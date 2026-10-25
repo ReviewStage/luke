@@ -19,6 +19,20 @@ import { pulseOnPress } from "../../press-pulse.js";
  * place reads the same in the bar as in a column of places.
  */
 
+/** The press: a share of the bar, its glyph over its name in the caption's type, muted until it is the place shown. */
+const BAR_ITEM =
+  "luke-bar-item flex min-h-luke-48 flex-1 basis-0 flex-col items-center justify-center gap-luke-2 border-0 bg-transparent [font-family:inherit] [font-style:inherit] [font-weight:inherit] text-caption text-muted-foreground [-webkit-tap-highlight-color:transparent] aria-[current=page]:text-accent-ink";
+
+/**
+ * What waits on the reader, as a badge on the glyph's top corner: a
+ * NavItem's needs-you count turned inside out, its figures in white on the
+ * needs-you fill the "!" disc is drawn in, in even figures, growing away from
+ * the glyph as it lengthens. A ring of the ground the bar stands on parts it
+ * from the glyph's strokes.
+ */
+const BAR_ITEM_COUNT =
+  "absolute -top-luke-4 left-bar-count-reach h-caption-leading min-w-caption-leading rounded-luke-full bg-attention-fill px-luke-4 text-center text-caption font-emphasis text-on-attention tabular-nums shadow-bar-count-ring";
+
 /** What waits on the reader in a place: its figure and what it counts, as a reader hears it after the figure. */
 export interface BarCount {
   readonly value: number;
@@ -58,16 +72,16 @@ export function BarItem({
   return (
     <button
       type="button"
-      className="luke-bar-item"
+      className={BAR_ITEM}
       aria-current={current ? "page" : undefined}
       aria-expanded={expanded}
       inert={inert}
       onPointerDown={onPointerDown}
       onClick={pulseOnPress(onPress)}
     >
-      <span className="luke-bar-item-icon" aria-hidden="true">
+      <span className="relative flex [&_svg]:size-luke-20" aria-hidden="true">
         {icon}
-        {counted ? <span className="luke-bar-item-count">{count.value}</span> : null}
+        {counted ? <span className={BAR_ITEM_COUNT}>{count.value}</span> : null}
       </span>
       <span>
         {children}

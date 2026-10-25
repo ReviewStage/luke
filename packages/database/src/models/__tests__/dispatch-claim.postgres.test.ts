@@ -8,8 +8,9 @@ import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { eq } from "drizzle-orm";
-import { Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Result } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Layer, Option, Ref, Result } from "effect";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { Database, type DatabaseServices } from "../../core/query.js";
 import { sqlClientOverUrl } from "../../core/sql-client.js";
 import { user } from "../../schemas/auth.js";
@@ -24,12 +25,14 @@ import { createTask, finishTaskWork } from "../task-store.js";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
 
 /**
- * The conversation's dispatch lock against a real Postgres, with a second
+ * The conversation's dispatch claim against a real Postgres, with a second
  * connection beside the test's own: the one thing PGlite, a single connection
  * that runs one transaction at a time, cannot show. A hand-over to eve held
- * open on a `Deferred` leaves the run stream's journal writing, keeps a second
- * send behind it, and keeps the take of its line into a turn waiting until
- * the line's row stands. This file runs in CI's Postgres job, where
+ * open on a `Deferred` holds no transaction and no lock: the run stream's
+ * journal lands, the take of its line into a turn finds the row at once, a
+ * second send waits on the claim holding nothing and reaches eve after it,
+ * and a task's finish or an agent's delete reads the line as work under way
+ * without waiting. This file runs in CI's Postgres job, where
  * `LUKE_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
  */
 
@@ -103,29 +106,40 @@ const untilBegan = (began: Deferred.Deferred<void>, fiber: Fiber.Fiber<unknown, 
     ),
   );
 
-/**
- * Waits until the fiber is waiting on a lock or has already ended, read off
- * Postgres's own lock table for this test's database alone (another file may
- * be holding a waiter of its own on the same cluster), so the test moves on as soon as the write it
- * forked is either parked behind the hand-over or, where nothing parks it,
- * done; and so a write that should not wait fails rather than hangs.
- */
-const parkedOrDone = (fiber: Fiber.Fiber<unknown, unknown>) =>
-  Effect.gen(function* () {
-    const client = yield* SqlClient.SqlClient;
-    for (;;) {
-      if (fiber.pollUnsafe() !== undefined) return;
-      const rows = yield* client<{
-        readonly waiting: number;
-      }>`select count(*)::int as waiting from pg_locks where not granted and pid in (select pid from pg_stat_activity where datname = current_database())`;
-      if ((rows[0]?.waiting ?? 0) > 0) return;
-      yield* Effect.yieldNow;
-    }
-  });
+/** How many times the probe below looks for the other sessions to go quiet before it reads what they hold. */
+const QUIET_LOOKS = 500;
 
-it.layer(getTestDB())("the conversation's dispatch lock", (it) => {
+/**
+ * What this test's database holds while a hand-over is out: how many of its
+ * sessions stand idle inside a transaction, and how many wait on a lock.
+ * Read off Postgres's own tables for this database alone, since another file
+ * may hold sessions of its own on the same cluster, once no other session of
+ * it is running a statement, or after a bounded number of looks, so a write
+ * forked a moment ago is read parked or done rather than halfway through.
+ */
+const heldMeanwhile = Effect.gen(function* () {
+  const client = yield* SqlClient.SqlClient;
+  for (let look = 0; look < QUIET_LOOKS; look += 1) {
+    const [busy] = yield* client<{
+      readonly active: number;
+    }>`select count(*)::int as active from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid() and state = 'active'`;
+    if ((busy?.active ?? 0) === 0) break;
+    yield* Effect.yieldNow;
+  }
+  const [row] = yield* client<{
+    readonly idleInTransaction: number;
+    readonly waiting: number;
+  }>`select
+      (select count(*)::int from pg_stat_activity where datname = current_database() and state like 'idle in transaction%') as "idleInTransaction",
+      (select count(*)::int from pg_locks where not granted and pid in (select pid from pg_stat_activity where datname = current_database())) as waiting`;
+  return { idleInTransaction: row?.idleInTransaction ?? -1, waiting: row?.waiting ?? -1 };
+});
+
+const NOTHING_HELD = { idleInTransaction: 0, waiting: 0 } as const;
+
+it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
   it.effect(
-    "the journal of a turn under way lands while a line's hand-over to eve is pending",
+    "the journal of a turn under way lands while a line's hand-over to eve is pending, and no transaction or lock is held meanwhile",
     () =>
       Effect.gen(function* () {
         const target = yield* openAgentConversation;
@@ -144,21 +158,17 @@ it.layer(getTestDB())("the conversation's dispatch lock", (it) => {
           ),
         );
         yield* untilBegan(held.began, sending);
-        const journaling = yield* Effect.forkChild(
-          onAnother(
-            writer.consumeAll(target, [
-              { ...turn, kind: BRAIN_RUN_EVENT.STEP_STARTED, sequence: 2, step: 1 },
-            ]),
-          ),
+        const meanwhile = yield* heldMeanwhile;
+        const journal = yield* onAnother(
+          writer.consumeAll(target, [
+            { ...turn, kind: BRAIN_RUN_EVENT.STEP_STARTED, sequence: 2, step: 1 },
+          ]),
         );
-        yield* parkedOrDone(journaling);
-        const journalWaited = journaling.pollUnsafe() === undefined;
         const sendStillPending = sending.pollUnsafe() === undefined;
         yield* Deferred.succeed(held.release, undefined);
         const sent = yield* Fiber.join(sending);
-        const journal = yield* Fiber.join(journaling);
 
-        assert.equal(journalWaited, false);
+        assert.deepEqual(meanwhile, NOTHING_HELD);
         assert.ok(journal.every(Result.isSuccess));
         assert.ok(sendStillPending);
         assert.ok(Result.isSuccess(sent) && Option.isSome(sent.success));
@@ -166,48 +176,49 @@ it.layer(getTestDB())("the conversation's dispatch lock", (it) => {
       }),
   );
 
-  it.effect("the journal lands while an ask's hand-over to eve is pending", () =>
-    Effect.gen(function* () {
-      const target = yield* openAgentConversation;
-      const onAnother = yield* anotherConnection;
-      const writer = yield* storeWriter({ tools: {} });
-      const asks = askRecord();
-      const { turn } = yield* startedTurn(target);
-      const ask = yield* asks.record({
-        ...target,
-        clientId: randomUUID(),
-        origin: ASK_ORIGIN.TYPED,
-        createdAt: new Date(0),
-      });
-      const held = yield* heldDispatch({ sessionId: "session-1", deliveryId: "delivery-1" });
+  it.effect(
+    "the journal lands while an ask's hand-over to eve is pending, and no transaction or lock is held meanwhile",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openAgentConversation;
+        const onAnother = yield* anotherConnection;
+        const writer = yield* storeWriter({ tools: {} });
+        const asks = askRecord();
+        const { turn } = yield* startedTurn(target);
+        const ask = yield* asks.record({
+          ...target,
+          clientId: randomUUID(),
+          origin: ASK_ORIGIN.TYPED,
+          createdAt: new Date(0),
+        });
+        const held = yield* heldDispatch({ sessionId: "session-1", deliveryId: "delivery-1" });
 
-      const dispatching = yield* Effect.forkChild(
-        onAnother(asks.dispatchOnce(target, ask.id, () => held.dispatch)),
-      );
-      yield* untilBegan(held.began, dispatching);
-      const journaling = yield* Effect.forkChild(
-        onAnother(
+        const dispatching = yield* Effect.forkChild(
+          onAnother(asks.dispatchOnce(target, ask.id, () => held.dispatch)),
+        );
+        yield* untilBegan(held.began, dispatching);
+        const meanwhile = yield* heldMeanwhile;
+        const journal = yield* onAnother(
           writer.consumeAll(target, [
             { ...turn, kind: BRAIN_RUN_EVENT.STEP_STARTED, sequence: 2, step: 1 },
           ]),
-        ),
-      );
-      yield* parkedOrDone(journaling);
-      const journalWaited = journaling.pollUnsafe() === undefined;
-      const askStillPending = dispatching.pollUnsafe() === undefined;
-      yield* Deferred.succeed(held.release, undefined);
-      const dispatched = yield* Fiber.join(dispatching);
-      const journal = yield* Fiber.join(journaling);
+        );
+        const askStillPending = dispatching.pollUnsafe() === undefined;
+        yield* Deferred.succeed(held.release, undefined);
+        const dispatched = yield* Fiber.join(dispatching);
 
-      assert.equal(journalWaited, false);
-      assert.ok(journal.every(Result.isSuccess));
-      assert.ok(askStillPending);
-      assert.equal(typeof dispatched === "string" ? undefined : dispatched.sessionId, "session-1");
-    }),
+        assert.deepEqual(meanwhile, NOTHING_HELD);
+        assert.ok(journal.every(Result.isSuccess));
+        assert.ok(askStillPending);
+        assert.equal(
+          typeof dispatched === "string" ? undefined : dispatched.sessionId,
+          "session-1",
+        );
+      }),
   );
 
   it.effect(
-    "the take of a line into the turn eve opened on it waits out the hand-over, so it takes the row rather than finding none",
+    "the take of a line into the turn eve opened on it finds the row while the hand-over is still pending",
     () =>
       Effect.gen(function* () {
         const target = yield* openAgentConversation;
@@ -226,13 +237,11 @@ it.layer(getTestDB())("the conversation's dispatch lock", (it) => {
           ),
         );
         yield* untilBegan(held.began, sending);
-        const taking = yield* Effect.forkChild(
-          onAnother(writer.takeAwaitingLine(target, { text: "Fix the tile.", turnId })),
+        const taken = yield* onAnother(
+          writer.takeAwaitingLine(target, { text: "Fix the tile.", turnId }),
         );
-        yield* parkedOrDone(taking);
         yield* Deferred.succeed(held.release, undefined);
-        yield* Fiber.join(sending);
-        const taken = yield* Fiber.join(taking);
+        const sent = yield* Fiber.join(sending);
         const row = yield* readMessageByClientId(
           target.userId,
           target.conversationId,
@@ -244,48 +253,59 @@ it.layer(getTestDB())("the conversation's dispatch lock", (it) => {
           Result.map(taken, (ids) => ids.length),
           Result.succeed(1),
         );
+        assert.ok(Result.isSuccess(sent) && Option.isSome(sent.success));
         assert.ok(row.ok);
         assert.equal(row.value.length, 1);
       }),
   );
 
-  it.effect("two sends to one conversation reach eve in the order their rows are numbered", () =>
-    Effect.gen(function* () {
-      const target = yield* openAgentConversation;
-      const onAnother = yield* anotherConnection;
-      const writer = yield* storeWriter({ tools: {} });
-      const heard = yield* Ref.make<readonly string[]>([]);
-      const first = yield* heldDispatch(true);
-      const send = (clientKey: string, dispatch: Effect.Effect<boolean>) =>
-        onAnother(
-          writer.writeAwaitingLine(
-            target,
-            { text: clientKey, clientKey, sender: SENDER },
-            Effect.tap(dispatch, () => Ref.update(heard, (keys) => [...keys, clientKey])),
+  it.effect(
+    "a second send to the conversation waits out the first's hand-over holding no transaction or lock, and the two reach eve in the order their rows are numbered",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openAgentConversation;
+        const onAnother = yield* anotherConnection;
+        const writer = yield* storeWriter({ tools: {} });
+        const heard = yield* Ref.make<readonly string[]>([]);
+        const first = yield* heldDispatch(true);
+        const send = (clientKey: string, dispatch: Effect.Effect<boolean>) =>
+          onAnother(
+            writer.writeAwaitingLine(
+              target,
+              { text: clientKey, clientKey, sender: SENDER },
+              Effect.tap(dispatch, () => Ref.update(heard, (keys) => [...keys, clientKey])),
+            ),
+          );
+
+        const sendingFirst = yield* Effect.forkChild(send("first", first.dispatch));
+        yield* untilBegan(first.began, sendingFirst);
+        const sendingSecond = yield* Effect.forkChild(send("second", Effect.succeed(true)));
+        // The second asks for the claim once, finds the first's, and waits on the test clock for its next try.
+        const meanwhile = yield* heldMeanwhile;
+        const secondStillPending = sendingSecond.pollUnsafe() === undefined;
+        const heardMeanwhile = yield* Ref.get(heard);
+        yield* Deferred.succeed(first.release, undefined);
+        yield* Fiber.join(sendingFirst);
+        yield* TestClock.adjust(Duration.seconds(1));
+        const second = yield* Fiber.join(sendingSecond);
+        const seqs = yield* Effect.forEach(["first", "second"], (key) =>
+          Effect.map(
+            readMessageByClientId(target.userId, target.conversationId, {}, sentLineId(key)),
+            (read) => (read.ok ? read.value[0]?.seq : undefined),
           ),
         );
 
-      const sendingFirst = yield* Effect.forkChild(send("first", first.dispatch));
-      yield* untilBegan(first.began, sendingFirst);
-      const sendingSecond = yield* Effect.forkChild(send("second", Effect.succeed(true)));
-      yield* parkedOrDone(sendingSecond);
-      yield* Deferred.succeed(first.release, undefined);
-      yield* Fiber.join(sendingFirst);
-      yield* Fiber.join(sendingSecond);
-      const seqs = yield* Effect.forEach(["first", "second"], (key) =>
-        Effect.map(
-          readMessageByClientId(target.userId, target.conversationId, {}, sentLineId(key)),
-          (read) => (read.ok ? read.value[0]?.seq : undefined),
-        ),
-      );
-
-      assert.deepEqual(yield* Ref.get(heard), ["first", "second"]);
-      assert.ok(seqs[0] !== undefined && seqs[1] !== undefined && seqs[0] < seqs[1]);
-    }),
+        assert.deepEqual(meanwhile, NOTHING_HELD);
+        assert.ok(secondStillPending);
+        assert.deepEqual(heardMeanwhile, []);
+        assert.ok(Result.isSuccess(second) && Option.isSome(second.success));
+        assert.deepEqual(yield* Ref.get(heard), ["first", "second"]);
+        assert.ok(seqs[0] !== undefined && seqs[1] !== undefined && seqs[0] < seqs[1]);
+      }),
   );
 
   it.effect(
-    "a task's finish waits out a hand-over to one of its agents, so the line eve took holds the task open",
+    "a task's finish while a hand-over to one of its agents is pending reads the line as work under way, without waiting, and holds the task open",
     () =>
       Effect.gen(function* () {
         const target = yield* openAgentConversation;
@@ -338,19 +358,18 @@ it.layer(getTestDB())("the conversation's dispatch lock", (it) => {
           ),
         );
         yield* untilBegan(held.began, sending);
-        const finishing = yield* Effect.forkChild(
-          onAnother(finishTaskWork(target.userId, taskId, idleUnlessAwaiting)),
+        const finished = yield* onAnother(
+          finishTaskWork(target.userId, taskId, idleUnlessAwaiting),
         );
-        yield* parkedOrDone(finishing);
         yield* Deferred.succeed(held.release, undefined);
         yield* Fiber.join(sending);
 
-        assert.equal(yield* Fiber.join(finishing), false);
+        assert.equal(finished, false);
       }),
   );
 
   it.effect(
-    "an agent's delete waits out a hand-over to it, so the line eve took refuses the delete",
+    "an agent's delete while a hand-over to it is pending reads the line as work under way, without waiting, and is refused",
     () =>
       Effect.gen(function* () {
         const target = yield* openAgentConversation;
@@ -389,7 +408,7 @@ it.layer(getTestDB())("the conversation's dispatch lock", (it) => {
           ),
         );
         yield* untilBegan(held.began, sending);
-        const deleting = yield* Effect.forkChild(
+        const deleted = yield* Effect.exit(
           onAnother(
             deleteCodingAgent(target.userId, agentId, {
               standsStopped: stoppedUnlessAwaiting,
@@ -397,10 +416,8 @@ it.layer(getTestDB())("the conversation's dispatch lock", (it) => {
             }),
           ),
         );
-        yield* parkedOrDone(deleting);
         yield* Deferred.succeed(held.release, undefined);
         yield* Fiber.join(sending);
-        const deleted = yield* Fiber.await(deleting);
 
         assert.ok(Exit.isFailure(deleted));
         assert.equal(

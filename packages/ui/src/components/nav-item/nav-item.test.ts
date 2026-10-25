@@ -3,7 +3,6 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { STATUS_TONE } from "../../status-tone.js";
 import { useMenu } from "../menu/menu.js";
 import { NAV_CURRENT, NAV_ITEM_VARIANT, NavItem, NavItemLink } from "./nav-item.js";
 
@@ -16,34 +15,15 @@ import { NAV_CURRENT, NAV_ITEM_VARIANT, NavItem, NavItemLink } from "./nav-item.
  * keeps focus leaves it on the field that held it. A nav item link is a
  * link to its address, named by its words or its label, announced as the
  * page where it is shown, handing its press to its caller, and opening in
- * a tab of its own where it leaves the page. A name, a row's or a link's,
- * fades out at its end only while its row cuts it short, and a row's detail
- * keeps its ellipsis.
+ * a tab of its own where it leaves the page.
  */
 
 const roots: Root[] = [];
 
-/** The measurement each observed box was handed, fired as a resize; jsdom lays nothing out, so nothing reports one of its own accord. */
-const resizes: (() => void)[] = [];
-
+/** Stands in for the ResizeObserver jsdom lacks, which a row's name is measured by. */
 class StandInResizeObserver {
-  readonly #fire: () => void;
-  constructor(fire: () => void) {
-    this.#fire = fire;
-  }
-  observe(): void {
-    resizes.push(this.#fire);
-  }
+  observe(): void {}
   disconnect(): void {}
-}
-
-/** Stands every box's words `wide` pixels in a box 100px wide, and fires every observed box's measurement, as a resize would. */
-function resize(wide: number): void {
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(wide);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
-  act(() => {
-    for (const fire of resizes) fire();
-  });
 }
 
 beforeEach(() => {
@@ -53,9 +33,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
-  resizes.splice(0);
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 });
 
 /** Draws `element` into a fresh container on the page. */
@@ -93,25 +71,6 @@ test("a count of none is left out", () => {
   );
 
   expect(button(container).textContent).toBe("Inbox");
-});
-
-test("a count is muted unless it is drawn in the accent's blue", () => {
-  const container = mount(
-    createElement(
-      "div",
-      null,
-      createElement(NavItem, { count: { value: 2, noun: "tasks" }, children: "acme/web" }),
-      createElement(NavItem, {
-        count: { value: 3, noun: "waiting on you", tone: STATUS_TONE.ATTENTION },
-        children: "Inbox",
-      }),
-    ),
-  );
-
-  const tones = [...container.querySelectorAll<HTMLElement>(".luke-nav-item-count")].map(
-    (each) => each.dataset.tone,
-  );
-  expect(tones).toEqual([STATUS_TONE.NEUTRAL, STATUS_TONE.ATTENTION]);
 });
 
 test("the place shown is announced as the page, a search's find as the location", () => {
@@ -258,31 +217,6 @@ test("a link's label names it where its words are not drawn whole, and its press
   expect(link?.getAttribute("aria-label")).toBe("Animations");
   expect(link?.hasAttribute("aria-current")).toBe(false);
   expect(pressed).toEqual(["/admin/animations"]);
-});
-
-test("a row's name fades out at its end only while the row cuts it short, and its detail keeps its ellipsis", () => {
-  const container = mount(
-    createElement(NavItem, { detail: "acme/web", children: "Fix the sidebar's long names" }),
-  );
-  const name = () => container.querySelector(".luke-nav-item-name");
-  resize(80);
-  expect(name()?.getAttribute("data-end")).toBe("fade");
-  expect(name()?.getAttribute("data-overflow")).toBe("false");
-  resize(160);
-  expect(name()?.getAttribute("data-overflow")).toBe("true");
-  expect(container.querySelector(".luke-nav-item-detail")?.hasAttribute("data-end")).toBe(false);
-});
-
-test("a link's name fades out at its end only while the row cuts it short", () => {
-  const container = mount(
-    createElement(NavItemLink, { href: "/settings", children: "Workspace settings" }),
-  );
-  const name = () => container.querySelector(".luke-nav-item-name");
-  resize(80);
-  expect(name()?.getAttribute("data-overflow")).toBe("false");
-  resize(160);
-  expect(name()?.getAttribute("data-end")).toBe("fade");
-  expect(name()?.getAttribute("data-overflow")).toBe("true");
 });
 
 test("a link that leaves the page opens in a tab of its own, and one that does not stays in this one", () => {

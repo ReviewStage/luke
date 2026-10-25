@@ -12,6 +12,23 @@
 
 import { type ReactNode, useRef } from "react";
 
+/** The frame the corners stand on, which brings them out while it is revealed or one has the keyboard. */
+const FRAME = "luke-resize-frame group/resize relative h-full w-full";
+
+/**
+ * A bracket on each top corner of a box, since the box grows upward: out of
+ * sight at rest, brought out while the frame is revealed (the pointer over
+ * the box, a drag under way) or the keyboard is on one, always on a touch
+ * screen, which has no hover to bring them out, and lit in the focus colour
+ * under the pointer, with no ring. Note that the light answers `:hover`
+ * itself rather than Tailwind's `hover:`, which only a fine pointer reaches.
+ */
+const CORNER = {
+  base: "luke-resize-corner absolute -top-luke-6 z-1 box-border size-luke-16 touch-none border-t-2 border-border-strong opacity-0 outline-none transition-opacity duration-(--luke-duration-hover) ease-plain group-focus-within/resize:opacity-100 group-data-[reveal=true]/resize:opacity-100 [@media(hover:none)]:opacity-100 [&:is(:hover,:active,:focus-visible)]:border-accent-fill",
+  left: "-left-luke-6 cursor-nwse-resize rounded-tl-luke-6 border-l-2",
+  right: "-right-luke-6 cursor-nesw-resize rounded-tr-luke-6 border-r-2",
+} as const;
+
 /** Which top corner of the box a handle stands on. */
 export const RESIZE_CORNER = {
   LEFT: "left",
@@ -43,7 +60,7 @@ export function ResizeFrame({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="luke-resize-frame" data-reveal={String(reveal)}>
+    <div className={FRAME} data-reveal={String(reveal)}>
       {children}
     </div>
   );
@@ -109,7 +126,7 @@ export function ResizeCorner({
   };
   return (
     <div
-      className="luke-resize-corner"
+      className={`${CORNER.base} ${CORNER[corner]}`}
       data-corner={corner}
       role="slider"
       aria-label={label}

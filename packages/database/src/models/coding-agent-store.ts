@@ -67,7 +67,6 @@ import {
 } from "../storage-vocabulary.js";
 import { agentAutomationNameSql, agentGivenNameSql } from "./agent-name.js";
 import { InstantColumnSchema } from "./columns.js";
-import { waitOutConversationDispatch } from "./dispatch-lock.js";
 import {
   awaitingLinesOf,
   awaitingLinesOfReached,
@@ -818,8 +817,8 @@ const lockAgentMentionedServers = SqlSchema.findOneOption({
     ),
 });
 
-/** The agent under its own lock, as far as a send adding to its mentioned servers reads it. */
-const lockReachableMentionedServers = SqlSchema.findOneOption({
+/** The agent as far as a send adding to its mentioned servers reads it. */
+const readReachableMentionedServers = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, mentionedServers: DisabledServersColumnSchema }),
   execute: ({ userId, agentId }) =>
@@ -827,8 +826,50 @@ const lockReachableMentionedServers = SqlSchema.findOneOption({
       db
         .select({ id: codingAgent.id, mentionedServers: codingAgent.mentionedServers })
         .from(codingAgent)
-        .where(reachableAgent(userId, agentId))
-        .for("update"),
+        .where(reachableAgent(userId, agentId)),
+    ),
+});
+
+const MentionedServersChangeSchema = Schema.Struct({
+  agentId: Schema.String,
+  names: Schema.Array(integrationConnectionNameSchema),
+});
+
+/** How far past those standing an added name's place is counted, so it sorts after them; no agent is mentioned this many servers. */
+const ADDED_AFTER = 1_000_000;
+
+/** The agent's mentioned servers as they stand, each with its place, in the statement that changes them. */
+const STANDING_SERVERS = sql`jsonb_array_elements_text(coalesce(${codingAgent.mentionedServers}, '[]'::jsonb)) with ordinality as stood(name, place)`;
+
+/**
+ * Adds the names to the agent's mentioned servers in the one statement,
+ * after those standing and each once, so nothing a turn took meanwhile is
+ * written back.
+ */
+const addMentionedServers = SqlSchema.void({
+  Request: MentionedServersChangeSchema,
+  execute: ({ agentId, names }) =>
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({
+          mentionedServers: sql`(select jsonb_agg(merged.name order by merged.place) from (select every.name, min(every.place) as place from (select stood.name, stood.place from ${STANDING_SERVERS} union all select added.name, added.place + ${ADDED_AFTER} from jsonb_array_elements_text(${JSON.stringify(names)}::jsonb) with ordinality as added(name, place)) as every group by every.name) as merged)`,
+        })
+        .where(eq(codingAgent.id, agentId)),
+    ),
+});
+
+/** Takes the names out of the agent's mentioned servers in the one statement, leaving every other as it now stands, none as none. */
+const removeMentionedServers = SqlSchema.void({
+  Request: MentionedServersChangeSchema,
+  execute: ({ agentId, names }) =>
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({
+          mentionedServers: sql`(select jsonb_agg(stood.name order by stood.place) from ${STANDING_SERVERS} where not exists (select 1 from jsonb_array_elements_text(${JSON.stringify(names)}::jsonb) as gone(name) where gone.name = stood.name))`,
+        })
+        .where(eq(codingAgent.id, agentId)),
     ),
 });
 
@@ -1903,10 +1944,9 @@ const deleteAgentCallWords = SqlSchema.void({
  * task's delete does; none where the account reaches no such agent.
  *
  * Everything runs under the agent's conversation lock, the one every write
- * of its lines and turns takes, taken once any hand-over to eve under way
- * has been waited out (`dispatch-lock.ts`), and the agent is read again
- * under it, so a message handed over after the caller stopped it either
- * landed first, and
+ * of its lines and turns takes, and the agent is read again under it, so a
+ * message handed over after the caller stopped it either landed first, its
+ * line standing from before eve hears it (`dispatch-claim.ts`), and
  * `standsStopped` refuses with `TaskAgentUnstopped`, nothing written, or
  * waits on the lock and finds no agent.
  */
@@ -1924,8 +1964,6 @@ export function deleteCodingAgent<R = never>(
       Effect.gen(function* () {
         const found = yield* findAgent({ userId, agentId });
         if (Option.isNone(found)) return Option.none();
-        // A hand-over to eve under way is waited out first, so its line stands awaiting when the guard reads.
-        yield* waitOutConversationDispatch(found.value.conversationId);
         const locked = yield* lockAgentConversation({
           conversationId: found.value.conversationId,
         });
@@ -2248,10 +2286,13 @@ export function updateCodingAgentServers(
  * The hand-over of a message mentioning MCP servers to eve, run with those
  * servers standing among the ones the agent's next turn takes whatever its
  * switches say, and left standing only where the hand-over answers that eve
- * took the message. The row is locked, the servers added, the hand-over
- * run, and the servers as they stood put back for one that answered
- * nothing, so a refused send leaves no server for a later turn. Note that
- * the caller runs this as the dispatch under the conversation's dispatch lock
+ * took the message. The servers not already standing are added, the
+ * hand-over run, and those same servers taken out again for one that
+ * answered nothing, so a refused send leaves no server for a later turn.
+ * No transaction is open across the hand-over, so a turn may take the
+ * servers meanwhile; each change is one statement over the row as it then
+ * stands, so the take-out never writes back what that turn took. Note that
+ * the caller runs this as the dispatch under the conversation's dispatch claim
  * (`writeAwaitingLine`), after its repeat check, so a send's servers are
  * added only for a send eve hears, and no other send's hand-over stands
  * between this one's servers and its message. Nothing is added for no
@@ -2265,16 +2306,13 @@ export function dispatchMentioningServers<E, R>(
 ): Effect.Effect<boolean, E | StoreFailure, R | DatabaseServices> {
   if (mentioned.length === 0) return dispatch;
   return Effect.gen(function* () {
-    const locked = yield* lockReachableMentionedServers({ userId, agentId });
-    if (Option.isNone(locked)) return yield* dispatch;
-    const before = locked.value.mentionedServers;
-    yield* setAgentMentionedServers({
-      agentId,
-      mentionedServers: storedServers([...before, ...mentioned]),
-    });
+    const read = yield* readReachableMentionedServers({ userId, agentId });
+    if (Option.isNone(read)) return yield* dispatch;
+    const standing = new Set(read.value.mentionedServers);
+    const added = [...new Set(mentioned)].filter((name) => !standing.has(name));
+    yield* addMentionedServers({ agentId, names: added });
     const taken = yield* dispatch;
-    if (!taken)
-      yield* setAgentMentionedServers({ agentId, mentionedServers: storedServers(before) });
+    if (!taken) yield* removeMentionedServers({ agentId, names: added });
     return taken;
   });
 }
@@ -2629,8 +2667,6 @@ export function archiveIdleCodingAgent(
       Effect.gen(function* () {
         const found = yield* findAgent({ userId, agentId });
         if (Option.isNone(found)) return IDLE_ARCHIVE.NOT_FOUND;
-        // A hand-over to eve under way is waited out first, so its line stands awaiting when `idle` reads.
-        yield* waitOutConversationDispatch(found.value.conversationId);
         const locked = yield* lockAgentConversation({
           conversationId: found.value.conversationId,
         });

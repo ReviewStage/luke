@@ -21,9 +21,7 @@ import {
  * open; a crumb's own name stands over its words and its hint raises its
  * words; a crumb's glyph is hidden from a reader, who hears its words, and
  * its card hangs from the app's hint, a crumb with no press's included; and
- * a toolbar's way back is a button named by its words. A crumb's words fade
- * out at their end only while its bar cuts them short, measured again when
- * it is renamed though its box keeps its width.
+ * a toolbar's way back is a button named by its words.
  */
 
 declare global {
@@ -34,28 +32,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** The measurement each observed box was handed, fired as a resize; jsdom lays nothing out, so nothing reports one of its own accord. */
-const resizes: (() => void)[] = [];
-
+/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: nothing is laid out here. */
 class StandInResizeObserver {
-  readonly #fire: () => void;
-  constructor(fire: () => void) {
-    this.#fire = fire;
-  }
-  observe(): void {
-    resizes.push(this.#fire);
-  }
+  observe(): void {}
   unobserve(): void {}
   disconnect(): void {}
-}
-
-/** Stands every box's words `wide` pixels in a box 100px wide, and fires every observed box's measurement, as a resize would. */
-function resize(wide: number): void {
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(wide);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
-  act(() => {
-    for (const fire of resizes) fire();
-  });
 }
 
 beforeEach(() => {
@@ -65,9 +46,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
-  resizes.splice(0);
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 });
 
 /** Draws a path of `crumbs` and hands back what it was drawn into. */
@@ -199,50 +178,4 @@ test("a toolbar's way back is a button named by its words, answering a press", (
   act(() => button(container, "Issues").click());
   expect(pressed).toEqual(["back"]);
   expect(container.querySelector("[aria-current='page']")?.textContent).toBe("REL-1");
-});
-
-test("a crumb's words fade out at their end only while the bar cuts them short", () => {
-  const container = draw({
-    label: "Path",
-    crumbs: [{ label: "acme/relay", onPress: () => undefined }, { label: "Invite flow" }],
-  });
-  const overflow = () =>
-    [...container.querySelectorAll(".luke-breadcrumb-label")].map((each) => [
-      each.getAttribute("data-end"),
-      each.getAttribute("data-overflow"),
-    ]);
-  resize(80);
-  expect(overflow()).toEqual([
-    ["fade", "false"],
-    ["fade", "false"],
-  ]);
-  resize(160);
-  expect(overflow()).toEqual([
-    ["fade", "true"],
-    ["fade", "true"],
-  ]);
-});
-
-test("a crumb renamed longer or shorter is measured again, though its box keeps its width", () => {
-  // Note that the box stands 100px wide whatever its words, as a crumb whose width its bar sets does.
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return (this.textContent ?? "").length * 8;
-  });
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
-  const path = (label: string) =>
-    createElement(Breadcrumbs, { label: "Path", crumbs: [{ label }] });
-  const container = draw({ label: "Path", crumbs: [{ label: "src" }] });
-  const root = roots.at(-1);
-  const overflow = () =>
-    container.querySelector(".luke-breadcrumb-label")?.getAttribute("data-overflow");
-  act(() => {
-    for (const fire of resizes) fire();
-  });
-  expect(overflow()).toBe("false");
-  act(() => root?.render(path("an-organisation-with-a-long-name")));
-  expect(overflow()).toBe("true");
-  act(() => root?.render(path("src")));
-  expect(overflow()).toBe("false");
 });

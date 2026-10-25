@@ -13,12 +13,11 @@ import { ToastStack } from "./toast-stack.js";
 /**
  * toast.test.ts -- a toast with an action holds under the pointer and focus
  * apart, dismisses on Escape and on its ×, and presses its action after
- * dismissing; one without is never held; its countdown stops while it is
- * held; a turn of tone keeps the glyph it led with to fade under the new
- * one; a drag or a trackpad sweep past the threshold sends it away and one
- * short of it puts it back; a compact one leaves its second line to the announcer
- * and stands across the window's foot; the stack names itself and says the newest words
- * through the window's announcer.
+ * dismissing; one without takes no press; a turn of tone changes its words
+ * in place; a drag or a trackpad sweep past the threshold sends it away and
+ * one short of it does not; a compact one leaves its second line to the
+ * announcer; the stack names itself and says the newest words through the
+ * window's announcer.
  */
 
 declare global {
@@ -162,7 +161,6 @@ test("a toast with no action takes no press and no hold", () => {
   );
   const toast = view.querySelector("li");
   assert.ok(toast !== null);
-  assert.equal(toast.dataset.action, undefined);
   assert.equal(view.querySelectorAll("button").length, 0);
   assert.equal(toast.querySelector(".luke-toast-detail")?.textContent, "Offline");
 });
@@ -210,79 +208,33 @@ function swipeable(dismissed: string[]): HTMLLIElement {
   return toast;
 }
 
-test("a toast's countdown drains over the hold it is handed, and stops while the toast is held", () => {
-  const view = render(
-    createElement(
-      "ol",
-      null,
-      acting(
-        () => undefined,
-        () => undefined,
-        () => undefined,
-        5000,
-      ),
-    ),
-  );
-  const toast = view.querySelector("li");
-  const bar = view.querySelector<HTMLElement>(".luke-toast-countdown");
-  assert.ok(toast !== null && bar !== null);
-
-  act(() => toast.dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
-  const held = toast.dataset.held;
-  act(() => toast.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
-
-  assert.equal(bar.style.getPropertyValue("--luke-toast-hold"), "5000ms");
-  assert.equal(bar.style.getPropertyValue("--luke-toast-seconds"), "5", "a notch a second");
-  assert.equal(held, "true");
-  assert.equal(toast.dataset.held, undefined);
-});
-
-test("a toast whose tone turns keeps the glyph it led with beside the new one, and its words change in place", () => {
+test("a toast whose tone turns changes its words in place", () => {
   const container = document.body.appendChild(document.createElement("ol"));
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(createElement(Toast, { tone: STATUS_TONE.WORKING, words: "Saving…" })));
   const toast = container.querySelector("li");
-  const before = [...container.querySelectorAll<HTMLElement>(".luke-toast-glyph > span")];
 
   act(() => root.render(createElement(Toast, { tone: STATUS_TONE.COMPLETE, words: "Saved" })));
-  const after = [...container.querySelectorAll<HTMLElement>(".luke-toast-glyph > span")];
 
-  assert.deepEqual(
-    before.map((glyph) => glyph.dataset.tone),
-    [STATUS_TONE.WORKING],
-  );
-  assert.deepEqual(
-    after.map((glyph) => [glyph.dataset.tone, glyph.dataset.turn]),
-    [
-      [STATUS_TONE.WORKING, "was"],
-      [STATUS_TONE.COMPLETE, "now"],
-    ],
-  );
   assert.equal(container.querySelector("li"), toast, "the same card");
-  assert.equal(toast?.dataset.tone, STATUS_TONE.COMPLETE);
   assert.equal(container.querySelector(".luke-toast-words")?.textContent, "Saved");
 });
 
-test("a toast dragged sideways past the threshold is sent away off that side, and one let go short of it goes back", () => {
+test("a toast dragged sideways past the threshold is sent away, and one let go short of it is not", () => {
   const dismissed: string[] = [];
   const toast = swipeable(dismissed);
 
   pointer(toast, "pointerdown", 0);
   pointer(toast, "pointermove", 30);
-  const following = toast.style.getPropertyValue("--luke-toast-drag");
   pointer(toast, "pointerup", 30);
-  const back = toast.style.getPropertyValue("--luke-toast-drag");
   const shortOf = [...dismissed];
   pointer(toast, "pointerdown", 0);
   pointer(toast, "pointermove", 120);
   pointer(toast, "pointerup", 120);
 
-  assert.equal(following, "30px");
-  assert.equal(back, "0px");
   assert.deepEqual(shortOf, []);
   assert.deepEqual(dismissed, ["dismiss"]);
-  assert.equal(toast.dataset.swiped, "right");
 });
 
 test("a press that travels up or down, or not at all, is no swipe", () => {
@@ -295,7 +247,6 @@ test("a press that travels up or down, or not at all, is no swipe", () => {
   pointer(toast, "pointerup", 120, 120);
 
   assert.deepEqual(dismissed, []);
-  assert.equal(toast.style.getPropertyValue("--luke-toast-drag"), "");
 });
 
 test("a trackpad's sideways sweep sends the toast away once it passes the threshold, and an up-and-down scroll is no sweep", () => {
@@ -305,19 +256,16 @@ test("a trackpad's sideways sweep sends the toast away once it passes the thresh
     act(() => toast.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaX, deltaY })));
 
   sweep(4, 40);
-  const scrolled = toast.style.getPropertyValue("--luke-toast-drag");
   sweep(20);
   sweep(20);
   const before = [...dismissed];
   sweep(40);
 
-  assert.equal(scrolled, "", "an up-and-down scroll is no sweep");
   assert.deepEqual(before, []);
   assert.deepEqual(dismissed, ["dismiss"]);
-  assert.equal(toast.dataset.swiped, "left");
 });
 
-test("a toast drawn compact shows its words alone, and its stack stands across the window's foot rather than in its corner", () => {
+test("a toast drawn compact shows its words alone", () => {
   const drawn = (look: ToastLook) =>
     render(
       createElement(ToastStack, {
@@ -338,13 +286,12 @@ test("a toast drawn compact shows its words alone, and its stack stands across t
   const stacks = [...document.querySelectorAll<HTMLElement>("section.luke-toast-stack")];
   assert.deepEqual(
     stacks.map((stack) => [
-      stack.dataset.look,
       stack.querySelector(".luke-toast-words")?.textContent,
       stack.querySelector(".luke-toast-detail")?.textContent ?? null,
     ]),
     [
-      [TOAST_LOOK.CARD, "Couldn't end the call", "The voice window is not answering."],
-      [TOAST_LOOK.COMPACT, "Couldn't end the call", null],
+      ["Couldn't end the call", "The voice window is not answering."],
+      ["Couldn't end the call", null],
     ],
   );
 });

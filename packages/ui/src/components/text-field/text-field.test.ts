@@ -8,7 +8,6 @@ import { FormField } from "../form-field/form-field.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
 import {
   ENTER_KEY_HINT,
-  TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_SUBMIT,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
@@ -354,13 +353,6 @@ test("a text entry standing alone in a settings row reports itself invalid while
   for (const entry of entries) assert.equal(entry.getAttribute("aria-invalid"), null);
 });
 
-test("a text entry is named by its field or by a label of its own, and never by neither", () => {
-  // @ts-expect-error A text entry with neither a field nor a label would stand unnamed.
-  createElement(TextField, { value: "", onChange: () => undefined });
-  // @ts-expect-error A text area with neither a field nor a label would stand unnamed.
-  createElement(TextArea, { value: "", onChange: () => undefined });
-});
-
 test("a number field hands back the number typed, and nothing while it is empty or not yet a number", () => {
   const changes: (number | undefined)[] = [];
   const page = render(
@@ -520,26 +512,4 @@ test("a text area names its return key's label to an on-screen keyboard", () => 
     }),
   );
   assert.equal(page.querySelector("textarea")?.getAttribute("enterkeyhint"), "send");
-});
-
-test("a growing text area grows to the profile's tallest note, or past it where its limit is none", () => {
-  const page = render(
-    createElement(
-      "div",
-      null,
-      createElement(TextArea, { label: "Note", value: "", onChange: () => undefined, grow: true }),
-      createElement(TextArea, {
-        label: "Message",
-        value: "",
-        onChange: () => undefined,
-        grow: true,
-        growLimit: TEXT_AREA_GROW_LIMIT.NONE,
-      }),
-      createElement(TextArea, { label: "Prompt", value: "", onChange: () => undefined }),
-    ),
-  );
-  const limits = [...page.querySelectorAll("textarea")].map((area) =>
-    area.getAttribute("data-grow-limit"),
-  );
-  assert.deepEqual(limits, ["note", "none", null]);
 });

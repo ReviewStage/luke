@@ -87,6 +87,17 @@ const OVER_PANE_ARRIVAL = {
 const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
 
 /**
+ * The pane: over the nearest positioned box at its full height, at that
+ * box's right edge or its left, on the window's floating surface with a
+ * hairline on the side facing the work, as wide as the box less a strip to
+ * press it away by, or a column's width; with no ring, since only script
+ * focuses it on open and what it holds rings. Its slide stays in
+ * `over-pane.css`, keyframes being what a utility cannot say.
+ */
+const PANE =
+  "luke-over-pane absolute inset-y-0 z-1 flex w-over-pane min-w-0 flex-col bg-popover shadow-menu outline-none data-[width=column]:w-over-pane-column data-[edge=left]:left-0 data-[edge=left]:border-r data-[edge=left]:border-border-strong data-[edge=right]:right-0 data-[edge=right]:border-l data-[edge=right]:border-border-strong";
+
+/**
  * How long the pane's slide out runs, read as the token stands on the body,
  * where a capture run zeroes it as reduced motion does. Note that a window
  * no stylesheet has drawn sets nothing, and waits the brand's own duration,
@@ -294,7 +305,7 @@ export function OverPane({
   return (
     <PanePin
       ref={pane}
-      className="luke-over-pane"
+      className={PANE}
       aria-label={label}
       tabIndex={-1}
       data-edge={edge}

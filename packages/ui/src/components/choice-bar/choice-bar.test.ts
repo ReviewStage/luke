@@ -12,13 +12,12 @@ import {
   CHOICE_BAR_LOOK,
   ChoiceBar,
   type ChoiceBarFocus,
-  type ChoiceBarLook,
   type ChoiceItem,
 } from "./choice-bar.js";
 
 /**
  * choice-bar.test.ts -- a bar handed panels is a tablist whose tabs control
- * them, and one without is a radio group, in either look; a clearable bar's
+ * them, and one without is a radio group; a clearable bar's
  * chosen option pressed again takes the choice back, and a fixed one's
  * stands; a bar that takes no focus leaves no option for Tab to land on and
  * keeps the keyboard where it was when pressed; the arrows, Home, and End
@@ -27,10 +26,8 @@ import {
  * option is not chosen; a count's glyph says its state in words; the
  * app's `data-` attributes reach the bar; and a bar folding together folds
  * every option once their names no longer fit, and unfolds once they would,
- * and folds as a name grows past its width with nothing resized; an option
- * that says more hangs the app's hint saying it; and the thumb
- * stands under the chosen option, slides to one chosen next, and follows it
- * where an option before it goes.
+ * and folds as a name grows past its width with nothing resized; and an
+ * option that says more hangs the app's hint saying it.
  */
 
 declare global {
@@ -81,7 +78,6 @@ function render(element: ReactElement): HTMLElement {
 /** A bar the caller holds, over a panel for each view where it shows panels. */
 function Held({
   items = ITEMS,
-  look = CHOICE_BAR_LOOK.FILL,
   withPanels = false,
   clearable = false,
   disabled = false,
@@ -89,7 +85,6 @@ function Held({
   start = VIEW.CONVERSATION,
 }: {
   items?: readonly ChoiceItem<View>[];
-  look?: ChoiceBarLook;
   withPanels?: boolean;
   clearable?: boolean;
   disabled?: boolean;
@@ -106,7 +101,7 @@ function Held({
       items,
       value: view,
       onChange: setView,
-      look,
+      look: CHOICE_BAR_LOOK.FILL,
       clearable,
       disabled,
       focus,
@@ -176,41 +171,31 @@ function reading(page: HTMLElement): Reading {
   };
 }
 
-test("a bar handed panels is a tablist whose tabs control them, in either look", () => {
-  for (const look of Object.values(CHOICE_BAR_LOOK)) {
-    const page = render(createElement(Held, { look, withPanels: true }));
-    const list = page.querySelector('[role="tablist"]');
-    assert.equal(list?.getAttribute("aria-label"), "Pull request", look);
-    assert.equal(page.querySelector('[role="radiogroup"]'), null, look);
-    const files = option(page, "Files");
-    assert.equal(
-      document.getElementById(files.getAttribute("aria-controls") ?? "")?.textContent,
-      "files view",
-      `${look}: the tab controls its own panel`,
-    );
-    act(() => files.click());
-    assert.deepEqual(reading(page), { chosen: ["Files"], tabStops: ["Files"] }, look);
-  }
+test("a bar handed panels is a tablist whose tabs control them", () => {
+  const page = render(createElement(Held, { withPanels: true }));
+  const list = page.querySelector('[role="tablist"]');
+  assert.equal(list?.getAttribute("aria-label"), "Pull request");
+  assert.equal(page.querySelector('[role="radiogroup"]'), null);
+  const files = option(page, "Files");
+  assert.equal(
+    document.getElementById(files.getAttribute("aria-controls") ?? "")?.textContent,
+    "files view",
+    "the tab controls its own panel",
+  );
+  act(() => files.click());
+  assert.deepEqual(reading(page), { chosen: ["Files"], tabStops: ["Files"] });
 });
 
-test("a bar without panels is a radio group of radios, in either look", () => {
-  for (const look of Object.values(CHOICE_BAR_LOOK)) {
-    const page = render(createElement(Held, { look }));
-    assert.equal(
-      page.querySelector('[role="radiogroup"]')?.getAttribute("aria-label"),
-      "Pull request",
-    );
-    assert.equal(page.querySelector('[role="tablist"]'), null, look);
-    assert.ok(
-      options(page).every((each) => each.getAttribute("role") === "radio"),
-      look,
-    );
-    assert.ok(
-      options(page).every((each) => !each.hasAttribute("aria-controls")),
-      look,
-    );
-    assert.deepEqual(reading(page), { chosen: ["Conversation"], tabStops: ["Conversation"] }, look);
-  }
+test("a bar without panels is a radio group of radios", () => {
+  const page = render(createElement(Held));
+  assert.equal(
+    page.querySelector('[role="radiogroup"]')?.getAttribute("aria-label"),
+    "Pull request",
+  );
+  assert.equal(page.querySelector('[role="tablist"]'), null);
+  assert.ok(options(page).every((each) => each.getAttribute("role") === "radio"));
+  assert.ok(options(page).every((each) => !each.hasAttribute("aria-controls")));
+  assert.deepEqual(reading(page), { chosen: ["Conversation"], tabStops: ["Conversation"] });
 });
 
 test("a clearable bar's chosen option pressed again takes the choice back, and a fixed bar's stands", () => {
@@ -441,53 +426,6 @@ test("an option that says more hangs the app's hint saying it, and one that says
   );
   assert.equal(option(page, "Conversation").closest("[data-hint]"), null);
   assert.ok(heard.every((label) => label === "+60 −7 total"));
-});
-
-test("the thumb stands under the chosen option, slides to one chosen next, and follows it where an option before it goes", () => {
-  // Note that jsdom lays nothing out and has no ResizeObserver, so each option's box is the test's, 100px wide in a row, and only a draw places the thumb.
-  const optionsOf = (element: HTMLElement) => [
-    ...(element.parentElement?.querySelectorAll(".luke-choice-bar-option") ?? []),
-  ];
-  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(() => 100);
-  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => 28);
-  vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(() => 0);
-  vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return optionsOf(this).indexOf(this) * 100;
-  });
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  const draw = (items: readonly ChoiceItem<View>[], value: View) =>
-    act(() =>
-      root.render(
-        createElement(ChoiceBar<View>, {
-          label: "Pull request",
-          items,
-          value,
-          onChange: () => undefined,
-          look: CHOICE_BAR_LOOK.SEGMENTED,
-        }),
-      ),
-    );
-  const thumbAt = () =>
-    container
-      .querySelector<HTMLElement>(".luke-choice-bar")
-      ?.style.getPropertyValue("--luke-choice-bar-thumb-x");
-  try {
-    draw(OPEN_ITEMS, VIEW.CHECKS);
-    assert.equal(thumbAt(), "100px", "the thumb stands under the chosen option");
-    draw(OPEN_ITEMS, VIEW.FILES);
-    assert.equal(thumbAt(), "200px", "it slides to the option chosen next");
-    draw(
-      OPEN_ITEMS.filter((item) => item.value !== VIEW.CONVERSATION),
-      VIEW.FILES,
-    );
-    assert.equal(thumbAt(), "100px", "an option before it gone, it follows the chosen one");
-  } finally {
-    vi.restoreAllMocks();
-  }
 });
 
 test("a bar folding together folds once a name grows past its width, though nothing resized to say so", () => {

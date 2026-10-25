@@ -425,6 +425,14 @@ test("the video starts at 120 px, its size is held between its bounds, a drag mo
   assert.equal(videoHeight(kept), "360px", "a kept height past the greatest is held to it");
 });
 
+/**
+ * An opacity as a browser computes it, a number: a utility writes one as a
+ * percentage (`opacity: 0%`), which jsdom leaves as written.
+ */
+function opacity(value: string): string {
+  return String(value.endsWith("%") ? Number.parseFloat(value) / 100 : Number.parseFloat(value));
+}
+
 test("hovering the video brings out its resize controls, each named and reached from the keyboard", async () => {
   const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
     avatar: { status: AVATAR_STATUS.LIVE },
@@ -435,7 +443,7 @@ test("hovering the video brings out its resize controls, each named and reached 
   try {
     const controls = () =>
       [...room.querySelectorAll<HTMLElement>(".luke-resize-corner")]
-        .map((each) => getComputedStyle(each).opacity)
+        .map((each) => opacity(getComputedStyle(each).opacity))
         .join(" ");
     assert.equal(room.dataset.reveal, "false");
     assert.equal(controls(), "0 0", "at rest the video is the video alone");
@@ -455,8 +463,8 @@ test("hovering the video brings out its resize controls, each named and reached 
   }
   const touch = layContainersAt({}, { touch: true });
   try {
-    const controls = [...room.querySelectorAll<HTMLElement>(".luke-resize-corner")].map(
-      (each) => getComputedStyle(each).opacity,
+    const controls = [...room.querySelectorAll<HTMLElement>(".luke-resize-corner")].map((each) =>
+      opacity(getComputedStyle(each).opacity),
     );
     assert.deepEqual(controls, ["1", "1"], "a touch screen, which has no hover, always shows them");
   } finally {
