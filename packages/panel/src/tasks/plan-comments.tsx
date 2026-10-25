@@ -1610,6 +1610,8 @@ export function PlanCommentLayer({
     const measure = () => {
       setWide(element.clientWidth >= READING_WIDTH + MARGIN_ROOM + PAGE_INSETS);
       setCardRoom(Math.max(0, element.clientHeight - 2 * VIEW_EDGE));
+      // Note that a scroller drawn shorter or taller resizes no card that already fits, so the open one is measured into the new view here.
+      setResized((count) => count + 1);
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -2101,17 +2103,22 @@ export function PlanCommentLayer({
           style={{ top: hung.get(shown.id) ?? shownTop + HUNG_DROP }}
           ref={cardRef(shown.id)}
         >
-          {(counts.get(shownTop) ?? [shown]).map((thread) => (
-            <ThreadCard
-              key={thread.id}
-              thread={thread}
-              open={thread.id === active}
-              place={THREAD_PLACE.FLOAT}
-              doors={doors}
-              onOpen={() => onActive(thread.id)}
-              onClose={close}
-            />
-          ))}
+          {/* Note that a line holding more threads than the view has room for scrolls them all, so no card is pressed below its own reply field. */}
+          <ScrollArea size={SCROLL_SIZE.CONTENT}>
+            <div className="comment-float-cards">
+              {(counts.get(shownTop) ?? [shown]).map((thread) => (
+                <ThreadCard
+                  key={thread.id}
+                  thread={thread}
+                  open={thread.id === active}
+                  place={THREAD_PLACE.FLOAT}
+                  doors={doors}
+                  onOpen={() => onActive(thread.id)}
+                  onClose={close}
+                />
+              ))}
+            </div>
+          </ScrollArea>
         </div>
       )}
       {pendingCard === null ? null : (

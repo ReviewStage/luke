@@ -6005,13 +6005,14 @@ svg.lucide {
   width: var(--comment-card-width);
   max-height: var(--comment-card-room);
   flex-direction: column;
-  gap: var(--luke-tight-gap);
 }
 
-/* The threads at rest beside the open one under a count keep their height;
-   the open one gives way to the room the float has. */
-.comment-float > .comment-card[data-open="false"] {
-  flex-shrink: 0;
+/* The threads on a folded line, the open one among those at rest, which
+   scroll together where the float has no room for them all. */
+.comment-float-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-tight-gap);
 }
 
 /* An open card over the plan stands no taller than the scroller it opens
