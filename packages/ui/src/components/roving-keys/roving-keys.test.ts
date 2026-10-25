@@ -163,3 +163,57 @@ test("← and → cross from a column to the next one's Tab stop, an empty colum
   key("ArrowLeft");
   expect(document.activeElement).toBe(card("Done one"));
 });
+
+const ROWS = ["First", "Second", "Third"] as const;
+
+/** A list of rows walked by ↑↓, each drawn with the attributes `marks` gives it. */
+function Rows({
+  marks,
+}: {
+  marks: Partial<Record<(typeof ROWS)[number], Record<string, string>>>;
+}): React.JSX.Element {
+  const roving = useRovingKeys<HTMLDivElement>();
+  return createElement(
+    "div",
+    roving,
+    ROWS.map((row) =>
+      createElement("button", { key: row, type: "button", ...rovingItem(), ...marks[row] }, row),
+    ),
+  );
+}
+
+/** Draws the rows and hands back their stops, in order. */
+function drawRows(marks: React.ComponentProps<typeof Rows>["marks"]): HTMLButtonElement[] {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(Rows, { marks })));
+  return [...container.querySelectorAll("button")];
+}
+
+test("Tab enters a list on its aria-current row, whatever value says current", () => {
+  for (const value of ["page", "step", "true"]) {
+    const rows = drawRows({ Third: { "aria-current": value } });
+    expect(
+      rows.map((row) => row.tabIndex),
+      value,
+    ).toEqual([-1, -1, 0]);
+    document.body.replaceChildren();
+  }
+});
+
+test("a row with aria-current false is not the current one", () => {
+  const rows = drawRows({ Third: { "aria-current": "false" } });
+  expect(rows.map((row) => row.tabIndex)).toEqual([0, -1, -1]);
+});
+
+test("a chosen row outranks the current one, and the row last moved to outranks both", () => {
+  const rows = drawRows({
+    Second: { "aria-selected": "true" },
+    Third: { "aria-current": "page" },
+  });
+  expect(rows.map((row) => row.tabIndex)).toEqual([-1, 0, -1]);
+  act(() => rows[0]?.focus());
+  expect(rows.map((row) => row.tabIndex)).toEqual([0, -1, -1]);
+});

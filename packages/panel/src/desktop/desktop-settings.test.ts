@@ -1222,9 +1222,12 @@ test("a page's row in the sidebar offers Copy link on a right-click, copying the
 test("the page list is one Tab stop, and ↑ and ↓ walk its pages across the groups without opening one", () => {
   const page = mount(createElement(SettingsHarness));
   const buttons = pageButtons(page);
+  const open = buttons.findIndex((each) => each.getAttribute("aria-current") === "page");
+  assert.notEqual(open, 0, "the open page is not the first, so Tab's landing says which it chose");
   assert.deepEqual(
     buttons.map((each) => each.tabIndex),
-    buttons.map((_, at) => (at === 0 ? 0 : -1)),
+    buttons.map((_, at) => (at === open ? 0 : -1)),
+    "Tab lands on the open page",
   );
   act(() => buttons[0]?.focus());
   const press = (key: string) =>

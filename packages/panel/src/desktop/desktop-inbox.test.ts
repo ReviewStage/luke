@@ -3680,7 +3680,7 @@ function rowTabStops(page: HTMLElement): (string | null | undefined)[] {
 test("the list's rows are one Tab stop, across its plans, that ↓ walks and End ends, the walk wrapping and the stop following the row last focused", async () => {
   const { page } = mount();
   await settle();
-  assert.deepEqual(rowTabStops(page), ["How is a failed email retried?"], "Tab lands on one row");
+  assert.deepEqual(rowTabStops(page), ["Alert at 80%?"], "Tab lands on the open row, one stop");
 
   act(() => rowNamed(page, "How is a failed email retried?").focus());
   pressKey("ArrowDown", document.activeElement ?? document.body);
