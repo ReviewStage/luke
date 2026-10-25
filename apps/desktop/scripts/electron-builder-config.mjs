@@ -16,7 +16,12 @@ import {
   resolveSigningMode,
   SIGNING_MODE,
 } from "./package-config.mjs";
-import { LIQUID_GLASS_ADDON, NATIVE_HELPERS, packagedAppPath } from "./package-layout.mjs";
+import {
+  AGENT_RUNNER_RESOURCES,
+  LIQUID_GLASS_ADDON,
+  NATIVE_HELPERS,
+  packagedAppPath,
+} from "./package-layout.mjs";
 import { builderReleaseArtifactDirectory, RELEASE_VOLUME_NAME } from "./release-config.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -85,6 +90,7 @@ export function createElectronBuilderConfig(env = process.env) {
         from: helperPath,
         to: path.basename(helperPath),
       })),
+      { from: packageAssets.agentRunnerPath, to: AGENT_RUNNER_RESOURCES.directory },
       {
         from: packageAssets.licensePath,
         to: path.basename(packageAssets.licensePath),
@@ -109,7 +115,12 @@ export function createElectronBuilderConfig(env = process.env) {
       entitlements: packageAssets.entitlementsPath,
       entitlementsInherit: packageAssets.entitlementsPath,
       minimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
-      binaries: [...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map(macBinaryPath),
+      binaries: [
+        ...[...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map(macBinaryPath),
+        ...[AGENT_RUNNER_RESOURCES.node, AGENT_RUNNER_RESOURCES.claude].map((binary) =>
+          path.join("Contents", "Resources", AGENT_RUNNER_RESOURCES.directory, binary),
+        ),
+      ],
       // The app's own scheme, which a Luke link's "Open in Luke" page hands
       // the plan to (`src/main/services/window-service.ts`): written into the
       // bundle's CFBundleURLTypes, which macOS registers the app for.

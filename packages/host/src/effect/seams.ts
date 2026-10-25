@@ -118,6 +118,39 @@ export class SignInConsent extends Context.Service<SignInConsent, SignInConsentS
 ) {}
 
 /**
+ * What a local agent's runner is started with on this Mac
+ * (`compose-local-agents.ts`): the program and its arguments that run the
+ * runner's bundle, and the environment they add, which the desktop chooses
+ * by how it ships the bundle; the Claude Code CLI the bundle drives, an
+ * absolute path the Mac registers; the name the Mac is offered under at
+ * Start; and the script that makes an agent's worktree of Luke's shared
+ * clone (`@luke/host/node`'s `agentWorktreeScript`). It arrives rather than
+ * being built here, because each is the desktop's own, a path into its
+ * bundle or a script `node:path` builds, and a host that built them could
+ * not load in a browser. Only the local agents concern asks for it.
+ */
+export interface LocalAgentPlatformSeam {
+  readonly runner: {
+    readonly program: string;
+    readonly args: readonly string[];
+    readonly env: Readonly<Record<string, string>>;
+  };
+  readonly claudeExecutable: string;
+  readonly deviceName: string;
+  readonly worktreeScript: (input: {
+    readonly home: string;
+    readonly repository: string;
+    readonly worktree: string;
+    readonly branch: string | null;
+  }) => string;
+}
+
+export class LocalAgentPlatform extends Context.Service<
+  LocalAgentPlatform,
+  LocalAgentPlatformSeam
+>()("@luke/host/LocalAgentPlatform") {}
+
+/**
  * Where the account's identity and credentials come from, as the shell
  * chooses it (`account-source.ts`): the desktop's OAuth source, which needs
  * `SecretCipher` and `SignInConsent` of its own, or a browser's cookie

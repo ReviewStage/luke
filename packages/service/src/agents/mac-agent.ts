@@ -15,15 +15,20 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import { accountExperimentOn } from "@luke/database/models/account-store";
+import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import {
   claimMacAgentLine,
+  latestMacAgentLaunch,
   macAgentLinesWaiting,
   macAgentRequestsWaiting,
+  settleMacAgentLine,
   withdrawExpiredMacAgentRows,
 } from "@luke/database/models/mac-agent-store";
 import { beatMacDevice, macDeviceLayout } from "@luke/database/models/mac-device-store";
 import { openMacLaunchSecrets, parseKeyRing } from "@luke/database/models/provider-key-seal";
+import { storeWriter } from "@luke/database/models/writer";
 import {
   MAC_AGENT_LINE_KIND,
   type MacAgentLaunchSecrets,
@@ -33,6 +38,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { Clock, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
 import { HostedEnvironment } from "../environment.js";
 import type { StoreFailure } from "../http/store-failure.js";
+import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 export const MAC_AGENT_SERVICE = {
   /** How long the Mac's read is held while nothing waits for it. */
@@ -140,5 +146,40 @@ export function claimedMacAgentLine(userId: string, deviceId: string, id: string
     }
     const secrets = yield* openedSecrets(userId, line.agentId, sealedSecrets);
     return Option.some(Option.isSome(secrets) ? { line, secrets: secrets.value } : { line });
+  });
+}
+
+/**
+ * One line the account's Mac claimed, settled; whether it was. A launch
+ * line that was the agent's newest settles its runner as gone, so a turn
+ * of the agent's still under way, whose runner posted no END before it
+ * ended, as when the app quit or the Mac's switch went off mid-turn, is
+ * settled lost (`settleRunnerLostTurns`) and the agent offers Continue
+ * rather than running until `TURN_ABANDON`. A turn the runner ended itself
+ * is already settled, and is left as it stands. An older launch a newer one
+ * replaced settles nothing of the newer one's turn.
+ */
+export function settledMacAgentLine(
+  userId: string,
+  deviceId: string,
+  id: string,
+  exitCode?: number,
+) {
+  return Effect.gen(function* () {
+    const settled = yield* settleMacAgentLine(userId, deviceId, id, exitCode);
+    if (Option.isNone(settled)) return false;
+    const { agentId, kind } = settled.value;
+    if (kind !== MAC_AGENT_LINE_KIND.LAUNCH) return true;
+    const newest = yield* latestMacAgentLaunch(userId, agentId);
+    if (Option.isNone(newest) || newest.value.id !== id) return true;
+    const agent = yield* readCodingAgent(userId, agentId);
+    if (Option.isNone(agent)) return true;
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    yield* settleRunnerLostTurns(
+      writer,
+      agent.value.conversationId,
+      yield* Clock.currentTimeMillis,
+    );
+    return true;
   });
 }

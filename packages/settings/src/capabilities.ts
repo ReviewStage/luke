@@ -22,6 +22,8 @@ export const HOST_CAPABILITY = {
   MAC_TERMINAL: "macTerminal",
   /** An agent's Terminal tab, and Show terminal and New terminal that open it. */
   TERMINALS: "terminals",
+  /** A coding agent's runner on this Mac, and the This Mac switch that lets agents run here. */
+  LOCAL_AGENTS: "localAgents",
   /** Sign in with ChatGPT, whose loopback only a client on the machine itself can listen on. */
   CHATGPT_SIGN_IN: "chatGptSignIn",
   /**

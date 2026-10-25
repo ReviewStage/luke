@@ -6,6 +6,7 @@ import {
   HostedCodingAgentClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
+  HostedMacAgentClient,
   HostedMacCommandClient,
   HostedTaskClient,
   HostedTerminalClient,
@@ -21,7 +22,7 @@ import {
   type GatewayShutdownSteps,
   NODE_CAPABILITY_STATUS,
 } from "@luke/gateway";
-import { APP_SETTING_SCHEMA, MAC_COMMAND_MODE } from "@luke/settings";
+import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, MAC_COMMAND_MODE } from "@luke/settings";
 import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
 import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { Effect, Layer } from "effect";
@@ -37,6 +38,7 @@ import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
+import { composeLocalAgents } from "./compose-local-agents.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
 import { composeMacTerminal } from "./compose-mac-terminal.js";
 import { composeSettings } from "./compose-settings.js";
@@ -50,6 +52,7 @@ import {
   type AccountSource,
   type AppIdentity,
   type Environment,
+  type LocalAgentPlatform,
   Reporter,
   ShutdownSignal,
   SignInConsent,
@@ -83,6 +86,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.INSTALLED_SKILLS,
   HOST_CONCERN.MAC_COMMANDS,
+  HOST_CONCERN.LOCAL_AGENTS,
 ];
 
 /** What every assembly asks for, whichever platform concerns it was built with. */
@@ -102,6 +106,9 @@ type HostAssemblyRequirements =
 /** What each platform concern adds to the assembly's requirements when it is chosen. */
 interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
+  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]:
+    | ChildProcessSpawner.ChildProcessSpawner
+    | LocalAgentPlatform;
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: never;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
   [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
@@ -255,6 +262,26 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           }),
         })
       : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
+    const localAgents = platform.has(HOST_PLATFORM_CONCERN.LOCAL_AGENTS)
+      ? yield* composeLocalAgents({
+          kernel,
+          account,
+          accountId,
+          // Note that a settings file that cannot be read runs nothing here, since both switches are off by default.
+          switchedOn: settings.store.snapshot().pipe(
+            Effect.map(
+              ({ stored, experiments }) =>
+                (stored.localAgents ?? APP_SETTING_SCHEMA.localAgents.default) &&
+                experimentOn(experiments, EXPERIMENT.LOCAL_AGENTS),
+            ),
+            Effect.orElseSucceed(() => false),
+          ),
+          client: new HostedMacAgentClient({
+            serviceBaseUrl: kernel.hostedServiceBaseUrl,
+            credential: account.credential,
+          }),
+        })
+      : unavailableConcern(HOST_PLATFORM_CONCERN.LOCAL_AGENTS);
     const macTerminal = platform.has(HOST_PLATFORM_CONCERN.MAC_TERMINAL)
       ? composeMacTerminal({ store: settings.store })
       : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_TERMINAL);
@@ -350,6 +377,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.INSTALLED_SKILLS]: installedSkills,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
+      [HOST_CONCERN.LOCAL_AGENTS]: localAgents,
       [HOST_CONCERN.MAC_TERMINAL]: macTerminal,
       [HOST_CONCERN.TERMINALS]: terminals,
       [HOST_CONCERN.CHATGPT_SIGN_IN]: chatGptSignIn,

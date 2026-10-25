@@ -35,6 +35,8 @@ export {
   AppIdentity,
   Environment,
   IdSource,
+  LocalAgentPlatform,
+  type LocalAgentPlatformSeam,
   RunMode,
   reporterLayer,
   SecretCipher,

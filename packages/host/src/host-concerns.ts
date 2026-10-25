@@ -3,7 +3,7 @@
  *
  * Every concern but the platform ones runs wherever the host does. A
  * platform concern reaches something only some hosts have: a process
- * spawner, a terminal's relay socket, this Mac's own repositories, a
+ * spawner, the runner a local agent runs on this Mac, a terminal's relay socket, this Mac's own repositories, a
  * loopback the browser hands a sign-in back to. The
  * assembly is built with the platform concerns its host chose; one left out
  * is never started, asks for nothing, and answers each of its methods with a
@@ -32,6 +32,7 @@ export const HOST_CONCERN = {
   INTEGRATIONS: "integrations",
   INSTALLED_SKILLS: "installedSkills",
   MAC_COMMANDS: "macCommands",
+  LOCAL_AGENTS: "localAgents",
   MAC_TERMINAL: "macTerminal",
   TERMINALS: "terminals",
   CHATGPT_SIGN_IN: "chatGptSignIn",
@@ -42,6 +43,7 @@ export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
 /** The concerns a host may leave out, for want of what they reach on its platform. */
 export const HOST_PLATFORM_CONCERN = {
   MAC_COMMANDS: HOST_CONCERN.MAC_COMMANDS,
+  LOCAL_AGENTS: HOST_CONCERN.LOCAL_AGENTS,
   MAC_TERMINAL: HOST_CONCERN.MAC_TERMINAL,
   TERMINALS: HOST_CONCERN.TERMINALS,
   CHATGPT_SIGN_IN: HOST_CONCERN.CHATGPT_SIGN_IN,
@@ -63,6 +65,7 @@ export const isPlatformConcern = (concern: HostConcern): concern is HostPlatform
 /** What each platform concern offers the client, which a host that left it out does not. */
 const CAPABILITY_OF_CONCERN = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: HOST_CAPABILITY.MAC_COMMANDS,
+  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: HOST_CAPABILITY.LOCAL_AGENTS,
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: HOST_CAPABILITY.MAC_TERMINAL,
   [HOST_PLATFORM_CONCERN.TERMINALS]: HOST_CAPABILITY.TERMINALS,
   [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: HOST_CAPABILITY.CHATGPT_SIGN_IN,
@@ -109,6 +112,8 @@ export function hostCapabilities(
 /** The methods each platform concern answers, which a host that left it out refuses. */
 const PLATFORM_CONCERN_METHODS = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: [GATEWAY_METHOD.MAC_COMMAND_ANSWER],
+  // Note that the panel asks nothing of a local agent's runner: the service reaches it through rows.
+  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: [],
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: [
     GATEWAY_METHOD.MAC_REPOSITORIES_READ,
     GATEWAY_METHOD.MAC_REPOSITORY_SET,

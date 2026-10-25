@@ -12,7 +12,12 @@ import {
 import path from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
-import { cloneFolder, openOnMacScript, worktreeFolder } from "./open-on-mac.js";
+import {
+  agentWorktreeScript,
+  cloneFolder,
+  openOnMacScript,
+  worktreeFolder,
+} from "./open-on-mac.js";
 
 /**
  * Open on this Mac's script over real Git and bash, an origin on disk
@@ -887,3 +892,35 @@ test("two branches never share a worktree, none reaches outside the repository's
     assert.doesNotMatch(path.basename(folder), /%/u);
   }
 });
+
+test(
+  "two local agents starting from one branch each get a worktree of it, and one already made keeps the agent's work",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    const head = push("first\n");
+    const clone = cloneFolder(state, "acme/app");
+    const agent = (name: string) => path.join(scratch, "agents", name, "repository");
+    const script = (worktree: string) =>
+      agentWorktreeScript({
+        repository: "acme/app",
+        clone,
+        worktree,
+        branch: "luke/fix-relay",
+        remotes: { https: origin, ssh: origin },
+      });
+
+    run(scratch, shell, script(agent("first")));
+    run(scratch, shell, script(agent("second")));
+    writeFileSync(path.join(agent("first"), "README.md"), "the agent's edit\n");
+    push("second\n");
+    run(scratch, shell, script(agent("first")));
+
+    assert.equal(git(agent("second"), ["rev-parse", "HEAD"]), head);
+    assert.equal(git(agent("first"), ["rev-parse", "HEAD"]), head);
+    assert.equal(
+      readFileSync(path.join(agent("first"), "README.md"), "utf8"),
+      "the agent's edit\n",
+    );
+  },
+  GIT_DEADLINE,
+);

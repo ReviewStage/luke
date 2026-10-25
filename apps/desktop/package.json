@@ -26,10 +26,11 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:native": "node scripts/build-native.mjs",
-    "package": "pnpm build:native && pnpm build && node scripts/prepare-builder-assets.mjs && electron-builder --config electron-builder.ts --mac --arm64 --publish never",
-    "package:dir": "pnpm build:native && pnpm build && node scripts/prepare-builder-assets.mjs && electron-builder --config electron-builder.ts --mac --arm64 --dir --publish never",
+    "build:runner": "pnpm --filter @luke/agent-runner build",
+    "package": "pnpm build:native && pnpm build:runner && pnpm build && node scripts/prepare-builder-assets.mjs && electron-builder --config electron-builder.ts --mac --arm64 --publish never",
+    "package:dir": "pnpm build:native && pnpm build:runner && pnpm build && node scripts/prepare-builder-assets.mjs && electron-builder --config electron-builder.ts --mac --arm64 --dir --publish never",
     "release": "LUKE_ELECTRON_BUILDER_NOTARIZE=1 pnpm package",
-    "start": "pnpm build:native && pnpm build && electron .",
+    "start": "pnpm build:native && pnpm build:runner && pnpm build && electron .",
     "test:vitest": "vitest run",
     "typecheck": "NODE_OPTIONS=--max-old-space-size=4096 tsc --project tsconfig.json"
   },

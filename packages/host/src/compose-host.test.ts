@@ -16,6 +16,7 @@ import {
   AppIdentity,
   Environment,
   IdSource,
+  LocalAgentPlatform,
   RunMode,
   reporterLayer,
   SecretCipher,
@@ -139,6 +140,12 @@ describe("the host's platform concerns", () => {
             scriptedSpawner(() => ({ exitCode: 0 })).layer,
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
             Layer.succeed(SignInConsent, { open: loopbackConsent }),
+            Layer.succeed(LocalAgentPlatform, {
+              runner: { program: "/usr/bin/false", args: [], env: {} },
+              claudeExecutable: "/usr/bin/false",
+              deviceName: "Fixture Mac",
+              worktreeScript: () => "exit 1",
+            }),
           ),
         ),
       );
@@ -160,6 +167,7 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.LOCAL_AGENTS,
         HOST_CAPABILITY.CHATGPT_SIGN_IN,
       ]);
       // The desktop answers every client capability too: its Zoom, login item and Keyboard shortcuts page stand on DESKTOP_APP.
@@ -170,6 +178,7 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.LOCAL_AGENTS,
         HOST_CAPABILITY.CHATGPT_SIGN_IN,
         HOST_CAPABILITY.DESKTOP_APP,
       ]);

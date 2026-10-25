@@ -101,6 +101,18 @@ const DENIED_VARIABLES = [
   "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
 ] as const;
 
+/**
+ * Where a command the agent runs on a Mac may write beside its worktree and
+ * its temp folder, which Claude Code's sandbox keeps writable: the caches
+ * toolchains share across projects, so a build or an install there works as
+ * in the developer's own shell. A Mac's sandbox is the developer's whole
+ * home otherwise, read but not written.
+ */
+const MAC_TOOLCHAIN_CACHES = ["~/.cache", "~/Library/Caches", "~/.npm"] as const;
+
+/** Whether the runner runs on the developer's Mac, under Seatbelt, rather than in a Linux sandbox under bubblewrap. */
+const ON_MAC = process.platform === "darwin";
+
 const CLAUDE_EFFORTS: ReadonlySet<string> = new Set(Object.values(EFFORT));
 
 /** Whether a model line's effort is one the CLI takes. */
@@ -186,9 +198,13 @@ function queryOptions(
       // Note that the sandbox's VM masks /proc/kcore and /proc/keys, so the
       // kernel refuses bubblewrap a fresh /proc and every command failed; the
       // host /proc is bound instead, where another process's environ, the
-      // CLI's and its token included, is still refused, as under Codex.
-      enableWeakerNestedSandbox: true,
+      // CLI's and its token included, is still refused, as under Codex. A Mac's
+      // Seatbelt has no /proc to bind.
+      ...(ON_MAC ? {} : { enableWeakerNestedSandbox: true }),
+      // Note that the list is no strict allowlist, so under `bypassPermissions` a host past it is
+      // still reached, which leaves a Mac's network open as the developer's own shell has it.
       network: { allowedDomains: [...config.allowedDomains] },
+      ...(ON_MAC ? { filesystem: { allowWrite: [...MAC_TOOLCHAIN_CACHES] } } : {}),
       credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
     },
     hooks: { Stop: [{ hooks: [onStop] }] },

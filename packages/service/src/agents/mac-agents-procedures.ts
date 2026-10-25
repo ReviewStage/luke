@@ -15,11 +15,7 @@
  */
 
 import { accountExperimentOn } from "@luke/database/models/account-store";
-import {
-  answerMacAgentRequest,
-  claimMacAgentRequest,
-  settleMacAgentLine,
-} from "@luke/database/models/mac-agent-store";
+import { answerMacAgentRequest, claimMacAgentRequest } from "@luke/database/models/mac-agent-store";
 import { beatMacDevice, registerMacDevice } from "@luke/database/models/mac-device-store";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect, Option } from "effect";
@@ -34,6 +30,7 @@ import {
   macAgentDeviceOf,
   macAgentLinesFor,
   macAgentRequestsFor,
+  settledMacAgentLine,
 } from "./mac-agent.js";
 
 export interface MacAgentsProcedureSeams {
@@ -96,7 +93,7 @@ export function macAgentsProcedures(seams: MacAgentsProcedureSeams) {
       yield* followed(context.userId, input.deviceId);
       return yield* keptOrNotFound(
         yield* hostedStoreOrUnavailable(
-          settleMacAgentLine(context.userId, input.deviceId, input.id, input.exitCode),
+          settledMacAgentLine(context.userId, input.deviceId, input.id, input.exitCode),
         ),
       );
     }),
