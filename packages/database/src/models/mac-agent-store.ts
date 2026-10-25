@@ -12,6 +12,12 @@
  * second claim, a listing, or a read after it finds none
  * (`../schemas/mac-agent.ts`). The secrets are opaque here: the service
  * seals them before the queue and opens them after the claim.
+ *
+ * Every line queued for one agent is queued under that agent's runner
+ * lease (`./coding-agent-runner-lease.ts`), as every write to a cloud
+ * runner is. That is what keeps an agent's lines committed in the order of
+ * their `seq`: the sequence is shared by every agent and holds no lock, so
+ * two lines queued at once outside the lease could commit out of order.
  */
 
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
@@ -103,10 +109,6 @@ function pinnedAgent(userId: string, agentId: string) {
   );
 }
 
-/** The agent's next place in its order: one past its latest line's, or one for its first. */
-const nextSeq = (agentId: string) =>
-  sql<number>`(select coalesce(max(${macAgentLine.seq}), 0) + 1 from ${macAgentLine} where ${macAgentLine.agentId} = ${agentId})`;
-
 const insertLine = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -127,7 +129,6 @@ const insertLine = SqlSchema.findAll({
               agentId: sql<string>`${codingAgent.id}`.as("agent_id"),
               userId: sql<string>`${codingAgent.userId}`.as("user_id"),
               deviceId: sql<string>`${macDevice.id}`.as("device_id"),
-              seq: nextSeq(agentId).as("seq"),
               kind: sql<MacAgentLineKind>`${kind}`.as("kind"),
               payload: sql<MacAgentObject>`${JSON.stringify(payload)}::jsonb`.as("payload"),
               sealedSecrets: sql<string | null>`${sealedSecrets}::text`.as("sealed_secrets"),
@@ -162,7 +163,7 @@ const findWaitingLines = SqlSchema.findAll({
             isNull(macAgentLine.claimedAt),
           ),
         )
-        .orderBy(asc(macAgentLine.createdAt), asc(macAgentLine.seq)),
+        .orderBy(asc(macAgentLine.seq)),
     ),
 });
 
@@ -415,9 +416,10 @@ const deleteExpiredRequests = SqlSchema.void({
 
 /**
  * Queues one line for the account's agent, to the Mac it is pinned to, at
- * the next place in the agent's order, with the sealed secrets a launch
- * line carries; its id and place, or none where the account holds no such
- * agent running on a Mac of its own.
+ * the next place in the order every line is queued in, with the sealed
+ * secrets a launch line carries, its caller holding the agent's runner
+ * lease; its id and place, or none where the account holds no such agent
+ * running on a Mac of its own.
  */
 export function queueMacAgentLine(
   userId: string,
@@ -443,7 +445,7 @@ export function queueMacAgentLine(
   );
 }
 
-/** The lines waiting for the account's Mac, oldest first and each agent's in its order, without their secrets. */
+/** The lines waiting for the account's Mac, in the order they were queued, without their secrets. */
 export function macAgentLinesWaiting(
   userId: string,
   deviceId: string,

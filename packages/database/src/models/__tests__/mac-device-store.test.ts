@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
@@ -52,8 +52,9 @@ it.layer(getTestDB())("the Mac device store", (it) => {
       const { owner } = yield* openAccounts;
       const id = randomUUID();
       yield* registerMacDevice(owner, { id, name: "Laptop" });
+      // Note that the cutoff is measured from the clock's reading, which the layer's clock carries from test to test.
+      const cutoff = new Date((yield* Clock.currentTimeMillis) + 45_000);
       yield* TestClock.adjust("60 seconds");
-      const cutoff = new Date(45_000);
 
       const staleRead = yield* macDevicesSeenSince(owner, cutoff);
       const beaten = yield* beatMacDevice(owner, id);

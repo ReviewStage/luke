@@ -51,8 +51,13 @@ export const macAgentObjectSchema = EffectSchema.Record(EffectSchema.String, Eff
 
 export type MacAgentObject = typeof macAgentObjectSchema.Type;
 
+/** A command's output, held to the bound in UTF-8 bytes rather than characters, since a character may take up to four. */
 const commandOutput = EffectSchema.String.check(
-  EffectSchema.isMaxLength(MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES),
+  EffectSchema.makeFilter(
+    (value: string) =>
+      Buffer.byteLength(value, "utf8") <= MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES ||
+      `at most ${MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES} bytes`,
+  ),
 );
 
 /**

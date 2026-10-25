@@ -4,7 +4,7 @@ import type {
   MacAgentRequestKind,
 } from "@luke/features/mac-agent-wire";
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { bytea, createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
@@ -23,7 +23,12 @@ import { macDevice } from "./mac-device.js";
 
 /**
  * One line to a local agent's runner, in the order the service wrote them:
- * `seq` counts from one per agent, minted as the line is queued. A launch
+ * `seq` is one sequence across every agent, minted as the line is queued,
+ * so it never repeats, even once expiry withdrew an agent's every line, and
+ * two lines queued at once never contend for one value. An agent's lines
+ * are read in its order; the values are not dense, and two lines queued at
+ * once may commit out of their order, so a Mac claims each by its id and
+ * never passes over one below the highest it saw. A launch
  * line carries the secrets its runner is launched under (its bearer and
  * the harness credential) in `sealed_secrets`, sealed by the service, which
  * no listing reads and the claim clears in the same statement it hands
@@ -44,8 +49,8 @@ export const macAgentLine = pgTable(
     deviceId: uuid("device_id")
       .notNull()
       .references(() => macDevice.id, { onDelete: "cascade" }),
-    /** The line's place among its agent's, from one. */
-    seq: integer("seq").notNull(),
+    /** The line's place in the order every line was queued in. */
+    seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity().notNull(),
     kind: text("kind").$type<MacAgentLineKind>().notNull(),
     /** What the line says, which its kind's reader holds to a shape. */
     payload: jsonb("payload").$type<MacAgentObject>().notNull(),
@@ -60,8 +65,6 @@ export const macAgentLine = pgTable(
     exitCode: integer("exit_code"),
   },
   (table) => [
-    // One place per line in its agent's order, so two queues at once cannot share one.
-    uniqueIndex("mac_agent_line_agent_seq").on(table.agentId, table.seq),
     // A Mac reads its unclaimed lines.
     index("mac_agent_line_device_waiting")
       .on(table.deviceId, table.seq)

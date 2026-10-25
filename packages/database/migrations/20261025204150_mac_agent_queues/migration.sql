@@ -3,7 +3,7 @@ CREATE TABLE "mac_agent_line" (
 	"agent_id" uuid NOT NULL,
 	"user_id" text NOT NULL,
 	"device_id" uuid NOT NULL,
-	"seq" integer NOT NULL,
+	"seq" bigint GENERATED ALWAYS AS IDENTITY (sequence name "mac_agent_line_seq_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
 	"kind" text NOT NULL,
 	"payload" jsonb NOT NULL,
 	"sealed_secrets" text,
@@ -39,7 +39,6 @@ CREATE TABLE "mac_device" (
 --> statement-breakpoint
 ALTER TABLE "coding_agent" ADD COLUMN "machine" text DEFAULT 'vercel' NOT NULL;--> statement-breakpoint
 ALTER TABLE "coding_agent" ADD COLUMN "device_id" uuid;--> statement-breakpoint
-CREATE UNIQUE INDEX "mac_agent_line_agent_seq" ON "mac_agent_line" ("agent_id","seq");--> statement-breakpoint
 CREATE INDEX "mac_agent_line_device_waiting" ON "mac_agent_line" ("device_id","seq") WHERE "claimed_at" is null;--> statement-breakpoint
 CREATE INDEX "mac_agent_line_user_created" ON "mac_agent_line" ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "mac_agent_request_device_waiting" ON "mac_agent_request" ("device_id","created_at") WHERE "claimed_at" is null;--> statement-breakpoint

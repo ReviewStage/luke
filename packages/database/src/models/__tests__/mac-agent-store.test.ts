@@ -9,7 +9,7 @@ import {
   type MacAgentAnswer,
 } from "@luke/features/mac-agent-wire";
 import { eq } from "drizzle-orm";
-import { Effect, Option } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
@@ -34,7 +34,8 @@ import { registerMacDevice } from "../mac-device-store.js";
 
 /**
  * The work queued for a local agent's Mac, over a real dialect: a line is
- * queued in its agent's order to the Mac the agent is pinned to, claimed
+ * queued in order to the Mac the agent is pinned to, at a place never
+ * handed out before, claimed
  * once with its secrets cleared in the claim, and settled once with its
  * runner's exit; a request is claimed once and answered once, its answer
  * read back as the Mac gave it; nothing is queued for, claimed by, or read
@@ -90,6 +91,12 @@ const launch = (agentId: string) =>
 const message = (agentId: string, text: string) =>
   ({ agentId, kind: MAC_AGENT_LINE_KIND.MESSAGE, payload: { text } }) as const;
 
+/** Five minutes past the clock's reading now, which the layer's clock carries from test to test. */
+const fiveMinutesOn = Effect.map(
+  Clock.currentTimeMillis,
+  (millis) => new Date(millis + 5 * 60_000),
+);
+
 /** The line's secrets column as the row holds it now. */
 const storedSecrets = (id: string) =>
   Effect.gen(function* () {
@@ -142,7 +149,7 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
       }),
   );
 
-  it.effect("an agent's lines are queued in its order, from one", () =>
+  it.effect("an agent's lines are read in the order they were queued", () =>
     Effect.gen(function* () {
       const { userId, deviceId, agentId } = yield* openAccount();
       yield* queueMacAgentLine(userId, launch(agentId));
@@ -152,13 +159,31 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
       const waiting = yield* macAgentLinesWaiting(userId, deviceId);
 
       assert.deepEqual(
-        waiting.map((line) => [line.seq, line.kind, line.payload.text]),
+        waiting.map((line) => [line.kind, line.payload.text]),
         [
-          [1, MAC_AGENT_LINE_KIND.LAUNCH, undefined],
-          [2, MAC_AGENT_LINE_KIND.MESSAGE, "first"],
-          [3, MAC_AGENT_LINE_KIND.MESSAGE, "second"],
+          [MAC_AGENT_LINE_KIND.LAUNCH, undefined],
+          [MAC_AGENT_LINE_KIND.MESSAGE, "first"],
+          [MAC_AGENT_LINE_KIND.MESSAGE, "second"],
         ],
       );
+    }),
+  );
+
+  it.effect("an agent's next line follows its last even once expiry withdrew every line", () =>
+    Effect.gen(function* () {
+      const { userId, deviceId, agentId } = yield* openAccount();
+      const first = Option.getOrThrow(yield* queueMacAgentLine(userId, launch(agentId)));
+      const cutoff = yield* fiveMinutesOn;
+      yield* TestClock.adjust("10 minutes");
+      yield* withdrawExpiredMacAgentRows(userId, cutoff);
+
+      const next = Option.getOrThrow(yield* queueMacAgentLine(userId, message(agentId, "back")));
+
+      assert.deepEqual(
+        (yield* macAgentLinesWaiting(userId, deviceId)).map((line) => line.id),
+        [next.id],
+      );
+      assert.ok(next.seq > first.seq, "a withdrawn line's place is never handed out again");
     }),
   );
 
@@ -286,33 +311,35 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
       }),
   );
 
-  it.effect("an answer past the bound is refused and writes nothing", () =>
+  it.effect("an answer past the bound in bytes is refused and writes nothing", () =>
     Effect.gen(function* () {
       const { userId, deviceId, agentId } = yield* openAccount();
-      const id = randomUUID();
-      yield* queueMacAgentRequest(userId, {
-        id,
-        agentId,
-        kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
-        args: { path: "huge.bin" },
-      });
-      yield* claimMacAgentRequest(userId, deviceId, id);
-
-      const oversized = yield* Effect.exit(
-        answerMacAgentRequest(userId, deviceId, id, {
+      // Note that the command's output is under the bound in characters, three bytes each.
+      const oversized: readonly MacAgentAnswer[] = [
+        {
           kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
           bytes: new Uint8Array(MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES + 2),
-        }),
-      );
+        },
+        { ...COMMAND_ANSWER, stdout: "€".repeat(MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES / 2) },
+      ];
 
-      assert.equal(oversized._tag, "Failure");
-      assert.deepEqual(yield* macAgentRequestAnswer(userId, id), Option.none());
+      for (const answer of oversized) {
+        const id = randomUUID();
+        yield* queueMacAgentRequest(userId, { id, agentId, kind: answer.kind, args: {} });
+        yield* claimMacAgentRequest(userId, deviceId, id);
+
+        const answered = yield* Effect.exit(answerMacAgentRequest(userId, deviceId, id, answer));
+
+        assert.equal(answered._tag, "Failure", answer.kind);
+        assert.deepEqual(yield* macAgentRequestAnswer(userId, id), Option.none());
+      }
     }),
   );
 
   it.effect("the expiry withdraws old lines and requests but a runner still at work", () =>
     Effect.gen(function* () {
       const { userId, deviceId, agentId } = yield* openAccount();
+      const cutoff = yield* fiveMinutesOn;
       const running = Option.getOrThrow(yield* queueMacAgentLine(userId, launch(agentId)));
       yield* claimMacAgentLine(userId, deviceId, running.id);
       yield* queueMacAgentLine(userId, message(agentId, "never taken"));
@@ -325,7 +352,7 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
       yield* TestClock.adjust("10 minutes");
       const fresh = Option.getOrThrow(yield* queueMacAgentLine(userId, message(agentId, "new")));
 
-      yield* withdrawExpiredMacAgentRows(userId, new Date(5 * 60_000));
+      yield* withdrawExpiredMacAgentRows(userId, cutoff);
 
       assert.deepEqual(
         (yield* macAgentLinesWaiting(userId, deviceId)).map((line) => line.id),
