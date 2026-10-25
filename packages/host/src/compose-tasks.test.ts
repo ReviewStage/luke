@@ -1601,6 +1601,29 @@ it.effect(
 );
 
 it.effect(
+  "a start answers once its task is drawn open, before the followed list carries its transaction",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(BILLING, "Billing export", "# Billing", 20)]);
+      const { call, listed, realtime, settled, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      const made = task(INVITES, "Invitation expiry", "", 10);
+      service.createAnswer = { ok: true, answer: { task: made, txid: "7303" } };
+
+      const starting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry" }),
+      );
+      yield* settled;
+
+      assert.notEqual(starting.pollUnsafe(), undefined, "the start is answered already");
+      assert.deepEqual(yield* Fiber.join(starting), { planId: INVITES });
+      assert.equal(last()?.activeTaskId, INVITES);
+      assert.deepEqual(realtime.awaitingTxids(), []);
+    }),
+);
+
+it.effect(
   "a rename's transaction is waited for by nothing while the list is not followed over Realtime",
   () =>
     Effect.gen(function* () {
