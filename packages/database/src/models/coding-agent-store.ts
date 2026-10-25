@@ -42,7 +42,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { Data, DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
+import { Data, DateTime, Effect, Exit, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { agentPin } from "../schemas/agent-pin.js";
@@ -77,7 +77,7 @@ import {
   turnUsagesOf,
 } from "./message-reads.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
-import { TaskAgentUnstopped, type TaskDeleteGuard } from "./task-store.js";
+import { TaskAgentUnstopped } from "./task-store.js";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
@@ -1894,8 +1894,10 @@ export function discardCodingAgent(
 export interface CodingAgentDeleteGuard<R> {
   /** Whether the agent, read under its conversation's lock, still stands as the caller's Stop left it; false refuses the delete. */
   readonly standsStopped: (agent: CodingAgent) => Effect.Effect<boolean, StoreFailure, R>;
-  /** Run under that lock before anything is deleted, given the agent's conversation, as a task's delete runs its own. */
-  readonly beforeDelete: TaskDeleteGuard<R>["beforeDelete"];
+  /** Run under that lock before anything is deleted, given the agent's conversation. */
+  readonly beforeDelete: (
+    conversationIds: readonly string[],
+  ) => Effect.Effect<void, StoreFailure, R>;
 }
 
 /** Every call into the agent, open or ended, locked against a segment its voice writes meanwhile, which waits and then finds the conversation stamped (`voice-writer.ts`). */
@@ -2288,7 +2290,8 @@ export function updateCodingAgentServers(
  * switches say, and left standing only where the hand-over answers that eve
  * took the message. The servers not already standing are added, the
  * hand-over run, and those same servers taken out again for one that
- * answered nothing, so a refused send leaves no server for a later turn.
+ * answered nothing, failed, or was interrupted at its deadline, so a send
+ * eve did not take leaves no server for a later turn.
  * No transaction is open across the hand-over, so a turn may take the
  * servers meanwhile; each change is one statement over the row as it then
  * stands, so the take-out never writes back what that turn took. Note that
@@ -2310,10 +2313,15 @@ export function dispatchMentioningServers<E, R>(
     if (Option.isNone(read)) return yield* dispatch;
     const standing = new Set(read.value.mentionedServers);
     const added = [...new Set(mentioned)].filter((name) => !standing.has(name));
-    yield* addMentionedServers({ agentId, names: added });
-    const taken = yield* dispatch;
-    if (!taken) yield* removeMentionedServers({ agentId, names: added });
-    return taken;
+    // The servers come out again however the hand-over ends short of taken, a deadline's interruption among them.
+    return yield* Effect.acquireUseRelease(
+      addMentionedServers({ agentId, names: added }),
+      () => dispatch,
+      (_, exit) =>
+        Exit.isSuccess(exit) && exit.value
+          ? Effect.void
+          : removeMentionedServers({ agentId, names: added }),
+    );
   });
 }
 
