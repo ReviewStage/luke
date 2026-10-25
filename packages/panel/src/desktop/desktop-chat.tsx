@@ -85,7 +85,8 @@ import { channelTitle } from "../tasks/chat-channel-name.js";
 import { ChatPane, type ChatTaskDoors } from "../tasks/chat-pane.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { VIEW_OPTIONS } from "../tasks/inbox-columns.js";
-import { InboxListSkeleton, markAllEntries } from "../tasks/inbox-list.js";
+import { INBOX_ROW_ATTENTION, INBOX_ROW_MARK } from "../tasks/inbox-item-parts.js";
+import { InboxListSkeleton, InboxRowLeading, markAllEntries } from "../tasks/inbox-list.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { keptSkills } from "../tasks/repository-skills.js";
 import type { SkillSource } from "../tasks/skill-picker.js";
@@ -704,10 +705,8 @@ function PlaceRow({
         leading={
           <>
             {/* Note that the gutter stands on every row, so the marks line up whether a row wears the dot or not. */}
-            <span className="inbox-row-gutter">
-              {unread ? <span className="inbox-row-unread" /> : null}
-            </span>
-            <span className="inbox-row-mark">{mark}</span>
+            <InboxRowLeading unread={unread} />
+            <span className={INBOX_ROW_MARK}>{mark}</span>
           </>
         }
         title={title}
@@ -716,7 +715,7 @@ function PlaceRow({
           <span className="home-row-meta">
             {unread ? <VisuallyHidden>{UNREAD_WORDS}</VisuallyHidden> : null}
             {needsYou ? (
-              <span className="inbox-row-attention">
+              <span className={INBOX_ROW_ATTENTION}>
                 <AttentionMark />
                 <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
               </span>

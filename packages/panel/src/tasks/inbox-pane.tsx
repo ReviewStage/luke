@@ -86,6 +86,9 @@ import {
   DraftQuestion,
   HeldControls,
   hasControls,
+  INBOX_ASK_BOX,
+  INBOX_ASK_KIND,
+  INBOX_ASK_STANDING,
   OPTION_NUMBER,
   optionRows,
   sendFromPane,
@@ -97,7 +100,8 @@ import {
 import { askHeadWords } from "./inbox-ask-words.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import type { InboxCodeDoors } from "./inbox-code-card.js";
-import { COMMENT, InboxComment } from "./inbox-comment.js";
+import { INBOX_VIEW_ITEMS } from "./inbox-columns.js";
+import { COMMENT, INBOX_THREAD, InboxComment } from "./inbox-comment.js";
 import type { FormTextDoors } from "./inbox-form-text.js";
 import { HolderGlyph } from "./inbox-item-parts.js";
 import {
@@ -385,7 +389,7 @@ function PendingReply({
         <AttachedFileChips files={attachmentChips(reply.attachments)} uploading />
       )}
       {reply.text === "" ? null : (
-        <div className="inbox-words inbox-message-words" data-inbox-message-text="">
+        <div className="inbox-words inbox-message-words leading-reading" data-inbox-message-text="">
           <SentWords text={reply.text} asDocument />
         </div>
       )}
@@ -492,9 +496,14 @@ function AnswerValues({
   return (
     <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} className="inbox-values" data-inbox-values="">
       {values.map(({ label, value }) => (
-        <li key={label} className="inbox-value">
-          <span className="inbox-value-label">{label}</span>
-          <div className="inbox-words inbox-value-words">
+        <li
+          key={label}
+          className="inbox-value flex min-w-0 flex-wrap items-baseline gap-x-control-gap gap-y-list-gap"
+        >
+          <span className="inbox-value-label min-w-0 max-w-full flex-none text-muted-foreground wrap-anywhere">
+            {label}
+          </span>
+          <div className="inbox-words inbox-value-words min-w-0 flex-[1_1_16ch] wrap-anywhere">
             {texts.has(label) && isWireString(value) ? (
               <SentWords text={value} />
             ) : (
@@ -510,7 +519,10 @@ function AnswerValues({
 /** Where a thread read carries only its latest messages: a line saying the earlier ones stand in the agent's tab, the agent's name opening it. */
 function EarlierMessages({ by }: { by: ItemAgent }): React.JSX.Element {
   return (
-    <li className="inbox-thread-earlier" data-inbox-earlier="">
+    <li
+      className="inbox-thread-earlier relative pb-luke-20 pl-inbox-earlier text-caption-inline text-muted-foreground before:absolute before:top-0 before:-bottom-inbox-face-half before:left-inbox-line before:w-luke-2 before:bg-border before:content-['']"
+      data-inbox-earlier=""
+    >
       <ActorLine>
         {"Earlier messages are in "}
         <AgentName by={by} />
@@ -584,7 +596,7 @@ function Waiting({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | nu
   const starter = usePerson(on);
   if (on === undefined) return null;
   return (
-    <span className="inbox-waiting-on" data-inbox-waiting="">
+    <span className="inbox-waiting-on text-muted-foreground" data-inbox-waiting="">
       Waiting on {actorName(starter, { sentence: true })}
     </span>
   );
@@ -639,8 +651,14 @@ function HeldAsk({
   // A to-do naming no steps draws the item's title as its one step, and a later post may have renamed the item since, so the title it drew then is not known.
   if (!hasControls(ask) || (ask.type === INBOX_ASK.DO && ask.steps.length === 0)) return marker;
   return (
-    <div className="inbox-ask-replaced" data-inbox-replaced="">
-      <div className="inbox-ask-replaced-controls" aria-disabled="true">
+    <div
+      className="inbox-ask-replaced flex min-w-0 flex-col gap-control-gap"
+      data-inbox-replaced=""
+    >
+      <div
+        className="inbox-ask-replaced-controls flex min-w-0 flex-col gap-block-gap"
+        aria-disabled="true"
+      >
         <SteppedBack>
           <HeldControls ask={ask} title={title} draft={EMPTY_INBOX_DRAFT} />
         </SteppedBack>
@@ -688,7 +706,10 @@ function WithdrawnMarker({
 }): React.JSX.Element {
   const closer = usePerson(item.closedBy);
   return (
-    <div className="inbox-ask-withdrawn" data-inbox-settled="withdrawn">
+    <div
+      className="inbox-ask-withdrawn flex min-w-0 flex-col items-start gap-tight-gap"
+      data-inbox-settled="withdrawn"
+    >
       <Badge>
         <WithdrawnWords reason={reason} closer={item.closedBy === undefined ? undefined : closer} />
       </Badge>
@@ -739,7 +760,7 @@ function AskBox({
 }): React.JSX.Element | null {
   if (!knownAsk(ask)) {
     return (
-      <div className="inbox-ask" data-inbox-ask="newer">
+      <div className={INBOX_ASK_BOX} data-inbox-ask="newer">
         <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
           <CardHead>
             <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE_ASK}</Text>
@@ -777,11 +798,11 @@ function AskBox({
     return ask.type === INBOX_ASK.ANSWER && ask.fields === undefined ? <AnsweredMarker /> : null;
   }
   return (
-    <div className="inbox-ask" data-inbox-ask={ask.status}>
+    <div className={INBOX_ASK_BOX} data-inbox-ask={ask.status}>
       <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
         <CardHead>
-          <span className="inbox-ask-kind">{askHeadWords(ask, undefined)}</span>
-          <span className="inbox-ask-standing">{ANSWERED}</span>
+          <span className={INBOX_ASK_KIND}>{askHeadWords(ask, undefined)}</span>
+          <span className={INBOX_ASK_STANDING}>{ANSWERED}</span>
         </CardHead>
       </Card>
     </div>
@@ -860,7 +881,7 @@ function ThreadMessage({
       />
       {message.text === "" ? null : (
         <div
-          className="inbox-words inbox-message-words"
+          className="inbox-words inbox-message-words leading-reading"
           data-inbox-message-text=""
           // The agent's words alone may be replied to, as in its tab, never a member's.
           {...(fromAgent ? { [REPLY_SCOPE]: "" } : {})}
@@ -1049,7 +1070,7 @@ function Subject({
   heading: (element: HTMLElement | null) => void;
 }): React.JSX.Element {
   return (
-    <header className="inbox-subject">
+    <header className="inbox-subject flex flex-col gap-tight-gap border-b border-border pb-block-gap">
       <Text
         as={TEXT_ELEMENT.H2}
         variant={TEXT_VARIANT.DIALOG}
@@ -1222,7 +1243,7 @@ function Crumbs({
     { label: title, current: true, shown: titleShown, end: ONE_LINE_END.ELLIPSIS },
   ].filter((crumb) => crumb !== undefined);
   return (
-    <div className="inbox-crumbs">
+    <div className="inbox-crumbs flex min-w-0 flex-initial">
       <Breadcrumbs label="Path" crumbs={crumbs} />
     </div>
   );
@@ -1347,7 +1368,7 @@ export function InboxPane({
   return (
     <section
       ref={pane}
-      className="inbox-view-items"
+      className={INBOX_VIEW_ITEMS}
       aria-label={cardTitle(item.title)}
       hidden={hidden}
     >
@@ -1375,7 +1396,7 @@ export function InboxPane({
         <PageToolbar
           start={TOOLBAR_INSET.COLUMN}
           lead={
-            <div className="inbox-item-bar">
+            <div className="inbox-item-bar flex min-w-0 flex-1 items-center gap-control-gap">
               {onBack === undefined ? null : (
                 <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
               )}
@@ -1387,7 +1408,7 @@ export function InboxPane({
                 titleShown={headingAway}
               />
               {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
-              <div className="luke-toolbar-actions inbox-item-actions">
+              <div className="luke-toolbar-actions inbox-item-actions ml-auto pr-column-inset">
                 {pager === undefined ||
                 (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
                   <InboxPagerControls pager={pager} />
@@ -1417,7 +1438,7 @@ export function InboxPane({
                   <Stack
                     as={LAYOUT_ELEMENT.OL}
                     gap={GAP.NONE}
-                    className="inbox-thread"
+                    className={INBOX_THREAD}
                     aria-label="Messages"
                   >
                     {thread.map((message, at) => (

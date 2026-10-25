@@ -140,6 +140,28 @@ const ROWS_NAVIGATION = {
   radius: ["inherit"],
 } as const;
 
+/**
+ * The names the panel Inbox's block of the theme adds (its columns, its
+ * list's held height, its thread's gutter, a pick, its fields, a message's
+ * leading), by the group tailwind-merge reads each in.
+ */
+const PANEL_INBOX = {
+  "font-weight": ["luke-medium", "luke-regular"],
+  leading: ["reading"],
+  spacing: [
+    "attention-glyph-small",
+    "column-inset",
+    "inbox-earlier",
+    "inbox-face-half",
+    "inbox-field-short",
+    "inbox-field-words",
+    "inbox-line",
+    "list-held-least",
+    "pick-glyph-lift",
+  ],
+  radius: ["disc"],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -161,6 +183,7 @@ const merge = extendTailwindMerge({
       ],
       "font-weight": [
         "text",
+        ...PANEL_INBOX["font-weight"],
         "label",
         "group",
         "tag",
@@ -171,7 +194,12 @@ const merge = extendTailwindMerge({
         ...FEEDBACK_DISPLAY["font-weight"],
       ],
       tracking: ["title"],
-      leading: ["body", ...FEEDBACK_DISPLAY.leading, ...ROWS_NAVIGATION.leading],
+      leading: [
+        "body",
+        ...FEEDBACK_DISPLAY.leading,
+        ...ROWS_NAVIGATION.leading,
+        ...PANEL_INBOX.leading,
+      ],
       spacing: [
         "luke-2",
         "luke-4",
@@ -237,6 +265,7 @@ const merge = extendTailwindMerge({
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
         ...ROWS_NAVIGATION.spacing,
+        ...PANEL_INBOX.spacing,
       ],
       radius: [
         "control",
@@ -255,6 +284,7 @@ const merge = extendTailwindMerge({
         "choice-box",
         ...FEEDBACK_DISPLAY.radius,
         ...ROWS_NAVIGATION.radius,
+        ...PANEL_INBOX.radius,
       ],
       shadow: [
         "dialog",

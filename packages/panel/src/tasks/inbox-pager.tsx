@@ -22,7 +22,7 @@ import {
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { cloneElement, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
-import { InboxItemCard, InboxItemEnd, ItemMark } from "./inbox-item-parts.js";
+import { INBOX_ROW_MARK, InboxItemCard, InboxItemEnd, ItemMark } from "./inbox-item-parts.js";
 import {
   INBOX_DIRECTION,
   type InboxDirection,
@@ -143,7 +143,7 @@ export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
   const { holder, item } = listed;
   const title = cardTitle(item.title);
   return (
-    <div className="inbox-next-dock">
+    <div className="inbox-next-dock pb-block-gap">
       <List label="Next item" variant={LIST_VARIANT.CARD}>
         <RowHintOptions
           card={<InboxItemCard listed={listed} now={now} models={models} readerId={readerId} />}
@@ -151,7 +151,7 @@ export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
         >
           <ListRow
             leading={
-              <span className="inbox-row-mark">
+              <span className={INBOX_ROW_MARK}>
                 <ItemMark
                   holder={holder}
                   agentId={item.agentId}
@@ -162,8 +162,10 @@ export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
               </span>
             }
             title={
-              <span className="inbox-next-words">
-                <span className="inbox-next-lead">{way.lead}</span>
+              <span className="inbox-next-words inline-flex max-w-full items-baseline gap-control-gap">
+                <span className="inbox-next-lead flex-none text-caption-inline font-luke-regular text-muted-foreground">
+                  {way.lead}
+                </span>
                 <OneLine className="inbox-next-title" words={title}>
                   {title}
                 </OneLine>
@@ -243,9 +245,9 @@ export function useInboxPager(
 /** The pager at the end of an item's bar: "2 of 8" where the item has a row, then the arrows up and down the list, each naming its key, stepped back where there is nowhere to go. */
 export function InboxPagerControls({ pager }: { pager: InboxPager }): React.JSX.Element {
   return (
-    <div className="luke-toolbar-actions inbox-pager">
+    <div className="luke-toolbar-actions inbox-pager items-center">
       {pager.count === undefined ? null : (
-        <span className="inbox-pager-count">
+        <span className="inbox-pager-count mr-item-gap whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums">
           {pager.count.at} of {pager.count.total}
         </span>
       )}
