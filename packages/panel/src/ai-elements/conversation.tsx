@@ -148,7 +148,9 @@ export function Conversation({
   // line at its bottom, and puts one back there once nothing is left below
   // to scroll to. Note that it watches no line of its own, because the block
   // is as tall as its lines, so any line resizing resizes it, and a line
-  // replaced or removed is then never held by the observer.
+  // replaced or removed is then never held by the observer; and that it
+  // watches the block's border box, so its end growing to clear the floating
+  // call card (`call.css`) keeps a following log at its newest line too.
   const [resized] = useState(
     () =>
       new ResizeObserver(() => {
@@ -217,7 +219,7 @@ export function Conversation({
     }
     if (first !== null) firstFromTop.current = first.offsetTop - element.scrollTop;
     resized.observe(element);
-    if (lines !== null) resized.observe(lines);
+    if (lines !== null) resized.observe(lines, { box: "border-box" });
     askOlder(element);
   });
   const scrollToBottom = useCallback(() => {
