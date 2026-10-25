@@ -1,64 +1,11 @@
-/* glyph-slot.css -- GlyphSlot: a glyph's square seat before a line's words,
-   16px unless `--luke-glyph-size` says otherwise, its glyph centred in it and
-   filling it, in the ink the slot names. */
+/* glyph-slot.css -- GlyphSlot's arrival: a glyph arriving on a change rides
+   the pair every arriving element rides, a fade and a scale on the small
+   spring: a step from just under its size, a check springing up from well
+   under it. Reduced motion keeps the fade alone. The slot itself is drawn
+   in utilities (`glyph-slot.tsx`); only its keyframes and the rules that
+   play them stand here. */
 
 @layer components {
-  .luke-glyph-slot {
-    display: inline-flex;
-    width: var(--luke-glyph-size, var(--luke-space-16));
-    height: var(--luke-glyph-size, var(--luke-space-16));
-    flex: none;
-    align-items: center;
-    justify-content: center;
-  }
-
-  /* Before words that may wrap, as tall as their first line and centred on it. */
-  .luke-glyph-slot[data-line="true"] {
-    height: 1lh;
-  }
-
-  /* A seat the slot names (`ICON_SIZE`) sets the size itself, ahead of any a container hands down, and draws its glyph whole, whatever weight the glyph's own class gave it. */
-  .luke-glyph-slot[data-size="small"] {
-    --luke-glyph-size: var(--luke-icon-12);
-  }
-
-  .luke-glyph-slot[data-size="medium"] {
-    --luke-glyph-size: var(--luke-icon-16);
-  }
-
-  .luke-glyph-slot[data-size="large"] {
-    --luke-glyph-size: var(--luke-icon-20);
-  }
-
-  .luke-glyph-slot[data-size="empty"] {
-    --luke-glyph-size: var(--luke-icon-40);
-  }
-
-  .luke-glyph-slot[data-size] > svg {
-    opacity: 1;
-  }
-
-  .luke-glyph-slot > :is(svg, img) {
-    width: var(--luke-glyph-size, var(--luke-space-16));
-    height: var(--luke-glyph-size, var(--luke-space-16));
-  }
-
-  .luke-glyph-slot[data-ink="muted"] {
-    color: var(--luke-color-text-muted);
-  }
-
-  .luke-glyph-slot[data-ink="text"] {
-    color: var(--luke-color-text);
-  }
-
-  .luke-glyph-slot[data-ink="voice"] {
-    color: var(--luke-color-working);
-  }
-
-  /* A glyph arriving on a change rides the pair every arriving element
-     rides, a fade and a scale on the small spring: a step from just under
-     its size, a check springing up from well under it. Reduced motion keeps
-     the fade alone. */
   .luke-glyph-slot[data-arrival] {
     animation:
       luke-glyph-slot-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,

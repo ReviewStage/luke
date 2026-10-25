@@ -210,7 +210,10 @@ export function AddTokenRepository({
       WORDS.NONE
     ) : undefined;
   return (
-    <span className="settings-picker relative inline-flex flex-none items-center" ref={holder}>
+    <span
+      className="settings-picker relative inline-flex min-w-0 flex-initial items-center"
+      ref={holder}
+    >
       <Button
         ref={button}
         variant={BUTTON_VARIANT.OUTLINE}

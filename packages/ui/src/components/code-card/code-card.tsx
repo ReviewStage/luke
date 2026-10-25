@@ -31,7 +31,8 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  * a reply's blocks are coloured by (`CodeLines`), handed in once they land;
  * until then, or where nothing colours them, the lines are drawn plain in
  * the code's own ink. A run keeps its colour in each appearance as custom
- * properties the sheet picks between, so the code follows the appearance
+ * properties its runs pick between (`light-dark()`, the theme's
+ * `code-run`), so the code follows the appearance
  * without being drawn again.
  *
  * A block longer than 40 lines shows its first 40 over a line offering the
@@ -44,6 +45,14 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  * whichever way it stands. Its lines are left out of the screen recording
  * (`ph-no-capture`), a second line behind the recording's text masking,
  * since their colours draw the code's shape.
+ *
+ * It is drawn in the Tailwind theme's utilities: the header on the hover
+ * fill over a hairline, its title holding to one line and fading where the
+ * header cuts it (`OneLine`), its controls and the Copy flush with its right
+ * edge; the lines in mono at the caption's size and the reading leading,
+ * tabs two wide; a block drawn as rows, a suggestion's or a diff's, its
+ * rows as wide as the widest and inset as the lines are, so a tint runs
+ * edge to edge.
  */
 
 /** How many lines a block shows before the rest waits behind Show all. */
@@ -81,6 +90,28 @@ export const CODE_CARD_TITLE = {
 
 export type CodeCardTitle = (typeof CODE_CARD_TITLE)[keyof typeof CODE_CARD_TITLE];
 
+/** Each row's tint, by what it does. */
+const ROW_CLASS = {
+  [CODE_ROW.ADDED]: "luke-code-card-row block px-list-inset bg-code-added",
+  [CODE_ROW.REMOVED]: "luke-code-card-row block px-list-inset bg-code-removed",
+  [CODE_ROW.CONTEXT]: "luke-code-card-row block px-list-inset",
+} as const satisfies Record<CodeRow, string>;
+
+/** Each title's face: a name in mono, words in the label's weight and the text's ink. */
+const TITLE_CLASS = {
+  [CODE_CARD_TITLE.NAME]: "luke-code-card-title flex min-w-0 items-center font-mono",
+  [CODE_CARD_TITLE.WORDS]:
+    "luke-code-card-title flex min-w-0 items-center font-label text-foreground",
+} as const satisfies Record<CodeCardTitle, string>;
+
+/** The lines, whole and scrolling sideways, each run in its colour for the appearance it stands in. */
+const BODY =
+  "luke-code-card-body m-0 overflow-x-auto overscroll-x-contain py-row-inset font-mono text-caption leading-reading wrap-normal whitespace-pre text-code [tab-size:2] [&_span]:text-code-run [&>code]:[font:inherit]";
+
+/** The lines of a block drawn plain, inset as the card is; and of one drawn as rows, each row inset itself. */
+const BODY_LINES = `${BODY} px-list-inset`;
+const BODY_ROWS = `${BODY} px-0 [&>code]:block [&>code]:min-w-fit`;
+
 /** A run's colour in each appearance, as the properties the sheet picks between; nothing for the code's own ink. */
 function runColours({ color, lightColor }: CodeToken): React.CSSProperties | undefined {
   if (color === undefined && lightColor === undefined) return undefined;
@@ -116,7 +147,11 @@ function CodeRows({
     const tokens = lines?.[at];
     return (
       // Note that a row's place is its identity: a block's rows never reorder.
-      <span key={at} className="luke-code-card-row" data-row={rows[at] ?? CODE_ROW.CONTEXT}>
+      <span
+        key={at}
+        className={ROW_CLASS[rows[at] ?? CODE_ROW.CONTEXT]}
+        data-row={rows[at] ?? CODE_ROW.CONTEXT}
+      >
         {words === "" ? "\n" : tokens === undefined ? words : lineRuns(tokens)}
       </span>
     );
@@ -238,19 +273,19 @@ export function CodeCard({
       look={CARD_LOOK.CODE}
       corner={CARD_CORNER.CONTROL}
       padding={CARD_PADDING.FLUSH}
-      className="luke-code-card ph-no-capture"
+      className="luke-code-card ph-no-capture m-0"
       aria-label={label}
       {...data}
     >
-      <figcaption className="luke-code-card-header">
-        <span className="luke-code-card-title" data-title={titleIs}>
+      <figcaption className="luke-code-card-header flex min-w-0 items-center justify-between gap-control-gap border-b border-border bg-muted pl-list-inset text-caption text-muted-foreground">
+        <span className={TITLE_CLASS[titleIs]} data-title={titleIs}>
           {typeof title === "string" ? (
             <OneLine hint={wholeWordsHint(title)}>{title}</OneLine>
           ) : (
             title
           )}
         </span>
-        <span className="luke-code-card-actions">
+        <span className="luke-code-card-actions ml-auto flex flex-none">
           {actions}
           {copied === undefined ? null : <CopyButton text={copied} what={COPY_WHAT} copy={copy} />}
         </span>
@@ -260,7 +295,7 @@ export function CodeCard({
       ) : (
         <pre
           id={bodyId}
-          className="luke-code-card-body"
+          className={rows === undefined ? BODY_LINES : BODY_ROWS}
           data-rows={rows === undefined ? undefined : true}
         >
           <code>
@@ -269,7 +304,7 @@ export function CodeCard({
               <>
                 {/* Note that the newline closes the lead's last line, so the rest's first is never read run on to it. */}
                 {rows === undefined ? "\n" : null}
-                <span ref={rest} className="luke-code-card-rest">
+                <span ref={rest} className="luke-code-card-rest block">
                   {drawLines(lead, text.length)}
                 </span>
               </>
@@ -278,7 +313,7 @@ export function CodeCard({
         </pre>
       )}
       {cut ? (
-        <div className="luke-code-card-foot">
+        <div className="luke-code-card-foot border-t border-border px-list-inset py-tight-gap text-caption text-muted-foreground">
           <TextButton
             aria-expanded={whole}
             aria-controls={bodyId}

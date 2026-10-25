@@ -6,6 +6,7 @@ import {
   shortcutGlyphs,
 } from "@luke/settings/shortcuts";
 import { cn } from "../../cn.js";
+import { Kbd, KbdGroup } from "../../shadcn/kbd.js";
 
 /**
  * shortcut.tsx -- a chord as the window draws it everywhere: its glyphs set tight and muted, ⇧⌘I, the way a Mac menu prints a key equivalent, or its words spaced, Ctrl Shift I, where Command is Ctrl.
@@ -23,7 +24,22 @@ import { cn } from "../../cn.js";
  *
  * Its words are text like any other, so the session recording masks them with
  * the rest.
+ *
+ * It is drawn by shadcn/ui's kbd (`../../shadcn/kbd.tsx`), the chord its
+ * group and each key a `Kbd`, in the Tailwind theme's utilities: muted, in
+ * the caption's size and weight unless the place's hooks say otherwise, the
+ * window's own face rather than the user agent's monospace (a menu prints
+ * ⌘, ⇧, ⌥, arrows, ⌫, and ⏎ in the system face, on the capitals' line),
+ * digits and letters at one advance so ⌘1 and ⌘5 are one width, and a hair
+ * between the keys as a gap rather than letter-spacing, which would leave
+ * the hair after the last key too. Under a finger there is no keyboard to
+ * press a chord on, so a chord shown as a hint is not drawn; a value still
+ * is, and a tablet worked with a trackpad keeps its hints.
  */
+
+/** The chord's look, every place's: set tight in the hooks' size and ink, spaced a word apart where its keys are words, and a row's value at the label's size in the value's ink. */
+const CHORD =
+  "luke-shortcut flex-none gap-[0.04em] [font-family:inherit] text-shortcut font-caption leading-none text-shortcut-ink tabular-nums whitespace-nowrap data-words:gap-luke-4 data-value:[--luke-shortcut-ink:var(--luke-color-text-muted)] data-value:[--luke-shortcut-text:var(--luke-type-label-size)] finger:not-data-value:hidden";
 
 /** Which chord: the window's own, or a system-wide key's accelerator as Settings stores it. */
 type ShortcutOf =
@@ -51,17 +67,17 @@ export function Shortcut(
   const accelerator =
     props.accelerator === undefined ? shortcutAccelerator(props.chord) : props.accelerator;
   return (
-    <kbd
-      className={cn("luke-shortcut", props.className)}
+    <KbdGroup
+      className={cn(CHORD, props.className)}
       data-value={props.value === true ? "" : undefined}
       data-words={commandKeyNow() === COMMAND_KEY.CONTROL ? "" : undefined}
       aria-hidden={props.spoken === true ? undefined : "true"}
     >
       {shortcutGlyphs(accelerator).map((glyph) => (
-        <span key={glyph} className="luke-shortcut-glyph">
+        <Kbd key={glyph} className="luke-shortcut-glyph">
           {glyph}
-        </span>
+        </Kbd>
       ))}
-    </kbd>
+    </KbdGroup>
   );
 }

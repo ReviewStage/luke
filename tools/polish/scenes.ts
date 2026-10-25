@@ -439,26 +439,17 @@ export const SCENES: readonly Scene[] = [
     clients: DESKTOP_ONLY,
     macOnly: true,
   },
-  // The voice, as a capture run stages it: the web client has no voice window, so it would draw the empty Inbox.
-  {
-    id: "voice-speaking",
-    place: PLACE.VOICE,
-    title: "Luke speaking",
-    profile: "speaking",
-    clients: DESKTOP_ONLY,
-  },
+  // The voice, as a fixture run stages it. Note that the voice profiles stage no call and no window of
+  // their own: the hidden voice window draws nothing, and the call window opens only on a call profile's
+  // staged call (`packages/host/src/fixture-stage.ts`). What they steer is the panel's voice notice
+  // (`packages/panel/src/window-voice.tsx`), where Luke speaking, alone or over the developer, only hides
+  // the failure lines, so the panel draws the idle window as it does unstaged; Output off draws the volume
+  // hint over it, the one picture they give. The web client has no voice at all.
   {
     id: "voice-muted",
     place: PLACE.VOICE,
-    title: "Output off",
+    title: "Output off: the volume hint",
     profile: "muted",
-    clients: DESKTOP_ONLY,
-  },
-  {
-    id: "voice-duplex",
-    place: PLACE.VOICE,
-    title: "Both speaking",
-    profile: "duplex",
     clients: DESKTOP_ONLY,
   },
   // Settings, page by page.

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { IconSize } from "../../icons/icon-size.js";
+import { ICON_SIZE, type IconSize } from "../../icons/icon-size.js";
 
 /**
  * glyph-slot.tsx -- the seat a glyph stands in before a line's words: a square a row's glyph fills, so every line's words start on one edge whatever glyph leads them.
@@ -27,6 +27,11 @@ import type { IconSize } from "../../icons/icon-size.js";
  * spring from well under its size for a check. Its caller mounts the slot
  * anew on the change (by its key) and gives none where the line was drawn
  * as it stands, so a list opened or read back does not play its history.
+ *
+ * It is drawn in the Tailwind theme's utilities (`size-glyph` reads
+ * `--luke-glyph-size`); a seat sets that size on the slot itself, ahead of
+ * any a container hands down, and draws its glyph whole, whatever weight the
+ * glyph's own class gave it. The arrival's keyframes are `glyph-slot.css`'s.
  */
 
 /** How a slot's glyph reads beside its words. */
@@ -46,6 +51,38 @@ export const GLYPH_ARRIVAL = {
 } as const;
 
 export type GlyphArrival = (typeof GLYPH_ARRIVAL)[keyof typeof GLYPH_ARRIVAL];
+
+/** The slot's square, or a line's height before words that may wrap, its glyph centred in it and filling it. */
+const SLOT_BASE =
+  "luke-glyph-slot inline-flex flex-none items-center justify-center [&>:is(svg,img)]:size-glyph";
+
+/** The size each seat sets, from the icon scale (`tokens/scale.css`). */
+const SEAT_CLASS = {
+  [ICON_SIZE.SMALL]: "[--luke-glyph-size:var(--luke-icon-12)] [&>svg]:opacity-100",
+  [ICON_SIZE.MEDIUM]: "[--luke-glyph-size:var(--luke-icon-16)] [&>svg]:opacity-100",
+  [ICON_SIZE.LARGE]: "[--luke-glyph-size:var(--luke-icon-20)] [&>svg]:opacity-100",
+  [ICON_SIZE.EMPTY]: "[--luke-glyph-size:var(--luke-icon-40)] [&>svg]:opacity-100",
+} as const satisfies Record<IconSize, string>;
+
+/** Each ink a slot names; `inherit` takes its holder's. */
+const INK_CLASS = {
+  [GLYPH_INK.MUTED]: "text-muted-foreground",
+  [GLYPH_INK.TEXT]: "text-foreground",
+  [GLYPH_INK.INHERIT]: "",
+  [GLYPH_INK.VOICE]: "text-working",
+} as const satisfies Record<GlyphInk, string>;
+
+/** The classes a slot of `ink`, `size`, and `line` is drawn in. */
+function slotClass(ink: GlyphInk, size: IconSize | undefined, line: boolean): string {
+  return [
+    SLOT_BASE,
+    line ? "w-glyph h-lh" : "size-glyph",
+    size === undefined ? "" : SEAT_CLASS[size],
+    INK_CLASS[ink],
+  ]
+    .filter((part) => part !== "")
+    .join(" ");
+}
 
 /** A glyph's seat before a line's words, in `ink`, named `label` where it says more than its words. */
 export function GlyphSlot({
@@ -71,7 +108,7 @@ export function GlyphSlot({
   if (label === undefined) {
     return (
       <span
-        className="luke-glyph-slot"
+        className={slotClass(ink, size, line)}
         data-ink={ink}
         data-size={size}
         data-line={line ? "true" : undefined}
@@ -84,7 +121,7 @@ export function GlyphSlot({
   }
   return (
     <span
-      className="luke-glyph-slot"
+      className={slotClass(ink, size, line)}
       data-ink={ink}
       data-size={size}
       data-line={line ? "true" : undefined}
