@@ -6,6 +6,7 @@ import {
   type PlanMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
+import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
 import { type PlanSection, planSections } from "@luke/features/plan-document";
 import {
   PLAN_ACTOR,
@@ -871,9 +872,9 @@ function TitleMenu({
 function useCommentedEdit(
   edit: MarkdownEdit | undefined,
   section: PlanSection | undefined,
+  threads: readonly PlanCommentThread[] | undefined,
   planText: string | undefined,
 ): MarkdownEdit | undefined {
-  const threads = usePlanCommentsControl()?.threads;
   const { active, pending } = useCommentFocus();
   return useMemo(() => {
     if (threads === undefined || section === undefined) return edit;
@@ -946,6 +947,8 @@ interface DocumentUnitProps {
   entry: boolean;
   /** Ticks or clears a task item pressed, offsets in the unit's words; every checkbox is read-only without it. */
   onTask?: MarkdownTaskToggler | undefined;
+  /** The plan's comment threads, which mark its words; none off a page that reads them. */
+  threads: readonly PlanCommentThread[] | undefined;
   /** The plan's text as saved, which a thread being started is laid over; none while no thread is being started. */
   planText: string | undefined;
 }
@@ -965,6 +968,7 @@ function sameUnit(left: DocumentUnitProps, right: DocumentUnitProps): boolean {
     left.anchor === right.anchor &&
     left.entry === right.entry &&
     left.onTask === right.onTask &&
+    left.threads === right.threads &&
     left.planText === right.planText
   );
 }
@@ -985,12 +989,13 @@ const DocumentUnit = memo(function DocumentUnit({
   anchor,
   entry,
   onTask,
+  threads,
   planText,
 }: DocumentUnitProps): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
   const picture = usePlanPictureDrawer();
-  const edit = useCommentedEdit(view.edit, section, planText);
+  const edit = useCommentedEdit(view.edit, section, threads, planText);
   const drawn = (
     <MarkdownMessage
       words={view.words}
@@ -1474,6 +1479,7 @@ export const PlanBody = memo(function PlanBody({
             anchor={anchors[section] ?? ""}
             entry={entry === view.id}
             onTask={taskToggler(section)}
+            threads={comments?.threads}
             planText={pendingText}
           />
         </SectionDates>
@@ -1487,6 +1493,7 @@ export const PlanBody = memo(function PlanBody({
         link={link}
         linked={linked}
         anchor={anchors[section] ?? ""}
+        threads={comments?.threads}
         planText={pendingText}
         // Note that a document that cannot be edited has no block Tab stop, so each ⋯ is one.
         entry

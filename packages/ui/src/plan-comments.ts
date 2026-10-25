@@ -121,6 +121,19 @@ function withThread(
     : [...threads, thread];
 }
 
+/** Whether two lists hold the same threads, each at the same revision, which every change of a thread moves on. */
+function sameThreads(
+  left: readonly PlanCommentThread[],
+  right: readonly PlanCommentThread[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (thread, at) => thread.id === right[at]?.id && thread.revision === right[at]?.revision,
+    )
+  );
+}
+
 const UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** How long the poll waits after a read that did not answer before it reads again. */
@@ -195,6 +208,19 @@ function fresh(planId: string | undefined): Held {
 }
 
 /**
+ * The comments held after a read answered with `threads`: the same held, and
+ * the same threads, where the answer brings nothing new. Note that a reader
+ * of the control draws again on a new one, and each section of an open plan
+ * marks its comments from the threads, so a read that changed nothing must
+ * hand on nothing new.
+ */
+function heldAfterRead(was: Held, threads: readonly PlanCommentThread[]): Held {
+  const same = sameThreads(was.threads, threads);
+  if (same && was.read && !was.failed) return was;
+  return { ...was, threads: same ? was.threads : threads, read: true, failed: false };
+}
+
+/**
  * The plan's comments, read while `shown`: the threads, and the doors that
  * write them, each answered as the service holds the thread after it.
  */
@@ -222,11 +248,11 @@ export function usePlanComments(input: {
               planId,
               read: (params) => latest.current.readComments(params),
               took: (threads) =>
-                setHeld((was) =>
-                  was.planId === planId ? { ...was, threads, read: true, failed: false } : was,
-                ),
+                setHeld((was) => (was.planId === planId ? heldAfterRead(was, threads) : was)),
               missed: () =>
-                setHeld((was) => (was.planId === planId ? { ...was, failed: true } : was)),
+                setHeld((was) =>
+                  was.planId === planId && !was.failed ? { ...was, failed: true } : was,
+                ),
             }),
           )
         : RESTING,
