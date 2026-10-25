@@ -1,92 +1,11 @@
-/* composer-foot.css -- a message box's foot: its files' row, its bar of
-   tools and presses with the send at its end, and its one note under them,
-   inset as the frame around it stands. */
+/* composer-foot.css -- what a message box's foot's utilities cannot say
+   (`composer-foot.tsx`, drawn in the shared Tailwind theme): the bar a call
+   stands in, a container of its own, which turns on what the bar holds. */
 
 @layer components {
-  /* A card's foot stands at the card's inset; the bar's two ends hold apart. */
-  .luke-composer-foot {
-    display: flex;
-    flex-direction: column;
-    gap: var(--luke-tight-gap);
-    padding: 0 var(--luke-space-12) var(--luke-space-12);
-  }
-
-  /* A field's or an input's foot stands a step tighter in its well. */
-  .luke-composer-frame:is([data-look="field"], [data-look="input"]) .luke-composer-foot {
-    padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
-  }
-
-  /* A bare frame's foot is flush with the words over it, since the card around it insets both. */
-  .luke-composer-frame[data-look="bare"] .luke-composer-foot {
-    padding-inline: 0;
-  }
-
-  .luke-composer-foot-files {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--luke-tight-gap);
-  }
-
-  /* A row that holds nothing drawn takes no gap, as a box's chips row is hidden while it holds no file. */
-  .luke-composer-foot-files:not(:has(> :not([hidden]))) {
-    display: none;
-  }
-
-  .luke-composer-foot-bar {
-    display: flex;
-    min-height: var(--luke-control-height);
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--luke-block-gap);
-  }
-
-  .luke-composer-foot-tools {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: var(--luke-tight-gap);
-  }
-
-  .luke-composer-foot-end {
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: var(--luke-tight-gap);
-    margin-inline-start: auto;
-  }
-
-  /* The note's line, and under it what mends it where that is more than one press. */
-  .luke-composer-foot-note {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--luke-tight-gap);
-  }
-
-  /* A dictation's strip takes the bar's room, the call beside it at the end. */
-  .luke-composer-foot-strip {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    align-items: center;
-  }
-
-  /* A call stands a step off the send, so End call and Send never read as a pair. */
-  .luke-composer-foot-call {
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: var(--luke-tight-gap);
-    margin-inline-end: var(--luke-tight-gap);
-  }
-
-  .luke-composer-foot-strip + .luke-composer-foot-call {
-    margin-inline-end: 0;
-  }
-
   /* A bar holding a call answers its own width, so the call's status gives
      way in a narrow box before the call's controls or the send are pushed
-     past it (call.css). Note that only such a bar is a container, because
+     past it (`call-controls.tsx`'s `CallLive`). Note that only such a bar is a container, because
      a container's width no longer follows what it holds. */
   .luke-composer-foot-bar:has(
     > .luke-composer-foot-call,

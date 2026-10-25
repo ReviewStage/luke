@@ -52,10 +52,13 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * Where the foot stands in its frame is the frame's look: a card's foot at
  * a card's inset, a field's and an input's a step tighter, and a bare
- * frame's flush with the words over it (`composer-frame.css`). A box still
+ * frame's flush with the words over it. A box still
  * loading draws the same foot (`ComposerFootSkeleton`), its tools' and its
  * end's placeholders handed by the owner and the send's disc last, so the
  * placeholder lands where the foot does.
+ *
+ * It is drawn in Tailwind utilities over the theme; `composer-foot.css`
+ * keeps the one rule that turns on what the bar holds (`:has()`).
  */
 
 /** The send's press: its name, whether the box has anything to send, and whether a send it made is still out. */
@@ -93,29 +96,60 @@ export interface ComposerNote {
   readonly mends?: ReactNode;
 }
 
+/**
+ * The foot's own box, at its frame's inset: a card's at the card's, a
+ * field's or an input's a step tighter in its well, and a bare frame's flush
+ * with the words over it, since the card around it insets both.
+ */
+const FOOT =
+  "luke-composer-foot flex flex-col gap-tight-gap px-luke-12 pt-0 pb-luke-12 " +
+  "group-data-[look=field]/composer:px-luke-6 group-data-[look=field]/composer:pt-luke-2 group-data-[look=field]/composer:pb-luke-6 " +
+  "group-data-[look=input]/composer:px-luke-6 group-data-[look=input]/composer:pt-luke-2 group-data-[look=input]/composer:pb-luke-6 " +
+  "group-data-[look=bare]/composer:px-0";
+
+/** The files' row, which takes no gap while it holds nothing drawn, as a box's chips row is hidden while it holds no file. */
+const FILES =
+  "luke-composer-foot-files flex flex-wrap gap-tight-gap [&:not(:has(>:not([hidden])))]:hidden";
+
+/** A call stands a step off the send, so End call and Send never read as a pair, and beside a dictation's strip at the bar's end. */
+const CALL =
+  "luke-composer-foot-call me-tight-gap flex flex-none items-center gap-tight-gap [.luke-composer-foot-strip+&]:me-0";
+
 /** The foot's own box: its files' row, its bar, and its note, stacked. */
 function FootBox({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="luke-composer-foot">{children}</div>;
+  return <div className={FOOT}>{children}</div>;
 }
 
 /** The bar: the tools at its start and the end's presses, or a strip in their place. */
 function FootBar({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="luke-composer-foot-bar">{children}</div>;
+  return (
+    <div className="luke-composer-foot-bar flex min-h-control items-center justify-between gap-block-gap">
+      {children}
+    </div>
+  );
 }
 
 /** The bar's start, which gives way first as the bar narrows. */
 function FootTools({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="luke-composer-foot-tools">{children}</div>;
+  return (
+    <div className="luke-composer-foot-tools flex min-w-0 items-center gap-tight-gap">
+      {children}
+    </div>
+  );
 }
 
 /** The bar's end: the counter, the owner's presses, a call, and the send last. */
 function FootEnd({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="luke-composer-foot-end">{children}</div>;
+  return (
+    <div className="luke-composer-foot-end ms-auto flex flex-none items-center gap-tight-gap">
+      {children}
+    </div>
+  );
 }
 
 /** A call's status, a step off the send. */
 function FootCall({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="luke-composer-foot-call">{children}</div>;
+  return <div className={CALL}>{children}</div>;
 }
 
 /** The send: the round submit in the panel's ink, busy while its send is out. */
@@ -201,9 +235,7 @@ export function ComposerFoot({
   const callPart = call === undefined || call === null ? null : <FootCall>{call}</FootCall>;
   return (
     <FootBox>
-      {files === undefined || files === null ? null : (
-        <div className="luke-composer-foot-files">{files}</div>
-      )}
+      {files === undefined || files === null ? null : <div className={FILES}>{files}</div>}
       <FootBar>
         {strip === undefined || strip === null ? (
           <>
@@ -219,13 +251,13 @@ export function ComposerFoot({
           </>
         ) : (
           <>
-            <div className="luke-composer-foot-strip">{strip}</div>
+            <div className="luke-composer-foot-strip flex min-w-0 flex-1 items-center">{strip}</div>
             {callPart}
           </>
         )}
       </FootBar>
       {note === undefined ? null : (
-        <div className="luke-composer-foot-note">
+        <div className="luke-composer-foot-note flex flex-col items-start gap-tight-gap">
           <ErrorState onRetry={note.onRetry} remedy={note.remedy}>
             {note.words}
           </ErrorState>

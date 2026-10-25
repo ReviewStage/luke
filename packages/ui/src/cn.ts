@@ -111,6 +111,44 @@ const FEEDBACK_DISPLAY = {
   container: ["progress"],
 } as const;
 
+/**
+ * The names the chips, media, and call block of the theme adds (attachment
+ * chip, picture set and tile, page thumb, video player, provider button,
+ * composer frame, call bar and video tile), by the group tailwind-merge reads
+ * each in.
+ */
+const CHIPS_MEDIA_CALL = {
+  text: ["label-inline"],
+  spacing: [
+    "attachment-chip",
+    "attachment-chip-check",
+    "attachment-chip-lead",
+    "attachment-chip-max",
+    "attachment-chip-meter",
+    "attachment-chip-remove",
+    "attachment-chip-remove-out",
+    "attachment-chip-thumb",
+    "call-row",
+    "call-row-max",
+    "call-tile",
+    "call-tile-face-max",
+    "call-tile-face-share",
+    "icon-12",
+    "icon-16",
+    "item-gap",
+    "page-thumb-row",
+    "picture-row",
+    "picture-thumb",
+    "provider-gate",
+    "provider-gate-touch",
+    "stage",
+    "video-player",
+  ],
+  radius: ["attachment-chip-face", "call-tile"],
+  shadow: ["attachment-chip-disc", "composer", "provider-gate"],
+  aspect: ["picture"],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -128,6 +166,7 @@ const merge = extendTailwindMerge({
         "group",
         "tag",
         ...FEEDBACK_DISPLAY.text,
+        ...CHIPS_MEDIA_CALL.text,
       ],
       "font-weight": [
         "text",
@@ -206,6 +245,7 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...CHIPS_MEDIA_CALL.spacing,
       ],
       radius: [
         "control",
@@ -223,6 +263,7 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-box",
         ...FEEDBACK_DISPLAY.radius,
+        ...CHIPS_MEDIA_CALL.radius,
       ],
       shadow: [
         "dialog",
@@ -231,8 +272,10 @@ const merge = extendTailwindMerge({
         "tooltip",
         "switch-thumb",
         ...FEEDBACK_DISPLAY.shadow,
+        ...CHIPS_MEDIA_CALL.shadow,
       ],
       font: ["ui"],
+      aspect: [...CHIPS_MEDIA_CALL.aspect],
       container: [
         "dialog-confirm",
         "dialog-wide",

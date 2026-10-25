@@ -1,8 +1,6 @@
 {
   "apps/catalog/src/catalog.css": 4,
-  "packages/ui/src/components/banner/banner.css": 1,
   "packages/ui/src/components/button/button.tsx": 1,
-  "packages/ui/src/components/chip/chip.css": 1,
   "packages/ui/src/components/error-state/error-state.css": 1,
   "packages/ui/src/components/list-row/list-row.css": 2,
   "packages/ui/src/components/nav-item/nav-item.css": 1,

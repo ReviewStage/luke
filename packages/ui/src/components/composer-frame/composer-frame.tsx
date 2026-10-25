@@ -14,6 +14,9 @@ import { createElement, type HTMLAttributes, type ReactNode, type Ref } from "re
  * thread's first comment is. The note a box gives way to stands on the same
  * frame, so it stands where the box stood. It is a form where it sends and a
  * div where it does not (`COMPOSER_ELEMENT`).
+ *
+ * It is drawn in Tailwind utilities over the theme, each look's edge,
+ * corner, and ground picked here; shadcn/ui has no composer.
  */
 
 /** How a composer stands: the window's message box, a field in a card's well, a text field's ground, or no frame of its own. */
@@ -33,6 +36,23 @@ export const COMPOSER_ELEMENT = {
 } as const;
 
 export type ComposerElement = (typeof COMPOSER_ELEMENT)[keyof typeof COMPOSER_ELEMENT];
+
+/**
+ * Each look's edge, corner, and ground: the card on the surface's ground at
+ * the dialog's corner, lifted by a soft shadow rather than ringed by a dark
+ * edge; the field, the input, and the bare look flat in what holds them, the
+ * input brightening once the caret is in it.
+ */
+const LOOK_CLASS: Record<ComposerLook, string> = {
+  [COMPOSER_LOOK.CARD]: "rounded-dialog border border-border bg-surface shadow-composer",
+  [COMPOSER_LOOK.FIELD]: "rounded-control border border-border bg-ground",
+  [COMPOSER_LOOK.INPUT]:
+    "rounded-control border border-border-strong bg-field transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit focus-within:bg-field-focus",
+  [COMPOSER_LOOK.BARE]: "border-0 bg-transparent",
+};
+
+/** The edge while files are dragged over it, brightened, so the drop target is the frame itself. */
+const DROPPING = "data-[dropping=true]:border-border-selected";
 
 /** `children` framed as a composer. */
 export function ComposerFrame({
@@ -60,8 +80,9 @@ export function ComposerFrame({
     {
       ...rest,
       ref,
-      className:
-        className === undefined ? "luke-composer-frame" : `luke-composer-frame ${className}`,
+      className: ["luke-composer-frame group/composer", LOOK_CLASS[look], DROPPING, className ?? ""]
+        .filter((part) => part !== "")
+        .join(" "),
       "data-look": look,
       "data-dropping": dropping ? "true" : undefined,
     },

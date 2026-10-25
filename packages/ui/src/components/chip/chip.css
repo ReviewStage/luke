@@ -6,11 +6,13 @@
 @layer components {
   /* A chip's words fade out over their last few pixels only while they are
      measured cut short, as a browser's tab ends a long title, so short words
-     end on their last letter; words cut in their middle end at an ellipsis
-     instead. Note that the fade stays here, because Tailwind's mask
+     end on their last letter. Words cut in their middle fade the end of
+     their start instead, where the cut stands, their kept end standing
+     whole after it. Note that the fades stay here, because Tailwind's mask
      utilities compose the gradient through variables rather than drawing
      it, as the badge's label fade does (`badge.css`). */
-  .luke-chip-name[data-overflow="true"] {
+  .luke-chip-name[data-overflow="true"],
+  .luke-chip-name-start[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
@@ -25,14 +27,6 @@
      test lays this class in markup of its own
      (`pull-request-header-narrow.test.ts`), and each part keeps its spaces,
      because a flex item drops one at its edge. */
-  /* Words cut in their middle give way from the end of their start at an
-     ellipsis rather than the fade, so the cut reads as a cut in the middle.
-     Note that it stays here, a rule the style guard's baseline holds for
-     this sheet. */
-  .luke-chip-name-start {
-    text-overflow: ellipsis;
-  }
-
   .luke-chip-name-end {
     display: inline-flex;
     flex: none;

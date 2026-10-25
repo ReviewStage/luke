@@ -220,6 +220,22 @@ test("a long name cut in its middle keeps its words whole and its end, after a j
   assert.equal(short?.querySelector(".luke-chip-name-end"), null);
 });
 
+test("a name cut in its middle fades the end of its start while the chip cuts it short, and no ellipsis stands for the cut", () => {
+  render(
+    createElement(ChipName, {
+      mono: true,
+      cut: CHIP_CUT.MIDDLE,
+      children: "luke/pull-request-header-menu-and-pill",
+    }),
+  );
+  const start = () => document.querySelector(".luke-chip-name-start");
+  resize(80);
+  assert.equal(start()?.getAttribute("data-overflow"), "false");
+  resize(160);
+  assert.equal(start()?.getAttribute("data-overflow"), "true");
+  assert.equal(document.querySelector(".luke-chip-name")?.textContent?.includes("…"), false);
+});
+
 test("a chip given an address is a link named by its words, going there, and its press is heard before the page is followed", () => {
   const presses: boolean[] = [];
   render(

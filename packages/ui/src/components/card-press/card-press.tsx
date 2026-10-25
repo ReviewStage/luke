@@ -62,7 +62,27 @@ import { holdRun, ListSelectionContext, selectableRow } from "../selection/list-
  * A press that is an item of a roving set (`roving`), a list's or a board
  * column's whose box `useRovingKeys` keeps, is one of the set's items: the
  * set's one Tab stop or out of the tab order, the arrows walking to it.
+ *
+ * It is drawn in Tailwind utilities over the theme, with no shadcn/ui base:
+ * a card press has no box of its own, its reach laid over the `Card` it
+ * stands in, which carries its look.
  */
+
+/** The press: a bare button holding the words that name its card. */
+const PRESS =
+  "luke-card-press group/card-press flex min-w-0 flex-col items-stretch border-0 bg-transparent p-0 text-start text-inherit [font:inherit] disabled:cursor-default";
+
+/**
+ * The reach, covering every edge of the card, the nearest positioned box,
+ * which carries the press's pressed fill, or a chosen card's selected fill
+ * as a chosen list row's. Its ring, the keyboard's (`data-focus-ring`), is
+ * drawn inside the card's edge, so a scroller the card stands at the edge of
+ * never cuts it off. Note that a press through its card lets the pointer
+ * reach what the card holds, its hover cards among it, and hears the card's
+ * clicks instead.
+ */
+const REACH =
+  "luke-card-press-reach absolute inset-0 rounded-control outline-offset-[calc(-1*var(--luke-focus-ring-width))] transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit group-data-[corner=menu]/card-press:rounded-menu group-data-[reach=card]/card-press:pointer-events-none group-data-[selected=true]/card-press:bg-fill-selected group-[:active:not(:disabled)]/card-press:bg-fill-pressed";
 
 /** How a press reaches its card: lying over it, or hearing through it. */
 export const CARD_PRESS_REACH = {
@@ -204,7 +224,7 @@ export function CardPress({
     <button
       ref={held}
       type="button"
-      className="luke-card-press"
+      className={PRESS}
       data-reach={reach}
       data-corner={corner}
       {...{ [CARD_PRESS_ATTRIBUTE]: "" }}
@@ -226,7 +246,7 @@ export function CardPress({
       {...withContextMenu(contextMenu, { onPointerDown, onTouchEnd })}
     >
       {children}
-      <span className="luke-card-press-reach" data-focus-ring="" aria-hidden="true" />
+      <span className={REACH} data-focus-ring="" aria-hidden="true" />
     </button>
   );
 }
