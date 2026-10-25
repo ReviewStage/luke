@@ -8,6 +8,7 @@ import {
   CODE_ROW,
   CodeCard,
   type CodeRow,
+  cn,
   DISCLOSURE_BODY,
   DisclosureBody,
   FailureNote,
@@ -111,11 +112,27 @@ export const FOLD_HINT = {
   HIDE: "Hide the call",
 } as const;
 
+/**
+ * The call's label, in the full ink over the line's muted one, cut to the
+ * line. Note that a chip after it gives way first (`shrink-0`), since a name
+ * cut at its end still reads.
+ */
+const TOOL_LABEL_CLASS = "tool-label min-w-0 overflow-hidden whitespace-nowrap text-foreground";
+
+/**
+ * The body under an open line, set in past its icon to the line's words,
+ * where a call's body, a model's reasoning, and a call's pictures stand
+ * (`--transcript-gutter`, tasks.css): `@luke/ui`'s tinted card holding what a
+ * call sent, a hairline between its blocks, or cards of their own one over
+ * the next with no frame around them.
+ */
+const TOOL_BODY_CLASS = "tool-body my-tight-gap mr-0 ml-transcript-gutter";
+
 export type ToolProps = Omit<FoldProps, "className">;
 
 export function Tool({ children, ...props }: ToolProps): ReactNode {
   return (
-    <Fold className="tool" {...props}>
+    <Fold className="tool text-caption-inline" {...props}>
       {children}
     </Fold>
   );
@@ -176,26 +193,31 @@ export function ToolLine({
     <>
       <GlyphSlot>{icon}</GlyphSlot>
       {/* Note that the label keeps its space, so the line still reads as one sentence to find, copy, and a screen reader, though the flex gap sets it. */}
-      <span className="tool-words">
+      <span className="flex min-w-0 flex-1 items-baseline gap-tight-gap">
         {label === undefined ? null : (
-          <OneLine className={chip === undefined ? "tool-label" : "tool-label tool-label-chipped"}>
+          <OneLine
+            className={chip === undefined ? TOOL_LABEL_CLASS : `${TOOL_LABEL_CLASS} shrink-0`}
+          >
             {trailing ? `${label} ` : label}
           </OneLine>
         )}
         {chip === undefined ? null : (
-          <span className="tool-chip">
+          <span className="tool-chip flex min-w-0 max-w-inline-ref-pill flex-initial whitespace-nowrap">
             {chip}
             {subject === undefined ? null : " "}
           </span>
         )}
         {subject === undefined ? null : (
-          <span className="tool-subject" data-code={subjectIsCode ? "" : undefined}>
+          <span
+            className="tool-subject min-w-0 flex-1 overflow-hidden whitespace-nowrap data-code:font-mono data-code:text-caption-inline"
+            data-code={subjectIsCode ? "" : undefined}
+          >
             {subject}
           </span>
         )}
       </span>
       {place === undefined ? null : (
-        <span className="tool-place">
+        <span className="flex flex-none">
           {" "}
           <Badge>{place}</Badge>
         </span>
@@ -267,7 +289,7 @@ export function ToolContent({
   if (bare) {
     return (
       <DisclosureBody inset={DISCLOSURE_BODY.NONE}>
-        <div className="tool-body" data-bare="">
+        <div className={`${TOOL_BODY_CLASS} flex flex-col gap-tight-gap`} data-bare="">
           {children}
         </div>
       </DisclosureBody>
@@ -279,7 +301,7 @@ export function ToolContent({
         look={CARD_LOOK.TINT}
         corner={CARD_CORNER.CONTROL}
         padding={CARD_PADDING.FLUSH}
-        className={name === undefined ? "tool-body" : `tool-body ${name}`}
+        className={cn(TOOL_BODY_CLASS, "[&>*+*]:border-t [&>*+*]:border-border", name)}
       >
         {children}
       </Card>

@@ -1,15 +1,7 @@
 import type { PlanEditor } from "@luke/features/task-wire";
 import { callHeading, WORKED_SEPARATOR, workingTime } from "@luke/features/time-format";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
-import {
-  Badge,
-  STATUS_TONE,
-  TEXT_ELEMENT,
-  TEXT_VARIANT,
-  Text,
-  Tooltip,
-  useMinute,
-} from "@luke/ui";
+import { Badge, STATUS_TONE, TEXT_ELEMENT, TEXT_VARIANT, Text, Tooltip, useMinute } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import type { CallRecord } from "@luke/voice/transcript-model";
 import type { ReactNode } from "react";
@@ -116,6 +108,24 @@ const CALL_MARKER_END = {
 
 type CallMarkerEnd = (typeof CALL_MARKER_END)[keyof typeof CALL_MARKER_END];
 
+/** A marker's rule, a hairline running from the pill to the log's edge. */
+const MARKER_RULE_CLASS = "call-marker-rule h-px min-w-luke-12 flex-1 bg-border";
+
+/** The pill, `@luke/ui`'s Badge, in the live green while the call stands, only as wide as its words. */
+const MARKER_PILL_CLASS = "call-marker-pill m-0 flex min-w-0 flex-initial";
+
+/** Its glyph, a call's or a hang-up's. */
+const MARKER_ICON_CLASS = "call-marker-icon flex flex-none";
+
+/** Its words, kept to one line, cut short rather than wrapped. */
+const MARKER_LINE_CLASS = "flex min-w-0 items-center gap-item-gap whitespace-nowrap";
+
+/** What happened, in the body ink. */
+const MARKER_WORDS_CLASS = "font-luke-semibold text-foreground";
+
+/** When, and how long, in the muted ink, as the time is. */
+const MARKER_DETAIL_CLASS = "font-luke-regular text-muted-foreground";
+
 /**
  * A rule across the log with a pill in its middle, which is how a call is
  * marked at each end: the rule says where the call's lines begin or end, and
@@ -131,10 +141,19 @@ function CallMarker({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="call-marker" data-call-marker={end} data-live={live ? "" : undefined}>
-      <span className="call-marker-rule" aria-hidden="true" />
+    // A standing call's start stays pinned to the log's top while the
+    // developer scrolls among its lines: it is the log's own child, and the
+    // call runs on to the log's foot, so it sticks for as long as any of the
+    // call is in view, on the window's ground so the lines scrolling under it
+    // do not show through.
+    <div
+      className="call-marker flex items-center gap-control-gap px-0 pt-list-inset pb-row-inset text-caption text-muted-foreground data-live:data-[call-marker=start]:sticky data-live:data-[call-marker=start]:top-0 data-live:data-[call-marker=start]:z-2 data-live:data-[call-marker=start]:bg-ground"
+      data-call-marker={end}
+      data-live={live ? "" : undefined}
+    >
+      <span className={MARKER_RULE_CLASS} aria-hidden="true" />
       {children}
-      <span className="call-marker-rule" aria-hidden="true" />
+      <span className={MARKER_RULE_CLASS} aria-hidden="true" />
     </div>
   );
 }
@@ -176,37 +195,41 @@ export function CallStartMarker({
 }): React.JSX.Element {
   return (
     <CallMarker end={CALL_MARKER_END.START} live={live}>
-      <span className="call-marker-pill">
+      <span className={MARKER_PILL_CLASS}>
         <Badge
           tone={live ? STATUS_TONE.COMPLETE : STATUS_TONE.NEUTRAL}
           icon={
-            <span className="call-marker-icon" aria-hidden="true">
+            <span className={MARKER_ICON_CLASS} aria-hidden="true">
               <GLYPH.CALL />
             </span>
           }
         >
-          <span className="call-marker-line">
+          <span className={MARKER_LINE_CLASS}>
             <Text
               as={TEXT_ELEMENT.SPAN}
               variant={TEXT_VARIANT.INHERIT}
               truncate
               className="call-marker-text"
             >
-              <span className="call-marker-words">
+              <span className={MARKER_WORDS_CLASS}>
                 {caller === undefined ? (
                   CALL_MARKER_WORDS.STARTED
                 ) : (
                   <CallerStarted caller={caller} />
                 )}
               </span>
-              <span className="call-marker-detail">
+              <span className={MARKER_DETAIL_CLASS}>
                 {WORKED_SEPARATOR}
                 <time dateTime={new Date(startedAt).toISOString()}>
                   {callHeading(startedAt, now)}
                 </time>
               </span>
             </Text>
-            {live ? <span className="call-marker-live">{CALL_MARKER_WORDS.LIVE}</span> : null}
+            {live ? (
+              <span className="inline-flex items-center gap-tight-gap font-luke-semibold text-complete before:size-luke-6 before:rounded-luke-full before:bg-current">
+                {CALL_MARKER_WORDS.LIVE}
+              </span>
+            ) : null}
           </span>
         </Badge>
       </span>
@@ -234,23 +257,23 @@ export function CallEndMarker({
   const now = useMinute();
   const endedAt = record?.endedAt;
   const icon = (
-    <span className="call-marker-icon" aria-hidden="true">
+    <span className={MARKER_ICON_CLASS} aria-hidden="true">
       <GLYPH.END_CALL />
     </span>
   );
   if (record === undefined || endedAt === undefined) {
     return (
       <CallMarker end={CALL_MARKER_END.END}>
-        <p className="call-marker-pill" data-call-ended="">
+        <p className={MARKER_PILL_CLASS} data-call-ended="">
           <Badge icon={icon}>
-            <span className="call-marker-line">
+            <span className={MARKER_LINE_CLASS}>
               <Text
                 as={TEXT_ELEMENT.SPAN}
                 variant={TEXT_VARIANT.INHERIT}
                 truncate
                 className="call-marker-text"
               >
-                <span className="call-marker-words">{line}</span>
+                <span className={MARKER_WORDS_CLASS}>{line}</span>
               </Text>
             </span>
           </Badge>
@@ -266,23 +289,23 @@ export function CallEndMarker({
         label={`${line}${WORKED_SEPARATOR}${length}${WORKED_SEPARATOR}${ended}`}
         card={<CallCard startedAt={startedAt} endedAt={endedAt} record={record} />}
       >
-        <p className="call-marker-pill" data-call-ended="">
+        <p className={MARKER_PILL_CLASS} data-call-ended="">
           <Badge icon={icon}>
-            <span className="call-marker-line">
+            <span className={MARKER_LINE_CLASS}>
               <Text
                 as={TEXT_ELEMENT.SPAN}
                 variant={TEXT_VARIANT.INHERIT}
                 truncate
                 className="call-marker-text"
               >
-                <span className="call-marker-words" data-call-length="">
+                <span className={MARKER_WORDS_CLASS} data-call-length="">
                   {line}
-                  <span className="call-marker-detail">
+                  <span className={MARKER_DETAIL_CLASS}>
                     {WORKED_SEPARATOR}
                     {length}
                   </span>
                 </span>
-                <span className="call-marker-detail">
+                <span className={MARKER_DETAIL_CLASS}>
                   {WORKED_SEPARATOR}
                   <time dateTime={new Date(endedAt).toISOString()}>{ended}</time>
                 </span>

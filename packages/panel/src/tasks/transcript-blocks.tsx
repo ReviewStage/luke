@@ -129,7 +129,13 @@ import remarkBreaks from "remark-breaks";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref.js";
 import { FoldBody } from "../ai-elements/fold.js";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message.js";
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning.js";
+import {
+  REASONING_BODY_CLASS,
+  REASONING_WORDS_CLASS,
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "../ai-elements/reasoning.js";
 import {
   blockSays,
   TOOL_BLOCK,
@@ -185,6 +191,13 @@ import { WorkingTime } from "./working-time.js";
  */
 
 /**
+ * An address the window opens nothing for, a file's say: a link's line,
+ * dotted, with the address as its hint.
+ */
+export const INERT_LINK_CLASS =
+  "underline decoration-dotted decoration-inert-link decoration-1 underline-offset-[0.24em]";
+
+/**
  * A link in a transcript's words. A web page, such as the pull request an
  * agent opened or the docs it read, is a plain link (`../text-link.tsx`)
  * that opens in the browser over the act channel (`use-open-link.ts`); any
@@ -207,7 +220,7 @@ function TranscriptLink({
   if (href === undefined || !opensAsLink(href)) {
     return (
       <Tooltip label={href}>
-        <span className="text-link-inert">{children}</span>
+        <span className={INERT_LINK_CLASS}>{children}</span>
       </Tooltip>
     );
   }
@@ -877,9 +890,9 @@ export function TranscriptReasoning({
       {cut === undefined ? (
         <ReasoningContent text={text.replace(LEADING_BLANK_LINES, "").trimEnd()} />
       ) : (
-        <FoldBody className="reasoning-body">
+        <FoldBody className={REASONING_BODY_CLASS}>
           <CutWords cut={cut} waiting={CUT_WORDS.THOUGHT}>
-            <p className="reasoning-words">{cutText(cut)}</p>
+            <p className={REASONING_WORDS_CLASS}>{cutText(cut)}</p>
           </CutWords>
         </FoldBody>
       )}
@@ -1308,13 +1321,13 @@ function SentCall({
       />
       <ToolContent name="tool-sent-words">
         {sent.words === undefined ? null : (
-          <div className="tool-sent-block">
+          <div className="px-list-inset py-row-inset">
             <TranscriptWords text={sent.words} />
           </div>
         )}
         {sent.note === undefined ? null : (
-          <div className="tool-sent-block">
-            <div className="tool-sent-note">{SENT_WORDS.NOTE}</div>
+          <div className="px-list-inset py-row-inset">
+            <div className="text-caption-inline text-muted-foreground">{SENT_WORDS.NOTE}</div>
             <TranscriptWords text={sent.note} />
           </div>
         )}

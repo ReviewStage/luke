@@ -111,6 +111,28 @@ const FEEDBACK_DISPLAY = {
   container: ["progress"],
 } as const;
 
+/**
+ * The names the panel's task surfaces' block of the theme adds (tasks.css,
+ * moving onto utilities), by the group tailwind-merge reads each in.
+ */
+const TASK_SURFACES = {
+  "font-weight": ["luke-regular", "luke-medium", "luke-semibold"],
+  leading: ["reading"],
+  spacing: [
+    "item-gap",
+    "section-gap",
+    "content-inset",
+    "bubble",
+    "transcript-gutter",
+    "inline-ref-pill",
+    "conversation-empty",
+    "conversation-empty-wide",
+    "conversation-older",
+  ],
+  radius: ["luke-14"],
+  shadow: ["floating-edge"],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -139,9 +161,10 @@ const merge = extendTailwindMerge({
         "emphasis",
         "title",
         ...FEEDBACK_DISPLAY["font-weight"],
+        ...TASK_SURFACES["font-weight"],
       ],
       tracking: ["title"],
-      leading: ["body", ...FEEDBACK_DISPLAY.leading],
+      leading: ["body", ...FEEDBACK_DISPLAY.leading, ...TASK_SURFACES.leading],
       spacing: [
         "luke-2",
         "luke-4",
@@ -206,6 +229,7 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...TASK_SURFACES.spacing,
       ],
       radius: [
         "control",
@@ -223,6 +247,7 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-box",
         ...FEEDBACK_DISPLAY.radius,
+        ...TASK_SURFACES.radius,
       ],
       shadow: [
         "dialog",
@@ -231,6 +256,7 @@ const merge = extendTailwindMerge({
         "tooltip",
         "switch-thumb",
         ...FEEDBACK_DISPLAY.shadow,
+        ...TASK_SURFACES.shadow,
       ],
       font: ["ui"],
       container: [

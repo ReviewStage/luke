@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
@@ -20,6 +19,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
@@ -535,11 +535,9 @@ test("a turn outside a call is drawn as it always was: its work folded and its w
   assert.match(container.textContent ?? "", /Done: invites now last fourteen days\./u);
 });
 
-/** The panel's tasks sheet, laid into the test's document. */
+/** The panel's sheets and the utilities its app compiles, laid into the test's document. */
 function layTasksSheet(): void {
-  const sheet = document.createElement("style");
-  sheet.textContent = readFileSync(`${__dirname}/../styles/tasks.css`, "utf8");
-  document.head.append(sheet);
+  layContainersAt({});
 }
 
 test('a call opens at a labelled rule, "Call started" and when, and closes at one, "Call ended", how long it ran, and when, each a pill on a rule with no band of its own', async () => {

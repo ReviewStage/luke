@@ -410,7 +410,7 @@ function AnsweredComment({
           </span>
         )}
         {answer.note === undefined ? null : (
-          <div className="inbox-words" data-inbox-note="">
+          <div className="m-0 select-text" data-inbox-note="">
             <SentWords text={answer.note} asDocument />
           </div>
         )}
