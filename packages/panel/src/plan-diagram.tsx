@@ -166,11 +166,17 @@ const DIAGRAM_ALT = "Diagram";
 /** How much of a title or first line an alt text keeps, so a long one does not read out whole. */
 const ALT_LIMIT = 80;
 
-/** A title the code names: in its front matter (`title: Order flow`) or as a line of its own (`pie title Votes`, `title Votes`). */
-const TITLE_LINE = /^\s*(?:\w+\s+)?title(?::\s*|\s+)(.+?)\s*$/u;
+/** The front matter a Mermaid code may open with: its settings between two `---` fences, which name nothing of the diagram but a `title`. */
+const FRONT_MATTER = /^\s*---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/u;
 
-/** A line of Mermaid code that names nothing of the diagram: blank, a comment, or the front matter's fence. */
-const SILENT_LINE = /^\s*(?:%%.*|---)?\s*$/u;
+/** The title a front matter names (`title: Order flow`), a top-level key. */
+const FRONT_TITLE = /^title:[ \t]*(.+?)[ \t]*$/mu;
+
+/** A title a diagram's own lines name, as a line of its own or after the diagram's kind (`title Votes`, `pie title Votes`). */
+const BODY_TITLE = /^[ \t]*(?:\w+[ \t]+)?title[ \t]+(.+?)[ \t]*$/mu;
+
+/** A line of Mermaid code that names nothing of the diagram: blank or a comment. */
+const SILENT_LINE = /^\s*(?:%%.*)?\s*$/u;
 
 /** The words kept of a title or first line, cut at the limit with an ellipsis. */
 function altWords(line: string): string {
@@ -180,11 +186,11 @@ function altWords(line: string): string {
 
 /** What a diagram's picture says it is, and what its press is named for after "Enlarge": its title, or its first line, after "Diagram". */
 function diagramAlt(code: string): string {
-  const lines = code.split("\n");
-  const title = lines
-    .map((line) => TITLE_LINE.exec(line)?.[1])
-    .find((found) => found !== undefined);
-  const words = altWords(title ?? lines.find((line) => !SILENT_LINE.test(line)) ?? "");
+  const front = FRONT_MATTER.exec(code);
+  const body = front === null ? code : code.slice(front[0].length);
+  const title = FRONT_TITLE.exec(front?.[1] ?? "")?.[1] ?? BODY_TITLE.exec(body)?.[1];
+  const first = body.split("\n").find((line) => !SILENT_LINE.test(line));
+  const words = altWords(title ?? first ?? "");
   return words === "" ? DIAGRAM_ALT : `${DIAGRAM_ALT}: ${words}`;
 }
 
@@ -313,7 +319,10 @@ export function DiagramPreview({
         <span>Preview</span>
       </div>
       {shown?.kind === DIAGRAM_DRAWING.DRAWN ? (
-        <DiagramPicture url={shown.url} alt={diagramAlt(code)} />
+        <DiagramPicture
+          url={shown.url}
+          alt={diagramAlt(drawingNow === undefined ? (previous ?? code) : code)}
+        />
       ) : null}
       {shown?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine onRetry={retry} /> : null}
     </>
