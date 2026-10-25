@@ -4,10 +4,12 @@
  * With a mouse, Enter sends and Shift+Enter is a new line. A phone's or a
  * tablet's keyboard has no Shift+Enter to type a line with, so on a coarse
  * pointer Enter is the new line and the box's visible Send sends; ⌘ or Ctrl
- * with Enter, from a keyboard attached to it, still sends. Every message box
- * asks here, the editor's (`plan-editor/composer-editor.ts`) and Chat's
- * plain one where the editor could not load, so one key does one thing in
- * each.
+ * with Enter, from a keyboard attached to it, still sends. Every box that
+ * sends asks here, the composer's editor (`plan-editor/composer-editor.ts`),
+ * a pull request's Markdown boxes (`tasks/comment-editor.tsx`), and the plain
+ * text areas that stand in for them, so one key does one thing in each. A
+ * document's text, a plan's or a pull request's description, is the one
+ * place Enter writes and ⌘ or Ctrl with Enter finishes (`modEnterSends`).
  */
 
 import { ENTER_KEY_HINT, type EnterKeyHint, TEXT_AREA_SUBMIT, type TextAreaSubmit } from "@luke/ui";
@@ -35,22 +37,13 @@ export function enterSends(press: EnterPress): boolean {
 }
 
 /**
- * Whether a press is the send of a box that sends on ⌘ or Ctrl with Enter and
- * lets a bare Enter add a line, as every pull request and review box does:
- * ⌘↩ on a Mac, Ctrl+↩ elsewhere. Note that both are read on every platform,
+ * Whether a press finishes a document's text, whose bare Enter writes a
+ * paragraph: ⌘↩ on a Mac, Ctrl+↩ elsewhere. Note that both are read on every platform,
  * because a Mac's keyboard has a Ctrl and another's attached to it a Meta key,
  * and neither is a chord that does anything else in a box.
  */
 export function modEnterSends(press: Pick<EnterPress, "key" | "metaKey" | "ctrlKey">): boolean {
   return press.key === "Enter" && (press.metaKey || press.ctrlKey);
-}
-
-/** Whether a press is the send of a box whose `submit` key is given: Enter as `enterSends` reads it, or ⌘ or Ctrl with Enter as `modEnterSends` does. */
-export function submitSends(
-  press: EnterPress,
-  submit: TextAreaSubmit = TEXT_AREA_SUBMIT.ENTER,
-): boolean {
-  return submit === TEXT_AREA_SUBMIT.MOD_ENTER ? modEnterSends(press) : enterSends(press);
 }
 
 /** The return key's label as the pointer stands now. */

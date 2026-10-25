@@ -1345,7 +1345,7 @@ export function InboxPane({
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
   const question =
     openAsk === undefined || wordsAlone ? undefined : (
-      <DraftQuestion pane={pane} ask={openAsk}>
+      <DraftQuestion pane={pane}>
         <AskControls
           ask={openAsk}
           title={cardTitle(item.title)}

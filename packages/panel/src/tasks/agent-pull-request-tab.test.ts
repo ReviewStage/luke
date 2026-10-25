@@ -2945,16 +2945,19 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   );
 });
 
-test("Ctrl+Enter submits the review from its words as ⌘↩ does, and a bare Enter only adds a line", async () => {
+test("Enter submits the review from its words, while Shift+Enter only adds a line and an input method's Enter sends nothing", async () => {
   const tab = await draw(controlAnswering());
   const panel = openReview(tab);
 
   writeReview(panel, "Looks right.");
-  pressInBox(panel, { key: "Enter" }, "Review comment");
+  pressInBox(panel, { key: "Enter", shiftKey: true }, "Review comment");
   await settle();
-  assert.deepEqual(changes, [], "a bare Enter sends nothing");
+  assert.deepEqual(changes, [], "Shift+Enter sends nothing");
+  pressInBox(panel, { key: "Enter", isComposing: true, keyCode: 229 }, "Review comment");
+  await settle();
+  assert.deepEqual(changes, [], "nor does an input method's Enter");
 
-  pressInBox(panel, { key: "Enter", ctrlKey: true }, "Review comment");
+  pressInBox(panel, { key: "Enter" }, "Review comment");
   await settle();
 
   assert.deepEqual(changes, [
@@ -2963,7 +2966,7 @@ test("Ctrl+Enter submits the review from its words as ⌘↩ does, and a bare En
       {
         action: PULL_REQUEST_ACTION.SUBMIT_REVIEW,
         event: REVIEW_EVENT.COMMENT,
-        // Note that the bare Enter left a new line open after the words.
+        // Note that Shift+Enter left a new line open after the words.
         body: "Looks right.\n\n",
       },
     ],

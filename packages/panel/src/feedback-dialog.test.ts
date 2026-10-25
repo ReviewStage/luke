@@ -102,7 +102,7 @@ function mount(account: AccountSnapshot = SIGNED_IN): void {
 
 function button(name: string, within: ParentNode = document): HTMLButtonElement {
   const found = [...within.querySelectorAll<HTMLButtonElement>("button")].find(
-    (each) => (each.getAttribute("aria-label") ?? each.textContent?.replace(/⌘⏎$/u, "")) === name,
+    (each) => (each.getAttribute("aria-label") ?? each.textContent) === name,
   );
   assert.ok(found, `a button named ${name}`);
   return found;
@@ -323,7 +323,7 @@ test("an empty note is closed by the first Escape", () => {
   assert.equal(dialog(), null);
 });
 
-test("a refused send says why and keeps the note, and sending again delivers it", async () => {
+test("a refused send says why and keeps the note, and Enter in the note, unlike Shift+Enter, sends it again", async () => {
   mount();
   openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -341,7 +341,15 @@ test("a refused send says why and keeps the note, and sending again delivers it"
   assert.equal(field().value, "The board missed a plan.");
 
   answer = { delivered: true };
-  await act(async () => button("Send").click());
+  const press = (init: KeyboardEventInit) =>
+    act(async () => {
+      field().dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }),
+      );
+    });
+  await press({ shiftKey: true });
+  assert.equal(sent.length, 1, "Shift+Enter sends nothing");
+  await press({});
   assert.equal(dialog(), null);
   assert.equal(sent.length, 2, "the kept note went again");
 });

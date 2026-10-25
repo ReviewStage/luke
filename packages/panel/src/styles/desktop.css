@@ -2880,14 +2880,6 @@ ul.actor-stack {
   line-height: var(--luke-type-caption-leading);
 }
 
-/* A filled button's chord (a dialog's Send, the home
-   page's New task) a glyph's gap after its word, muted against the button's
-   own fill rather than the ground around it. */
-.button-chord {
-  --luke-shortcut-ink: var(--luke-color-on-accent-muted);
-  margin-inline-start: var(--luke-icon-gap);
-}
-
 /* New task's composer (`new-task-composer.tsx`) under the welcome's line,
    its head row and card as the dialog draws them. */
 .home-composer {

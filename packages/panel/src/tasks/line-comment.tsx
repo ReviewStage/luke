@@ -58,7 +58,7 @@ export type PendingReview = { readonly comments: number } | null | undefined;
 /**
  * The comment under the lines it is on: its head naming them, the words
  * written as they are drawn, GitHub's answer where it did not take it, and Cancel
- * with what GitHub offers. ⌘↩ sends it the way the first offer does, and
+ * with what GitHub offers. Enter sends it the way the first offer does, and
  * Escape lets it go unless it is on its way.
  */
 export function LineComment({
