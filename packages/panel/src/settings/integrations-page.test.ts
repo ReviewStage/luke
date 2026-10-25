@@ -1839,7 +1839,7 @@ test("with motion held still, an integration that connects takes its place and n
   }
 });
 
-/** Every element laid one row tall under the one before it in the document, so what a change inserts moves what follows it. */
+/** Every element laid one row tall under the one before it in the document, so what a change inserts moves what follows it, in a window tall enough to show them all, since the list motion plays only what the reader can see. */
 function layInDocumentOrder(): void {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
@@ -1847,6 +1847,9 @@ function layInDocumentOrder(): void {
     const top = [...document.querySelectorAll("*")].indexOf(this) * ROW;
     return { top, bottom: top + ROW, left: 0, right: 0, width: 0, height: ROW } as DOMRect;
   });
+  vi.spyOn(window, "innerHeight", "get").mockImplementation(
+    () => document.querySelectorAll("*").length * ROW,
+  );
 }
 
 /** The chevron on a row's tools press, and whether it stands turned. */
