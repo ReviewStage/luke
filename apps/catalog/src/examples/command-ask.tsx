@@ -5,8 +5,8 @@ import { CatalogSection } from "../section";
 
 /**
  * command-ask.tsx -- a command an agent asks to run on this Mac, put to the
- * developer over the window: a short one, and a long one that scrolls
- * inside its card, each opened from its button and put away by any of its
+ * developer over the window: a short one, a long one that scrolls
+ * inside its card, and one carrying a base64 payload, each opened from its button and put away by any of its
  * answers, Escape, or a press on the dimmed window, fading out as it goes.
  */
 
@@ -19,6 +19,13 @@ const LONG_COMMAND = [
   'for pkg in packages/*; do echo "$pkg"; (cd "$pkg" && pnpm run typecheck); done',
   "tail -n 200 ~/Library/Logs/Luke/main.log",
 ].join(" && \\\n  ");
+
+/** A script shipped as base64, as an agent writes a file to the Mac in one command. */
+const PAYLOAD_COMMAND = [
+  'd=$(mktemp -d) && cd "$d" && git init -q',
+  `echo '${"H4sICCUi3moCA3NwbGl0LnBhdGNo".padEnd(4800, "AMVyTomQwK860JbsX0cp5JNjpWKdCoPsjYEgSGJCAS4GFCXV")}' | base64 -d | gunzip | git apply`,
+  "pnpm exec vitest run packages/service",
+].join(" && ");
 
 /** A button that puts `command` to the developer, whose answers put it away. */
 function Asking({ label, command }: { label: string; command: string }): React.JSX.Element {
@@ -46,6 +53,7 @@ function CommandAsks(): React.JSX.Element {
       <Inline>
         <Asking label="Short command…" command={SHORT_COMMAND} />
         <Asking label="Long command…" command={LONG_COMMAND} />
+        <Asking label="Encoded payload…" command={PAYLOAD_COMMAND} />
       </Inline>
     </CatalogSection>
   );
