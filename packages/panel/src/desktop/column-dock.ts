@@ -1,5 +1,5 @@
 /**
- * column-dock.ts -- how tall the dock at the foot of a column stands, said where what floats over that foot reads it: the folded sidebar's call card, the toasts, and the voice's notice line; and how much of the window's foot the toasts take, which a page's scroll leaves room for.
+ * column-dock.ts -- how tall the dock at the foot of a column stands, said where what floats over that foot reads it: the folded sidebar's call card, the toasts, and the voice's notice line; how tall a phone's card may stand under the column's bars; and how much of the window's foot the toasts take, which a page's scroll leaves room for.
  */
 
 import { type RefObject, useLayoutEffect } from "react";
@@ -31,6 +31,24 @@ const FLOATING_CARD = '.call-card[data-surface="floating"]';
 
 /** The length the floating card's own height is written in. */
 const FLOATING_CARD_HEIGHT = "--floating-card";
+
+/** The floating card's video tile (`@luke/ui`'s `CallVideoTile`). */
+const CARD_TILE = ".luke-call-video-tile";
+
+/** The length the card hands its tile's height in (`@luke/ui`'s placement hook). */
+const CARD_TILE_HEIGHT = "--luke-call-video-height";
+
+/** The bars at the head of a pane, a tab's own and its tabs (`@luke/ui`'s `PaneBar`), which a phone's card never covers. */
+const PANE_BAR = ".luke-pane-bar";
+
+/** The token the card stands clear of what it rises above by. */
+const CARD_GAP = "--luke-space-8";
+
+/** The token the card's tile never stands shorter than: a control's height, so its Video off stays a press. */
+const TILE_FLOOR = "--luke-control-height";
+
+/** The tile's own aspect on a card, height over width (`CALL_VIDEO_FIT.CARD`). */
+const TILE_ASPECT = 9 / 16;
 
 /** What docks under the toasts besides a column's parts: a phone's places bar at the screen's foot (`mobile-bar.tsx`). */
 const TOAST_DOCKED = ".mobile-bar";
@@ -98,6 +116,77 @@ function dockHeight(column: Element, docked: string, card: DOMRect | undefined):
   return Math.max(0, foot - top);
 }
 
+/** A length token read off the document's root, or none where it is unset. */
+function rootLength(root: HTMLElement, token: string): number {
+  const length = Number.parseFloat(getComputedStyle(root).getPropertyValue(token));
+  return Number.isNaN(length) ? 0 : length;
+}
+
+/** The lowest foot of the bars on screen at the head of `column`, in its upper half, so a bar docked at its foot is none of them; or none where no bar stands. */
+function barsFoot(column: Element): number | undefined {
+  const span = column.getBoundingClientRect();
+  const middle = span.top + span.height / 2;
+  let foot: number | undefined;
+  for (const bar of column.querySelectorAll(PANE_BAR)) {
+    const box = bar.getBoundingClientRect();
+    if (!seen(bar, box, span) || box.top >= middle) continue;
+    foot = Math.max(foot ?? box.bottom, box.bottom);
+  }
+  return foot;
+}
+
+/**
+ * The height a phone's card hands its video tile, or none where the tile
+ * stands at its own 16:9: where the card at rest would reach over the
+ * lowest bar at the column's head (`barsFoot`), the tile gives up what it
+ * must for the card to stand the gap clear of it, and never goes shorter
+ * than `floor`, below which the card covers the bar rather than lose the
+ * video. Note that the card is read where it is laid out, its `offsetTop`,
+ * not where its rise or its lift over a dock (`lift`) has moved it, since
+ * neither the end of a rise nor the end of the lift's glide reaches an
+ * observer; and that the card stands on its foot, so handing the tile a
+ * height moves the card's top and leaves the room it is read from as it was.
+ */
+function tileHeight(
+  card: HTMLElement,
+  tile: HTMLElement,
+  ceiling: number,
+  lift: number,
+  gap: number,
+  floor: number,
+): number | undefined {
+  const rest = card.offsetTop + card.offsetHeight - lift;
+  const chrome = card.offsetHeight - tile.offsetHeight;
+  const room = rest - ceiling - gap - chrome;
+  if (room >= tile.offsetWidth * TILE_ASPECT) return undefined;
+  return Math.floor(Math.max(floor, room));
+}
+
+/**
+ * Hands the floating card's video tile the height `tileHeight` answers for
+ * the bars at the head of `column`, the column a phone's card stands over,
+ * or takes it back where none is given or none answers, so the tile stands
+ * at its own 16:9 again.
+ */
+function fitTile(
+  card: Element | null,
+  column: Element | null,
+  dock: number,
+  root: HTMLElement,
+): void {
+  const tile = card?.querySelector(CARD_TILE);
+  if (!(card instanceof HTMLElement) || !(tile instanceof HTMLElement)) return;
+  const ceiling = column === null ? undefined : barsFoot(column);
+  const gap = rootLength(root, CARD_GAP);
+  // As far as the card's own rule lifts it over the dock (`call.css`).
+  const lift = Math.max(0, dock + gap - cornerStep(root));
+  const height =
+    ceiling === undefined
+      ? undefined
+      : tileHeight(card, tile, ceiling, lift, gap, rootLength(root, TILE_FLOOR));
+  writeLength(card, CARD_TILE_HEIGHT, height === undefined ? undefined : `${height}px`);
+}
+
 /** The toasts' step in from the window's corner, read from its token on the document's root, or none where it is unset. */
 function cornerStep(root: HTMLElement): number {
   const step = Number.parseFloat(getComputedStyle(root).getPropertyValue(CORNER_STEP));
@@ -141,6 +230,9 @@ function toastDockHeight(shell: Element, docked: string, stack: DOMRect, step: n
  * panel while it fills the window, where a chat's composer docks too
  * (`CHAT_DOCKED`); of those found, the first on screen, and of its docked
  * parts, those on screen, so a pane or a panel on its way out lifts nothing.
+ * On a phone, where a short screen leaves the card no room under the
+ * column's bars at the card's full height, the card's video tile is handed
+ * the height that does fit (`tileHeight`), so the card never covers a tab.
  *
  * The toasts stand in the window's corner, over whichever column reaches
  * it, so they read a dock of their own too (`--luke-toast-dock`): the
@@ -193,16 +285,14 @@ export function useColumnDock(
       if (host === null) return;
       const card = host.querySelector(FLOATING_CARD);
       const under = besideCard ? cardSpan(card) : undefined;
-      writeLength(
-        root,
-        COLUMN_DOCK,
-        column === null ? undefined : `${dockHeight(column, docked, under)}px`,
-      );
+      const dock = column === null ? undefined : dockHeight(column, docked, under);
+      writeLength(root, COLUMN_DOCK, dock === undefined ? undefined : `${dock}px`);
       writeLength(
         host,
         FLOATING_CARD_HEIGHT,
         card === null ? undefined : `${card.getBoundingClientRect().height}px`,
       );
+      fitTile(card, narrow ? column : null, dock ?? 0, root);
       const stack = root.querySelector(TOAST_STACK);
       const toastDock =
         stack === null
@@ -263,6 +353,7 @@ export function useColumnDock(
       root.style.removeProperty(TOAST_DOCK);
       root.style.removeProperty(TOAST_ROOM);
       host.style.removeProperty(FLOATING_CARD_HEIGHT);
+      host.querySelector<HTMLElement>(FLOATING_CARD)?.style.removeProperty(CARD_TILE_HEIGHT);
     };
   }, [shell, panelFull, narrow, key]);
 }

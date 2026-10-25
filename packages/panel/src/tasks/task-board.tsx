@@ -139,7 +139,8 @@ function BoardCanvas({
     if (scene !== undefined) save({ taskId, ...scene, module, withImage: true });
   }, [looking, viewOnly, module, taskId, save]);
 
-  return <div ref={host} className="task-board-canvas" />;
+  // Excalidraw draws to the size of the box it is given, so the canvas's box is the tab's own.
+  return <div ref={host} className="task-board-canvas absolute inset-0" />;
 }
 
 /**
@@ -160,8 +161,15 @@ export function TaskBoard({
   const loaded = useAtomValue(whiteboard);
   const retry = useAtomRefresh(whiteboard);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
+  // Note that the board isolates its own stacking, because Excalidraw raises
+  // its toolbar, hints, and menus by z-index: unisolated they rose through the
+  // side panel's tab strip and over the "+" menu dropped from it.
   return (
-    <Fill as={FILL_ELEMENT.SECTION} className="task-board ph-no-capture" aria-label="Whiteboard">
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="task-board ph-no-capture relative isolate overflow-hidden text-muted-foreground"
+      aria-label="Whiteboard"
+    >
       {AsyncResult.isFailure(loaded) ? (
         <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
           {BOARD_LOAD_FAILED}

@@ -17,6 +17,7 @@ import {
   TrashIcon,
   UserIcon,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -170,6 +171,32 @@ function ListRows(): React.JSX.Element {
                 thing: "Inbox item",
                 groups: [[{ label: "Mark as unread", onSelect: ignore }]],
               }}
+            />
+          </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="list-row-lead-inline"
+        title="What a row belongs to, leading its description in plain words"
+      >
+        <div className="catalog-column">
+          <List label="Runs" variant={LIST_VARIANT.CARD}>
+            <ListRow
+              leading={<GLYPH.TIME />}
+              title="Fix the flaky invite expiry test"
+              lead={{ icon: <GLYPH.AUTOMATION />, label: "Nightly flaky-test sweep" }}
+              leadAt={LIST_ROW_LEAD.INLINE}
+              description="Working"
+              meta="1d"
+              onPress={() => undefined}
+            />
+            <ListRow
+              leading={<GLYPH.TIME />}
+              title="Scheduled run"
+              lead={{ icon: <GLYPH.AUTOMATION />, label: "Nightly flaky-test sweep" }}
+              leadAt={LIST_ROW_LEAD.INLINE}
+              description="Skipped: an earlier run's agent was still at work."
+              meta="3d"
             />
           </List>
         </div>

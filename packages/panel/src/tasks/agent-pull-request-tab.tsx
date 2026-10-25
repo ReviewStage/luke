@@ -435,6 +435,14 @@ const CHECK_GLYPHS = {
   [CHECK_STATE.SKIPPED]: <CircleSlashIcon />,
 } as const satisfies Record<CheckState, ReactNode>;
 
+/** The ink a check's glyph wears for where it stands: passed green, failed red, one still running the working ink, since it is work under way rather than something that needs you, and one skipped quiet. */
+const CHECK_INK = {
+  [CHECK_STATE.FAILED]: "text-destructive",
+  [CHECK_STATE.PENDING]: "text-working",
+  [CHECK_STATE.PASSED]: "text-complete",
+  [CHECK_STATE.SKIPPED]: "text-muted-foreground",
+} as const satisfies Record<CheckState, string>;
+
 /** Where a check stands, in the words its glyph says to a reader who cannot see it and the count says. */
 const CHECK_WORDS = {
   [CHECK_STATE.FAILED]: "failed",
@@ -593,10 +601,14 @@ function Section({
       as={TEXT_ELEMENT.H3}
       variant={TEXT_VARIANT.GROUP}
       truncate
-      className="pull-request-heading"
+      className="pull-request-heading mx-0 mt-0 mb-item-gap flex items-baseline gap-item-gap px-row-inset"
     >
       {title}
-      {count === undefined ? null : <span className="pull-request-count">{count}</span>}
+      {count === undefined ? null : (
+        <span className="pull-request-count font-luke-regular text-muted-foreground tabular-nums">
+          {count}
+        </span>
+      )}
     </Text>
   );
   if (fold === undefined) {
@@ -695,8 +707,11 @@ function CheckLead({
   avatarUrl: string | undefined;
 }): React.JSX.Element {
   return (
-    <span className="pull-request-check-lead">
-      <span className="pull-request-check-glyph" data-check-state={tone}>
+    <span className="inline-flex items-center gap-control-gap">
+      <span
+        className={`inline-grid flex-none place-items-center [&>svg]:size-check-glyph ${CHECK_INK[tone]}`}
+        data-check-state={tone}
+      >
         {CHECK_GLYPHS[tone]}
       </span>
       {avatarUrl === undefined ? null : (
@@ -769,7 +784,9 @@ function Checks({
   return (
     <Section title="Checks" count={counts.length === 0 ? undefined : counts.join(", ")}>
       {checks.length === 0 ? (
-        <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_CHECKS}</p>
+        <p className="pull-request-none m-0 px-row-inset text-caption-inline text-muted-foreground">
+          {PULL_REQUEST_WORDS.NO_CHECKS}
+        </p>
       ) : (
         <CheckList>
           {checks.map((check, at) => (
@@ -890,7 +907,7 @@ function TitleSkeleton(): React.JSX.Element {
 /** A part whose read failed: its sentence and its own Retry, where the part would have stood. */
 function PartFailure({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
   return (
-    <div className="pull-request-failure">
+    <div className="pull-request-failure px-row-inset">
       <ErrorState onRetry={onRetry}>{line}</ErrorState>
     </div>
   );
@@ -915,7 +932,7 @@ function EntryWords({
 }): React.JSX.Element | null {
   if (entry.html !== null) {
     return (
-      <div className="pull-request-words">
+      <div className="pull-request-words min-w-0 select-text text-body-size leading-reading text-foreground">
         <EntryPictures html={entry.html}>
           <Anchored>
             <GitHubWords html={entry.html} picture={picture} />
@@ -925,7 +942,7 @@ function EntryWords({
     );
   }
   return entry.body === "" ? null : (
-    <div className="pull-request-words">
+    <div className="pull-request-words min-w-0 select-text text-body-size leading-reading text-foreground">
       <Anchored>
         <TranscriptWords text={entry.body} />
       </Anchored>
@@ -996,7 +1013,7 @@ function ThreadMenu({
   if (actions.length === 0) return null;
   const label = moreLabel(THREAD_REVEAL_WORDS.THING);
   return (
-    <span className="pull-request-thread-menu">
+    <span className="pull-request-thread-menu ml-auto flex">
       <MoreButton thing={THREAD_REVEAL_WORDS.THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
@@ -1046,28 +1063,32 @@ function ThreadWhere({
 }): React.JSX.Element {
   const cut = path === undefined ? -1 : path.lastIndexOf("/");
   const words = (
-    <span className="annotation-where">
+    <span className="flex min-w-0 whitespace-nowrap px-list-inset py-tight-gap">
       {path === undefined ? null : (
         <>
           <Text
             as={TEXT_ELEMENT.SPAN}
             variant={TEXT_VARIANT.INHERIT}
+            font={TEXT_FONT.MONO}
             truncate
-            className="annotation-where-folder"
+            className="shrink-[1000] grow-0 basis-auto"
           >
             <bdi>{path.slice(0, cut + 1)}</bdi>
           </Text>
           <Text
             as={TEXT_ELEMENT.SPAN}
             variant={TEXT_VARIANT.INHERIT}
+            font={TEXT_FONT.MONO}
             truncate
-            className="annotation-where-file"
+            className="flex-initial text-foreground"
           >
             <bdi>{path.slice(cut + 1)}</bdi>
           </Text>
         </>
       )}
-      {lines === undefined ? null : <span className="annotation-where-lines">{lines}</span>}
+      {lines === undefined ? null : (
+        <span className="ms-control-gap flex-none text-muted-foreground">{lines}</span>
+      )}
     </span>
   );
   const named = [path, lines].filter((part) => part !== undefined).join(" ");
@@ -1160,7 +1181,7 @@ function ThreadCard({
               look={look}
               selected={preview.selected}
               excerpt
-              className="diff-view pull-request-thread-lines select-text"
+              className="diff-view pull-request-thread-lines mb-control-gap flex-none overflow-y-visible border-y border-border bg-card-code select-text"
             />
           )
         }
@@ -1236,7 +1257,7 @@ function PendingList({
             variant={TEXT_VARIANT.INHERIT}
             font={TEXT_FONT.MONO}
             truncate
-            className="pull-request-quiet pull-request-pending-where"
+            className="pull-request-pending-where text-muted-foreground"
           >
             {draft.path}
             {draft.line === null
@@ -1294,7 +1315,7 @@ function ThreadComments({
         ))}
       </AnnotationComments>
       {thread.more === 0 || last === undefined ? null : (
-        <p className="pull-request-more annotation-card-more">
+        <p className="annotation-card-more mr-0 mb-0 mt-luke-8 ml-annotation-more self-start max-w-full text-caption text-muted-foreground">
           <OnGitHubLink href={last.url}>{PULL_REQUEST_WORDS.moreReplies(thread.more)}</OnGitHubLink>
         </p>
       )}
@@ -1372,7 +1393,10 @@ function EntryFrame({
   ...props
 }: Omit<ComponentProps<"li">, "className">): React.JSX.Element {
   return (
-    <li className="pull-request-entry" {...props}>
+    <li
+      className="pull-request-entry flex min-w-0 flex-col gap-item-gap rounded-control border border-border px-boxed-inset py-row-inset text-caption-inline"
+      {...props}
+    >
       {children}
     </li>
   );
@@ -1484,7 +1508,7 @@ function PullRequestHead({
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
     <PeopleLine>
-      <span className="pull-request-branch-row">
+      <span className="pull-request-branch-row flex min-w-0 max-w-full items-center gap-control-gap">
         <PullRequestBranches
           base={pullRequest.base}
           head={pullRequest.head}
@@ -1499,7 +1523,7 @@ function PullRequestHead({
           mergedAt === null ? undefined : <Time at={mergedAt} now={now} look={TIME_LOOK.AGO} />
         }
       />
-      <span className="pull-request-reviewers">
+      <span className="pull-request-reviewers inline-flex items-center gap-list-gap">
         {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
         {open ? <ReviewerPicker author={author?.login} writes={writes} {...editing} /> : null}
         <LabelPicker writes={writes} {...editing} />
@@ -1533,8 +1557,8 @@ function DeploymentRow({
       description={DEPLOYMENT_WORDS[state]}
       meta={
         url === null ? null : (
-          <span className="pull-request-deployment-open">
-            <ExternalLinkIcon aria-hidden="true" />
+          <span>
+            <ExternalLinkIcon className="block size-deployment-open" aria-hidden="true" />
           </span>
         )
       }
@@ -1733,7 +1757,7 @@ function DescriptionPart({
   if (part.kind === PART.FAILED || part.kind === PART.NONE) return null;
   const words =
     part.kind !== PART.LANDED || part.value.html === "" ? undefined : (
-      <div className="pull-request-words">
+      <div className="pull-request-words min-w-0 select-text text-body-size leading-reading text-foreground">
         <EntryPictures html={part.value.html}>
           <Anchored>
             <GitHubWords html={part.value.html} picture={picture} />
@@ -1760,7 +1784,7 @@ function DescriptionPart({
         />
       ) : (
         (words ?? (
-          <p className="pull-request-quiet pull-request-none">
+          <p className="pull-request-none m-0 px-row-inset text-caption-inline text-muted-foreground">
             {PULL_REQUEST_WORDS.NO_DESCRIPTION}
           </p>
         ))
@@ -1819,18 +1843,20 @@ function ConversationPart({
     >
       {/* The earlier entries a read left on GitHub are counted where they would stand, first. */}
       {earlier === 0 || url === undefined ? null : (
-        <p className="pull-request-more pull-request-earlier">
+        <p className="pull-request-earlier mx-0 mt-0 mb-control-gap px-row-inset self-start max-w-full text-caption text-muted-foreground">
           <OnGitHubLink href={url}>{PULL_REQUEST_WORDS.earlier(earlier)}</OnGitHubLink>
         </p>
       )}
       {conversation.length === 0 ? (
         earlier === 0 ? (
-          <p className="pull-request-quiet pull-request-none">
+          <p className="pull-request-none m-0 px-row-inset text-caption-inline text-muted-foreground">
             {PULL_REQUEST_WORDS.NO_CONVERSATION}
           </p>
         ) : null
       ) : shown.length === 0 ? (
-        <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_MATCHING}</p>
+        <p className="pull-request-none m-0 px-row-inset text-caption-inline text-muted-foreground">
+          {PULL_REQUEST_WORDS.NO_MATCHING}
+        </p>
       ) : (
         <EntryList>
           {shown.map((entry) => (

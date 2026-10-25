@@ -654,7 +654,7 @@ function DatePickerPanel({
           </SettingsRow>
         ) : null}
       </Stack>
-      <div className="date-picker-foot">
+      <div className="-mx-luke-16 mt-0 -mb-luke-8 border-t border-border px-row-inset pt-tight-gap pb-0">
         <Button variant={BUTTON_VARIANT.ROW} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
           {WORDS.CLEAR}
         </Button>

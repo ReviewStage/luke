@@ -176,14 +176,14 @@ test("the workspace's skills come before the account's own, by name, each with i
     groups.workspace.map((row) => [row.skill.name, row.source, row.line]),
     [
       ["release-notes", "workspace", "acme/agent-skills @ 3f9c2e1 · by you"],
-      ["triage", "workspace", "pasted · by Dean"],
+      ["triage", "workspace", "Pasted · by Dean"],
     ],
   );
   assert.deepEqual(
     groups.personal.map((row) => [row.skill.name, row.source, row.line, row.fromGitHub]),
     [
       ["alpha", "personal", "acme/agent-skills @ 3f9c2e1", true],
-      ["zeta", "personal", "pasted", false],
+      ["zeta", "personal", "Pasted", false],
     ],
   );
 });
@@ -200,7 +200,7 @@ test("a workspace skill whose installer is gone or unknown names nobody", () => 
 
   assert.deepEqual(
     groups.workspace.map((row) => row.line),
-    ["pasted", "pasted"],
+    ["Pasted", "Pasted"],
   );
 });
 
