@@ -27,12 +27,19 @@
  *
  * An app's hint wraps a link and hands it the pointer and focus handlers it
  * shows and goes on (`HintProps`), which land on the link itself.
+ *
+ * It is drawn in the Tailwind theme's utilities, its role's from the table
+ * `Text` reads (`text-role.ts`), on a hairline corner so the keyboard's
+ * ring, the app's reset's as for every control, hugs the words. Only a link
+ * with an address lifts under the pointer or where the reader is, and in an
+ * editor it keeps the caret's cursor, since there it is words being written.
  */
 
 import type { FocusEventHandler, MouseEvent, PointerEventHandler, ReactNode } from "react";
 import { ArrowUpRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
-import type { TextFont, TextVariant } from "../text/text.js";
+import { TEXT_FONT, type TextFont } from "../text/text.js";
+import { TEXT_ROLE_CLASS, TEXT_VARIANT, type TextVariant } from "../text/text-role.js";
 import { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
 
 export { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
@@ -54,6 +61,58 @@ export const TEXT_LINK_CURRENT = {
 export type TextLinkCurrent = (typeof TEXT_LINK_CURRENT)[keyof typeof TEXT_LINK_CURRENT];
 
 /** What an app's hint hands the link it wraps: when to show and go, and the words it describes it by. */
+/** What every link is drawn with: its corner, its words broken anywhere, its ink and underline easing under the pointer; the ↗'s group (`ArrowUpRightIcon`). */
+const LINK_BASE =
+  "luke-text-link group/text-link rounded-text-link wrap-anywhere transition-[color,text-decoration-color] duration-(--luke-duration-hover) ease-motion-exit";
+
+/** Each look's ink at rest and, where `a` lifts under the pointer or where the reader is, lit: an underlined link keeps its words' ink, its line going full strength. */
+const LOOK_CLASS = {
+  [TEXT_LINK_LOOK.QUIET]: {
+    rest: "text-muted-foreground no-underline",
+    lit: "[&:hover]:text-foreground [&[aria-current]]:text-foreground",
+  },
+  [TEXT_LINK_LOOK.UNDERLINED]: {
+    rest: "text-inherit underline decoration-link-underline decoration-1 underline-offset-[0.24em] [&:is(:hover,:focus-visible)]:decoration-current",
+    lit: "",
+  },
+  [TEXT_LINK_LOOK.HEADING]: {
+    rest: "text-foreground no-underline",
+    lit: "[&:hover]:text-accent-ink",
+  },
+} as const satisfies Record<TextLinkLook, { rest: string; lit: string }>;
+
+/** The face a link's words are set in, where it asks for one. */
+const FONT_CLASS = {
+  [TEXT_FONT.SANS]: "font-ui",
+  [TEXT_FONT.MONO]: "font-mono",
+} as const satisfies Record<TextFont, string>;
+
+/** A link as tall as a control, its words on its middle. */
+const CONTROL_HEIGHT = "inline-flex items-center min-h-control";
+
+/** The classes a link of `look`, `variant`, `font`, and `height` is drawn in, with an address (`linked`) or none. */
+function linkClass(
+  look: TextLinkLook,
+  variant: TextVariant | undefined,
+  font: TextFont | undefined,
+  height: TextLinkHeight,
+  linked: boolean,
+): string {
+  const { rest, lit } = LOOK_CLASS[look];
+  return [
+    LINK_BASE,
+    rest,
+    linked ? `cursor-pointer in-[[contenteditable]]:cursor-text ${lit}` : undefined,
+    font === undefined ? undefined : FONT_CLASS[font],
+    height === TEXT_LINK_HEIGHT.CONTROL ? CONTROL_HEIGHT : undefined,
+    variant === undefined || variant === TEXT_VARIANT.INHERIT
+      ? undefined
+      : TEXT_ROLE_CLASS[variant],
+  ]
+    .filter((part) => part !== undefined && part !== "")
+    .join(" ");
+}
+
 type HintProps = {
   onPointerEnter?: PointerEventHandler<HTMLElement> | undefined;
   onPointerLeave?: PointerEventHandler<HTMLElement> | undefined;
@@ -109,14 +168,14 @@ export function TextLink({
   };
   if (href === undefined) {
     return (
-      <span className="luke-text-link" {...face} {...hint}>
+      <span className={linkClass(look, variant, font, height, false)} {...face} {...hint}>
         {words}
       </span>
     );
   }
   return (
     <a
-      className="luke-text-link"
+      className={linkClass(look, variant, font, height, true)}
       {...face}
       {...hint}
       href={href}

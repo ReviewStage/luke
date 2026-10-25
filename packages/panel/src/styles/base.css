@@ -72,6 +72,8 @@
   --terminal-cyan: light-dark(#1b7c83, #39c5cf);
   --terminal-white: light-dark(#6e7781, #b1bac4);
   --terminal-bright-black: light-dark(#57606a, #6e7681);
+  /* The terminal's own notes, held to 4.5:1 on the ground in either appearance. */
+  --terminal-note: light-dark(#57606a, #9198a1);
   --terminal-bright-red: light-dark(#a40e26, #ffa198);
   --terminal-bright-green: light-dark(#1a7f37, #56d364);
   --terminal-bright-yellow: light-dark(#633c01, #e3b341);

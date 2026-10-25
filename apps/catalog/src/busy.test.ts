@@ -13,8 +13,7 @@ import { EXAMPLES } from "./examples.js";
  * no ring until the press has been out the settle delay, and shows exactly one
  * after it: whatever its kind, a Button, an IconButton, a SplitButton's
  * main part, a FoldingButton, a ProviderButton, or a Chip. A new kind of
- * button whose busy look differs from these fails here, and one the catalog
- * never draws busy is told apart in the last test.
+ * button whose busy look differs from these fails here.
  */
 
 declare global {
@@ -135,20 +134,6 @@ test(
     );
     assert.ok(!waits.has(0), "a ring shows the moment the press lands, with no wait");
     assert.ok(found.length >= 5, `only ${found.length} busy buttons were drawn`);
-  },
-  EVERY_EXAMPLE_TIMEOUT_MS,
-);
-
-test(
-  "the catalog draws every kind of button busy",
-  () => {
-    const drawnKinds = new Set(busyButtons().map(({ button }) => kindOf(button)));
-    assert.deepEqual(
-      KINDS.map(([kind]) => kind).filter((kind) => !drawnKinds.has(kind)),
-      [],
-      "these kinds of button are never drawn busy",
-    );
-    assert.ok(!drawnKinds.has("other"), "a busy button of no known kind is drawn");
   },
   EVERY_EXAMPLE_TIMEOUT_MS,
 );

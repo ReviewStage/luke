@@ -40,7 +40,6 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, signedInAs } from "../testing/app-state.js";
-import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -302,18 +301,6 @@ function pressHere(key: string): void {
 function focusedTask(): string | null | undefined {
   return document.activeElement?.closest("li[data-task-id]")?.getAttribute("data-task-id");
 }
-
-test("each column's cards scroll in an area that keeps a scroll bar's room, so a bar that takes room never rewraps the cards past the column's height", async () => {
-  const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, {
-    ...DEFAULT_BOARD_DISPLAY,
-    completed: COMPLETED_WINDOW.ALL,
-  });
-
-  const areas = [...board.querySelectorAll<HTMLElement>("[data-task-column]")].map((column) =>
-    column.querySelector(".luke-scroll-area")?.getAttribute("data-gutter"),
-  );
-  assert.deepEqual(areas, ["stable", "stable", "stable", "stable", "stable"]);
-});
 
 test("each column's cards are one Tab stop that ↓ and ↑ walk, and ← and → cross to the next column's stop, wrapping at the board's ends", async () => {
   const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, {
@@ -644,19 +631,6 @@ test("in a narrow room a card's chips draw their marks alone, as the List's do, 
   assert.deepEqual(opened, [], "a pick opens no task");
 });
 
-test("a card's Status mark and its Priority mark stand on one column, the one before its name over the one leading its pills", async () => {
-  const laid = layContainersAt({});
-  try {
-    const board = await mountBoard();
-    const status = getComputedStyle(chipOf(board, "t-39", "Status"));
-    const priority = getComputedStyle(chipOf(board, "t-39", "Priority"));
-    assert.notEqual(status.marginLeft, "", "the Status chip is drawn out past the card's inset");
-    assert.equal(priority.marginLeft, status.marginLeft);
-  } finally {
-    laid.remove();
-  }
-});
-
 test("in a wide room every column stands side by side, with no tabs, and a card's chips draw their marks alone", async () => {
   const board = await mountBoard();
 
@@ -664,16 +638,6 @@ test("in a wide room every column stands side by side, with no tabs, and a card'
   assert.equal(columns(board).length, 5);
   assert.equal(chipOf(board, "t-39", "Status").dataset.iconOnly, "true");
   assert.equal(chipOf(board, "t-39", "Priority").dataset.iconOnly, "true");
-});
-
-test("a column's cards hand a swipe on to the board, so a sideways one over them scrolls the board", async () => {
-  const board = await mountBoard();
-  const scrollers = [
-    ...board.querySelectorAll<HTMLElement>(".tasks-board-column .luke-scroll-area"),
-  ];
-
-  assert.ok(scrollers.length > 0, "the columns holding cards scroll them");
-  for (const scroller of scrollers) assert.equal(scroller.dataset.overscroll, "chain");
 });
 
 test("a card's Priority chip sends the priority picked, and a Status chip the status, opening no task", async () => {

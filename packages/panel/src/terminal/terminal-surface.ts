@@ -59,6 +59,14 @@ const TERMINAL_LOOK = {
   allowProposedApi: true,
 } as const;
 
+/** The attribute the tab sets on the host while no shell is connected, which dims the output. */
+const DIM_ATTRIBUTE = "data-dim";
+
+/** Whether the tab has the screen dimmed. */
+function isDim(host: HTMLElement): boolean {
+  return host.getAttribute(DIM_ATTRIBUTE) === "true";
+}
+
 /** The Unicode version wide characters are measured by. */
 const UNICODE_VERSION = "11";
 
@@ -177,7 +185,7 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
   const terminal = new Terminal({
     ...TERMINAL_LOOK,
     fontFamily: landed ? family : FALLBACK_FONT,
-    theme: terminalTheme(host),
+    theme: terminalTheme(host, isDim(host)),
   });
   terminal.attachCustomKeyEventHandler((event) => {
     const key = terminalKey(event);
@@ -203,6 +211,7 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
   );
   terminal.open(host);
   drawWithWebgl(terminal);
+  const contrast = terminal.options.minimumContrastRatio ?? 1;
   const find = scrollbackFind(terminal, host);
   const heard = [terminal.onData(props.onInput), terminal.onResize(props.onResize)];
   fit.fit();
@@ -218,9 +227,15 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
   }
 
   // The tokens' values flip with the appearance, and the canvas holds the old ones until told.
-  const stopRetheming = onDrawnThemeChange(() => {
-    terminal.options.theme = terminalTheme(host);
-  });
+  // Note that a dimmed screen is dimmed in its colours, never by the box's opacity, which would dim the notes the terminal prints as well, and its contrast floor is lifted, because the floor would lift the output back out of its dimming.
+  const retheme = () => {
+    const dim = isDim(host);
+    terminal.options.theme = terminalTheme(host, dim);
+    terminal.options.minimumContrastRatio = dim ? 1 : contrast;
+  };
+  const stopRetheming = onDrawnThemeChange(retheme);
+  const dimming = new MutationObserver(retheme);
+  dimming.observe(host, { attributes: true, attributeFilter: [DIM_ATTRIBUTE] });
 
   // A box resized many times in a frame is fitted once, at the frame.
   let frame: number | undefined;
@@ -244,6 +259,7 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
       resized.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
       stopRetheming();
+      dimming.disconnect();
       for (const each of heard) each.dispose();
       terminal.dispose();
       stopAdopting();

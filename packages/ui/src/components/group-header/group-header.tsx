@@ -57,12 +57,15 @@ import { Tooltip } from "../tooltip/hint.js";
  * the Tasks list's, hands them on through its fold's body (`rows`).
  *
  * A group's actions (a repository's ⋯ and +) stand at the head's end beside
- * the fold, so pressing one folds nothing, shown while the head is hovered
- * or holds the focus, and at rest where there is no hover; a head whose
- * buttons are the list's own, Tasks' View options, keeps them standing at
- * rest (`actionsShown`). A right-click on the head is the ⋯'s second door
- * (`contextMenu`), and the head stays ringed while the menu it opened stands
- * (`menuOpen`).
+ * the fold, so pressing one folds nothing, shown while the head is hovered,
+ * holds the focus, or a menu one of them dropped stands open, and at rest
+ * where there is no hover; a head whose buttons are the list's own keeps
+ * them standing at rest (`actionsShown`). One action may be on, a filter
+ * leaving rows out (`GroupAction`): it stands at rest while the rest wait,
+ * wearing a dot in the accent's ink over its corner, so a list cut down
+ * never passes for the whole of it. A right-click on the head is the ⋯'s
+ * second door (`contextMenu`), and the head stays ringed while the menu it
+ * opened stands (`menuOpen`).
  *
  * A head that is too tight for a search of its own may offer one (`search`):
  * a magnifier after the label unfolds a field laid over the label and the
@@ -88,6 +91,13 @@ export const GROUP_ACTIONS = {
   AT_REST: "at-rest",
 } as const;
 export type GroupActions = (typeof GROUP_ACTIONS)[keyof typeof GROUP_ACTIONS];
+
+/** Whether one of a head's actions waits with the rest, or is on and stands at rest, wearing its dot. */
+export const GROUP_ACTION_STATE = {
+  IDLE: "idle",
+  ACTIVE: "active",
+} as const;
+export type GroupActionState = (typeof GROUP_ACTION_STATE)[keyof typeof GROUP_ACTION_STATE];
 
 /** How wide the surface a group stands on is, which says where its count stands: always on a wide page, only folded or under the pointer in a narrow column. */
 export const GROUP_SURFACE = {
@@ -166,6 +176,27 @@ function Lead({
       {said(mark) ? <span className="luke-group-header-mark">{mark}</span> : null}
       {count === undefined ? null : <Count count={count} />}
     </>
+  );
+}
+
+/**
+ * One of a head's actions, the button and the menu it drops, which stands at
+ * rest while it is on, a filter leaving rows out, wearing the accent's dot,
+ * though the head's other actions wait for the pointer or the keyboard.
+ */
+export function GroupAction({
+  state = GROUP_ACTION_STATE.IDLE,
+  children,
+}: {
+  /** Whether it is on, which keeps it standing and dotted. */
+  state?: GroupActionState;
+  /** The action's button, and the menu it drops. */
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <span className="luke-group-header-action" data-state={state}>
+      {children}
+    </span>
   );
 }
 

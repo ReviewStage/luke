@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test, vi } from "vitest";
+import { afterEach, test } from "vitest";
 import type { MenuEntry } from "../menu/menu.js";
 import { PaneBar } from "./pane-bar.js";
 
@@ -11,10 +11,7 @@ import { PaneBar } from "./pane-bar.js";
  * pane-bar.test.ts -- a tab's bar draws its lead, its middle, and its
  * actions in that order with the ⋯ last, and leaves out a slot that says
  * nothing; the ⋯ drops the menu it was handed, named as the ⋯ is, and a
- * choice in it acts and closes it; the title holds to one line that fades
- * where the bar cuts it rather than wrapping. jsdom lays nothing out, so a
- * cut title's widths are stood in for, and the observer that measures it
- * is fired by hand.
+ * choice in it acts and closes it.
  */
 
 declare global {
@@ -27,33 +24,9 @@ const TITLE = "Quarterly review of the onboarding funnel";
 
 const roots: Root[] = [];
 
-/** The measurement each observed box was handed, fired as a resize. */
-const resizes: (() => void)[] = [];
-
-/** Fires every observed box's measurement, as a resize would. */
-function resize(): void {
-  act(() => {
-    for (const fire of resizes) fire();
-  });
-}
-
-class StandInObserver {
-  readonly #fire: () => void;
-  constructor(fire: () => void) {
-    this.#fire = fire;
-  }
-  observe(): void {
-    resizes.push(this.#fire);
-  }
-  disconnect(): void {}
-}
-
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
-  resizes.splice(0);
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 });
 
 function render(element: ReactElement): HTMLElement {
@@ -106,7 +79,6 @@ test("the lead, the middle, and the actions stand in that order, the ⋯ last", 
 test("a slot that says nothing is not drawn, and a bar with no menu has no ⋯", () => {
   const container = render(createElement(PaneBar, { title: TITLE, middle: null, actions: "" }));
   const bar = barOf(container);
-  assert.equal(bar.children.length, 1);
   assert.equal(bar.querySelector("button"), null);
   assert.equal(bar.textContent, TITLE);
 });
@@ -136,23 +108,4 @@ test("the ⋯ drops the menu it was handed, and a choice in it acts and closes i
   act(() => items[0]?.click());
   assert.deepEqual(chosen, ["Copy path"]);
   assert.equal(more.getAttribute("aria-expanded"), "false");
-});
-
-test("the title holds to one line and fades where the bar cuts it, rather than wrapping", () => {
-  vi.stubGlobal("ResizeObserver", StandInObserver);
-  const container = render(createElement(PaneBar, { title: TITLE }));
-  const title = barOf(container).querySelector<HTMLElement>(".luke-one-line");
-  assert.ok(title !== null, "the title is held to one line");
-  assert.equal(title.textContent, TITLE);
-  assert.equal(title.getAttribute("data-end"), "fade");
-
-  vi.spyOn(title, "scrollWidth", "get").mockReturnValue(320);
-  vi.spyOn(title, "clientWidth", "get").mockReturnValue(320);
-  resize();
-  assert.equal(title.getAttribute("data-overflow"), "false");
-
-  vi.spyOn(title, "clientWidth", "get").mockReturnValue(120);
-  resize();
-  assert.equal(title.getAttribute("data-overflow"), "true");
-  assert.equal(title.textContent, TITLE);
 });

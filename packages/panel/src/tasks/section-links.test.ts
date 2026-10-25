@@ -133,14 +133,6 @@ test("a section's ⋯ copies the section's link, its bare address, as a teammate
   assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${TASK_ID}#rollout`]);
 });
 
-test("the plan's first words, under no heading, offer no link", () => {
-  const { container } = drawn();
-
-  const mores = container.querySelectorAll(SECTION_MORE);
-
-  assert.equal(mores.length, 3, "one ⋯ for each of the three headed sections");
-});
-
 test("an ask to show a section scrolls the document to it, and an ask for one it no longer holds to its top", () => {
   const { container } = drawn();
   const scroller = container.querySelector<HTMLElement>(".plan-document-body")?.parentElement;

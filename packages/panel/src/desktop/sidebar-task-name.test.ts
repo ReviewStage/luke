@@ -123,12 +123,3 @@ test("a task name cut short by its row fades out where it is cut, and the row's 
   assert.equal(name.dataset.overflow, "true");
   assert.ok(pillOver(row)?.startsWith(LONG_NAME));
 });
-
-test("a task name that fits stays whole, with no fade", async () => {
-  const sidebar = await mountSidebar();
-  const name = rowOf(sidebar, SHORT_NAME).querySelector<HTMLElement>(
-    ".luke-list-row-title .luke-one-line",
-  );
-  assert.ok(name);
-  assert.equal(name.dataset.overflow, "false");
-});

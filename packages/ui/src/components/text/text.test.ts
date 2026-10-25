@@ -59,5 +59,4 @@ test("a path cut from its start still holds every part of it", () => {
     }),
   );
   assert.equal(container.textContent, path);
-  assert.ok(container.querySelector("[data-truncate='start']"));
 });

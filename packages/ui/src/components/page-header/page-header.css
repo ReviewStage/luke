@@ -1,7 +1,8 @@
 /* page-header.css -- a document's header: its title and the line under it,
    and the page's acts centred on the title's first line, wrapping under it
-   when the title needs the line. The room around the header is the page's,
-   which places it at its inset and measure. */
+   only when not even the title's least width fits beside them. The room
+   around the header is the page's, which places it at its inset and
+   measure. */
 
 @layer components {
   .luke-page-header {
@@ -11,9 +12,14 @@
     gap: var(--luke-control-gap);
   }
 
+  /* Note that the title's share of the line starts at a least width rather
+     than at its words' own, because a long title that wraps inside its
+     column leaves the acts on its first line, and one sized to its words
+     takes the whole line and sends them under it, onto a row of their own
+     that a hidden ⋯ leaves empty. */
   .luke-page-header-heading {
     display: flex;
-    flex: 1 1 auto;
+    flex: 1 1 calc(var(--luke-control-height) * 5);
     flex-direction: column;
     gap: var(--luke-space-4);
     min-width: 0;

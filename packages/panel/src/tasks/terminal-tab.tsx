@@ -6,12 +6,10 @@ import {
   ErrorState,
   FILL_FLOW,
   Fill,
+  OneLine,
   PaneBar,
   Shortcut,
   TEXT_BUTTON_TONE,
-  TEXT_ELEMENT,
-  TEXT_VARIANT,
-  Text,
   TextButton,
 } from "@luke/ui";
 import { useMemo, useState } from "react";
@@ -105,19 +103,15 @@ function StateBar({
       data-late={String(bar.late)}
       onAnimationEnd={() => setRevealed(true)}
     >
-      {bar.busy ? (
-        <span className="tracking-busy text-muted-foreground" aria-hidden="true">
-          ⋯
-        </span>
-      ) : null}
-      <Text
-        as={TEXT_ELEMENT.SPAN}
-        variant={TEXT_VARIANT.INHERIT}
-        truncate
-        className="terminal-bar-words"
-      >
-        {bar.words}
-      </Text>
+      {/* Note that the glyph and the words are one item, so a bar too narrow for its action puts the action on a line of its own rather than the glyph apart from its words. */}
+      <span className="flex min-w-0 flex-initial items-center gap-control-gap">
+        {bar.busy ? (
+          <span className="flex-none tracking-busy text-muted-foreground" aria-hidden="true">
+            ⋯
+          </span>
+        ) : null}
+        <OneLine className="terminal-bar-words">{bar.words}</OneLine>
+      </span>
       <span className="terminal-bar-end ml-auto inline-flex items-center gap-control-gap">
         {bar.since === undefined ? null : (
           <WorkingTime startedAt={bar.since} className="text-muted-foreground" />
@@ -219,7 +213,7 @@ export function TerminalTab({
           ) : (
             <div
               ref={session.screen}
-              className={`${TERMINAL_SCREEN_CLASS} data-[dim=true]:opacity-terminal-dim`}
+              className={TERMINAL_SCREEN_CLASS}
               data-dim={String(look.dim)}
             />
           )}

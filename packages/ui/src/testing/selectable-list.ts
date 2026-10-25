@@ -19,7 +19,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
  */
 
 /** Every surface whose rows are chosen, by where it stands and where its contract runs. */
-export const SELECTABLE_SURFACE = {
+const SELECTABLE_SURFACE = {
   CATALOG: {
     source: "apps/catalog/src/examples/selection.tsx",
     test: "apps/catalog/src/selectable-lists.test.ts",

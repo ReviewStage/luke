@@ -5,7 +5,7 @@ import {
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import { test } from "vitest";
-import { commentSpansIn, marginTops, PENDING_THREAD } from "./plan-comments.js";
+import { commentSpansIn, hungTop, marginTops, PENDING_THREAD } from "./plan-comments.js";
 
 /**
  * Where a plan's comments are drawn: each open thread's words marked inside
@@ -86,6 +86,25 @@ test("the open card stands exactly level with its words, and the ones above it s
   );
 
   assert.deepEqual(Object.fromEntries(tops), { a: -48, b: 40, c: 248 });
+});
+
+test("an open card that would run past the view's foot is lifted until it ends there, the ones above stepping up out of its way", () => {
+  const tops = marginTops(
+    [
+      { id: "a", top: 300, height: 100 },
+      { id: "b", top: 500, height: 300 },
+      { id: "c", top: 520, height: 40 },
+    ],
+    "b",
+    8,
+    { top: 0, bottom: 640 },
+  );
+
+  assert.deepEqual(Object.fromEntries(tops), { a: 232, b: 340, c: 648 });
+});
+
+test("a card hung under a line that has no room below it there flips to end over the line", () => {
+  assert.equal(hungTop(500, 28, 300, 8, { top: 0, bottom: 640 }), 192);
 });
 
 test("a thread begun on the editor's words is marked on the same words of the saved text, though words typed before them are not saved yet", () => {

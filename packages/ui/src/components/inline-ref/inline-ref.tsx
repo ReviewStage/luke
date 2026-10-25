@@ -39,6 +39,16 @@ import { Tooltip } from "../tooltip/hint.js";
  * (`Tooltip`, `hint.tsx`), or one the caller hangs in its place (`hint`):
  * it is handed the words and the card and wraps the token, which takes what
  * the hint hands it on its own root.
+ *
+ * It is drawn in the Tailwind theme's utilities, its metrics in em, since it
+ * stands in prose of any size, and never making its line taller than a line
+ * of words: its name alone sits on the words' baseline (a flex box takes its
+ * baseline from the items that are, and otherwise from its glyph, whose
+ * baseline is its bottom edge), and a pill stands proud of the name on
+ * padding its margins take back. A wash bleeds by a ring of its own colour
+ * rather than padding, so the words around it keep their spacing, and hands
+ * the wash on (`--luke-inline-ref-wash`) for a mark inside that rings itself
+ * in the ground. A cut name's fade is `inline-ref.css`'s, as a chip's is.
  */
 
 /** How a token is drawn, by the place it stands. */
@@ -113,6 +123,85 @@ interface InlineRefFace {
   leaves?: boolean | undefined;
 }
 
+/** What every token is drawn with: one target that never outgrows its column, its words the line's own. */
+const ROOT =
+  "luke-inline-ref inline-flex min-w-0 max-w-full items-center p-0 border-0 text-left align-baseline [font:inherit] no-underline whitespace-nowrap";
+
+/** Each look's own box and ink at rest, a pill's type asked on its look so it outranks the line's own font the root takes. Note that a wash's name stands at least a 16px mark's height, so a mark beside it stays centred on it. */
+const LOOK_ROOT = {
+  [INLINE_REF_LOOK.LINK]: "gap-icon-gap bg-transparent",
+  [INLINE_REF_LOOK.WASH]:
+    "gap-luke-4 rounded-luke-6 bg-transparent transition-[background-color,box-shadow,color] duration-(--luke-duration-hover) ease-motion-exit [&:hover]:bg-muted [&:hover]:text-foreground [&:hover]:shadow-inline-ref-wash [&:hover]:[--luke-inline-ref-wash:var(--luke-color-fill-hover)]",
+  [INLINE_REF_LOOK.PILL]:
+    "-my-[0.075em] gap-luke-4 rounded-luke-6 py-[0.075em] pr-luke-6 pl-luke-4 text-foreground data-[look=pill]:leading-[1.2] data-[look=pill]:font-tag transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit",
+} as const satisfies Record<InlineRefLook, string>;
+
+/** How a token's root is drawn: its look, its ink, a pointer where it presses, and a pill's fill lifting under the pointer or the keyboard, or with the row it stands inert in, unless what it names is gone. */
+function rootClass({
+  look,
+  gone,
+  pressable,
+  stated,
+}: {
+  look: InlineRefLook;
+  gone: boolean;
+  pressable: boolean;
+  stated: boolean;
+}): string {
+  const pill = look === INLINE_REF_LOOK.PILL;
+  const parts: string[] = [ROOT, LOOK_ROOT[look]];
+  if (!pill) parts.push(gone ? "text-muted-foreground" : "text-inherit");
+  if (pressable) parts.push("cursor-pointer");
+  if (pill) {
+    // Note that a pill saying its standing is let wider, so its name is read rather than cut at its first word.
+    parts.push(stated ? "max-w-inline-ref-pill-stated" : "max-w-inline-ref-pill");
+    if (gone) parts.push("bg-transparent inset-ring inset-ring-border-strong");
+    else if (pressable) parts.push("bg-fill-strong [&:is(:hover,:focus-visible)]:bg-fill-selected");
+    // Note that the lift is what keeps an inert pill seen on a row that is itself a press, because its resting fill is the row's hover fill.
+    else
+      parts.push(
+        "bg-fill-strong in-[:is(button,summary):is(:hover,:focus-visible)]:bg-fill-selected",
+      );
+  }
+  return parts.join(" ");
+}
+
+/** A token's glyph, centred in a box the line's size; a pill's in the muted ink. */
+function glyphClass(look: InlineRefLook): string {
+  const glyph = "luke-inline-ref-glyph inline-grid flex-none place-items-center [&>svg]:size-[1em]";
+  return look === INLINE_REF_LOOK.PILL ? `${glyph} size-[1em] text-muted-foreground` : glyph;
+}
+
+/** A token's name, alone on the words' baseline: struck through where gone, a path in the code face cut from its left, a link's name underlined under the pointer, and a wash's at least a mark tall. */
+function labelClass({
+  look,
+  name,
+  gone,
+  pressable,
+}: {
+  look: InlineRefLook;
+  name: InlineRefName;
+  gone: boolean;
+  pressable: boolean;
+}): string {
+  const parts = ["luke-inline-ref-label min-w-0 self-baseline overflow-hidden"];
+  if (name === INLINE_REF_NAME.PATH) parts.push("[direction:rtl] font-mono");
+  if (gone) parts.push("line-through");
+  if (look === INLINE_REF_LOOK.LINK && pressable) {
+    parts.push("group-[:hover]/inline-ref:underline group-[:hover]/inline-ref:underline-offset-2");
+  }
+  if (look === INLINE_REF_LOOK.WASH) parts.push("py-inline-ref-mark");
+  return parts.join(" ");
+}
+
+/** Where a token stands, after its name, never cut; a pill's set off by a hairline. */
+function stateClass(look: InlineRefLook): string {
+  const state = "luke-inline-ref-state flex-none self-baseline text-muted-foreground";
+  return look === INLINE_REF_LOOK.PILL
+    ? `${state} border-l border-border-strong pl-luke-4 font-caption`
+    : state;
+}
+
 /** What a screen reader hears after a gone subject's name, which its strike-through says to the eye alone. */
 const GONE_HEARD = " (gone)";
 
@@ -164,31 +253,37 @@ function InlineRefRoot({
   }): React.JSX.Element {
   const linkAddress = useLinkAddress(linkHref);
   const [measured, clipped] = useClipped(label);
+  const pressable = onPress !== undefined;
+  const stated = !(state === undefined || state === null || labelHidden);
   const face = (
     <>
       {kind === undefined ? null : <span className="luke-visually-hidden">{`${kind} `}</span>}
       {glyph === undefined ? null : (
-        <span className="luke-inline-ref-glyph" aria-hidden="true">
+        <span className={glyphClass(look)} aria-hidden="true">
           {glyph}
         </span>
       )}
       <span
         ref={measured}
-        className={labelHidden ? "luke-visually-hidden" : "luke-inline-ref-label"}
+        className={
+          labelHidden ? "luke-visually-hidden" : labelClass({ look, name, gone, pressable })
+        }
         data-name={name}
         data-overflow={String(clipped)}
       >
         {/* Note that a path is isolated, so the fade at its start never reorders it. */}
         {name === INLINE_REF_NAME.PATH ? <bdi>{label}</bdi> : label}
       </span>
-      {state === undefined || state === null || labelHidden ? null : (
-        <span className="luke-inline-ref-state">{state}</span>
-      )}
+      {!stated ? null : <span className={stateClass(look)}>{state}</span>}
       {heard === undefined ? null : <span className="luke-visually-hidden">{heard}</span>}
       {gone ? <span className="luke-visually-hidden">{GONE_HEARD}</span> : null}
     </>
   );
-  const own = { ...rest, className: "luke-inline-ref", "data-look": look };
+  const own = {
+    ...rest,
+    className: `${rootClass({ look, gone, pressable, stated })}${pressable ? " group/inline-ref" : ""}`,
+    "data-look": look,
+  };
   const goneProps = gone ? { "data-gone": "true" } : {};
   if (onPress === undefined) {
     return (

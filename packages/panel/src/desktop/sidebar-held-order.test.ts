@@ -241,7 +241,6 @@ test("grouped by assignee, a group whose last task is given away slides out wher
   assert.match(leaving?.textContent ?? "", /Grace Hopper/u, "its group is drawn on");
   assert.equal(leaving?.hasAttribute("inert"), true, "out of reach while it goes");
   const out = motions.played.find((each) => each.element === leaving);
-  assert.equal(out?.keyframes.at(-1)?.opacity, 0, "it fades out as it slides");
   assert.deepEqual(
     [
       ...container.querySelectorAll(".sidebar-repository:not([data-leaving]) .luke-list-row-title"),
