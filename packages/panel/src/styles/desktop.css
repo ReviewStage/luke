@@ -415,18 +415,16 @@ body,
   display: inline-flex;
 }
 
-/* The sidebar's View options and the Tasks page's Filter wear a dot while
-   the view leaves tasks out, so a filtered list never passes for the whole
-   of it: drawn by the box around the button, over its corner, in the
-   accent's ink, since the web's accent fill is too light to hold 3:1 as a
-   mark on its light page and its ring is near-black there. */
-.sidebar-view-options,
+/* The Tasks page's Filter wears a dot while the view leaves tasks out, so a
+   filtered list never passes for the whole of it, as the sidebar's head's
+   do (`@luke/ui`'s `GroupAction`): drawn by the box around the button, over
+   its corner, in the accent's ink, since the web's accent fill is too light
+   to hold 3:1 as a mark on its light page and its ring is near-black there. */
 .tasks-page-option {
   position: relative;
   display: inline-flex;
 }
 
-.sidebar-view-options[data-filtered="true"]::after,
 .tasks-page-option[data-filtered="true"]::after {
   position: absolute;
   top: var(--luke-space-4);
@@ -437,12 +435,6 @@ body,
   background: var(--luke-color-accent-text);
   content: "";
   pointer-events: none;
-}
-
-/* The Tasks head's status filter always stands, whether or not the sidebar
-   is hovered or holds focus (`sidebar-task-view.tsx`). */
-.sidebar-status-filter {
-  display: inline-flex;
 }
 
 /* The quiet line under the list saying what the status filter leaves out,
