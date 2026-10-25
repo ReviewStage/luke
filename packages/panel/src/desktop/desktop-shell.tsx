@@ -921,7 +921,7 @@ export function DesktopShell({
     room,
     tasks,
     chatOn,
-    channelsOn ? { threadOpen: channelPlace.threadOpen } : undefined,
+    channelsOn ? { threadId: channelPlace.threadId } : undefined,
   );
   return (
     <div

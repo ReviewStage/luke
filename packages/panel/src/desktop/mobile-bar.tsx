@@ -40,9 +40,9 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
  * stream keeps the whole screen, as an item does.
  */
 
-/** Channels in the Inbox's place, where the account has it on: whether a thread stands open over a channel's stream. */
+/** Channels in the Inbox's place, where the account has it on: the thread opened over a channel's stream, by its item's id. */
 export interface BarChannels {
-  readonly threadOpen: boolean;
+  readonly threadId: string | undefined;
 }
 
 /** Whether the bar stands: a narrow room, signed in, on one of the places' lists; `channels` is none while Channels is off. */
@@ -57,9 +57,10 @@ export function mobileBarShown(
   const { inboxView, chatView, boardView, automationsView, adminView, agentView, personView } =
     tasks;
   if (chatView.open && chatOn) return chatView.listed;
-  // Note that a thread stands over a channel's stream only once its item is chosen, so a thread asked for with none still shows the stream.
+  // Note that a thread stands over a channel's stream only while its item is the one chosen, so a choice history went back past shows the stream.
+  const chosen = inboxView.chosen;
   const itemStands =
-    inboxView.chosen !== undefined && (channels === undefined || channels.threadOpen);
+    chosen !== undefined && (channels === undefined || channels.threadId === chosen.itemId);
   if (inboxView.open) return inboxView.listed || !itemStands;
   if (agentView.agentId !== undefined || personView.userId !== undefined) return false;
   if (boardView.open) return true;

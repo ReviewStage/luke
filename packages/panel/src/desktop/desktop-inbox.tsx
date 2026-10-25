@@ -250,7 +250,10 @@ function InboxShown({
   // A phone's list of channels stands while the list is asked for, as the bar's Channels asks, so the window's Back returns to it from a stream.
   const channelsListed = streaming && phone && view.listed;
   const threadShown =
-    channel !== undefined && channelPlace.threadOpen && chosen !== undefined && !channelsListed;
+    channel !== undefined &&
+    chosen !== undefined &&
+    channelPlace.threadId === chosen.item.id &&
+    !channelsListed;
   const threadBeside = threadShown && !phone;
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
   // Note that the window keeps whether the list was asked for, so its history can go back to it.
@@ -416,7 +419,7 @@ function InboxShown({
         : choiceOf(listedThread)),
       opened: true,
     });
-    channelPlace.onOpenThread();
+    channelPlace.onOpenThread(thread.id);
   };
   // A channel pressed on a phone's list opens on its stream, never on a thread left open in it.
   const openChannel = (channelId: string) => {
