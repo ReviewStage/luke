@@ -596,7 +596,7 @@
   --spacing-glyph: var(--luke-glyph-size, var(--luke-space-16));
   --color-shortcut-ink: var(--luke-shortcut-ink, var(--luke-color-text-muted));
   --text-shortcut: var(--luke-shortcut-text, var(--luke-type-caption-size));
-  --spacing-working-mark: var(--luke-working-mark-size, var(--luke-space-12));
+  --spacing-working-mark: var(--luke-working-mark-size, var(--luke-space-16));
   --color-mark-strip-ink: var(--luke-mark-strip-ink);
   --spacing-thinking-dot: 5px; /* off-scale: a wait's dot */
   --color-code: var(--luke-color-code-text);
