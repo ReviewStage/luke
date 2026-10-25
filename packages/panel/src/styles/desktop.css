@@ -419,7 +419,9 @@ body,
 
 /* The sidebar's View options and the Tasks page's Filter wear a dot while
    the view leaves tasks out, so a filtered list never passes for the whole
-   of it: drawn by the box around the button, over its corner. */
+   of it: drawn by the box around the button, over its corner, in the
+   accent's ink, since the web's accent fill is too light to hold 3:1 as a
+   mark on its light page and its ring is near-black there. */
 .sidebar-view-options,
 .tasks-page-option {
   position: relative;
@@ -434,7 +436,7 @@ body,
   width: 5px; /* off-scale: a status dot */
   height: 5px; /* off-scale: a status dot */
   border-radius: 50%;
-  background: var(--luke-color-focus-ring);
+  background: var(--luke-color-accent-text);
   content: "";
   pointer-events: none;
 }
