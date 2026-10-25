@@ -69,11 +69,20 @@
   /* A bar's path: a crumb gives way, by its share, down to its first
      letters, fading out, its chevron always standing before it, and the
      current one, last, gives way last of all. Note that the floors stay
-     here, because they hang on `:has()` and on the bar's widths. */
+     here, because they hang on `:has()` and on the bar's widths.
+
+     Note that a crumb stands on its floor and grows by its share to its own
+     width, never past it, rather than shrinking from its width to a floor,
+     because a floor wider than a short crumb's words would stretch its item
+     and stand a gap before the next chevron; this way a crumb's least width
+     is the lesser of its floor and its words, and a path with room packs
+     each crumb one chevron after the one before. */
   .luke-breadcrumbs[data-variant="caption"] li {
     --luke-breadcrumb-floor: 2.5em;
-    min-width: var(--luke-breadcrumb-floor);
-    flex: 0 9 auto;
+    --luke-breadcrumb-chevron-room: 0px;
+    flex: 1 0 calc(var(--luke-breadcrumb-floor) + var(--luke-breadcrumb-chevron-room));
+    min-width: 0;
+    max-width: max-content;
   }
 
   /* Note that a crumb of words or a plain press keeps a floor its words read
@@ -85,25 +94,27 @@
   }
 
   .luke-breadcrumbs[data-variant="caption"] li:has(> .luke-breadcrumb-separator) {
-    min-width: calc(var(--luke-breadcrumb-floor) + 12px);
+    --luke-breadcrumb-chevron-room: 12px;
   }
 
   /* Note that a crumb whose chevron a width hides takes no chevron's room
      in its floor there, as below for the narrower widths. */
   .luke-breadcrumbs[data-variant="caption"]
   li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
-    min-width: var(--luke-breadcrumb-floor);
+    --luke-breadcrumb-chevron-room: 0px;
   }
 
-  /* Note that the last crumb's share is a whole one, because shares summing
-     to less than one leave the rest of the overflow standing. */
+  /* The last crumb, the page the reader stands on, takes the larger share of
+     the room past the floors, so it gives way last. */
   .luke-breadcrumbs[data-variant="caption"] li:last-child {
-    flex-shrink: 1;
+    flex-grow: 9;
   }
 
-  /* A crumb standing for others a narrow bar leaves out keeps its width. */
-  .luke-breadcrumbs[data-variant="caption"] li:is([data-shown="narrow"], [data-shown="narrowest"]) {
-    flex-shrink: 0;
+  /* A crumb that keeps its size, and one standing for others a narrow bar
+     leaves out, keep their width. */
+  .luke-breadcrumbs[data-variant="caption"]
+  li:is([data-fixed="true"], [data-shown="narrow"], [data-shown="narrowest"]) {
+    flex: none;
   }
 
   /* The widths a crumb is drawn at (`shownAt`): a wide bar, or none, draws
@@ -139,12 +150,12 @@
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
-      min-width: calc(var(--luke-breadcrumb-floor) + 12px);
+      --luke-breadcrumb-chevron-room: 12px;
     }
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
-      min-width: var(--luke-breadcrumb-floor);
+      --luke-breadcrumb-chevron-room: 0px;
     }
   }
 
@@ -168,12 +179,12 @@
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
-      min-width: calc(var(--luke-breadcrumb-floor) + 12px);
+      --luke-breadcrumb-chevron-room: 12px;
     }
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-narrowest="false"]) {
-      min-width: var(--luke-breadcrumb-floor);
+      --luke-breadcrumb-chevron-room: 0px;
     }
   }
 }

@@ -27,6 +27,9 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * The way in taken last (`lastUsed`) wears "Last used" on its top-right
  * corner, a pill hung over the button rather than a word inside it, so the
  * button is still named by its words alone and the pill describes it.
+ *
+ * A control button is shadcn/ui's, through `Button`; the gate's own and the
+ * pill are drawn in Tailwind utilities over the theme.
  */
 
 /** How tall a provider's button stands: the profile's control, or the sign-in gate's own. */
@@ -36,6 +39,29 @@ export const PROVIDER_BUTTON_SIZE = {
 } as const;
 
 export type ProviderButtonSize = (typeof PROVIDER_BUTTON_SIZE)[keyof typeof PROVIDER_BUTTON_SIZE];
+
+/**
+ * The gate's button: forty pixels tall on the window's control corner, the
+ * quiet fill in a hairline, or, primary, filled in the text's ink the way a
+ * composer's send press is. Held while a sign-in is out, the button waited
+ * on stays as it was, saying so, and the others step back. Only the
+ * desktop's window is dragged, so a press on its bar stays a press.
+ */
+const GATE =
+  "luke-provider-button m-0 flex h-provider-gate items-center justify-center gap-icon-gap rounded-control border-0 bg-muted px-luke-16 py-0 font-ui text-label-inline font-label text-foreground shadow-provider-gate transition-[background-color,opacity] duration-(--luke-duration-hover) ease-motion-exit pointer-coarse:h-provider-gate-touch in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag] [&:hover:not(:disabled)]:bg-fill-strong [&:disabled:not([aria-busy=true])]:opacity-disabled " +
+  "data-[primary=true]:bg-primary data-[primary=true]:text-primary-foreground data-[primary=true]:shadow-none data-[primary=true]:[&:hover:not(:disabled)]:bg-ink";
+
+/**
+ * "Last used": a small pill hung on the top-right corner of the button it
+ * marks, overhanging it, the way a devtool's sign-in marks the way in taken
+ * last. It wears the button's own ink at a tint, laid over the filled
+ * button's ground rather than over nothing, so the half that overhangs the
+ * page is the same solid pill as the half over the button. Its border is
+ * clear and only keeps the pill's box. It lets a press fall through to the
+ * button, and steps back with a button held while another's sign-in is out.
+ */
+const LAST_USED_PILL =
+  "luke-provider-button-last-used pointer-events-none absolute -top-luke-8 -right-luke-6 rounded-luke-full border border-transparent bg-provider-last-used px-luke-6 py-0 text-tag leading-caption font-tag whitespace-nowrap text-provider-last-used-ink transition-opacity duration-(--luke-duration-hover) ease-motion-exit [.luke-provider-button:disabled:not([aria-busy=true])+&]:opacity-disabled [.luke-button:disabled+&]:opacity-disabled";
 
 /** What the last-used pill says. */
 const LAST_USED = "Last used";
@@ -67,7 +93,7 @@ function GateButton({
   return (
     <button
       type="button"
-      className="luke-provider-button"
+      className={GATE}
       data-primary={primary ? "true" : undefined}
       disabled={disabled || busy}
       aria-busy={busy ? true : undefined}
@@ -75,7 +101,7 @@ function GateButton({
       onClick={pulseOnPress(onPress, PRESS_PULSE.QUIET)}
     >
       {ringShown ? (
-        <span className="luke-provider-button-wait">
+        <span className="luke-provider-button-wait size-luke-16 flex-[0_0_auto]">
           <SpinnerRing />
         </span>
       ) : (
@@ -113,7 +139,7 @@ export function ProviderButton({
   const words = `Continue with ${name}`;
   const describedBy = lastUsed ? badge : undefined;
   return (
-    <span className="luke-provider-button-slot">
+    <span className="luke-provider-button-slot relative flex flex-col">
       {size === PROVIDER_BUTTON_SIZE.GATE ? (
         <GateButton
           provider={provider}
@@ -139,7 +165,7 @@ export function ProviderButton({
         </Button>
       )}
       {lastUsed ? (
-        <span id={badge} className="luke-provider-button-last-used">
+        <span id={badge} className={LAST_USED_PILL}>
           {LAST_USED}
         </span>
       ) : null}

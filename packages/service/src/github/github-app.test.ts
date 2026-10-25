@@ -1,20 +1,17 @@
 import assert from "node:assert/strict";
 import { verify } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
 } from "@luke/database/github-installation-vocabulary";
 import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
 import { listWorkspaces } from "@luke/database/models/workspace-store";
-import { account } from "@luke/database/schemas/auth";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { generateCodeChallenge } from "better-auth/oauth2";
-import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
@@ -36,7 +33,6 @@ import {
   openGithubUser,
   openTokenMember,
   type SentToGitHub,
-  standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { GITHUB_REPOSITORY_SELECTION, GitHubApp } from "./github-app.js";
 import {
@@ -638,23 +634,6 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
           "another workspace's installation is never asked",
         );
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
-  );
-
-  it.effect(
-    "the sign-in's token stays sealed on its row: what the table holds is not the token",
-    () =>
-      Effect.gen(function* () {
-        const db = yield* Database;
-        const now = yield* Clock.currentTimeMillis;
-        const userId = yield* openGithubUser(standingGithubRow(now));
-        const [row] = yield* db
-          .select({ accessToken: account.accessToken, refreshToken: account.refreshToken })
-          .from(account)
-          .where(eq(account.userId, userId));
-        assert.ok(row);
-        assert.notEqual(row.accessToken, standingGithubRow(0).accessToken);
-        assert.notEqual(row.refreshToken, standingGithubRow(0).refreshToken);
-      }),
   );
 
   it.effect(

@@ -301,6 +301,12 @@ body {
   border-radius: var(--luke-radius-8);
 }
 
+/* A column wider than a strip's narrow break and short of its whole sentence, so its words are cut short. */
+.catalog-strip-room {
+  width: 520px;
+  max-width: 100%;
+}
+
 /* A sample block standing for an item an arrangement holds; a long one
    gives way rather than overflowing, as a real label does. */
 .catalog-swatch {

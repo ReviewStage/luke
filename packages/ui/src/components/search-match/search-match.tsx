@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 /**
- * search-match.tsx -- the words a search's query landed on, marked in a line so a result says why it matched.
+ * search-match.tsx -- the words a search's query landed on, marked in a line so a result says why it matched: a settings or ⌘K result, a reply's Markdown, a searchable menu's row.
  *
  * A wash rather than the engine's yellow: the mark identifies text, and the
  * line's own colours keep saying everything else. No padding, because these

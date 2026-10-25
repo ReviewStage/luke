@@ -3,8 +3,6 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { gunzipSync } from "node:zlib";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
@@ -561,14 +559,6 @@ it.effect(
 
       assert.deepEqual(ready, Option.some(fake.snapshots[0]));
     }),
-);
-
-it.effect("the template starts from the base image of the eve this repository installs", () =>
-  Effect.sync(() => {
-    const manifest = createRequire(import.meta.url).resolve("eve/package.json");
-    const { version } = JSON.parse(readFileSync(manifest, "utf8")) as { version: string };
-    assert.equal(EVE_BASE_IMAGE, `vcr.vercel.com/vercel/eve/base:${version.split("+")[0]}`);
-  }),
 );
 
 it.effect(

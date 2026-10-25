@@ -103,6 +103,7 @@ import type { SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
+  automationsTab,
   type InboxChoice,
   type LeaveGuard,
   type TasksControl,
@@ -1134,9 +1135,7 @@ export function useWindowHistory(input: {
   const automationsPage = tasks.automationsView.place;
   // A narrow room stands an automation's runs alone over its setup, as a step of their own.
   const automationRuns =
-    narrow && automationsPage.kind !== AUTOMATIONS_PAGE.LIST
-      ? tasks.automationsView.runs
-      : undefined;
+    narrow && !automationsTab(automationsPage) ? tasks.automationsView.runs : undefined;
   const chatOpen = tasks.chatView.open;
   const chatOn = useChatOn();
   const experiments = useExperimentChoices();

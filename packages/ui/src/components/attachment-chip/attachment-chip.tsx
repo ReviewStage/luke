@@ -45,6 +45,11 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * A chip is one item of a list its caller draws and names, so the caller
  * owns the row's layout; the chip takes no class or style.
+ *
+ * It is drawn in Tailwind utilities over the theme, with no shadcn/ui base:
+ * shadcn's badge takes no press and its button is a control's box, while a
+ * chip is a thumbnail's frame holding two presses, its face and its way off.
+ * `attachment-chip.css` keeps the motions it arrives, waits, and lands in.
  */
 
 /** Where a chip's file stands: here to open, still read, on its way up, or failed to come. */
@@ -57,6 +62,52 @@ export const ATTACHMENT_CHIP_STATE = {
 
 export type AttachmentChipState =
   (typeof ATTACHMENT_CHIP_STATE)[keyof typeof ATTACHMENT_CHIP_STATE];
+
+/**
+ * The chip: as tall as a thumbnail, at most its longest, in a hairline that
+ * strengthens while the pointer is on its face, a press; a thumbnail's width
+ * where it holds one.
+ */
+const CHIP =
+  "luke-attachment-chip group/attachment-chip relative flex h-attachment-chip max-w-attachment-chip-max rounded-luke-8 border border-border bg-surface transition-[border-color] duration-(--luke-duration-hover) ease-motion-exit has-[button.luke-attachment-chip-face:hover]:border-border-strong data-[image=true]:w-attachment-chip-thumb";
+
+/**
+ * The face, the press that opens the file where it is one, washed under the
+ * pointer as a row is, and a hair inside the chip's edge; a thumbnail's place
+ * holds a picture, or a wait or a failure's glyph at its middle.
+ */
+const FACE =
+  "luke-attachment-chip-face m-0 flex min-w-0 flex-[1_1_auto] items-center gap-luke-8 rounded-attachment-chip-face border-0 bg-transparent py-0 pr-luke-12 pl-attachment-chip-lead text-left text-muted-foreground [font-family:inherit] [font-style:inherit] [font-weight:inherit] leading-[inherit] text-caption-inline transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit [&>svg]:size-icon-16 [&>svg]:flex-none group-data-[image=true]/attachment-chip:justify-center group-data-[image=true]/attachment-chip:p-0";
+
+/** The face as a press: the pointer's hand, and the strong fill under it, a picture brightening with it. */
+const FACE_PRESS = "group/attachment-face cursor-pointer [&:hover]:bg-fill-strong";
+
+/**
+ * The way off. Note that the disc is 18px but the button is 24px, because a
+ * chip's corner carries no more disc than that and the pointer still needs a
+ * 24px target over it: a transparent border is hit like the rest of the
+ * button, and the ground is clipped inside it. The app's reset draws the
+ * ring; it stands inside the target, close round the disc.
+ */
+const REMOVE =
+  "luke-attachment-chip-remove absolute -top-attachment-chip-remove-out -right-attachment-chip-remove-out m-0 flex size-attachment-chip-remove items-center justify-center rounded-luke-full border-3 border-transparent bg-background bg-clip-padding p-0 text-muted-foreground shadow-attachment-chip-disc transition-[color] duration-(--luke-duration-hover) ease-motion-exit focus-visible:outline-offset-[calc(-1*var(--luke-focus-ring-width))] [&:hover:not(:disabled)]:text-foreground disabled:opacity-disabled [&_svg]:size-luke-8";
+
+/**
+ * An upload's meter, a hairline along the chip's foot inside its edge in the
+ * working ink: filled from its start to the share gone up on `transform`, so
+ * the bar never changes size, and easing to each new share as a pane does
+ * rather than springing past it; where no share is known, a third of the
+ * track sweeps across it (`attachment-chip.css`).
+ */
+const METER =
+  "luke-attachment-chip-meter pointer-events-none absolute right-luke-4 bottom-luke-2 left-luke-4 h-attachment-chip-meter overflow-hidden rounded-luke-full bg-fill-strong";
+const METER_FILL = "luke-attachment-chip-meter-fill block h-full rounded-luke-full bg-working";
+const METER_SHARE =
+  "origin-left [transform:scaleX(var(--luke-attachment-chip-share,0))] transition-transform duration-(--luke-duration-pane) ease-pane";
+
+/** A landed file's check on the chip's corner, in the done ink on the way off's disc. */
+const LANDED =
+  "luke-attachment-chip-landed pointer-events-none absolute -right-luke-6 -bottom-luke-6 flex size-luke-16 items-center justify-center rounded-luke-full bg-background text-complete shadow-attachment-chip-disc [&_svg]:size-attachment-chip-check [&_svg]:text-inherit";
 
 /** What a chip's face holds for its file as it stands. */
 function ChipFace({
@@ -79,7 +130,13 @@ function ChipFace({
   }
   const drawn = state === ATTACHMENT_CHIP_STATE.READY || state === ATTACHMENT_CHIP_STATE.UPLOADING;
   if (drawn && image !== undefined) {
-    return <img src={image} alt={name} />;
+    return (
+      <img
+        className="block size-full rounded-attachment-chip-face object-cover transition-[filter] duration-(--luke-duration-hover) ease-motion-exit group-hover/attachment-face:brightness-112"
+        src={image}
+        alt={name}
+      />
+    );
   }
   const words = state === ATTACHMENT_CHIP_STATE.FAILED ? failure : name;
   return (
@@ -87,7 +144,7 @@ function ChipFace({
       {icon}
       {words === undefined ? null : (
         <ClippedLine
-          className="luke-attachment-chip-name"
+          className="luke-attachment-chip-name overflow-hidden whitespace-nowrap text-foreground"
           as={ONE_LINE_ELEMENT.SPAN}
           end={ONE_LINE_END.FADE}
           words={words}
@@ -95,7 +152,9 @@ function ChipFace({
           {words}
         </ClippedLine>
       )}
-      {detail === undefined ? null : <span className="luke-attachment-chip-detail">{detail}</span>}
+      {detail === undefined ? null : (
+        <span className="luke-attachment-chip-detail flex-none">{detail}</span>
+      )}
     </>
   );
 }
@@ -117,7 +176,7 @@ function UploadMeter({
   const fraction = progress === undefined ? undefined : fractionOf(progress);
   return (
     <span
-      className="luke-attachment-chip-meter"
+      className={METER}
       role="progressbar"
       aria-label={`Uploading ${name}`}
       aria-valuemin={fraction === undefined ? undefined : 0}
@@ -126,7 +185,7 @@ function UploadMeter({
       data-indeterminate={fraction === undefined ? "true" : undefined}
     >
       <span
-        className="luke-attachment-chip-meter-fill"
+        className={fraction === undefined ? METER_FILL : `${METER_FILL} ${METER_SHARE}`}
         style={
           fraction === undefined
             ? undefined
@@ -213,18 +272,18 @@ export function AttachmentChip({
   return (
     <Tooltip label={name} card={card}>
       <li
-        className="luke-attachment-chip"
+        className={CHIP}
         data-image={thumbnail ? "true" : undefined}
         data-removable={onRemove === undefined ? undefined : "true"}
         {...(motionKey === undefined ? {} : motionKeyAttribute(motionKey))}
         data-state={state}
       >
         {onOpen === undefined || !ready ? (
-          <span className="luke-attachment-chip-face">{face}</span>
+          <span className={FACE}>{face}</span>
         ) : (
           <button
             type="button"
-            className="luke-attachment-chip-face"
+            className={`${FACE} ${FACE_PRESS}`}
             aria-label={`Open ${name}`}
             onClick={pulseOnPress(onOpen)}
           >
@@ -233,14 +292,14 @@ export function AttachmentChip({
         )}
         {uploading ? <UploadMeter name={name} progress={progress} /> : null}
         {landed ? (
-          <span className="luke-attachment-chip-landed" aria-hidden="true">
+          <span className={LANDED} aria-hidden="true">
             <CheckIcon />
           </span>
         ) : null}
         {onRemove === undefined ? null : (
           <button
             type="button"
-            className="luke-attachment-chip-remove"
+            className={REMOVE}
             aria-label={`Remove ${name}`}
             disabled={removeDisabled === true}
             onClick={pulseOnPress(onRemove)}

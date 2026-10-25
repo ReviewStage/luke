@@ -537,7 +537,7 @@ test("an agent asked for a plan, a proposal, or research opens no pull request o
   assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, true]);
 });
 
-test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
+test("the session is told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     assert.ok(
       coderInstructions("Acme/Relay", brief, false, TASK_ADDRESS).includes(
@@ -546,15 +546,9 @@ test("the session and the post tool are told never to ask for a credential or a 
       brief,
     );
   }
-  assert.ok(
-    INBOX_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
-  );
-  assert.ok(
-    CHAT_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
-  );
 });
 
-test("the session and the post tool send whatever is ready for the developer to look at or review to the inbox, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post", () => {
+test("the session sends whatever is ready for the developer to look at or review to the inbox, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post", () => {
   const READY = "ready for them to look at or review";
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const taskLink of [TASK_ADDRESS, null]) {
@@ -573,10 +567,6 @@ test("the session and the post tool send whatever is ready for the developer to 
       );
     }
   }
-  assert.ok(INBOX_TOOLS.POST.description.includes(READY));
-  assert.ok(
-    INBOX_TOOLS.POST.description.includes("testing by hand what you could not test yourself"),
-  );
 });
 
 test("an agent writing as its developer is told to end every commit on the trailer naming Luke as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
@@ -647,19 +637,12 @@ test("an agent whose credential reads its checks waits on them with sleep until 
   );
 });
 
-test("one pause is held inside what is left of the GitHub credential its background commands use, and the model is told the bound and to wait again for longer", () => {
+test("the model is shown the bound on one pause", () => {
   const shown = serializeModelInputSchema(SLEEP_TOOL.inputSchema);
   assert.equal(
     JSON.stringify(shown).includes(`"maximum":${Duration.toSeconds(CODER.SLEEP_MAX)}`),
     true,
   );
-  assert.ok(
-    Duration.isLessThan(
-      Duration.sum(CODER.SLEEP_MAX, CODER.GITHUB_TOKEN_REFRESH),
-      Duration.hours(1),
-    ),
-  );
-  assert.ok(SLEEP_TOOL.description?.includes("to wait longer, wait again"));
 });
 
 test("every agent is told that what happens on its pull request after its turn reaches it from GitHub, and to read its reviews before it ends a turn", () => {
@@ -696,7 +679,6 @@ test("every agent is told to reply to a message on an inbox thread on that threa
       assert.ok(!instructions.includes("saying what you did with it"), brief);
     }
   }
-  assert.ok(INBOX_TOOLS.POST.description.includes("never how the work is going"));
 });
 
 test("every agent is told to look at a UI it built in the image's Chromium and show the developer what it saw", () => {

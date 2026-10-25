@@ -16,6 +16,7 @@ import {
   AUTOMATION_FOLLOW,
   type AutomationListView,
   type AutomationRunsView,
+  type AutomationWorkspaceRunsView,
 } from "@luke/features/automation-view";
 import {
   AUTOMATION_ACTION,
@@ -28,6 +29,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationRunSummary,
   type AutomationSummary,
+  type AutomationWorkspaceRun,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
@@ -279,6 +281,21 @@ function automations(workspaceId: string): readonly AutomationSummary[] {
   ];
 }
 
+/** Every run of the workspace's automations, newest first, each with the automation it is a run of, as the Runs tab reads them. */
+function workspaceRuns(workspaceId: string): readonly AutomationWorkspaceRun[] {
+  return automations(workspaceId)
+    .flatMap((automation) =>
+      (RUNS.get(automation.id) ?? []).map((run) => ({
+        ...run,
+        automation: { id: automation.id, name: automation.name },
+      })),
+    )
+    .toSorted((one, other) => other.firedAt - one.firedAt);
+}
+
+/** What a follow of the fixture pushes. */
+type FollowedView = AutomationListView | AutomationRunsView | AutomationWorkspaceRunsView;
+
 /** The page each Automations profile opens on. */
 const AUTOMATIONS_PLACES: ReadonlyMap<string, AutomationsPlace> = new Map<string, AutomationsPlace>(
   [
@@ -295,17 +312,14 @@ const AUTOMATIONS_PLACES: ReadonlyMap<string, AutomationsPlace> = new Map<string
 );
 
 /** A follow that pushes what stands once, as the host's does on opening, and nothing after, since nothing here moves. */
-async function* pushedOnce(
-  view: AutomationListView | AutomationRunsView,
-): AsyncGenerator<AutomationListView | AutomationRunsView> {
+async function* pushedOnce(view: FollowedView): AsyncGenerator<FollowedView> {
   yield view;
 }
 
-/** What one follow pushes: a workspace's automations, or one automation's runs, which an id none of them has answers as gone. */
-function followed(
-  payload: PortActPayload<typeof ACT_KIND.AUTOMATIONS_FOLLOW>,
-): AutomationListView | AutomationRunsView {
+/** What one follow pushes: a workspace's automations or its runs, or one automation's runs, which an id none of them has answers as gone. */
+function followed(payload: PortActPayload<typeof ACT_KIND.AUTOMATIONS_FOLLOW>): FollowedView {
   if (payload.kind === AUTOMATION_FOLLOW.WORKSPACE) return { automations: automations(payload.id) };
+  if (payload.kind === AUTOMATION_FOLLOW.WORKSPACE_RUNS) return { runs: workspaceRuns(payload.id) };
   const runs = RUNS.get(payload.id);
   return runs === undefined ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND } : { runs };
 }
