@@ -3470,7 +3470,8 @@ ul.actor-stack {
    title starts, over a hairline. */
 .automation-agent-run {
   flex: none;
-  padding: 0 calc(var(--column-inset) + var(--luke-row-inset)) var(--luke-item-gap);
+  padding: 0 calc(var(--column-inset) + var(--luke-row-inset) + var(--luke-list-inset))
+    var(--luke-item-gap);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
