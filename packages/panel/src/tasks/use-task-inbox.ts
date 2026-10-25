@@ -546,7 +546,7 @@ export function useTaskInbox(input: {
       writer.update(place, () => EMPTY_DRAFT);
       // Note that a reply carrying an answer settles the ask, so it stands over every read the moment it is sent, as an answer does.
       const sent = answers === undefined ? undefined : settler.answer(item, { text, answers });
-      // Note that a plain reply stands on the thread at once under its key, as the agent's box and chat draw a message on its way, so its words are never nowhere while it goes.
+      // Note that a plain reply stands on the thread at once under its key, as the agent's box draws a message on its way, so its words are never nowhere while it goes.
       if (sent === undefined) {
         const before = new Set((item.thread ?? []).map(({ id }) => id));
         const reply: PendingInboxReply = { key, text, attachments, at: Date.now(), before };

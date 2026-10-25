@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { decodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { personActor } from "@luke/ui/actor-model";
 import { holdExits } from "@luke/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useRef } from "react";
@@ -15,10 +14,9 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { MENTION_MENU_SIDE, type MentionPicker, useMentionPicker } from "./mention-picker.js";
-import { NO_TASK } from "./task-mentions.js";
 
 /**
- * mention-picker.test.ts -- the `@` list as the editor's reports drive it: where the words are a chat message's, the members a mention tells offered in place of the workspace's, and a list closed with Escape, which fades out before it goes and which a `#` written over its word opens again on the channels; and on a plan, the workspace's other tasks found by their keys.
+ * mention-picker.test.ts -- the `@` list as the editor's reports drive it: a list closed with Escape, which fades out before it goes; and on a plan, the workspace's other tasks found by their keys.
  */
 
 let root: Root | undefined;
@@ -30,33 +28,18 @@ afterEach(() => {
   Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
-/** The list drawn as a chat box draws it, the latest it answered kept for the test to drive. */
+/** The list drawn as a plan's box draws it, over a plan whose one section is Margins, the latest it answered kept for the test to drive. */
 function mounted() {
   let latest: MentionPicker | undefined;
   function Picker() {
     const room = useRef<HTMLDivElement>(null);
     latest = useMentionPicker({
       source: {
-        taskId: NO_TASK,
-        taskName: "",
+        taskId: "plan-1",
+        taskName: "Ship the palette",
         workspace: "acme",
         repository: null,
-        text: () => "",
-      },
-      members: {
-        people: [
-          {
-            userId: "maria",
-            name: "Maria Chen",
-            email: "maria@example.com",
-            actor: personActor({ userId: "maria", name: "Maria Chen" }, undefined, undefined, []),
-          },
-        ],
-        agents: [],
-      },
-      channels: {
-        known: [{ name: "general", taskId: undefined, detail: undefined }],
-        onChoose: () => undefined,
+        text: () => "## Margins\n",
       },
       room,
       side: MENTION_MENU_SIDE.ABOVE,
@@ -86,22 +69,19 @@ function word(query: string): ComposerTrigger {
 const rows = (page: HTMLElement) =>
   [...page.querySelectorAll(".luke-combobox-option-label")].map((row) => row.textContent);
 
-test("an @ list closed with Escape stays closed in its word, and a # written over that @ opens the channels", () => {
+test("an @ list closed with Escape stays closed in its word, and opens again once the word is left and written anew", () => {
   const { picker, page } = mounted();
   act(() => picker().onTrigger(word("mar")));
-  assert.deepEqual(rows(page), ["Maria Chen"]);
+  assert.deepEqual(rows(page), ["Margins"]);
   act(() => {
     picker().onKey(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
   });
   assert.deepEqual(rows(page), []);
   act(() => picker().onTrigger(word("mar")));
   assert.deepEqual(rows(page), [], "the closed word stays closed");
-  // The editor reports both words as one change lands: the `@` gone, a `#` at the same place.
-  act(() => {
-    picker().onTrigger(undefined);
-    picker().onChannelTrigger(word(""));
-  });
-  assert.deepEqual(rows(page), ["general"]);
+  act(() => picker().onTrigger(undefined));
+  act(() => picker().onTrigger(word("mar")));
+  assert.deepEqual(rows(page), ["Margins"]);
 });
 
 test("an @ list closed with Escape stays drawn, inert, with its rows while it fades, and goes once the fade has run", () => {
@@ -118,7 +98,7 @@ test("an @ list closed with Escape stays drawn, inert, with its rows while it fa
 
   assert.ok(fading, "the list stands while it fades");
   assert.equal(fading.hasAttribute("inert"), true, "the fading list takes nothing");
-  assert.deepEqual(fadingRows, ["Maria Chen"], "the fading list keeps the rows it closed with");
+  assert.deepEqual(fadingRows, ["Margins"], "the fading list keeps the rows it closed with");
   assert.equal(expanded, "false", "the field reads the list closed as it starts to fade");
   assert.equal(page.querySelector(".luke-rect-float"), null, "the list goes once it has faded");
 });

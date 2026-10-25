@@ -33,8 +33,8 @@
  *
  * What a page shows within it is a step too: the tab the task's column
  * shows, the tab its side panel shows while open (a narrow room's panel
- * standing over the plan being a step of its own already), the
- * Inbox's item, and Chat's place, so Back goes back to what the window was
+ * standing over the plan being a step of its own already), and the
+ * Inbox's item, so Back goes back to what the window was
  * just showing rather than past it to the page before. Such a choice is a
  * step only where a press or a key led to it: one the window makes by
  * itself, as a task's tabs arriving after it opens, an agent's tab shown as
@@ -57,7 +57,7 @@
  * A narrow room, a phone's, stands the window as one pane at a time
  * (`shell-room.ts`), and there each pane opened over another is a step of its
  * own, which Back closes: the side panel over the plan, an Inbox item, a
- * Settings page, a version, a Chat place over its list, or an automation's
+ * Settings page, a version, or an automation's
  * runs over its setup. Each such step
  * holds its sub-step beside its place, and a wide room holds none, so two
  * places are one step there as they always were, and a room turned from one
@@ -78,7 +78,6 @@
 
 import { linkOf, type ReadLink } from "@luke/features/link-grammar";
 import type { SettingsView } from "@luke/settings/settings-views";
-import { CHAT_PLACE, type ChatPlace } from "@luke/ui/chat-model";
 import type { HistoryAdapter, HistoryEntry, HistorySnapshot } from "@luke/ui/history-adapter";
 import { type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -96,7 +95,6 @@ import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
-import { useChatOn } from "./tasks/chat-gate.js";
 import type { MainTab } from "./tasks/use-main-tabs.js";
 import type { HistorySpot } from "./tasks/use-plan-history.js";
 import type { SidePanelTab } from "./tasks/use-side-panel.js";
@@ -126,7 +124,6 @@ const PLACE_KIND = {
   AGENT: "agent",
   PERSON: "person",
   AUTOMATIONS: "automations",
-  CHAT: "chat",
   BOARD: "board",
   SETTINGS: "settings",
   ADMIN: "admin",
@@ -143,7 +140,7 @@ interface PanelStep {
  * stands, by its id, so a rename leaves it the same place. A place a narrow
  * room shows one pane of at a time holds which, its sub-step, and none in a
  * wide room: the side panel over a task, an automation's runs over its
- * setup, and whether Settings, a version history, the Inbox, or Chat stands
+ * setup, and whether Settings, a version history, or the Inbox stands
  * on its list (`listed`) or the item chosen in it.
  */
 type Place =
@@ -185,14 +182,6 @@ type Place =
       readonly workspaceId: string | undefined;
       /** Whether an automation's runs stood alone over its setup, in a narrow room alone. */
       readonly runs?: boolean | undefined;
-    }
-  | {
-      readonly kind: typeof PLACE_KIND.CHAT;
-      /** The workspace listed as Chat stood, whose chat it read. */
-      readonly workspaceId: string | undefined;
-      readonly listed?: boolean | undefined;
-      /** The place shown: beside the rail in a wide room, which takes no step of its own, so a reload reopens it; alone in a narrow one, while one stands so. */
-      readonly shown?: ChatPlace | undefined;
     }
   | {
       readonly kind: typeof PLACE_KIND.BOARD;
@@ -308,7 +297,6 @@ function subStepOf(place: Place): boolean | undefined {
       return place.runs;
     case PLACE_KIND.VERSION_HISTORY:
     case PLACE_KIND.INBOX:
-    case PLACE_KIND.CHAT:
     case PLACE_KIND.SETTINGS:
       return place.listed;
     default:
@@ -321,14 +309,6 @@ function sameSubStep(one: Place, other: Place): boolean {
   const mine = subStepOf(one);
   const theirs = subStepOf(other);
   return mine === undefined || theirs === undefined || mine === theirs;
-}
-
-/** Whether two Chat places are the same: For you, or the same channel. */
-function sameChatPlace(one: ChatPlace | undefined, other: ChatPlace | undefined): boolean {
-  if (one?.kind === CHAT_PLACE.CHANNEL && other?.kind === CHAT_PLACE.CHANNEL) {
-    return one.channelId === other.channelId;
-  }
-  return one?.kind === other?.kind;
 }
 
 /** Whether two Inbox items are the same item of the same holder. */
@@ -344,7 +324,7 @@ function samePanelTab(one: PanelStep | undefined, other: PanelStep | undefined):
   return sameTab(one.tab, other.tab);
 }
 
-/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, the same Automations page, Chat in the same workspace, the same workspace's Board, or Settings on any page. */
+/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, the same Automations page, the same workspace's Board, or Settings on any page. */
 function samePage(one: Place, other: Place): boolean {
   if (one.kind !== other.kind) return false;
   if (one.kind === PLACE_KIND.ADMIN && other.kind === PLACE_KIND.ADMIN) {
@@ -357,9 +337,6 @@ function samePage(one: Place, other: Place): boolean {
   if ("agentId" in one && "agentId" in other) return one.agentId === other.agentId;
   if ("userId" in one && "userId" in other) {
     return one.userId === other.userId && one.workspaceId === other.workspaceId;
-  }
-  if (one.kind === PLACE_KIND.CHAT && other.kind === PLACE_KIND.CHAT) {
-    return one.workspaceId === other.workspaceId;
   }
   if ("workspaceId" in one && "workspaceId" in other) return one.workspaceId === other.workspaceId;
   return true;
@@ -400,7 +377,7 @@ function sameOrUnknownTab(one: StripTab | undefined, other: StripTab | undefined
 
 /**
  * Whether two places of one page show one thing in it: the same tabs of a
- * task's column and side panel, the same Inbox item, the same Chat place.
+ * task's column and side panel, the same Inbox item.
  * Either side showing none, as a task whose tabs are on their way or an
  * Inbox with no item chosen yet, is the same, so what arrives fills in the
  * step it stands in.
@@ -418,22 +395,17 @@ function sameShown(one: Place, other: Place): boolean {
       ? true
       : sameInboxChoice(one.chosen, other.chosen);
   }
-  if (one.kind === PLACE_KIND.CHAT && other.kind === PLACE_KIND.CHAT) {
-    return one.shown === undefined || other.shown === undefined
-      ? true
-      : sameChatPlace(one.shown, other.shown);
-  }
   return true;
 }
 
-/** Whether two places are one step of the history: one page, on one sub-step, since a narrow room's pane opened over another is a step of its own, showing one thing in it, since a tab, an Inbox item, or a Chat place chosen is a step of its own too. */
+/** Whether two places are one step of the history: one page, on one sub-step, since a narrow room's pane opened over another is a step of its own, showing one thing in it, since a tab or an Inbox item chosen is a step of its own too. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   return (
     one !== undefined && samePage(one, other) && sameSubStep(one, other) && sameShown(one, other)
   );
 }
 
-/** Whether two places are one step but for what each shows in its page: the move between them chooses another tab, Inbox item, or Chat place on the page standing. */
+/** Whether two places are one step but for what each shows in its page: the move between them chooses another tab or Inbox item on the page standing. */
 function choosesWithin(one: Place | undefined, other: Place): boolean {
   return (
     one !== undefined && samePage(one, other) && sameSubStep(one, other) && !sameShown(one, other)
@@ -449,7 +421,7 @@ function sameSpot(one: HistorySpot | undefined, other: HistorySpot | undefined):
   );
 }
 
-/** Whether a step stands as it stood: its narrow sub-step the same, the side panel on the same tab, the same Inbox item or Chat place standing alone, Settings on the same page, a version history where it was, a person's page by the name it was last opened with, an Automations page as it was opened. */
+/** Whether a step stands as it stood: its narrow sub-step the same, the side panel on the same tab, the same Inbox item standing alone, Settings on the same page, a version history where it was, a person's page by the name it was last opened with, an Automations page as it was opened. */
 function samePlace(one: Place, other: Place): boolean {
   // A room turned takes the step standing in place, with its sub-step or without.
   if (subStepOf(one) !== subStepOf(other)) return false;
@@ -462,9 +434,6 @@ function samePlace(one: Place, other: Place): boolean {
   }
   if (one.kind === PLACE_KIND.INBOX && other.kind === PLACE_KIND.INBOX) {
     return sameInboxChoice(one.chosen, other.chosen);
-  }
-  if (one.kind === PLACE_KIND.CHAT && other.kind === PLACE_KIND.CHAT) {
-    return sameChatPlace(one.shown, other.shown);
   }
   if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
     return one.workspaceId === other.workspaceId && sameAutomationsOpening(one.page, other.page);
@@ -505,7 +474,7 @@ function addressOf(link: ReadLink | undefined): string {
  * history moved within, which the standing step takes in place, and so does
  * the automation a new automation's page made, and an address changed under
  * it, and so does `up`, a list a narrow screen went up to from its item where
- * the list was no step behind. A tab, an Inbox item, or a Chat place chosen
+ * the list was no step behind. A tab or an Inbox item chosen
  * within the page standing is a visit only where a press or a key led to it
  * (`pressed`): one the window chose by itself, as a task's tabs arriving
  * after it opens, an agent's tab shown as it starts, or the tab chosen in
@@ -693,7 +662,6 @@ function listedSteps(
 export interface ListBacks {
   readonly settings: () => void;
   readonly versions: () => void;
-  readonly chat: () => void;
   /** Stands an automation's setup again from its runs. */
   readonly runs: () => void;
   /** Stands the Inbox's list alone, or its item. */
@@ -762,7 +730,6 @@ export function throughHistory(tasks: TasksControl, lists: ListBacks): TasksCont
       return true;
     },
     history: { ...tasks.history, onList: lists.versions },
-    chatView: { ...tasks.chatView, onList: lists.chat },
     inboxView: { ...tasks.inboxView, onListed: lists.inbox },
     automationsView: {
       ...tasks.automationsView,
@@ -1063,7 +1030,6 @@ export function useWindowHistory(input: {
     | "personView"
     | "workspace"
     | "automationsView"
-    | "chatView"
     | "boardView"
     | "adminView"
     | "restoring"
@@ -1089,10 +1055,6 @@ export function useWindowHistory(input: {
   const inboxChosen = inboxSingle ? inboxAlone : tasks.inboxView.chosen;
   const inboxListed = inboxSingle ? inboxAlone === undefined : undefined;
   const historyListed = narrow ? tasks.history.listed : undefined;
-  // Chat showing one column, by its own width or a narrow room's, steps between its rail and its place as the Inbox does.
-  const chatListed = narrow || tasks.chatView.single === true ? tasks.chatView.listed : undefined;
-  // The place Chat shows, alone in a narrow room or beside its rail in a wide one; none while a narrow room's rail stands.
-  const chatShownPlace = chatListed === true ? undefined : tasks.chatView.place;
   const panelOpen = tasks.sidePanel.open;
   const panelTab = panelOpen ? tasks.sidePanel.tab : undefined;
   // The strips are the open task's, which is the one bound for once it has opened and its agents are read, so a task on its way holds no tab of the one before it.
@@ -1122,8 +1084,6 @@ export function useWindowHistory(input: {
   // A narrow room stands an automation's runs alone over its setup, as a step of their own.
   const automationRuns =
     narrow && !automationsTab(automationsPage) ? tasks.automationsView.runs : undefined;
-  const chatOpen = tasks.chatView.open;
-  const chatOn = useChatOn();
   const experiments = useExperimentChoices();
   const boardOpen = tasks.boardView.open;
   const adminOpen = tasks.adminView.open;
@@ -1176,14 +1136,6 @@ export function useWindowHistory(input: {
         runs: automationRuns,
       };
     }
-    if (chatOpen) {
-      return {
-        kind: PLACE_KIND.CHAT,
-        workspaceId: listedWorkspace,
-        listed: chatListed,
-        shown: chatShownPlace,
-      };
-    }
     if (boardOpen) return { kind: PLACE_KIND.BOARD, workspaceId: listedWorkspace };
     if (adminOpen) return { kind: PLACE_KIND.ADMIN, view: adminView };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
@@ -1221,9 +1173,6 @@ export function useWindowHistory(input: {
     automationsOpen,
     automationsPage,
     automationRuns,
-    chatOpen,
-    chatListed,
-    chatShownPlace,
     boardOpen,
     adminOpen,
     adminView,
@@ -1251,8 +1200,6 @@ export function useWindowHistory(input: {
       if (to.page.kind !== AUTOMATIONS_PAGE.EDIT) return true;
       return to.workspaceId === listedWorkspace && !deletedAutomations.has(to.page.automationId);
     }
-    // Chat is the chat of the workspace it stood in, so Back passes over it once another is listed.
-    if (to.kind === PLACE_KIND.CHAT) return chatOn && to.workspaceId === listedWorkspace;
     // A Settings page an experiment holds, such as Memory, stands only while the account has it on.
     if (to.kind === PLACE_KIND.SETTINGS) return settingsPageExperimentStands(to.view, experiments);
     // The Board is a workspace's tasks, so Back passes over it once another is listed.
@@ -1310,19 +1257,6 @@ export function useWindowHistory(input: {
       }
       return;
     }
-    if (to.kind === PLACE_KIND.CHAT) {
-      if (to.shown !== undefined) {
-        tasks.chatView.onShow(to.shown);
-        // A wide room's For you step stands the rail too, as Chat's link does, for a narrow room to show alone.
-        if (to.listed === undefined && to.shown.kind === CHAT_PLACE.FOR_YOU) {
-          tasks.chatView.onList();
-        }
-        return;
-      }
-      tasks.chatView.onOpen();
-      if (to.listed === true) tasks.chatView.onList();
-      return;
-    }
     if (to.kind === PLACE_KIND.BOARD) {
       tasks.boardView.onOpen();
       return;
@@ -1331,12 +1265,11 @@ export function useWindowHistory(input: {
       tasks.adminView.onOpen(to.view);
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, the Admin place, the Automations page, Chat, and the Board stand over.
+    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, the Admin place, the Automations page, and the Board stand over.
     if (inboxOpen) tasks.inboxView.onClose();
     if (pageAgent !== undefined) tasks.agentView.onClose();
     if (pagePerson !== undefined) tasks.personView.onClose();
     if (automationsOpen) tasks.automationsView.onClose();
-    if (chatOpen) tasks.chatView.onClose();
     if (boardOpen) tasks.boardView.onClose();
     if (adminOpen) tasks.adminView.onClose();
     // Note that a version history is opened on its spot even where it is
@@ -1400,11 +1333,6 @@ export function useWindowHistory(input: {
             { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot, listed: true },
             tasks.history.onList,
           ),
-    chat: () =>
-      up(
-        { kind: PLACE_KIND.CHAT, workspaceId: listedWorkspace, listed: true },
-        tasks.chatView.onList,
-      ),
     runs: () =>
       up(
         {

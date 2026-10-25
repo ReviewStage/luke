@@ -130,7 +130,7 @@ export function useAppKeymap(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
     const handleKey = (event: KeyboardEvent) => {
-      // Note that the command offered is read first, because the Inbox's and Chat's K and J share their keys, and only one of the two ever stands.
+      // Note that the command offered is read first, because commands share a key, as Escape, and only the one offered answers it.
       const command =
         commandForKey(
           KEYED.filter((each) => (offers.get(each)?.length ?? 0) > 0),

@@ -28,7 +28,7 @@ import { FileTypeIcon } from "./file-type-icon.js";
  *
  * An image is its thumbnail; any other file is its type's icon as the file
  * tree draws it (`file-type-icon.tsx`), its name, and its size, as every
- * chat draws one. Both read the file's bytes from a `data:` URL, the one the
+ * chat app draws one. Both read the file's bytes from a `data:` URL, the one the
  * message box made or the one the service kept on the developer's row, so a
  * transcript read back after a restart draws the same row. A press on a chip
  * opens its file over the window (`attachment-viewer.tsx`), walking the

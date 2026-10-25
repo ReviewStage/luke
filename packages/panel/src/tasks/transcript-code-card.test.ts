@@ -11,8 +11,8 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
- * transcript-code-card.test.ts -- a fenced block in a transcript, an Inbox
- * item or a chat message is a code card: its language in the header with
+ * transcript-code-card.test.ts -- a fenced block in a transcript or an Inbox
+ * item is a code card: its language in the header with
  * one Copy, a block of more than 40 lines cut there behind Show all, and
  * Copy copies the whole block however it stands. Synthetic code.
  */
@@ -96,7 +96,7 @@ test("Copy copies the whole fence, even while it is cut", async () => {
   );
 });
 
-test("an Inbox item's or a chat message's fence, drawn as a document, is the same card", async () => {
+test("an Inbox item's fence, drawn as a document, is the same card", async () => {
   const code = block(45);
   const drawing = await drawn(
     createElement(TranscriptWords, { text: fenced(code), asDocument: true }),

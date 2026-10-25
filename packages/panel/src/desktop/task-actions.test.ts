@@ -444,7 +444,7 @@ test("a sidebar task Luke or a coding agent made wears who is on it rather than 
   unmountAll();
 });
 
-test("Start and the task's ⋯ stand in the task's toolbar whichever tab its column shows, its plan's or its Chat's", () => {
+test("Start and the task's ⋯ stand in the task's toolbar whichever tab its column shows", () => {
   const drawn = (tab: MainTab | undefined) => {
     const container = mount(
       createElement(DesktopTasks, {

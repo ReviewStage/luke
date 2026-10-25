@@ -95,7 +95,6 @@ export interface Scene {
 const PLACE = {
   TASKS: "Tasks",
   PLAN: "Plan",
-  CHAT: "Chat",
   INBOX: "Inbox",
   PERSON: "Person",
   AGENT: "Agent",
@@ -299,8 +298,6 @@ export const SCENES: readonly Scene[] = [
       RESOLVED,
     ],
   },
-  // Chat.
-  { id: "chat", place: PLACE.CHAT, title: "For you", profile: "chat" },
   // The Inbox.
   {
     id: "inbox",

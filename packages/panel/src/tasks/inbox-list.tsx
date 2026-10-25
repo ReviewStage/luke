@@ -835,8 +835,8 @@ function ViewOptions({
   );
 }
 
-/** Mark all as read, as the view's menu offers it at its foot, pressable while anything is unread; Chat's view menu offers the same. */
-export function markAllEntries(readAll: InboxReadAll): MenuEntry[] {
+/** Mark all as read, as the view's menu offers it at its foot, pressable while anything is unread. */
+function markAllEntries(readAll: InboxReadAll): MenuEntry[] {
   return [
     {
       label: MARK_ALL_READ,
@@ -1071,13 +1071,13 @@ export function ShowEmpty({
  * An item row's leading: the gutter the unread dot stands in, on every row so
  * the words line up whether a row wears the dot or not. The list's rows and
  * its placeholder rows both lead with it, so a title lands where its block
- * stood, and Chat's rows lead with it too. The gutter sets its line in the
+ * stood. The gutter sets its line in the
  * title's type, so its baseline is the title's, and the dot stands centred
  * on the title's capitals rather than on its line's box. The dot is the
  * accent's ink rather than its fill, because the web's cyan fill reads at
  * 1.7:1 on its light page, under a mark's 3:1.
  */
-export function InboxRowLeading({ unread }: { unread: boolean }): React.JSX.Element {
+function InboxRowLeading({ unread }: { unread: boolean }): React.JSX.Element {
   return (
     <span className="inbox-row-gutter block w-status-dot flex-none text-center text-label">
       {unread ? (
@@ -1102,7 +1102,7 @@ export function InboxListSkeleton({
 }: {
   /** How many placeholder rows stand, at most five. */
   rows?: number;
-  /** What a reader hears is being read, where the list is another's than the Inbox's, as Chat's rail. */
+  /** What a reader hears is being read, where the list is another's than the Inbox's. */
   reading?: string;
   /** What the list is called, where it is another's than the Inbox's. */
   list?: string;

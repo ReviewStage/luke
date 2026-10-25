@@ -73,8 +73,8 @@ import { WEBM_TYPE } from "./video-signature.js";
  * newer service added. An ask of a type this build does not know reads as
  * its type alone, so a desktop behind the service draws what it knows and a
  * placeholder for the rest rather than refusing the whole inbox. The
- * blocks and the responses below are the vocabulary a workspace chat's ask
- * is written in (`chat-wire.ts`), and an old transcript's post.
+ * blocks and the responses below are also the vocabulary an old
+ * transcript's post is written in.
  */
 
 /**
@@ -197,9 +197,6 @@ export const INBOX_IMAGE_TYPE = {
 
 export type InboxImageType = (typeof INBOX_IMAGE_TYPE)[keyof typeof INBOX_IMAGE_TYPE];
 
-/** An image's media type as the wire carries it: one of the three the service keeps. */
-export const inboxImageTypeSchema = EffectSchema.Literals(Object.values(INBOX_IMAGE_TYPE));
-
 /**
  * The types a file of an item's may be kept and served under: any a
  * message's file travels as, or a WebM the agent recorded of what it did and
@@ -318,7 +315,7 @@ export const INBOX_APPROVAL_OPTION = {
 } as const;
 
 /** An item's key as the agent spells it: a short slug, the same each time it means the same item. */
-export const inboxKeySchema = EffectSchema.String.check(
+const inboxKeySchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_KEY_CHARS),
   EffectSchema.isPattern(/^[a-z0-9][a-z0-9._-]*$/u),
@@ -358,14 +355,11 @@ const WORD_BLOCKS = [
   }),
 ] as const;
 
-/** One word block as a person writes it from the window: Markdown, a link, or lines of code, never a picture. */
-export const inboxWordBlockSchema = EffectSchema.Union(WORD_BLOCKS);
-
 /** What an image block says of its picture: the words that stand for it where it cannot be seen. */
 const imageWords = { alt: filledText(INBOX_BOUNDS.MAX_ALT_CHARS) };
 
 /** One block of an item's context as the service keeps it and the desktop reads it: a word block as the agent wrote it, or an image by the attachment the service keeps it as. */
-export const inboxBlockSchema = EffectSchema.Union([
+const inboxBlockSchema = EffectSchema.Union([
   ...WORD_BLOCKS,
   EffectSchema.Struct({
     type: EffectSchema.Literal(INBOX_BLOCK.IMAGE),
@@ -374,7 +368,7 @@ export const inboxBlockSchema = EffectSchema.Union([
   }),
 ]);
 
-export type InboxBlock = typeof inboxBlockSchema.Type;
+type InboxBlock = typeof inboxBlockSchema.Type;
 
 /** A code block as an item carries it: the repository, the path, the lines, and the commit. */
 export type InboxCodeBlock = Extract<InboxBlock, { type: typeof INBOX_BLOCK.CODE }>;
@@ -386,9 +380,6 @@ export function codeLinesReadable(block: Pick<InboxCodeBlock, "startLine" | "end
     block.endLine - block.startLine < INBOX_BOUNDS.MAX_CODE_LINES
   );
 }
-
-/** An image block as an item carries one, naming the attachment the desktop fetches. */
-export type InboxImageBlock = Extract<InboxBlock, { type: typeof INBOX_BLOCK.IMAGE }>;
 
 /** One block as the agent posts it: the word blocks as they are kept, and an image by the path of its file in the agent's sandbox, which the service reads and keeps. */
 const inboxPostBlockSchema = EffectSchema.Union([
@@ -408,13 +399,13 @@ const inboxPostBlocksSchema = EffectSchema.Array(inboxPostBlockSchema).check(
 );
 
 /** One option of a choice: its label, and the trade-off in a sentence where the agent wrote one. */
-export const inboxOptionSchema = EffectSchema.Struct({
+const inboxOptionSchema = EffectSchema.Struct({
   label: filledText(INBOX_BOUNDS.MAX_LABEL_CHARS),
   detail: EffectSchema.optionalKey(boundedText(INBOX_BOUNDS.MAX_OPTION_DETAIL_CHARS)),
 });
 
 /** One field of a form: its type, its label, which names its value in the answer, whether it must be filled, and a select's options, one perhaps recommended. */
-export const inboxFieldSchema = EffectSchema.Struct({
+const inboxFieldSchema = EffectSchema.Struct({
   type: EffectSchema.Literals(Object.values(INBOX_FIELD)),
   label: filledText(INBOX_BOUNDS.MAX_LABEL_CHARS),
   required: EffectSchema.optionalKey(EffectSchema.Boolean),
@@ -435,7 +426,7 @@ export type InboxField = typeof inboxFieldSchema.Type;
  * one label, or a list of them, several only where the choice lets several
  * be picked.
  */
-export const recommendedInputSchema = EffectSchema.Union([
+const recommendedInputSchema = EffectSchema.Union([
   EffectSchema.String,
   EffectSchema.Array(EffectSchema.String).check(
     EffectSchema.isMinLength(1),
@@ -449,7 +440,7 @@ export const recommendedInputSchema = EffectSchema.Union([
  * first stays a label of its own, because a desktop from before several
  * reads `recommended` as one label and drops `recommendations` unread.
  */
-export const RECOMMENDED_FIELDS = {
+const RECOMMENDED_FIELDS = {
   recommended: EffectSchema.optionalKey(EffectSchema.String),
   recommendations: EffectSchema.optionalKey(
     EffectSchema.Array(EffectSchema.String).check(
@@ -563,14 +554,14 @@ export const inboxFormValueSchema = EffectSchema.Struct({
 export type InboxFormValue = typeof inboxFormValueSchema.Type;
 
 /** A form's values, one per field filled, each named by its field's label. */
-export const inboxFormValuesSchema = EffectSchema.Array(inboxFormValueSchema).check(
+const inboxFormValuesSchema = EffectSchema.Array(inboxFormValueSchema).check(
   EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_FIELDS),
 );
 
 type InboxFormValues = typeof inboxFormValuesSchema.Type;
 
 /** The developer's answer: how they answered, the options where they picked, the form's values where they filled one, and their note. */
-export const inboxReplySchema = EffectSchema.Struct({
+const inboxReplySchema = EffectSchema.Struct({
   reply: EffectSchema.Literals(Object.values(INBOX_REPLY)),
   choices: EffectSchema.optionalKey(
     EffectSchema.Array(EffectSchema.String).check(
@@ -1304,8 +1295,7 @@ function ownWordsRefusal(words: string, files: AnswerFiles): string | undefined 
  * does: the response takes the reply, a pick names offered options, a
  * form's values fit it, filling it or giving something beside the note or
  * the files, and words or files stand where the answer is the developer's
- * own, as a message to an agent may be files alone. A chat ask answers by
- * this vocabulary (`chat-wire.ts`).
+ * own, as a message to an agent may be files alone.
  */
 export function inboxReplyRefusal(
   response: InboxResponse,
@@ -1381,35 +1371,6 @@ export function inboxAnswersRefusal(
           : NOT_TAKEN;
       }
       return answers.reply === INBOX_REPLY.ANSWERED ? ownWordsRefusal(words, files) : NOT_TAKEN;
-  }
-}
-
-/**
- * The ask a response stands for, as a chat ask's answer is read: a choice
- * is a `decide` of its options, an approval a `decide` between Approve and
- * Decline, a to-do a `do` of no steps, a form an `answer` of its fields,
- * words an `answer` of none, and an acknowledgement no ask at all.
- */
-export function inboxResponseAsk(response: InboxResponse): InboxAsk | undefined {
-  switch (response.type) {
-    case INBOX_RESPONSE.CHOICE:
-      return { ...response, type: INBOX_ASK.DECIDE };
-    case INBOX_RESPONSE.APPROVAL:
-      return {
-        type: INBOX_ASK.DECIDE,
-        options: [
-          { label: INBOX_APPROVAL_OPTION.APPROVE },
-          { label: INBOX_APPROVAL_OPTION.DECLINE },
-        ],
-      };
-    case INBOX_RESPONSE.TODO:
-      return { type: INBOX_ASK.DO, steps: [] };
-    case INBOX_RESPONSE.FORM:
-      return { type: INBOX_ASK.ANSWER, fields: response.fields };
-    case INBOX_RESPONSE.TEXT:
-      return { type: INBOX_ASK.ANSWER };
-    case INBOX_RESPONSE.NONE:
-      return undefined;
   }
 }
 

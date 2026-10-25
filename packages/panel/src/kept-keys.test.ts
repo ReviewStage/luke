@@ -9,7 +9,6 @@ import { useChosenWorkspace } from "./desktop/chosen-workspace.js";
 import {
   FILE_TREE_WIDTH,
   INBOX_LIST_WIDTH,
-  useChatListWidth,
   useFileTreeWidth,
   useFoldedGroups,
   useInboxListWidth,
@@ -173,18 +172,15 @@ test("a task's own Inbox keeps its scope apart from the window's", () => {
 });
 
 test("the list, the file tree and the Runs panel stand at the widths they were kept at, held to their bounds", () => {
-  keep("luke.inboxListWidth", "400");
-  keep("luke.chatListWidth", "9999");
+  keep("luke.inboxListWidth", "9999");
   keep("luke.fileTreeWidth", "1");
   keep("luke.automationRunsPanel", '{"width":300,"open":false}');
   const drawn = draw(() => ({
     inbox: useInboxListWidth(),
-    chat: useChatListWidth(),
     tree: useFileTreeWidth(),
     runs: useRunsPanel(),
   }));
-  expect(drawn.now().inbox.width).toBe(400);
-  expect(drawn.now().chat.width).toBe(INBOX_LIST_WIDTH.MAX);
+  expect(drawn.now().inbox.width).toBe(INBOX_LIST_WIDTH.MAX);
   expect(drawn.now().tree.width).toBe(FILE_TREE_WIDTH.MIN);
   expect(drawn.now().runs).toMatchObject({ width: 300, open: false });
   act(() => drawn.now().inbox.onResize(350.4));

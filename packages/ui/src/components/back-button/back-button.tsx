@@ -56,7 +56,7 @@ export function BackButton({
   look?: BackButtonLook | undefined;
   /** Its words, and so its name: the place's own name ("Settings"), or a column's ("All versions"). */
   label: string;
-  /** The place it leads to as a sentence names it mid-way, which its hint reads ("chat", "MCP servers"). */
+  /** The place it leads to as a sentence names it mid-way, which its hint reads ("inbox", "MCP servers"). */
   place: string;
   /** The key that goes back here, which its hint says: the window's Back where none is named, and none for `NO_BACK_KEY`. */
   command?: KeyedCommand | typeof NO_BACK_KEY | undefined;

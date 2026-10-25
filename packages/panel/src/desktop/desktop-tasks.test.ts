@@ -33,9 +33,7 @@ import {
 } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -44,15 +42,11 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { ShellRoomContext } from "../stage-room.js";
-import { fixtureChat } from "../tasks/chat-fixture.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -60,7 +54,6 @@ import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
-import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 const TASK: Task = {
@@ -1000,168 +993,6 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   assert.equal(opened.length, 6, "no tab was asked for");
   act(() => root.unmount());
   container.remove();
-});
-
-/** The task's column on its Chat tab over the fixture's chat, its plan channel this task's where `ownChannel`, its view as `view` changes it. */
-async function chatTabMounted(
-  ownChannel: boolean,
-  view: Partial<ReturnType<typeof tasksControl>["chatView"]> = {},
-  room: ShellRoom = SHELL_ROOM.WIDE,
-) {
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: () => ({
-      matches: false,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }),
-  });
-  const staged = fixtureChat({ fixtureMode: true }, 0);
-  assert.ok(staged);
-  const chat = {
-    ...staged,
-    answer: {
-      ...staged.answer,
-      channels: staged.answer.channels.map((channel) =>
-        ownChannel && channel.name === "teammate-invitations"
-          ? { ...channel, planId: TASK.id }
-          : channel,
-      ),
-    },
-  };
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        // Note that the shell hands its room to every tab's body, as the window's root does.
-        createElement(
-          ShellRoomContext.Provider,
-          { value: room },
-          createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
-            looks: NO_LOOKS,
-            room,
-            away: { label: "Inbox", onPress: () => undefined },
-            tasks: tasksControl({
-              page: TASKS_PAGE.DOCUMENT,
-              activeTaskId: TASK.id,
-              region: { kind: DOCUMENT_REGION.READY, task: TASK },
-              sidePanel: {
-                ...tasksControl().sidePanel,
-                open: true,
-                fullScreen: room === SHELL_ROOM.NARROW,
-                fullScreenOnly: room === SHELL_ROOM.NARROW,
-                tab: SIDE_PANEL_TAB.CHAT,
-              },
-              chatView: { ...tasksControl().chatView, available: true, chat, ...view },
-            }),
-          }),
-        ),
-      ),
-    ),
-  );
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-  return { container, root };
-}
-
-test("a task's Chat tab in the side panel shows its task channel at reading size, its composer posting there, and says so where the task has no channel yet", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const own = await chatTabMounted(true);
-  const tab = own.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
-  assert.ok(tab, "the task's Chat tab");
-  assert.equal(
-    tab.querySelector(".chat-stream .luke-pane-bar-lead")?.textContent,
-    "teammate-invitations",
-  );
-  assert.match(
-    tab.querySelector(".chat-composer")?.textContent ?? "",
-    /Message #teammate-invitations/u,
-    "its composer asks for a message to the channel",
-  );
-  assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 8);
-  act(() => own.root.unmount());
-  own.container.remove();
-
-  const none = await chatTabMounted(false);
-  assert.match(
-    none.container.querySelector("section.desktop-task-chat")?.textContent ?? "",
-    /Nothing is posted in this task's channel yet\./u,
-  );
-  act(() => none.root.unmount());
-  none.container.remove();
-});
-
-test("a task's Chat tab whose chat could not be read says so with Retry, never that nothing is posted, nor a loading placeholder, and Retry reads again; an unavailable chat says it is unavailable", async () => {
-  let retried = 0;
-  const failed = await chatTabMounted(true, {
-    chat: undefined,
-    failed: true,
-    onRetry: () => {
-      retried += 1;
-    },
-  });
-  const tab = failed.container.querySelector("section.desktop-task-chat");
-  assert.equal(
-    tab?.querySelector('[role="alert"]')?.textContent,
-    "The workspace's chat could not be read.Retry",
-  );
-  assert.equal(tab?.querySelector('[role="status"]'), null, "no loading placeholder");
-  assert.doesNotMatch(tab?.textContent ?? "", /Nothing is posted/u);
-  const retry = [...(tab?.querySelectorAll("button") ?? [])].find(
-    (each) => each.textContent === "Retry",
-  );
-  act(() => retry?.click());
-  assert.equal(retried, 1);
-  act(() => failed.root.unmount());
-  failed.container.remove();
-
-  // Note that the column draws the tab only where the chat is available, so the tab itself is mounted here.
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(TaskChatTab, {
-          tasks: tasksControl({
-            chatView: { ...tasksControl().chatView, available: false, chat: undefined },
-          }),
-          taskId: TASK.id,
-        }),
-      ),
-    ),
-  );
-  assert.match(container.textContent ?? "", /Chat is not available yet\./u);
-  assert.doesNotMatch(container.textContent ?? "", /Nothing is posted/u);
-  act(() => root.unmount());
-  container.remove();
-});
-
-test("on a phone a task's Chat tab draws no channel head under the task's header, which names it, and keeps its composer", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const phone = await chatTabMounted(true, {}, SHELL_ROOM.NARROW);
-  const tab = phone.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
-  assert.ok(tab, "the task's Chat tab");
-  assert.equal(tab.querySelector(".chat-stream .luke-pane-bar"), null, "no channel head");
-  assert.match(
-    tab.querySelector(".chat-composer")?.textContent ?? "",
-    /Message #teammate-invitations/u,
-  );
-  assert.equal(phone.container.querySelector(".task-head h1")?.textContent, "Chat");
-  act(() => phone.root.unmount());
-  phone.container.remove();
-});
-
-test("with Chat off for the account, a Chat tab kept in the side panel draws nothing", async () => {
-  handState({});
-  const off = await chatTabMounted(true);
-  assert.equal(off.container.querySelector("section.desktop-task-chat"), null);
-  act(() => off.root.unmount());
-  off.container.remove();
 });
 
 test("a plan's own Inbox marks the item it shows read as it opens it, and its rows offer to mark an item read or unread as the window's Inbox does", async () => {

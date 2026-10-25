@@ -68,7 +68,6 @@
     "./diagram-contract": "./src/diagram-contract.js",
     "./avatar-session": "./src/avatar-session.js",
     "./person-page-model": "./src/person-page-model.js",
-    "./chat-model": "./src/chat-model.js",
     "./tailwind/theme.css": "./src/tailwind/theme.css",
     "./tailwind/sources.css": "./src/tailwind/sources.css"
   },

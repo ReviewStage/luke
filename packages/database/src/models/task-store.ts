@@ -57,7 +57,6 @@ import { voiceSessions } from "../schemas/voice.js";
 import { readPlanTemplate } from "./account-store.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ensureGeneralChannel } from "./channel-store.js";
-import { moveTaskChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
@@ -1250,8 +1249,7 @@ const followingAutomations = SqlSchema.void({
 });
 
 /**
- * The task's agents and inbox moved along with it to another workspace, its
- * chat after them (`chat-store.ts`'s `moveTaskChat`), so
+ * The task's agents and inbox moved along with it to another workspace, so
  * no row of the task's stays tied to the workspace it left, whose deletion
  * would otherwise take them with it. Note that the inbox's threads go to the
  * new workspace's #general, because a channel is one workspace's and the one
@@ -1430,7 +1428,6 @@ export function updateTaskCommitted<E = never, R = never>(
         }
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(taskId, row.organizationId, moved, now);
-          yield* moveTaskChat(taskId, row.organizationId);
           if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
         }
         const changed = yield* taskOf(userId, row);

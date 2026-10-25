@@ -53,10 +53,10 @@ export {
   type TurnStatus,
 } from "./turn.js";
 export {
+  AGENT_MESSAGE_FROM_CHARS,
+  type AgentMessageMetadata,
   ASSISTANT_MESSAGE_METADATA,
   type AssistantMessageMetadata,
-  CHAT_NOTICE_FROM_CHARS,
-  type ChatNoticeMetadata,
   COMPACTION_METADATA,
   type CompactionMetadata,
   MESSAGE_AUTHOR,

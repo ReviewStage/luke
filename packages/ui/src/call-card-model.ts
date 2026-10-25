@@ -73,7 +73,7 @@ export function callBarAgentId(input: {
   /** The agent whose own page stands in the plan's place; none while no agent's page does. */
   pageAgentId: string | undefined;
   sidePanelFullScreen: boolean;
-  /** The agent whose tab the open task's column has chosen; none on its Chat or with no agent tab. */
+  /** The agent whose tab the open task's column has chosen; none with no agent tab. */
   columnAgentId: string | undefined;
 }): string | undefined {
   if (!input.tasksTab || input.inboxOpen || input.sidePanelFullScreen) return undefined;

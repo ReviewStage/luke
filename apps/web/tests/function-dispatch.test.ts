@@ -208,12 +208,6 @@ test("every route that stays off the oRPC router is reached at its public URL by
       ],
     ],
     ["/api/workspaces/w1/photo", "workspaces/photo", "/api/workspaces/photo", [["id", "w1"]]],
-    [
-      "/api/workspaces/chat/attachment?id=c1",
-      "workspaces/chat/attachment",
-      "/api/workspaces/chat/attachment",
-      [["id", "c1"]],
-    ],
   ];
   for (const [path, key, restored, query] of expected) {
     assert.deepEqual(await land(path), { key, path: restored, query }, path);

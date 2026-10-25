@@ -61,7 +61,6 @@ const KIND_NAME = {
   [LINK_PLACE.AUTOMATION_RUN]: "Run",
   [LINK_PLACE.SETTINGS]: "Settings",
   [LINK_PLACE.PERSON]: "Profile",
-  [LINK_PLACE.CHAT]: "Chat",
   [LINK_PLACE.ADMIN]: "Admin",
 } as const satisfies Record<LinkPlace["kind"], string>;
 

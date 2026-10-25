@@ -231,10 +231,9 @@ export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindT
  * replaced by eve's provider-run `web_search` on the agent's own key, the archive, unarchive, and move of a task into a
  * section since folded into `update_agent` and `update_task`, and the close
  * of and reply on an inbox item since folded into `withdraw_ask` and
- * `post_to_inbox`, that post and its read, since named `post_thread` and
- * `read_threads`, and the workspace's chat, retired for channels' threads
- * and `message_agent`. A transcript written then names them, and reads
- * back under the same set.
+ * `post_to_inbox`, and that post and its read, since named `post_thread`
+ * and `read_threads`. A transcript written then names them, and reads back
+ * under the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -246,10 +245,6 @@ export const RETIRED_CODER_TOOL = {
   REPLY_INBOX: RETIRED_TOOL.REPLY_INBOX,
   POST_TO_INBOX: RETIRED_TOOL.POST_TO_INBOX,
   READ_INBOX: RETIRED_TOOL.READ_INBOX,
-  POST_CHAT: RETIRED_TOOL.POST_CHAT,
-  READ_CHAT: RETIRED_TOOL.READ_CHAT,
-  RESOLVE_ASK: RETIRED_TOOL.RESOLVE_ASK,
-  EDIT_CHANNEL: RETIRED_TOOL.EDIT_CHANNEL,
 } as const;
 
 /**

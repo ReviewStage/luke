@@ -88,10 +88,6 @@
     "dest": "/api/default.js?route=triggers/sentry/installed"
   },
   {
-    "src": "/api/workspaces/chat/attachment",
-    "dest": "/api/default.js?route=workspaces/chat/attachment"
-  },
-  {
     "src": "/api/workspaces/linear/connected",
     "dest": "/api/default.js?route=workspaces/linear/connected"
   },

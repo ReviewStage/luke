@@ -41,7 +41,6 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SignInGate } from "../sign-in-gate.js";
-import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
@@ -69,7 +68,6 @@ import { READING_AUTOMATIONS } from "./automation-words.js";
 import { backPlaceOf } from "./back-place.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
-import { DesktopChat, useChatSurface } from "./desktop-chat.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -528,17 +526,6 @@ function usePlaceCommands(
         }
       : undefined,
   );
-  // Chat is an experiment, so ⌘K offers it only on the terms its sidebar row stands on.
-  const chatOn = useChatOn();
-  useAppCommand(
-    APP_COMMAND.CHAT,
-    pastGate && tasks.signedIn && chatOn && tasks.chatView.available
-      ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          tasks.chatView.onOpen();
-        }
-      : undefined,
-  );
   // Luke's chord opens his page in the listed workspace, or asks his ensure again where it failed; while the account has him off it is no chord at all.
   const operator = useLukeOperator({
     accountId: tasks.me,
@@ -595,7 +582,7 @@ function usePlaceCommands(
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever task its item is
- * from; the Automations page and Chat in the listed workspace; the task on screen in its own workspace, or alone while that is not
+ * from; the Automations page in the listed workspace; the task on screen in its own workspace, or alone while that is not
  * read; else the listed workspace.
  */
 function titleSubject(
@@ -617,7 +604,6 @@ function titleSubject(
   if (tasks.automationsView.open) {
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
-  if (tasks.chatView.open) return { signedIn, subject: "Chat", workspace: tasks.workspace };
   if (tasks.boardView.open) return { signedIn, subject: "Tasks", workspace: tasks.workspace };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
@@ -651,7 +637,7 @@ function automationsPlaceKey(place: AutomationsPlace): string {
  * press outside it and its toggle. A stage as narrow as a phone's stands the
  * window as one pane at a time (`shell-room.ts`): the sidebar is a drawer its
  * toggle opens, with no edge to peek it out, and the side panel stands only
- * full screen, and Settings, a version history, and Chat each show their
+ * full screen, and Settings and a version history each show their
  * list or the item chosen in it, one at a time. Back and forward ride the left column's title-bar row,
  * the tasks' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the tasks when nothing
@@ -700,12 +686,6 @@ export function DesktopShell({
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
   const offline = useOffline();
   usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
-  // Chat is an experiment: switched off while it stands, here or on another Mac, it puts itself away.
-  const chatOn = useChatOn();
-  const { open: chatShown, onClose: closeChat } = tasks.chatView;
-  useEffect(() => {
-    if (chatShown && !chatOn) closeChat();
-  }, [chatShown, chatOn, closeChat]);
   // The Admin place is an admin's alone: an account known to be no admin, or no longer one, is given the task's place back,
   // while one whose access is still being read, as a reloaded Admin address's is, has the place wait on it.
   const adminAccess = useAdminAccess();
@@ -720,16 +700,15 @@ export function DesktopShell({
     shell,
     tasks.sidePanel.fullScreen,
     room === SHELL_ROOM.NARROW,
-    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.boardView.open}:${tasks.adminView.open}:${sidebar.collapsed}`,
+    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.automationsView.open}:${tasks.boardView.open}:${tasks.adminView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
-  // the Inbox, an agent's or a person's page, the Automations page, Chat, or the Board standing in its place is not the plan.
+  // the Inbox, an agent's or a person's page, the Automations page, or the Board standing in its place is not the plan.
   const standingIn =
     tasks.inboxView.open ||
     tasks.agentView.agentId !== undefined ||
     tasks.personView.userId !== undefined ||
     tasks.automationsView.open ||
-    tasks.chatView.open ||
     tasks.boardView.open ||
     tasks.adminView.open;
   const shownTask =
@@ -783,12 +762,10 @@ export function DesktopShell({
   const newTaskDialog = useMemo(() => <NewTaskDialog newTask={tasks.newTask} />, [tasks.newTask]);
   // Note that the shell says whether the panel's toggle stands, because the
   // toolbar beneath it leaves the toggle room then and only then. The
-  // Automations page and Chat stand in the plan's place, so they draw
+  // Automations page stands in the plan's place, so it draws
   // no panel to toggle; an agent's page draws the agent's own, and the Inbox
   // the chosen item's task's.
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
-  // Chat is handed only what it reads of the tasks, so a delivery that moves the rest draws none of it.
-  const chatSurface = useChatSurface(tasks);
   // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
   const awayLabel = awayBack(history.away, history.onLeave).label;
   const { onLeave } = history;
@@ -845,7 +822,6 @@ export function DesktopShell({
         {settingsBar ? (
           <MobileBar
             tasks={tasks}
-            chatOn={chatOn}
             channelsOn={channelsOn}
             sidebar={sidebar}
             onPressMore={keepOverlay}
@@ -894,7 +870,6 @@ export function DesktopShell({
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
   const automationsOpen = tasks.automationsView.open;
-  const chatOpen = tasks.chatView.open && chatOn;
   const boardOpen = tasks.boardView.open;
   // The Admin place is an admin's alone; while the account's access is still read it stands as it does while its chunk loads.
   const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
@@ -920,7 +895,6 @@ export function DesktopShell({
   const barShown = mobileBarShown(
     room,
     tasks,
-    chatOn,
     channelsOn ? { threadId: channelPlace.threadId } : undefined,
   );
   return (
@@ -952,17 +926,7 @@ export function DesktopShell({
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
-            {chatOpen ? (
-              <PageFind page={FIND_PAGE.CHAT} active={tasks.shown}>
-                <DesktopChat
-                  tasks={chatSurface}
-                  room={room}
-                  accountName={
-                    account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined
-                  }
-                />
-              </PageFind>
-            ) : inboxOpen ? (
+            {inboxOpen ? (
               <DesktopInbox tasks={tasks} listing={sharedListing} room={room} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
@@ -1036,7 +1000,6 @@ export function DesktopShell({
       {barShown ? (
         <MobileBar
           tasks={tasks}
-          chatOn={chatOn}
           channelsOn={channelsOn}
           sidebar={sidebar}
           onPressMore={keepOverlay}

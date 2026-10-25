@@ -20,7 +20,7 @@ const PLACES = [
   { id: "inbox", name: "Inbox", note: "3 items" },
   { id: "tasks", name: "Tasks", note: "12 open" },
   { id: "archive", name: "Archive", note: "Syncing", disabled: true },
-  { id: "chat", name: "Chat", note: "2 unread" },
+  { id: "channels", name: "Channels", note: "2 unread" },
   { id: "automations", name: "Automations", note: "4 on" },
 ] as const;
 

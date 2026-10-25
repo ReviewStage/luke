@@ -10,6 +10,7 @@ import {
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
+  type InboxAsk,
   type InboxResponse,
   inboxAcknowledgeRequestSchema,
   inboxAnswerFileSchema,
@@ -17,7 +18,6 @@ import {
   inboxMessageSchema,
   inboxReplyAnswers,
   inboxReplyRefusal,
-  inboxResponseAsk,
   inboxThreadPostInputSchema,
   keptInboxAsk,
   recommendedLabels,
@@ -31,9 +31,9 @@ import {
 
 /**
  * inbox-asks.test.ts -- the inbox wire's asks: an ask on a thread's
- * message and the answer to it, how each reads off the wire, the ask a
- * response stands for, an answer given against a response read as the
- * answer to that ask, and every answer an ask refuses.
+ * message and the answer to it, how each reads off the wire, an answer
+ * given against a response read as the answer to the ask it stands for, and
+ * every answer an ask refuses.
  * Synthetic items throughout.
  */
 
@@ -175,77 +175,49 @@ test("an agent's answer ask keeps the option its select recommends", () => {
   assert.deepEqual(posted?.ask, ask);
 });
 
-test("a response maps to the ask it stands for, and an acknowledgement to none", () => {
-  const options = [{ label: "Postgres" }, { label: "SQLite", detail: "Simpler." }];
-  assert.deepEqual(
-    inboxResponseAsk({
-      type: INBOX_RESPONSE.CHOICE,
-      options,
-      multiple: true,
-      recommended: "Postgres",
-    }),
-    { type: INBOX_ASK.DECIDE, options, multiple: true, recommended: "Postgres" },
-  );
-  assert.deepEqual(inboxResponseAsk({ type: INBOX_RESPONSE.APPROVAL }), {
-    type: INBOX_ASK.DECIDE,
-    options: [{ label: "Approve" }, { label: "Decline" }],
-  });
-  assert.deepEqual(inboxResponseAsk({ type: INBOX_RESPONSE.TODO }), {
-    type: INBOX_ASK.DO,
-    steps: [],
-  });
-  assert.deepEqual(inboxResponseAsk({ type: INBOX_RESPONSE.FORM, fields: REGION.fields }), {
-    type: INBOX_ASK.ANSWER,
-    fields: REGION.fields,
-  });
-  assert.deepEqual(inboxResponseAsk({ type: INBOX_RESPONSE.TEXT, placeholder: "Which one?" }), {
-    type: INBOX_ASK.ANSWER,
-  });
-  assert.equal(inboxResponseAsk({ type: INBOX_RESPONSE.NONE }), undefined);
-});
-
 test("an answer given against a response reads as the answer to the ask it stands for, Done ticking every step", () => {
-  const asking = (view: InboxResponse) => {
-    const ask = inboxResponseAsk(view);
-    assert.notEqual(ask, undefined);
-    return ask === undefined ? undefined : { id: ASKING_ID, ask, view };
-  };
-  const choice = { type: INBOX_RESPONSE.CHOICE, options: DEPLOY.options } as const;
-  const todo = { type: INBOX_RESPONSE.TODO } as const;
-  const form = { type: INBOX_RESPONSE.FORM, fields: REGION.fields } as const;
+  const asking = (view: InboxResponse, ask: InboxAsk) => ({ id: ASKING_ID, ask, view });
+  const choice = asking(
+    { type: INBOX_RESPONSE.CHOICE, options: DEPLOY.options },
+    { type: INBOX_ASK.DECIDE, options: DEPLOY.options },
+  );
+  const approval = asking(
+    { type: INBOX_RESPONSE.APPROVAL },
+    {
+      type: INBOX_ASK.DECIDE,
+      options: [{ label: INBOX_APPROVAL_OPTION.APPROVE }, { label: INBOX_APPROVAL_OPTION.DECLINE }],
+    },
+  );
+  const todo = asking({ type: INBOX_RESPONSE.TODO }, { type: INBOX_ASK.DO, steps: [] });
+  const form = asking(
+    { type: INBOX_RESPONSE.FORM, fields: REGION.fields },
+    { type: INBOX_ASK.ANSWER, fields: REGION.fields },
+  );
   const cases = [
     [
-      asking(choice),
+      choice,
       { reply: INBOX_REPLY.CHOSE, choices: ["Wait"], note: "Not today." },
       { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: ["Wait"] },
     ],
     [
-      asking({ type: INBOX_RESPONSE.APPROVAL }),
+      approval,
       { reply: INBOX_REPLY.APPROVED },
       { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: [INBOX_APPROVAL_OPTION.APPROVE] },
     ],
     [
-      asking({ type: INBOX_RESPONSE.APPROVAL }),
+      approval,
       { reply: INBOX_REPLY.DECLINED },
       { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: [INBOX_APPROVAL_OPTION.DECLINE] },
     ],
     [
-      asking(choice),
+      choice,
       { reply: INBOX_REPLY.ANSWERED, note: "Neither." },
       { ask: ASKING_ID, reply: INBOX_REPLY.ANSWERED },
     ],
+    [todo, { reply: INBOX_REPLY.DONE }, { ask: ASKING_ID, reply: INBOX_REPLY.DONE, steps: [] }],
+    [todo, { reply: INBOX_REPLY.NOT_DONE }, { ask: ASKING_ID, reply: INBOX_REPLY.NOT_DONE }],
     [
-      asking(todo),
-      { reply: INBOX_REPLY.DONE },
-      { ask: ASKING_ID, reply: INBOX_REPLY.DONE, steps: [] },
-    ],
-    [
-      asking(todo),
-      { reply: INBOX_REPLY.NOT_DONE },
-      { ask: ASKING_ID, reply: INBOX_REPLY.NOT_DONE },
-    ],
-    [
-      asking(form),
+      form,
       { reply: INBOX_REPLY.SUBMITTED, values: [{ label: "Region", value: "eu-west" }] },
       {
         ask: ASKING_ID,
@@ -255,7 +227,6 @@ test("an answer given against a response reads as the answer to the ask it stand
     ],
   ] as const;
   for (const [open, reply, answers] of cases) {
-    if (open === undefined) continue;
     // The answer fits the response it was given against, and its reading fits the ask.
     const note: string | undefined = "note" in reply ? reply.note : undefined;
     assert.equal(inboxReplyRefusal(open.view, reply), undefined, reply.reply);
@@ -267,8 +238,7 @@ test("an answer given against a response reads as the answer to the ask it stand
       reply.reply,
     );
   }
-  const words = asking({ type: INBOX_RESPONSE.TEXT });
-  assert.ok(words !== undefined);
+  const words = asking({ type: INBOX_RESPONSE.TEXT }, { type: INBOX_ASK.ANSWER });
   assert.equal(inboxReplyAnswers(words, { reply: INBOX_REPLY.ACKNOWLEDGED }), undefined);
 });
 
@@ -321,11 +291,8 @@ test("a do takes Mark done once every step is ticked, or Couldn't do it with any
   assert.equal(inboxAnswersRefusal(SECRET, answer(INBOX_REPLY.NOT_DONE, [0]), ""), undefined);
   assert.equal(inboxAnswersRefusal(SECRET, answer(INBOX_REPLY.NOT_DONE), ""), undefined);
   // A stored to-do maps to a do of no steps, which Mark done answers ticking none.
-  const todo = inboxResponseAsk({ type: INBOX_RESPONSE.TODO });
-  assert.notEqual(todo, undefined);
-  if (todo !== undefined) {
-    assert.equal(inboxAnswersRefusal(todo, answer(INBOX_REPLY.DONE), ""), undefined);
-  }
+  const todo = { type: INBOX_ASK.DO, steps: [] };
+  assert.equal(inboxAnswersRefusal(todo, answer(INBOX_REPLY.DONE), ""), undefined);
   const refusals = [
     [answer(INBOX_REPLY.DONE, [0]), "Mark done needs every step ticked."],
     [answer(INBOX_REPLY.DONE), "Mark done needs every step ticked."],

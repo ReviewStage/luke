@@ -113,7 +113,7 @@ export interface InboxColumns {
   readonly shown: InboxColumnsShown;
   /** Says a row was pressed, which opens its item while the Inbox shows one column. */
   readonly onOpen: (itemId: string) => void;
-  /** Says K or J stepped to another item, which hands the keyboard to its row while the list stands, as Chat's keys hand it to theirs. */
+  /** Says K or J stepped to another item, which hands the keyboard to its row while the list stands. */
   readonly onStep: () => void;
   /** Goes back from the item to the list, while the item stands alone and the list holds more. */
   readonly onBack: (() => void) | undefined;

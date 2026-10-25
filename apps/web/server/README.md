@@ -763,7 +763,7 @@ discard as well, so the guarantee does not rest on one property in one file.
 
 The service counts its own half under the same key: the core loop the desktop
 cannot see (a task, workspace, issue, or automation made, a coding agent
-started, an agent's pull request opened, an Inbox answer, a member's Chat post,
+started, an agent's pull request opened, an Inbox answer,
 an integration connected or disconnected), recorded where each is committed
 through `recordServerEvent` in `packages/service/src/events/server-events.ts`.
 Its vocabulary is typed per event and holds only fixed words, booleans, and

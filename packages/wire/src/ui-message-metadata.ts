@@ -33,8 +33,7 @@ export const MessageRoleSchema = EffectSchema.Literals(Object.values(MESSAGE_ROL
 
 /**
  * Who wrote a message: the developer, Luke's own judgment, the voice model,
- * or a child run; or, for a line a chat notice wrote, which kind of chat
- * member posted what it tells: a coding agent, a task's Luke, or a person.
+ * a child run, or another coding agent, whose message a line carries.
  */
 export const MESSAGE_AUTHOR = {
   DEVELOPER: "developer",
@@ -42,15 +41,13 @@ export const MESSAGE_AUTHOR = {
   VOICE_MODEL: "voice_model",
   CHILD: "child",
   AGENT: "agent",
-  LUKE: "planner",
-  HUMAN: "human",
 } as const;
 
-/** How a developer's ask arrived, or that a chat notice carried the line. */
+/** How a developer's ask arrived, or that another coding agent's message carried the line. */
 export const MESSAGE_CHANNEL = {
   TYPED: "typed",
   VOICE: "voice",
-  CHAT: "chat",
+  AGENT_MESSAGE: "agent_message",
 } as const;
 
 /**
@@ -66,7 +63,7 @@ export const OBSERVATION_SOURCE = {
    * earlier build wrote carry it, and this build reads those rows.
    */
   HOOK: "hook",
-  /** A chat whose transcript changed, handed to the observed conversation on the scheduled tick. */
+  /** A conversation whose transcript changed, handed to the observed conversation on the scheduled tick. */
   TRANSCRIPT_CHANGE: "transcript_change",
   /** A child's own turn: the task its requester delegated, as the child reads it. */
   CHILD: "child",
@@ -97,8 +94,8 @@ const spanInstant = nonNegativeInteger;
 
 /**
  * A user row is one of four things, and the shape says which: the
- * developer's typed ask, a spoken ask cut from a voice session, a chat
- * notice steered into a coding agent, or an observation the brain wrote down
+ * developer's typed ask, a spoken ask cut from a voice session, another
+ * coding agent's message steered into a coding agent, or an observation the brain wrote down
  * for itself. Four structs rather than one with every field optional, so an
  * observation carrying a channel has no shape to arrive in. A typed ask
  * names a voice session only where it was typed into that call, with the
@@ -141,27 +138,22 @@ function coherentSpan(metadata: SpokenAskMetadata): boolean {
 const SPOKEN_ASK_METADATA = SPOKEN_ASK_STRUCT.check(EffectSchema.makeFilter(coherentSpan));
 
 /**
- * A chat notice is a line the chat steered into a coding agent's turn on a
- * member's behalf: which kind of member posted the message it tells, the
- * message's place in its workspace's chat sequence, and what the poster is
- * called: their display name as a card draws it, within `CHAT_NOTICE_FROM_CHARS`,
- * never a link or a handle. A message another coding agent sent it with
- * `message_agent` is written as one too, with no place, since it stands in
- * no chat but the two agents' transcripts. The words are the notice the chat
- * wrote, never the developer's, so a reader that names the developer's task
- * passes this row by.
+ * An agent message is a line another coding agent sent with `message_agent`,
+ * steered into the receiving agent's turn: what the sender is called, its
+ * name as a card draws it, within `AGENT_MESSAGE_FROM_CHARS`, never a link
+ * or a handle. The words are the sender's, never the developer's, so a
+ * reader that names the developer's task passes this row by.
  */
-/** The most UTF-16 code units a chat notice names its poster in. */
-export const CHAT_NOTICE_FROM_CHARS = 128;
+/** The most UTF-16 code units an agent message names its sender in. */
+export const AGENT_MESSAGE_FROM_CHARS = 128;
 
-const CHAT_NOTICE_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literals([MESSAGE_AUTHOR.AGENT, MESSAGE_AUTHOR.LUKE, MESSAGE_AUTHOR.HUMAN]),
-  channel: EffectSchema.Literal(MESSAGE_CHANNEL.CHAT),
-  chat_seq: EffectSchema.optionalKey(nonNegativeInteger),
-  from: trimmedText.check(EffectSchema.isMaxLength(CHAT_NOTICE_FROM_CHARS)),
+const AGENT_MESSAGE_METADATA = EffectSchema.Struct({
+  author: EffectSchema.Literal(MESSAGE_AUTHOR.AGENT),
+  channel: EffectSchema.Literal(MESSAGE_CHANNEL.AGENT_MESSAGE),
+  from: trimmedText.check(EffectSchema.isMaxLength(AGENT_MESSAGE_FROM_CHARS)),
 });
 
-export type ChatNoticeMetadata = EffectSchema.Schema.Type<typeof CHAT_NOTICE_METADATA>;
+export type AgentMessageMetadata = EffectSchema.Schema.Type<typeof AGENT_MESSAGE_METADATA>;
 
 /** An observation arrives on no channel: the brain's own note of what opened the turn or what the host handed it. */
 const OBSERVATION_METADATA = EffectSchema.Struct({
@@ -174,14 +166,14 @@ type ObservationMetadata = EffectSchema.Schema.Type<typeof OBSERVATION_METADATA>
 export type UserMessageMetadata =
   | TypedAskMetadata
   | SpokenAskMetadata
-  | ChatNoticeMetadata
+  | AgentMessageMetadata
   | ObservationMetadata;
 
 /** What a user row says about itself. */
 export const USER_MESSAGE_METADATA = EffectSchema.Union([
   TYPED_ASK_METADATA,
   SPOKEN_ASK_METADATA,
-  CHAT_NOTICE_METADATA,
+  AGENT_MESSAGE_METADATA,
   OBSERVATION_METADATA,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 

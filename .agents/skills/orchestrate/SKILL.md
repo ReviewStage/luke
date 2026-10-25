@@ -17,23 +17,22 @@ for a worker. Where you work on no task (an automation may start you on
 none), make one task for the whole rollout with `create_task`, named for the
 plan or the issue, before the first worker, and take "your own task" below as
 that one: pass its id as `taskId` wherever the table starts or lists workers.
-The whole rollout is one team on one task, so in Luke the task's chat
-(`post_chat`) is how you and the workers talk, as an engineering team talks
-in its Slack channel: you write a worker's mention link, the `mention`
-`start_agent` answered, in your words, and it reports to yours. Use the
-column for the host you are in:
+The whole rollout is one team on one task, so in Luke `message_agent` is
+how you and the workers talk: you message a worker by the agent id
+`start_agent` answered, and it reports to yours. Use the column for the host
+you are in:
 
 | Action | Conductor | Luke |
 | --- | --- | --- |
-| Ask the user | `AskUserQuestion` | `post_to_inbox` with a `decide` or `answer` ask, which waits for the reply; where another coding agent started you, to it instead, in your task's chat with its mention link, or a direct message (`post_chat` with `to` set to that link) where you do not share a task |
-| Tell the user | Your reply | `post_to_inbox` without an ask, and your reply; where another coding agent started you, to it instead, as above |
+| Ask the user | `AskUserQuestion` | `post_thread` with a `decide` or `answer` ask, which waits for the reply; where another coding agent started you, to it instead, with `message_agent` and its agent id |
+| Tell the user | Your reply | `post_thread` without an ask, and your reply; where another coding agent started you, to it instead, as above |
 | Valid model ids | `conductor model` | `list_models` |
 | Your id, for reports | `echo "$CONDUCTOR_SESSION_ID"` | Nothing to record: a started agent is told your id and your mention link |
 | Start a worker | `conductor workspace create` (below) | `start_agent` on your own task (no `taskId`, or the rollout task's id where you work on none), with `title` set to the PR title, the brief as `prompt`, plus `model` and `effort` (below) |
 | Worker's base branch | `--branch <base-branch>` | `start_agent`'s `branch` |
 | Open a PR | `gh pr create --base <base-branch>` | `open_pull_request` with `base` |
-| Message a worker | `conductor message create --session <sessionId>` | `post_chat` in the task's chat with the worker's mention link in the words, or a reply in the thread it posted in |
-| Worker reports back | `conductor message create --session <ORCHESTRATOR_SESSION_ID>` | `post_chat` in the task's chat with the orchestrator's mention link in the words |
+| Message a worker | `conductor message create --session <sessionId>` | `message_agent` with the worker's agent id |
+| Worker reports back | `conductor message create --session <ORCHESTRATOR_SESSION_ID>` | `message_agent` with the orchestrator's agent id |
 | Check on a silent worker | `conductor session message <sessionId>` | `read_agent` with its agent id |
 | Stop a worker | `conductor session cancel <sessionId>` | `stop_agent` with its agent id |
 | Continue a dead or stalled worker | `conductor session create --workspace <workspaceId> --agent claude --model <model> --effort <effort>`, with `--message` repeating the brief, the PR url, your session id, and "report to me" | `start_agent` with `from: { agentId }` and a `note` repeating the PR url and its branch, "keep this PR and open no second one", your mention link, and "report to me" |
@@ -96,8 +95,8 @@ posts nothing to the developer's inbox, not even the PR it opened: the
 service tells every agent another agent starts that the inbox is its
 starter's, and the brief repeats it. What a worker would have put there (a
 PR ready for review, a question, a decision, a to-do only the user can do by
-hand, such as adding a secret) comes to you as a report, in the task's
-chat, and you decide what reaches the user. Keep the user's inbox to what needs them: one item per held
+hand, such as adding a secret) comes to you as a report, by
+`message_agent`, and you decide what reaches the user. Keep the user's inbox to what needs them: one item per held
 PR asking for its go, a question or a to-do only they can settle, relayed
 under its own thread, and the final report (Step 4). Never pass a worker's
 routine milestones (opened, fix pushed, CI green, merged) on to the user; the
@@ -112,10 +111,7 @@ user" rows say for it.
 
 In Conductor, record your own session id first; workers report back to it.
 In Luke there is nothing to record: every agent you start is told your agent
-id and how to reach you, by your mention link in the task's chat. Say hello
-in the chat as the rollout starts, with the
-PRs you split the plan into and which worker takes each, so the developer
-watching the channel sees the team form.
+id and how to reach you by `message_agent`.
 
 Start one worker per PR, but only for PRs whose base exists. Kick off every
 PR that starts from `main` now. Do not kick off a PR that builds on another
@@ -150,7 +146,7 @@ pass it as `base` when it opens its PR. Give the brief as `prompt`, so the
 worker works from the brief and not the whole plan, and the chosen `model`
 and `effort`, checked against `list_models`. The call carries everything the
 worker is told; do not follow it with a message. `prompt` and `note` each
-hold at most 64,000 characters, and a chat post far less: put the
+hold at most 64,000 characters: put the
 PR's own scope and acceptance criteria in `prompt` and the rest of the brief
 in `note`, and where the plan is long, quote only the parts this PR needs and
 name the plan's file in the repository, if it has one, for the worker to read.
@@ -182,9 +178,8 @@ Every brief must contain:
    PR has merged and the restack has retargeted it to `main`.
 4. **Report back, do not wait to be asked**: on each milestone (opened, fix
    pushed, CI green, blocked, merged) tell the orchestrator, as the table's
-   "Worker reports back" row says, in this shape (in Luke's chat, as a short
-   message with the orchestrator's mention link, in a teammate's words rather
-   than a form):
+   "Worker reports back" row says, in this shape (in Luke, as a short
+   message in a teammate's words rather than a form):
 
    ```text
    <PR title>: <status>. PR: <url>. <what happened / what is blocking>
@@ -192,9 +187,9 @@ Every brief must contain:
 
    In Conductor, give the worker your session id to send it to. Also tell it
    to answer any message the orchestrator sends it. In Luke,
-   also tell it the other workers' PRs and that it talks to them in the
-   task's chat too, where their work meets: a shared file, an interface, a
-   PR it builds on. It reports to the
+   also tell it the other workers' PRs and agent ids, and that it messages
+   them too, where their work meets: a shared file, an interface, a PR it
+   builds on. It reports to the
    orchestrator only, never to the user: in Luke, it posts nothing to the
    developer's inbox, and sends the orchestrator instead whatever it would
    have posted there.
@@ -214,11 +209,8 @@ them to reply, to kick off the PRs above, to restack, and to archive.
 ## Step 2: Monitor by messages, not polling
 
 Do not poll workers in a loop. Workers message you when something happens,
-and each message arrives as a new turn; in Luke, a post that
-mentions you arrives the same way, and you read the task's chat with
-`read_chat` when a report lands, to catch what the workers said to each
-other. Answer in the chat, in the report's thread, so the team sees it. On
-each report:
+and each message arrives as a new turn; in Luke, a worker's
+`message_agent` arrives the same way. On each report:
 
 - **PR opened**: if a PR is waiting on this one, kick its worker off now
   (Step 1) with this PR's branch as its base.

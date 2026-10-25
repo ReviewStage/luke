@@ -163,7 +163,6 @@ import {
   settingsSearchEntries,
 } from "../settings-search.js";
 import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../tasks/agent-ref.js";
-import { useChatOn } from "../tasks/chat-gate.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
@@ -189,7 +188,7 @@ import { useCapability, useExperiment, useExperimentChoices } from "../use-app-s
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
-import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
+import { agentEntries, inboxEntries } from "./main-tabs.js";
 import { strandedHome } from "./move-task-dialog.js";
 import {
   ADD_SECTION,
@@ -837,7 +836,7 @@ function paletteEntries(entry: AddEntry): readonly AddEntry[] {
 }
 
 /**
- * The open task's Inbox, Chat, and coding agents, as the column's "+" lists them,
+ * The open task's Inbox and coding agents, as the column's "+" lists them,
  * then what the side panel's "+" offers past its kinds, by its own rules
  * (`panelOffers`): the files Luke showed, the agents' Pull request tabs, the
  * plan's pages, a terminal for each agent, and a new Browser tab in each
@@ -851,7 +850,6 @@ function paletteEntries(entry: AddEntry): readonly AddEntry[] {
  */
 function agentRows(
   tasks: TasksControl,
-  chatOn: boolean,
   doors: PanelOfferDoors,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
@@ -859,7 +857,6 @@ function agentRows(
   if (taskId === undefined) return [];
   const taskName = tasks.tasks.find((task) => task.id === taskId)?.name;
   const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
-  const chat = chatEntries(chatOn && tasks.chatView.available, () => tasks.onShowChat(taskId));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
@@ -879,7 +876,6 @@ function agentRows(
         agents: tasks.agents,
         shownCode,
         pages,
-        chat: chatOn && tasks.chatView.available,
         onNewTerminal: doors.onNewTerminal,
         browsers: doors.browsers,
         viewedAgent: undefined,
@@ -898,7 +894,7 @@ function agentRows(
         .flatMap(paletteEntries)
         .map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
     : [];
-  const entries: readonly AddEntry[] = [...inbox, ...chat, ...agents, ...places];
+  const entries: readonly AddEntry[] = [...inbox, ...agents, ...places];
   const standing = entries.map(({ row, endMark, card, onPick, agent }) => {
     // Note that a terminal's row is named by its agent, as under the "+"'s Terminal heading, which ⌘K draws none of, so the row says it.
     const heading = row.section === ADD_SECTION.TERMINAL ? row.section : undefined;
@@ -1068,7 +1064,6 @@ function inboxRows(
 const PLACE_COMMANDS: ReadonlySet<AppCommand> = new Set([
   APP_COMMAND.TASKS,
   APP_COMMAND.INBOX,
-  APP_COMMAND.CHAT,
   APP_COMMAND.AUTOMATIONS,
   APP_COMMAND.SETTINGS,
   APP_COMMAND.KEYBOARD_SHORTCUTS,
@@ -1208,7 +1203,6 @@ function copyLinkRows(
  */
 function panelTabRows(
   tasks: TasksControl,
-  chatOn: boolean,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
   if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
@@ -1218,7 +1212,6 @@ function panelTabRows(
     inbox:
       inboxOffered(tasks.agents, tasks.sidePanel) ||
       tasks.listed.inbox.some((waiting) => waiting.taskId === tasks.activeTaskId),
-    chat: chatOn && tasks.chatView.available,
     // Note that this is the "+"'s own input, though only an agent's page holds Code to it: a task's panel offers Code either way.
     code: (tasks.shownCode?.length ?? 0) > 0,
   });
@@ -1718,7 +1711,6 @@ export function CommandPalette({
   readFiles: (taskId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const chatOn = useChatOn();
   const experiments = useExperimentChoices();
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
@@ -1972,7 +1964,7 @@ export function CommandPalette({
           )
         : [],
     ],
-    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, chatOn, offerDoors, onTasks)],
+    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
     [PALETTE_FILTER.INBOX]: () => [
       inboxAsked
         ? inboxRows(inboxSearch.items, {
@@ -2002,7 +1994,7 @@ export function CommandPalette({
         ...agentPinRows(listedTasks, choose),
         ...taskCommandRows(tasks, reads, renameOffer, choose),
         ...agentArchiveRows(openAgent, askArchive, choose),
-        ...panelTabRows(tasks, chatOn, onTasks),
+        ...panelTabRows(tasks, onTasks),
         ...actionRows(OPEN_THING_SHOW_COMMANDS, runCommand),
         ...actionRows(OPEN_THING_LAST_COMMANDS, runCommand),
         ...actionRows(GO_TO_COMMANDS, runCommand),

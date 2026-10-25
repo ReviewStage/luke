@@ -80,7 +80,7 @@ export function UnloadedComposerField(): React.JSX.Element {
 }
 
 /** Whether the developer is typing somewhere the box must not take focus from: a field or an editor elsewhere. */
-export function typingElsewhere(): boolean {
+function typingElsewhere(): boolean {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement) || active === document.body) return false;
   return (
@@ -107,8 +107,6 @@ export interface ComposerFieldMentions {
   readonly chip: (mention: MentionNode, node: MentionNodeDoors) => ReactNode;
   /** The mention words pasted whole stand for; nothing for words that paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
-  /** The `#` word's report, where the box names channels; none where it names none, read as it mounts. */
-  readonly onChannelTrigger?: ((trigger: ComposerTrigger | undefined) => void) | undefined;
 }
 
 export function ComposerField({
@@ -254,10 +252,6 @@ export function ComposerField({
               onTrigger: (trigger) => latest.current.mentions?.onTrigger(trigger),
               drawMention: (element, mention, node) => draw(element, { mention, node }),
               pasted: (words) => latest.current.mentions?.pasted(words),
-              onChannelTrigger:
-                now.mentions.onChannelTrigger === undefined
-                  ? undefined
-                  : (trigger) => latest.current.mentions?.onChannelTrigger?.(trigger),
             },
       format: {
         onFormat: (format) => latest.current.format.onFormat(format),

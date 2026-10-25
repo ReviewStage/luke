@@ -19,7 +19,7 @@ import { wholeWordsHint } from "../tooltip/hint.js";
  * code-card.tsx -- the window's one card for a block of code: a header naming its language or file with the one Copy, its lines in the host's colours, and a cut at 40 lines.
  *
  * Every block of code the window draws (a reply's fenced block, the code an
- * agent showed, an Inbox item's or a chat message's) stands in this card,
+ * agent showed, an Inbox item's) stands in this card,
  * so each reads the same: a quiet header in the caption's type naming what
  * the lines are, the language they are written in or the file they came
  * from, with the one Copy at its end (`CopyButton`, "Copy code"), over the

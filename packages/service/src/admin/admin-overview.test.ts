@@ -129,7 +129,6 @@ test("the funnel and reach keep their order, with shares of their bases and none
       [REACH_FEATURE.VOICE_CALLS, 0],
       [REACH_FEATURE.INTEGRATIONS, 0],
       [REACH_FEATURE.AUTOMATIONS, 0],
-      [REACH_FEATURE.CHAT, 0],
     ],
   );
 

@@ -84,7 +84,6 @@ import {
   FolderPlusIcon,
   GLYPH,
   GlobeIcon,
-  HashIcon,
   HourglassIcon,
   ImageIcon,
   InboxIcon,
@@ -93,9 +92,6 @@ import {
   type LucideIcon,
   MessageCircleQuestionIcon,
   MessageCircleXIcon,
-  MessageSquareCheckIcon,
-  MessageSquareTextIcon,
-  MessagesSquareIcon,
   PencilLineIcon,
   PlayIcon,
   ScrollTextIcon,
@@ -948,7 +944,7 @@ function CutWords({
   );
 }
 
-/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one; a list of the models wears a chip, what an agent runs on. A chat call wears a speech bubble, and an edit of a channel the hash the chat's list leads a channel with. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one; a list of the models wears a chip, what an agent runs on. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
@@ -973,10 +969,6 @@ const CALL_ICON = {
   [CALL_KIND.INBOX_READ]: InboxIcon,
   [CALL_KIND.INBOX_REPLY]: InboxIcon,
   [CALL_KIND.INBOX_WITHDRAW]: InboxIcon,
-  [CALL_KIND.CHAT_POST]: MessageSquareTextIcon,
-  [CALL_KIND.CHAT_READ]: MessagesSquareIcon,
-  [CALL_KIND.CHAT_RESOLVE]: MessageSquareCheckIcon,
-  [CALL_KIND.CHAT_EDIT_CHANNEL]: HashIcon,
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,

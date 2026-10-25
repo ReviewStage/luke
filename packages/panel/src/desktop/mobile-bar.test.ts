@@ -28,5 +28,5 @@ test.each([
   { on: "a stream Back returned to", listed: false, channels: { threadId: "item-2" }, shown: true },
   { on: "an Inbox item, Channels off", listed: false, channels: undefined, shown: false },
 ])("the bar on $on stands: $shown", ({ listed, channels, shown }) => {
-  assert.equal(mobileBarShown(SHELL_ROOM.NARROW, onInbox(listed), false, channels), shown);
+  assert.equal(mobileBarShown(SHELL_ROOM.NARROW, onInbox(listed), channels), shown);
 });

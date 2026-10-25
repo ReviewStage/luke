@@ -80,7 +80,7 @@ import { TASK_CARD_STANDING, TASK_STATUS_WORDS, TaskKey } from "./task-standing.
 import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
 
-/** A row's mark before its words, a Chat place's or the next item's, which keeps its own size. */
+/** A row's mark before its words, the next item's, which keeps its own size. */
 export const INBOX_ROW_MARK = "inbox-row-mark flex flex-none";
 
 /**
@@ -88,7 +88,7 @@ export const INBOX_ROW_MARK = "inbox-row-mark flex flex-none";
  * a size under a row glyph's, as a sidebar plan wears it, so the disc's edge
  * reads at the time's height.
  */
-export const INBOX_ROW_ATTENTION =
+const INBOX_ROW_ATTENTION =
   "inbox-row-attention inline-flex [&_.attention-mark]:size-luke-12 [&_.attention-mark_svg]:size-attention-glyph-small";
 
 /** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */

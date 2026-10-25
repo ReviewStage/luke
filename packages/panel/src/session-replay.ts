@@ -16,7 +16,7 @@
  * pictures of the person's screen, a task's title and the editor its document
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
- * version history, Inbox, Chat, and coding agents' tabs and their Terminal tabs,
+ * version history, Inbox, and coding agents' tabs and their Terminal tabs,
  * Browser tabs with the still of a page they draw and a cloud Browser
  * tab's live view, and ⌃Tab's previews, each a still of a tab, among others. The whiteboard, a Terminal tab, and a cloud
  * Browser tab's live view are the surfaces that draw

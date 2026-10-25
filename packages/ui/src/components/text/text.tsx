@@ -20,7 +20,7 @@ export { TEXT_VARIANT, type TextVariant } from "./text-role.js";
  *
  * - `TITLE`: a document's own title in the page, a person's, Settings', the
  *   plan's. `TOOLBAR_TITLE`: the name in the window's top bar, which a
- *   workspace (Tasks, Inbox, Chat) wears in place of an in-page title.
+ *   workspace (Tasks, Inbox) wears in place of an in-page title.
  * - `DIALOG`: a dialog's or a pane's heading. `SECTION`: a heading on a page.
  *   `GROUP`: the small heading over a group of rows in a sidebar, a menu, a
  *   picker, or a settings list.

@@ -10,13 +10,6 @@ import {
   writeAccountPreferences,
 } from "@luke/database/models/account-store";
 import {
-  attachMessageImages,
-  ensureMember,
-  ensureTaskChannel,
-  findOrMakeDm,
-  postMessage,
-} from "@luke/database/models/chat-store";
-import {
   archiveCodingAgent,
   createCodingAgent,
   fillCodingAgentTitle,
@@ -43,7 +36,9 @@ import {
   updateTask,
 } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { attachment } from "@luke/database/schemas/attachment";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { messages } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
@@ -57,7 +52,6 @@ import {
 } from "@luke/database/testing";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
-import { CHAT_BLOCK, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   AGENT_MESSAGE_LEAD,
   agentMessageReplyLine,
@@ -85,10 +79,10 @@ import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-is
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { settleJsonSchemaGolden } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -895,33 +889,6 @@ async function keptPicture(
   return Option.getOrThrow(kept).id;
 }
 
-/** A chat message carrying one picture, posted by the member into the channel as the account given; answers the picture's attachment id and the message's id. */
-async function chatPicture(
-  as: string,
-  workspaceId: string,
-  author: { readonly id: string },
-  channelId: string,
-  bytes: Uint8Array,
-): Promise<{ readonly attachmentId: string; readonly messageId: string }> {
-  const attachmentId = randomUUID();
-  const posted = await database.run(
-    postMessage(as, workspaceId, {
-      authorMemberId: author.id,
-      to: { channelId },
-      blocks: [{ type: CHAT_BLOCK.IMAGE, attachmentId, alt: "The invite as it renders." }],
-      clientKey: randomUUID(),
-    }),
-  );
-  const { message } = Result.getOrThrow(posted);
-  const kept = await database.run(
-    attachMessageImages(as, workspaceId, author.id, message.id, [
-      { id: attachmentId, contentType: "image/png", bytes },
-    ]),
-  );
-  assert.equal(kept, true);
-  return { attachmentId, messageId: message.id };
-}
-
 /** The file parts a message eve was sent carries, each as eve is handed it. */
 function sentFiles(body: string | undefined): readonly unknown[] {
   const message: unknown = JSON.parse(body ?? "").message;
@@ -940,36 +907,19 @@ function forwardedPng(attachmentId: string, bytes: Uint8Array) {
   };
 }
 
-/** The caller's seat in its workspace's chat and its task's channel, as a real start seats it, and its starter's own seat. */
-async function seatedCaller(workspaceId: string, taskId: string, caller: StartedAgent) {
-  const seat = async (subject: Parameters<typeof ensureMember>[2], as = caller.userId) =>
-    Option.getOrThrow(await database.run(ensureMember(as, workspaceId, subject)));
-  const self = await seat({ kind: MEMBER_KIND.AGENT, agentId: caller.id });
-  const person = await seat({ kind: MEMBER_KIND.HUMAN, userId: caller.userId });
-  const channel = Option.getOrThrow(await database.run(ensureTaskChannel(caller.userId, taskId)));
-  return { self, person, channel, seat };
-}
-
-test("start_agent on the plan with a note hands the agent the pictures images names as file parts of its first message: one kept beside the caller's own conversation, one of a chat message in its task's channel, and one of a DM it is one of", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+test("start_agent on the plan with a note hands the agent the pictures images names, kept beside the caller's own conversation, as file parts of its first message", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), caller, eve.services);
-  const { self, person, channel } = await seatedCaller(workspaceId, tasks.invitations, caller);
   const shown = pngOf(64, 1);
-  const inChannel = pngOf(64, 2);
-  const inDm = pngOf(64, 3);
+  const other = pngOf(64, 2);
   const shownId = await keptPicture(caller, shown);
-  const posted = await chatPicture(caller.userId, workspaceId, person, channel.id, inChannel);
-  const channelId = posted.attachmentId;
-  const dm = Option.getOrThrow(
-    await database.run(findOrMakeDm(caller.userId, workspaceId, self.id, person.id)),
-  );
-  const { attachmentId: dmId } = await chatPicture(caller.userId, workspaceId, person, dm.id, inDm);
+  const otherId = await keptPicture(caller, other);
 
   const started = await call(
     CODER_TOOL.START_AGENT,
-    { note: NOTE, images: [shownId, channelId, dmId] },
+    { note: NOTE, images: [shownId, otherId] },
     "call-images",
   );
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
@@ -980,17 +930,19 @@ test("start_agent on the plan with a note hands the agent the pictures images na
   assert.ok(message.includes(NOTE), message);
   assert.deepEqual(sentFiles(opening?.body), [
     forwardedPng(shownId, shown),
-    forwardedPng(channelId, inChannel),
-    forwardedPng(dmId, inDm),
+    forwardedPng(otherId, other),
   ]);
 
   // The same call run again answers the agent it made, though a picture it named is gone since.
   await database.run(
-    attachMessageImages(caller.userId, workspaceId, person.id, posted.messageId, []),
+    Effect.gen(function* () {
+      const db = yield* Database;
+      yield* db.delete(attachment).where(eq(attachment.id, otherId));
+    }),
   );
   const again = await call(
     CODER_TOOL.START_AGENT,
-    { note: NOTE, images: [shownId, channelId, dmId] },
+    { note: NOTE, images: [shownId, otherId] },
     "call-images",
   );
   assert.ok(isRecord(started.agent) && isRecord(again.agent), JSON.stringify(again));
@@ -1009,26 +961,12 @@ test("message_agent shows the model the recorded input", async () => {
   await settleJsonSchemaGolden(GOLDEN_ROOT, "message-agent-input", MESSAGE_AGENT_TOOL.inputSchema);
 });
 
-test("start_agent refuses, in words that say why and starting nothing, a picture of another agent's conversation, one of a DM the caller is not in, a video the caller recorded, one past an image's bound, pictures past a message's bound together, and more ids than a start takes", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+test("start_agent refuses, in words that say why and starting nothing, a picture of another agent's conversation, a video the caller recorded, one past an image's bound, pictures past a message's bound together, and more ids than a start takes", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), caller, eve.services);
-  const { seat } = await seatedCaller(workspaceId, tasks.invitations, caller);
-  const teammate = teammates.userId;
   const theirs = await keptPicture(teammates, pngOf(64, 4));
-  const bobAgent = await seat({ kind: MEMBER_KIND.AGENT, agentId: teammates.id }, teammate);
-  const bob = await seat({ kind: MEMBER_KIND.HUMAN, userId: teammate }, teammate);
-  const dm = Option.getOrThrow(
-    await database.run(findOrMakeDm(teammate, workspaceId, bobAgent.id, bob.id)),
-  );
-  const { attachmentId: notTheirs } = await chatPicture(
-    teammate,
-    workspaceId,
-    bob,
-    dm.id,
-    pngOf(64, 5),
-  );
   const tooLarge = pngOf(CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES + 1, 6);
   const tooLargeId = await keptPicture(caller, tooLarge);
   const recording = await keptPicture(caller, pngOf(64, 10), "video/webm");
@@ -1037,11 +975,10 @@ test("start_agent refuses, in words that say why and starting nothing, a picture
   );
   const unreached = (id: string) =>
     `Not started: attachment ${id} is no picture you can hand on. Name a picture of your own ` +
-    "conversation, such as one show_image kept, or one of a chat message you can read.";
+    "conversation, such as one show_image kept.";
 
   for (const [images, reason] of [
     [[theirs], unreached(theirs)],
-    [[notTheirs], unreached(notTheirs)],
     [
       [recording],
       `Not started: attachment ${recording} is a video, and only a picture, a PNG, JPEG, or ` +
@@ -2418,6 +2355,26 @@ test("message_agent hands another agent of the workspace the words under the sen
     words,
   );
   assert.ok(words.endsWith(`${NOTE}\n\n${agentMessageReplyLine(agents.caller.id)}`), words);
+  // The other agent's row says another agent wrote it, so its window draws it as the sender's and no title is named from it.
+  const [line] = await database.run(
+    Database.use((db) =>
+      db
+        .select({ metadata: messages.metadata })
+        .from(messages)
+        .where(eq(messages.conversationId, agents.teammates.conversationId))
+        .orderBy(desc(messages.seq))
+        .limit(1),
+    ),
+  );
+  const metadata = line?.metadata;
+  assert.ok(
+    metadata !== undefined && metadata !== null && "channel" in metadata,
+    "a line is written",
+  );
+  assert.deepEqual(
+    [metadata.author, metadata.channel],
+    [MESSAGE_AUTHOR.AGENT, MESSAGE_CHANNEL.AGENT_MESSAGE],
+  );
   assert.deepEqual(
     await directMessage(host, agents.caller, agents.caller, eve.services, "call-2"),
     {

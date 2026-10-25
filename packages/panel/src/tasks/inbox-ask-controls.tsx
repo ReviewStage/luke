@@ -49,9 +49,7 @@ import {
   decideButtons,
   doDecision,
   fieldValueOf,
-  INBOX_MISSING,
   type InboxDraft,
-  type InboxMissing,
   shownTicks,
   withDoPress,
   withStep,
@@ -62,25 +60,21 @@ import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 
 /**
- * inbox-ask-controls.tsx -- what an ask asks for, drawn as the Inbox draws it and as Chat's asks compose it: a `decide`'s options or its two presses, a `do`'s steps and presses, an `answer`'s fields, open or as an answer left them, and the words an ask stands at once it no longer waits.
+ * inbox-ask-controls.tsx -- what an ask asks for, drawn as the Inbox draws it: a `decide`'s options or its two presses, a `do`'s steps and presses, an `answer`'s fields, open or as an answer left them, and the words an ask stands at once it no longer waits.
  *
- * The pieces here are the Inbox's own (`inbox-pane.tsx`), moved so a chat
- * ask (`chat-ask.tsx`) draws an ask with the same controls rather than a
- * copy of them. An open ask's controls attach its answer to a draft as they
+ * The pieces here are the Inbox's own (`inbox-pane.tsx`). An open ask's controls attach its answer to a draft as they
  * are pressed, picked, ticked, or filled, the box's Send sending it; an
  * answered ask's stand as the answer left them, read-only and at full
  * strength. Enter on an option or in a field sends the box the controls
  * stand in (`DraftQuestion`), a form of several fields too, where Space or
- * a press picks an option, and a send lacking something takes the keyboard
- * to it (`focusMissing`). An ask's words, its options and its
+ * a press picks an option. An ask's words, its options and its
  * steps, select and copy whether it is open or not (`ReadableControls`), a
  * drag over them picking and ticking nothing, and stand Reply over them as
  * the words around them do (`reply-to-selection.tsx`), a field's own
- * typing aside. Nothing here knows where the ask came from: an Inbox
- * item's thread or a chat message.
+ * typing aside.
  */
 
-/** An ask's box, in an Inbox thread or Chat's message, which gives way to its column. */
+/** An ask's box, in an Inbox thread, which gives way to its column. */
 export const INBOX_ASK_BOX = "inbox-ask min-w-0";
 
 /** An ask's kind at its head, in the label's weight. */
@@ -444,34 +438,6 @@ function onResponseKey(
   // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
   event.preventDefault();
   sendFromPane(pane.current);
-}
-
-/**
- * Takes the keyboard to what the answer lacks: the option a reader's Tab
- * lands on, the field's first control, or the box's words.
- */
-export function focusMissing(pane: HTMLElement | null, missing: InboxMissing): void {
-  if (pane === null) return;
-  if (missing.kind === INBOX_MISSING.OPTION) {
-    const rows = optionRows(pane);
-    (rows.find((row) => row.tabIndex === 0) ?? rows[0])?.focus();
-    return;
-  }
-  if (missing.kind === INBOX_MISSING.WORDS) {
-    // Note that the note's field is the one outside the question's own, whose text fields stand over it in the box.
-    [...pane.querySelectorAll<HTMLElement>('.inbox-answer [contenteditable="true"]')]
-      .find((editor) => editor.closest(".inbox-draft-ask") === null)
-      ?.focus();
-    return;
-  }
-  const field = [...pane.querySelectorAll<HTMLElement>("[data-inbox-field]")].find(
-    (each) => each.dataset.inboxFieldLabel === missing.label,
-  );
-  field
-    ?.querySelector<HTMLElement>(
-      'input, [contenteditable="true"], button:not([tabindex="-1"]):not(:disabled)',
-    )
-    ?.focus();
 }
 
 /** The keys 1 to 9, each the option of its number. */

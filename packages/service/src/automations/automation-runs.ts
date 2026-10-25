@@ -358,7 +358,6 @@ function reasonOfRefusal(refusal: HostedRefusal | ModelChoiceRefused): Automatio
   if ("_tag" in refusal) return AUTOMATION_RUN_REASON.MODEL;
   switch (refusal.error) {
     case HOSTED_API_ERROR.NOT_FOUND:
-    case HOSTED_API_ERROR.TASK_ARCHIVED:
       return AUTOMATION_RUN_REASON.TASK_UNREACHABLE;
     case HOSTED_API_ERROR.NO_REPOSITORY:
       return AUTOMATION_RUN_REASON.NO_REPOSITORY;
@@ -375,15 +374,13 @@ function reasonOfRefusal(refusal: HostedRefusal | ModelChoiceRefused): Automatio
  * The fixed word for why a run's line was not handed to the automation's
  * agent: one gone, retired, or archived is gone; one still coming up, or a
  * service that did not take the line, is unavailable, so the next firing
- * tries again; and a repository or task out of reach is said as a start's.
+ * tries again; and a repository out of reach is said as a start's.
  */
 function reasonOfSteerRefusal(refusal: HostedRefusal): AutomationRunReason {
   switch (refusal.error) {
     case HOSTED_API_ERROR.NOT_FOUND:
     case HOSTED_API_ERROR.AGENT_RETIRED:
       return AUTOMATION_RUN_REASON.AGENT_GONE;
-    case HOSTED_API_ERROR.TASK_ARCHIVED:
-      return AUTOMATION_RUN_REASON.TASK_UNREACHABLE;
     case HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE:
       return AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE;
     case HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING:

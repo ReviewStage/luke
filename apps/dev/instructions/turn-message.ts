@@ -1,5 +1,5 @@
 /**
- * turn-message.ts -- what each turn opens with after the history: the call's words, the developer's time, and the task and chat where they changed.
+ * turn-message.ts -- what each turn opens with after the history: the call's words, the developer's time, and the task where it changed.
  *
  * A user-role instruction, which eve appends to the session's durable
  * history as the turn starts, ahead of the turn's own message, rather than
@@ -9,8 +9,7 @@
  * every turn. Here the system prompt, the tools, and the history stay the
  * provider's cached prefix from one turn to the next, whatever kind of turn
  * each is. What the session has handed is kept in its state (`turnHanded`),
- * so a turn hands the call's words, the task, and the chat only where they
- * changed (`packages/service/src/agents/coder-host/turn-context.ts`).
+ * so a turn hands the call's words and the task only where they changed (`packages/service/src/agents/coder-host/turn-context.ts`).
  */
 
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";

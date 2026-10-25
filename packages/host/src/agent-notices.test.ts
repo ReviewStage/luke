@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  ACCOUNT_CHAT_REASON,
-  type AccountChatEntry,
-  type AccountFailedRun,
-  type AccountInboxEntry,
-  type AccountTasklessEntry,
+import type {
+  AccountFailedRun,
+  AccountInboxEntry,
+  AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import {
@@ -65,7 +63,6 @@ type InboxAnswerGiven =
  */
 function fixture() {
   const posted: AgentNotice[] = [];
-  let chatOn = true;
   let channelsOn = false;
   const badges: number[] = [];
   /** Whether the badge door throws, as a platform that refuses one may. */
@@ -125,7 +122,6 @@ function fixture() {
         taskless.push(next.taskless);
         failedRuns.push(next.failedRuns);
       },
-      chatOn: () => chatOn,
       channelsOn: () => channelsOn,
       report: () => undefined,
     });
@@ -157,10 +153,6 @@ function fixture() {
     taskless,
     badges,
     failedRuns,
-    /** The account's Chat experiment. */
-    turnChat: (on: boolean) => {
-      chatOn = on;
-    },
     /** The account's Channels experiment. */
     turnChannels: (on: boolean) => {
       channelsOn = on;
@@ -910,28 +902,13 @@ it.effect("a failed run the first answer carries is written for the window", () 
   }),
 );
 
-/** A chat message waiting on the developer, as the account's read carries it. */
-function chatEntry(seq: number, patch: Partial<AccountChatEntry> = {}): AccountChatEntry {
-  return {
-    messageId: `00000000-0000-4000-8000-${String(seq).padStart(12, "0")}`,
-    seq,
-    workspaceId: "workspace-acme",
-    reason: ACCOUNT_CHAT_REASON.DIRECT,
-    from: "Invite emails",
-    planId: TASK_ID,
-    touchedSeq: seq,
-    updatedAt: READ_AT,
-    ...patch,
-  };
-}
-
 it.effect(
-  "an agent's end, an Inbox item, a chat message and a failed run, focused or behind, post no notification, while the dot, the counts, the badge and the Automations mark still move",
+  "an agent's end, an Inbox item and a failed run, focused or behind, post no notification, while the dot, the counts, the badge and the Automations mark still move",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       const notices = yield* f.notices;
-      f.answerInbox({ items: [], chat: [], cursor: "1", readAt: READ_AT });
+      f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
       yield* settled;
 
       for (const focused of [false, true]) {
@@ -943,7 +920,6 @@ it.effect(
       f.focus(false);
       f.answerInbox({
         items: [waitingItem(ITEM_A, { updatedAt: READ_AT + 1 })],
-        chat: [chatEntry(40, { updatedAt: READ_AT + 1 })],
         failedRuns: [failedRun()],
         cursor: "2",
         readAt: READ_AT + 2,
@@ -959,32 +935,13 @@ it.effect(
         f.waiting.at(-1)?.flatMap((task) => task.items.map((item) => item.id)),
         [ITEM_A],
       );
-      assert.equal(f.badges.at(-1), 2, "the badge counts the item and the chat message");
+      assert.equal(f.badges.at(-1), 1, "the badge counts the item");
       assert.deepEqual(f.failedRuns.at(-1), [failedRun()]);
     }),
 );
 
-it.effect("with Chat off for the account, nothing waiting in chat is counted on the badge", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    yield* f.notices;
-    f.turnChat(false);
-    f.focus(false);
-    f.answerInbox({ items: [], chat: [chatEntry(40)], cursor: "1", readAt: READ_AT });
-    yield* settled;
-    f.answerInbox({
-      items: [],
-      chat: [chatEntry(40), chatEntry(41)],
-      cursor: "2",
-      readAt: READ_AT,
-    });
-    yield* settled;
-    assert.equal(f.badges.at(-1), 0);
-  }),
-);
-
 it.effect(
-  "with Channels on, the badge counts the open asks that wait on the account, an ask with no task addressed to it among them, and no notice or teammate's ask, beside chat",
+  "with Channels on, the badge counts the open asks that wait on the account, an ask with no task addressed to it among them, and no notice or teammate's ask",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -1001,13 +958,12 @@ it.effect(
           tasklessItem(ITEM_B, { startedBy: teammate, waitsOn: ACCOUNT_ID, asking: true }),
           tasklessItem(ITEM_C, { startedBy: ACCOUNT_ID, waitsOn: teammate, asking: true }),
         ],
-        chat: [chatEntry(40)],
         cursor: "1",
         readAt: READ_AT,
       });
       yield* settled;
 
-      assert.equal(f.badges.at(-1), 3);
+      assert.equal(f.badges.at(-1), 2);
     }),
 );
 

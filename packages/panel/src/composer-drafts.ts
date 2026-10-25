@@ -24,15 +24,13 @@ import { rendererRuntime } from "./renderer-runtime.js";
  * Discord's, and GitHub's comments alike, and so does every box here that
  * sends somewhere: an agent's composer keeps its words per agent, a plan's
  * draft agent its first message per plan, New task its words per workspace
- * the task starts in, a chat's box its message per channel and per thread
- * (`chat-composer.tsx`), the Inbox's New thread its To, Subject, and words
+ * the task starts in, the Inbox's New thread its To, Subject, and words
  * per workspace (`inbox-compose.tsx`), a plan's comment its words per
  * thread being started, per thread answered, and per comment edited
  * (`plan-comments.tsx`), a line comment in Files changed its words per
  * agent, pull request, file, side, and last line (`comment-drafts.ts`), an agent's line
  * written again its words and files per agent and line
- * (`edit-composer.tsx`), a chat ask's answer its
- * picks and note per message (`chat-ask.tsx`), and an inbox card its answer
+ * (`edit-composer.tsx`), and an inbox card its answer
  * per item, the options picked, the fields filled, and, on a thread, the
  * steps ticked and the answer pressed beside its note. A draft is known by
  * where it goes, a place named by the ids of what it goes to, never one key
@@ -75,19 +73,17 @@ const MAX_KEPT = 200;
 /** How long the typing rests before what the window changed is written to storage. */
 const STORE_PAUSE = Duration.millis(300);
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a chat's channel or thread, an Inbox thread not yet started, a plan's comment, a line comment on an agent's changed file, an agent's line written again, or a chat message's ask. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, an Inbox thread not yet started, a plan's comment, a line comment on an agent's changed file, or an agent's line written again. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
   INBOX: "inbox",
   NEW_TASK: "newTask",
   NEW_AUTOMATION: "newAutomation",
-  CHAT: "chat",
   NEW_THREAD: "newThread",
   PLAN_COMMENT: "planComment",
   LINE_COMMENT: "lineComment",
   EDIT: "edit",
-  CHAT_ASK: "chatAsk",
 } as const;
 
 const draftPlaceSchema = Schema.Union([
@@ -130,12 +126,6 @@ const draftPlaceSchema = Schema.Union([
     kind: Schema.Literal(DRAFT_PLACE.NEW_AUTOMATION),
     /** The workspace the automation's helper starts in; null before the workspaces are read. */
     workspaceId: Schema.NullOr(Schema.String),
-  }),
-  Schema.Struct({
-    kind: Schema.Literal(DRAFT_PLACE.CHAT),
-    channelId: Schema.String,
-    /** The thread's root, by its place in the chat, where the draft is a reply in it rather than a post at the channel's foot. */
-    replyTo: Schema.optionalKey(Schema.Number),
   }),
   Schema.Struct({
     kind: Schema.Literal(DRAFT_PLACE.NEW_THREAD),
@@ -181,11 +171,6 @@ const draftPlaceSchema = Schema.Union([
     /** The developer's line the words are written again in place of. */
     messageId: Schema.String,
   }),
-  Schema.Struct({
-    kind: Schema.Literal(DRAFT_PLACE.CHAT_ASK),
-    /** The chat message that carries the ask. */
-    messageId: Schema.String,
-  }),
 ]);
 
 /** Where one draft goes. */
@@ -204,49 +189,57 @@ const issueDraftPlaceSchema = Schema.Struct({
 });
 
 /**
- * An inbox card's or a chat ask's place as a build from before its picks
- * kept their revision stored it: the revision in the place, and an inbox
- * card's thread apart from its answer. Note that such an entry is read as
- * today's place with the revision moved onto its draft, so its picks still
- * stand on the ask they were made on, and goes once its account writes again.
+ * An inbox card's place as a build from before its picks kept their
+ * revision stored it: the revision in the place, and its thread apart from
+ * its answer. Note that such an entry is read as today's place with the
+ * revision moved onto its draft, so its picks still stand on the ask they
+ * were made on, and goes once its account writes again.
  */
-const revisedPlaceSchema = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal(DRAFT_PLACE.INBOX),
-    planId: Schema.NullOr(Schema.String),
-    agentId: Schema.String,
-    itemId: Schema.String,
-    revision: Schema.Number,
-    thread: Schema.optionalKey(Schema.Literal(true)),
-  }),
-  Schema.Struct({
-    kind: Schema.Literal(DRAFT_PLACE.CHAT_ASK),
-    messageId: Schema.String,
-    revision: Schema.Number,
-  }),
-]);
+const revisedPlaceSchema = Schema.Struct({
+  kind: Schema.Literal(DRAFT_PLACE.INBOX),
+  planId: Schema.NullOr(Schema.String),
+  agentId: Schema.String,
+  itemId: Schema.String,
+  revision: Schema.Number,
+  thread: Schema.optionalKey(Schema.Literal(true)),
+});
 
-/** A place as storage may hold it: one of today's, New task's on an issue (`issueDraftPlaceSchema`), or one with its revision (`revisedPlaceSchema`). */
+/** The places of the boxes Chat had, a channel's or a thread's and an ask's answer, as a build from before Chat was removed stored them. */
+const RETIRED_DRAFT_PLACE = {
+  CHAT: "chat",
+  CHAT_ASK: "chatAsk",
+} as const;
+
+/**
+ * A Chat box's place, as a build from before Chat was removed stored it. No
+ * box opens on one now, so such an entry is read past rather than refusing
+ * every draft beside it, and goes once its account writes again.
+ */
+const retiredPlaceSchema = Schema.Struct({
+  kind: Schema.Literals(Object.values(RETIRED_DRAFT_PLACE)),
+});
+
+/** A place as storage may hold it: one of today's, New task's on an issue (`issueDraftPlaceSchema`), one with its revision (`revisedPlaceSchema`), or a Chat box's (`retiredPlaceSchema`). */
 const storedPlaceSchema = Schema.Union([
   issueDraftPlaceSchema,
   revisedPlaceSchema,
   draftPlaceSchema,
+  retiredPlaceSchema,
 ]);
 
 type StoredPlace = typeof storedPlaceSchema.Type;
+
+/** Whether a stored place is a Chat box's, which no box opens now. */
+function retired(stored: StoredPlace): stored is typeof retiredPlaceSchema.Type {
+  return stored.kind === RETIRED_DRAFT_PLACE.CHAT || stored.kind === RETIRED_DRAFT_PLACE.CHAT_ASK;
+}
 
 /** The place a box opens today that a stored place names, with the revision a place from before held for its picks; none for a place no box opens now. */
 function placeOf(
   stored: StoredPlace,
 ): { readonly place: DraftPlace; readonly revision?: number } | undefined {
-  if ("issueId" in stored) return undefined;
+  if (retired(stored) || "issueId" in stored) return undefined;
   if (!("revision" in stored)) return { place: stored };
-  if (stored.kind === DRAFT_PLACE.CHAT_ASK) {
-    return {
-      place: { kind: stored.kind, messageId: stored.messageId },
-      revision: stored.revision,
-    };
-  }
   const { kind, planId, agentId, itemId, revision } = stored;
   return { place: { kind, planId, agentId, itemId }, revision };
 }
@@ -288,7 +281,7 @@ export interface Draft {
   readonly to?: string | undefined;
   /** The files of a line written again that its box took off, by their key in the line, so they stay off where the line's files are offered again (`edit-composer.tsx`). */
   readonly dropped?: readonly string[] | undefined;
-  /** The revision of the inbox item or chat ask its picks were made on, so they never land on an ask changed since (`draftAt`). */
+  /** The revision of the inbox item its picks were made on, so they never land on an ask changed since (`draftAt`). */
   readonly revision?: number | undefined;
 }
 
@@ -303,9 +296,6 @@ export type NewAgentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_A
 /** An inbox card's place. */
 export type InboxPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.INBOX }>;
 
-/** A chat box's place: a channel's foot, or a thread in it. */
-export type ChatDraftPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.CHAT }>;
-
 /** New thread's place: the workspace whose Inbox it is written in. */
 export type NewThreadPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_THREAD }>;
 
@@ -317,9 +307,6 @@ export type LineCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.LI
 
 /** An agent's line written again: the agent and the line. */
 export type EditPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.EDIT }>;
-
-/** A chat ask's answer: the message carrying it, at the ask's revision. */
-export type ChatAskPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.CHAT_ASK }>;
 
 /** A box holding nothing. */
 export const EMPTY_DRAFT: Draft = { text: "", attachments: [], choices: [], values: [] };
@@ -972,7 +959,7 @@ export function withoutPicks<D extends Draft>(draft: D): D {
  * the draft itself wherever nothing is let go, so a reader comparing drafts
  * by identity draws again only as one changes.
  */
-export function draftAt<D extends Draft>(draft: D, revision: number | null): D {
+function draftAt<D extends Draft>(draft: D, revision: number | null): D {
   return draft.revision === revision || !holdsPicks(draft) ? draft : withoutPicks(draft);
 }
 

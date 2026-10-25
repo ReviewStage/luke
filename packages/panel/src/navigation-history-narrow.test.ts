@@ -4,11 +4,8 @@ import assert from "node:assert/strict";
 import { AUTOMATION_PRESET } from "@luke/features/automation-code-review";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
-import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
-import { CHAT_PLACE, type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -43,8 +40,7 @@ import { tasksControl } from "./testing/tasks-control.js";
 /**
  * navigation-history-narrow.test.ts -- on a stage as narrow as a phone's,
  * each pane opened over another is a step of its own: the side panel over
- * the plan, an Inbox item, a Settings page, a version, and a Chat place over
- * their lists, and an automation's runs over its setup. Back returns to the pane before, Forward opens it again, the
+ * the plan, an Inbox item, a Settings page, and a version over their lists, and an automation's runs over its setup. Back returns to the pane before, Forward opens it again, the
  * screens' own ways back go through the history, and each step's address is
  * the link Copy link copies there. On the desktop's width none of them is a
  * step. The window's plans tab and Settings are a fake holding only where the
@@ -70,9 +66,6 @@ const ITEM: InboxChoice = { taskId: DOCUMENT_TASK.id, itemId: "item-1" };
 /** A coding agent of the task's. */
 const AGENT = "agent-1";
 
-/** A channel of Acme's chat. */
-const CHANNEL: ChatPlace = { kind: CHAT_PLACE.CHANNEL, channelId: "channel-1" };
-
 /** An automation of Acme's, whose page stands over the plan. */
 const AUTOMATION = "automation-1";
 
@@ -88,7 +81,6 @@ interface Standing {
     /** Whether the Inbox shows one column by its own width, as one narrower than its split does in a room still wide. */
     readonly single?: boolean;
   };
-  readonly chat: { readonly open: boolean; readonly place: ChatPlace; readonly listed: boolean };
   readonly versions: {
     readonly open: boolean;
     readonly revision: number | undefined;
@@ -117,7 +109,6 @@ const ON_TASK: Standing = {
   settings: { view: SETTINGS_VIEW.ACCOUNT, listed: true },
   panel: { open: false, tab: undefined },
   inbox: { open: false, chosen: undefined, listed: false },
-  chat: { open: false, place: FOR_YOU, listed: true },
   versions: { open: false, revision: undefined, listed: true },
   agent: undefined,
 };
@@ -134,8 +125,6 @@ function tasksTab(
   const panel = (next: Standing["panel"]) => patch((held) => ({ ...held, panel: next }));
   const inbox = (next: Partial<Standing["inbox"]>) =>
     patch((held) => ({ ...held, inbox: { ...held.inbox, ...next } }));
-  const chat = (next: Partial<Standing["chat"]>) =>
-    patch((held) => ({ ...held, chat: { ...held.chat, ...next } }));
   // As the real one does, opening or shutting the panel leaves the tab where it stands.
   const setOpen = (open: boolean) => patch((held) => ({ ...held, panel: { ...held.panel, open } }));
   const shut = () => setOpen(false);
@@ -230,17 +219,6 @@ function tasksTab(
       onChoose: (chosen) => inbox({ chosen }),
       onListed: (listed) => inbox({ listed }),
     },
-    chatView: {
-      ...base.chatView,
-      open: at.chat.open,
-      place: at.chat.place,
-      listed: at.chat.listed,
-      onOpen: () => chat({ open: true }),
-      onClose: () => chat({ open: false }),
-      onList: () => chat({ listed: true }),
-      onChoose: (place) => chat({ place, listed: false }),
-      onShow: (place) => chat({ open: true, place, listed: false }),
-    },
     adminView: {
       ...base.adminView,
       open: at.admin !== undefined,
@@ -272,7 +250,7 @@ function tasksTab(
 const roots: Root[] = [];
 
 beforeEach(() => {
-  handState(experimentsOn(EXPERIMENT.CHAT), { access: { admin: true } });
+  handState({}, { access: { admin: true } });
 });
 
 /** Takes down every window mounted so far, since a window's history is the one its root installed last. */
@@ -604,24 +582,6 @@ test("on a narrow stage a version chosen from the list is a step, which Back lea
   assert.equal(window.at().versions.revision, 2, "the version chosen comes back");
 });
 
-test("on a narrow stage a Chat place chosen from the rail is a step, and Chat's way back steps back to the rail", async () => {
-  const window = mount(SHELL_ROOM.NARROW, {
-    ...ON_TASK,
-    chat: { open: true, place: FOR_YOU, listed: true },
-  });
-  // Chat is an experiment, whose word arrives with the window's state.
-  await settle();
-  window.press(() => window.shown().chatView.onChoose(CHANNEL));
-
-  assert.equal(window.addresses().length, 2);
-  const shownPlace = (at: Standing) => (at.chat.listed ? undefined : at.chat.place);
-  backAndForth(window, shownPlace, undefined, CHANNEL);
-
-  window.press(() => window.shown().chatView.onList());
-  assert.equal(shownPlace(window.at()), undefined);
-  assert.equal(window.history().canGoForward, true, "the way back was a step back");
-});
-
 test("on a narrow stage a Settings page a link opened has no list behind it, so the way back stands the list in the page's step and Back leaves Settings", () => {
   const window = mount(SHELL_ROOM.NARROW, ON_TASK);
   // A link turns to Settings and then to its page in one move, as `followSettingsLink` does.
@@ -675,7 +635,6 @@ test("on the desktop's width none of a narrow room's panes is a step: the side p
     window.press(() => {
       window.history().lists.settings();
       window.shown().inboxView.onListed(true);
-      window.shown().chatView.onList();
       window.shown().history.onList();
     });
     assert.equal(window.addresses().length, 1, "one step, however the panes turn");
@@ -739,9 +698,12 @@ test("a reloaded window whose saved step is the Admin place opens it once the ac
 
   // The reloaded window's first document holds no access yet, as main's does until the read answers.
   let deliver: ((snapshot: AppStateSnapshot) => void) | undefined;
-  const unread = stateWith(experimentsOn(EXPERIMENT.CHAT), {
-    access: { admin: false, pending: true },
-  });
+  const unread = stateWith(
+    {},
+    {
+      access: { admin: false, pending: true },
+    },
+  );
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     requestAppState: () => Promise.resolve(unread),

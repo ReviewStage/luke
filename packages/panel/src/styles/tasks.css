@@ -2142,7 +2142,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* off-scale: 400px, a card under which the box folds its own presses into its ⋯ (composer-foot.css) */
 @container composer (width < 400px) {
   .agent-composer :is(.agent-servers-button, .agent-context-button),
-  .agent-composer:not(.chat-composer) > form:not(.inbox-answer) .dictate-button {
+  .agent-composer > form:not(.inbox-answer) .dictate-button {
     display: none;
   }
 

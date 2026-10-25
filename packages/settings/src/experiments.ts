@@ -10,8 +10,6 @@ import { Option, Schema } from "effect";
 export const EXPERIMENT = {
   /** A Browser tab in the side panel: an agent's cloud browser beside the plan, watched and taken over. */
   BROWSER: "browser",
-  /** A workspace's chat: its people, coding agents, and Luke talking in channels and DMs. */
-  CHAT: "chat",
   /** The Code review automation, offered on the Automations page with its own settings in the editor. */
   CODE_REVIEW: "code-review",
   /** Calls that open with Luke on video, a Keyframe avatar in the agent's tab. */
@@ -101,14 +99,6 @@ export const EXPERIMENTS = [
       "Watch your agents' cloud browsers in a tab beside your plan, and take one over to " +
       "sign in or steer.",
     owner: "Dean",
-    since: "2026-10-16",
-  },
-  {
-    key: EXPERIMENT.CHAT,
-    name: "Chat",
-    detail:
-      "Talk with your workspace's people, coding agents, and Luke in channels and direct messages.",
-    owner: "Charles",
     since: "2026-10-16",
   },
   {

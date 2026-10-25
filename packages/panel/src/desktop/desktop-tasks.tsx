@@ -42,8 +42,6 @@ import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { peopleOf } from "../tasks/changes-card.js";
-import { useChatNames } from "../tasks/chat-actors.js";
-import { useChatOn } from "../tasks/chat-gate.js";
 import { agentActor, agentName, type SentLine } from "../tasks/coding-agent-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
@@ -93,7 +91,6 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import type { MenuAction } from "./action-menu.js";
 import { useAgentCallDoors, useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
-import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 import { useTaskInboxShow } from "./folded-groups.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
@@ -647,7 +644,6 @@ function PlanDocument({
   }, [activityAsked, panelOpen, panelTab]);
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const views = useTabViews();
-  const chatOn = useChatOn();
   const { act } = useAct();
   const inboxTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   const inbox = useTaskInbox({
@@ -822,8 +818,6 @@ function PlanDocument({
           setInboxAsk({ taskId, key: target.key, agentId: from });
         }
         return openPanelTab(SIDE_PANEL_TAB.INBOX);
-      case TOOL_TARGET.CHAT:
-        return chatOn ? openPanelTab(SIDE_PANEL_TAB.CHAT) : undefined;
       case TOOL_TARGET.BOARD:
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
@@ -975,18 +969,6 @@ function PlanDocument({
         />
       ),
     [opened, linearIssuesIn, githubIssuesIn],
-  );
-  // A chat notice in an agent's transcript reads its message from the chat
-  // the window holds, and opens the window's Chat on its channel.
-  const chatRead = tasks.chatView.chat;
-  const { onShow: showChat } = tasks.chatView;
-  const chatNamed = useChatNames(tasks.tasks, chatRead, undefined);
-  const chat = useMemo(
-    () =>
-      chatRead === undefined
-        ? undefined
-        : { chat: chatRead.answer, names: chatNamed, onOpen: showChat },
-    [chatRead, chatNamed, showChat],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
@@ -1381,7 +1363,6 @@ function PlanDocument({
                                 onOpenPullRequest={openPullRequestDoor}
                                 onOpenTarget={openTargetDoor}
                                 cards={cards}
-                                chat={chat}
                                 onFork={forkDoor}
                                 onContinue={continueDoor}
                               />
@@ -1430,17 +1411,6 @@ function PlanDocument({
                           board: inbox.board,
                           drafted: inbox.drafted,
                         }}
-                        chat={
-                          chatOn && tasks.chatView.available ? (
-                            <Fill
-                              as={FILL_ELEMENT.SECTION}
-                              className="desktop-task-chat"
-                              aria-label="Chat"
-                            >
-                              <TaskChatTab tasks={tasks} taskId={task.id} />
-                            </Fill>
-                          ) : undefined
-                        }
                         activity={
                           switched
                             ? { listed: activityListed, onListed, onShown: setShownTab }

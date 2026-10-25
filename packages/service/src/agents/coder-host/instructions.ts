@@ -715,7 +715,7 @@ Your workspace keeps one memory shared by every member and every one of its agen
  * for what it was handed, for whether its token reads the repository's CI,
  * for the link of the task it works on, null for an agent on none, and for
  * whose its commits are: the developer's where the co-author trailer is
- * handed, the App's otherwise, for whether its starter turned Chat on, for
+ * handed, the App's otherwise, for whether its starter turned Memory on, for
  * the branch it was started on, null for the default branch, and for
  * whether its credential is its starter's own token, which reaches GitHub's
  * REST API alone, and for the harness it runs on, which names the tools that

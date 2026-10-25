@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   createAutomation,
   ownFailedRunsLiveStatement,
@@ -15,14 +14,6 @@ import {
   createChannel,
   ensureGeneralChannel,
 } from "@luke/database/models/channel-store";
-import {
-  ensureMember,
-  ensureTaskChannel,
-  findOrMakeDm,
-  markNoticed,
-  postAsk,
-  postMessage,
-} from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { updateTask } from "@luke/database/models/task-store";
 import { organization, user } from "@luke/database/schemas/auth";
@@ -31,7 +22,7 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import { ACCOUNT_CHAT_REASON, type AccountInboxTask } from "@luke/features/account-inbox-wire";
+import type { AccountInboxTask } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -41,7 +32,6 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import { CHAT_ASK, CHAT_BLOCK, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_KIND,
@@ -67,7 +57,6 @@ import {
   scopeInboxLiveRowsSchema,
 } from "@luke/features/live-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -283,51 +272,12 @@ const liveAnswerOf = (userId: string, readAt: number) =>
         plans: yield* runLive(parts.plans, accountInboxLiveRowSchemas.plans),
         automations: yield* runLive(parts.automations, accountInboxLiveRowSchemas.automations),
         failedRuns: yield* runLive(failedRuns, accountInboxLiveRowSchemas.failedRuns),
-        chatAsks: yield* runLive(parts.chatAsks, accountInboxLiveRowSchemas.chatAsks),
-        chatNotices: yield* runLive(parts.chatNotices, accountInboxLiveRowSchemas.chatNotices),
       },
       readAt,
     );
   });
 
 it.layer(getTestDB())("the inbox store", (it) => {
-  it.effect(
-    "a message that waits names its author by what they are called, a person by their account's name, alike in the live read and the held read",
-    () =>
-      Effect.gen(function* () {
-        const { agent, workspaceId } = yield* openAgentIn;
-        const owner = agent.userId;
-        const teammate = yield* openUser;
-        yield* Database.use((db) =>
-          db.update(user).set({ name: "Grace Hopper" }).where(eq(user.id, teammate)),
-        );
-        yield* joinWorkspace(workspaceId, teammate);
-        for (const each of [owner, teammate]) {
-          yield* writeAccountPreferences(each, { experiments: { [EXPERIMENT.CHAT]: true } });
-        }
-        const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, agent.taskId));
-        const grace = Option.getOrThrow(
-          yield* ensureMember(owner, workspaceId, { kind: MEMBER_KIND.HUMAN, userId: teammate }),
-        );
-        // A person posts as themselves, so Grace's ask is hers.
-        const fromGrace = Result.getOrThrow(
-          yield* postAsk(teammate, workspaceId, {
-            authorMemberId: grace.id,
-            to: { channelId: channel.id },
-            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Ship it?" }],
-            clientKey: randomUUID(),
-            key: "ship",
-            ask: { response: { type: CHAT_ASK.APPROVAL } },
-          }),
-        );
-        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START);
-        const live = yield* liveAnswerOf(owner, held.readAt);
-        assert.deepEqual({ ...live, cursor: held.cursor }, held);
-        const fromOf = new Map(held.chat?.map((entry) => [entry.messageId, entry.from]));
-        assert.equal(fromOf.get(fromGrace.message.id), "Grace Hopper");
-      }),
-  );
-
   it.effect(
     "the live statements of a plan's inbox and an agent's deliver the items their held reads answer, open, answered, and closed alike, to a member and to no one else",
     () =>
@@ -441,62 +391,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         });
         yield* updateTask(onTask.agent.userId, shelved.id, { status: TASK_STATUS.DONE });
 
-        // Chat on for everyone but the taskless agent's starter: an open ask the plan's agent
-        // posts in its channel, a direct message to the teammate they were told of, and the
-        // starter told of the ask itself, which waits once.
         const owner = onTask.agent.userId;
-        const workspace = onTask.workspaceId;
-        for (const each of [owner, teammate, outsider]) {
-          yield* writeAccountPreferences(each, { experiments: { [EXPERIMENT.CHAT]: true } });
-        }
-        const person = (userId: string) =>
-          Effect.map(
-            ensureMember(owner, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
-            Option.getOrThrow,
-          );
-        const ownerMember = yield* person(owner);
-        const teammateMember = yield* person(teammate);
-        const agentMember = Option.getOrThrow(
-          yield* ensureMember(owner, workspace, {
-            kind: MEMBER_KIND.AGENT,
-            agentId: onTask.agent.agentId,
-          }),
-        );
-        const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, onTask.agent.taskId));
-        const asked = Result.getOrThrow(
-          yield* postAsk(owner, workspace, {
-            authorMemberId: agentMember.id,
-            to: { channelId: channel.id },
-            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Which expiry?" }],
-            clientKey: randomUUID(),
-            key: "invite-expiry",
-            ask: {
-              title: "Invite expiry",
-              response: {
-                type: CHAT_ASK.CHOICE,
-                options: [{ label: "Seven days" }, { label: "Five days" }],
-              },
-            },
-          }),
-        );
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(owner, workspace, agentMember.id, teammateMember.id),
-        );
-        const direct = Result.getOrThrow(
-          yield* postMessage(owner, workspace, {
-            authorMemberId: agentMember.id,
-            to: { channelId: dm.id },
-            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
-            clientKey: randomUUID(),
-          }),
-        );
-        assert.ok(
-          yield* markNoticed(owner, workspace, teammateMember.id, dm.id, direct.message.seq),
-        );
-        assert.ok(
-          yield* markNoticed(owner, workspace, ownerMember.id, channel.id, asked.message.seq),
-        );
-
         for (const reader of [owner, taskless.userId, teammate, outsider]) {
           const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
           const live = yield* liveAnswerOf(reader, held.readAt);
@@ -512,34 +407,12 @@ it.layer(getTestDB())("the inbox store", (it) => {
           shelvedRead.items.some((item) => item.planId === shelved.id),
           "its item waits like any other",
         );
-        // The notices name their sender by its title, or its model before it has one.
-        const [authorRow] = yield* Database.use((db) =>
-          db
-            .select({ title: codingAgent.title, model: codingAgent.model })
-            .from(codingAgent)
-            .where(eq(codingAgent.id, onTask.agent.agentId)),
-        );
-        const author = authorRow?.title ?? authorRow?.model;
         const read = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
         assert.equal(read.items.length + (read.planless?.length ?? 0), 4);
         const unreadOf = (answer: typeof read) =>
           answer.items.find((item) => item.id === first.id)?.unread;
         assert.equal(unreadOf(read), true, "the teammate has not read it");
         assert.equal(unreadOf(yield* accountInboxPast(owner, INBOX_CURSOR_START)), false);
-        // Every change in a test lands at one instant, so the asks stand before the notices.
-        assert.deepEqual(
-          read.chat?.map((entry) => [entry.messageId, entry.reason, entry.from]),
-          [
-            [asked.message.id, ACCOUNT_CHAT_REASON.ASK, author],
-            [direct.message.id, ACCOUNT_CHAT_REASON.DIRECT, author],
-          ],
-        );
-        assert.deepEqual(
-          (yield* accountInboxPast(owner, INBOX_CURSOR_START)).chat?.map((entry) => entry.reason),
-          [ACCOUNT_CHAT_REASON.ASK],
-          "a notice of an ask is the ask",
-        );
-        assert.deepEqual((yield* accountInboxPast(outsider, INBOX_CURSOR_START)).chat, []);
       }),
   );
 

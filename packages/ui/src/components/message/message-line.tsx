@@ -1,7 +1,7 @@
 /**
  * message-line.tsx -- the line under a message: who sent it and when, at the edge of the column the message keeps to, and its actions on the side toward the middle.
  *
- * An agent's transcript and a chat notice both end a message on this line,
+ * An agent's transcript and another agent's message both end a message on this line,
  * so the name, the time and the buttons never trade places from one
  * message to the next. The time is `Time`'s day and clock, a call's
  * words, after a dot where someone is named; the actions are a

@@ -7,7 +7,6 @@ import {
   EVE_TOOL,
   RETIRED_TOOL,
 } from "@luke/features/agent-tools";
-import { CHAT_TOOL } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodos,
@@ -660,17 +659,6 @@ function namedCall(
   };
 }
 
-/** A chat call named by a field that may hold a member's mention link, said by the name its chip says rather than its address (`linkLabels`). */
-function chatCall(
-  kind: CallKind,
-  input: WireValue | undefined,
-  output: WireValue | undefined,
-  field: string,
-): ToolCallView {
-  const call = namedCall(kind, input, output, field);
-  return { ...call, subject: linkLabels(call.subject) };
-}
-
 /** A call about one agent named by the agent's title its answer gives, as the agent's tab names it; nothing before the answer, whose input holds only an id. */
 function answeredAgentCall(
   kind: CallKind,
@@ -1141,14 +1129,6 @@ const RETIRED_TOOL_VIEWS = {
   [RETIRED_TOOL.REPLY_INBOX]: READ_INBOX_CALL,
   [RETIRED_TOOL.POST_TO_INBOX]: READ_INBOX_CALL,
   [RETIRED_TOOL.READ_INBOX]: READ_INBOX_CALL,
-  [RETIRED_TOOL.POST_CHAT]: ({ input, output }) =>
-    chatCall(CALL_KIND.CHAT_POST, input, output, "text"),
-  [RETIRED_TOOL.READ_CHAT]: ({ input, output }) =>
-    chatCall(CALL_KIND.CHAT_READ, input, output, "channel"),
-  [RETIRED_TOOL.RESOLVE_ASK]: ({ input, output }) =>
-    namedCall(CALL_KIND.CHAT_RESOLVE, input, output, "key"),
-  [RETIRED_TOOL.EDIT_CHANNEL]: ({ input, output }) =>
-    namedCall(CALL_KIND.CHAT_EDIT_CHANNEL, input, output, "channel"),
   [RETIRED_TOOL.LIST_ISSUES]: ({ input, output }) =>
     namedCall(CALL_KIND.LIST_ISSUES, input, output, undefined),
   [RETIRED_TOOL.READ_ISSUE]: ({ input, output }) => issueCall(CALL_KIND.READ_ISSUE, input, output),
@@ -1199,9 +1179,6 @@ export function toolCallView(input: {
   );
 }
 
-/** The tools a member talks in chat with, by name. */
-type ChatTool = (typeof CHAT_TOOL)[keyof typeof CHAT_TOOL];
-
 /** What a call's row may open: something the window already draws in a tab of its own. */
 export const TOOL_TARGET = {
   /** A coding agent's tab in the task's column. */
@@ -1216,8 +1193,6 @@ export const TOOL_TARGET = {
   SHOWN_CODE: "shown-code",
   /** The task's Inbox tab, on the item a call names by its key where it names one. */
   INBOX: "inbox",
-  /** The plan's Chat tab, its channel of the workspace's chat. */
-  CHAT: "chat",
   /** Another task of the workspace, opened on its plan as the sidebar opens it. */
   TASK: "task",
   /** A pull request the agent opened, its Pull request tab where the window has one and GitHub's page otherwise; its row opens it through the link opener (`useOpenLink`), as a link to the pull request does, so no window's `onOpenTarget` is asked for it. */
@@ -1235,7 +1210,6 @@ export type ToolTarget =
       /** The key of the calling agent's thread the call posted on or withdrew, whose item the Inbox opens on; none for a read of the whole Inbox. */
       readonly key?: string;
     }
-  | { readonly kind: typeof TOOL_TARGET.CHAT }
   | { readonly kind: typeof TOOL_TARGET.TASK; readonly task: string }
   | { readonly kind: typeof TOOL_TARGET.PULL_REQUEST; readonly url: string };
 
@@ -1247,7 +1221,6 @@ export const TARGET_HINT = {
   [TOOL_TARGET.PLAN]: "Open the plan",
   [TOOL_TARGET.SHOWN_CODE]: "Open the file",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
-  [TOOL_TARGET.CHAT]: "Open the task's chat",
   [TOOL_TARGET.TASK]: "Open the task",
   [TOOL_TARGET.PULL_REQUEST]: "Open the pull request",
 } as const satisfies Record<ToolTarget["kind"], string>;
@@ -1263,24 +1236,11 @@ interface TargetedCall {
 const BOARD_TARGET: ToolTarget = { kind: TOOL_TARGET.BOARD };
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
-const CHAT_TARGET: ToolTarget = { kind: TOOL_TARGET.CHAT };
 
 /** The thread a call names by its key, a post's or a withdrawal's, whose item its row opens; the whole Inbox where it names none. */
 function namedThread(call: TargetedCall): ToolTarget {
   const key = stringAt(call.input, "key");
   return key === undefined || key === "" ? INBOX_TARGET : { kind: TOOL_TARGET.INBOX, key };
-}
-
-/**
- * A post into the poster's plan channel, where its plan's Chat tab shows it:
- * one naming neither a `to` nor a message it replies to. Note that a post
- * elsewhere, a read, and a resolve open nothing and fold open instead,
- * because the channel each reaches is named in words the window cannot
- * place on a channel, or not named at all.
- */
-function tasksOwnPost(call: TargetedCall): ToolTarget | undefined {
-  if (!isRecord(call.input) || "to" in call.input || "replyTo" in call.input) return undefined;
-  return CHAT_TARGET;
 }
 
 /** The agent a call names in its input, as a read of or a message to one does. */
@@ -1360,14 +1320,13 @@ function shownCode(call: TargetedCall): ToolTarget | undefined {
  * worker's own delegation and a loaded skill open their tabs through their
  * own rows (`DelegationRow`, `LoadedSkillView`), and a command, a search, or
  * a file's read, write, or patch, or a web read is read in its row's body,
- * so none is listed. A chat tool's call opens the plan's Chat tab, where
- * what it posted or read stands. Note that a coding agent's file calls stay in their
+ * so none is listed. Note that a coding agent's file calls stay in their
  * bodies, because a File tab and the Changes tab read the repository and
  * the pull request on GitHub rather than the agent's checkout, so what the
  * agent read or wrote and has not pushed would open on nothing.
  */
 const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | undefined> = new Map<
-  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL] | ChatTool,
+  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
   (call: TargetedCall) => ToolTarget | undefined
 >([
   [AGENT_TOOL.SHOW_PAGE, shownPage],
@@ -1397,7 +1356,6 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.READ_THREADS, () => INBOX_TARGET],
   [RETIRED_TOOL.READ_INBOX, () => INBOX_TARGET],
   [RETIRED_TOOL.REPLY_INBOX, () => INBOX_TARGET],
-  [CHAT_TOOL.POST, tasksOwnPost],
 ]);
 
 /**

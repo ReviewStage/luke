@@ -11,7 +11,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
-import { CHAT_NOTICE_FROM_CHARS, type WireRecord } from "@luke/wire";
+import { AGENT_MESSAGE_FROM_CHARS, type WireRecord } from "@luke/wire";
 import { describeWire } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import {
@@ -41,17 +41,16 @@ import { steerCodingAgent } from "./steer.js";
  * agent-message.ts -- `message_agent`: one coding agent's message to another of its workspace, shown in the two agents' transcripts alone.
  *
  * The sender's transcript keeps the call; the other agent's takes the
- * message as a line steered into its session as a chat notice is
- * (`chat-notify.ts`): minted for that agent's starter, whose principal its
- * turn runs under, under the sending agent's name (`MESSAGE_SENDER.AGENT`),
- * marked as a notice with no place in any chat, so its window draws it as
- * the sender's bubble rather than the developer's, and keyed by eve's id
- * for the call, so a call run again sends once. Its words open with who
- * sent it, by the sender's mention link, and close with how to answer, by
- * the sender's id, both written here rather than by the model, so the
- * receiving agent reads them as a colleague's word, never the developer's
- * or Luke's. No chat row is written: the message stands in the two
- * transcripts and nowhere else. It reaches any agent of the sender's
+ * message as a line steered into its session: minted for that agent's
+ * starter, whose principal its turn runs under, under the sending agent's
+ * name (`MESSAGE_SENDER.AGENT`), marked as an agent message
+ * (`MESSAGE_CHANNEL.AGENT_MESSAGE`), so its window draws it as the sender's
+ * bubble rather than the developer's, and keyed by eve's id for the call,
+ * so a call run again sends once. Its words open with who sent it, by the
+ * sender's mention link, and close with how to answer, by the sender's id,
+ * both written here rather than by the model, so the receiving agent reads
+ * them as a colleague's word, never the developer's or Luke's. The message
+ * stands in the two transcripts and nowhere else. It reaches any agent of the sender's
  * workspace, on any task, held to what a steer into it is held to; an
  * archived agent, one whose starter has left the workspace, or the sender
  * itself takes none.
@@ -88,8 +87,6 @@ export const MESSAGE_AGENT_REFUSAL = {
     "Not sent: that agent's session is still coming up; the same message a moment later is taken.",
   RETIRED:
     "Not sent: that agent's session has ended for good, so nothing reaches it; only a new agent goes on from its work.",
-  TASK_ARCHIVED:
-    "Not sent: that agent's task is archived, so its agents take no message until a member unarchives it.",
   IMAGE_PREPARING:
     "Not sent: that agent's sandbox image is still being prepared; the same message in a minute or two is taken.",
   PLAN_SIGNED_OUT:
@@ -110,7 +107,6 @@ const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, MESSAGE_AGENT_REFUSAL.NOT_REACHABLE],
   [HOSTED_API_ERROR.AGENT_NOT_READY, MESSAGE_AGENT_REFUSAL.NOT_READY],
   [HOSTED_API_ERROR.AGENT_RETIRED, MESSAGE_AGENT_REFUSAL.RETIRED],
-  [HOSTED_API_ERROR.TASK_ARCHIVED, MESSAGE_AGENT_REFUSAL.TASK_ARCHIVED],
   [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, MESSAGE_AGENT_REFUSAL.IMAGE_PREPARING],
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, MESSAGE_AGENT_REFUSAL.PLAN_SIGNED_OUT],
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, MESSAGE_AGENT_REFUSAL.PLAN_UNREACHABLE],
@@ -164,7 +160,7 @@ function messageLine(sender: CodingAgent, senderMention: string, text: string): 
 function senderName(sender: CodingAgent): string {
   let kept = "";
   for (const character of agentName(sender).trim()) {
-    if (kept.length + character.length > CHAT_NOTICE_FROM_CHARS) break;
+    if (kept.length + character.length > AGENT_MESSAGE_FROM_CHARS) break;
     kept += character;
   }
   return kept.trim();
@@ -225,7 +221,7 @@ export function runMessageAgent(
         sender: senderOf(sender),
         metadata: {
           author: MESSAGE_AUTHOR.AGENT,
-          channel: MESSAGE_CHANNEL.CHAT,
+          channel: MESSAGE_CHANNEL.AGENT_MESSAGE,
           from: senderName(sender),
         },
       }).pipe(Effect.result);

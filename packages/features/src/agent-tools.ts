@@ -11,7 +11,6 @@
  */
 
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "./board-vocabulary.js";
-import { CHAT_TOOL } from "./chat-wire.js";
 import {
   AGENT_MESSAGE_TOOL,
   CODING_AGENT_DELEGATE_TOOL,
@@ -130,10 +129,8 @@ export const CONNECTION_TOOL = {
  * names: eve's provider-run web reads, which coding agents ran before they
  * had the public reads, the planning model's four tools about the
  * task's coding agents, since named as `AGENT_TOOL`'s agent tools, the
- * four about the workspace's own issues, gone with them, the inbox's
- * post and read, since named for the channels a thread is posted to, and
- * the workspace's chat, whose threads moved to channels and whose direct
- * messages moved to `message_agent`.
+ * four about the workspace's own issues, gone with them, and the inbox's
+ * post and read, since named for the channels a thread is posted to.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -158,11 +155,6 @@ export const RETIRED_TOOL = {
   // Renamed `post_thread` and `read_threads`, since a thread is posted to a channel.
   POST_TO_INBOX: "post_to_inbox",
   READ_INBOX: "read_inbox",
-  // The workspace's chat, retired for channels' threads and `message_agent`.
-  POST_CHAT: CHAT_TOOL.POST,
-  READ_CHAT: CHAT_TOOL.READ,
-  RESOLVE_ASK: CHAT_TOOL.RESOLVE,
-  EDIT_CHANNEL: CHAT_TOOL.EDIT_CHANNEL,
 } as const;
 
 /**

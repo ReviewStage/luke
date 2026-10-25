@@ -86,7 +86,7 @@ import {
 import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
-  type ChatNoticeMetadata,
+  type AgentMessageMetadata,
   isRecord,
   isWireString,
   MESSAGE_AUTHOR,
@@ -328,7 +328,7 @@ const RECEIVED_SENDERS: ReadonlySet<string> = new Set([
 
 /**
  * Whether one of the developer's lines is the other side's words, drawn at
- * the column's left as a chat notice is: Luke's from a call, GitHub's, and
+ * the column's left as another agent's message is: Luke's from a call, GitHub's, and
  * another coding agent's. A person's and an automation's, which runs on its
  * creator's behalf, stand at the right.
  */
@@ -1544,31 +1544,16 @@ export function agentPart(part: WireValue): AgentPart {
 const readUserMetadata = Schema.decodeUnknownOption(USER_MESSAGE_METADATA);
 
 /**
- * What a chat notice says of the message it tells, where a chat notice
- * wrote the line rather than the developer: which kind of member posted
- * it, its place in the workspace's chat, and the poster's handle. Nothing
+ * What another coding agent's message, sent with `message_agent`, says of
+ * its sender, where one wrote the line rather than the developer; nothing
  * for the developer's own words, typed or spoken, or a row this build
  * cannot read.
  */
-export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | undefined {
+export function agentMessageOf(message: CodingAgentMessage): AgentMessageMetadata | undefined {
   if (message.role !== MESSAGE_ROLE.USER || message.metadata === undefined) return undefined;
   const read = Option.getOrUndefined(readUserMetadata(message.metadata));
   if (read === undefined || !("channel" in read)) return undefined;
-  return read.channel === MESSAGE_CHANNEL.CHAT ? read : undefined;
-}
-
-/**
- * The notice a transcript draws and copies a line as, the sender's rather
- * than the developer's: a chat notice while the window offers Chat, and a
- * message another agent sent with `message_agent`, which holds no place in
- * any chat, whatever it offers; nothing for any other line.
- */
-export function drawnNoticeOf(
-  message: CodingAgentMessage,
-  chatOn: boolean,
-): ChatNoticeMetadata | undefined {
-  const notice = chatNoticeOf(message);
-  return notice !== undefined && (chatOn || notice.chat_seq === undefined) ? notice : undefined;
+  return read.channel === MESSAGE_CHANNEL.AGENT_MESSAGE ? read : undefined;
 }
 
 /**
