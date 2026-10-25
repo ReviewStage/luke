@@ -233,7 +233,7 @@ function rowLooks(column: Element): Map<string, Look> {
   const add = column.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]');
   assert.ok(add, "the strip's +");
   act(() => add.click());
-  const rows = [...column.querySelectorAll('.tab-add-menu [role="option"]')].map((row) => {
+  const rows = [...column.querySelectorAll('.luke-searchable-menu [role="option"]')].map((row) => {
     const label = row.querySelector(".luke-combobox-option-label")?.textContent ?? "";
     return [
       label,
@@ -334,7 +334,7 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
     (each) => each.querySelector(".luke-tab-label")?.textContent === "#42 Expire invitations",
   );
   const [chip, files] = container.querySelectorAll<HTMLElement>(
-    'button[data-mention-ref][data-kind="link"]',
+    'a[data-mention-ref][data-kind="link"]',
   );
   const cardOf = (control: HTMLElement | undefined) => {
     assert.ok(control, "the pull request is named");

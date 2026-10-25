@@ -20,11 +20,12 @@
     color: inherit;
     font: inherit;
     text-align: left;
+    text-decoration: none;
     vertical-align: baseline;
     white-space: nowrap;
   }
 
-  button.luke-inline-ref {
+  :is(button, a).luke-inline-ref {
     cursor: pointer;
   }
 
@@ -73,7 +74,7 @@
   }
 
   .luke-inline-ref[data-gone="true"] {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   .luke-inline-ref[data-gone="true"] .luke-inline-ref-label {
@@ -81,7 +82,7 @@
   }
 
   /* A link's name underlines under the pointer, as a link's does. */
-  button.luke-inline-ref[data-look="link"]:hover .luke-inline-ref-label {
+  :is(button, a).luke-inline-ref[data-look="link"]:hover .luke-inline-ref-label {
     text-decoration: underline;
     text-underline-offset: var(--luke-space-2);
   }
@@ -93,6 +94,10 @@
   .luke-inline-ref[data-look="wash"] {
     gap: var(--luke-space-4);
     border-radius: var(--luke-radius-6);
+    transition:
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      box-shadow var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-inline-ref[data-look="wash"] .luke-inline-ref-label {
@@ -119,8 +124,9 @@
     border-radius: var(--luke-radius-6);
     background: var(--luke-color-fill-strong);
     color: var(--luke-color-text);
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-tag-weight);
     line-height: 1.2;
+    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-inline-ref[data-look="pill"]:has(.luke-inline-ref-state) {
@@ -136,10 +142,13 @@
   .luke-inline-ref[data-look="pill"] .luke-inline-ref-state {
     padding-left: var(--luke-space-4);
     border-left: 1px solid var(--luke-color-border-strong);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-caption-weight);
   }
 
-  button.luke-inline-ref[data-look="pill"]:not([data-gone="true"]):is(:hover, :focus-visible) {
+  :is(button, a).luke-inline-ref[data-look="pill"]:not([data-gone="true"]):is(
+    :hover,
+    :focus-visible
+  ) {
     background: var(--luke-color-fill-selected);
   }
 

@@ -22,12 +22,15 @@ for a frame. Durations and delays come only from the tokens in
 `packages/ui/src/tokens/motion-tokens.css` (`--luke-duration-shape`,
 `--luke-duration-exit`, `--luke-duration-quick`, `--luke-duration-fast`, `--luke-duration-hover`,
 `--luke-duration-pane`, `--luke-motion-exit`, `--luke-motion-pane`, `--luke-row-stagger`,
-`--luke-hint-delay`, `--luke-late-delay`, and `--luke-confirm-delay`, how long an
+`--luke-hint-delay`, `--luke-late-delay`, `--luke-settle-delay`, and `--luke-confirm-delay`, how long an
 autosave's Saved stands). Never write a literal millisecond into a
 rule: reduced motion and capture runs zero the tokens, and a literal is a
-motion those runs cannot stop. The one sanctioned exception is an endless loop
+motion those runs cannot stop. Easings are tokens too, never `ease` or `ease-out`: a fade, a
+hover settle and a press ride `--luke-motion-exit`, a pane and a fold `--luke-motion-pane`,
+and a travel the spring. A script that plays motion reads the same tokens through `tokenTiming`
+(`@luke/ui`), and asks `motionHeld` rather than `matchMedia` whether to move at all. The one sanctioned exception is an endless loop
 (a spinner, a breathing idle, the face's own motions) whose
-`animation-play-state` answers `--loop-motion` or `--luke-face-motion`: those runs
+`animation-play-state` answers `--luke-loop-motion` or `--luke-face-motion`: those runs
 stop it by pausing rather than by zeroing, so its duration may be a literal,
 and a loop that carries one must answer a play-state token. A finite companion
 timed to a generated face gesture may also use the gesture's literal phase,
@@ -100,6 +103,27 @@ their generators in `@luke/brand` (`pnpm --filter @luke/brand check` reports
 drift when run by hand), renderer CSS may not reintroduce `@starting-style`, and no rule may transition
 a layout property. A new exception belongs in this contract in the same change.
 
+## Width lines and zoom
+
+The window answers three width lines, each measured in script on the stage
+(the panel's root element) in CSS pixels, with a leave width a few pixels past
+its enter width so a window dragged across it does not flicker:
+
+- **Narrow**, enter 640, leave 672 (`shell-room.ts`): the phone's one pane, with
+  the sidebar a drawer, the mobile bar, and the side panel full screen only.
+- **Split**, enter 860, leave 892 (`column-split.ts`): a screen that lists
+  things beside the one chosen shows two columns or one, by its own width.
+- **Pinned**, enter 1120, leave 1160 (`sidebar-collapse.ts`): the sidebar docks
+  beside the work or floats over it.
+
+Zoom is a window size. It works by shrinking the CSS pixel, so the desktop
+window's least width (760) is 608 CSS pixels at 125% and 380 at 200%, and the
+default window (1280) is 1024 at 125%. The desktop can therefore be narrow
+when zoomed, and then draws the phone's layout under a mouse. Dean accepted
+that: it is the responsive layout doing its job, and the window's least size
+does not rise with zoom. A layout change is checked at the least window at 125%
+and 200% as well as at a phone's width (`desktop/shell-room.test.ts`).
+
 ## Shared tokens and components
 
 The tokens a control is drawn with, and every control any app draws,
@@ -148,8 +172,8 @@ black, or text gray. The desktop's palette writes each colour once as a
 `light-dark()` pair, and the root's `system` theme follows the Mac's
 appearance, which Luke's Theme setting drives through Electron's
 `nativeTheme.themeSource`. Every colour of the window's own that differs in
-the light is restated in its file's `@media (prefers-color-scheme: light)`
-`:root` block. Either way a change of appearance is the stylesheet's alone:
+the light is written the same way, as a `light-dark()` pair in its own file,
+so a change of appearance is the stylesheet's alone:
 nothing re-renders, and the whiteboard takes it as a new theme for the canvas
 already mounted. No colour literal belongs anywhere but a token block, a
 `:root` or a palette's profile; a mask's black is an alpha rather than a
@@ -215,7 +239,7 @@ without a fill. A chip, which names a value or a thing rather than an act, is
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
 switch, option, and menu item, and anything else in the tab order, draws
-`--luke-color-focus-ring` at `--focus-ring-width`, `--focus-ring-offset` off its edge, and
+`--luke-color-focus-ring` at `--luke-focus-ring-width`, `--luke-focus-ring-offset` off its edge, and
 only once the keyboard has moved focus (`keyboard-modality.ts`), so a press
 never rings a control. A control whose drawn shape is a part of it, a picture
 tile's picture over its caption, marks that part `data-focus-ring`, which
@@ -224,21 +248,21 @@ unavailable button that keeps the keyboard (`aria-disabled`) fades its fill
 and words rather than itself, so its ring stays at full strength. A box that clips
 what it holds keeps the ring whole one of two ways: one that clips only to hold
 in what runs long, a reply or a path, clips past the ring (`overflow: clip`,
-`overflow-clip-margin: var(--focus-ring-room)`, which names its box because
+`overflow-clip-margin: var(--luke-focus-ring-room)`, which names its box because
 Chromium drops a bare `calc()` there), and a card whose clip is its own edge
-sets `--focus-ring-offset` to `--focus-ring-inset` for what it holds, so the
+sets `--luke-focus-ring-offset` to `--luke-focus-ring-inset` for what it holds, so the
 ring is drawn inside, on a header rounded as the card is. Every
-control scrolls in with `--focus-ring-reach` to spare (`scroll-margin`), and a
+control scrolls in with `--luke-focus-ring-reach` to spare (`scroll-margin`), and a
 scroller that fades an edge scroll-pads by the fade, so the keyboard never
 leaves a row sliced at a scroller's edge or under its fade. A
-scroller whose rows run edge to edge pads by `--focus-ring-reach` and gives it
+scroller whose rows run edge to edge pads by `--luke-focus-ring-reach` and gives it
 back as a negative margin, so a row's ring is never cut off at its sides, and a
 row holding the keyboard stands over its neighbours, so the next row's fill
 leaves its ring whole. A row that runs the scroller's width by design, a line of
 code or Pierre's tree, draws the ring inside it instead. A
-field holding the caret wears the same ring centred on its edge however the
-caret arrived, and a field set borderless in a well, a search's or the
-composer's, rings the well (`.field-well`). A rule that takes the ring away
+field holding the caret wears no ring, however the caret arrived: the caret
+and the field's own ground say where typing goes, and so does a well's, a
+search's or the composer's, around a field set borderless in it. A rule that takes the ring away
 marks it `/* no ring: … */` with what shows focus instead; menus mark a row
 with its fill. An unmarked one is a bug, and so is a ring drawn off the tokens.
 

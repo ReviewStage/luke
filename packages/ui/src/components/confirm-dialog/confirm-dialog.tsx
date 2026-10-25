@@ -1,5 +1,7 @@
 import type { ActionResult } from "@luke/wire";
-import { useId, useMemo, useRef, useState } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { isComposingKey } from "../../composing-key.js";
 import {
   CONFIRM_STAGE,
   type ConfirmSurroundings,
@@ -8,50 +10,66 @@ import {
   type HeldConfirm,
   useConfirm,
 } from "../../confirm-state.js";
-import { BUTTON_VARIANT, Button } from "../button/button.js";
-import { DIALOG_ROLE, Dialog } from "../dialog/dialog.js";
+import { DIALOG_ROLE, Dialog, type RestoreTo } from "../dialog/dialog.js";
+import { DIALOG_TONE, DialogActions, type DialogTone } from "../dialog/dialog-actions.js";
+import { DIALOG_ANSWERS, useDialogFoot } from "../dialog/dialog-foot.js";
+import { ErrorLine } from "../error-line/error-line.js";
 import { FormField } from "../form-field/form-field.js";
+import { TEXT_VARIANT, Text } from "../text/text.js";
 import { TEXT_FIELD_AUTO_COMPLETE, TextField } from "../text-field/text-field.js";
 
 /**
- * confirm-dialog.tsx -- an irreversible act's question as a modal over the window: what goes, then Cancel and the act.
+ * confirm-dialog.tsx -- the question before an act that costs something, as a modal over the window or, asked inside a dialog, at that dialog's foot: what goes, then Cancel and the act.
  *
  * The window asks the way every desktop app does: it dims, a card names what
- * the act takes with it, and the two answers sit at its foot, the safe one
- * first and the act in red last, or in the accent for an act that can be
- * undone, such as restoring a version of a plan. Focus lands on Cancel, so a
- * key already pressed changes nothing; Tab stays inside the card; Escape, a
- * press on the dimmed window, and Cancel all withdraw it, and however it
- * goes, focus goes back to whatever asked if that still stands. Enter is the
- * focused button's own, so it acts only from the act's button.
+ * the act takes with it, and the two answers sit at its foot
+ * (`DialogActions`), the safe one first and the act last. The act's colour
+ * follows what it costs (`loss`): red only for what cannot be undone, and in
+ * the accent for an act that can be undone but still asks because it reaches
+ * someone else. Focus lands on Cancel, so a key already pressed changes
+ * nothing; Tab stays inside the card; Escape, a press on the dimmed window,
+ * and Cancel all withdraw it, and however it goes, focus goes back to
+ * whatever asked if that still stands, or where its owner says once the act
+ * took that away (`restoreTo`). Enter is the focused button's own, so
+ * it acts only from the act's button.
  *
  * The question is `confirm-state.ts`'s, so it withdraws the render its subject
- * or its surface goes. An answer already given finishes where it stands with
- * both buttons stilled; one that was refused keeps the card up saying why, so
- * the act can be tried again or let go.
+ * or its surface goes. However it goes, the card fades out on the exit token
+ * as it stood, a landed act still wearing its check, rather than vanishing.
+ * An answer already given finishes where it stands with
+ * both buttons stilled; one that was refused keeps the card up saying why,
+ * in the one `ErrorLine` every form part says what went wrong in, so the act
+ * can be tried again or let go.
  */
 
-/** How the act's button is drawn: red for an act that destroys, the accent for one that can be undone. */
-export const DIALOG_TONE = {
-  DANGER: "danger",
-  PRIMARY: "primary",
+/**
+ * What an act that asks first costs, which decides its colour. An act that
+ * can be undone and reaches no one else asks nothing: it happens at once and
+ * offers Undo.
+ */
+export const CONFIRM_LOSS = {
+  /** Past undoing: the act is red. */
+  IRREVERSIBLE: "irreversible",
+  /** Can be undone, but reaches someone else (removing a member, transferring ownership, disconnecting), so it still asks, in the accent. */
+  AFFECTS_OTHERS: "affects-others",
 } as const;
 
-export type DialogTone = (typeof DIALOG_TONE)[keyof typeof DIALOG_TONE];
+export type ConfirmLoss = (typeof CONFIRM_LOSS)[keyof typeof CONFIRM_LOSS];
 
-/** The act's button's look, by its tone. */
-const ACT_VARIANT = {
-  [DIALOG_TONE.DANGER]: BUTTON_VARIANT.DANGER,
-  [DIALOG_TONE.PRIMARY]: BUTTON_VARIANT.PRIMARY,
-} as const satisfies Record<DialogTone, string>;
+/** The act's tone, by what it costs. */
+const LOSS_TONE = {
+  [CONFIRM_LOSS.IRREVERSIBLE]: DIALOG_TONE.DANGER,
+  [CONFIRM_LOSS.AFFECTS_OTHERS]: DIALOG_TONE.PRIMARY,
+} as const satisfies Record<ConfirmLoss, DialogTone>;
 
-/** What the dialog says: its title, what the act takes with it if anything needs saying, and the act's word, and what a reader is told while it runs; the act is red unless its tone says otherwise. */
+/** What the dialog says: its title, what the act takes with it if anything needs saying, and the act's word, and what a reader is told while it runs. */
 export interface DialogQuestion {
   title: string;
   body?: string;
   verb: string;
   running: string;
-  tone?: DialogTone;
+  /** What the act costs, which decides its colour: no question asks without saying it. */
+  loss: ConfirmLoss;
 }
 
 /** One confirming act as a dialog holds it: the confirm, and whether its subject and surface still stand. */
@@ -79,15 +97,13 @@ export function useConfirmDialog(
 
 /**
  * What the act takes with it, the name a gate asks for, and a refusal,
- * between the shared dialog's title and its answers. The body is the part
- * that gives way and scrolls, so the title and the answers stay on screen
- * however short the window is; the gate's name is set apart from the words
- * around it so it reads as exactly what to type.
+ * between the shared dialog's title and its answers, which hold them in the
+ * middle that gives way and scrolls (`Dialog`), so the title and the answers
+ * stay on screen however short the window is; the gate's name is set apart
+ * from the words around it so it reads as exactly what to type.
  */
-const BODY =
-  "m-0 min-h-0 overflow-x-hidden overflow-y-auto text-body text-muted-foreground wrap-anywhere";
+const BODY = "m-0 text-body text-muted-foreground wrap-anywhere";
 const GATE = "font-mono text-foreground wrap-anywhere";
-const REFUSAL = "m-0 text-caption text-danger wrap-anywhere";
 
 /** What the act's button is told by the stage of its answer. */
 interface ActState {
@@ -100,20 +116,24 @@ interface ActState {
 
 /**
  * The card itself, drawn afresh on each opening, so a gate's words start
- * empty every time it is asked.
+ * empty every time it is asked, and kept through its fade as it closes.
  */
 function ConfirmCard({
+  open,
   confirm,
   question,
   field,
   gate,
+  restoreTo,
   act,
   children,
 }: {
+  open: boolean;
   confirm: DialogConfirm;
   question: DialogQuestion;
   field: React.RefObject<HTMLInputElement | null> | undefined;
   gate: string | undefined;
+  restoreTo: RestoreTo | undefined;
   act: ActState;
   children: React.ReactNode;
 }): React.JSX.Element {
@@ -136,9 +156,10 @@ function ConfirmCard({
   };
   // Enter in the question's field, or in its gate, answers it as a press of
   // the act would, which a gate still locked refuses with the act's own
-  // shake; anywhere else Enter is the focused button's own.
+  // shake; anywhere else Enter is the focused button's own. An Enter that
+  // confirms an input method's composition is the input method's, not the act's.
   const fieldKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" || settling) return;
+    if (event.key !== "Enter" || settling || isComposingKey(event)) return;
     if (event.target !== field?.current && event.target !== gateField.current) return;
     event.preventDefault();
     actButton.current?.click();
@@ -146,6 +167,7 @@ function ConfirmCard({
 
   return (
     <Dialog
+      open={open}
       role={DIALOG_ROLE.ALERT_DIALOG}
       title={question.title}
       describedBy={question.body ? bodyId : undefined}
@@ -153,26 +175,25 @@ function ConfirmCard({
       refused={rejection !== undefined && !acting}
       initialFocus={field ?? (gate === undefined ? cancel : gateField)}
       onDismiss={dismiss}
+      restoreTo={restoreTo}
       onKeyDown={fieldKey}
       actions={
-        <>
-          <Button ref={cancel} variant={BUTTON_VARIANT.QUIET} disabled={settling} onClick={dismiss}>
-            Cancel
-          </Button>
-          <Button
-            ref={actButton}
-            variant={ACT_VARIANT[question.tone ?? DIALOG_TONE.DANGER]}
-            disabled={acting || locked}
-            focusableWhenDisabled={locked}
-            busy={acting}
-            busyLabel={question.running}
-            done={landed}
-            onDone={act.onShown}
-            onClick={() => confirm.run()}
-          >
-            {question.verb}
-          </Button>
-        </>
+        <DialogActions
+          onCancel={dismiss}
+          cancelRef={cancel}
+          act={{
+            verb: question.verb,
+            tone: LOSS_TONE[question.loss],
+            onPress: () => confirm.run(),
+            running: question.running,
+            busy: acting,
+            disabled: locked,
+            focusableWhenDisabled: locked,
+            landed,
+            onShown: act.onShown,
+            ref: actButton,
+          }}
+        />
       }
     >
       {question.body ? (
@@ -202,27 +223,64 @@ function ConfirmCard({
           )}
         </FormField>
       )}
-      {rejection !== undefined && !acting ? (
-        <p className={REFUSAL} role="alert">
-          {rejection}
-        </p>
-      ) : null}
+      <ErrorLine>{rejection !== undefined && !acting ? rejection : null}</ErrorLine>
     </Dialog>
   );
+}
+
+/** Where a question's answer stands, as the card or the foot that asks it draws it. */
+interface AnswerState extends ActState {
+  /** Whether the question is drawn at all: asked, running, refused, or showing its check. */
+  shown: boolean;
+  /** How many times it has been asked, so each asking draws afresh. */
+  openings: number;
+}
+
+/**
+ * Where a question's answer stands: asked, running, refused, or landed and
+ * showing its check until that has been seen.
+ *
+ * Note that an act landing is noticed in the render that sees it leave its
+ * run with no refusal, because a question put away an effect later would
+ * draw one frame with nothing there before its check.
+ */
+function useAnswerState(confirm: DialogConfirm): AnswerState {
+  const { stage, rejection } = confirm;
+  const acting = stage === CONFIRM_STAGE.ACTING;
+  const [wasStage, setWasStage] = useState(stage);
+  const [landed, setLanded] = useState(false);
+  // Whether the landed check has been seen, which puts the question away
+  // still wearing it, so it goes as it stood rather than as a question again.
+  const [seen, setSeen] = useState(false);
+  const [openings, setOpenings] = useState(0);
+  if (stage !== wasStage) {
+    setWasStage(stage);
+    setLanded(wasStage === CONFIRM_STAGE.ACTING && rejection === undefined && confirm.standing);
+    setSeen(false);
+    if (wasStage === CONFIRM_STAGE.RESTING) setOpenings((count) => count + 1);
+  }
+  if (landed && !confirm.standing) setLanded(false);
+  const shown =
+    confirm.standing && (confirmAsked(stage) || rejection !== undefined || (landed && !seen));
+  return { acting, landed, onShown: () => setSeen(true), shown, openings };
 }
 
 /**
  * The question over the window while it is asked, running, or refused, and
  * for the beat its check shows once the act lands, and nothing otherwise,
- * in the shared `Dialog`.
+ * in the shared `Dialog`, fading out as it goes.
  */
 export function ConfirmDialog({
+  open,
   confirm,
   question,
   field,
   gate,
+  restoreTo,
   children,
 }: {
+  /** Whether its owner shows it at all; falling, the card fades out. */
+  open: boolean;
   confirm: DialogConfirm;
   question: DialogQuestion;
   /** A field the question asks to be filled, which takes focus in Cancel's place; Enter in it answers. */
@@ -233,36 +291,124 @@ export function ConfirmDialog({
    * field that takes focus in Cancel's place. An ordinary delete asks no gate.
    */
   gate?: string | undefined;
+  /** Where focus goes once the card is gone if the act took away what asked (`nextRowOrHead`), as `Dialog` takes it. */
+  restoreTo?: RestoreTo | undefined;
   /** What the card holds under its body: the field, where the question asks one. */
   children?: React.ReactNode;
-}): React.JSX.Element | null {
-  const { stage, rejection } = confirm;
-  const acting = stage === CONFIRM_STAGE.ACTING;
-  // Note that an act landing is noticed in the render that sees it leave
-  // its run with no refusal, because a card closed an effect later would
-  // draw one frame with nothing there before its check.
-  const [wasActing, setWasActing] = useState(acting);
-  const [landed, setLanded] = useState(false);
-  if (acting !== wasActing) {
-    setWasActing(acting);
-    setLanded(!acting && rejection === undefined && confirm.standing);
-  }
-  if (landed && !confirm.standing) setLanded(false);
+}): React.JSX.Element {
+  const answer = useAnswerState(confirm);
   // Note that an answer under way is hidden with its surface rather than
   // drawn over whatever stands in its place, because the window then
   // presents something else; the act itself finishes all the same.
-  const open = confirm.standing && (confirmAsked(stage) || rejection !== undefined || landed);
-
-  if (!open) return null;
   return (
     <ConfirmCard
+      key={answer.openings}
+      open={open && answer.shown}
       confirm={confirm}
       question={question}
       field={field}
       gate={gate}
-      act={{ acting, landed, onShown: () => setLanded(false) }}
+      restoreTo={restoreTo}
+      act={answer}
     >
       {children}
     </ConfirmCard>
+  );
+}
+
+/** The question's words at the foot's start, given the room the answers leave, and its answers at the end. */
+const FOOT_QUESTION = "flex min-w-0 flex-1 items-center gap-dialog-action-gap";
+const FOOT_WORDS = "flex min-w-0 flex-1 flex-col";
+
+/**
+ * A question asked inside a dialog about something the dialog holds (a key
+ * it shows, a sign-in it keeps), drawn at that dialog's foot in place of its
+ * answers rather than as a second card over it: the question's title and
+ * what goes at the foot's start, Cancel and the act at its end, coloured by
+ * what it costs as `ConfirmDialog`'s are. It stands in the dialog's body
+ * where the control that asks it is, and draws nothing there; it must stand
+ * inside a `Dialog`.
+ *
+ * While it is asked what the dialog holds stands still and takes no press,
+ * focus is on Cancel, and Escape, a press on the dimmed window, and Cancel
+ * withdraw it, the dialog staying open; focus then goes back to whatever
+ * asked if that still stands. An answer under way stills both buttons and
+ * the dialog, one that lands wears its check until it has been seen and
+ * then hands the foot back, and one that was refused keeps the question up
+ * saying why, shaking the card, so the act can be tried again or let go.
+ */
+export function FootQuestion({
+  confirm,
+  question,
+}: {
+  confirm: DialogConfirm;
+  question: DialogQuestion;
+}): React.JSX.Element | null {
+  const foot = useDialogFoot();
+  const answer = useAnswerState(confirm);
+  const { acting, landed } = answer;
+  const settling = acting || landed;
+  const refused = confirm.rejection !== undefined && !acting;
+  const cancel = useRef<HTMLButtonElement | null>(null);
+  const titleId = useId();
+  const bodyId = useId();
+  const withdraw = (): boolean => {
+    if (settling) return false;
+    if (confirmWithdrawable(confirm.stage)) confirm.keep();
+    confirm.clear();
+    return true;
+  };
+  // Note that the dialog reads the newest withdrawal as Escape lands, so
+  // the foot is claimed again only as what the dialog holds it by changes.
+  const newestWithdraw = useRef(withdraw);
+  newestWithdraw.current = withdraw;
+  const shown = answer.shown && foot !== undefined;
+  useLayoutEffect(() => {
+    if (!shown || foot === undefined) return;
+    return foot.claim({
+      withdraw: () => newestWithdraw.current(),
+      focus: cancel,
+      busy: settling,
+      refused,
+    });
+  }, [shown, foot, settling, refused]);
+
+  if (!shown || foot?.slot == null) return null;
+  return createPortal(
+    // biome-ignore lint/a11y/useSemanticElements: a question is its words and its two answers, not a form's fields, so it is no `<fieldset>`.
+    <div
+      role="group"
+      aria-labelledby={titleId}
+      aria-describedby={question.body ? bodyId : undefined}
+      className={FOOT_QUESTION}
+    >
+      <div className={FOOT_WORDS}>
+        <Text id={titleId} variant={TEXT_VARIANT.LABEL}>
+          {question.title}
+        </Text>
+        {question.body ? (
+          <p id={bodyId} className={BODY}>
+            {question.body}
+          </p>
+        ) : null}
+        <ErrorLine>{refused ? confirm.rejection : null}</ErrorLine>
+      </div>
+      <div className={DIALOG_ANSWERS}>
+        <DialogActions
+          onCancel={withdraw}
+          cancelRef={cancel}
+          act={{
+            verb: question.verb,
+            tone: LOSS_TONE[question.loss],
+            onPress: () => confirm.run(),
+            running: question.running,
+            busy: acting,
+            landed,
+            onShown: answer.onShown,
+          }}
+        />
+      </div>
+    </div>,
+    foot.slot,
   );
 }

@@ -182,6 +182,18 @@ test("the button opens the menu on its first item, the arrows pass over a dimmed
   expect(more.getAttribute("aria-expanded")).toBe("false");
 });
 
+test("the button names the menu it opened while it stands, and none once it is closed", () => {
+  mount(createElement(Harness, { groups: taskGroups([]) }));
+  const more = button("More");
+  expect(more.getAttribute("aria-controls")).toBeNull();
+  press(more);
+  const standing = openMenu() ?? expect.fail("the menu stands");
+  expect(standing.id).not.toBe("");
+  expect(more.getAttribute("aria-controls")).toBe(standing.id);
+  press(more);
+  expect(more.getAttribute("aria-controls")).toBeNull();
+});
+
 test("typing the start of an item's name moves to it, as a system menu's typeahead does", () => {
   mount(createElement(Harness, { groups: taskGroups([]) }));
   press(button("More"));
@@ -701,7 +713,9 @@ function lift(target: HTMLElement, pointerType: string, x = 40, y = 20): boolean
 async function hungAt(): Promise<[string, string] | undefined> {
   await placed();
   const menu = openMenu();
-  const at = /translate\((-?[\d.]+px), (-?[\d.]+px)\)/u.exec(menu?.parentElement?.style.transform ?? "");
+  const at = /translate\((-?[\d.]+px), (-?[\d.]+px)\)/u.exec(
+    menu?.parentElement?.style.transform ?? "",
+  );
   return at === null ? undefined : [at[1] ?? "", at[2] ?? ""];
 }
 
@@ -880,7 +894,8 @@ test("a switch in the row that keeps its menu opens nothing, held or right-click
 /** Whether `element` is a menu or the positioner holding one, which a browser lays out the menu's size. */
 function menuBox(element: HTMLElement): boolean {
   return (
-    element.getAttribute("role") === "menu" || element.querySelector(':scope > [role="menu"]') !== null
+    element.getAttribute("role") === "menu" ||
+    element.querySelector(':scope > [role="menu"]') !== null
   );
 }
 

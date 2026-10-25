@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import http from "node:http";
 import { it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber } from "effect";
+import { SIGN_IN_FAILURE } from "@luke/features/words";
+import { Deferred, Duration, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import type { LoopbackAuthorization, LoopbackConsentOptions, LoopbackExchange } from "./consent.js";
 import { loopbackConsent } from "./loopback-consent.js";
@@ -174,6 +176,28 @@ it.effect(
     }),
 );
 
+it.effect("a grant draws its pill as complete and a refusal as attention", () =>
+  Effect.gen(function* () {
+    for (const [query, tone] of [
+      [{ code: "auth-code" }, "complete"],
+      [{ error: "access_denied" }, "attention"],
+    ] as const) {
+      const armed = yield* Deferred.make<LoopbackAuthorization>();
+      const { consent } = harness(armed);
+
+      const waiting = yield* trip(consent);
+      const authorization = yield* armedTrip(armed);
+      const answered = yield* callback(authorization.redirectUri, {
+        state: authorization.state,
+        ...query,
+      });
+      yield* Fiber.join(waiting);
+
+      assert.match(answered.body, new RegExp(`<span class="pill" data-tone="${tone}">`));
+    }
+  }),
+);
+
 it.effect("a refusal lands on its card whatever the flow would continue to", () =>
   Effect.gen(function* () {
     const armed = yield* Deferred.make<LoopbackAuthorization>();
@@ -190,7 +214,88 @@ it.effect("a refusal lands on its card whatever the flow would continue to", () 
 
     assert.equal(answered.status, 200);
     assert.equal(answered.location, undefined);
-    assert.deepEqual(yield* Fiber.join(waiting), { reason: REASON.REFUSED });
+    assert.deepEqual(yield* Fiber.join(waiting), {
+      reason: REASON.REFUSED,
+      failure: SIGN_IN_FAILURE.REFUSED,
+    });
+  }),
+);
+
+it.effect(
+  "a press while this machine is offline is answered at once, with nothing bound or opened",
+  () =>
+    Effect.gen(function* () {
+      const armed = yield* Deferred.make<LoopbackAuthorization>();
+      const { consent, opened, authorizations } = harness(armed, { isOnline: () => false });
+
+      const waiting = yield* trip(consent);
+      // Note that the clock never moves: a trip that waited on its deadline
+      // would still be waiting here.
+      yield* Effect.yieldNow;
+
+      assert.notEqual(
+        waiting.pollUnsafe(),
+        undefined,
+        "the press is answered without the clock moving",
+      );
+      assert.deepEqual(yield* Fiber.join(waiting), {
+        reason: "This machine is offline.",
+        failure: SIGN_IN_FAILURE.OFFLINE,
+      });
+      assert.deepEqual(authorizations, []);
+      assert.deepEqual(opened, []);
+    }),
+);
+
+it.effect("a trip nothing comes back to ends at its deadline as timed out", () =>
+  Effect.gen(function* () {
+    const armed = yield* Deferred.make<LoopbackAuthorization>();
+    const { consent } = harness(armed, { timeoutMs: 60_000 });
+
+    const waiting = yield* trip(consent);
+    yield* armedTrip(armed);
+    yield* TestClock.adjust(Duration.millis(59_999));
+    assert.equal(waiting.pollUnsafe(), undefined, "the trip still waits before its deadline");
+    yield* TestClock.adjust(Duration.millis(1));
+
+    assert.deepEqual(yield* Fiber.join(waiting), {
+      reason: REASON.TIMED_OUT,
+      failure: SIGN_IN_FAILURE.TIMED_OUT,
+    });
+  }),
+);
+
+it.effect("a sign-in page the browser could not open ends the trip as the browser's", () =>
+  Effect.gen(function* () {
+    const armed = yield* Deferred.make<LoopbackAuthorization>();
+    const { consent } = harness(armed, {
+      openExternal: () => Promise.reject(new Error("no browser")),
+    });
+
+    const outcome = yield* Effect.scoped(consent.signInEffect());
+
+    assert.deepEqual(outcome, {
+      reason: "Luke could not open the sign-in page in your browser.",
+      failure: SIGN_IN_FAILURE.BROWSER,
+    });
+  }),
+);
+
+it.effect("a second press while a trip waits is answered that one is already waiting", () =>
+  Effect.gen(function* () {
+    const armed = yield* Deferred.make<LoopbackAuthorization>();
+    const { consent } = harness(armed);
+
+    const first = yield* trip(consent);
+    yield* armedTrip(armed);
+    const second = yield* Effect.scoped(consent.signInEffect());
+    consent.cancel();
+    yield* Fiber.join(first);
+
+    assert.deepEqual(second, {
+      reason: "A sign-in is already waiting in your browser.",
+      failure: SIGN_IN_FAILURE.ALREADY_WAITING,
+    });
   }),
 );
 

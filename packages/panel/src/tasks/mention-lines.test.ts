@@ -226,7 +226,7 @@ test("lines picked by their numbers in a File tab, ⌥⌘K, are a chip in the ag
   assert.equal(ran, true);
   assert.deepEqual(card, ["src/invite.ts", "Lines 2–3 at 0123456"]);
   assert.deepEqual(
-    chips.map((chip) => chip.textContent),
+    chips.map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
     ["invite.ts:2–3"],
   );
   assert.deepEqual(sent, [

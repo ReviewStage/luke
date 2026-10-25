@@ -21,7 +21,7 @@ import { CatalogSection } from "../section";
  * popover-panels.tsx -- a panel hung from its button: a card with its title
  * and ×, and a menu whose search field is its head and takes the focus.
  * Each closes on Escape, its ×, a second press of its button, and focus
- * leaving it, and hands the focus back to its button.
+ * leaving it, fading out as it goes, and hands the focus back to its button.
  */
 
 /** A button and the panel it opens, drawn in `look`. */
@@ -49,36 +49,35 @@ function Hung({ look, label }: { look: PopoverPanelLook; label: string }): React
       >
         {label}
       </Button>
-      {open && (
-        <AnchoredPopover align={menu ? POPOVER_ALIGN.END : POPOVER_ALIGN.START}>
-          <PopoverPanel
-            id={panelId}
-            title={label}
-            look={look}
-            closeLabel={menu ? undefined : "Close"}
-            initialFocus={menu ? field : undefined}
-            onDismiss={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          >
-            {menu ? (
-              <SearchField
-                ref={field}
-                label="Search servers"
-                placeholder="Search servers"
-                value={query}
-                onChange={setQuery}
-              />
-            ) : (
-              <>
-                <Text>62% of the context window is in use.</Text>
-                <Text tone={TEXT_TONE.MUTED}>As of the agent's last step.</Text>
-              </>
-            )}
-          </PopoverPanel>
-        </AnchoredPopover>
-      )}
+      <AnchoredPopover open={open} align={menu ? POPOVER_ALIGN.END : POPOVER_ALIGN.START}>
+        <PopoverPanel
+          open={open}
+          id={panelId}
+          title={label}
+          look={look}
+          closeLabel={menu ? undefined : "Close"}
+          initialFocus={menu ? field : undefined}
+          onDismiss={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        >
+          {menu ? (
+            <SearchField
+              ref={field}
+              label="Search servers"
+              placeholder="Search servers"
+              value={query}
+              onChange={setQuery}
+            />
+          ) : (
+            <>
+              <Text>62% of the context window is in use.</Text>
+              <Text tone={TEXT_TONE.MUTED}>As of the agent's last step.</Text>
+            </>
+          )}
+        </PopoverPanel>
+      </AnchoredPopover>
     </div>
   );
 }

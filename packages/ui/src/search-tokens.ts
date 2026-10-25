@@ -1,5 +1,5 @@
 /**
- * search-tokens.ts -- the word search the settings search reads a query with.
+ * search-tokens.ts -- the word search the settings search reads a query with, and the words the tiered scorer (`search-score.ts`) reads one into.
  */
 
 /**
@@ -24,7 +24,7 @@ export function matchesTokens(lines: readonly string[], tokens: readonly string[
 }
 
 /** One stretch of a drawn line that a query's word landed on. */
-interface MatchRange {
+export interface MatchRange {
   start: number;
   end: number;
 }

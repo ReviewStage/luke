@@ -8,10 +8,10 @@
  * rearranges by it the line it reads: the room (`shell-room.ts`) and the
  * sidebar's fold (`sidebar-collapse.ts`).
  *
- * The room is written on the document's root too, as `data-luke-room`, for
- * the layers the panel portals out of the stage, a dialog and the toasts,
- * which stand outside the shell's own `data-room` and must answer the same
- * room rather than a breakpoint of their own.
+ * The room is written on the document's root as `data-luke-room`, the one
+ * attribute the panel's stylesheets read it off, so the layers the panel
+ * portals out of the stage, a dialog and the toasts, answer the same room as
+ * the shell rather than a breakpoint of their own.
  *
  * Only those lines are state, never the width itself: the root holds the
  * whole shell, so a width in its state would draw the shell again at every
@@ -19,7 +19,7 @@
  * is drawn.
  */
 
-import { createContext, useCallback, useLayoutEffect, useState } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useState } from "react";
 import { COARSE_POINTER, coarsePointerNow } from "./coarse-pointer.js";
 import { compactStage } from "./desktop/sidebar-collapse.js";
 import { narrowStage, SHELL_ROOM, type ShellRoom } from "./shell-room.js";
@@ -44,6 +44,11 @@ const UNMEASURED: StageLines = { narrow: false, compact: false };
  * rather than turning to glyphs. Wide where nothing provides it.
  */
 export const ShellRoomContext = createContext<ShellRoom>(SHELL_ROOM.WIDE);
+
+/** Whether the stage is a phone's, where a task's tab draws no bar of its own and hands its controls to the task's header (`strip-tabs.tsx`'s `useTabActions`). */
+export function usePhoneRoom(): boolean {
+  return useContext(ShellRoomContext) === SHELL_ROOM.NARROW;
+}
 
 /** What the stage is measured by, and the room its width gives. */
 export interface StageRoom {

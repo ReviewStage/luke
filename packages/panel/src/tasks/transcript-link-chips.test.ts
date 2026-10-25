@@ -110,18 +110,18 @@ function carriesTarget(container: HTMLElement): boolean {
     .some((attribute) => !masked.has(attribute.name) && attribute.value.includes("://"));
 }
 
-test("on a plan's page a plan's link, a file's lines, and a Linear page are chips, any other link a link, and code is code", () => {
+test("on a plan's page a plan's link, a file's lines, and a Linear page are chips, the section called by its heading now, any other link a link, and code is code", () => {
   const opened: Mention[] = [];
   const files: { path: string; lines: MentionLines | undefined }[] = [];
   const container = drawn(taskPage(opened, files));
 
   assert.deepEqual(chips(container), [
-    [MENTION_KIND.SECTION, "the rollout"],
+    [MENTION_KIND.SECTION, "Rollout"],
     [MENTION_KIND.FILE, "the store"],
     [MENTION_KIND.LINK, "LUKE-142/fix-the-thing"],
   ]);
   assert.deepEqual(
-    [...container.querySelectorAll("a")].map((link) => link.textContent),
+    [...container.querySelectorAll("a:not([data-mention-ref])")].map((link) => link.textContent),
     ["the docs"],
   );
   assert.deepEqual(
@@ -130,7 +130,7 @@ test("on a plan's page a plan's link, a file's lines, and a Linear page are chip
   );
   assert.equal(carriesTarget(container), false);
 
-  for (const chip of container.querySelectorAll<HTMLButtonElement>("button[data-mention-ref]")) {
+  for (const chip of container.querySelectorAll<HTMLElement>(":is(button, a)[data-mention-ref]")) {
     act(() => chip.click());
   }
   assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "rollout" }]);
@@ -149,7 +149,7 @@ test("off a plan's page, as in the workspace's Inbox, the same links are chips, 
     [MENTION_KIND.LINK, "LUKE-142/fix-the-thing"],
   ]);
   assert.deepEqual(
-    [...container.querySelectorAll("a")].map((link) => link.textContent),
+    [...container.querySelectorAll("a:not([data-mention-ref])")].map((link) => link.textContent),
     ["the docs"],
   );
   assert.equal(carriesTarget(container), false);
@@ -173,7 +173,7 @@ test("a reference link is read through its definition, and a file's page far lon
     [MENTION_KIND.FILE, "the store"],
     [MENTION_KIND.FILE, "the long one"],
   ]);
-  for (const chip of container.querySelectorAll<HTMLButtonElement>("button[data-mention-ref]")) {
+  for (const chip of container.querySelectorAll<HTMLElement>(":is(button, a)[data-mention-ref]")) {
     act(() => chip.click());
   }
   assert.deepEqual(

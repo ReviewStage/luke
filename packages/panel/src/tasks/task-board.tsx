@@ -1,7 +1,8 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { admittedElements } from "@luke/features/board-scene";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
+import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { ERROR_STATE_PLACEMENT, ErrorState, FILL_ELEMENT, Fill, SpinnerRegion } from "@luke/ui";
@@ -155,12 +156,16 @@ export function TaskBoard({
   /** Whether the board only shows, as an archived task's does. */
   viewOnly?: boolean;
 }): React.JSX.Element {
-  const loaded = useAtomValue(useSideBundles().whiteboard);
+  const { whiteboard } = useSideBundles();
+  const loaded = useAtomValue(whiteboard);
+  const retry = useAtomRefresh(whiteboard);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   return (
     <Fill as={FILL_ELEMENT.SECTION} className="task-board ph-no-capture" aria-label="Whiteboard">
       {AsyncResult.isFailure(loaded) ? (
-        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{BOARD_LOAD_FAILED}</ErrorState>
+        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+          {BOARD_LOAD_FAILED}
+        </ErrorState>
       ) : null}
       {module !== undefined && board !== undefined ? (
         // Keyed by whether it only shows as well, so an Unarchive mounts an editable canvas.
@@ -175,7 +180,7 @@ export function TaskBoard({
         </Fragment>
       ) : null}
       {!AsyncResult.isFailure(loaded) && (module === undefined || board === undefined) ? (
-        <SpinnerRegion delay label="Loading board" />
+        <SpinnerRegion delay label={readingWords("the board")} />
       ) : null}
     </Fill>
   );

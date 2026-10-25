@@ -1,26 +1,25 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
-import {
-  CONFLICT_NOTE,
-  DOCUMENT_EDITOR_STATE,
-  type DocumentEditor,
-} from "@luke/features/plan-edit-model";
+import { DOCUMENT_EDITOR_STATE, type DocumentEditor } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
 import {
+  ANNOUNCE,
   Button,
   EDITABLE_BLOCK_KIND,
   EDITABLE_HEADING_LEAVE,
   EDITABLE_TEXT_BLOCK_SELECTOR,
   EditableBlock,
   EditableHeading,
+  PageHeader,
   RetryButton,
 } from "@luke/ui";
-import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
+import { markdownClass } from "@luke/ui/markdown-class";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
 import {
+  type EditorAnchor,
   type EditorAnchors,
   PLACEMENT_END,
   PLAN_PLACEHOLDER,
@@ -29,11 +28,17 @@ import {
   type PlanEditorPlacement,
 } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { useEditorPictures } from "./editor-pictures.js";
 import { MarkdownEditor } from "./markdown-editor.js";
 import { type MentionDoors, retargetedMention } from "./mention-chip.js";
 import { useTaskMentions } from "./task-mentions.js";
-import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing.js";
+import {
+  EDITOR_PLACE,
+  type EditorHost,
+  type PlanEditing,
+  useMarkTitleUnsaved,
+} from "./use-plan-editing.js";
 
 /**
  * plan-document-editor.tsx -- the open plan, edited in place: its title, its sections as blocks, and its whole text in one editor.
@@ -85,7 +90,7 @@ const titlePauseAtom = rendererRuntime.fn((stamp: number) =>
 );
 
 /** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button bar a picture's, a video's player, a task's checkbox or the label around it, or the section's byline. */
-function editsOnClick(target: EventTarget): boolean {
+export function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
   // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item, and the label around it, whose press a finger takes beside the box and hands to it; a comment's marked words open its thread and the editor at them alike. A picture's press is a button that hands on only the press it does not take, a diagram's under a mouse in a wide room, which is the words' as the bare picture's was. A video's player is its own whole, its frame and every control in it, whatever they are drawn as, since a press there plays, seeks, or enlarges it; its caption is the words'.
@@ -143,6 +148,56 @@ function wordsUnder(
     if (at.textContent === text && inCode(at) === code) occurrence += 1;
   }
   return { section, text, occurrence, offset: range.startOffset, code, top: lineTop(range, words) };
+}
+
+/** Whether an element is a heading that opens a section, as the editor counts them (`SECTION_LEVELS`). */
+function opensSection(element: Element | null | undefined): element is HTMLHeadingElement {
+  return (
+    element instanceof HTMLHeadingElement && (element.tagName === "H1" || element.tagName === "H2")
+  );
+}
+
+/**
+ * The words a click at a point landed on in a document drawn whole rather
+ * than as its sections, as a pull request's description is: the section
+ * counted by the headings that open one before the words, as the editor
+ * counts them, so it finds them again (`PlacedWords`); none where it landed
+ * on no words.
+ */
+export function documentWordsUnder(
+  root: HTMLElement,
+  x: number,
+  y: number,
+): PlacedWords | undefined {
+  const range = rangeAt(x, y);
+  const words = range?.startContainer;
+  if (range == null || !(words instanceof Text) || !root.contains(words)) return undefined;
+  const code = inCode(words);
+  let section = 0;
+  let occurrence = 0;
+  // Whether any words came before, since a heading opening the text opens its first section.
+  let begun = false;
+  let heading: Element | undefined;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let at = walker.nextNode(); at !== null; at = walker.nextNode()) {
+    const opens = at.parentElement?.closest("h1, h2");
+    if (opensSection(opens) && opens !== heading) {
+      heading = opens;
+      section += begun ? 1 : 0;
+      occurrence = begun ? 0 : occurrence;
+    }
+    if (at === words) break;
+    if ((at.textContent ?? "").trim() !== "") begun = true;
+    if (at.textContent === words.data && inCode(at) === code) occurrence += 1;
+  }
+  return {
+    section,
+    text: words.data,
+    occurrence,
+    offset: range.startOffset,
+    code,
+    top: lineTop(range, words),
+  };
 }
 
 /** Where the words a closing editor's caret stood on stand in the drawn text now; none where the drawn text holds no such words. */
@@ -413,6 +468,7 @@ export function EditableTitle({
   entry,
   editing,
   renaming = 0,
+  actions,
   onRename,
   onDraft,
 }: {
@@ -422,13 +478,15 @@ export function EditableTitle({
   editing: PlanEditing;
   /** How many times Rename was chosen; each change is an ask of its own. */
   renaming?: number;
+  /** The title's ⋯, at the end of its line. */
+  actions?: ReactNode;
   /** Renames the task, answering whether the name was taken. */
   onRename: (name: string) => Promise<boolean>;
   onDraft: (name: string | undefined) => void;
 }): React.JSX.Element {
   const block = useRef<HTMLDivElement>(null);
   const prefetchEditorBundle = usePrefetchEditorBundle();
-  const text = useRef<HTMLDivElement>(null);
+  const text = useRef<HTMLElement>(null);
   const [pause, restartPause] = useAtom(titlePauseAtom);
   const stamp = useRef(0);
   // ↑ on the text's first line comes back into the title, its caret at the end.
@@ -445,6 +503,10 @@ export function EditableTitle({
   const echo = useRef<string | undefined>(undefined);
   const doors = useRef({ onRename, onDraft });
   doors.current = { onRename, onDraft };
+  // How many renames asked for have not answered; the title's words are unsaved work while any is out or words are typed.
+  const asking = useRef(0);
+  const markUnsaved = useMarkTitleUnsaved();
+  const tellUnsaved = () => markUnsaved(typed.current || asking.current > 0);
   // The Rename last answered, so only a newer one puts the caret here.
   const renamed = useRef(renaming);
   useEffect(() => {
@@ -467,10 +529,17 @@ export function EditableTitle({
   const rename = (element: HTMLElement) => {
     typed.current = false;
     const next = typedName(element);
-    if (next === "" || next === base.current) return;
+    if (next === "" || next === base.current) {
+      tellUnsaved();
+      return;
+    }
     base.current = next;
     const asked = stamp.current;
+    asking.current += 1;
+    tellUnsaved();
     doors.current.onRename(next).then((renamed) => {
+      asking.current -= 1;
+      tellUnsaved();
       if (renamed) return;
       if (stamp.current !== asked) {
         if (base.current === next) base.current = "";
@@ -504,47 +573,55 @@ export function EditableTitle({
     };
   }, []);
   return (
-    <EditableBlock
-      ref={block}
-      label="Title"
-      kind={EDITABLE_BLOCK_KIND.TITLE}
-      entry={entry}
-      onPointerEnter={prefetchEditorBundle}
-      onFocus={(event) => {
-        prefetchEditorBundle();
-        if (event.target === event.currentTarget) editing.select(EDITOR_PLACE.TITLE);
-      }}
-      onOpen={() => {
-        if (text.current !== null) caretAtEnd(text.current);
-      }}
-    >
-      <div className={`${MARKDOWN_CLASS.ROOT} task-title ph-no-capture`}>
-        <EditableHeading
-          ref={text}
-          label="Task name"
-          level={1}
-          onFocus={() => {
-            saved.current = false;
-          }}
-          onInput={(event) => {
-            saved.current = false;
-            typed.current = true;
-            boundTitle(event.currentTarget);
-            const next = typedName(event.currentTarget);
-            echo.current = next === "" ? undefined : next;
-            onDraft(echo.current);
-            stamp.current += 1;
-            restartPause(stamp.current);
-          }}
-          onBlur={(event) => save(event.currentTarget)}
-          onLeave={(way, heading) => {
-            save(heading);
-            if (way === EDITABLE_HEADING_LEAVE.BACK) block.current?.focus();
-            else editing.open();
-          }}
+    // Note that the unit's class lets the ⋯ show as the pointer or the keyboard comes onto the title, as a section's does.
+    <div className="task-title plan-unit-attributed ph-no-capture">
+      <EditableBlock
+        ref={block}
+        label="Title"
+        kind={EDITABLE_BLOCK_KIND.TITLE}
+        entry={entry}
+        onPointerEnter={prefetchEditorBundle}
+        onFocus={(event) => {
+          prefetchEditorBundle();
+          if (event.target === event.currentTarget) editing.select(EDITOR_PLACE.TITLE);
+        }}
+        onOpen={() => {
+          if (text.current !== null) caretAtEnd(text.current);
+        }}
+      >
+        <PageHeader
+          title={
+            <EditableHeading
+              ref={text}
+              label="Task name"
+              onFocus={() => {
+                saved.current = false;
+              }}
+              onInput={(event) => {
+                saved.current = false;
+                if (!typed.current) {
+                  typed.current = true;
+                  tellUnsaved();
+                }
+                boundTitle(event.currentTarget);
+                const next = typedName(event.currentTarget);
+                echo.current = next === "" ? undefined : next;
+                onDraft(echo.current);
+                stamp.current += 1;
+                restartPause(stamp.current);
+              }}
+              onBlur={(event) => save(event.currentTarget)}
+              onLeave={(way, heading) => {
+                save(heading);
+                if (way === EDITABLE_HEADING_LEAVE.BACK) block.current?.focus();
+                else editing.open();
+              }}
+            />
+          }
+          actions={actions}
         />
-      </div>
-    </EditableBlock>
+      </EditableBlock>
+    </div>
   );
 }
 
@@ -567,6 +644,7 @@ interface DraftDoors {
 function useDraftHandOver(
   editing: PlanEditing,
   hostOf: (section: number) => EditorHost,
+  handed: React.RefObject<string>,
 ): DraftDoors {
   const [pause, restartPause] = useAtom(draftPauseAtom);
   const pending = useRef<{ markdown: string; anchors: EditorAnchors | undefined } | undefined>(
@@ -578,7 +656,9 @@ function useDraftHandOver(
   const flush = () => {
     const next = pending.current;
     pending.current = undefined;
-    if (next !== undefined) door.current.typeText(next.markdown, next.anchors);
+    if (next === undefined) return;
+    handed.current = next.markdown;
+    door.current.typeText(next.markdown, next.anchors);
   };
   // A pause that ran out on the newest text hands it over.
   useEffect(() => {
@@ -593,6 +673,7 @@ function useDraftHandOver(
   }, []);
   return {
     onDraft: (markdown, anchors) => {
+      if (pending.current === undefined) door.current.holdingWords();
       pending.current = { markdown, anchors };
       stamp.current += 1;
       restartPause(stamp.current);
@@ -613,40 +694,119 @@ function useDraftHandOver(
 }
 
 /**
- * A save's merged answer taken into the open editor. A save that landed shows
- * as the model's base moving to the text it sent; the host draws the plan
- * the service answered before the save's answer arrives, so the plan whose
- * last save is the developer's, and newer than the one last taken, holds
- * the merged text. Then Luke's part of it is laid in and the model's base
- * becomes what the service holds. A draft never moves the last save, and a
- * save of Luke's is not the developer's, so neither reaches the editor.
+ * Text the open editor did not type taken into it, the caret kept where it
+ * stood, since the editor mounts once on its words and never follows them.
+ * Three kinds reach it. A save's merged answer: a save that landed shows as
+ * the model's base moving to the text it sent; the host draws the plan the
+ * service answered before the save's answer arrives, so the plan whose last
+ * save is the developer's, and newer than the one last taken, holds the
+ * merged text, whose other part is laid in and the model's base becomes
+ * what the service holds. A save someone else made, a teammate's, an
+ * agent's, or Luke's, reaching an editor holding nothing unsaved: their text
+ * is laid in and becomes the base. An editor holding words not yet saved
+ * keeps them instead, and its next save is laid over the service's text,
+ * whose merged answer then reaches it as the first kind. And words the
+ * model moved itself, as Keep mine's merged words: laid in place of the
+ * blocks they changed. `handed` is the last text the editor handed over or
+ * was laid with, which tells the model's own moves from the editor's.
  */
-function useMergedAnswers(
+function useTakenText(
   editor: DocumentEditor,
   editing: PlanEditing,
   task: Task,
   handle: React.RefObject<PlanEditorHandle | undefined>,
+  handed: React.RefObject<string>,
 ): void {
-  const seen = useRef({ base: editor.base, updatedAt: task.updatedAt });
+  const seen = useRef({ base: editor.base, draft: editor.draft, updatedAt: task.updatedAt });
   const landed = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const { base, sending, state } = editor;
+    const { base, draft, sending, state } = editor;
     const settled = sending === undefined && state.kind === DOCUMENT_EDITOR_STATE.EDITING;
     if (settled && base !== seen.current.base) landed.current = base;
     seen.current.base = base;
+    // Note that words handed over in this commit reach the draft only in the next, so only a draft that moved is the model's.
+    const moved = draft !== seen.current.draft;
+    seen.current.draft = draft;
+    const mounted = handle.current;
+    // Note that an editor still loading mounts on the newest words, which then need no laying in.
+    if (moved && draft !== handed.current) {
+      handed.current = mounted === undefined ? draft : mounted.take(handed.current, draft).text;
+      return;
+    }
+    if (task.updatedAt === seen.current.updatedAt) return;
     const sent = landed.current;
-    if (sent === undefined || task.updatedAt === seen.current.updatedAt) return;
-    if (task.lastEdit?.actor !== PLAN_ACTOR.DEVELOPER) return;
-    landed.current = undefined;
+    if (sent !== undefined) {
+      if (task.lastEdit?.actor !== PLAN_ACTOR.DEVELOPER) return;
+      landed.current = undefined;
+      seen.current.updatedAt = task.updatedAt;
+      const taken = mounted?.take(sent, task.document.body);
+      if (taken === undefined) return;
+      seen.current.base = taken.base;
+      handed.current = taken.text;
+      editing.rebase(taken.base, taken.text);
+      return;
+    }
+    if (!settled || editor.closing || draft !== base) return;
     seen.current.updatedAt = task.updatedAt;
-    const taken = handle.current?.take(sent, task.document.body);
-    if (taken === undefined) return;
+    const theirs = task.document.body;
+    if (theirs === base) return;
+    const taken =
+      mounted === undefined ? { base: theirs, text: theirs } : mounted.take(base, theirs);
     seen.current.base = taken.base;
+    handed.current = taken.text;
     editing.rebase(taken.base, taken.text);
   });
 }
 
-/** What stands under the editor: Luke's change and the choice it asks, or a failed save and its retry; a save under way says nothing. */
+/** Whether two lists name the same threads, in whatever order. */
+function sameThreads(a: readonly string[], b: readonly string[]): boolean {
+  const named = new Set(a);
+  return a.length === b.length && b.every((thread) => named.has(thread));
+}
+
+/** The open threads as last handed to an editor: every one, and those with words. */
+interface HandedThreads {
+  readonly editor: PlanEditorHandle;
+  readonly open: readonly string[];
+  readonly anchored: readonly string[];
+}
+
+/**
+ * The open threads handed to the open editor whenever they change, a thread
+ * opened or closed while it stands, or its words found or lost: `open`
+ * names every one, and `anchors` the words of those that have them, in
+ * offsets of `text`, the plan as saved. Note that nothing is handed while
+ * the same threads stay open on the same words, since the editor's marks
+ * already follow them, so a render while typing costs a comparison of the
+ * threads alone; and that an editor mounted anew is handed them once, since
+ * what it opened with may have left some out.
+ */
+function useAnchorsFollowed(
+  handle: React.RefObject<PlanEditorHandle | undefined>,
+  text: string,
+  anchors: readonly EditorAnchor[],
+  open: readonly string[],
+): void {
+  const handed = useRef<HandedThreads | undefined>(undefined);
+  useLayoutEffect(() => {
+    const editor = handle.current;
+    if (editor === undefined) return;
+    const anchored = anchors.map((anchor) => anchor.thread);
+    const was = handed.current;
+    if (
+      was !== undefined &&
+      was.editor === editor &&
+      sameThreads(was.open, open) &&
+      sameThreads(was.anchored, anchored)
+    ) {
+      return;
+    }
+    handed.current = { editor, open, anchored };
+    editor.replaceAnchors(text, anchors, open);
+  });
+}
+
+/** What stands under the editor: someone else's change, named, and the choice it asks, or a failed save and its retry; a save under way says nothing. */
 function DocumentNote({
   editor,
   editing,
@@ -654,18 +814,23 @@ function DocumentNote({
   editor: DocumentEditor;
   editing: PlanEditing;
 }): React.JSX.Element | null {
-  if (editor.state.kind === DOCUMENT_EDITOR_STATE.CONFLICT) {
+  useAnnounceShown(
+    ANNOUNCE.ALERT,
+    editing.conflict?.note ??
+      (editor.state.kind === DOCUMENT_EDITOR_STATE.FAILED ? editor.state.note : ""),
+  );
+  if (editing.conflict !== undefined) {
     return (
-      <div className="plan-editor-note" role="alert">
-        <span>{CONFLICT_NOTE}</span>
+      <div className="plan-editor-note">
+        <span>{editing.conflict.note}</span>
         <Button onClick={editing.keepMine}>Keep mine</Button>
-        <Button onClick={editing.takeLukes}>Use Luke's</Button>
+        <Button onClick={editing.takeTheirs}>{editing.conflict.take}</Button>
       </div>
     );
   }
   if (editor.state.kind === DOCUMENT_EDITOR_STATE.FAILED) {
     return (
-      <div className="plan-editor-note" role="alert">
+      <div className="plan-editor-note">
         <span>{editor.state.note}</span>
         <RetryButton onRetry={editing.retry} />
       </div>
@@ -710,7 +875,9 @@ export function PlanDocumentEditor({
   /** Starts a thread on the words selected, as the toolbar's Comment over them does; none where the plan takes no comments here. */
   onComment?: (() => void) | undefined;
 }): React.JSX.Element {
-  const doors = useDraftHandOver(editing, hostOf);
+  // The words the editor last handed over, or was laid with, which it holds unless the model moved them.
+  const handed = useRef(editor.draft);
+  const doors = useDraftHandOver(editing, hostOf, handed);
   // Note that this runs before the editor itself is taken down, so its caret is still measured.
   useLayoutEffect(
     () => () => {
@@ -718,17 +885,22 @@ export function PlanDocumentEditor({
     },
     [],
   );
-  // The open threads' words, carried by the editor from the text it opens on, which is the plan's as saved.
+  // The open threads' words, in offsets of the plan as saved, which the editor opens with where it opens on that text, and is handed again as threads open and close.
+  // Note that none is handed over while no open thread has words, since an empty list would still map every marked word on each keystroke for nothing.
   const comments = usePlanCommentsControl();
+  const openThreads = comments === undefined ? [] : comments.threads.filter(openThread);
+  const openAnchors = openThreads.flatMap((thread) =>
+    thread.anchor === undefined ? [] : [{ thread: thread.id, ...thread.anchor }],
+  );
   const commentAnchors =
-    comments === undefined || editor.draft !== task.document.body
-      ? undefined
-      : comments.threads.flatMap((thread) =>
-          thread.anchor === undefined || !openThread(thread)
-            ? []
-            : [{ thread: thread.id, ...thread.anchor }],
-        );
-  useMergedAnswers(editor, editing, task, handle);
+    openAnchors.length === 0 || editor.draft !== task.document.body ? undefined : openAnchors;
+  useTakenText(editor, editing, task, handle, handed);
+  useAnchorsFollowed(
+    handle,
+    task.document.body,
+    openAnchors,
+    openThreads.map((thread) => thread.id),
+  );
   // Whether the editor's bundle has landed, which mounts the editor in the room.
   const ready = AsyncResult.isSuccess(useAtomValue(useSideBundles().planEditor));
   const room = useRef<HTMLElement>(null);

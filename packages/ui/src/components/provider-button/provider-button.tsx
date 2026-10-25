@@ -1,7 +1,8 @@
 import { useId } from "react";
 import { type MarkProvider, PROVIDER_MARK_SIZE, ProviderMark } from "../../marks/provider-mark.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
-import { BUTTON_VARIANT, Button } from "../button/button.js";
+import { BUTTON_VARIANT, type BusyProps, Button } from "../button/button.js";
+import { useSettled } from "../spinner/settle-wait.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 
 /**
@@ -13,12 +14,15 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * window offers when signing in is the one thing to do there: forty pixels
  * full-width, raised, or the ink fill when `primary`.
  *
- * A pending button is the sign-in being opened or waited on: it refuses its
- * press and is named by `pendingLabel` ("Opening Google", "Waiting for
- * browser…") for as long as it is. A control button shows that name to a
- * reader alone, under the Button's ring; a gate button shows it beside a
- * ring standing in the mark's place, and keeps its full strength while the
- * others beside it, disabled by the caller, step back.
+ * A busy button is the sign-in being opened or waited on, in every button's
+ * one busy shape (`busy` and `busyLabel`, `BusyProps`): it refuses its press
+ * and is named by `busyLabel` ("Opening Google", "Waiting for browser…") for
+ * as long as it is. A control button shows that name to a reader alone,
+ * under the Button's ring; a gate button shows it beside a ring standing in
+ * the mark's place, and keeps its full strength while the others beside it,
+ * disabled by the caller, step back. Either shows its ring only once the
+ * sign-in has been out a moment (`--luke-settle-delay`), as every busy
+ * button does.
  *
  * The way in taken last (`lastUsed`) wears "Last used" on its top-right
  * corner, a pill hung over the button rather than a word inside it, so the
@@ -36,12 +40,16 @@ export type ProviderButtonSize = (typeof PROVIDER_BUTTON_SIZE)[keyof typeof PROV
 /** What the last-used pill says. */
 const LAST_USED = "Last used";
 
-/** The gate's own button: the mark, or the ring while pending, before its words. */
+/**
+ * The gate's own button: the mark, or the ring once its sign-in has been out
+ * a moment, before its words, which say what it is doing while it is busy.
+ */
 function GateButton({
   provider,
   words,
   primary,
-  pending,
+  busy,
+  busyLabel,
   disabled,
   describedBy,
   onPress,
@@ -49,55 +57,53 @@ function GateButton({
   provider: MarkProvider;
   words: string;
   primary: boolean;
-  pending: boolean;
+  busy: boolean;
+  busyLabel: string | undefined;
   disabled: boolean;
   describedBy: string | undefined;
   onPress: () => void;
 }): React.JSX.Element {
+  const ringShown = useSettled(busy);
   return (
     <button
       type="button"
       className="luke-provider-button"
       data-primary={primary ? "true" : undefined}
-      disabled={disabled || pending}
-      aria-busy={pending ? true : undefined}
+      disabled={disabled || busy}
+      aria-busy={busy ? true : undefined}
       aria-describedby={describedBy}
       onClick={pulseOnPress(onPress, PRESS_PULSE.QUIET)}
     >
-      {pending ? (
+      {ringShown ? (
         <span className="luke-provider-button-wait">
           <SpinnerRing />
         </span>
       ) : (
         <ProviderMark provider={provider} size={PROVIDER_MARK_SIZE.ICON} />
       )}
-      {words}
+      {busy ? busyLabel : words}
     </button>
   );
 }
 
-/** One provider's button, named "Continue with" `name`, or `pendingLabel` while pending. */
+/** One provider's button, named "Continue with" `name`, or `busyLabel` while busy. */
 export function ProviderButton({
   provider,
   name,
   size = PROVIDER_BUTTON_SIZE.CONTROL,
   primary = false,
-  pending = false,
-  pendingLabel,
+  busy = false,
+  busyLabel,
   disabled = false,
   lastUsed = false,
   onPress,
-}: {
+}: BusyProps & {
   provider: MarkProvider;
   /** The provider's name as a reader knows it ("GitHub"). */
   name: string;
   size?: ProviderButtonSize;
   /** Whether it is the filled one among the choices. */
   primary?: boolean;
-  /** Whether its sign-in is being opened or waited on. */
-  pending?: boolean;
-  /** What it is named while pending, the act in progress ("Opening GitHub"). */
-  pendingLabel: string;
   disabled?: boolean;
   /** Whether it is the way in taken last, which wears the pill that says so. */
   lastUsed?: boolean;
@@ -111,9 +117,10 @@ export function ProviderButton({
       {size === PROVIDER_BUTTON_SIZE.GATE ? (
         <GateButton
           provider={provider}
-          words={pending ? pendingLabel : words}
+          words={words}
           primary={primary}
-          pending={pending}
+          busy={busy}
+          busyLabel={busyLabel}
           disabled={disabled}
           describedBy={describedBy}
           onPress={onPress}
@@ -122,8 +129,8 @@ export function ProviderButton({
         <Button
           variant={primary ? BUTTON_VARIANT.INK : BUTTON_VARIANT.OUTLINE}
           icon={<ProviderMark provider={provider} />}
-          busy={pending}
-          busyLabel={pendingLabel}
+          busy={busy}
+          busyLabel={busyLabel ?? ""}
           disabled={disabled}
           aria-describedby={describedBy}
           onClick={onPress}

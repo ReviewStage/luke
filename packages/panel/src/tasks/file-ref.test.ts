@@ -126,7 +126,7 @@ test("a file's tab, its row in the panel's +, and its code card's head wear its 
     (each) => each.querySelector(".luke-tab-label")?.textContent === "accept.ts",
   );
   assert.ok(tab, "the file's tab");
-  const head = panel.querySelector(".code-card [data-file-ref]");
+  const head = panel.querySelector(".luke-code-card [data-file-ref]");
   assert.ok(head, "the code card names the file");
   const icon = tab.querySelector(".luke-tab-icon")?.innerHTML;
   assert.equal(head.querySelector("svg")?.outerHTML, icon, "the head wears the tab's icon");
@@ -134,7 +134,7 @@ test("a file's tab, its row in the panel's +, and its code card's head wear its 
   const add = panel.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]');
   assert.ok(add, "the strip's +");
   act(() => add.click());
-  const row = [...document.querySelectorAll('.tab-add-menu [role="option"]')].find(
+  const row = [...document.querySelectorAll('.luke-searchable-menu [role="option"]')].find(
     (each) => each.querySelector(".luke-combobox-option-label")?.textContent === "accept.ts",
   );
   assert.equal(
@@ -148,9 +148,34 @@ test("a file's tab, its row in the panel's +, and its code card's head wear its 
   assert.deepEqual(cardOn(head), [PATH, NOTE]);
 });
 
+test("a code card's head hangs the file's card naming the repository its lines were read from, the task's or another", () => {
+  const shared: TaskCodeShowing = {
+    ...SHOWING,
+    callId: "d",
+    code: { ...SHOWING.code, repository: "acme/shared" },
+  };
+  const heads = mount([], [SHOWING, shared]).querySelectorAll(
+    ".side-panel .luke-code-card [data-file-ref]",
+  );
+
+  const named = [...heads].map((head) => {
+    restOn(head);
+    const sub = document.querySelector(
+      ".luke-tooltip-card [data-file-card] .luke-hover-card-sub",
+    )?.textContent;
+    act(() => {
+      head.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+    });
+    return sub;
+  });
+  assert.deepEqual(named.toSorted(), ["acme/relay", "acme/shared"]);
+});
+
 test("a code card's head says its lines as Lines 3–5, and a press on it opens the file on those lines at the commit Luke read them at", () => {
   const opened: unknown[][] = [];
-  const head = mount(opened).querySelector<HTMLButtonElement>(".code-card button[data-file-ref]");
+  const head = mount(opened).querySelector<HTMLButtonElement>(
+    ".luke-code-card button[data-file-ref]",
+  );
   assert.ok(head, "the code card's head opens the file");
   assert.equal(head.textContent, `${PATH}Lines 3–5`);
   act(() => head.click());

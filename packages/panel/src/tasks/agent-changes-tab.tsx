@@ -10,8 +10,10 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { imageTypeOfPath } from "@luke/features/github-image";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
+import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  ANNOUNCE,
   BUTTON_SIZE,
   Button,
   Checkbox,
@@ -26,31 +28,42 @@ import {
   IconButton,
   INSET,
   LAYOUT_ELEMENT,
+  type PaneBarMenu,
   SpinnerRegion,
   Stack,
-  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
   TextButton,
   Tooltip,
+  useAnnounce,
 } from "@luke/ui";
 import {
   CheckIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
-  ClipboardCopyIcon,
   CodeIcon,
-  FileDiffIcon,
   FoldVerticalIcon,
+  GLYPH,
   ImageIcon,
   RotateCwIcon,
   UnfoldVerticalIcon,
-} from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+} from "@luke/ui/icons";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
+import { useDraft } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
+import type { MenuAction } from "../desktop/action-menu.js";
+import { useTabActions } from "../desktop/strip-tabs.js";
 import {
   DIFF_SELECTION_SIDE,
   type DiffFileTexts,
@@ -59,6 +72,7 @@ import {
   type DiffSelection,
   FILE_NOTE_LINE,
 } from "../diff-view/contract.js";
+import { usePhoneRoom } from "../stage-room.js";
 import {
   type ChangesList,
   FileHead,
@@ -94,13 +108,13 @@ import {
 import { ChangesStrip } from "./changes-strip.js";
 import { agentStillWriting } from "./coding-agent-model.js";
 import {
+  type CommentDraft,
   type CommentDrafts,
   closeDraft,
   lightDraft,
+  lineCommentPlace,
   NO_DRAFTS,
   openDraft,
-  withWords,
-  wordsOf,
 } from "./comment-drafts.js";
 import {
   type DiffListEntry,
@@ -110,19 +124,28 @@ import {
   PierreDiffList,
 } from "./diff-list.js";
 import { useDiffLook, useSplitRoom } from "./file-diff.js";
-import { BarMenu, useSaveText } from "./file-menu.js";
+import { useSaveText } from "./file-menu.js";
 import { FileTreePane } from "./file-tree-pane.js";
-import { FileViewBar, type TreeShown, usePaneRoom, useTreeEdge } from "./file-view.js";
+import {
+  barMenuItems,
+  FileViewBar,
+  gitHubAction,
+  paneToggleAction,
+  type TreeShown,
+  usePaneRoom,
+  useTreeEdge,
+} from "./file-view.js";
 import { useFileViewSettings } from "./file-view-settings.js";
 import { FilesChangedKeysSheet } from "./files-changed-keys.js";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff.js";
 import { LineComment, type PendingReview } from "./line-comment.js";
 import { MinimizedThreads } from "./minimized-threads.js";
+import { useOpenFileTab } from "./open-file-tab.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
+import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
 
 /**
@@ -259,11 +282,10 @@ function ViewedCount({
   /** Whether the read stopped short of every file of the pull request. */
   truncated: boolean;
 }): React.JSX.Element {
-  const count = files.length;
-  const seen = viewed === undefined ? undefined : files.filter((file) => viewed(file.path)).length;
-  const complete = seen === count && !truncated;
+  const { words, complete } = viewedOf(files, viewed, truncated);
+  useAnnounce(ANNOUNCE.POLITE, words);
   return (
-    <p className="files-viewed" aria-live="polite" data-complete={complete ? "" : undefined}>
+    <p className="files-viewed" data-complete={complete ? "" : undefined}>
       {complete ? <CheckIcon aria-hidden="true" /> : null}
       <Text
         as={TEXT_ELEMENT.SPAN}
@@ -271,20 +293,34 @@ function ViewedCount({
         truncate
         className="files-viewed-words"
       >
-        {seen === undefined
-          ? LIST_WORDS.filesOf(count)
-          : complete
-            ? LIST_WORDS.allViewed(count)
-            : LIST_WORDS.viewedOf(seen, count)}
+        {words}
       </Text>
     </p>
   );
 }
 
+/** How many of the files are viewed, in the bar's words (`ViewedCount`), and whether every one is. */
+function viewedOf(
+  files: readonly CodingAgentChangedFile[],
+  viewed: ((path: string) => boolean) | undefined,
+  truncated: boolean,
+): { readonly words: string; readonly complete: boolean } {
+  const count = files.length;
+  const seen = viewed === undefined ? undefined : files.filter((file) => viewed(file.path)).length;
+  const complete = seen === count && !truncated;
+  const words =
+    seen === undefined
+      ? LIST_WORDS.filesOf(count)
+      : complete
+        ? LIST_WORDS.allViewed(count)
+        : LIST_WORDS.viewedOf(seen, count);
+  return { words, complete };
+}
+
 /** What the bar's ⋯ says. */
 const CHANGES_MENU_WORDS = {
-  COPY_PATCH: "Copy PR patch",
-  DOWNLOAD_PATCH: "Download PR patch",
+  COPY_PATCH: "Copy patch",
+  DOWNLOAD_PATCH: "Download patch",
   PATCH_COPIED: "Patch copied",
   /** Why the patch is not offered where the read stopped short of every file. */
   TRUNCATED: "This pull request has more files than were read",
@@ -298,37 +334,39 @@ const CHANGES_MENU_WORDS = {
  * in the list's order (`pullRequestPatch`), and the changes read again. The
  * patch is not offered, and says why, where the read stopped short of every
  * file, since it would not be the pull request's. A file's own path is
- * copied from its header (`FileHead`).
+ * copied from its header (`FileHead`). `PaneBar` draws it as its ⋯.
  */
-function ChangesMenu({
+function useChangesMenu({
   pullRequest,
   reading,
   onRefresh,
 }: {
+  /** The pull request read; none, while there is none to act on, draws no ⋯. */
   pullRequest: {
     readonly url: string;
     readonly truncated: boolean;
     readonly files: readonly CodingAgentChangedFile[];
-  };
+  } | null;
   /** Whether a read is out, which a refresh would only repeat. */
   reading: boolean;
   onRefresh: () => void;
-}): React.JSX.Element {
+}): PaneBarMenu | undefined {
   const copyWithToast = useCopyToast();
   const saveText = useSaveText();
+  if (pullRequest === null) return undefined;
   const patch = pullRequest.truncated ? undefined : pullRequestPatch(treeOrder(pullRequest.files));
   const why = pullRequest.truncated
     ? CHANGES_MENU_WORDS.TRUNCATED
     : patch === undefined
       ? CHANGES_MENU_WORDS.NO_PATCH
       : undefined;
-  return (
-    <BarMenu
-      label="Changes actions"
-      actions={[
+  return {
+    thing: "Changes",
+    groups: [
+      [
         {
           label: CHANGES_MENU_WORDS.COPY_PATCH,
-          icon: <ClipboardCopyIcon aria-hidden="true" />,
+          icon: <GLYPH.COPY />,
           detail: why,
           disabled: patch === undefined,
           onSelect: () => {
@@ -352,9 +390,26 @@ function ChangesMenu({
           disabled: reading,
           onSelect: onRefresh,
         },
-      ]}
-    />
-  );
+      ],
+    ],
+  };
+}
+
+/** What a phone's ⋯ calls Files changed's own Open on GitHub, told from the pull request's beside it. */
+const OPEN_FILES_ON_GITHUB = "Open files on GitHub";
+
+/** Collapse all or Expand all as an item of a phone's ⋯, as the bar's button is. */
+function foldAllAction(list: ChangesList): MenuAction {
+  return {
+    label: list.allCollapsed ? LIST_WORDS.EXPAND_ALL : LIST_WORDS.COLLAPSE_ALL,
+    icon: list.allCollapsed ? (
+      <ChevronsUpDownIcon aria-hidden="true" />
+    ) : (
+      <ChevronsDownUpIcon aria-hidden="true" />
+    ),
+    disabled: list.kept.length === 0,
+    onSelect: list.toggleAll,
+  };
 }
 
 /** A pull request's review threads as Files changed draws them on their lines: the threads, and the door that draws one. */
@@ -637,11 +692,7 @@ function entryOf(
     notice === CHANGES_WORDS.UNCHANGED_CONTENTS && whole.offered && whole.texts === undefined ? (
       <>
         {" · "}
-        <TextButton
-          tone={TEXT_BUTTON_TONE.LINK}
-          aria-label={`${LIST_WORDS.SHOW_FILE}: ${path}`}
-          onClick={whole.toggle}
-        >
+        <TextButton aria-label={`${LIST_WORDS.SHOW_FILE}: ${path}`} onClick={whole.toggle}>
           {LIST_WORDS.SHOW_FILE}
         </TextButton>
       </>
@@ -1024,10 +1075,33 @@ export interface LineComments {
 }
 
 /**
+ * A line comment whose words the drafts store keeps as they are typed, by
+ * where the comment stands (`lineCommentPlace`), so they outlast the tab
+ * and the window. Note that each comment reads its own draft, so a word
+ * typed in one draws no other comment of the list.
+ */
+function DraftedLineComment({
+  draft,
+  ...comment
+}: Omit<ComponentProps<typeof LineComment>, "body" | "onBody"> & {
+  draft: CommentDraft;
+}): React.JSX.Element {
+  const number = usePullRequestNumber();
+  const { draft: kept, update } = useDraft(lineCommentPlace(comment.agentId, number, draft));
+  return (
+    <LineComment
+      {...comment}
+      body={kept.text}
+      onBody={(text) => update((was) => ({ ...was, text }))}
+    />
+  );
+}
+
+/**
  * The comments being written on lines of the files, several at once
- * across lines and files, held above the list with their words
- * (`comment-drafts.ts`) for as long as the tab stands, so one scrolled out
- * of the list and back loses nothing; one opens where the gutter's + or a
+ * across lines and files, held above the list (`comment-drafts.ts`) for
+ * as long as the tab stands, with their words in the drafts store, so one
+ * scrolled out of the list and back, or left with the tab, loses nothing; one opens where the gutter's + or a
  * selection of code picks lines GitHub would take a comment on
  * (`commentLines`). A comment whose lines a read of the files no longer
  * holds is not drawn.
@@ -1082,14 +1156,13 @@ function useListCommenting(
         side: COMMENT_SIDE[lines.side],
         line: lines.line,
         content: (
-          <LineComment
+          <DraftedLineComment
+            draft={draft}
             agentId={agentId}
             path={path}
             lines={lines}
             headSha={headSha}
             pending={comments.pending}
-            body={wordsOf(drafts, draft)}
-            onBody={(body) => setDrafts((was) => withWords(was, draft, body))}
             suggestion={suggestedLines(file, lines)}
             onActive={() => setDrafts((was) => lightDraft(was, draft.id))}
             onClose={() => setDrafts((was) => closeDraft(was, draft.id))}
@@ -1323,6 +1396,7 @@ function SourceToggle({
       <IconButton
         icon={source ? <ImageIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
         label={label}
+        size={BUTTON_SIZE.COMPACT}
         onClick={onToggle}
       />
     </Tooltip>
@@ -1504,6 +1578,14 @@ function FoldAllButton({ list }: { list: ChangesList }): React.JSX.Element {
   );
 }
 
+/** The file the list stands on, or its first where it stands on none. */
+function shownFileOf(
+  files: readonly CodingAgentChangedFile[],
+  current: string | undefined,
+): CodingAgentChangedFile | undefined {
+  return files.find((file) => file.path === current) ?? files[0];
+}
+
 /** The list of files, or the words saying the filter keeps none, and over it the filter where the tree that holds it is hidden. */
 function FilesList({
   list,
@@ -1609,7 +1691,10 @@ type ChangesPullRequest = Extract<
  * the member's viewed marks, read with each answer.
  */
 export interface ChangesReads {
+  /** The changes as last answered, a good answer standing over any failure after it; a failure only where none has landed. */
   readonly answer: CodingAgentChangesAnswerView | undefined;
+  /** Whether the latest read failed after a good one landed, which leaves the good one drawn. */
+  readonly refreshFailed: boolean;
   readonly out: boolean;
   readonly ask: () => void;
   /** How many answers have landed, which a changed image is drawn anew on. */
@@ -1634,13 +1719,26 @@ export function useChangesReads(
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   // The pull request the tab names by its number, where it names one other than the agent's own (`pull-request-number.ts`).
   const number = usePullRequestNumber();
-  const { answer, out, ask } = useAgentRead(
+  const {
+    answer: latest,
+    out,
+    ask,
+  } = useAgentRead(
     agentId,
     shown,
     ended,
     (id: string) => control.readChanges(id, number),
     UNANSWERED,
   );
+  // Note that a good answer stands over a failure after it, because a read that fails
+  // again must not take the files drawn away; the count follows what is drawn.
+  const good = useRef<
+    { readonly agentId: string; readonly answer: CodingAgentChangesAnswerView } | undefined
+  >(undefined);
+  if (latest !== undefined && !("failure" in latest)) good.current = { agentId, answer: latest };
+  const standing = good.current?.agentId === agentId ? good.current.answer : undefined;
+  const answer = standing ?? latest;
+  const refreshFailed = standing !== undefined && latest !== undefined && "failure" in latest;
   const reads = useRef<{ readonly of: unknown; readonly count: number }>({
     of: undefined,
     count: 0,
@@ -1656,7 +1754,7 @@ export function useChangesReads(
     readViewed,
     pullRequest === null ? undefined : reads.current.count,
   );
-  return { answer, out, ask, count: reads.current.count, pullRequest, viewedFiles };
+  return { answer, refreshFailed, out, ask, count: reads.current.count, pullRequest, viewedFiles };
 }
 
 /** A file to bring into view in the list, as a chapter's key change asks: counted, so each ask is its own. */
@@ -1701,7 +1799,7 @@ export function AgentChangesTab({
   /** A file to bring into view, once, among those drawn. */
   fileReveal?: FileReveal | undefined;
 }): React.JSX.Element {
-  const { answer, out, ask, pullRequest, viewedFiles } = reads;
+  const { answer, refreshFailed, out, ask, pullRequest, viewedFiles } = reads;
   const room = usePaneRoom(tree);
   const edge = useTreeEdge(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
@@ -1736,13 +1834,16 @@ export function AgentChangesTab({
     if (!shown) hideKeys();
   }, [shown, hideKeys]);
   const { go, expand } = list;
-  // A file chosen in the tree floating over the list takes the tree down, to show the file.
+  const openTab = useOpenFileTab();
+  // A file chosen with ⌘ or Ctrl opens in a File tab of its own, as a File tab's tree opens one,
+  // where the panel offers one; a file chosen in the tree floating over the list takes the tree down, to show the file.
   const choose = useCallback(
-    (path: string) => {
+    (path: string, newTab: boolean) => {
+      if (newTab && openTab !== undefined) return openTab(path);
       closeOver();
       go(path);
     },
-    [closeOver, go],
+    [closeOver, go, openTab],
   );
   // A file asked for is opened and scrolled to, each ask once; one asked for at its lines is stood on, and the list scrolls to them once it draws the file open.
   const latestFileReveal = useRef({ fileReveal, expand, go, stand: list.stand });
@@ -1758,11 +1859,36 @@ export function AgentChangesTab({
     fileReveal?.lines === undefined
       ? undefined
       : { ask: fileReveal.ask, range: { path: fileReveal.path, ...fileReveal.lines } };
-  const shownFile = changed.files.find((file) => file.path === list.current) ?? changed.files[0];
+  const shownFile = shownFileOf(changed.files, list.current);
   const refresh = () => {
     ask();
     threads?.refresh?.();
   };
+  const changesMenu = useChangesMenu({ pullRequest, reading: out, onRefresh: refresh });
+  const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy });
+  // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown, the count of files viewed said under Show files.
+  const phone = usePhoneRoom();
+  const url = pullRequest?.url;
+  useTabActions(
+    phone && shown && url !== undefined && shownFileOf(changed.files, list.current) !== undefined
+      ? [
+          [
+            paneToggleAction(
+              room,
+              undefined,
+              viewedOf(changed.files, list.viewed, pullRequest?.truncated === true).words,
+            ),
+            {
+              ...gitHubAction(() => appPlatform().openGitHub(`${url}/files`)),
+              label: OPEN_FILES_ON_GITHUB,
+            },
+            settings.action,
+            foldAllAction(list),
+          ],
+          ...barMenuItems(changesMenu),
+        ]
+      : undefined,
+  );
   const taskId = control.agents?.find((each) => each.id === agentId)?.planId ?? null;
   const texts = useFileTexts(taskId, repository, pullRequest, changed.files);
   const commenting = useListCommenting(
@@ -1783,22 +1909,26 @@ export function AgentChangesTab({
     const standing = latestReveal.current;
     if (revealGone && standing !== undefined) standing.onGone(standing.ask);
   }, [revealGone, revealAsk]);
-  // A failure gives way to the wait as soon as it is asked again; files drawn stand until the answer lands.
+  // A failure with nothing drawn gives way to the wait as soon as it is asked again; files drawn stand until the answer lands, and a failure after them is a line over them.
   if (answer === undefined || (out && "failure" in answer)) {
     return <SpinnerRegion delay label={CHANGES_WORDS.READING} />;
   }
-  if ("failure" in answer) {
+  // Where the good answer drew no files (no pull request, none changed), a refresh that failed has nothing to keep drawn and stands as the failure.
+  const unkept = refreshFailed && !out && (pullRequest === null || shownFile === undefined);
+  if ("failure" in answer || unkept) {
     return (
-      <ErrorState onRetry={ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+      <ErrorState onRetry={refresh} placement={ERROR_STATE_PLACEMENT.CENTRED}>
         {CHANGES_WORDS.FAILED}
       </ErrorState>
     );
   }
   if (pullRequest === null) {
-    return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.NO_PULL_REQUEST}</EmptyState>;
+    return (
+      <EmptyState icon={<GLYPH.PULL_REQUEST_CHANGES />}>{CHANGES_WORDS.NO_PULL_REQUEST}</EmptyState>
+    );
   }
   if (shownFile === undefined) {
-    return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>;
+    return <EmptyState icon={<GLYPH.PULL_REQUEST_CHANGES />}>{CHANGES_WORDS.EMPTY}</EmptyState>;
   }
   return (
     // The view hears stage-cli's keys from whatever in it has the focus, the list's own scroller among them.
@@ -1810,25 +1940,35 @@ export function AgentChangesTab({
         list.onKeyDown(event);
       }}
     >
-      <FileViewBar
-        lead={
-          <ViewedCount
-            files={changed.files}
-            viewed={list.viewed}
-            truncated={pullRequest.truncated}
-          />
-        }
-        onGitHub={() => appPlatform().openGitHub(`${pullRequest.url}/files`)}
-        menu={
-          <>
-            <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />
-            <FoldAllButton list={list} />
-            <ChangesMenu pullRequest={pullRequest} reading={out} onRefresh={refresh} />
-          </>
-        }
-        tree={room.toggles}
-      />
+      {phone ? (
+        settings.sheet
+      ) : (
+        <FileViewBar
+          lead={
+            <ViewedCount
+              files={changed.files}
+              viewed={list.viewed}
+              truncated={pullRequest.truncated}
+            />
+          }
+          github={{
+            href: `${pullRequest.url}/files`,
+            open: (url) => appPlatform().openGitHub(url),
+          }}
+          menu={
+            <>
+              <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />
+              <FoldAllButton list={list} />
+            </>
+          }
+          more={changesMenu}
+          tree={room.toggles}
+        />
+      )}
       <PullRequestWriteNote writes={viewedFiles} />
+      {refreshFailed && !out ? (
+        <ErrorState onRetry={refresh}>{REFRESH_FAILED_WORDS}</ErrorState>
+      ) : null}
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
           <p>{CHANGES_WORDS.TRUNCATED}</p>
@@ -1851,23 +1991,22 @@ export function AgentChangesTab({
           }
           flash={flash}
         />
-        {room.drawn ? (
-          <FileTreePane
-            file={shownFile.path}
-            only={changed.paths}
-            marks={marks}
-            label="Changed files"
-            listFolder={changed.folders}
-            search={{ query: list.query, onQuery: list.onQuery }}
-            onOpen={choose}
-            onViewed={list.markViewed}
-            pane={room.beside.pane}
-            float={room.pane}
-            leaving={room.beside.leaving}
-            width={tree.width?.width}
-            edge={edge}
-          />
-        ) : null}
+        <FileTreePane
+          file={shownFile.path}
+          only={changed.paths}
+          marks={marks}
+          label="Changed files"
+          listFolder={changed.folders}
+          search={{ query: list.query, onQuery: list.onQuery }}
+          onOpen={choose}
+          onViewed={list.markViewed}
+          over={room.docked ? undefined : room.over}
+          narrow={room.narrow}
+          pane={room.beside.pane}
+          leaving={room.beside.leaving}
+          width={tree.width?.width}
+          edge={edge}
+        />
         {tree.open ? null : (
           <ChangesStrip
             files={changed.ordered}
@@ -1877,7 +2016,7 @@ export function AgentChangesTab({
           />
         )}
       </Fill>
-      {shown && list.keysShown ? <FilesChangedKeysSheet onDismiss={hideKeys} /> : null}
+      <FilesChangedKeysSheet open={shown && list.keysShown} onDismiss={hideKeys} />
     </Fill>
   );
 }

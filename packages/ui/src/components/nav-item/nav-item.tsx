@@ -1,37 +1,32 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
-import { ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
+import { rovingItem } from "../roving-keys/roving-keys.js";
 
 /**
  * nav-item.tsx -- a place in a column of places: its glyph, its name, and what stands at its end, a count, a mark, or its chord.
  *
- * A NavItem is a press that goes somewhere, or folds what stands under it,
+ * A NavItem is a press that goes somewhere,
  * in the sidebar's voice: no ground at rest, the column's hover fill under
  * the pointer, and the stronger fill on the place shown (`current`), which
  * is announced as the page (`aria-current="page"`), or as the spot within
- * one (`location`) for a search's result. Three looks, by what it is:
+ * one (`location`) for a search's result. Two looks, by what it is:
  *
  * - `row`, a place: a page, a channel, a way back. One control's height,
  *   its glyph and its name in the body's voice and the sidebar's ink, a
  *   step under the primary, as the task rows it heads are, until it is
  *   hovered or shown.
- * - `head`, a fold's head over a group of rows, in the headings' quieter
- *   voice and with no fill of its own, since its group's container draws
- *   one around it and its actions. Where it has a glyph and folds
- *   (`expanded`), the glyph gives way to the fold's chevron while it is
- *   hovered or has the keyboard, pointing down open and right folded.
  * - `identity`, who or where: an account's picture and name, a
  *   workspace's tile and who shares it, a row tall enough for a face.
  *
  * Its end holds, at rest, a `mark` (a failed run's glyph, a pin) and a
  * `count`, read with its noun ("3 waiting on you") and left out at none,
- * muted, or in the accent's blue where it counts what waits on the reader;
- * a fold's count can stand only while the head is hovered. Its `shortcut`,
- * the chord the app draws, stands there while it is hovered or has the
- * keyboard and takes the count's and the mark's place then, so showing it
- * moves nothing. A row's `detail`, the words after its name, steps back and
+ * muted, or in the needs-you tone (`STATUS_TONE.ATTENTION`) where it counts
+ * what waits on the reader. Its `shortcut`, the chord the app draws, stands there while it is
+ * hovered or has the keyboard and takes the count's and the mark's place
+ * then, so showing it moves nothing. A row's `detail`, the words after its name, steps back and
  * gives way first, so the name stays whole. An `unread` row reads in the
  * heavier weight and the primary ink until it is looked at.
  *
@@ -48,10 +43,9 @@ import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped
  * class or style; its outer spacing is its column's.
  */
 
-/** What a nav item is: a place, a fold's head, or who or where. */
+/** What a nav item is: a place, or who or where. A fold's head is `GroupHeader`. */
 export const NAV_ITEM_VARIANT = {
   ROW: "row",
-  HEAD: "head",
   IDENTITY: "identity",
 } as const;
 
@@ -73,22 +67,14 @@ export const NAV_COUNT_SHOWN = {
 
 export type NavCountShown = (typeof NAV_COUNT_SHOWN)[keyof typeof NAV_COUNT_SHOWN];
 
-/** A count's ink: muted, as a group's tally, or the accent's blue, for what waits on the reader. */
-export const NAV_COUNT_TONE = {
-  MUTED: "muted",
-  ACCENT: "accent",
-} as const;
-
-export type NavCountTone = (typeof NAV_COUNT_TONE)[keyof typeof NAV_COUNT_TONE];
-
 /** A count at the item's end: its figure, what it counts as a reader hears it, when it stands, and its ink. */
 export interface NavCount {
   readonly value: number;
   /** Said after the figure to a reader, "waiting on you", "tasks"; the figure alone where absent. */
   readonly noun?: string | undefined;
   readonly shown?: NavCountShown | undefined;
-  /** Muted where absent. */
-  readonly tone?: NavCountTone | undefined;
+  /** Its status tone: neutral, a tally in the muted ink, where absent; attention for what needs the reader. */
+  readonly tone?: StatusTone | undefined;
 }
 
 /** What `useMenu().trigger()` hands the button its menu drops from. */
@@ -116,8 +102,6 @@ export type NavItemProps = HintProps & {
   current?: NavCurrent | undefined;
   /** Whether something arrived in it the developer has not looked at. */
   unread?: boolean | undefined;
-  /** Whether what it folds stands open; absent where it folds nothing. */
-  expanded?: boolean | undefined;
   /** The count at its end, left out at none. */
   count?: NavCount | undefined;
   /** A mark at its end at rest: a failed run's glyph, a pin. */
@@ -133,6 +117,8 @@ export type NavItemProps = HintProps & {
   disabled?: boolean | undefined;
   /** Whether a pointer's press leaves the focus where it is. */
   keepFocus?: boolean | undefined;
+  /** Whether it is an item of a column a `useRovingKeys` box holds, whose one Tab stop the arrows walk. */
+  roving?: boolean | undefined;
   id?: string | undefined;
   ref?: Ref<HTMLButtonElement> | undefined;
   /** Its name, where the words drawn do not say the whole of it. */
@@ -151,16 +137,11 @@ function said(node: ReactNode): boolean {
   return node !== undefined && node !== null && node !== false && node !== "";
 }
 
-/** The glyph's cell: the glyph alone, or, on a fold's head, the glyph and the chevron it gives way to. */
-function Glyph({ icon, folds }: { icon: ReactNode; folds: boolean }): React.JSX.Element {
+/** The glyph's cell. */
+function Glyph({ icon }: { icon: ReactNode }): React.JSX.Element {
   return (
     <span className="luke-nav-item-glyph" aria-hidden="true">
       <span className="luke-nav-item-icon">{icon}</span>
-      {folds ? (
-        <span className="luke-nav-item-chevron">
-          <ChevronRightIcon />
-        </span>
-      ) : null}
     </span>
   );
 }
@@ -185,7 +166,7 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
         <span
           className="luke-nav-item-count"
           data-shown={count.shown ?? NAV_COUNT_SHOWN.ALWAYS}
-          data-tone={count.tone ?? NAV_COUNT_TONE.MUTED}
+          data-tone={count.tone ?? STATUS_TONE.NEUTRAL}
         >
           {count.value}
           {count.noun === undefined ? null : (
@@ -236,13 +217,13 @@ export function NavItemLink({
       aria-current={current}
       onClick={pulseOnPress(onClick, PRESS_PULSE.QUIET)}
     >
-      {said(icon) ? <Glyph icon={icon} folds={false} /> : null}
+      {said(icon) ? <Glyph icon={icon} /> : null}
       <Name>{children}</Name>
     </a>
   );
 }
 
-/** A place in a column: `icon`, its name, and its end, going there or folding on a press. */
+/** A place in a column: `icon`, its name, and its end, going there on a press. */
 export function NavItem({
   variant = NAV_ITEM_VARIANT.ROW,
   icon,
@@ -250,16 +231,15 @@ export function NavItem({
   detail,
   current,
   unread,
-  expanded,
   count,
   mark,
   shortcut,
   menu,
   onClick,
   keepFocus,
+  roving,
   ...props
 }: NavItemProps): React.JSX.Element {
-  const folds = variant === NAV_ITEM_VARIANT.HEAD && expanded !== undefined;
   return (
     <button
       type="button"
@@ -272,7 +252,7 @@ export function NavItem({
       aria-label={props["aria-label"]}
       aria-describedby={props["aria-describedby"]}
       aria-current={current}
-      aria-expanded={menu?.["aria-expanded"] ?? expanded}
+      aria-expanded={menu?.["aria-expanded"]}
       aria-haspopup={menu?.["aria-haspopup"]}
       aria-keyshortcuts={props["aria-keyshortcuts"]}
       onPointerEnter={props.onPointerEnter}
@@ -284,8 +264,9 @@ export function NavItem({
       onClick={pulseOnPress(menu?.onClick ?? onClick, PRESS_PULSE.QUIET)}
       {...withContextMenu(props.contextMenu, { onPointerDown: props.onPointerDown })}
       onKeyDown={props.onKeyDown}
+      {...(roving === true ? rovingItem() : undefined)}
     >
-      {said(icon) ? <Glyph icon={icon} folds={folds} /> : null}
+      {said(icon) ? <Glyph icon={icon} /> : null}
       <Name>{children}</Name>
       {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
       <AtRest mark={mark} count={count} />

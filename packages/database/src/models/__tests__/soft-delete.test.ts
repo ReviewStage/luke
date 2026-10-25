@@ -8,15 +8,16 @@ import { user } from "../../schemas/auth.js";
 import { sessionSandboxCleanup } from "../../schemas/session-sandbox.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
-import { getTestDB } from "../../testing/index.js";
+import { getTestDB, planOf, plansOf } from "../../testing/index.js";
 import {
   CLEARED_CONVERSATION_RETENTION_MS,
   purgeClearedConversations,
+  purgeDeletedTaskCalls,
   stampConversationsDeleted,
 } from "../soft-delete.js";
 
 /**
- * soft-delete.test.ts -- a conversation stamped deleted with every one delegated from it, and the purge thirty days on queueing each one's sandbox, a worker's beside its agent's.
+ * soft-delete.test.ts -- a conversation stamped deleted with every one delegated from it, and the purge seven days on queueing each one's sandbox, a worker's beside its agent's.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -44,7 +45,7 @@ const openConversation = (userId: string, parentConversationId?: string) =>
 
 it.layer(getTestDB())("the soft delete", (it) => {
   it.effect(
-    "an agent's conversation is stamped with its workers' and theirs, a sibling stands, and the purge thirty days on queues every stamped one's sandbox",
+    "an agent's conversation is stamped with its workers' and theirs, a sibling stands, and the purge seven days on queues every stamped one's sandbox",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -91,5 +92,48 @@ it.layer(getTestDB())("the soft delete", (it) => {
           .where(eq(conversations.id, sibling));
         assert.deepEqual(left, [{ id: sibling }]);
       }),
+  );
+});
+
+it.layer(getTestDB())("the soft delete's reads and the purge's cascade", (it) => {
+  it.effect(
+    "a delete's stamp finds the conversations delegated from those it stamps through their parent's index",
+    () =>
+      Effect.gen(function* () {
+        const plans = yield* plansOf(stampConversationsDeleted([randomUUID()]));
+        const children = plans.find(({ sql }) => /^select/i.test(sql));
+
+        assert.match(children?.plan ?? "", /conversations_parent/);
+      }),
+  );
+
+  it.effect("the sweep finds a deleted task's calls through their task's index", () =>
+    Effect.gen(function* () {
+      const [purge] = yield* plansOf(purgeDeletedTaskCalls(new Date("2026-10-20T12:00:00Z")));
+
+      assert.match(purge?.plan ?? "", /voice_sessions_task/);
+    }),
+  );
+
+  // Note that these are the statements Postgres's own foreign key triggers run for each row a
+  // purge deletes, which no store call sends and so none can be captured from.
+  it.effect("the purge's cascade finds each deleted conversation's children by their parent", () =>
+    Effect.gen(function* () {
+      const plan = yield* planOf(
+        `DELETE FROM ONLY "public"."conversations" WHERE $1 OPERATOR(pg_catalog.=) "parent_conversation_id"`,
+      );
+
+      assert.match(plan, /conversations_parent/);
+    }),
+  );
+
+  it.effect("the check on each turn deleted finds the messages it wrote by their turn", () =>
+    Effect.gen(function* () {
+      const plan = yield* planOf(
+        `SELECT 1 FROM ONLY "public"."messages" x WHERE "turn_id" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x`,
+      );
+
+      assert.match(plan, /messages_turn/);
+    }),
   );
 });

@@ -16,14 +16,15 @@ import {
  * refuses a token from an app whose MCP access is off, and the grant still
  * stands. So a surface says a provider is connected only once its server
  * answered with its tools, and draws its count; one whose server answered
- * why it would not is a problem, said in a line of its own with the
- * server's message where it sent one. A refusal, or the server's own error,
+ * why it would not is a problem, said in a sentence of ours, with the
+ * server's message, where it sent one, quoted on a second line that names
+ * it (`saidWords`), never inside our sentence. A refusal, or the server's own error,
  * is mended by reconnecting (a token issued before a provider-side setting
  * changed keeps failing); a server that never answered is an outage a
  * reconnect would not mend, so it keeps its switch and offers nothing. A read
  * not answered yet is still being checked; one Luke's own service could not
- * answer says nothing of the server, so the connection stands as the
- * service says.
+ * answer says nothing of the server, so a surface says the tools could not be
+ * read and offers to read them again, never that the connection works.
  */
 
 /**
@@ -47,8 +48,8 @@ export const CONNECTION_HEALTH = {
   BROKEN: "broken",
   /** Its tools have not been read yet. */
   CHECKING: "checking",
-  /** Luke's own service could not ask the server, so nothing is known of it. */
-  UNKNOWN: "unknown",
+  /** Luke's own service could not ask the server, so nothing is known of it: a read that failed, which asking again may mend. */
+  FAILED: "failed",
 } as const;
 
 export type ConnectionHealth =
@@ -56,26 +57,41 @@ export type ConnectionHealth =
   | {
       readonly kind: typeof CONNECTION_HEALTH.BROKEN;
       readonly problem: string;
+      /** The server's own message, quoted and naming the server, for a line under the problem's; none where it sent none. */
+      readonly said?: string;
       /** Whether reconnecting mends it: a refusal or the server's own error, never an outage. */
       readonly reconnect: boolean;
     }
-  | { readonly kind: typeof CONNECTION_HEALTH.CHECKING | typeof CONNECTION_HEALTH.UNKNOWN };
+  | { readonly kind: typeof CONNECTION_HEALTH.CHECKING | typeof CONNECTION_HEALTH.FAILED };
 
 /** How a connected server's count of tools reads. */
 export function toolsCount(count: number): string {
   return count === 1 ? "1 tool" : `${count} tools`;
 }
 
-/** The line that says why a provider's server listed no tools. */
-function problemLine(
+/**
+ * Someone else's words as a line of their own under a sentence of ours:
+ * who said them, then the words quoted as they came. Note that the words
+ * are never folded into our sentence, because a provider's text has its own
+ * grammar and case, and quoted it reads as theirs rather than as Luke's.
+ */
+export function saidWords(source: string, words: string): string {
+  return `${source} said: “${words}”`;
+}
+
+/** The sentence that says why a provider's server listed no tools, and its own message quoted where it sent one. */
+function problemLines(
   provider: IntegrationProvider,
   problem: { readonly reason: IntegrationToolsProblemReason; readonly message?: string },
-): string {
+): { readonly problem: string; readonly said?: string } {
   const name = INTEGRATION_NAME[provider];
-  if (problem.reason === INTEGRATION_TOOLS_PROBLEM.REFUSED) return `${name} refused the sign-in.`;
+  if (problem.reason === INTEGRATION_TOOLS_PROBLEM.REFUSED) {
+    return { problem: `${name} refused the sign-in.` };
+  }
+  const sentence = `${name} could not be reached.`;
   return problem.message === undefined
-    ? `Can't reach ${name}.`
-    : `Can't reach ${name}: ${problem.message}`;
+    ? { problem: sentence }
+    : { problem: sentence, said: saidWords(name, problem.message) };
 }
 
 /** Whether one connected provider's server works, from its tools read; nothing is a read not answered yet. */
@@ -84,12 +100,12 @@ export function connectionHealth(
   read: IntegrationToolsView | undefined,
 ): ConnectionHealth {
   if (read === undefined) return { kind: CONNECTION_HEALTH.CHECKING };
-  if ("failure" in read) return { kind: CONNECTION_HEALTH.UNKNOWN };
+  if ("failure" in read) return { kind: CONNECTION_HEALTH.FAILED };
   if ("problem" in read) {
     const reason = read.problem.reason;
     return {
       kind: CONNECTION_HEALTH.BROKEN,
-      problem: problemLine(provider, read.problem),
+      ...problemLines(provider, read.problem),
       reconnect:
         reason === INTEGRATION_TOOLS_PROBLEM.REFUSED ||
         reason === INTEGRATION_TOOLS_PROBLEM.REJECTED,

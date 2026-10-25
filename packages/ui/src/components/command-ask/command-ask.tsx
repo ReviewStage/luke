@@ -1,4 +1,4 @@
-import { useId, useRef } from "react";
+import { type ReactNode, useId, useRef } from "react";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { DIALOG_ROLE, Dialog } from "../dialog/dialog.js";
 import { FILE_TEXT_EXTENT, FileText } from "../file-text/file-text.js";
@@ -15,8 +15,9 @@ import { TEXT_TONE, Text } from "../text/text.js";
  * Escape and a press on the dimmed window deny too, since a prompt waved
  * away must not run the command. Always allow says beside it that it stops
  * the asking for every later command, which is the setting it writes.
- * Whoever owns the card holds it mounted while the ask stands and takes it
- * down as the ask goes, answered or timed out.
+ * Whoever owns the card holds it mounted while the ask stands and passes
+ * `open` as the ask goes, answered or timed out, so the card fades out
+ * (`Dialog`'s `open`), taking it down once it says it is gone.
  */
 
 /** What the card is titled. */
@@ -26,11 +27,16 @@ const TITLE = "Run this command on your Mac?";
 const COMMAND_LABEL = "The command";
 
 export function CommandAsk({
+  open,
   command,
   onAllowOnce,
   onAllowAlways,
   onDeny,
+  onExited,
+  settingsPage,
 }: {
+  /** Whether the ask stands; falling, the card fades out before it goes. */
+  open: boolean;
   /** The shell command, as the agent wrote it. */
   command: string;
   /** Run it this once. */
@@ -39,16 +45,22 @@ export function CommandAsk({
   onAllowAlways: () => void;
   /** Do not run it, which Escape and the dimmed window also answer. */
   onDeny: () => void;
+  /** Its fade has run and the card is gone, which its owner takes the ask down on. */
+  onExited?: (() => void) | undefined;
+  /** The page of Settings the asking is changed in, as the window links it by name; settings at large where none. */
+  settingsPage?: ReactNode;
 }): React.JSX.Element {
   const deny = useRef<HTMLButtonElement | null>(null);
   const bodyId = useId();
   return (
     <Dialog
+      open={open}
       role={DIALOG_ROLE.ALERT_DIALOG}
       title={TITLE}
       describedBy={bodyId}
       initialFocus={deny}
       onDismiss={onDeny}
+      onExited={onExited}
       actions={
         <>
           <Button ref={deny} variant={BUTTON_VARIANT.QUIET} onClick={onDeny}>
@@ -67,7 +79,8 @@ export function CommandAsk({
         <Text tone={TEXT_TONE.MUTED} id={bodyId}>
           An agent wants to run this in your login shell, from your home folder. What it prints goes
           to the model and is kept with the conversation. Always allow stops the asking for every
-          later command, until you change it in Settings › This Mac.
+          later command, until you change it in{" "}
+          {settingsPage === undefined ? null : <>{settingsPage} </>}settings.
         </Text>
         <FileText text={command} label={COMMAND_LABEL} extent={FILE_TEXT_EXTENT.WHOLE} />
       </Stack>

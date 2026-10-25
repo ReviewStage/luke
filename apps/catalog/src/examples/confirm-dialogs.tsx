@@ -1,10 +1,16 @@
 import {
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
-  DIALOG_TONE,
+  DIALOG_SIZE,
+  Dialog,
+  DialogActions,
   type DialogQuestion,
+  FootQuestion,
   Inline,
+  JUSTIFY,
+  Text,
   TextField,
   useConfirmDialog,
 } from "@luke/ui";
@@ -16,8 +22,11 @@ import { CatalogSection } from "../section";
  * confirm-dialogs.tsx -- an irreversible act's question, opened from its
  * button: one refused the first time it is answered and accepted when tried
  * again, its card shaking at the refusal and its act wearing a check as it
- * lands, one in the accent for an act that can be undone, a long one, one
- * that asks for a field to be filled, and one gated on the subject's name.
+ * lands, one in the accent for an act that can be undone but reaches someone
+ * else, a long one, one that asks for a field to be filled, and one gated on
+ * the subject's name. Only an act past undoing is red. A question asked
+ * inside a dialog about what it holds asks at that dialog's foot instead
+ * (`FootQuestion`): a key's Remove, refused the first time.
  */
 
 /** What a confirming act answers, as `useConfirmDialog` takes it, so the catalog needs nothing beyond `@luke/ui`. */
@@ -51,7 +60,7 @@ function Asking({
       <Button variant={BUTTON_VARIANT.OUTLINE} aria-haspopup="dialog" onClick={confirm.ask}>
         {label}
       </Button>
-      <ConfirmDialog confirm={confirm} question={question} gate={gate} />
+      <ConfirmDialog open confirm={confirm} question={question} gate={gate} />
     </>
   );
 }
@@ -67,6 +76,7 @@ function RefusedOnce(): React.JSX.Element {
         body: "Luke stops using it at once. Agents that are running finish on it.",
         verb: "Delete",
         running: "Deleting",
+        loss: CONFIRM_LOSS.IRREVERSIBLE,
       }}
       answer={() => {
         if (triedOnce) return ACCEPTED;
@@ -77,12 +87,12 @@ function RefusedOnce(): React.JSX.Element {
   );
 }
 
-/** A question that asks for a name before it acts; Enter in the field answers. */
+/** A question that asks for the new owner's name before it acts; Enter in the field answers. */
 function Named(): React.JSX.Element {
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement | null>(null);
   const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    Promise.resolve(name.trim() === "" ? refused("Name the workspace.") : ACCEPTED),
+    Promise.resolve(name.trim() === "" ? refused("Name the new owner.") : ACCEPTED),
   );
   return (
     <>
@@ -94,22 +104,24 @@ function Named(): React.JSX.Element {
           confirm.ask();
         }}
       >
-        New workspace…
+        Transfer ownership…
       </Button>
       <ConfirmDialog
+        open
         confirm={confirm}
         field={field}
         question={{
-          title: "New workspace",
-          verb: "Create workspace",
-          running: "Creating workspace",
-          tone: DIALOG_TONE.PRIMARY,
+          title: "Transfer the workspace?",
+          body: "The new owner can remove you and everyone else, and can transfer it back.",
+          verb: "Transfer workspace",
+          running: "Transferring workspace",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       >
         <TextField
           ref={field}
-          label="Workspace name"
-          placeholder="Workspace name"
+          label="New owner"
+          placeholder="Name or email"
           value={name}
           onChange={(value) => {
             setName(value);
@@ -121,19 +133,82 @@ function Named(): React.JSX.Element {
   );
 }
 
+/** A dialog holding a key whose Remove asks at the dialog's own foot, refused the first time so the refusal can be seen there. */
+function KeyInADialog(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState(true);
+  const [triedOnce, setTriedOnce] = useState(false);
+  const removal = useConfirmDialog({ subject: key, surfaceOpen: open }, () => {
+    if (!triedOnce) {
+      setTriedOnce(true);
+      return Promise.resolve(refused("The keychain is locked. Unlock it and try again."));
+    }
+    setKey(false);
+    return Promise.resolve(ACCEPTED);
+  });
+  return (
+    <>
+      <Button
+        variant={BUTTON_VARIANT.OUTLINE}
+        aria-haspopup="dialog"
+        onClick={() => {
+          setKey(true);
+          setTriedOnce(false);
+          setOpen(true);
+        }}
+      >
+        Manage key…
+      </Button>
+      <Dialog
+        open={open}
+        title="OpenAI"
+        size={DIALOG_SIZE.WIDE}
+        onDismiss={() => setOpen(false)}
+        actions={<DialogActions onDone={() => setOpen(false)} />}
+      >
+        {key ? (
+          <Inline justify={JUSTIFY.BETWEEN}>
+            <Text>sk-…wxyz</Text>
+            <Button
+              variant={BUTTON_VARIANT.DANGER_OUTLINE}
+              busy={removal.busy}
+              busyLabel="Removing"
+              onClick={removal.ask}
+            >
+              Remove
+            </Button>
+          </Inline>
+        ) : (
+          <Text>No key saved.</Text>
+        )}
+        <FootQuestion
+          confirm={removal}
+          question={{
+            title: "Remove your OpenAI API key?",
+            body: "Calls and dictation will be off until a key is saved again.",
+            verb: "Remove key",
+            running: "Removing",
+            loss: CONFIRM_LOSS.IRREVERSIBLE,
+          }}
+        />
+      </Dialog>
+    </>
+  );
+}
+
 function ConfirmDialogs(): React.JSX.Element {
   return (
     <CatalogSection id="confirm-dialog-states" title="Confirm dialogs">
       <Inline>
         <RefusedOnce />
         <Asking
-          label="Restore version…"
+          label="Remove member…"
           question={{
-            title: "Restore this version?",
-            body: "The plan goes back to how it read on 3 October. The current version stays in its history.",
-            verb: "Restore",
-            running: "Restoring",
-            tone: DIALOG_TONE.PRIMARY,
+            title: "Remove Ada Lovelace from the workspace?",
+            body: "Ada loses access to its tasks at once, and can be invited again later.",
+            verb: "Remove",
+            running: "Removing",
+            loss: CONFIRM_LOSS.AFFECTS_OTHERS,
           }}
         />
         <Asking
@@ -144,6 +219,7 @@ function ConfirmDialogs(): React.JSX.Element {
             body: "The task, its plan, and every agent’s transcript under it go for good. Anyone in the workspace who opened it sees it gone the next time they look, and links to it from other tasks, from Linear issues, and from pull requests stop resolving.",
             verb: "Delete",
             running: "Deleting",
+            loss: CONFIRM_LOSS.IRREVERSIBLE,
           }}
         />
         <Named />
@@ -155,8 +231,10 @@ function ConfirmDialogs(): React.JSX.Element {
             body: "This cannot be undone.",
             verb: "Delete account",
             running: "Deleting account",
+            loss: CONFIRM_LOSS.IRREVERSIBLE,
           }}
         />
+        <KeyInADialog />
       </Inline>
     </CatalogSection>
   );

@@ -1,137 +1,17 @@
-/* card.css -- a card's edge, corner, and ground, and the room inside it for
-   each padding choice; what it holds sets itself. A card standing in running
-   words (a span) is still a block. */
+/* card.css -- what of a card's frame Tailwind's utilities cannot say: the
+   transition of a card that lifts, four properties on four motion tokens.
+   The frame itself is utilities over the theme (`card.tsx`,
+   `../../shadcn/card.tsx`). */
 
 @layer components {
-  .luke-card {
-    position: relative;
-    display: block;
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-card-radius);
-    background: var(--luke-color-surface);
-    padding: var(--luke-card-inset);
-  }
-
-  /* Note that a flush card clips what it holds, because content drawn to its
-     edge would otherwise paint square corners over the card's round ones; it
-     clips without becoming a scroller, so a focus inside never scrolls it. */
-  .luke-card[data-padding="flush"] {
-    overflow: clip;
-    padding: 0;
-  }
-
-  /* A ring inside a card that clips is drawn inside its control, where the
-     clip cannot cut it. */
-  .luke-card[data-padding="flush"]:not([data-look="raised"]) {
-    --luke-focus-ring-offset: var(--luke-focus-ring-inset);
-  }
-
-  .luke-card[data-padding="none"] {
-    padding: 0;
-  }
-
-  .luke-card[data-padding="snug"] {
-    padding: var(--luke-card-inset-snug) var(--luke-card-inset);
-  }
-
-  .luke-card[data-padding="compact"] {
-    padding: var(--luke-card-inset-compact) var(--luke-card-inset);
-  }
-
-  .luke-card[data-corner="control"] {
-    border-radius: var(--luke-control-radius);
-  }
-
-  .luke-card[data-look="tint"] {
-    background: var(--luke-color-fill-hover);
-  }
-
-  .luke-card[data-look="code"] {
-    background: var(--luke-color-code-ground);
-  }
-
-  .luke-card[data-look="outline"] {
-    background: none;
-  }
-
-  /* Note that a well's edge is there but unseen, so ringed as a drop target
-     the card keeps its size, the ring fading in as a hover does. */
-  .luke-card[data-look="well"] {
-    border-color: transparent;
-    background: var(--luke-color-well);
-    transition: border-color var(--luke-duration-hover) ease;
-  }
-
-  .luke-card[data-dashed="true"] {
-    border-style: dashed;
-  }
-
-  .luke-card[data-look="raised"] {
-    border-color: var(--luke-color-border-strong);
-    border-radius: var(--luke-radius-8);
-    background: var(--luke-color-overlay);
-    /* Note that a raised card lets what it holds stand past its edge, because
-       its fields open their suggestion menus over its top and a clip would
-       hide their rows; what it holds draws no ground of its own to square
-       its corners. */
-    overflow: visible;
-  }
-
-  /* A menu's corner, raised or not, as a card standing over the page as a
-     menu does wears it. */
-  .luke-card[data-corner="menu"] {
-    border-radius: var(--luke-menu-radius);
-  }
-
-  .luke-card[data-shadow="soft"] {
-    box-shadow: 0 1px 2px var(--luke-color-shadow-soft);
-  }
-
-  .luke-card[data-shadow="menu"] {
-    box-shadow: var(--luke-menu-shadow);
-  }
-
-  /* Note that the wash is laid over the card's own ground as an image, so a
-     card on an opaque ground stays opaque under it and one with none takes
-     the wash alone. */
-  .luke-card[data-hover="wash"]:is(:hover, [data-lit="true"]),
-  .luke-card[data-drop-target="true"] {
-    background-image: linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover));
-  }
-
   /* Note that a card that lifts is one that moves among others, as a board's
      cards slide aside under a drag and fade as one is carried, so its slide
      and its fade ride the motion tokens beside its lift. */
   .luke-card[data-hover="lift"] {
     transition:
       transform var(--luke-duration-fast) var(--luke-spring-fast),
-      border-color var(--luke-duration-hover) ease,
-      box-shadow var(--luke-duration-hover) ease,
+      border-color var(--luke-duration-hover) var(--luke-motion-exit),
+      box-shadow var(--luke-duration-hover) var(--luke-motion-exit),
       opacity var(--luke-duration-quick) var(--luke-motion-exit);
-  }
-
-  .luke-card[data-hover="lift"]:is(:hover, [data-lit="true"]) {
-    border-color: var(--luke-color-border-strong);
-    box-shadow: 0 2px 6px var(--luke-color-shadow-soft);
-  }
-
-  /* The card a dragged row is carried over is ringed as well as washed, so it
-     reads as the one the row will land in. */
-  .luke-card[data-drop-target="true"] {
-    border-color: var(--luke-color-focus-ring);
-  }
-
-  .luke-card-head {
-    display: flex;
-    min-width: 0;
-    min-height: var(--luke-control-height);
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--luke-space-4) var(--luke-space-8);
-    padding: var(--luke-space-4) var(--luke-space-12);
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
   }
 }

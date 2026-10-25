@@ -1,7 +1,9 @@
 /* rect-float.css -- the layer that stands by a box in the window
    (`rect-float.tsx`): laid in its owner's positioned box at the edge of the
    box it stands by, as wide as what it holds, and moved the gap off it,
-   above by its own height too. What it holds draws its own surface. */
+   above by its own height too. What it holds draws its own surface. Closed,
+   it fades where it stood on the exit token, as a menu does, taking no
+   press. */
 
 @layer components {
   .luke-rect-float {
@@ -16,5 +18,10 @@
 
   .luke-rect-float[data-side="below"] {
     translate: 0 var(--luke-space-4);
+  }
+
+  .luke-rect-float[data-leaving="true"] {
+    pointer-events: none;
+    animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   }
 }

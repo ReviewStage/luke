@@ -402,7 +402,7 @@ test("a spoken turn keeps its Copy and its Copy link inside its fold, under its 
   assert.match(foot.textContent ?? "", /Worked for 11s/u);
   assert.ok(
     [...foot.querySelectorAll("button")].some(
-      (button) => button.getAttribute("aria-label") === "Copy" || button.textContent === "Copy",
+      (button) => button.getAttribute("aria-label") === "Copy message",
     ),
     "its Copy is in the foot",
   );

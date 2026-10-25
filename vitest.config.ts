@@ -28,6 +28,7 @@ export default defineConfig({
       "tools/codex-probe",
       "packages/agent-runner",
       "tools/anti-slop",
+      "tools/polish",
     ],
   },
 });

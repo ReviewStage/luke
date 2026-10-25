@@ -28,6 +28,7 @@ import { Database, type DatabaseServices, type QueryError } from "../core/query.
 import { codingAgent } from "../schemas/coding-agent.js";
 import { operatorNotice, operatorWake } from "../schemas/operator-notice.js";
 import { OPERATOR_NOTICE_KIND, type OperatorNoticeKind } from "../storage-vocabulary.js";
+import { agentAutomationNameSql } from "./agent-name.js";
 
 type NoticeEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
@@ -98,8 +99,10 @@ const UnreadNoticeSchema = Schema.Struct({
   agentId: Schema.String,
   taskId: Schema.NullOr(Schema.String),
   at: Schema.Date,
+  agentKind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
+  agentAutomationName: Schema.NullOr(Schema.String),
 });
 
 export type UnreadOperatorNotice = typeof UnreadNoticeSchema.Type;
@@ -116,8 +119,10 @@ const findUnread = SqlSchema.findAll({
           agentId: operatorNotice.agentId,
           taskId: operatorNotice.taskId,
           at: operatorNotice.at,
+          agentKind: codingAgent.kind,
           agentTitle: codingAgent.title,
           agentModel: codingAgent.model,
+          agentAutomationName: agentAutomationNameSql(codingAgent),
         })
         .from(operatorNotice)
         .innerJoin(codingAgent, eq(codingAgent.id, operatorNotice.agentId))
@@ -161,8 +166,10 @@ const DueWakeSchema = Schema.Struct({
   organizationId: Schema.String,
   agentId: Schema.String,
   taskId: Schema.NullOr(Schema.String),
+  agentKind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
+  agentAutomationName: Schema.NullOr(Schema.String),
 });
 
 export type DueOperatorWake = typeof DueWakeSchema.Type;
@@ -184,8 +191,10 @@ const findDueWakes = SqlSchema.findAll({
           organizationId: operatorOf.organizationId,
           agentId: operatorNotice.agentId,
           taskId: operatorNotice.taskId,
+          agentKind: failedAgent.kind,
           agentTitle: failedAgent.title,
           agentModel: failedAgent.model,
+          agentAutomationName: agentAutomationNameSql(failedAgent),
         })
         .from(operatorNotice)
         .innerJoin(operatorOf, eq(operatorOf.id, operatorNotice.operatorId))

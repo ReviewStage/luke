@@ -1,0 +1,10 @@
+{
+  "instead": "Name a document once with PageHeader from @luke/ui, through DetailPage, CollectionPage or SettingsPage; a workspace is named by Toolbar.",
+  "classes": [
+    { "class": "person-head", "allow": [] },
+    { "class": "person-head-copy", "allow": [] },
+    { "class": "person-head-name", "allow": [] },
+    { "class": "task-title-line", "allow": [] },
+    { "class": "task-title-actions", "allow": [] }
+  ]
+}

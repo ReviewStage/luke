@@ -11,7 +11,7 @@
  */
 
 import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
-import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { isLinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AppCommand, isAppCommand } from "@luke/settings/shortcuts";
 import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
@@ -22,7 +22,7 @@ import { readEither } from "@luke/wire/effect";
 import { wireResult as result, type WireGuard, type WireGuardValue } from "@luke/wire/wire-guard";
 import { eventIterator, type } from "@orpc/contract";
 import { Result } from "effect";
-import { type AppStateSnapshot, isAppStateSnapshot } from "../app-state.js";
+import { type AppStateDelivery, isAppStateDelivery } from "../app-state.js";
 import { actProcedure } from "./base.js";
 
 /** Every push main sends a window, by the name it crosses under. */
@@ -50,17 +50,21 @@ export const PUSH = {
 
 export type PushName = (typeof PUSH)[keyof typeof PUSH];
 
+/** Every push but the document's, which a window's stream works out from the document itself rather than carrying as handed. */
+export type EventPushName = Exclude<PushName, typeof PUSH.APP_STATE>;
+
 /** Each push's guard, which the window reads its payload with before any listener hears it. */
 export const PUSH_GUARD = {
   /**
-   * The one way a window learns what main holds. Its first delivery is this
-   * window's bootstrap and every later one carries a version at least as
-   * high, so there is no per-field push channel and no "which arrived first"
-   * for a reader to answer. A delivery whose version repeats the one held is
-   * this window's own facts having moved — its mode, or the display it stands
-   * on — which the document does not number.
+   * The one way a window learns what main holds after its first read: what
+   * moved in the document since the last delivery this stream sent, every
+   * entry of it on the stream's first. Each carries a version at least as
+   * high as the one before, so there is no per-field push channel and no
+   * "which arrived first" for a reader to answer. A delivery whose version
+   * repeats the one held is this window's own facts having moved — its mode,
+   * or the display it stands on — which the document does not number.
    */
-  [PUSH.APP_STATE]: result<AppStateSnapshot>(isAppStateSnapshot),
+  [PUSH.APP_STATE]: result<AppStateDelivery>(isAppStateDelivery),
   /** A command chosen from the menu bar, for the focused window to run as its shortcut would. */
   [PUSH.MENU_COMMAND]: result<AppCommand>(isAppCommand),
   /**
@@ -197,23 +201,26 @@ export const PUSH_GUARD = {
       isWireBoolean(value.failed),
   ),
   /**
-   * An inbox item opened while the window was focused away from its task's
-   * Inbox tab: the panel says so in its toast, whose View opens that tab.
-   * An event, as an agent's end is, because it is said once and never
-   * bootstrapped from.
+   * The inbox items one read found opened while the window was focused away
+   * from their task's Inbox tab: the panel says them in one toast, whose
+   * View opens a task's tab. An event, as an agent's end is, because it is
+   * said once and never bootstrapped from.
    */
   [PUSH.INBOX_ITEM_OPENED]: result<{
-    taskId: string;
-    itemId: string;
-    words: string;
-    detail: string;
+    items: readonly { taskId: string; itemId: string; words: string; detail: string }[];
   }>(
     (value) =>
       isRecord(value) &&
-      isWireString(value.taskId) &&
-      isWireString(value.itemId) &&
-      isWireString(value.words) &&
-      isWireString(value.detail),
+      Array.isArray(value.items) &&
+      value.items.length > 0 &&
+      value.items.every(
+        (item) =>
+          isRecord(item) &&
+          isWireString(item.taskId) &&
+          isWireString(item.itemId) &&
+          isWireString(item.words) &&
+          isWireString(item.detail),
+      ),
   ),
   /**
    * A run of one of the account's automations failed to start while the

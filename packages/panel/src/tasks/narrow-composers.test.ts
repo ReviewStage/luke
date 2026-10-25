@@ -7,7 +7,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "../testing/composer.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
@@ -16,7 +15,6 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { AgentComposer } from "./agent-composer.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
-import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { useAgentComposer } from "./use-agent-composer.js";
 
 /**
@@ -48,6 +46,8 @@ const INBOX_CARD_AT_360 = 288;
 
 const DESKTOP = {
   STAGE: 800,
+  /** A laptop's window with a dock, or a pane squeezed short. */
+  SHORT_STAGE: 260,
   CARD: 720,
   DIALOG_ROOM: 1232,
 } as const;
@@ -80,7 +80,7 @@ async function draw(node: ReactElement, room?: "narrow" | "wide"): Promise<HTMLE
   const container = document.body.appendChild(document.createElement("div"));
   if (room !== undefined) {
     container.className = "desktop-shell";
-    container.dataset.room = room;
+    document.documentElement.dataset.lukeRoom = room;
   }
   const root = createRoot(container);
   roots.push(root);
@@ -109,8 +109,9 @@ function pixels(element: Element, value: string): number {
   const arithmetic = resolved(element, value)
     .replace(/\bcalc\(/gu, "(")
     .replace(/\bmin\(/gu, "Math.min(")
+    .replace(/\bmax\(/gu, "Math.max(")
     .replace(/(-?\d*\.?\d+)px/gu, "$1");
-  assert.match(arithmetic, /^[\d\s.+\-*/(),Mathmin]+$/u, `${value} is pixels alone`);
+  assert.match(arithmetic, /^[\d\s.+\-*/(),Mathminx]+$/u, `${value} is pixels alone`);
   return Number(new Function(`return ${arithmetic};`)());
 }
 
@@ -144,14 +145,26 @@ test("on a phone with the keyboard up, the agent's field stops growing at under 
   assert.ok(cap < lines, "the share of the screen is less than eight lines");
 });
 
-test("on a desktop, the agent's field grows to its eight lines whatever the window's height", async () => {
+test("on a desktop, the agent's field grows to its eight lines in a window tall enough for them", async () => {
+  document.documentElement.setAttribute("data-luke-profile", "desktop");
   layContainersAt({ composer: DESKTOP.CARD });
   stageAt(DESKTOP.STAGE);
   const container = await draw(createElement(AgentBox), "wide");
   const field = container.querySelector(".agent-composer-input") ?? assert.fail("the field stands");
-  const cap = getComputedStyle(field).maxHeight;
-  assert.doesNotMatch(cap, /stage-height|field-cap/u, "the window's height bounds nothing");
-  assert.equal(custom(field, "--agent-composer-field-cap"), undefined);
+  const lines = pixels(field, custom(field, "--agent-composer-field-lines") ?? "");
+  assert.equal(pixels(field, getComputedStyle(field).maxHeight), lines);
+});
+
+test("in a short desktop window, the agent's field stops growing at two fifths of what is seen, short of its eight lines", async () => {
+  document.documentElement.setAttribute("data-luke-profile", "desktop");
+  layContainersAt({ composer: DESKTOP.CARD });
+  stageAt(DESKTOP.SHORT_STAGE);
+  const container = await draw(createElement(AgentBox), "wide");
+  const field = container.querySelector(".agent-composer-input") ?? assert.fail("the field stands");
+  const cap = pixels(field, getComputedStyle(field).maxHeight);
+  const lines = pixels(field, custom(field, "--agent-composer-field-lines") ?? "");
+  assert.equal(cap, DESKTOP.SHORT_STAGE * 0.4);
+  assert.ok(cap < lines, "the share of the window is less than eight lines");
 });
 
 /** New task's dialog open, as a press of New task opens it, portalled over the window outside any shell; answers its field. */
@@ -185,19 +198,21 @@ test("on a phone with the keyboard up, New task's dialog, drawn outside the shel
   assert.equal(pixels(field, getComputedStyle(field).maxHeight), PHONE.STAGE_WITH_KEYBOARD * 0.3);
 });
 
-test("on a desktop, New task's dialog lets its field grow to its eight lines whatever the window's height", async () => {
+test("on a desktop, New task's dialog lets its field grow to its eight lines in a window tall enough for them", async () => {
+  document.documentElement.setAttribute("data-luke-profile", "desktop");
   document.documentElement.setAttribute("data-luke-room", "wide");
   layContainersAt({ "luke-dialog-room": DESKTOP.DIALOG_ROOM, composer: DESKTOP.CARD });
   stageAt(DESKTOP.STAGE);
   const field = await openNewTask();
-  assert.doesNotMatch(getComputedStyle(field).maxHeight, /stage-height|field-cap/u);
+  const lines = pixels(field, custom(field, "--agent-composer-field-lines") ?? "");
+  assert.equal(pixels(field, getComputedStyle(field).maxHeight), lines);
 });
 
 /** A thread opened over a plan's column, as the plan lays it, in the room given. */
 function threadIn(room: "narrow" | "wide"): HTMLElement {
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
-  shell.dataset.room = room;
+  document.documentElement.dataset.lukeRoom = room;
   const float = shell.appendChild(document.createElement("div"));
   float.className = "comment-float";
   return float;
@@ -225,6 +240,7 @@ test("in a wide room, an open thread keeps the margin card's width", () => {
 async function composerDialog(): Promise<HTMLElement> {
   await draw(
     createElement(Dialog, {
+      open: true,
       title: "New task",
       size: DIALOG_SIZE.COMPOSER,
       onDismiss: ignore,
@@ -256,45 +272,10 @@ test("on a desktop, New task's dialog keeps the dimmed window's margins", async 
   assert.equal(pixels(dialog, style.marginRight), 0);
 });
 
-test("on a 390px screen, the repository menu opened from Home's chip stands inside the screen", async () => {
-  layContainersAt({}, { touch: true });
-  vi.spyOn(window, "innerWidth", "get").mockReturnValue(PHONE.SCREEN);
-  const chipLeft = 85;
-  vi.spyOn(HTMLButtonElement.prototype, "getBoundingClientRect").mockReturnValue(
-    DOMRect.fromRect({ x: chipLeft, y: 300, width: 120, height: 44 }),
-  );
-  // The menu at its own width, which jsdom lays out as none.
-  const menuWidth = 340;
-  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return this.classList.contains("searchable-menu") ? menuWidth : 0;
-  });
-  const container = await draw(
-    createElement(RepositoryChip, {
-      value: "acme/web",
-      chooser: { ...tasksControl().repositories, recent: ["acme/web"] },
-      onChoose: ignore,
-      place: CHIP_PLACE.FIELD,
-      align: PICKER_ALIGN.START,
-    }),
-  );
-  const chip =
-    container.querySelector<HTMLButtonElement>(".repository-chip button") ??
-    assert.fail("the chip stands");
-  await act(async () => chip.click());
-  const menu = container.querySelector(".searchable-menu") ?? assert.fail("the menu opens");
-
-  const style = getComputedStyle(menu);
-  const start = chipLeft + pixels(menu, style.left);
-  const end = start + Math.min(menuWidth, pixels(menu, style.maxWidth));
-  assert.ok(start >= 0 && end <= PHONE.SCREEN, `the menu stands from ${start} to ${end}`);
-});
-
 /** The `@` list's foot, which names the keys it hears. */
 function mentionFoot(): HTMLElement {
   const menu = document.body.appendChild(document.createElement("div"));
-  menu.className = "luke-menu-surface searchable-menu mention-menu";
+  menu.className = "luke-menu-surface mention-menu";
   const foot = menu.appendChild(document.createElement("div"));
   foot.className = "luke-menu-keys";
   return foot;
@@ -324,7 +305,7 @@ test("a page that says no room of its own is answered by its dimmed window's wid
   assert.equal(24 + pixels(dialog, getComputedStyle(dialog).marginLeft), 12);
 });
 
-/** The Inbox's answer box as the box lays it (`inbox-answer-box.tsx`): its note line, and under it its foot of +, microphone, and Send. */
+/** The Inbox's answer box as the box lays it (`inbox-answer-box.tsx`): its note line, and under it its foot (`ComposerFoot`) of +, microphone, and Send. */
 function inboxBox(): Record<"foot" | "attach" | "line" | "actions" | "mic" | "send", HTMLElement> {
   const part = (parent: Element, tag: string, className: string) => {
     const element = parent.appendChild(document.createElement(tag));
@@ -335,11 +316,11 @@ function inboxBox(): Record<"foot" | "attach" | "line" | "actions" | "mic" | "se
   const form = part(card, "form", "luke-composer-frame prompt-input inbox-answer");
   const line = part(form, "div", "agent-composer-field");
   part(line, "div", "agent-composer-input");
-  const foot = part(form, "div", "prompt-input-footer inbox-answer-foot");
-  const attach = part(part(foot, "div", "prompt-input-tools"), "button", "");
-  const actions = part(foot, "div", "inbox-answer-actions");
+  const foot = part(part(form, "div", "luke-composer-foot"), "div", "luke-composer-foot-bar");
+  const attach = part(part(foot, "div", "luke-composer-foot-tools"), "button", "");
+  const actions = part(foot, "div", "luke-composer-foot-end");
   const mic = part(actions, "button", "dictate-button");
-  const send = part(actions, "button", "prompt-input-submit");
+  const send = part(actions, "button", "");
   return { foot, attach, line, actions, mic, send };
 }
 

@@ -48,11 +48,14 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.OPENAI_KEY_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.OPENAI_KEY_UNFUNDED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -137,6 +140,8 @@ export const HOSTED_REFUSAL = {
   AGENT_PLAN_INELIGIBLE: { error: HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE },
   /** The account keeps neither the model provider's subscription nor its API key, and Luke's key pays for no coding agent; nothing was written. */
   AGENT_CREDENTIAL_MISSING: { error: HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING },
+  /** The agent runs on its starter's API key, which is saved but does not open under this deployment's key ring; nothing was written, and no retry opens it. */
+  AGENT_API_KEY_UNREADABLE: { error: HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE },
   /** The chat channel is archived, so it takes no post; nothing was written. Named for the task archive it once answered too, which no task has any more. */
   TASK_ARCHIVED: { error: HOSTED_API_ERROR.TASK_ARCHIVED },
   /** The account's role in the workspace does not allow this; nothing was written. */
@@ -248,7 +253,8 @@ export const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
 ): Effect.fn.Return<string, HostedRefusal> {
   const account = yield* seams.resolveUserId(request);
-  if (Option.isNone(account)) return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.INVALID_TOKEN);
+  if (Option.isNone(account))
+    return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.INVALID_TOKEN);
   return account.value;
 });
 

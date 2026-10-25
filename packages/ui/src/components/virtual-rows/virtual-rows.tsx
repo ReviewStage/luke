@@ -42,6 +42,10 @@ import { cssCustomProperties } from "../../css.js";
  * end (`pinned`), the run puts the scroller back there after its own
  * writes. The run opens on its last rows.
  *
+ * The run is a list to a reader, and each row drawn an item of it that says
+ * how many rows the run holds and where it stands among them, since the
+ * rows left undrawn are not there to be counted.
+ *
  * The virtualizer is TanStack Virtual's: headless, so the rows are the
  * caller's own elements in the caller's own scroller, and the scroll logic
  * the caller already keeps is left as it was.
@@ -232,8 +236,10 @@ export function VirtualRows({
   const before = first === undefined ? 0 : first.start - margin;
   const after = last === undefined ? 0 : virtualizer.getTotalSize() - (last.end - margin);
   return (
+    // biome-ignore lint/a11y/useSemanticElements: the block is a flow of the caller's own rows, which a <ul>'s list styling and a <li>'s marker would reach.
     <div
       ref={block}
+      role="list"
       className={className === undefined ? "luke-virtual-rows" : `luke-virtual-rows ${className}`}
       {...{ [VIRTUAL_ROWS_ATTRIBUTE]: `${keys.length}:${keys.at(-1) ?? ""}:${keys[0] ?? ""}` }}
       style={cssCustomProperties({
@@ -243,10 +249,14 @@ export function VirtualRows({
       })}
     >
       {items.map((item) => (
+        // biome-ignore lint/a11y/useSemanticElements: see the block above.
         <div
           key={item.key}
           ref={virtualizer.measureElement}
           data-index={item.index}
+          role="listitem"
+          aria-setsize={keys.length}
+          aria-posinset={item.index + 1}
           {...{ [VIRTUAL_ROW_KEY_ATTRIBUTE]: String(item.key) }}
           className={
             rowClassName === undefined ? "luke-virtual-row" : `luke-virtual-row ${rowClassName}`

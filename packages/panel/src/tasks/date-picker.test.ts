@@ -6,12 +6,16 @@ import type { Task } from "@luke/features/task-wire";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
-import { act, createElement } from "react";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { PlanBody } from "./plan-body.js";
 
 /**
@@ -20,7 +24,8 @@ import { PlanBody } from "./plan-body.js";
  * change the chip in place once the picker closes, and the `@` list narrowed
  * to dates opens the same picker to write a new one. A date chip in the
  * plan's words at rest opens the same picker with no editor opened, and a
- * date changed there saves the plan with it written anew. A date in words
+ * date changed there saves the plan with it written anew, or says it could
+ * not where the save is refused. A date in words
  * that take no change opens nothing. Synthetic plan; day-only dates
  * wherever the reader's zone would otherwise change what is written.
  */
@@ -38,6 +43,14 @@ const TASK: Task = {
 };
 
 const roots: Root[] = [];
+const registries: AtomRegistry.AtomRegistry[] = [];
+
+/** A registry of the test's own, as the window's root provides one, so words a plan left unsaved in one test are not the next one's. */
+function ownRegistry(): AtomRegistry.AtomRegistry {
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  return registry;
+}
 
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
@@ -47,8 +60,11 @@ beforeEach(() => {
   fakeAppBridge({});
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  // Note that the saves a plan left as it went answer before its atoms go.
+  for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   vi.useRealTimers();
 });
@@ -61,41 +77,12 @@ function drawn(): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        task: TASK,
-        live: false,
-        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        sectionLinks: {
-          workspace: "acme",
-          onOpen: () => undefined,
-          onOpenFile: () => undefined,
-          reveal: undefined,
-        },
-      }),
-    ),
-  );
-  return container;
-}
-
-/** The plan's page drawn at rest, every save asked kept, and drawn again over a plan written anew. */
-function drawnAtRest(task: Task = TASK, editable = true) {
-  const saves: PlanEditRequest[] = [];
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  const draw = (plan: Task) =>
-    act(() =>
-      root.render(
+      onRegistry(
+        ownRegistry(),
         createElement(PlanBody, {
-          task: plan,
+          task: TASK,
           live: false,
-          onEdit: editable
-            ? (request: PlanEditRequest) => {
-                saves.push(request);
-                return Promise.reject(new Error("Nothing is saved in this test."));
-              }
-            : undefined,
+          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
           sectionLinks: {
             workspace: "acme",
             onOpen: () => undefined,
@@ -103,6 +90,49 @@ function drawnAtRest(task: Task = TASK, editable = true) {
             reveal: undefined,
           },
         }),
+      ),
+    ),
+  );
+  return container;
+}
+
+/** The plan's page drawn at rest beside the window's toasts, every save asked kept and refused, or saved where `saving`, and drawn again over a plan written anew. */
+function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
+  const saves: PlanEditRequest[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = ownRegistry();
+  const draw = (plan: Task) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(
+            Fragment,
+            null,
+            createElement(PlanBody, {
+              task: plan,
+              live: false,
+              onEdit: editable
+                ? (request: PlanEditRequest) => {
+                    saves.push(request);
+                    return saving
+                      ? Promise.resolve({ saved: true as const })
+                      : Promise.reject(new Error("Nothing is saved in this test."));
+                  }
+                : undefined,
+              sectionLinks: {
+                workspace: "acme",
+                onOpen: () => undefined,
+                onOpenFile: () => undefined,
+                reveal: undefined,
+              },
+            }),
+            createElement(ToastHost),
+          ),
+        ),
       ),
     );
   draw(task);
@@ -156,9 +186,20 @@ function control(dialog: HTMLElement, selector: string): HTMLElement {
   return found;
 }
 
-/** A field of the picker, by its name. */
+/** The words shown over a field of the picker, by what they say; nothing where none stand. */
+function labelOf(dialog: HTMLElement, name: string): HTMLLabelElement | undefined {
+  return [...dialog.querySelectorAll<HTMLLabelElement>("label")].find(
+    (label) => label.textContent === name,
+  );
+}
+
+/** A field of the picker, by its name: the words shown over it, or a name of its own where none are. */
 function fieldOf(dialog: HTMLElement, name: string): HTMLInputElement {
-  const found = dialog.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`);
+  const label = labelOf(dialog, name);
+  const found =
+    label === undefined
+      ? dialog.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)
+      : dialog.querySelector<HTMLInputElement>(`input[id="${label.htmlFor}"]`);
   assert.ok(found, `the picker holds the ${name} field`);
   return found;
 }
@@ -224,7 +265,7 @@ test("a date chip pressed in the plan's editor opens its picker on the date, its
   const dialog = await pressChip(container);
 
   assert.equal(fieldOf(dialog, "Start").value, "Oct 23, 2026");
-  assert.equal(dialog.querySelector('input[aria-label="End"]'), null);
+  assert.equal(labelOf(dialog, "End"), undefined);
   assert.match(dialog.textContent ?? "", /October 2026/u);
   assert.equal(
     control(dialog, '[aria-selected="true"] button').getAttribute("aria-label"),
@@ -239,7 +280,7 @@ test("a day picked names the chip anew in place once the picker closes, and undo
   pickDay(dialog, "Saturday, October 24, 2026");
   await pressKey(dialog, "Escape");
   const picked = mentionsIn(editor);
-  const chip = chipIn(container).textContent;
+  const chip = chipIn(container).querySelector(".luke-inline-ref-label")?.textContent;
   act(() => {
     editor.commands.undo();
   });
@@ -273,7 +314,8 @@ test("End date switched on and closed at once writes the range it shows, to the 
   const start = fieldOf(dialog, "Start");
   const end = fieldOf(dialog, "End");
   const shown = [start.value, end.value];
-  const oneRow = start.parentElement === end.parentElement;
+  // Note that each date stands in its field, under its name, so the row is the line the two fields share.
+  const oneRow = start.closest(".luke-inline") === end.closest(".luke-inline");
   await pressKey(dialog, "Escape");
 
   assert.deepEqual(shown, ["Oct 23, 2026", "Oct 24, 2026"]);
@@ -339,9 +381,15 @@ test("the picker stays hung from its chip as the words under it scroll", async (
   const chip = chipIn(container);
   let top = 120;
   vi.spyOn(chip, "getBoundingClientRect").mockImplementation(() => new DOMRect(40, top, 60, 20));
+  // Note that jsdom lays nothing out, so the box the picker is laid in is named for it.
+  vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockReturnValue(document.body);
 
-  const dialog = await pressChip(container);
-  const hung = dialog.closest<HTMLElement>(".date-picker-anchor");
+  await pressChip(container);
+  const dialog = [...container.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+    (each) =>
+      document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent === "Date",
+  );
+  const hung = dialog?.parentElement;
   const before = hung?.style.top;
   top = 60;
   act(() => {
@@ -366,7 +414,10 @@ test("Include time puts a time on the day, spelled with the offset the reader's 
   assert.equal(time, "09:00");
   assert.equal(mention?.target, `luke://date/2026-10-23T09:00${offset}`);
   assert.match(mention?.name ?? "", /^Oct 23, 2026, 9:00 AM /u);
-  assert.equal(chipIn(container).textContent, "Friday 9:00 AM");
+  assert.equal(
+    chipIn(container).querySelector(".luke-inline-ref-label")?.textContent,
+    "Friday 9:00 AM",
+  );
 });
 
 /** Time zone's field pressed, and the page of zones it turns the picker to. */
@@ -503,7 +554,10 @@ test("words naming a time typed into a day's field put the time on, the date wri
   const [mention] = mentionsIn(editor);
 
   assert.match(mention?.target ?? "", /^luke:\/\/date\/2026-10-28T15:00[+-]\d\d:\d\d$/u);
-  assert.equal(chipIn(container).textContent, "Oct 28 3:00 PM");
+  assert.equal(
+    chipIn(container).querySelector(".luke-inline-ref-label")?.textContent,
+    "Oct 28 3:00 PM",
+  );
 });
 
 test("a day typed into the end's field before the start shows its own month as the ends swap", async () => {
@@ -534,6 +588,39 @@ test("words typed in the picker that name no date are marked and change nothing"
   assert.deepEqual(mentionsIn(editor), [
     { name: "Oct 23, 2026", target: "luke://date/2026-10-23" },
   ]);
+});
+
+test("each end's date field is named by the words shown over it", async () => {
+  const { container } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="End date"]').click());
+
+  for (const name of ["Start", "End"]) {
+    const label = labelOf(dialog, name);
+    assert.ok(label, `the ${name} field has its name shown over it`);
+    assert.equal(fieldOf(dialog, name).id, label.htmlFor);
+  }
+});
+
+test("words that name no date say what to write under the field, in words, until they are typed again", async () => {
+  const { container } = await opened();
+
+  const dialog = await pressChip(container);
+  typeWords(dialog, "Start", "someday");
+  await pressKey(dialog, "Enter");
+  const field = fieldOf(dialog, "Start");
+  const said = () =>
+    (field.getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .map((id) => (id === "" ? "" : (document.getElementById(id)?.textContent ?? "")))
+      .join("");
+
+  assert.equal(said(), "Write a date, such as Oct 24.");
+  assert.match(dialog.textContent ?? "", /Write a date, such as Oct 24\./u);
+  typeWords(dialog, "Start", "oct 28");
+  assert.equal(said(), "");
+  assert.doesNotMatch(dialog.textContent ?? "", /Write a date/u);
 });
 
 test("Clear takes the chip out of the words", async () => {
@@ -598,6 +685,74 @@ test("a day picked from the plan at rest saves the plan with the date named anew
       },
     },
   ]);
+});
+
+test("a day picked from the plan at rest whose save is refused leaves the date as it was and says the plan could not be saved", async () => {
+  const { container, saves } = drawnAtRest();
+  const before = chipAtRest(container).querySelector(".luke-inline-ref-label")?.textContent;
+
+  act(() => chipAtRest(container).click());
+  await act(async () => undefined);
+  const dialog = picker(container);
+  assert.ok(dialog);
+  pickDay(dialog, "Saturday, October 24, 2026");
+  await pressKey(dialog, "Escape");
+  await act(async () => {
+    for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  });
+
+  assert.equal(saves.length, 1, "the save was asked");
+  assert.equal(
+    chipAtRest(container).querySelector(".luke-inline-ref-label")?.textContent,
+    before,
+    "the chip names the date as it was",
+  );
+  assert.equal(newestToastSays(), "The plan could not be saved.");
+});
+
+test("a tick, a date and a tick from the plan at rest, before it is drawn anew, are each written over the one before", async () => {
+  const body =
+    "## Rollout\n\n- [ ] One\n- [ ] Two\n\nShip by [@Oct 23, 2026](luke://date/2026-10-23).";
+  const { container, saves } = drawnAtRest(
+    { ...TASK, document: { body, assumptions: [] } },
+    true,
+    true,
+  );
+  const box = (name: string) => {
+    const found = container.querySelector<HTMLElement>(`[role="checkbox"][aria-label="${name}"]`);
+    assert.ok(found, `${name} is drawn`);
+    return found;
+  };
+  const settled = () =>
+    act(async () => {
+      for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+    });
+
+  act(() => box("One").click());
+  await settled();
+  act(() => chipAtRest(container).click());
+  await act(async () => undefined);
+  const dialog = picker(container);
+  assert.ok(dialog);
+  pickDay(dialog, "Saturday, October 24, 2026");
+  await pressKey(dialog, "Escape");
+  await settled();
+  act(() => box("Two").click());
+  await settled();
+
+  const ticked = body.replace("[ ] One", "[x] One");
+  const dated = ticked.replace(
+    "[@Oct 23, 2026](luke://date/2026-10-23)",
+    "[@Oct 24, 2026](luke://date/2026-10-24)",
+  );
+  assert.deepEqual(
+    saves.map((save) => save.document),
+    [
+      { base: body, value: ticked },
+      { base: ticked, value: dated },
+      { base: dated, value: dated.replace("[ ] Two", "[x] Two") },
+    ],
+  );
 });
 
 test("Clear from the plan at rest saves the plan with the date taken out", async () => {
@@ -687,7 +842,7 @@ test("a date chip in a plan that takes no change opens no picker", () => {
   act(() => chip.click());
 
   assert.equal(chip.tagName, "SPAN");
-  assert.equal(chip.textContent, "Friday");
+  assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "Friday");
   assert.equal(picker(container), null);
 });
 

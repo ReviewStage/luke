@@ -28,6 +28,7 @@ import {
 } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import {
+  LIVE_POLL_URL,
   LIVE_SIGNED_OUT,
   type TaskBoardLiveAnswer,
   type TaskBrowserTabsLiveAnswer,
@@ -80,6 +81,7 @@ import {
 import {
   BROWSER_TAB_OPEN_FAILURE,
   GITHUB_DISCONNECT_FAILURE,
+  HOST_LIVE,
   PICTURE_KEEP_FAILURE,
   type RepositoryCallFailure,
   TASK_CALL_FAILURE,
@@ -106,12 +108,13 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
 } from "@luke/gateway";
-import { TURN_STATUS, type WireRecord, type WireValue } from "@luke/wire";
+import { isRecord, TURN_STATUS, type WireRecord, type WireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
+import { FIXTURE_IDS, FIXTURE_PAGE } from "./fixture-stage.js";
 import type { LiveClient } from "./live-follow.js";
 import { fakeRealtime as fakeServiceRealtime } from "./testing/fake-realtime.js";
 
@@ -171,6 +174,10 @@ interface FakeService extends TasksClient {
   boardSeals: Record<string, TaskBoardLiveAnswer>;
   /** Each task's pages and calls sealed for following, by task id; a task with none is not found, as the service answers one the account does not reach. */
   recordSeals: Record<string, TaskRecordLiveAnswer>;
+  /** Whether each task's record is answered polled, Realtime off, its rows as `tasks` holds them now, in place of `recordSeals`. */
+  recordPolled: boolean;
+  /** How many opens the service leaves unanswered before it answers again. */
+  opensUnanswered: number;
   /** What the service seals for following each task's pages; none answers unanswered. */
   pageSeals: Record<string, TaskPagesLiveAnswer>;
   /** What the service seals for following each task's Browser tabs; none answers unanswered. */
@@ -497,6 +504,8 @@ function fakeService(tasks: Task[]): FakeService {
     boards: {},
     boardSeals: {},
     recordSeals: {},
+    recordPolled: false,
+    opensUnanswered: 0,
     pageSeals: {},
     browserTabSeals: {},
     historySeals: {},
@@ -1034,6 +1043,7 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     recordLive: (taskId) =>
       Effect.sync(() => {
+        if (service.recordPolled) return { ok: true, answer: polledRecord(service, taskId) };
         const sealed = service.recordSeals[taskId];
         return sealed === undefined
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
@@ -1065,6 +1075,10 @@ function fakeService(tasks: Task[]): FakeService {
     open: (taskId) =>
       Effect.sync((): TaskCallResult<Task, TaskCallFailure> => {
         service.reads.push(`open:${taskId}`);
+        if (service.opensUnanswered > 0) {
+          service.opensUnanswered -= 1;
+          return { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED };
+        }
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         return found === undefined
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
@@ -1255,6 +1269,8 @@ function subject(
   service: FakeService,
   options: {
     signedIn?: boolean;
+    /** Whether the run reaches the service, which a fixture run does not. */
+    sendsNetwork?: boolean;
     call?: StandingCall;
     /** A view the window's channel throws on, the first time one is told. */
     breaksOn?: (view: TasksView) => boolean;
@@ -1282,7 +1298,7 @@ function subject(
     const realtime = fakeRealtime();
     const tasks = yield* composeTasks({
       kernel: {
-        runMode: { sendsNetwork: true },
+        runMode: { sendsNetwork: options.sendsNetwork ?? true },
         now: () => 0,
         emit: (kind, payload) => {
           if (kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED) pages.push(payload);
@@ -1374,6 +1390,27 @@ function subject(
     };
   });
 }
+
+it.effect(
+  "a run that sends nothing reads its fixture's page, each version it stages, and no other page",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const { call } = yield* subject(service, { sendsNetwork: false });
+      const read = (pageId: string, version: number) =>
+        call(GATEWAY_METHOD.TASKS_PAGE, { taskId: FIXTURE_IDS.TASK, pageId, version });
+
+      const newest = yield* read(FIXTURE_PAGE.id, FIXTURE_PAGE.version);
+      const first = yield* read(FIXTURE_PAGE.id, 1);
+      const other = yield* read("8b2d4f6a-0c1e-4b5d-9f7a-1c3e5b7d9f1a", 1);
+
+      assert.ok(isRecord(newest) && isRecord(newest.page));
+      assert.equal(newest.page.version, FIXTURE_PAGE.version);
+      assert.ok(isRecord(first) && isRecord(first.page));
+      assert.equal(first.page.version, 1);
+      assert.deepEqual(other, { failure: TASK_CALL_FAILURE.UNANSWERED });
+    }),
+);
 
 it.effect(
   "a plan's picture is answered to the window that asked as its bytes, and as not found where the service holds none for it",
@@ -3944,7 +3981,34 @@ function sealedRecord(round: number): TaskRecordLiveAnswer {
   });
   return {
     url: "wss://realtime.example/v1",
-    queries: { pages: query("pages"), calls: query("calls"), code: query("code") },
+    queries: {
+      plan: query("plan"),
+      pages: query("pages"),
+      calls: query("calls"),
+      code: query("code"),
+    },
+  };
+}
+
+/** A task's record as the service answers it polled, Realtime off: each part's rows inline, the plan marked by its last save as `tasks` holds it. */
+function polledRecord(service: FakeService, taskId: string): TaskRecordLiveAnswer {
+  const query = (part: string, rows: readonly unknown[]) => ({
+    capability: part,
+    queryFingerprint: part,
+    expiresAt: 3_600_000,
+    rows,
+  });
+  const plan = service.tasks
+    .filter((each) => each.id === taskId)
+    .map((each) => ({ taskId, savedAt: each.updatedAt }));
+  return {
+    url: LIVE_POLL_URL,
+    queries: {
+      plan: query("plan", plan),
+      pages: query("pages", []),
+      calls: query("calls", []),
+      code: query("code", []),
+    },
   };
 }
 
@@ -3975,12 +4039,18 @@ it.effect(
       yield* tasks.lifetime;
       yield* openTask(INVITES);
       yield* boardSettled;
-      assert.deepEqual(realtime.subscribed().toSorted(), ["calls-0", "code-0", "pages-0"]);
+      assert.deepEqual(realtime.subscribed().toSorted(), [
+        "calls-0",
+        "code-0",
+        "pages-0",
+        "plan-0",
+      ]);
       const taken = () => service.recordReads.splice(0).toSorted();
       taken();
       const deliver = (pages: readonly unknown[], calls: readonly unknown[]) =>
         Effect.andThen(
           Effect.sync(() => {
+            realtime.deliver("plan-0", []);
             realtime.deliver("pages-0", pages);
             realtime.deliver("calls-0", calls);
             realtime.deliver("code-0", []);
@@ -4032,6 +4102,7 @@ it.effect(
       const deliver = (code: readonly unknown[]) =>
         Effect.andThen(
           Effect.sync(() => {
+            realtime.deliver("plan-0", []);
             realtime.deliver("pages-0", []);
             realtime.deliver("calls-0", []);
             realtime.deliver("code-0", code);
@@ -4086,6 +4157,65 @@ it.effect(
       // A later step of the same turn rewrites its journal and leaves its calls as they stood.
       yield* deliver(journals);
       assert.deepEqual(service.recordReads.splice(0), []);
+    }),
+);
+
+it.effect(
+  "a plan saved by someone else reaches the open document as its polled mark moves, a read of it that went unanswered asked again, and the window's own save, which the mark only confirms, reads nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", INVITES_TEXT, 10)]);
+      service.codes[INVITES] = [];
+      service.recordPolled = true;
+      const { call, tasks, last, viewLands, openTask } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* openTask(INVITES);
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* boardSettled;
+      const opens = () => service.reads.filter((read) => read === `open:${INVITES}`).length;
+      const opened = opens();
+      // The first poll's mark is the save the open read already holds, so nothing reads it again.
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* boardSettled;
+      assert.equal(opens(), opened);
+
+      // A teammate saves the plan, which the next poll carries.
+      const theirs = `${INVITES_TEXT}\n\nInvites expire after a week.`;
+      const [held] = service.tasks;
+      assert.ok(held !== undefined);
+      service.tasks = [
+        {
+          ...held,
+          updatedAt: 20,
+          document: { ...held.document, body: theirs },
+          lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 20, duringCall: false },
+        },
+      ];
+      // The first read of it goes unanswered, and is asked again, since the mark it read for stands still.
+      service.opensUnanswered = 1;
+      const reached = yield* viewLands((view) => view.document.task?.document.body === theirs);
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* boardSettled;
+      assert.equal(opens(), opened + 1);
+      assert.equal(last()?.document.task?.document.body, INVITES_TEXT, "the copy held stands");
+      yield* TestClock.adjust(Duration.seconds(2));
+      yield* boardSettled;
+      yield* reached;
+      assert.equal(opens(), opened + 2);
+
+      // The window's own save is drawn from its answer, which the next poll's mark only confirms.
+      const mine = `${theirs}\n\nOnly members invite.`;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_EDIT, {
+          taskId: INVITES,
+          edit: { document: { base: theirs, value: mine } },
+        }),
+        { saved: true },
+      );
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* boardSettled;
+      assert.equal(last()?.document.task?.document.body, mine);
+      assert.equal(opens(), opened + 2);
     }),
 );
 
@@ -4462,6 +4592,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* realtime.settled;
       assert.equal(last()?.listStatus, TASKS_READ.FAILED);
+      assert.equal(last()?.live, HOST_LIVE.OFFLINE, "a service that answers no seal is offline");
 
       service.liveList = { ok: true, answer: SEALED_LIST };
       yield* TestClock.adjust(Duration.seconds(5));
@@ -4471,6 +4602,7 @@ it.effect(
       realtime.deliverPart("issues", []);
       yield* realtime.settled;
       assert.equal(last()?.listStatus, TASKS_READ.READY);
+      assert.equal(last()?.live, HOST_LIVE.LIVE);
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
 
       // The session is another account's now: the subscription stops and the seal is refused for good.
@@ -4604,6 +4736,141 @@ it.effect(
       realtime.deliverPart("issues", []);
       yield* realtime.settled;
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, again");
+    }),
+);
+
+it.effect(
+  "a list whose rows stop decoding keeps what it drew and says it is catching up, and is live again once rows land",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(LIVE_NOW);
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const realtime = fakeRealtime();
+      const { call, last } = yield* subject(service, { openLive: realtime.open });
+      const delivered = (name: string) =>
+        Effect.gen(function* () {
+          yield* realtime.listSubscribed;
+          realtime.deliverPart("plans", [taskRow(INVITES, name)]);
+          realtime.deliverPart("agents", []);
+          realtime.deliverPart("issues", []);
+          yield* realtime.settled;
+        });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* delivered("Teammate invitations, live");
+      assert.equal(last()?.live, HOST_LIVE.LIVE);
+
+      // A deploy changed the row's shape, so it no longer decodes and the follow breaks.
+      realtime.deliverPart("plans", [{ id: INVITES, title: "Teammate invitations" }]);
+      yield* realtime.settled;
+      assert.equal(last()?.live, HOST_LIVE.CATCHING_UP);
+      assert.equal(last()?.listStatus, TASKS_READ.READY, "the list drawn stands");
+      assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
+
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* delivered("Teammate invitations, again");
+      assert.equal(last()?.live, HOST_LIVE.LIVE);
+      assert.equal(last()?.tasks[0]?.name, "Teammate invitations, again");
+    }),
+);
+
+it.effect(
+  "a resync seals a followed list again at once, once for a wake's several events, and asks nothing of a list not followed",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(LIVE_NOW);
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const realtime = fakeRealtime();
+      const { call, last } = yield* subject(service, { openLive: realtime.open });
+      const delivered = Effect.gen(function* () {
+        yield* realtime.listSubscribed;
+        realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, live")]);
+        realtime.deliverPart("agents", []);
+        realtime.deliverPart("issues", []);
+        yield* realtime.settled;
+      });
+
+      yield* call(GATEWAY_METHOD.TASKS_RESYNC);
+      yield* realtime.settled;
+      assert.equal(service.liveListReads, 0, "nothing is followed before the Tasks tab asks");
+
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* delivered;
+      const before = service.liveListReads;
+
+      // The Mac woke: a resume and an unlock land together.
+      yield* call(GATEWAY_METHOD.TASKS_RESYNC);
+      yield* call(GATEWAY_METHOD.TASKS_RESYNC);
+      yield* realtime.settled;
+      assert.equal(service.liveListReads, before + 1, "one wake seals the list once");
+      assert.equal(last()?.live, HOST_LIVE.CATCHING_UP, "behind until the fresh rows land");
+
+      yield* delivered;
+      assert.equal(last()?.live, HOST_LIVE.LIVE);
+
+      yield* TestClock.adjust(Duration.seconds(10));
+      const later = service.liveListReads;
+      yield* call(GATEWAY_METHOD.TASKS_RESYNC);
+      yield* realtime.settled;
+      assert.equal(service.liveListReads, later + 1, "a later wake seals it again");
+    }),
+);
+
+it.effect(
+  "a teammate's change to the open task's status, assignee, and repository reaches its document as the live list carries it, its body and last save kept",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const realtime = fakeRealtime();
+      const { call, last, openTask } = yield* subject(fakeService([invites]), {
+        openLive: realtime.open,
+      });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* realtime.listSubscribed;
+      realtime.deliverPart("plans", [rowOfTask(invites)]);
+      realtime.deliverPart("agents", []);
+      realtime.deliverPart("issues", []);
+      yield* realtime.settled;
+      yield* openTask(INVITES);
+      const standing = () => {
+        const open = last()?.document.task;
+        return [
+          open?.status,
+          open?.assignee,
+          open?.repository,
+          open?.document.body,
+          open?.updatedAt,
+        ];
+      };
+
+      realtime.deliverPart("plans", [
+        {
+          ...rowOfTask(invites),
+          status: TASK_STATUS.IN_PROGRESS,
+          assigneeId: ADA.userId,
+          assigneeName: ADA.name,
+          repository: "acme/relay",
+          updatedAt: 20,
+        },
+      ]);
+      yield* realtime.settled;
+      assert.deepEqual(standing(), [
+        TASK_STATUS.IN_PROGRESS,
+        { userId: ADA.userId, name: ADA.name },
+        "acme/relay",
+        "# Teammate invitations",
+        10,
+      ]);
+
+      // A row that names no assignee is a task assigned to no one.
+      realtime.deliverPart("plans", [{ ...rowOfTask(invites), status: TASK_STATUS.DONE }]);
+      yield* realtime.settled;
+      assert.deepEqual(standing(), [
+        TASK_STATUS.DONE,
+        undefined,
+        null,
+        "# Teammate invitations",
+        10,
+      ]);
     }),
 );
 

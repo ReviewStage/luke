@@ -1,10 +1,18 @@
+import { noMatchWords, TERM } from "@luke/features/words";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
   ALIGN,
   ComboboxList,
   comboboxOptionId,
   GAP,
   MENU_SURFACE_INSET,
+  type MenuKey,
+  MenuKeys,
   MenuSurface,
+  menuKey,
+  POPOVER_WIDTH,
+  RectFloat,
   Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -21,12 +29,13 @@ import {
   useMemo,
   useState,
 } from "react";
+import { SettingsPageLink } from "../open-settings.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
   ComposerTrigger,
 } from "../plan-editor/contract.js";
-import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
+import { MENTION_MENU_SIDE, type MentionMenuSide, wordBox } from "./mention-picker.js";
 import { opensFile, SkillRef, type SkillWithFile, skillOption } from "./skill-ref.js";
 
 /**
@@ -48,8 +57,9 @@ import { opensFile, SkillRef, type SkillWithFile, skillOption } from "./skill-re
  *
  * The box is an editor (`../plan-editor/composer-editor.ts`), which finds
  * the `/` word the caret ends and says where its slash stands in the
- * window, so the list stands above that line, inside the box's width, as
- * the box stands at the foot of its tab. A chosen skill is a chip in the
+ * window, so the list hangs over that line (`@luke/ui`'s `RectFloat`), as
+ * the box stands at the foot of its tab, and closes on a press outside it
+ * and the box as on Escape. A chosen skill is a chip in the
  * words, an atom one Backspace takes out whole, which reads out as `/name`,
  * so the message sent is the words it always was; the editor draws each
  * through the box (`chip`), as the one pill a sent message's chip is (`skill-ref.tsx`), a press on which opens the skill's
@@ -66,18 +76,24 @@ export type SkillSource = () => Promise<SkillsRead>;
 const SKILL_MENU_NOTE = {
   READING: "Reading skills…",
   NONE: "No skills yet",
-  NONE_HINT: "Install one in Settings › Skills, or add one at .agents/skills/<name>/SKILL.md",
-  NO_MATCH: "No skills match",
+  /** Where a skill comes from, naming the page one is installed on by its link. */
+  noneHint: (page: ReactNode) => (
+    <>
+      Install one in {page} settings, or add one at {".agents/skills/<name>/SKILL.md"}
+    </>
+  ),
+  NO_MATCH: noMatchWords(TERM.SKILL),
 } as const;
 
 /** The list's own name, which its listbox is read by. */
 const SKILL_MENU_LABEL = "Skills";
 
-/** The gap between the caret's line and the list over it. */
-const MENU_GAP = 4;
-
-/** The list's width, as the stylesheet sets it (`.skill-menu`), which keeps it inside the box. */
-const MENU_WIDTH = 320;
+/** The keys the list hears, said at its foot. */
+const SKILL_MENU_KEYS: readonly MenuKey[] = [
+  menuKey("Move", SHORTCUT_KEY.UP, SHORTCUT_KEY.DOWN),
+  menuKey("Insert", SHORTCUT_KEY.ENTER, SHORTCUT_KEY.TAB),
+  menuKey("Close", SHORTCUT_KEY.ESCAPE),
+];
 
 /** No skill is known, before the read lands or where it did not. */
 const NO_NAMES: ReadonlySet<string> = new Set();
@@ -105,6 +121,8 @@ export interface SkillPicker {
   readonly chip: (chip: ComposerChip) => ReactNode;
   /** The repository's skills as read; nothing before they are, or where they could not be. */
   readonly known: readonly SkillOption[] | undefined;
+  /** Whether the read of the skills came back unread, which an `@` list says could not be read; asking again reads them again. */
+  readonly unread: boolean;
   /** Asks for the skills to be read, as an `@` list offering them does once it opens. */
   readonly ask: () => void;
 }
@@ -122,20 +140,15 @@ function MenuNote({ read }: { read: SkillsRead | undefined }): React.ReactNode {
   if (read.skills.length > 0) return SKILL_MENU_NOTE.NO_MATCH;
   return (
     <Stack gap={GAP.TIGHT} align={ALIGN.CENTER}>
-      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.SUBTLE}>
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
         {SKILL_MENU_NOTE.NONE}
       </Text>
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-        {SKILL_MENU_NOTE.NONE_HINT}
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+        {SKILL_MENU_NOTE.noneHint(<SettingsPageLink page={SETTINGS_VIEW.SKILLS} />)}
       </Text>
     </Stack>
   );
 }
-
-/** Where the list stands in its box: its left edge, and its foot over the slash's line, or its top under it. */
-type SkillMenuPlace =
-  | { readonly left: number; readonly bottom: number }
-  | { readonly left: number; readonly top: number };
 
 /** The list itself: a row per skill offered, the highlighted one washed, or the line saying why there is none. */
 function SkillMenu({
@@ -143,7 +156,6 @@ function SkillMenu({
   rows,
   at,
   read,
-  place,
   onHover,
   onChoose,
 }: {
@@ -151,18 +163,12 @@ function SkillMenu({
   rows: readonly SkillOption[];
   at: number;
   read: SkillsRead | undefined;
-  /** Where the list stands in the box: its left edge, and how far its foot stands above the box's foot, or its top under the box's top. */
-  place: SkillMenuPlace;
   onHover: (index: number) => void;
   onChoose: (skill: SkillOption) => void;
 }): React.JSX.Element {
   const options = rows.map(skillOption);
   return (
-    <MenuSurface
-      className="searchable-menu skill-menu"
-      inset={MENU_SURFACE_INSET.NONE}
-      style={place}
-    >
+    <MenuSurface className="skill-menu" inset={MENU_SURFACE_INSET.NONE}>
       <ComboboxList
         id={id}
         label={SKILL_MENU_LABEL}
@@ -175,6 +181,7 @@ function SkillMenu({
         }}
         note={rows.length === 0 ? <MenuNote read={read} /> : undefined}
       />
+      <MenuKeys keys={SKILL_MENU_KEYS} />
     </MenuSurface>
   );
 }
@@ -214,7 +221,7 @@ export function useSkillPicker({
 }: {
   /** The box's editor, which a chosen skill is written into; nothing until it has mounted. */
   editor: RefObject<ComposerEditorHandle | undefined>;
-  /** The box's field, which the list stands inside. */
+  /** The box's field, a press in which is the box's own rather than one away from the list. */
   room: RefObject<HTMLElement | null>;
   /** The box's words, which say whether a skill is named already, so its chip wants the skills read. */
   draft: string;
@@ -249,6 +256,7 @@ export function useSkillPicker({
       : 0;
   const at = Math.min(held, Math.max(rows.length - 1, 0));
   const known = skills !== undefined && "skills" in skills ? skills.skills : undefined;
+  const unread = skills !== undefined && "unread" in skills;
   const names = useMemo(
     () => (known === undefined ? NO_NAMES : new Set(known.map((each) => each.name))),
     [known],
@@ -307,42 +315,47 @@ export function useSkillPicker({
     return false;
   };
 
-  // The list stands by the slash's line, on the side asked, measured from the box's field, which it keeps inside.
-  // Note that the field is measured only while the list is open, since a measure in a draw lays out the whole window.
-  const box = room.current;
-  const placed = open ? box?.getBoundingClientRect() : undefined;
-  const placeOf = (word: ComposerTrigger, at: DOMRect, width: number): SkillMenuPlace => {
-    const left = Math.max(0, Math.min(word.rect.left - at.left, width - MENU_WIDTH));
-    return side === MENTION_MENU_SIDE.BELOW
-      ? { left, top: word.rect.bottom - at.top + MENU_GAP }
-      : { left, bottom: at.bottom - word.rect.top + MENU_GAP };
-  };
-  const menu =
-    !open || box === null || placed === undefined ? null : (
-      <SkillMenu
-        id={listId}
-        rows={rows}
-        at={at}
-        read={skills}
-        place={placeOf(mention, placed, box.clientWidth)}
-        onHover={(index) => setHighlight({ start: mention.start, query: mention.query, at: index })}
-        onChoose={choose}
-      />
-    );
+  // The list hangs by the slash's line, on the side asked; a press outside it and the box closes it as Escape does, and it fades as it closes.
+  const menu = (
+    <RectFloat
+      open={open}
+      anchor={() => (mention === undefined ? undefined : wordBox(mention))}
+      side={side}
+      width={POPOVER_WIDTH.REGULAR}
+      onPressAway={() => {
+        if (mention !== undefined) setClosedAt(mention.start);
+      }}
+      holds={(target) => room.current?.contains(target) === true}
+    >
+      {!open ? null : (
+        <SkillMenu
+          id={listId}
+          rows={rows}
+          at={at}
+          read={skills}
+          onHover={(index) =>
+            setHighlight({ start: mention.start, query: mention.query, at: index })
+          }
+          onChoose={choose}
+        />
+      )}
+    </RectFloat>
+  );
 
   return {
     menu,
     aria: {
       "aria-autocomplete": "list",
-      "aria-expanded": String(menu !== null),
-      "aria-controls": menu === null ? undefined : listId,
+      "aria-expanded": String(open),
+      "aria-controls": open ? listId : undefined,
       "aria-activedescendant":
-        menu === null || rows.length === 0 ? undefined : comboboxOptionId(listId, at),
+        !open || rows.length === 0 ? undefined : comboboxOptionId(listId, at),
     },
     names,
     onTrigger: setTrigger,
     onKey,
     known,
+    unread,
     ask,
     chip: ({ name }) => (
       <BoxChip name={name} skill={known?.find((each) => each.name === name)} onOpen={onOpen} />

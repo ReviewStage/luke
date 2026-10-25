@@ -16,10 +16,9 @@ import {
   type InboxItem,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
-  BADGE_TONE,
   Badge,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -30,20 +29,21 @@ import {
   HoverCardRule,
   INLINE_REF_LOOK,
   InlineRef,
+  STATUS_TONE,
   TaskStatusMark,
   Time,
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName, personActor } from "@luke/ui/actor-model";
-import * as Atom from "effect/reactivity/Atom";
 import {
   CheckIcon,
   CircleIcon,
-  FactoryIcon,
+  GLYPH,
   PenLineIcon,
   SquareCheckIcon,
   SquareIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
+import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
@@ -54,7 +54,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
-import { AutomationChipCard, TaskChipCard } from "./chip-cards.js";
+import { AutomationChipCard, ChipCardSkeleton, TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
 import {
   holderName,
@@ -220,7 +220,11 @@ export function InboxItemCard({
       />
       {thread.ask === undefined ? (
         settled === undefined ? null : (
-          <HoverCardRow look={HOVER_CARD_ROW_LOOK.DETAIL} glyph={<CheckIcon />} label={settled} />
+          <HoverCardRow
+            look={HOVER_CARD_ROW_LOOK.DETAIL}
+            glyph={item.status === INBOX_STATUS.CLOSED ? <GLYPH.DISMISSED /> : <CheckIcon />}
+            label={settled}
+          />
         )
       ) : (
         <CardAsk ask={thread.ask} ticked={ticked} title={cardTitle(item.title)} />
@@ -320,6 +324,7 @@ function HolderRef({
               automationId={holder.automationId}
               workspace={workspaceId}
               wordsWorkspaceId={workspaceId}
+              reading={<ChipCardSkeleton glyph={glyph} name={name} />}
               fallback={fallback}
             />
           )
@@ -369,7 +374,7 @@ function CardAsk({
                 label={option.label}
                 end={
                   recommendedLabels(ask).includes(option.label) ? (
-                    <Badge tone={BADGE_TONE.ATTENTION}>{RECOMMENDED}</Badge>
+                    <Badge tone={STATUS_TONE.ATTENTION}>{RECOMMENDED}</Badge>
                   ) : undefined
                 }
               />
@@ -421,14 +426,22 @@ const RECOMMENDED = "Recommended";
  * to a reader and in the row's card (`HolderLine`). Note that it is drawn
  * whatever the status, an item of a finished task staying listed until it
  * is read or answered, and none for an agent with no task, nor for a task
- * from a service before statuses.
+ * from a service before statuses. A row that draws the status elsewhere, on
+ * the line naming its task, keeps only its words here (`drawn` off).
  */
-function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element | null {
+function TaskStatusChip({
+  holder,
+  drawn = true,
+}: {
+  holder: InboxHolder;
+  /** Whether the mark is drawn, or its words alone said to a reader. */
+  drawn?: boolean;
+}): React.JSX.Element | null {
   if (holder.kind !== INBOX_HOLDER.TASK || holder.task.status === undefined) return null;
   const { status } = holder.task;
   return (
     <span className="inbox-row-task-status" data-task-status={status}>
-      <TaskStatusMark status={status} />
+      {drawn ? <TaskStatusMark status={status} /> : null}
       <VisuallyHidden>{TASK_STATUS_WORDS[status]}</VisuallyHidden>
     </span>
   );
@@ -436,7 +449,7 @@ function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element 
 
 /**
  * A holder's glyph as a row's chip draws it: a task's status's mark, an
- * automation's clock tile, and the factory glyph for the agents no
+ * automation's clock tile, and the automation glyph for the agents no
  * automation names, as the holder's group header draws them.
  */
 export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
@@ -444,7 +457,7 @@ export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Elem
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );
   if (holder.kind === INBOX_HOLDER.TASK) return <PlanGlyph status={holder.task.status} />;
-  if (holder.automationId === null) return <FactoryIcon />;
+  if (holder.automationId === null) return <GLYPH.AUTOMATION />;
   return (
     <ActorMark
       actor={
@@ -492,6 +505,9 @@ function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element 
  * waits unsent in its box and that box is not the one open beside the list,
  * the attention mark where it needs the reader, its task's status, and how
  * long ago it changed. `before` stands ahead of them, as the row's context does, and `after` behind, as a shortcut does.
+ * A row that says where its item stands on a line of its own (`standing`
+ * off), the Inbox's own, draws neither the attention mark nor the status at
+ * its end, a reader still hearing both there.
  */
 export function InboxItemEnd({
   listed,
@@ -499,6 +515,7 @@ export function InboxItemEnd({
   readerId,
   open = false,
   face = true,
+  standing = true,
   before,
   after,
 }: {
@@ -509,6 +526,8 @@ export function InboxItemEnd({
   open?: boolean;
   /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
+  /** Whether the end draws the attention mark and the task's status, which a row saying them elsewhere leaves to a reader's ears. */
+  standing?: boolean;
   before?: ReactNode;
   /** What stands after the time, as a shortcut does. */
   after?: ReactNode;
@@ -524,13 +543,14 @@ export function InboxItemEnd({
         <VisuallyHidden>{waitingOn(starter)}</VisuallyHidden>
       )}
       {drafted ? <DraftMark /> : null}
-      {needsYou ? (
+      {needsYou && standing ? (
         <span className="inbox-row-attention">
           <AttentionMark />
           <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
         </span>
       ) : null}
-      <TaskStatusChip holder={holder} />
+      {needsYou && !standing ? <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden> : null}
+      <TaskStatusChip holder={holder} drawn={standing} />
       <Time at={item.updatedAt} now={now} hint={false} />
       {after}
     </InboxRowMeta>

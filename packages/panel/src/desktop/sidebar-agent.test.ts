@@ -18,6 +18,7 @@ import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { relayout } from "../testing/resize-observer.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { type AgentActions, rowDoors, useAgentActions } from "./agent-actions.js";
 import { SidebarAgent } from "./sidebar-agent.js";
@@ -48,6 +49,10 @@ const RUN: TasklessAgent = {
   activityAt: 2,
 };
 
+/** Who reads the sidebar, and a teammate who started an agent of theirs. */
+const ME = "user-me";
+const ADA = { userId: "user-ada", name: "Ada Lovelace" };
+
 /** Where the agent stands as its own page reads it, which may have moved since the list was read. */
 let standing: TasklessAgent = RUN;
 /** Every archive or Unarchive asked, in order. */
@@ -56,6 +61,8 @@ let archives: { agentId: string; archived: boolean }[] = [];
 let seen: string[] = [];
 /** Every rename asked, in order. */
 let renames: { agentId: string; title: string }[] = [];
+/** Whether the service takes the names the rows ask for. */
+let renameTaken = true;
 /** Every delete asked, in order. */
 let deletes: string[] = [];
 /** How many times a delete that landed left the agent's page. */
@@ -66,6 +73,7 @@ beforeEach(() => {
   standing = RUN;
   archives = [];
   renames = [];
+  renameTaken = true;
   deletes = [];
   left = 0;
   seen = [];
@@ -99,6 +107,7 @@ function mount(
   unread = false,
 ): HTMLElement {
   const agents = codingAgentsControl({
+    me: ME,
     pullRequests,
     onArchive: (agentId, archived) => {
       archives.push({ agentId, archived });
@@ -106,7 +115,7 @@ function mount(
     },
     onRename: (agentId, title) => {
       renames.push({ agentId, title });
-      return Promise.resolve(true);
+      return Promise.resolve(renameTaken);
     },
     onDelete: (agentId) => {
       deletes.push(agentId);
@@ -166,7 +175,7 @@ function item(items: readonly HTMLButtonElement[], label: string): HTMLButtonEle
 
 test("an agent at rest is archived from its row's right-click at once, once its own page reads it at rest too", async () => {
   const row = mount(RUN);
-  const archive = item(rightClick(row), "Archive agent");
+  const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -174,10 +183,21 @@ test("an agent at rest is archived from its row's right-click at once, once its 
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
 });
 
-test("an agent the list read at rest but whose page reads it working is asked about first, and archived only once asked", async () => {
+test("the reader's own working agent is archived at once from its row, asking nothing, since its toast's Undo brings it back", async () => {
   standing = { ...RUN, status: CODING_AGENT_STATUS.RUNNING };
-  const row = mount(RUN);
-  const archive = item(rightClick(row), "Archive agent");
+  const row = mount({ ...RUN, status: CODING_AGENT_STATUS.RUNNING });
+  const archive = item(rightClick(row), "Archive");
+  await act(async () => archive.click());
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
+});
+
+test("a teammate's agent the list read at rest but whose page reads it working is asked about first, and archived only once asked", async () => {
+  standing = { ...RUN, startedBy: ADA, status: CODING_AGENT_STATUS.RUNNING };
+  const row = mount({ ...RUN, startedBy: ADA });
+  const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -192,11 +212,30 @@ test("an agent the list read at rest but whose page reads it working is asked ab
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
 });
 
+test("stopping a teammate's working agent to archive it draws its act in the accent, since Unarchive brings it back", async () => {
+  standing = { ...RUN, startedBy: ADA, status: CODING_AGENT_STATUS.RUNNING };
+  const row = mount({ ...RUN, startedBy: ADA });
+  const archive = item(rightClick(row), "Archive");
+  await act(async () => archive.click());
+  await settle();
+
+  assert.equal(dialogAnswer("Stop and archive").getAttribute("data-variant"), "primary");
+});
+
+test("Permanently delete draws its act in the danger colour, since an agent is not brought back", async () => {
+  const row = mount(RUN);
+  const remove = item(rightClick(row), "Permanently delete");
+  act(() => remove.click());
+  await settle();
+
+  assert.equal(dialogAnswer("Permanently delete").getAttribute("data-variant"), "danger");
+});
+
 test("an archived agent's row offers Unarchive in Archive's place and no pin, and Unarchive brings it back", async () => {
   const row = mount({ ...RUN, archivedAt: 3 });
   const items = rightClick(row);
   const labels = items.map((each) => each.textContent);
-  assert.ok(!labels.includes("Archive agent"));
+  assert.ok(!labels.includes("Archive"));
   assert.ok(!labels.includes("Pin"));
   await act(async () => item(items, "Unarchive").click());
   await settle();
@@ -218,6 +257,25 @@ test("Rename on the row's right-click turns the row into its name's field, and t
   await settle();
 
   assert.deepEqual(renames, [{ agentId: AGENT_ID, title: "Remove the stale banners" }]);
+});
+
+test("a refused rename reopens the row's field holding the name typed, and says under it that the agent was not renamed, as a task's row does", async () => {
+  renameTaken = false;
+  const row = mount(RUN);
+  const offered = rightClick(row);
+  act(() => item(offered, "Rename").click());
+  const field =
+    row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]') ??
+    assert.fail("the row is its name's field");
+  act(() => {
+    field.value = "Remove the stale banners";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+
+  const reopened = row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]');
+  assert.equal(reopened?.value, "Remove the stale banners");
+  assert.ok(row.textContent?.includes("The agent could not be renamed. Try again."));
 });
 
 test("rested on, the row hangs the agent's card beside it, naming it as its tab's card does", () => {
@@ -410,7 +468,7 @@ test("Permanently delete stands last and alone in the row's right-click, asks fi
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("it asks first");
   assert.equal(
     document.getElementById(question.getAttribute("aria-describedby") ?? "")?.textContent,
-    "“Remove the stale copy” and its transcript will be deleted. This can’t be undone. To keep it out of the way instead, archive it.",
+    "“Remove the stale copy” and its transcript will be deleted. This cannot be undone. To keep it out of the way instead, archive it.",
   );
   await act(async () => dialogAnswer("Permanently delete").click());
   await settle();
@@ -428,7 +486,7 @@ test("an archived agent's row offers Permanently delete too, and Cancel deletes 
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("it asks first");
   assert.equal(
     document.getElementById(question.getAttribute("aria-describedby") ?? "")?.textContent,
-    "“Remove the stale copy” and its transcript will be deleted. This can’t be undone.",
+    "“Remove the stale copy” and its transcript will be deleted. This cannot be undone.",
     "an archived agent is out of the way already",
   );
   await act(async () => dialogAnswer("Cancel").click());
@@ -498,4 +556,41 @@ test("every action an agent's tab and page offer stands in its row's right-click
       "place each on the row (sidebar-agent.tsx) or name it in NOT_ON_A_ROW",
     );
   }
+});
+
+test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop after its press", () => {
+  const row = mount(RUN);
+  const more = row.querySelector<HTMLButtonElement>('button[aria-label="Agent actions"]');
+  assert.ok(more, "the row draws a ⋯");
+  assert.equal(more.tabIndex, 0);
+  const labels = () =>
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent);
+  act(() => more.click());
+  const fromMore = labels();
+  assert.ok(fromMore.includes("Archive"));
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+  assert.deepEqual(
+    rightClick(row).map((each) => each.textContent),
+    fromMore,
+  );
+});
+
+test("an agent's name cut short by its row fades out where it is cut, and one that fits does not", () => {
+  const row = mount(RUN);
+  const name =
+    row.querySelector<HTMLElement>(".luke-list-row-title .luke-one-line") ??
+    assert.fail("the name is drawn as one line");
+  assert.equal(name.textContent, RUN.title);
+  assert.equal(name.dataset.overflow, "false");
+
+  Object.defineProperty(name, "scrollWidth", { configurable: true, value: 320 });
+  Object.defineProperty(name, "clientWidth", { configurable: true, value: 180 });
+  act(() => relayout());
+
+  assert.equal(name.dataset.end, "fade");
+  assert.equal(name.dataset.overflow, "true");
 });

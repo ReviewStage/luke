@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { LINK_PLACE, linkOf } from "./link-grammar.js";
 import { LONE_LINK, loneLinkOf } from "./lone-link.js";
-import { LINK_PLACE, linkOf } from "./luke-link.js";
 
 /**
  * What a link standing alone in a paragraph is drawn as: a pull request's

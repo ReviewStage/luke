@@ -2,8 +2,11 @@
 
 import { act, createElement, createRef, useId, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, expect, test } from "vitest";
-import { DIALOG_ROLE, Dialog, type DialogHandle } from "./dialog.js";
+import { afterEach, beforeAll, expect, test, vi } from "vitest";
+import { MOTION_TOKEN } from "../../motion-timing.js";
+import { holdExits } from "../../testing/held-exits.js";
+import { Announcer } from "../announcer/announcer.js";
+import { DIALOG_ROLE, Dialog, type DialogHandle, nextRowOrHead } from "./dialog.js";
 
 /**
  * dialog.test.ts -- a dialog opened from a button takes the keyboard and
@@ -13,9 +16,12 @@ import { DIALOG_ROLE, Dialog, type DialogHandle } from "./dialog.js";
  * the button; a press dragged out of the card puts nothing away; an input
  * method's keys stay the method's; no key or press inside reaches the window
  * behind; a busy dialog holds focus on its card until it is done, and
- * nudges its card when asked away meanwhile; and one
+ * nudges its card when asked away meanwhile; one
  * given a title and actions is named by the title, its answers after what
- * it holds.
+ * it holds; one its owner closes through `open` fades out before it
+ * goes, or goes at once where motion is held, and hands focus back once it
+ * has gone; and one whose act took its opener's row away hands focus to the
+ * row after it, or to the list's head where none is left.
  */
 
 declare global {
@@ -33,6 +39,9 @@ afterEach(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.replaceChildren();
+  document.body.style.removeProperty(MOTION_TOKEN.DURATION_FAST);
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
+  vi.useRealTimers();
 });
 
 /** What the window behind the dialog heard, which should be nothing, and the keys the dialog heard. */
@@ -60,6 +69,7 @@ function Owner({ heard, busy }: { heard: Heard; busy: boolean }): React.JSX.Elem
     createElement("button", { type: "button", onClick: () => setShown(false) }, "Withdraw"),
     open && shown
       ? createElement(Dialog, {
+          open: true,
           labelledBy: titleId,
           busy,
           initialFocus: field,
@@ -160,6 +170,7 @@ test("it opens named by its title on its field, keeps Tab and Shift-Tab among it
 test("a link or a select at either end of the card is one of its controls, and what is out of the Tab order is not", () => {
   draw(
     createElement(Dialog, {
+      open: true,
       labelledBy: "title",
       onDismiss: () => undefined,
       children: [
@@ -189,6 +200,14 @@ test("an input method's Escape and Return are its own, and the dialog hears its 
   key("Escape", { isComposing: true });
   key("Enter", { isComposing: true });
   expect(card()).not.toBeNull();
+  expect(heard.dialogKeys).toEqual([]);
+  key("Enter");
+  expect(heard.dialogKeys).toEqual(["Enter"]);
+});
+
+test("Safari's composing key, code 229 with isComposing already false, is the input method's too", () => {
+  const { heard } = opened();
+  key("Enter", { keyCode: 229 });
   expect(heard.dialogKeys).toEqual([]);
   key("Enter");
   expect(heard.dialogKeys).toEqual(["Enter"]);
@@ -232,6 +251,7 @@ test("asked away while busy, by the dimmed window or Escape, the card nudges eac
   let dismissals = 0;
   draw(
     createElement(Dialog, {
+      open: true,
       title: "Deleting plan",
       busy: true,
       onDismiss: () => {
@@ -255,6 +275,7 @@ test("asked away while busy, by the dimmed window or Escape, the card nudges eac
 test("a question that must be answered is an alert dialog, named by its title and described by what it asks", () => {
   draw(
     createElement(Dialog, {
+      open: true,
       role: DIALOG_ROLE.ALERT_DIALOG,
       labelledBy: "title",
       describedBy: "body",
@@ -276,6 +297,7 @@ test("a dialog given a title and actions is named by its title, and what it hold
   const field = createRef<HTMLTextAreaElement>();
   draw(
     createElement(Dialog, {
+      open: true,
       title: "Send feedback",
       initialFocus: field,
       onDismiss: () => undefined,
@@ -300,9 +322,38 @@ test("a dialog given a title and actions is named by its title, and what it hold
   expect(holds(field.current)).toBe(true);
 });
 
+test("what a dialog holds stands in one middle between its head and its foot, so a short window scrolls the middle and keeps the title and the answers", () => {
+  draw(
+    createElement(Dialog, {
+      open: true,
+      title: "New section",
+      onDismiss: () => undefined,
+      actions: createElement("button", { type: "button" }, "Save"),
+      children: [
+        createElement("input", { key: "title", "aria-label": "Section title" }),
+        createElement("p", { key: "icons" }, "Icons"),
+      ],
+    }),
+  );
+  const dialog = card() ?? expect.fail("the dialog opens");
+  const middle =
+    dialog.querySelector('[data-slot="dialog-body"]') ?? expect.fail("a middle stands");
+  const head = dialog.querySelector("h2") ?? expect.fail("a head stands");
+  expect(middle.contains(dialog.querySelector("input"))).toBe(true);
+  expect(middle.contains(dialog.querySelector("p"))).toBe(true);
+  expect(middle.contains(head)).toBe(false);
+  expect(middle.contains(button("Save"))).toBe(false);
+  // Note that the head comes before the middle and the foot after it, in the card's own column.
+  expect(head.compareDocumentPosition(middle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(
+    middle.compareDocumentPosition(button("Save")) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
 /** A dialog whose act its owner refuses or lets through, at the owner's word. */
 function Refusing({ refused }: { refused: boolean }): React.JSX.Element {
   return createElement(Dialog, {
+    open: true,
     title: "Delete plan?",
     refused,
     onDismiss: () => undefined,
@@ -336,6 +387,7 @@ test("a dialog holding a draft is nudged and kept by the first Escape or press o
   let dismissals = 0;
   const drawn = (holding: boolean) =>
     createElement(Dialog, {
+      open: true,
       title: "Send feedback",
       holding,
       onDismiss: () => {
@@ -343,6 +395,7 @@ test("a dialog holding a draft is nudged and kept by the first Escape or press o
       },
       children: createElement("textarea", { "aria-label": "Feedback" }),
     });
+  draw(createElement(Announcer));
   draw(drawn(true));
   const root = roots.at(-1) ?? expect.fail("no root");
   const dialog = card() ?? expect.fail("the dialog opens");
@@ -351,7 +404,7 @@ test("a dialog holding a draft is nudged and kept by the first Escape or press o
   const afterFirst = {
     dismissals,
     nudge: dialog.getAttribute("data-nudge"),
-    told: dialog.querySelector('[role="status"]')?.textContent,
+    told: document.querySelector('[role="status"]')?.textContent,
   };
   key("Escape");
   const afterSecond = dismissals;
@@ -372,6 +425,7 @@ test("an owner asks its dialog away through its handle as Escape would, a draft 
   const handle = createRef<DialogHandle>();
   draw(
     createElement(Dialog, {
+      open: true,
       ref: handle,
       title: "New task",
       holding: true,
@@ -394,12 +448,14 @@ test("an owner asks its dialog away through its handle as Escape would, a draft 
 function Stacked({ onOuter, onInner }: { onOuter: () => void; onInner: () => void }) {
   const [inner, setInner] = useState(false);
   return createElement(Dialog, {
+    open: true,
     title: "Settings",
     onDismiss: onOuter,
     children: [
       createElement("button", { key: "ask", type: "button", onClick: () => setInner(true) }, "Ask"),
       inner
         ? createElement(Dialog, {
+            open: true,
             key: "inner",
             role: DIALOG_ROLE.ALERT_DIALOG,
             title: "Delete key?",
@@ -431,4 +487,265 @@ test("a dialog opened over another is the one Escape puts away, and the one bene
   expect(afterFirst).toEqual(["inner"]);
   expect(card(DIALOG_ROLE.ALERT_DIALOG)).toBeNull();
   expect(dismissed).toEqual(["inner", "outer"]);
+});
+
+/** A window holding the button that opens a dialog through `open`, whose Done closes it the same way. */
+function OpenOwner({ onExited }: { onExited?: (() => void) | undefined }): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  return createElement(
+    "div",
+    null,
+    createElement("button", { type: "button", onClick: () => setOpen(true) }, "Rename"),
+    createElement(Dialog, {
+      open,
+      title: "Rename plan",
+      onDismiss: () => setOpen(false),
+      onExited,
+      children: createElement("button", { type: "button", onClick: () => setOpen(false) }, "Done"),
+    }),
+  );
+}
+
+/** The owner drawn, its dialog opened from its button, and then closed by Done. */
+function closedThroughOpen(onExited?: () => void): HTMLButtonElement {
+  draw(createElement(OpenOwner, { onExited }));
+  const opener = button("Rename");
+  opener.focus();
+  act(() => opener.click());
+  expect(card()).not.toBeNull();
+  act(() => button("Done").click());
+  return opener;
+}
+
+test("a dialog its owner closes through open stays drawn in its ending state until its fade has run, then goes, handing focus back to its opener", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  const opener = closedThroughOpen();
+  const leaving = card();
+  const endingAsClosed = leaving?.hasAttribute("data-ending-style");
+  const focusWhileFading = holds(opener);
+  act(() => vi.advanceTimersToNextFrame());
+  const standsAFrameOn = card() !== null;
+  await act(async () => exits.finish());
+
+  expect(leaving).not.toBeNull();
+  expect(endingAsClosed).toBe(true);
+  expect(focusWhileFading).toBe(false);
+  expect(standsAFrameOn).toBe(true);
+  expect(card()).toBeNull();
+  expect(holds(opener)).toBe(true);
+});
+
+test("a dialog closed through open while motion is held goes at once", () => {
+  document.body.style.setProperty(MOTION_TOKEN.DURATION_FAST, "0s");
+  holdExits();
+  const opener = closedThroughOpen();
+
+  expect(card()).toBeNull();
+  expect(holds(opener)).toBe(true);
+});
+
+test("a dialog tells its owner it is gone once its fade has run, and not before", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  const gone = vi.fn();
+  closedThroughOpen(gone);
+  act(() => vi.advanceTimersToNextFrame());
+  const whileFading = gone.mock.calls.length;
+  await act(async () => exits.finish());
+
+  expect(whileFading).toBe(0);
+  expect(gone).toHaveBeenCalledTimes(1);
+});
+
+test("a dialog closed while motion is held tells its owner it is gone at once", () => {
+  document.body.style.setProperty(MOTION_TOKEN.DURATION_FAST, "0s");
+  holdExits();
+  const gone = vi.fn();
+  closedThroughOpen(gone);
+
+  expect(card()).toBeNull();
+  expect(gone).toHaveBeenCalledTimes(1);
+});
+
+test("a dialog that never opened has no exit to tell its owner of", () => {
+  const gone = vi.fn();
+  draw(createElement(OpenOwner, { onExited: gone }));
+
+  expect(gone).not.toHaveBeenCalled();
+});
+
+/** A list of rows, each with a Delete that asks first in a dialog whose answer takes the row away, focus handed on as `nextRowOrHead` says. */
+function RowsOwner({ names }: { names: readonly string[] }): React.JSX.Element {
+  const [rows, setRows] = useState(names);
+  const [asked, setAsked] = useState<string | undefined>(undefined);
+  return createElement(
+    "div",
+    null,
+    createElement(
+      "ul",
+      null,
+      rows.map((name) =>
+        createElement(
+          "li",
+          { key: name },
+          createElement("button", { type: "button", onClick: () => setAsked(name) }, name),
+        ),
+      ),
+    ),
+    createElement(Dialog, {
+      open: asked !== undefined,
+      title: "Delete row?",
+      restoreTo: nextRowOrHead,
+      onDismiss: () => setAsked(undefined),
+      children: createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => {
+            setRows((now) => now.filter((name) => name !== asked));
+            setAsked(undefined);
+          },
+        },
+        "Delete",
+      ),
+    }),
+  );
+}
+
+/** The rows drawn, the one named `name` asked about from its own button, and the question answered Delete. */
+function deletedFromList(names: readonly string[], name: string): void {
+  draw(createElement(RowsOwner, { names }));
+  const opener = button(name);
+  opener.focus();
+  act(() => opener.click());
+  expect(card()).not.toBeNull();
+  act(() => button("Delete").click());
+}
+
+test("a dialog whose act took its opener's row hands focus to the row after it once its fade has run", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  deletedFromList(["Alpha", "Beta", "Gamma"], "Beta");
+  const next = button("Gamma");
+  act(() => vi.advanceTimersToNextFrame());
+  const focusWhileFading = holds(next);
+  await act(async () => exits.finish());
+
+  expect(focusWhileFading).toBe(false);
+  expect(card()).toBeNull();
+  expect(holds(next)).toBe(true);
+});
+
+test("a dialog whose act took the last row hands focus to the list's head", () => {
+  document.body.style.setProperty(MOTION_TOKEN.DURATION_FAST, "0s");
+  holdExits();
+  deletedFromList(["Alpha", "Beta", "Gamma"], "Gamma");
+
+  expect(card()).toBeNull();
+  expect(holds(button("Alpha"))).toBe(true);
+});
+
+/** One row that asks before it is deleted, its question drawn inside it, so deleting it takes the question with it. */
+function AskingRow({ name, onDelete }: { name: string; onDelete: () => void }): React.JSX.Element {
+  const [asked, setAsked] = useState(false);
+  return createElement(
+    "li",
+    null,
+    createElement("button", { type: "button", onClick: () => setAsked(true) }, name),
+    createElement(Dialog, {
+      open: asked,
+      title: "Delete row?",
+      restoreTo: nextRowOrHead,
+      onDismiss: () => setAsked(false),
+      children: createElement("button", { type: "button", onClick: onDelete }, "Delete"),
+    }),
+  );
+}
+
+/** A list whose rows each hold their own question. */
+function AskingRows({ names }: { names: readonly string[] }): React.JSX.Element {
+  const [rows, setRows] = useState(names);
+  return createElement(
+    "ul",
+    null,
+    rows.map((name) =>
+      createElement(AskingRow, {
+        key: name,
+        name,
+        onDelete: () => setRows((now) => now.filter((each) => each !== name)),
+      }),
+    ),
+  );
+}
+
+test("a dialog unmounted with the row its act took away hands focus to the row after it", async () => {
+  draw(createElement(AskingRows, { names: ["Alpha", "Beta", "Gamma"] }));
+  const opener = button("Beta");
+  opener.focus();
+  act(() => opener.click());
+  expect(card()).not.toBeNull();
+  await act(async () => button("Delete").click());
+
+  expect(card()).toBeNull();
+  expect(holds(button("Gamma"))).toBe(true);
+});
+
+/** Threads in a list, each holding its comments in a list of their own, and the one comment of the first thread asked about; deleting it takes its thread with it. */
+function ThreadsOwner(): React.JSX.Element {
+  const [threads, setThreads] = useState(["First", "Second"]);
+  const [asked, setAsked] = useState(false);
+  return createElement(
+    "div",
+    null,
+    createElement(
+      "ul",
+      null,
+      threads.map((thread) =>
+        createElement(
+          "li",
+          { key: thread },
+          createElement(
+            "ul",
+            null,
+            createElement(
+              "li",
+              null,
+              createElement("button", { type: "button", onClick: () => setAsked(true) }, thread),
+            ),
+          ),
+        ),
+      ),
+    ),
+    createElement(Dialog, {
+      open: asked,
+      title: "Delete comment?",
+      restoreTo: nextRowOrHead,
+      onDismiss: () => setAsked(false),
+      children: createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => {
+            setThreads((now) => now.filter((thread) => thread !== "First"));
+            setAsked(false);
+          },
+        },
+        "Delete",
+      ),
+    }),
+  );
+}
+
+test("a dialog whose act took the opener's whole list hands focus to the row after the one around it", () => {
+  document.body.style.setProperty(MOTION_TOKEN.DURATION_FAST, "0s");
+  holdExits();
+  draw(createElement(ThreadsOwner));
+  const opener = button("First");
+  opener.focus();
+  act(() => opener.click());
+  act(() => button("Delete").click());
+
+  expect(card()).toBeNull();
+  expect(holds(button("Second"))).toBe(true);
 });

@@ -1,13 +1,21 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { TASK_ISSUE_PROVIDER, type TaskIssueProvider } from "@luke/features/task-issue-wire";
 import {
   TASK_BOUNDS,
   TASK_STATUS,
   type TaskStanding,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import {
+  noneYetWords,
+  REFRESH_FAILED_WORDS,
+  readFailedWords,
+  readingWords,
+  TERM,
+} from "@luke/features/words";
+import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
+  AVATAR_SIZE,
   BUTTON_SIZE,
   CARD_CORNER,
   CARD_ELEMENT,
@@ -27,14 +35,14 @@ import {
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
-  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   GAP,
   GLYPH_INK,
   GlyphSlot,
-  IconButton,
+  GROUP_SURFACE,
+  GroupHeader,
   INSET,
   InlineEdit,
   LAYOUT_ELEMENT,
@@ -42,9 +50,8 @@ import {
   motionKey,
   PAGE_FRAME,
   PAGE_WIDTH,
-  PROVIDER_MARK_SIZE,
-  ProviderMark,
   SCROLL_FADE,
+  SCROLL_GUTTER,
   SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
@@ -59,10 +66,14 @@ import {
   Tooltip,
   useLeaving,
   useMinute,
+  useRovingColumns,
+  useRovingKeys,
+  useRowMenu,
+  VisuallyHidden,
 } from "@luke/ui";
-import { actorName, creatorActor } from "@luke/ui/actor-model";
+import { actorName } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
-import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
+import { RENAME_FAILED_NOTE, repositoryPageUrl } from "@luke/ui/tasks-model";
 import {
   COMPLETED_WINDOW,
   TASK_PROPERTY,
@@ -74,35 +85,41 @@ import {
   tasksBoardColumns,
 } from "@luke/ui/tasks-page-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
-import { SquareKanbanIcon } from "lucide-react";
+import { FolderGitIcon, SquareKanbanIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
-import { issueTagWords } from "../tasks/task-issue-links-model.js";
+import { TaskIssueTagChip } from "../tasks/task-issue-links.js";
 import {
   NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
   TASK_STATUS_WORDS,
   TaskKey,
 } from "../tasks/task-standing.js";
-import { useOpenLink } from "../tasks/use-open-link.js";
+import { linkPressOf } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { useTaskMenu } from "./task-actions.js";
-import { taskCardOf } from "./task-card.js";
+import { rowMenu } from "./action-menu.js";
+import { groupCount } from "./sidebar-fold.js";
+import { useTaskMenuItems } from "./task-actions.js";
 import {
   AssigneeChip,
+  CreatorFace,
   PriorityChip,
   StatusChip,
   standsAt,
   TaskWorkMarks,
   useStandingDoor,
   WaitingBadge,
+  WORK_LOOK,
 } from "./task-row-parts.js";
 import {
   assigneeFor,
@@ -110,6 +127,7 @@ import {
   OlderCompleted,
   type TasksViewFrame,
 } from "./tasks-page-options.js";
+import { useHeldTasks } from "./use-held-tasks.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
@@ -118,20 +136,23 @@ import { useRowDrag } from "./use-row-drag.js";
  * It is one of the Tasks page's two views (`tasks-page.tsx`), which stands
  * in the plan's place beside the sidebar, as the Inbox does. A column is a quiet well headed by
  * its status's mark, its name, and how many tasks stand in it, and scrolls
- * its own cards, the most pressing first. A card is raised off the well:
- * its key, how many of its Inbox threads wait on the reader, when it last
- * moved, and its creator's face over its whole name, and at its foot the
- * chips that change its priority, its status, and its assignee where it
- * stands, the assignee's left off under an assignee's column, its
- * repository, what its agents are doing and the pull requests they opened
- * (`task-row-parts.tsx`), and a ⋯ dropping the task's own menu, the sidebar
- * row's, which a right-click drops too and whose Rename makes the card's
- * name its field. A press anywhere else opens the task. A card hangs no
- * hover card, since it already says what its row's card would. A card dragged onto another column
+ * its own cards, the most pressing first. A card is raised off the well,
+ * drawn as Linear's board draws one: its key, how many of its Inbox threads
+ * wait on the reader, when it last moved, and its creator's face over its
+ * status's chip and its whole name, then a row that wraps rather than
+ * running past the card's edge: the chips that change its priority and its
+ * assignee where it stands, their marks alone as the List draws them, the
+ * assignee's left off under an assignee's column, its repository, what its agents are doing and the
+ * pull requests they opened (`task-row-parts.tsx`), and the issues it
+ * links, and a ⋯ at their end dropping the task's own menu, the sidebar
+ * row's, which a right-click and the menu key drop too (`useRowMenu`) and
+ * whose Rename makes the card's name its field. A press anywhere else opens the task. A card hangs no
+ * card for the whole task, since it already says what that card would;
+ * its parts hang their own instead (`task-part-cards.tsx`). A card dragged onto another column
  * is sent that column's status or priority, or assigned to its person, No
  * assignee's assigning it to no one, as the task page's chips send them,
- * and stands where it was until the list read again says otherwise; a
- * change the service did not keep says so, whether dragged or picked. Which columns stand, what each holds, its order, and what a card
+ * and moves there at once; a change the service did not keep goes back
+ * where it stood and says so, whether dragged or picked. Which columns stand, what each holds, its order, and what a card
  * draws are the Tasks page's filter and the Board's own display
  * (`tasks-page-model.ts`): Backlog, Todo, In progress, and Done at first,
  * Canceled once asked for. A task archived is off the board, as it is off
@@ -142,15 +163,15 @@ import { useRowDrag } from "./use-row-drag.js";
  * A narrow room, a phone's, has no width for columns side by side, nor a
  * second column in sight to drag a card onto: it stands one column at a
  * time across the whole page, chosen by a tab for each column above it
- * (Todo at first), and each card's Status chip says its status in words,
- * since its pick is how a card moves there without a drag.
+ * (Todo at first), and each card's Status chip, its mark before its name as
+ * on a wide board, is how a card moves there without a drag.
  */
 
 /** What the page is read as while the tasks are. */
-const READING_LINE = "Reading tasks";
+const READING_LINE = readingWords(TERM.TASK.many);
 
 /** What the page says where the tasks could not be read. */
-const UNREAD_LINE = "Your tasks could not be read.";
+const UNREAD_LINE = readFailedWords(`your ${TERM.TASK.many}`);
 
 /** What a column with no task says in its own place. */
 const NO_TASKS = "No tasks";
@@ -179,55 +200,72 @@ const FIRST_SHOWN: string = TASK_STATUS.TODO;
 /** What the tabs choosing a narrow board's column are called, to a screen reader. */
 const COLUMN_TABS = "Columns";
 
-/** The mark a tag wears for who holds its issue. */
-const TAG_MARK = {
-  [TASK_ISSUE_PROVIDER.GITHUB]: INTEGRATION_PROVIDER.GITHUB,
-  [TASK_ISSUE_PROVIDER.LINEAR]: INTEGRATION_PROVIDER.LINEAR,
-} as const satisfies Record<TaskIssueProvider, string>;
-
 /**
- * The issues a card's task links, oldest first, a tag each in a row under
- * its name: the provider's mark and its key, a GitHub issue of the task's
- * own repository by its `#N` alone. A press on a tag opens the issue as a
- * link to it does elsewhere (`../tasks/use-open-link.ts`), never the task.
- * Nothing for a task that links none.
+ * The issues a card's task links, oldest first, a tag each among its pills
+ * (`../tasks/task-issue-links.tsx`). Nothing for a task that links none.
  */
-function TaskBoardTags({ task }: { task: TaskSummary }): React.JSX.Element | null {
-  const openLink = useOpenLink();
-  const tags = task.issues ?? [];
-  if (tags.length === 0) return null;
+function TaskBoardTags({ task }: { task: TaskSummary }): React.JSX.Element {
   return (
-    <div className="tasks-board-tags">
-      {tags.map((tag) => (
-        <Chip
-          key={tag.id}
-          look={CHIP_LOOK.PILL}
-          size={CHIP_SIZE.COMPACT}
-          data-provider={tag.provider}
-          onClick={() => openLink(tag.url)}
-        >
-          <ProviderMark provider={TAG_MARK[tag.provider]} size={PROVIDER_MARK_SIZE.CAPTION} />
-          <ChipName mono>{issueTagWords(tag, task.repository)}</ChipName>
-        </Chip>
+    <>
+      {(task.issues ?? []).map((tag) => (
+        <TaskIssueTagChip key={tag.id} tag={tag} taskId={task.id} repository={task.repository} />
       ))}
-    </div>
+    </>
   );
 }
 
 /**
- * One task's card: its key, what waits on the reader, when it last moved,
- * and its creator's face over its name, one press that opens it, and at its foot
- * the chips that change it where it stands, its priority, its status, and
- * its assignee, its repository, its agents' work and pull requests, and the
- * ⋯ dropping the task's own menu, which a right-click opens too. Renamed
- * from that menu, its name is its field until the edit ends. On a phone the status
- * chip says its status in words, since it is how a card moves there.
+ * A card's repository as a pill: its owner's picture and its own name, its
+ * whole name in its hint, and a press that opens it on GitHub, as the
+ * task's menu does.
+ */
+function TaskBoardRepository({
+  tasks,
+  repository,
+}: {
+  tasks: TasksControl;
+  repository: string;
+}): React.JSX.Element {
+  return (
+    <Tooltip label={repository}>
+      <Chip
+        look={CHIP_LOOK.PILL}
+        size={CHIP_SIZE.COMPACT}
+        data-task-repository=""
+        href={repositoryPageUrl(repository)}
+        onClick={linkPressOf(tasks.repositories.openGitHub, repositoryPageUrl(repository))}
+      >
+        <RepositoryPicture
+          repository={repository}
+          pictures={tasks.repositories.pictures}
+          fallback={<FolderGitIcon />}
+          size={AVATAR_SIZE.GLYPH}
+        />
+        <ChipName>{repositoryName(repository)}</ChipName>
+      </Chip>
+    </Tooltip>
+  );
+}
+
+/**
+ * One task's card, as Linear's board draws one: its key, what waits on the
+ * reader, when it last moved, and its creator's face on its first line; its
+ * status's mark before its name, which wraps; and a row under it, wrapping
+ * onto as many lines as they take, so nothing is cut off at the card's edge:
+ * its priority's and its assignee's marks, drawn as the List draws them, then
+ * pills for its repository, its agents at
+ * work, the pull requests they opened, and the issues it links, each a press
+ * of its own and each hanging its own card where it has more to say
+ * (`task-part-cards.tsx`), rather than one card for the whole task, which
+ * says nothing the card does not. Its ⋯ stands at the pills' end, dropping
+ * the task's own menu, which a right-click opens too. One press, under its
+ * pills, opens it. Renamed from that menu, its name is its field until the
+ * edit ends.
  */
 function TaskBoardCard({
   tasks,
   task,
   workspaceName,
-  narrow,
   properties,
   waiting,
   now,
@@ -237,7 +275,6 @@ function TaskBoardCard({
   tasks: TasksControl;
   task: TaskSummary;
   workspaceName: string;
-  narrow: boolean;
   /** What the card draws beside its name. */
   properties: readonly TaskProperty[];
   /** How many of its Inbox threads wait on the reader. */
@@ -246,55 +283,26 @@ function TaskBoardCard({
   onOpen: () => void;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
-  const creator = creatorActor(task, useMemberDirectory(), undefined);
   const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
-  const actions = useTaskMenu(tasks, task.id, task.name, {
+  useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
+  const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
     unread: reads.markedUnread(task.id),
   });
   const press = useRef<HTMLButtonElement | null>(null);
-  const item = useRef<HTMLElement | null>(null);
+  const nameId = useId();
+  const menu = useRowMenu(
+    rename.editing
+      ? undefined
+      : { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer },
+    { disabled: actions.deletion.busy, opener: press },
+  );
   const drawn = (property: TaskProperty) => properties.includes(property);
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
-  const head = (
-    <span className="tasks-board-card-head">
-      {drawn(TASK_PROPERTY.KEY) ? (
-        <TaskKey workspaceName={workspaceName} number={task.number} />
-      ) : null}
-      <span className="tasks-board-card-marks">
-        {drawn(TASK_PROPERTY.WAITING) && waiting > 0 ? (
-          <span className="tasks-board-waiting">
-            <WaitingBadge count={waiting} />
-          </span>
-        ) : null}
-        {drawn(TASK_PROPERTY.UPDATED) ? (
-          <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
-        ) : null}
-        {drawn(TASK_PROPERTY.CREATOR) ? (
-          <span className="tasks-board-face">
-            {maker === undefined ? null : (
-              <Text
-                as={TEXT_ELEMENT.SPAN}
-                variant={TEXT_VARIANT.INHERIT}
-                truncate
-                className="tasks-board-maker"
-              >
-                {actorName(maker.actor)}
-              </Text>
-            )}
-            <ActorMark
-              actor={maker?.actor ?? creator}
-              size={ACTOR_SIZE.MARK}
-              forWhom={maker === undefined ? undefined : creator}
-            />
-          </span>
-        ) : null}
-      </span>
-    </span>
-  );
+  const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
   return (
     <Card
       as={CARD_ELEMENT.LI}
@@ -302,20 +310,52 @@ function TaskBoardCard({
       padding={CARD_PADDING.NONE}
       shadow={CARD_SHADOW.SOFT}
       hover={CARD_HOVER.LIFT}
-      lit={actions.open}
+      lit={menu.open}
       className="tasks-board-card"
-      ref={item}
       data-task-id={task.id}
       {...motionKey(task.id)}
-      data-menu-open={actions.open ? "true" : undefined}
+      {...menu.props}
       data-editing={rename.editing ? "true" : undefined}
     >
-      {rename.editing ? (
-        <div className="tasks-board-card-face">
-          {head}
+      {/* Note that the first line stands under the card's press, but for the creator's face, which hangs their card. */}
+      <span className="tasks-board-card-head">
+        {drawn(TASK_PROPERTY.KEY) ? (
+          <TaskKey workspaceName={workspaceName} number={task.number} decorative />
+        ) : null}
+        <span className="tasks-board-card-marks">
+          {drawn(TASK_PROPERTY.WAITING) && waiting > 0 ? (
+            <span className="tasks-board-waiting">
+              <WaitingBadge count={waiting} />
+            </span>
+          ) : null}
+          {drawn(TASK_PROPERTY.UPDATED) ? (
+            <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
+          ) : null}
+          {drawn(TASK_PROPERTY.CREATOR) ? (
+            <span className="tasks-board-face">
+              {maker === undefined ? null : (
+                <Text
+                  as={TEXT_ELEMENT.SPAN}
+                  variant={TEXT_VARIANT.INHERIT}
+                  truncate
+                  className="tasks-board-maker"
+                >
+                  {actorName(maker.actor)}
+                </Text>
+              )}
+              <CreatorFace task={task} onOpen={onOpen} />
+            </span>
+          ) : null}
+        </span>
+      </span>
+      <span className="tasks-board-card-title">
+        {drawn(TASK_PROPERTY.STATUS) ? (
+          <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+        ) : null}
+        {rename.editing ? (
           <span className="tasks-board-name">
             <InlineEdit
-              value={task.name}
+              value={rename.asked ?? task.name}
               label="Task name"
               maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
               editing
@@ -325,67 +365,49 @@ function TaskBoardCard({
               }}
             />
           </span>
-        </div>
-      ) : (
-        <Tooltip label={task.name} card={taskCardOf(tasks, task, now)} cardRegion={item}>
+        ) : (
           <CardPress
             ref={press}
             disabled={actions.deletion.busy}
+            roving
             onPress={() => {
-              actions.close(false);
+              menu.close(false);
               onOpen();
             }}
-            onKeyDown={actions.keyMenu}
-            contextMenu={actions.contextMenu(press)}
           >
-            <span className="tasks-board-card-face">
-              {head}
-              <span className="tasks-board-name">{task.name}</span>
+            <span id={nameId} className="tasks-board-name">
+              {task.name}
             </span>
+            {/* Note that the key stands drawn on the first line, outside the press, so the press says it to a screen reader, and find skips it, which finds it drawn. */}
+            {key === undefined || !drawn(TASK_PROPERTY.KEY) ? null : (
+              <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{`, ${key}`}</VisuallyHidden>
+            )}
           </CardPress>
-        </Tooltip>
-      )}
-      {rename.refused ? (
-        <span className="tasks-board-card-note" role="alert">
-          {RENAME_FAILED_NOTE}
-        </span>
-      ) : null}
-      <TaskBoardTags task={task} />
-      <div className="tasks-board-card-foot">
-        {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
-        {drawn(TASK_PROPERTY.PRIORITY) ? (
-          <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
-        ) : null}
-        {drawn(TASK_PROPERTY.STATUS) ? (
-          <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} named={narrow} onStanding={onStanding} />
-        ) : null}
-        {drawn(TASK_PROPERTY.ASSIGNEE) ? (
-          <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
-        ) : null}
-        {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
-          <Text
-            as={TEXT_ELEMENT.SPAN}
-            variant={TEXT_VARIANT.INHERIT}
-            truncate
-            className="tasks-board-repository"
-          >
-            {repositoryName(task.repository)}
-          </Text>
         )}
-        {drawn(TASK_PROPERTY.AGENTS) ? <TaskWorkMarks task={task} /> : null}
+      </span>
+      {rename.refused ? <span className="tasks-board-card-note">{RENAME_FAILED_NOTE}</span> : null}
+      <div className="tasks-board-card-foot">
+        <div className="tasks-board-card-pills">
+          {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
+          {drawn(TASK_PROPERTY.PRIORITY) ? (
+            <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+          ) : null}
+          {drawn(TASK_PROPERTY.ASSIGNEE) ? (
+            <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+          ) : null}
+          {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
+            <TaskBoardRepository tasks={tasks} repository={task.repository} />
+          )}
+          {drawn(TASK_PROPERTY.AGENTS) ? (
+            <TaskWorkMarks task={task} tasks={tasks} look={WORK_LOOK.PILLS} onOpen={onOpen} />
+          ) : null}
+          <TaskBoardTags task={task} />
+        </div>
         <span className="tasks-board-card-more">
-          <Tooltip label="Task actions">
-            <IconButton
-              icon={<EllipsisIcon />}
-              label={`Actions for ${task.name}`}
-              size={BUTTON_SIZE.COMPACT}
-              disabled={actions.deletion.busy}
-              {...actions.trigger()}
-            />
-          </Tooltip>
+          {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
         </span>
       </div>
-      {actions.menu}
+      {menu.popup}
       {actions.dialog}
     </Card>
   );
@@ -506,12 +528,16 @@ function TaskBoardColumnView({
   });
   const { mark, words } = columnHead(column.head, people);
   const value = columnValue(column.head);
-  // Note that a phone's card keeps its assignee's chip under an assignee's column, since with no drag it is how the card moves to another.
-  const drawn =
-    column.head.kind === TASKS_GROUP.ASSIGNEE && !narrow
+  // Note that a phone's card keeps its assignee's chip under an assignee's column, since with no drag it is how the card moves to another, and so does a card held under a column that no longer names its assignee.
+  const drawn = (task: TaskSummary) =>
+    column.head.kind === TASKS_GROUP.ASSIGNEE &&
+    !narrow &&
+    column.head.assigneeId === (task.assignee?.userId ?? null)
       ? properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE)
       : properties;
   const cards = useLeaving(column.tasks, taskIdOf);
+  // A column's cards are one Tab stop that ↑↓ walk; ←→ cross to the next column's (`useRovingColumns`).
+  const roving = useRovingKeys<HTMLDivElement>();
   return (
     <Card
       as={CARD_ELEMENT.SECTION}
@@ -525,17 +551,12 @@ function TaskBoardColumnView({
       id={narrow ? panelId : undefined}
       role={narrow ? "tabpanel" : undefined}
     >
-      <h2 className="tasks-board-column-head">
-        {mark}
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
-          {words}
-        </Text>
-        {column.tasks.length === 0 ? null : (
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-            {column.tasks.length}
-          </Text>
-        )}
-      </h2>
+      <GroupHeader
+        label={words}
+        glyph={mark}
+        count={column.tasks.length === 0 ? undefined : groupCount(column.tasks.length)}
+        surface={GROUP_SURFACE.WIDE}
+      />
       {cards.length === 0 ? (
         column.older === undefined ? (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-board-empty">
@@ -543,11 +564,13 @@ function TaskBoardColumnView({
           </Text>
         ) : null
       ) : (
-        <div className="tasks-board-column-scroll">
+        <div className="tasks-board-column-scroll" {...roving}>
           {/* Note that the cards hand a swipe on, because a contained area swallows a sideways one it cannot scroll, and the board scrolls sideways under them. */}
+          {/* Note that the gutter is kept, because the column is as tall as its cards measured without a scroll bar, so a bar that takes room and rewraps a card's pills taller would leave a column that fits scrolling and faded. */}
           <ScrollArea
             size={narrow ? SCROLL_SIZE.FILL : SCROLL_SIZE.CONTENT}
             fade={SCROLL_FADE.BOTH}
+            gutter={SCROLL_GUTTER.STABLE}
             overscroll={SCROLL_OVERSCROLL.CHAIN}
           >
             <Stack
@@ -564,8 +587,7 @@ function TaskBoardColumnView({
                   tasks={tasks}
                   task={task}
                   workspaceName={workspaceName}
-                  narrow={narrow}
-                  properties={drawn}
+                  properties={drawn(task)}
                   waiting={waitingOn.get(task.id) ?? 0}
                   now={now}
                   onOpen={() => onOpen(task)}
@@ -596,12 +618,12 @@ export function TasksBoard({
   frame: TasksViewFrame;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
-  const setStanding = useStandingDoor(tasks);
   const now = useMinute();
   const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const ids = useId();
   const board = useRef<HTMLDivElement>(null);
+  const crossing = useRovingColumns<HTMLDivElement>();
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
   const listed = tasks.listed.tasks;
   const { filter, display } = frame;
@@ -612,14 +634,21 @@ export function TasksBoard({
     ),
     words: (userId) => assigneeWords(userId, directory, listed),
   };
-  const columns = tasksBoardColumns(listed, {
-    filter,
-    display,
-    readerId: tasks.me,
-    personName: people.words,
-    members: (directory.members ?? []).map((member) => member.userId),
-    now,
-  });
+  // While the page is shown each card keeps the column and the place it was first drawn in, so one a teammate's change would move stays under the reader's eye.
+  const columns = useHeldTasks(
+    tasks,
+    { workspaceId: tasks.workspace?.id, filter, display },
+    (standing) =>
+      tasksBoardColumns(standing, {
+        filter,
+        display,
+        readerId: tasks.me,
+        personName: people.words,
+        members: (directory.members ?? []).map((member) => member.userId),
+        now,
+      }),
+  );
+  const setStanding = useStandingDoor(tasks);
   const narrow = room === SHELL_ROOM.NARROW;
   const values = columns.map((column) => columnValue(column.head));
   // Note that a column gone from the view lets the choice go, so its coming back does not bring it back unasked.
@@ -665,18 +694,23 @@ export function TasksBoard({
       width={PAGE_WIDTH.FULL}
       label={title}
       toolbar={frame.toolbar}
+      scrollRef={frame.scroll}
       filters={filters}
       state={boardState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
-      empty={<EmptyState icon={<SquareKanbanIcon />}>No tasks yet</EmptyState>}
+      empty={<EmptyState icon={<SquareKanbanIcon />}>{noneYetWords(TERM.TASK)}</EmptyState>}
       error={
         <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}
         </ErrorState>
       }
     >
+      {/* A refresh that failed after the tasks were read leaves them drawn, with a line over them. */}
+      {tasks.listFailed && listed.length > 0 ? (
+        <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
+      ) : null}
       <ListMotion root={board}>
-        <div ref={board} className="tasks-board" data-row-drop-scope="">
+        <div ref={board} className="tasks-board" data-row-drop-scope="" {...crossing}>
           {columns.length === 0 ? (
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {NONE_STANDING}

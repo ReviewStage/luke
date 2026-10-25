@@ -13,6 +13,7 @@
  * time, never from anything observed.
  */
 
+import { formatCount } from "@luke/features/number-format";
 import * as React from "react";
 import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
@@ -246,7 +247,6 @@ function ChartTooltipContent({
     // Recharts hands `label` over as a loose ReactNode, and a string is the
     // only form that can name a ChartConfig entry — this check is the boundary.
     const value =
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof
       !labelKey && typeof label === "string" ? (config[label]?.label ?? label) : itemConfig?.label;
 
     if (labelFormatter) {
@@ -297,8 +297,7 @@ function ChartTooltipContent({
                   item.value == null ? null : (
                     <span className="luke-chart-tooltip-value">
                       {Number.isFinite(item.value)
-                        ? (valueFormatter?.(Number(item.value)) ??
-                          Number(item.value).toLocaleString())
+                        ? (valueFormatter?.(Number(item.value)) ?? formatCount(Number(item.value)))
                         : String(item.value)}
                     </span>
                   )
@@ -318,7 +317,6 @@ function ChartTooltipContent({
  * are parsed: their shapes are recharts' own, carrying no contract this
  * repository could import, so the narrowing has to happen here at runtime.
  */
-/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof, anti-slop/require-safety-comment-for-type-assertion */
 function getPayloadConfigFromPayload(config: ChartConfig, payload: unknown, key: string) {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
@@ -343,7 +341,5 @@ function getPayloadConfigFromPayload(config: ChartConfig, payload: unknown, key:
 
   return configLabelKey in config ? config[configLabelKey] : config[key];
 }
-
-/* oxlint-enable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof, anti-slop/require-safety-comment-for-type-assertion */
 
 export { ChartContainer, ChartTooltip, ChartTooltipContent, ChartTooltipFrame };

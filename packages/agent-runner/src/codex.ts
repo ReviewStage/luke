@@ -1,5 +1,5 @@
 /**
- * codex.ts -- one launch of Codex for a Luke agent: `codex app-server` spawned with the ChatGPT plan's provider, the thread started or resumed, Luke's lines turned into turns, steers, interrupts and restarts, every notification posted out, and the launch ended when the agent's turn is.
+ * codex.ts -- one launch of Codex for a Luke agent: `codex app-server` spawned with the ChatGPT plan's provider, the thread started or resumed, Luke's lines turned into turns, steers, interrupts and restarts, every notification posted out, and the launch ended, or kept warm, once the agent's turn is over.
  *
  * One controller fiber owns the launch's state and acts on one signal at a
  * time: a line Luke wrote, or what app-server reported (a message a turn
@@ -10,9 +10,9 @@
  * steered message is always recorded as sent before the notification that
  * says the turn took it.
  *
- * When the launch ends (Codex's end-of-run rule). A launch ends at the
- * `turn/completed` of the turn it is running, on its own thread, once no
- * message Luke sent is left unanswered. Each `turn/start` and `turn/steer`
+ * When the agent's turn is over (Codex's end-of-run rule). It is over at
+ * the `turn/completed` of the turn the launch is running, on its own thread,
+ * once no message Luke sent is left unanswered. Each `turn/start` and `turn/steer`
  * carries a `clientUserMessageId`, which Codex echoes as the `clientId` of
  * the `userMessage` item a turn takes it in, and which is Luke's own id for
  * the line where a message goes alone. As app-server takes a line (its
@@ -25,8 +25,11 @@
  * launch, which ends at that turn's completion by the same rule. Codex's
  * turn holds its own waits (its unified exec polls a long command inside the
  * turn, as P16 found), so nothing outlives `turn/completed` the way Claude
- * Code's background work outlives a `result`. A completed turn ends the
- * launch as `turn_ended`; one interrupted after Luke's stop as `stopped`; a
+ * Code's background work outlives a `result`. A turn that is over ends the
+ * launch as `turn_ended`, or, where the config asks it to stay `warm`, posts
+ * IDLE and keeps the launch up (`RUNNER_WARM`) for Luke's next message,
+ * until Luke retires it or its cap ends it as `idled`. One interrupted
+ * after Luke's stop ends the launch as `stopped`; a
  * failed turn, or one interrupted without a stop, as `failed`, with the
  * turn's error, so it shows as interrupted and Continue resumes the thread. A
  * stop with no turn running ends the launch at once; so does stdin closing
@@ -47,7 +50,7 @@
 
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { Effect, Exit, Option, Queue, Schema, Scope, Stream } from "effect";
+import { Duration, Effect, Exit, Option, Queue, Schema, Scope, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import {
   type AppServer,
@@ -76,6 +79,7 @@ import {
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_EVENT,
+  RUNNER_WARM,
   type RunnerEnd,
 } from "./protocol.js";
 
@@ -376,6 +380,8 @@ interface CodexLaunch {
   /** Whether the next turn runs on the `fast` service tier: a fast version on an API key alone. */
   fast: boolean;
   stopping: boolean;
+  /** Whether the launch is warm: its turn completed with nothing left, an IDLE posted, and no message taken since. */
+  warm: boolean;
 }
 
 /** Ends the launch: the outcome the controller's loop stops on. */
@@ -584,6 +590,7 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
   const value = line.value;
   switch (value.type) {
     case INPUT_LINE.MESSAGE: {
+      launch.warm = false;
       // Note that Luke's id for the line is the id Codex echoes, so a turn that takes it names it.
       const uuid = value.uuid ?? randomUUID();
       const outgoing: Outgoing = { clientId: uuid, input: userInput(value.content), lines: [uuid] };
@@ -630,6 +637,14 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
         );
       return interrupted ? undefined : ended(RUNNER_END.STOPPED);
     }
+    case INPUT_LINE.RETIRE: {
+      // Lines are taken one at a time, so a message ahead of this one already took the launch out of warm.
+      if (launch.warm && launch.turnId === undefined && launch.waiting.length === 0) {
+        return ended(RUNNER_END.IDLED);
+      }
+      yield* Effect.logWarning("agent-runner: skipped a retire for a launch at work");
+      return undefined;
+    }
     case INPUT_LINE.MODEL: {
       if (value.model !== undefined) launch.model = value.model;
       if (value.fast !== undefined) launch.fast = value.fast;
@@ -671,7 +686,12 @@ const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(func
     const done = yield* takeSignal(launch, queued.value);
     if (done !== undefined) return done;
   }
-  return launch.turnId === undefined ? ended(RUNNER_END.TURN_ENDED) : undefined;
+  if (launch.turnId !== undefined) return undefined;
+  if (launch.context.config.warm !== true) return ended(RUNNER_END.TURN_ENDED);
+  // The agent's turn is over: the launch stays warm for Luke's next message rather than ending.
+  launch.warm = true;
+  yield* launch.context.sink.emit({ type: RUNNER_EVENT.IDLE });
+  return undefined;
 });
 
 /** One signal, acted on; answers the launch's outcome where it ends the launch. */
@@ -762,6 +782,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     effort: config.effort,
     fast: config.fast === true,
     stopping: false,
+    warm: false,
   };
 
   // Luke's lines join the signals in a loop of their own, so a line is
@@ -773,7 +794,14 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   );
   const outcome = yield* Effect.gen(function* () {
     for (;;) {
-      const done = yield* takeSignal(launch, yield* Queue.take(signals));
+      // A warm launch waits at most its cap for the next signal, and ends where none came.
+      const next = launch.warm
+        ? yield* Queue.take(signals).pipe(
+            Effect.timeoutOption(Duration.millis(RUNNER_WARM.IDLE_CAP_MS)),
+          )
+        : Option.some(yield* Queue.take(signals));
+      if (Option.isNone(next)) return ended(RUNNER_END.IDLED);
+      const done = yield* takeSignal(launch, next.value);
       if (done !== undefined) return done;
     }
   }).pipe(

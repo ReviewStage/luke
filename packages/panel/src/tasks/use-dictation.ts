@@ -55,11 +55,11 @@ type DictationPhase = (typeof DICTATION_PHASE)[keyof typeof DICTATION_PHASE];
 /** Why a dictation left nothing, in the words the box's note says. */
 const DICTATION_NOTE = {
   MICROPHONE_DENIED:
-    "Luke can't use the microphone. Allow it in System Settings › Privacy & Security › Microphone.",
-  MICROPHONE_FAILED: "The microphone couldn't be opened.",
+    "Luke cannot use the microphone. Allow it in System Settings › Privacy & Security › Microphone.",
+  MICROPHONE_FAILED: "The microphone could not be opened.",
   BOX_FULL: "There is no room for the dictated words.",
   NO_WORDS: "No words were heard.",
-  FAILED: "The recording couldn't be transcribed. Try again.",
+  FAILED: "The recording could not be transcribed. Try again.",
   OPENAI_KEY_MISSING: OPENAI_KEY_MISSING_NOTE,
 } as const;
 

@@ -5,12 +5,13 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
+import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { SkillOption } from "@luke/ui/skill-mention";
@@ -26,6 +27,7 @@ import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
+  pasteInComposer,
   pressInComposer,
   QUIET_COMPOSER,
   typeInComposer,
@@ -171,6 +173,57 @@ test("the box takes the caret as it opens, Enter sends what was typed, and the b
   assert.equal(box.shown(), "and the next one");
 });
 
+test("a paste past the box's cap is cut to the room left and the note says so, until the words change", async () => {
+  const box = await mounted();
+  const cap = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS;
+  const note = () => box.container.querySelector(".luke-composer-foot-note")?.textContent;
+  assert.equal(note(), undefined);
+
+  pasteInComposer(box.container, "x".repeat(cap + 500));
+  assert.equal(box.shown().length, cap, "the box holds what fits");
+  assert.equal(note()?.includes(pasteCutWords(cap)), true, "and says the rest was cut");
+
+  const editor = composerEditor(box.container).editor;
+  assert.ok(editor, "the editor is running");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  assert.equal(note(), undefined, "the note goes once the words change again");
+});
+
+test("a paste that fits the cap says nothing of a cut", async () => {
+  const box = await mounted();
+  pasteInComposer(box.container, "x".repeat(1000));
+  assert.equal(box.shown().length, 1000);
+  assert.equal(box.container.querySelector(".luke-composer-foot-note"), null);
+});
+
+test("a paste into a full box whose message did not go leaves the failure and its Retry standing", async () => {
+  const box = await mounted(() =>
+    Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+  );
+  typeInComposer(box.container, "x".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS));
+  pressInComposer(box.container, "Enter");
+  await settle();
+  const retry = () =>
+    [...box.container.querySelectorAll("button")].find((each) => each.textContent === "Retry");
+  assert.ok(retry(), "Retry is offered");
+
+  pasteInComposer(box.container, "more");
+  assert.ok(retry(), "the cut paste took nothing from the failure");
+});
+
+test("the length counter stands from four fifths of the cap and not before", async () => {
+  const box = await mounted();
+  const cap = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS;
+  const counter = () => box.container.querySelector(".luke-length-counter")?.textContent;
+
+  typeInComposer(box.container, "x".repeat(cap * 0.8 - 1));
+  assert.equal(counter(), undefined);
+  typeInComposer(box.container, "x");
+  assert.equal(counter(), `${cap * 0.8}/${cap}`);
+});
+
 test("words selected raise the format toolbar, its marks alone, and a message bolded from it is sent as its Markdown", async () => {
   const box = await mounted();
   typeInComposer(box.container, "Ship it now");
@@ -312,6 +365,28 @@ test("a message refused after the developer wrote on keeps their words in the bo
   assert.equal(box.shown(), "Still writing", "and are never sent over");
 });
 
+test("a message refused while another waits behind it still lets that one go, and comes back into the box with its Retry", async () => {
+  const box = await answeredInTurn();
+  typeInComposer(box.container, "First");
+  pressInComposer(box.container, "Enter");
+  await settle();
+  typeInComposer(box.container, "Second");
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  await box.answer(0, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["First", "Second"],
+    "the refusal drops nothing behind it",
+  );
+  assert.equal(box.shown(), "First", "the refused words wait in the box");
+  assert.ok(
+    [...box.container.querySelectorAll("button")].some((each) => each.textContent === "Retry"),
+    "with Retry beside them",
+  );
+});
+
 test("a message sent with Send hands the caret to the box as it opens again", async () => {
   const box = await answeredLater();
   typeInComposer(box.container, "Fix the bug");
@@ -346,7 +421,7 @@ test("a box that opens again after a send leaves the caret on a press of its own
   pressInComposer(box.container, "Enter");
   await settle();
   const servers = box.container.querySelector<HTMLButtonElement>(
-    'button[aria-label="MCP servers"]',
+    'button[aria-label="Integrations"]',
   );
   assert.ok(servers);
   servers.focus();
@@ -426,7 +501,8 @@ test("a / opens the repository's skills over the caret, the keys move through th
   assert.equal(box.sent.length, 0, "the Enter picked rather than sent");
   assert.equal(box.container.querySelector('[role="listbox"]'), null);
   assert.equal(
-    box.container.querySelector(".agent-composer-input [data-skill-ref]")?.textContent,
+    box.container.querySelector(".agent-composer-input [data-skill-ref] .luke-inline-ref-label")
+      ?.textContent,
     "/deploy",
   );
   typeInComposer(box.container, "now");
@@ -449,7 +525,7 @@ test("a row of the skills' list leads with a book, says what it is for and where
     row.querySelector(".luke-combobox-option-detail")?.textContent,
     SKILLS[0]?.description,
   );
-  assert.equal(row.querySelector(".luke-combobox-option-hint")?.textContent, "Repo");
+  assert.equal(row.querySelector(".luke-combobox-option-hint")?.textContent, "Repository");
 
   restOn(row);
 
@@ -573,8 +649,8 @@ test("a dictation the service refused for want of an OpenAI key says to add one 
   await settle();
 
   const said = box.container.textContent ?? "";
-  assert.match(said, /Add an OpenAI API key in Settings/u);
-  assert.doesNotMatch(said, /couldn't be transcribed/u);
+  assert.match(said, /Add an OpenAI key in settings/u);
+  assert.doesNotMatch(said, /could not be transcribed/u);
   assert.equal(box.shown(), "", "nothing was put in the box");
 });
 
@@ -641,6 +717,19 @@ test("a call that begins mid-dictation ends it, keeping the words said, and the 
   );
   assert.equal(box.container.querySelector('button[aria-label="Dictate"]'), null);
   assert.equal(composerEditor(box.container).textContent, "the invite page");
+});
+
+test('a clip sent for reading draws its ring and its "Transcribing" together, the word with no dots, before the settle delay has passed', async () => {
+  const box = await mountedForCall(() => new Promise(ignore));
+  box.press("Dictate");
+  await settle();
+  box.press("Done");
+  await settle();
+
+  const reading = box.container.querySelector(".dictation-transcribing");
+  assert.ok(reading, "the strip says it is transcribing");
+  assert.ok(reading.querySelector('[data-slot="spinner"]'), "the ring stands with the word");
+  assert.equal(reading.querySelector(":scope > [aria-hidden]")?.textContent, "Transcribing");
 });
 
 test("a clip still being read as a call begins keeps its strip and its Cancel beside the call's controls until its words land, then the row holds the call", async () => {

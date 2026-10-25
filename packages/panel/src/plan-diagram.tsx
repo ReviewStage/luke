@@ -1,10 +1,11 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   Button,
   CARD_CORNER,
   CARD_ELEMENT,
   CARD_PADDING,
   Card,
+  FailureNote,
   IMAGE_OPENING,
   PictureTile,
   PortalFence,
@@ -116,10 +117,17 @@ function useAppearance(): DiagramAppearance {
 /**
  * A code's drawing in the window's appearance: the one held, or nothing
  * while the bundle loads and the draw runs, which then lands. A bundle that
- * could not load refuses every code, so each fence stands as its code.
+ * could not load refuses every code, so each fence stands as its code, with
+ * the `retry` that imports the bundle again; a fence the bundle itself
+ * refused has none, since drawing it again would refuse it again.
  */
-function useDrawing(code: string, appearance: DiagramAppearance): DiagramDrawing | undefined {
-  const bundle = useAtomValue(useSideBundles().diagram);
+function useDrawing(
+  code: string,
+  appearance: DiagramAppearance,
+): { readonly drawing: DiagramDrawing | undefined; readonly retry: (() => void) | undefined } {
+  const { diagram } = useSideBundles();
+  const bundle = useAtomValue(diagram);
+  const retryBundle = useAtomRefresh(diagram);
   const held = heldDrawing(appearance, code);
   const [, landed] = useReducer((count: number) => count + 1, 0);
   useEffect(() => {
@@ -132,8 +140,10 @@ function useDrawing(code: string, appearance: DiagramAppearance): DiagramDrawing
       standing = false;
     };
   }, [held, bundle, appearance, code]);
-  if (held !== undefined) return held;
-  return AsyncResult.isFailure(bundle) ? { kind: DIAGRAM_DRAWING.REFUSED } : undefined;
+  if (held !== undefined) return { drawing: held, retry: undefined };
+  return AsyncResult.isFailure(bundle)
+    ? { drawing: { kind: DIAGRAM_DRAWING.REFUSED }, retry: retryBundle }
+    : { drawing: undefined, retry: undefined };
 }
 
 /** What a diagram opened over the window is named, its header's title and the file Download saves. */
@@ -150,17 +160,48 @@ function opensFullScreen(element: Element): boolean {
   return coarsePointerNow() || element.closest(NARROW_ROOM) !== null;
 }
 
-/** What a diagram's picture says it is, and what its press is named for after "Enlarge". */
+/** What a diagram's picture is called where its code names nothing: the kind of thing it is. */
 const DIAGRAM_ALT = "Diagram";
 
+/** How much of a title or first line an alt text keeps, so a long one does not read out whole. */
+const ALT_LIMIT = 80;
+
+/** The front matter a Mermaid code may open with: its settings between two `---` fences, which name nothing of the diagram but a `title`. */
+const FRONT_MATTER = /^\s*---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/u;
+
+/** The title a front matter names (`title: Order flow`), a top-level key. */
+const FRONT_TITLE = /^title:[ \t]*(.+?)[ \t]*$/mu;
+
+/** A title a diagram's own lines name, as a line of its own or after the diagram's kind (`title Votes`, `pie title Votes`). */
+const BODY_TITLE = /^[ \t]*(?:\w+[ \t]+)?title[ \t]+(.+?)[ \t]*$/mu;
+
+/** A line of Mermaid code that names nothing of the diagram: blank or a comment. */
+const SILENT_LINE = /^\s*(?:%%.*)?\s*$/u;
+
+/** The words kept of a title or first line, cut at the limit with an ellipsis. */
+function altWords(line: string): string {
+  const words = line.replace(/^["']|["']$/gu, "").trim();
+  return words.length > ALT_LIMIT ? `${words.slice(0, ALT_LIMIT).trimEnd()}…` : words;
+}
+
+/** What a diagram's picture says it is, and what its press is named for after "Enlarge": its title, or its first line, after "Diagram". */
+function diagramAlt(code: string): string {
+  const front = FRONT_MATTER.exec(code);
+  const body = front === null ? code : code.slice(front[0].length);
+  const title = FRONT_TITLE.exec(front?.[1] ?? "")?.[1] ?? BODY_TITLE.exec(body)?.[1];
+  const first = body.split("\n").find((line) => !SILENT_LINE.test(line));
+  const words = altWords(title ?? first ?? "");
+  return words === "" ? DIAGRAM_ALT : `${DIAGRAM_ALT}: ${words}`;
+}
+
 /** A diagram's picture, at its own size up to the column's. */
-function DiagramPicture({ url }: { url: string }): React.JSX.Element {
-  return <img className="plan-diagram-picture" src={url} alt={DIAGRAM_ALT} decoding="async" />;
+function DiagramPicture({ url, alt }: { url: string; alt: string }): React.JSX.Element {
+  return <img className="plan-diagram-picture" src={url} alt={alt} decoding="async" />;
 }
 
 /** The line a refused fence stands under. */
-function RefusedLine(): React.JSX.Element {
-  return <p className="plan-diagram-failed">{DIAGRAM_REFUSED_LINE}</p>;
+function RefusedLine({ onRetry }: { onRetry?: (() => void) | undefined }): React.JSX.Element {
+  return <FailureNote onRetry={onRetry}>{DIAGRAM_REFUSED_LINE}</FailureNote>;
 }
 
 /** A diagram opened over the window at its own pixels, until it is closed. */
@@ -193,10 +234,11 @@ export function PlanDiagram({
   code: string;
   source: ReactNode;
 }): React.JSX.Element {
-  const drawingNow = useDrawing(code, useAppearance());
+  const { drawing: drawingNow, retry } = useDrawing(code, useAppearance());
   const [showingCode, setShowingCode] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
   const picture = drawingNow?.kind === DIAGRAM_DRAWING.DRAWN ? drawingNow.url : undefined;
+  const alt = diagramAlt(code);
   const pictureShown = picture !== undefined && !showingCode;
   // Note that this draws what a press would do, where `opensFullScreen` asks again as the press lands.
   const coarse = useCoarsePointer();
@@ -225,11 +267,11 @@ export function PlanDiagram({
           </span>
         )}
       </div>
-      {drawingNow?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine /> : null}
+      {drawingNow?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine onRetry={retry} /> : null}
       {pictureShown ? (
         <div className="plan-diagram-stage">
           <PictureTile
-            name={DIAGRAM_ALT}
+            name={alt}
             pointerOpens={pointerOpens}
             onOpen={(event) => {
               // Note that a key's press (no pointer's click count) opens it in any room, because the
@@ -241,7 +283,7 @@ export function PlanDiagram({
               setFullScreen(true);
             }}
           >
-            <DiagramPicture url={picture} />
+            <DiagramPicture url={picture} alt={alt} />
           </PictureTile>
         </div>
       ) : (
@@ -268,7 +310,7 @@ export function DiagramPreview({
   previous: string | undefined;
 }): React.JSX.Element {
   const appearance = useAppearance();
-  const drawingNow = useDrawing(code, appearance);
+  const { drawing: drawingNow, retry } = useDrawing(code, appearance);
   const shown =
     drawingNow ?? (previous === undefined ? undefined : heldDrawing(appearance, previous));
   return (
@@ -276,8 +318,13 @@ export function DiagramPreview({
       <div className="plan-diagram-head">
         <span>Preview</span>
       </div>
-      {shown?.kind === DIAGRAM_DRAWING.DRAWN ? <DiagramPicture url={shown.url} /> : null}
-      {shown?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine /> : null}
+      {shown?.kind === DIAGRAM_DRAWING.DRAWN ? (
+        <DiagramPicture
+          url={shown.url}
+          alt={diagramAlt(drawingNow === undefined ? (previous ?? code) : code)}
+        />
+      ) : null}
+      {shown?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine onRetry={retry} /> : null}
     </>
   );
 }

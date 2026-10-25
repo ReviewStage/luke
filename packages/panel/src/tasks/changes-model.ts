@@ -16,6 +16,7 @@ import {
   LOCKFILE_NAMES,
   patchHunks,
 } from "@luke/features/diff-hunks";
+import { pullRequestAddressOf } from "@luke/features/link-grammar";
 import { isSecretFile } from "@luke/features/task-wire";
 import {
   DIFF_SELECTION_SIDE,
@@ -108,10 +109,10 @@ export type ExpansionRefusal = (typeof EXPANSION_REFUSAL)[keyof typeof EXPANSION
 
 /** What a file whose lines between hunks could not be opened says, once, above its first hunk. */
 export const EXPANSION_REFUSED_WORDS = {
-  [EXPANSION_REFUSAL.NOT_TEXT]: "Can't load more of this file: it's too large or not plain text.",
+  [EXPANSION_REFUSAL.NOT_TEXT]: "Cannot load more of this file: it's too large or not plain text.",
   [EXPANSION_REFUSAL.CHANGED]:
-    "Can't load more of this file: it changed since these changes were read.",
-  [EXPANSION_REFUSAL.UNAVAILABLE]: "Can't load more of this file just now.",
+    "Cannot load more of this file: it changed since these changes were read.",
+  [EXPANSION_REFUSAL.UNAVAILABLE]: "Cannot load more of this file just now.",
 } as const satisfies Record<ExpansionRefusal, string>;
 
 /** The letter a file wears for what became of it, as an editor's source control marks it. */
@@ -554,12 +555,10 @@ export function pullRequestPatch(files: readonly CodingAgentChangedFile[]): stri
 
 /** What a pull request's patch is saved as, from its page on GitHub: `<repository>-pr-<number>.patch`, or a plain name where the page names neither. */
 export function pullRequestPatchName(url: string): string {
-  const [, name, kind, number] = URL.canParse(url)
-    ? new URL(url).pathname.split("/").filter((segment) => segment !== "")
-    : [];
-  return name === undefined || kind !== "pull" || number === undefined
-    ? "pull-request.patch"
-    : `${name}-pr-${number}.patch`;
+  const address = pullRequestAddressOf(url);
+  if (address === undefined) return "pull-request.patch";
+  const name = address.repository.slice(address.repository.indexOf("/") + 1);
+  return `${name}-pr-${address.number}.patch`;
 }
 
 /** A file's header as git writes one, with no hunks under it: what the list draws for a file whose place shows no lines. */

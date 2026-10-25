@@ -1,21 +1,31 @@
-import type { PendingReviewComment, ReviewThread } from "@luke/features/coding-agent-wire";
+import type {
+  GitHubPerson,
+  PendingReviewComment,
+  ReviewThread,
+} from "@luke/features/coding-agent-wire";
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
-  BADGE_TONE,
   Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
+  Comment,
   ConfirmDialog,
   type DialogQuestion,
+  nextRowOrHead,
+  STATUS_TONE,
   useConfirmDialog,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { PencilIcon, Trash2Icon } from "lucide-react";
-import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
-import { MarkdownField } from "./markdown-field.js";
+import { createContext, type ReactNode, useContext, useState } from "react";
+import { ActorRef, commentAuthor } from "../actor-ref.js";
+import { useNamer } from "./pull-request-people.js";
 import { noop, useThreadWriting } from "./pull-request-thread-actions.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
+import { ReplyForm, type ReplyFormWords } from "./reply-form.js";
 
 /**
  * pending-comments.tsx -- the member's own pending review comments, which nobody else sees until they submit the review, drawn as GitHub draws them: on their lines in Files changed, each marked Pending, with Edit and Delete.
@@ -42,19 +52,24 @@ export const PENDING_WORDS = {
   PENDING: "Pending",
   EDIT: "Edit",
   DELETE: "Delete",
-  SAVE: "Save",
-  SAVING: "Saving",
-  CANCEL: "Cancel",
-  FIELD: "Pending comment",
-  PLACEHOLDER: "Leave a comment…",
 } as const;
+
+/** What the edit's form is named, asks for, and says. */
+const EDIT_WORDS: ReplyFormWords = {
+  field: "Pending comment",
+  placeholder: "Edit comment",
+  cancel: "Cancel",
+  send: "Save",
+  sending: "Saving",
+};
 
 /** What Delete asks before it takes a pending comment out of the review. */
 const DELETE_QUESTION: DialogQuestion = {
   title: "Delete this pending comment?",
-  body: "This can't be undone.",
+  body: IRREVERSIBLE_WORDS,
   verb: "Delete comment",
   running: "Deleting",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 /** A pending comment as the comment of a thread it is drawn as: keyed by its own id. */
@@ -138,78 +153,13 @@ export function usePendingThread(thread: ReviewThread): boolean {
 
 /** The Pending mark a pending comment and a thread it starts wear. */
 export function PendingBadge(): React.JSX.Element {
-  return <Badge tone={BADGE_TONE.ATTENTION}>{PENDING_WORDS.PENDING}</Badge>;
-}
-
-/** The words being written over a pending comment's: the field, Cancel, and Save; ⌘↩ saves. */
-function EditForm({
-  draft,
-  busy,
-  saving,
-  onSave,
-  onCancel,
-}: {
-  draft: PendingReviewComment;
-  busy: boolean;
-  saving: boolean;
-  onSave: (body: string) => void;
-  onCancel: () => void;
-}): React.JSX.Element {
-  const [body, setBody] = useState(draft.body);
-  const field = useRef<HTMLTextAreaElement>(null);
-  const blank = body.trim() === "";
-  const save = () => {
-    if (!blank && !busy) onSave(body);
-  };
-  useEffect(() => {
-    field.current?.focus();
-  }, []);
-  return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: Escape in the field lets the edit go, as the reply's field does; the key arrives here from it.
-    <div
-      className="pull-request-thread-reply"
-      onKeyDown={(event) => {
-        // Note that ⌘↩ saves this comment alone, so it goes no further: the Review panel around a listed comment submits the whole review on it.
-        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-          event.stopPropagation();
-          return;
-        }
-        if (event.key !== "Escape" || busy) return;
-        event.stopPropagation();
-        onCancel();
-      }}
-    >
-      <MarkdownField
-        label={PENDING_WORDS.FIELD}
-        placeholder={PENDING_WORDS.PLACEHOLDER}
-        value={body}
-        onChange={setBody}
-        busy={busy}
-        fieldRef={field}
-        onSubmit={save}
-      />
-      <div className="pull-request-thread-reply-foot">
-        <Button disabled={busy} onClick={onCancel}>
-          {PENDING_WORDS.CANCEL}
-        </Button>
-        <Button
-          variant={BUTTON_VARIANT.PRIMARY}
-          disabled={blank || (busy && !saving)}
-          busy={saving}
-          busyLabel={PENDING_WORDS.SAVING}
-          onClick={save}
-        >
-          {PENDING_WORDS.SAVE}
-        </Button>
-      </div>
-    </div>
-  );
+  return <Badge tone={STATUS_TONE.ATTENTION}>{PENDING_WORDS.PENDING}</Badge>;
 }
 
 /**
  * One of the member's pending comments: its head, marked Pending, then its
- * words, or the field over them while Edit is open, Cancel keeping nothing
- * written; then Edit and Delete, Delete asking first; GitHub's refusal of
+ * words, or the field over them while Edit is open, Esc keeping what
+ * was written for the next Edit and Cancel keeping nothing; then Edit and Delete, Delete asking first; GitHub's refusal of
  * either under them. Outside a tab that writes, it is drawn without them.
  */
 export function PendingComment({
@@ -221,8 +171,8 @@ export function PendingComment({
   draft: PendingReviewComment;
   /** Whether it wears its own Pending mark; not where the card it starts already wears one in its head. */
   marked?: boolean;
-  /** Who wrote it and when, as every comment's head names them; none where the card it stands in names them beside it. */
-  head?: ReactNode;
+  /** Who wrote it and when, as every comment's head names them (`Comment`); none where the card it stands in names them beside it. */
+  head?: { readonly person: GitHubPerson; readonly at: number; readonly now: number } | undefined;
   /** Its words as every comment's are drawn. */
   words: ReactNode;
 }): React.JSX.Element {
@@ -241,26 +191,31 @@ export function PendingComment({
       ),
   );
   const out = writes.pending;
-  return (
+  const name = useNamer();
+  const body = (
     <div className="pull-request-pending-comment">
-      {head === undefined ? null : (
-        <span className="changes-comment-head">
-          {head}
-          {marked ? <PendingBadge /> : null}
-        </span>
-      )}
-      {editing ? (
-        <EditForm
-          draft={draft}
+      {editing && writing !== undefined ? (
+        <ReplyForm
+          words={EDIT_WORDS}
+          start={writing.edits.of(draft.id) ?? draft.body}
           busy={out !== undefined}
-          saving={out === PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT}
-          onSave={(body) =>
+          sending={out === PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT}
+          // Note that words written back to the comment's own are no edit, so none are held.
+          onWrite={(next) => writing.edits.keep(draft.id, next === draft.body ? undefined : next)}
+          onSend={(body) =>
             writes.write(
               { action: PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT, commentId: draft.id, body },
-              () => setEditing(false),
+              () => {
+                writing.edits.keep(draft.id, undefined);
+                setEditing(false);
+              },
             )
           }
-          onCancel={() => setEditing(false)}
+          onLeave={() => setEditing(false)}
+          onDiscard={() => {
+            writing.edits.keep(draft.id, undefined);
+            setEditing(false);
+          }}
         />
       ) : (
         words
@@ -270,7 +225,7 @@ export function PendingComment({
           <Button
             size={BUTTON_SIZE.COMPACT}
             variant={BUTTON_VARIANT.OUTLINE}
-            icon={<PencilIcon aria-hidden="true" />}
+            icon={<GLYPH.RENAME />}
             disabled={out !== undefined}
             onClick={() => setEditing(true)}
           >
@@ -279,7 +234,7 @@ export function PendingComment({
           <Button
             size={BUTTON_SIZE.COMPACT}
             variant={BUTTON_VARIANT.DANGER_OUTLINE}
-            icon={<Trash2Icon aria-hidden="true" />}
+            icon={<GLYPH.DELETE />}
             disabled={out !== undefined}
             onClick={deleting.ask}
           >
@@ -288,7 +243,20 @@ export function PendingComment({
         </div>
       )}
       <PullRequestWriteNote writes={writes} className="pull-request-thread-note" />
-      <ConfirmDialog confirm={deleting} question={DELETE_QUESTION} />
+      <ConfirmDialog open confirm={deleting} question={DELETE_QUESTION} restoreTo={nextRowOrHead} />
     </div>
+  );
+  if (head === undefined) return body;
+  const writer = name(head.person);
+  return (
+    <Comment
+      author={commentAuthor(writer)}
+      nameRef={<ActorRef actor={writer} nameOnly />}
+      at={head.at}
+      now={head.now}
+      trailing={marked ? <PendingBadge /> : undefined}
+    >
+      {body}
+    </Comment>
   );
 }

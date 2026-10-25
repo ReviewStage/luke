@@ -121,9 +121,18 @@ async function settle(): Promise<void> {
   });
 }
 
+/** How the workspaces' own read stands, which the page is handed beside the workspace it shows. */
+interface WorkspacesRead {
+  readonly failed: boolean;
+  readonly retry: () => void;
+}
+
+const WORKSPACES_READ: WorkspacesRead = { failed: false, retry: () => undefined };
+
 async function mount(
   signedIn = true,
-  workspace: Workspace | undefined = ACME,
+  workspace: Workspace | null = ACME,
+  workspaces: WorkspacesRead = WORKSPACES_READ,
 ): Promise<{
   readonly page: HTMLElement;
   readonly show: (next: Workspace, readerId?: string) => Promise<void>;
@@ -132,8 +141,18 @@ async function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const draw = (shown: Workspace | undefined, readerId: string | undefined) =>
-    act(() => root.render(createElement(MemorySection, { signedIn, workspace: shown, readerId })));
+  const draw = (shown: Workspace | null, readerId: string | undefined) =>
+    act(() =>
+      root.render(
+        createElement(MemorySection, {
+          signedIn,
+          workspace: shown ?? undefined,
+          readerId,
+          workspacesFailed: workspaces.failed,
+          onRetryWorkspaces: workspaces.retry,
+        }),
+      ),
+    );
   draw(workspace, signedIn ? READER : undefined);
   await settle();
   return {
@@ -162,8 +181,8 @@ const button = (within: Element, label: string) =>
 const dialog = () =>
   document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
 
-/** Chooses Forget in a memory's ⋯, then the dialog's own Forget; answers whether it asked before forgetting. */
-async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean> {
+/** Chooses Forget in a memory's ⋯, which puts its question up. */
+function askForget(page: HTMLElement, memory: MemorySummary): void {
   const ellipsis =
     rowOf(page, memory).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
     assert.fail("no ⋯");
@@ -175,6 +194,11 @@ async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean
       ) ?? assert.fail("no Forget in the ⋯")
     ).click(),
   );
+}
+
+/** Asks Forget, then presses the dialog's own Forget; answers whether it asked before forgetting. */
+async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean> {
+  askForget(page, memory);
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.MEMORIES_FORGET);
   act(() => button(dialog(), "Forget").click());
   await settle();
@@ -190,8 +214,10 @@ test("what Luke kept in the workspace is read for it and listed in the service's
       .map((request) => request.payload),
     [{ workspaceId: ACME.id }],
   );
-  assert.match(page.textContent ?? "", /work in Acme/u);
-  assert.match(page.textContent ?? "", /Everyone in the workspace shares these memories/u);
+  assert.match(
+    page.textContent ?? "",
+    /keep what you settle in Acme and recall it in later tasks/u,
+  );
   assert.deepEqual(words(page), [DEPLOYS.text, TESTS.text]);
   assert.match(rowOf(page, DEPLOYS).textContent ?? "", /Kept by You · Oct 12, 2026/u);
   assert.match(rowOf(page, TESTS).textContent ?? "", /Kept by Dean · /u);
@@ -217,6 +243,14 @@ test("Forget asks first, then forgets the memory for good and lists what the ser
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
 
+test("Forget is drawn red, since a forgotten memory cannot be got back", async () => {
+  const { page } = await mount();
+
+  askForget(page, DEPLOYS);
+
+  assert.equal(button(dialog(), "Forget").getAttribute("data-variant"), "danger");
+});
+
 test("a forget that fails says so in the dialog and keeps the memory listed", async () => {
   refuseForget = true;
   const { page } = await mount();
@@ -225,7 +259,7 @@ test("a forget that fails says so in the dialog and keeps the memory listed", as
 
   assert.deepEqual(words(page), [DEPLOYS.text, TESTS.text]);
   assert.equal(
-    dialog().querySelector('[role="alert"]')?.textContent,
+    dialog().querySelector('[data-slot="field-error"]:not(:empty)')?.textContent,
     "The memory could not be forgotten. Try again.",
   );
 });
@@ -236,7 +270,6 @@ test("a private memory is marked Only you, a shared one is not, and its Forget s
 
   assert.match(rowOf(page, DEPLOYS).textContent ?? "", /Only you/u);
   assert.doesNotMatch(rowOf(page, TESTS).textContent ?? "", /Only you/u);
-  assert.match(page.textContent ?? "", /except those marked Only you/u);
   const ellipsis =
     rowOf(page, DEPLOYS).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
     assert.fail("no ⋯");
@@ -278,7 +311,7 @@ test("showing another workspace reads that workspace's memories in place of the 
     [{ workspaceId: ACME.id }, { workspaceId: GLOBEX.id }],
   );
   assert.deepEqual(words(page), []);
-  assert.match(page.textContent ?? "", /work in Globex/u);
+  assert.match(page.textContent ?? "", /settle in Globex/u);
 });
 
 test("a forget answered after the page moved on to another workspace leaves that workspace's list as it read it", async () => {
@@ -293,7 +326,7 @@ test("a forget answered after the page moved on to another workspace leaves that
   await settle();
 
   assert.deepEqual(words(page), []);
-  assert.match(page.textContent ?? "", /work in Globex/u);
+  assert.match(page.textContent ?? "", /settle in Globex/u);
 });
 
 test("a forget answered after the page left its workspace and came back reads that workspace again, so the forgotten memory is not left listed", async () => {
@@ -377,10 +410,37 @@ test("a read that fails offers to try again, and no account reads nothing", asyn
   act(() => button(failed, "Retry").click());
   await settle();
   assert.deepEqual(words(failed), [DEPLOYS.text, TESTS.text]);
-  assert.equal(signedOut.textContent, "Sign in to see what Luke remembers.");
+  assert.equal(signedOut.textContent, "Sign in to use this page.");
   assert.equal(
     sent.filter((request) => request.kind === ACT_KIND.MEMORIES_READ).length,
     2,
     "the signed-out page reads nothing",
   );
+});
+
+test("while the memories are read the page says Reading, which is neither its failure nor its empty line", async () => {
+  holdReads = [];
+  const { page } = await mount();
+
+  const status = page.querySelector('[role="status"]') ?? assert.fail("no reading region");
+  assert.equal(status.textContent, "Reading Luke's memory");
+  assert.doesNotMatch(page.textContent ?? "", /could not be read|hasn't remembered/u);
+});
+
+test("before the workspaces are read the page says Reading, and does not say none is open", async () => {
+  const { page } = await mount(true, null);
+
+  const status = page.querySelector('[role="status"]') ?? assert.fail("no reading region");
+  assert.equal(status.textContent, "Reading your workspaces");
+  assert.doesNotMatch(page.textContent ?? "", /none is open/u);
+  assert.equal(sent.length, 0, "no workspace is a memory read of none");
+});
+
+test("workspaces that could not be read say so with Retry, which asks for them again", async () => {
+  let retried = 0;
+  const { page } = await mount(true, null, { failed: true, retry: () => (retried += 1) });
+
+  assert.match(page.textContent ?? "", /Your workspaces could not be read\./u);
+  act(() => button(page, "Retry").click());
+  assert.equal(retried, 1);
 });

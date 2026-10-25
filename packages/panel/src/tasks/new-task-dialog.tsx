@@ -1,5 +1,7 @@
 import { DIALOG_SIZE, Dialog, type DialogHandle } from "@luke/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
+import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
+import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer, useNewTaskHolding } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
@@ -34,8 +36,8 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * asked as New task asks.
  */
 
-/** The composer's words field, the editor's own textbox, which the card hands focus to. */
-const FIELD_SELECTOR = '[role="textbox"]';
+/** The composer's words field, the editor's own root, which the card hands focus to. */
+const FIELD_SELECTOR = EDITOR_ROOT_SELECTOR;
 
 /** The dialog's own card, which holds focus while the field has not landed. */
 const CARD_SELECTOR = '[aria-modal="true"]';
@@ -45,7 +47,16 @@ const CARD_SELECTOR = '[aria-modal="true"]';
  * start over, and whether a start is under way, which holds the card. Its
  * words are the draft's, which the opening brings back.
  */
-function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
+function NewTaskCard({
+  open,
+  newTask,
+  onExited,
+}: {
+  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. */
+  open: boolean;
+  newTask: TasksControl["newTask"];
+  onExited: () => void;
+}): React.JSX.Element {
   const [starting, setStarting] = useState(false);
   // The Automations page's Create with an agent opens this card for an automation's agent, and a refusal opens it again for the same.
   const purpose = newTask.preset?.purpose ?? NEW_TASK_PURPOSE.TASK;
@@ -72,6 +83,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
 
   return (
     <Dialog
+      open={open}
       size={DIALOG_SIZE.COMPOSER}
       labelledBy={titleId}
       ref={dialog}
@@ -79,6 +91,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
       holding={holding}
       initialFocus={field}
       onDismiss={close}
+      onExited={onExited}
     >
       <div className="new-task ph-no-capture" ref={body}>
         <NewTaskComposer
@@ -98,12 +111,14 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   );
 }
 
-/** The card over the window while New task is asked, in `@luke/ui`'s shared `Dialog`; nothing otherwise. */
+/** The card over the window while New task is asked, in `@luke/ui`'s shared `Dialog`, and through its fade as it goes; nothing otherwise. */
 export function NewTaskDialog({
   newTask,
 }: {
   newTask: TasksControl["newTask"];
 }): React.JSX.Element | null {
-  if (!newTask.open) return null;
-  return <NewTaskCard newTask={newTask} />;
+  // Note that the card is drawn from its opening until its fade has run, because its picks are its own and start over each time it opens.
+  const { drawn, onExited } = useDrawnThroughExit(newTask.open);
+  if (!drawn) return null;
+  return <NewTaskCard open={newTask.open} newTask={newTask} onExited={onExited} />;
 }

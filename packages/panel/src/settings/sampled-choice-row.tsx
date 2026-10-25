@@ -21,7 +21,6 @@
 
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
-  BADGE_TONE,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -38,6 +37,7 @@ import {
   SCROLL_SIZE,
   ScrollArea,
   SettingsRow,
+  STATUS_TONE,
   StopIcon,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -47,7 +47,8 @@ import {
 } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { SettingMarks } from "./marks.js";
 import { type SamplePlayer, useSamplePlayer } from "./sample-player.js";
 
@@ -129,20 +130,30 @@ function PickedInView({ row }: { row: React.RefObject<HTMLButtonElement | null> 
 
 /** The dialog the chip opens: every value under its heading, the picked one played as it is picked, kept only by Done. */
 function SampledChoiceDialog({
+  open,
   title,
   value,
   options,
   onDone,
   onCancel,
+  onExited,
 }: {
+  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. */
+  open: boolean;
   title: string;
   value: string;
   options: readonly SampledChoiceOption[];
   onDone: (value: string) => void;
   onCancel: () => void;
+  onExited: () => void;
 }): React.JSX.Element {
   const [picked, setPicked] = useState(value);
   const player = useSamplePlayer();
+  // Note that a clip stops as the card is put away, not as its fade ends, because the card stays drawn through the fade.
+  const { stop } = player;
+  useEffect(() => {
+    if (!open) stop();
+  }, [open, stop]);
   const pickedRow = useRef<HTMLButtonElement | null>(null);
   const hear = (token: string) => {
     const sample = options.find((option) => option.value === token)?.sample;
@@ -171,10 +182,12 @@ function SampledChoiceDialog({
   };
   return (
     <Dialog
+      open={open}
       title={title}
       size={DIALOG_SIZE.CONFIRM}
       initialFocus={pickedRow}
       onDismiss={onCancel}
+      onExited={onExited}
       actionsStart={
         <SampleButton
           sample={options.find((option) => option.value === picked)?.sample}
@@ -211,7 +224,7 @@ function SampledChoiceDialog({
                     value: token,
                     label,
                     badge: tag,
-                    badgeTone: BADGE_TONE.NEUTRAL,
+                    badgeTone: STATUS_TONE.NEUTRAL,
                   }))}
                   value={holdsPick ? [picked] : []}
                   focusRef={holdsPick ? pickedRow : undefined}
@@ -249,6 +262,8 @@ export function SampledChoiceRow({
 }): React.JSX.Element {
   const { busy, rejection, saves, run } = useSettingWrite(onChange);
   const [open, setOpen] = useState(false);
+  // Note that the card keeps its pick and the sample playing while it is drawn, from its opening until its fade has run, so each opening starts from the stored value.
+  const { drawn, onExited } = useDrawnThroughExit(open);
   const chosen = options.find((option) => option.value === value)?.label ?? value;
   return (
     <SettingsRow
@@ -273,12 +288,14 @@ export function SampledChoiceRow({
           >
             <ChipName>{chosen}</ChipName>
           </Chip>
-          {open ? (
+          {drawn ? (
             <SampledChoiceDialog
+              open={open}
               title={label}
               value={value}
               options={options}
               onCancel={() => setOpen(false)}
+              onExited={onExited}
               onDone={(picked) => {
                 setOpen(false);
                 // A value kept as it stood is no change, so it writes nothing and ends no conversation.

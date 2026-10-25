@@ -4,9 +4,8 @@ import assert from "node:assert/strict";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useConfirmDialog } from "@luke/ui";
 import { forgetPictures } from "@luke/ui/picture-cache";
-import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -16,6 +15,7 @@ import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { PlanBody } from "./plan-body.js";
 import { HISTORY_READ } from "./use-plan-history.js";
@@ -46,6 +46,7 @@ const HOUR = 60 * 60 * 1000;
 let root: Root | undefined;
 
 afterEach(() => {
+  releaseMotion();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -112,6 +113,23 @@ test("a plan's picture is drawn from its bytes under its caption, and one this r
   assert.equal(blocks[0]?.querySelector(".picture-caption")?.textContent, "The mock Lee shared");
   assert.equal(blocks[1]?.querySelector("img"), null);
   assert.equal(blocks[1]?.textContent, "Members page · not available");
+});
+
+test("a picture that is not available is read as words, with or without alt text, never hidden behind an image role", async () => {
+  const taskId = "4d5e6f7a-8b9c-4d0e-a1f2-3b4c5d6e7f80";
+  standHost(new Set(), []);
+  const body = [`![Members page](${picture(taskId, GONE)})`, `![](${picture(taskId, GONE)})`].join(
+    "\n\n",
+  );
+
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
+
+  const blocks = [...view.querySelectorAll<HTMLElement>(".picture-block")];
+  assert.deepEqual(
+    blocks.map((block) => block.textContent),
+    ["Members page · not available", "This picture is not available"],
+  );
+  assert.ok(blocks.every((block) => block.querySelector('[role="img"]') === null));
 });
 
 test("a press on a picture opens the plan's pictures over the window, named by their alt text", async () => {
@@ -205,10 +223,9 @@ test("a version draws the picture it struck and the one it wrote in, each in its
   const before = `## Approach\n\n![First mock](${picture(taskId, MOCK)})\n`;
   const after = `## Approach\n\n![Second mock](${picture(taskId, SECOND)})\n`;
   function Version(): React.JSX.Element {
-    const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-      Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-    );
+    const restore = { busy: false, onRestore: () => undefined };
     return createElement(VersionView, {
+      onRetry: () => undefined,
       viewing: {
         line: {
           seq: 2,
@@ -271,14 +288,20 @@ test("once the window lets go of its pictures, as an account change asks, each i
   assert.equal(view.querySelector(".picture-block")?.textContent, "Invite email · not available");
 });
 
-test("a picture whose read went unanswered says so alone, and the picture drawn in its place next is read", async () => {
+test("a picture whose read went unanswered says it could not be read, with Retry, and the picture drawn in its place next is read", async () => {
   const taskId = "3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f";
   standHost(new Set([SECOND]), [], new Set([MOCK]));
   const first = `## Approach\n\n![First mock](${picture(taskId, MOCK)})`;
   const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, first), live: false }));
-  assert.equal(view.querySelector(".picture-block")?.textContent, "First mock · not available");
+  const failed = view.querySelector(".picture-block");
+  assert.match(
+    failed?.querySelector('[role="alert"]')?.textContent ?? "",
+    /^First mock could not be read\./u,
+  );
+  assert.equal(failed?.querySelector("button")?.textContent, "Retry");
 
-  // A plan drawn again asks the window whether motion is reduced, which a page with no layout cannot say.
+  // A plan drawn again asks whether motion is held still, which a page with no stylesheet cannot say.
+  holdMotion();
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({

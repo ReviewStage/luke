@@ -1,4 +1,4 @@
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
   SETTINGS_PAGE_LIST,
@@ -16,8 +16,10 @@ import {
  * window does not know opens Settings on its first. Chat's place stands
  * nowhere while its experiment is off, as every other door to it does
  * (`renderer/CLAUDE.md`'s "Experiments"), so a link to it says how to turn
- * it on instead. The Admin place is an admin's alone, so
- * its link opens nowhere, and says nothing, for a reader who is no admin;
+ * it on instead, and names the page it is turned on in, which the window
+ * offers by the page's own name rather than a path spelled into the words.
+ * The Admin place is an admin's alone, so its link opens nowhere, and says
+ * nothing, for a reader who is no admin;
  * the window counts a reader whose access it is still reading as one, the
  * place waiting on that read, since a reload on an Admin address would
  * otherwise be refused for a reader who is an admin. Every other place opens on
@@ -37,12 +39,14 @@ export const LINK_ROUTE = {
 export type LinkRoute =
   | { readonly kind: typeof LINK_ROUTE.SETTINGS; readonly settings: SettingsLink }
   | { readonly kind: typeof LINK_ROUTE.TASKS }
-  | { readonly kind: typeof LINK_ROUTE.EXPERIMENT_OFF }
+  | { readonly kind: typeof LINK_ROUTE.EXPERIMENT_OFF; readonly settings: SettingsLink }
   | { readonly kind: typeof LINK_ROUTE.NOT_PERMITTED };
 
-/** What a link to a place of an experiment that is off says, since the place stands nowhere until it is on. */
-export const EXPERIMENT_OFF_LINK =
-  "Turn on this experiment in Settings › Experimental to open the link.";
+/** What a link to a place of an experiment that is off says, since the place stands nowhere until it is on; the route names the page it is turned on in. */
+export const EXPERIMENT_OFF_LINK = "Turn on this experiment in settings to open the link.";
+
+/** Where an experiment that is off is turned on. */
+const EXPERIMENTS: SettingsLink = { page: SETTINGS_VIEW.EXPERIMENTAL };
 
 /** Where the window opens a link, given the account's workspaces and the experiments it has on. */
 export function linkRoute(
@@ -71,7 +75,9 @@ export function linkRoute(
       };
     }
     case LINK_PLACE.CHAT:
-      return window.chatOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
+      return window.chatOn
+        ? { kind: LINK_ROUTE.TASKS }
+        : { kind: LINK_ROUTE.EXPERIMENT_OFF, settings: EXPERIMENTS };
     case LINK_PLACE.ADMIN:
       return window.adminOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.NOT_PERMITTED };
     default:

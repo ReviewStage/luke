@@ -1,6 +1,5 @@
 import { SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
-import { AuthPage, BUTTON_VARIANT, Button, SocialSignInCard } from "@luke/ui";
-import { LukeMark } from "../../SiteChrome";
+import { AuthPage, BUTTON_VARIANT, Button, FaceMark, SocialSignInCard } from "@luke/ui";
 import { useSocialSignIn } from "../../sign-in-choices";
 import { authClient } from "../auth-client";
 
@@ -8,7 +7,7 @@ import { authClient } from "../auth-client";
 function AdminMark(): React.JSX.Element {
   return (
     <span className="inline-flex w-13">
-      <LukeMark className="h-auto w-full" />
+      <FaceMark />
     </span>
   );
 }

@@ -183,6 +183,15 @@ function sidebarToggle(page: HTMLElement): HTMLButtonElement {
   return button;
 }
 
+/** The places bar's More, which opens a phone's drawer where no title bar's toggle stands. */
+function drawerMore(page: HTMLElement): HTMLButtonElement {
+  const button = [
+    ...page.querySelectorAll<HTMLButtonElement>('nav[aria-label="Places"] button'),
+  ].find((each) => each.textContent === "More");
+  assert.ok(button, "the places bar's More stands");
+  return button;
+}
+
 /** The side panel's toggle at the window's top right, by whatever it is called now. */
 function panelToggle(page: HTMLElement): HTMLButtonElement {
   const button = page.querySelector<HTMLButtonElement>(
@@ -235,6 +244,49 @@ test("a stage narrowed below 640 stands the window as one pane, and only at 672 
   assert.equal(roomOf(page), "wide", "a stage narrowed within the band stays wide");
 });
 
+/**
+ * The desktop's least window, 760 wide, as the stage measures it once zoom
+ * shrinks the CSS pixel: 760 / 1.25 at 125%, and 760 / 2 at 200%. Under a
+ * mouse, as `beforeEach` leaves the pointer.
+ */
+const ZOOMED_LEAST_WINDOW = [
+  { zoom: 125, width: 608 },
+  { zoom: 200, width: 380 },
+] as const;
+
+for (const { zoom, width } of ZOOMED_LEAST_WINDOW) {
+  test(`the least desktop window at ${zoom}% zoom, ${width} CSS px under a mouse, stands as one pane with a drawer, and unzoomed it is wide again`, () => {
+    const page = mount(width);
+    assert.equal(roomOf(page), "narrow");
+    assert.deepEqual(panelOf(page), {
+      fullScreen: true,
+      resizable: false,
+      fullScreenButton: false,
+    });
+    assert.equal(
+      page.querySelector(".desktop-shell > .title-bar-controls"),
+      null,
+      "the task's header stands for the sidebar's toggle",
+    );
+
+    resizeStage(760);
+    assert.equal(roomOf(page), "wide", "the same window unzoomed is wide");
+    assert.equal(
+      panelOf(page).fullScreen,
+      false,
+      "the panel stands beside the document once the room is wide",
+    );
+  });
+
+  test(`the sidebar at ${zoom}% zoom, ${width} CSS px, is a drawer that the places bar's More opens`, () => {
+    const page = mount(width, false);
+    assert.equal(roomOf(page), "narrow");
+    assert.equal(sidebarStanding(page), "away");
+    act(() => drawerMore(page).click());
+    assert.equal(sidebarStanding(page), "drawer");
+  });
+}
+
 /** The phone's view of the task named `name`, from the ⋯ heading it in the panel's toggle's place, its menu opened to find it. */
 function paneView(page: HTMLElement, name: string): HTMLElement {
   const more = page.querySelector<HTMLButtonElement>('.task-head [aria-label="Task actions"]');
@@ -281,7 +333,7 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
   assert.equal(paneView(page, "Agents").getAttribute("aria-checked"), "true");
 });
 
-test("the sidebar on a narrow stage is a drawer: no edge peeks it out, its toggle opens it over the work, and a press outside puts it away", () => {
+test("the sidebar on a narrow stage is a drawer: no edge peeks it out and no title bar's toggle stands, the places bar's More opens it over the work, and a press outside puts it away", () => {
   const sheets = layContainersAt({});
   const page = mount(PHONE, false);
   const shell = page.querySelector(".desktop-shell") ?? assert.fail("the shell stands");
@@ -297,9 +349,14 @@ test("the sidebar on a narrow stage is a drawer: no edge peeks it out, its toggl
     "no edge waits for a pointer a phone does not have",
   );
 
-  act(() => sidebarToggle(page).click());
+  assert.equal(
+    page.querySelector(".desktop-shell > .title-bar-controls"),
+    null,
+    "a phone's page heads itself, so no toggle stands over it",
+  );
+  act(() => drawerMore(page).click());
   assert.equal(sidebarStanding(page), "drawer");
-  assert.equal(sidebarToggle(page).getAttribute("aria-label"), "Hide sidebar");
+  assert.equal(drawerMore(page).getAttribute("aria-expanded"), "true");
 
   const main = page.querySelector("main.desktop-main");
   assert.ok(main);
@@ -323,13 +380,13 @@ test("a phone's drawer is modal: while it stands over the work, the work is iner
   const main = page.querySelector<HTMLElement>("main.desktop-main") ?? assert.fail("the work");
   assert.equal(main.hasAttribute("inert"), false, "with the drawer away the work answers");
 
-  act(() => sidebarToggle(page).click());
+  act(() => drawerMore(page).click());
   assert.equal(sidebarStanding(page), "drawer");
   assert.equal(main.hasAttribute("inert"), true, "the work behind the drawer is inert");
   assert.equal(
-    sidebarToggle(page).closest("[inert]"),
+    drawerMore(page).closest("[inert]"),
     null,
-    "the drawer's own toggle still closes it",
+    "the More that opened it still closes it",
   );
 
   act(() => {
@@ -368,7 +425,7 @@ function historyArrows(page: HTMLElement): boolean {
 test("a phone's browser tab draws no Back and Forward in the drawer's head, its browser's own walking the history; a wide one keeps them", () => {
   inBrowserTab();
   const page = mount(PHONE, false);
-  act(() => sidebarToggle(page).click());
+  act(() => drawerMore(page).click());
   assert.equal(historyArrows(page), false);
 
   resizeStage(WIDE);
@@ -377,7 +434,7 @@ test("a phone's browser tab draws no Back and Forward in the drawer's head, its 
 
 test("a phone's installed app, with no browser around it, keeps Back and Forward in the drawer's head", () => {
   const page = mount(PHONE, false);
-  act(() => sidebarToggle(page).click());
+  act(() => drawerMore(page).click());
   assert.equal(historyArrows(page), true);
 });
 
@@ -397,7 +454,7 @@ test("Escape puts a phone's drawer away and gives the keyboard back to the work 
     assert.fail("the work holds a button");
   work.focus();
 
-  act(() => sidebarToggle(page).click());
+  act(() => drawerMore(page).click());
   assert.equal(sidebarStanding(page), "drawer");
   const held = document.activeElement;
   assert.ok(

@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import {
   BROWSER_LIVE_CLIENT,
+  BROWSER_LIVE_CLOSE_CODE,
+  BROWSER_LIVE_CLOSE_REASON,
   BROWSER_LIVE_HISTORY,
   BROWSER_LIVE_REFUSAL,
   BROWSER_LIVE_SERVER,
@@ -13,18 +16,26 @@ import {
   type TasksBrowserTabOpenParams,
 } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { COMMAND_KEY } from "@luke/settings/shortcuts";
 import type { WireBoundaryInput } from "@luke/wire";
-import { Duration } from "effect";
+import { Clock, Context, Duration, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { rendererRuntime } from "../renderer-runtime.js";
+import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort, fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
+import { onPhone } from "../testing/phone-tab.js";
 import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserDraftPane, CloudBrowserPane } from "./cloud-browser-pane.js";
 import {
+  CLOUD_BROWSER_AGENT_RECENT,
   CLOUD_BROWSER_TABS_AGAIN,
   noteOpenedCloudTab,
   useCloudBrowserTabs,
@@ -305,10 +316,7 @@ test("a cloud Browser tab's pane spins while it waits for the page, draws it onc
   assert.ok(listener, "the pane opened its view");
   // The window's own spinner stands while the page is on its way, its words for a screen reader alone.
   await vi.waitFor(() => assert.equal(status(), "Waiting for the page"));
-  assert.ok(
-    document.querySelector(".cloud-browser-notice .luke-spinner-ring"),
-    "the spinner is drawn",
-  );
+  assert.ok(document.querySelector(".cloud-browser-notice .luke-spinner"), "the spinner is drawn");
   assert.ok(
     document.querySelector("section.ph-no-capture"),
     "the pane is left out of the recording",
@@ -405,6 +413,61 @@ test("while the member drives, a paste reaches the page as text, Control-V and â
   );
 });
 
+test("off a Mac, while the member drives, a Ctrl chord the window has a command for goes to the page, and the window never hears it", async () => {
+  const sent: { type: string; key?: string }[] = [];
+  let listener: BrowserLiveListener | undefined;
+  fakeAppPlatform({
+    commandKey: COMMAND_KEY.CONTROL,
+    openBrowserLive: (_target, heard) => {
+      listener = heard;
+      return { send: (text) => sent.push(JSON.parse(text)), close: () => undefined };
+    },
+  });
+  draw(
+    createElement(CloudBrowserPane, {
+      taskId: TASK,
+      tab: LISTED,
+      owner: LUKE_OWNER,
+      shown: true,
+      memberName: () => undefined,
+    }),
+  );
+  await settle();
+  await act(async () =>
+    listener?.message(
+      JSON.stringify({
+        type: BROWSER_LIVE_SERVER.DRIVER,
+        driver: { userId: "user-dean", heldUntil: 60_000 },
+        yours: true,
+      }),
+    ),
+  );
+  await settle();
+  const canvas = document.querySelector("canvas");
+  assert.ok(canvas);
+  const heard: KeyboardEvent[] = [];
+  const hear = (event: KeyboardEvent) => heard.push(event);
+  window.addEventListener("keydown", hear);
+  act(() => {
+    canvas.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "b",
+        code: "KeyB",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  window.removeEventListener("keydown", hear);
+
+  assert.deepEqual(
+    sent.filter((message) => message.type === BROWSER_LIVE_CLIENT.KEY).map(({ key }) => key),
+    ["b"],
+  );
+  assert.deepEqual(heard, [], "the window's keymap yields the press, so the sidebar stays put");
+});
+
 test("a tab the member opened here is listed before the service lists it, and let go once it does", async () => {
   const opened: AgentBrowserTab = {
     ...LISTED,
@@ -469,7 +532,8 @@ async function pressEnter(): Promise<void> {
   await settle();
 }
 
-test("a draft opens nothing until its bar's Enter, then opens the tab in its agent's browser and hands it on; a refusal stays in words, and Escape discards it", async () => {
+test("a draft opens nothing until its bar's Enter, then opens the tab in its agent's browser and hands it on; a refusal stays as a failure note over the kept address", async () => {
+  mountAnnouncer();
   const asked: TasksBrowserTabOpenParams[] = [];
   let answer: WireBoundaryInput = { failure: BROWSER_TAB_OPEN_FAILURE.NOT_READY };
   fakeActPort({
@@ -506,9 +570,22 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
 
   await pressEnter();
   assert.deepEqual(asked, [{ taskId: TASK, agentId: AGENT_ID, address: "http://localhost:3000/" }]);
+  assert.equal(
+    document.querySelector(".cloud-browser-standing [role='alert']")?.textContent,
+    "Invite expiry hasn't opened its sandbox yet. Try again once it has started working.",
+    "a refusal is an alert, said once",
+  );
+  assert.equal(announcedAsAlert(), "", "the window's own alert does not say it again");
   assert.ok(
-    document.querySelector('[role="alert"]')?.textContent?.includes("hasn't opened its sandbox"),
-    "a refusal is said under the bar",
+    document
+      .querySelector(".cloud-browser-standing .luke-failure-note")
+      ?.textContent?.includes("hasn't opened its sandbox"),
+    "a refusal is said under the bar as a failure note",
+  );
+  assert.equal(
+    addressField().value,
+    "localhost:3000",
+    "the refused address stays for Enter to retry",
   );
   assert.deepEqual(handed, []);
 
@@ -521,11 +598,37 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
   answer = { tab: opened };
   await pressEnter();
   assert.deepEqual(handed, [opened]);
+  assert.equal(discarded, 0);
+});
 
-  await act(async () =>
-    addressField().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+test("in a draft, Escape clears the typed address first and discards the draft only on an empty field", async () => {
+  fakeActPort({});
+  let discarded = 0;
+  draw(
+    createElement(CloudBrowserDraftPane, {
+      taskId: TASK,
+      draft: { id: "draft-1", agentId: AGENT_ID },
+      owner: { name: "Invite expiry", icon: createElement("span") },
+      onOpened: () => undefined,
+      onDiscard: () => {
+        discarded += 1;
+      },
+    }),
   );
-  assert.equal(discarded, 1);
+  await settle();
+  const pressEscape = () =>
+    act(async () =>
+      addressField().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+    );
+
+  typeAddress("localhost:3000");
+  await settle();
+  await pressEscape();
+  assert.equal(addressField().value, "", "the first Escape clears the words");
+  assert.equal(discarded, 0, "the draft stands while there were words to clear");
+
+  await pressEscape();
+  assert.equal(discarded, 1, "Escape on an empty field discards the draft");
 });
 
 test("a live tab's bar opens a typed address and steps back, forward, and reload over the live view, and says so where another member holds the tab", async () => {
@@ -584,6 +687,52 @@ test("a live tab's bar opens a typed address and steps back, forward, and reload
   assert.ok(
     document.body.textContent?.includes("Ada is driving this tab. Wait until they hand it back."),
   );
+});
+
+test("a bar's steps say why they are off while the tab is not live, reachable by the keyboard, and are named plainly once it is", async () => {
+  let listener: BrowserLiveListener | undefined;
+  fakeAppPlatform({
+    openBrowserLive: (_target, heard) => {
+      listener = heard;
+      return { send: () => undefined, close: () => undefined };
+    },
+  });
+  draw(
+    createElement(CloudBrowserPane, {
+      taskId: TASK,
+      tab: LISTED,
+      owner: LUKE_OWNER,
+      shown: true,
+      memberName: () => undefined,
+    }),
+  );
+  await settle();
+  const back = () =>
+    document.querySelector<HTMLButtonElement>('button[aria-label="Back"]') ?? assert.fail("Back");
+  const hint = () => document.querySelector('[role="tooltip"]')?.textContent;
+
+  assert.equal(back().disabled, false, "an unavailable step stays in the tab order");
+  assert.equal(back().getAttribute("aria-disabled"), "true");
+  restOn(back());
+  assert.equal(hint(), "Back: the browser is not live yet");
+
+  await act(async () =>
+    listener?.message(
+      JSON.stringify({ type: BROWSER_LIVE_SERVER.DRIVER, driver: null, yours: false }),
+    ),
+  );
+  await settle();
+  assert.equal(back().getAttribute("aria-disabled"), null);
+  act(() => back().dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
+  restOn(back());
+  assert.equal(hint(), "Back");
+
+  // A view the relay closed as idle needs Watch again, which is not a wait.
+  act(() => back().dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
+  await act(async () => listener?.closed(BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.IDLE]));
+  await settle();
+  restOn(back());
+  assert.equal(hint(), "Back: watch again to use it");
 });
 
 test("plain words typed in a cloud tab's bar search the web, in a draft and on a live tab alike", async () => {
@@ -645,3 +794,73 @@ test("plain words typed in a cloud tab's bar search the web, in a draft and on a
     [{ type: BROWSER_LIVE_CLIENT.NAVIGATE, address: search }],
   );
 });
+
+test("on a phone a Browser tab's bar keeps its address alone, the task's header's â‹¯ offering its Back, Forward, and Reload, dimmed where the page cannot step", async () => {
+  fakeActPort({});
+  const { element, handed } = onPhone(
+    createElement(CloudBrowserDraftPane, {
+      taskId: TASK,
+      draft: { id: "draft-1", agentId: AGENT_ID },
+      owner: { name: "Invite expiry", icon: createElement("span") },
+      onOpened: () => undefined,
+      onDiscard: () => undefined,
+    }),
+  );
+  draw(element);
+  await settle();
+
+  assert.ok(addressField(), "the address stands as the page's own field");
+  assert.deepEqual(
+    [...document.querySelectorAll(".cloud-browser-bar button")]
+      .map((button) => button.getAttribute("aria-label"))
+      .filter((label) => label === "Back" || label === "Forward" || label === "Reload"),
+    [],
+  );
+  assert.deepEqual(handed.labels(), ["Back", "Forward", "Reload"]);
+  assert.deepEqual(handed.item("Reload"), { disabled: true, detail: "no page is open yet" });
+});
+
+it.effect(
+  "a tab says its agent is using it while the agent acted lately, and stops saying so once the recent span passes with nothing else redrawing the bar",
+  () =>
+    Effect.gen(function* () {
+      const clock = yield* Clock.Clock;
+      fakeAppPlatform({
+        openBrowserLive: () => ({ send: () => undefined, close: () => undefined }),
+      });
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      roots.push(root);
+      const registry = AtomRegistry.make({
+        initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+      });
+      act(() =>
+        root.render(
+          onRegistry(
+            registry,
+            createElement(CloudBrowserPane, {
+              taskId: TASK,
+              tab: { ...LISTED, lastActedAt: 0 },
+              owner: { name: "Ada", icon: createElement("span") },
+              shown: true,
+              memberName: () => undefined,
+            }),
+          ),
+        ),
+      );
+      const says = () => document.body.textContent?.includes("Ada is using this tab") === true;
+      const landed = Effect.promise(settle);
+
+      yield* landed;
+      assert.equal(says(), true, "said while the agent just acted");
+
+      yield* TestClock.adjust(Duration.subtract(CLOUD_BROWSER_AGENT_RECENT, Duration.millis(1)));
+      yield* landed;
+      assert.equal(says(), true, "still said a moment before the span ends");
+
+      yield* TestClock.adjust(Duration.millis(1));
+      yield* landed;
+      assert.equal(says(), false, "gone once the span passes, unprompted");
+    }),
+);

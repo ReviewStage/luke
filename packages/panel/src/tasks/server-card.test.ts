@@ -62,7 +62,7 @@ const PLACE: MentionPlace = { workspace: "acme", repository: "acme/relay" };
 
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 
-/** Linear's server's tools, out of order, more than a card lists. */
+/** Linear's server's tools, out of order, more than a card has height for. */
 const TOOLS = [
   { name: "update_issue", description: "Change an issue." },
   { name: "list_issues", description: "List the team's issues. Filtered by state." },
@@ -255,7 +255,6 @@ async function cardOf(chip: Element | null | undefined) {
       tool.querySelector(".integration-tool-title")?.textContent,
       tool.querySelector(".luke-list-row-description")?.textContent,
     ]),
-    more: card.querySelector("ul ~ .luke-hover-card-note")?.textContent,
     presses: card.querySelectorAll("button, [role=switch]").length,
   };
   act(() => {
@@ -283,8 +282,9 @@ test("in an agent's tab with Linear off, a line that opened a turn hands it that
       ["get_user", "Read one member."],
       ["list_issues", "List the team's issues."],
       ["list_teams", "List the teams."],
+      ["search_documentation", "Search Linear's documentation."],
+      ["update_issue", "Change an issue."],
     ],
-    more: "2 more",
     presses: 0,
   });
   assert.deepEqual(await cardOf(chipIn(container, "steered")), {
@@ -293,7 +293,6 @@ test("in an agent's tab with Linear off, a line that opened a turn hands it that
     on: "false",
     note: SERVER_MENTION_NOTE.OFF_STEERS,
     tools: [["list_issues", "List the team's issues."]],
-    more: undefined,
     presses: 0,
   });
   const reply = await cardOf(chipIn(container, "first"));
@@ -354,7 +353,6 @@ test("a server not connected says so, with no switch and no tools, a tool's ment
     on: undefined,
     note: SERVER_MENTION_NOTE.NOT_CONNECTED,
     tools: [],
-    more: undefined,
     presses: 0,
   });
   assert.deepEqual((await cardOf(chipIn(container, "steered"))).tools, []);
@@ -382,6 +380,6 @@ test("off an agent, as in a plan's or Luke's words, the server's row has no swit
   assert.equal(serverCard.on, undefined);
   assert.equal(serverCard.note, undefined);
   assert.equal(serverCard.count, "7 tools");
-  assert.equal(serverCard.tools.length, 5);
+  assert.equal(serverCard.tools.length, 7, "the card lists every tool, scrolling past a few");
   assert.deepEqual(toolCard.tools, [["list_issues", "List the team's issues."]]);
 });

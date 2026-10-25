@@ -14,18 +14,18 @@ import {
   type PullRequestAction,
 } from "@luke/features/pull-request-write-wire";
 import {
-  BADGE_TONE,
   Badge,
-  type BadgeTone,
   BUTTON_VARIANT,
   Button,
   type ButtonVariant,
+  CONFIRM_LOSS,
   ConfirmDialog,
-  DIALOG_TONE,
   type DialogQuestion,
   SPINNER_SIZE,
   SpinnerRing,
   SplitButton,
+  STATUS_TONE,
+  type StatusTone,
   Tooltip,
   useConfirmDialog,
   useMenu,
@@ -37,8 +37,9 @@ import { Schema } from "effect";
 import { CircleXIcon, GitMergeIcon, TriangleAlertIcon, UserRoundIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { readKept, writeKept } from "../kept-storage.js";
-import type { PullRequestWrites } from "./pull-request-writes.js";
+import { keptKey, useKept } from "../use-kept.js";
+import { queuedLabel } from "./coding-agent-model.js";
+import { type PullRequestWrites, QUEUE_WARNING } from "./pull-request-writes.js";
 
 /**
  * merge-box.tsx -- the merge control at the end of an open pull request's title row, as stage-cli's merge status is: a chip saying what holds the merge up, and beside it the one press that may be made now.
@@ -119,7 +120,6 @@ const BOX_WORDS = {
   DISABLE_AUTO_MERGE: "Disable auto-merge",
   DEQUEUE: "Remove from queue",
   CHOOSE_METHOD: "Choose how to merge",
-  queued: (position: number) => `#${position} in the merge queue`,
   autoMerge: (method: MergeMethod | null) =>
     method === null ? "Auto-merge is on" : `Auto-merge is on (${METHOD_NOUNS[method]})`,
 } as const;
@@ -197,33 +197,32 @@ function sentenceOf(pullRequest: CodingAgentOverviewPullRequest): string {
   const autoMerge = merging?.autoMerge ?? null;
   const lead =
     queued !== null
-      ? BOX_WORDS.queued(queued.position)
+      ? queuedLabel(queued.position)
       : autoMerge !== null
         ? BOX_WORDS.autoMerge(autoMerge.method)
         : undefined;
   return lead === undefined ? standing : `${lead}. ${standing}`;
 }
 
-/** Where the method chosen is kept, by repository. */
-const METHODS_KEY = "luke.pullRequestMergeMethods";
-
 const storedMethods = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Literals(Object.values(MERGE_METHOD))),
 );
+
+/** Where the method chosen is kept, by repository. */
+const KEPT = { METHODS: keptKey("luke.pullRequestMergeMethods", storedMethods) } as const;
 
 /** The method chosen for the repository, kept across launches: the one last chosen where the repository still allows it, else the first it allows. */
 function useMergeMethod(
   repository: string | null,
   allowed: readonly MergeMethod[],
 ): readonly [MergeMethod | undefined, (method: MergeMethod) => void] {
-  const [kept, setKept] = useState(() => readKept(METHODS_KEY, storedMethods, {}));
+  const [kept, , change] = useKept(KEPT.METHODS, {});
   const chosen = repository === null ? undefined : kept[repository];
   const method = chosen !== undefined && allowed.includes(chosen) ? chosen : allowed[0];
   const choose = (next: MergeMethod) => {
     if (repository === null) return;
-    const now = { ...readKept(METHODS_KEY, storedMethods, {}), [repository]: next };
-    writeKept(METHODS_KEY, storedMethods, now);
-    setKept(now);
+    // Note that the record is read again before it is written, so another window's method for another repository is kept.
+    change((held) => ({ ...held, [repository]: next }));
   };
   return [method, choose];
 }
@@ -231,7 +230,7 @@ function useMergeMethod(
 /** The chip's face: its word, its tone, and its glyph. */
 interface ChipFace {
   readonly label: string;
-  readonly tone: BadgeTone;
+  readonly tone: StatusTone;
   readonly icon: ReactNode;
 }
 
@@ -244,22 +243,22 @@ const CHIP_GLYPHS = {
   READY: <GitMergeIcon aria-hidden="true" />,
 } as const;
 
-function chip(label: string, tone: BadgeTone, icon: ReactNode): ChipFace {
+function chip(label: string, tone: StatusTone, icon: ReactNode): ChipFace {
   return { label, tone, icon };
 }
 
 /** What a merge GitHub says is blocked is held up by, as the chip says it; none where it waits on its checks, which the Checks tab says. */
 function blockedChip(merging: PullRequestMerging | undefined): ChipFace | undefined {
   if (merging?.review === REVIEW_DECISION.CHANGES_REQUESTED) {
-    return chip("Changes requested", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
+    return chip("Changes requested", STATUS_TONE.DANGER, CHIP_GLYPHS.HELD);
   }
   if (merging?.review === REVIEW_DECISION.REVIEW_REQUIRED) {
-    return chip("Review required", BADGE_TONE.ATTENTION, CHIP_GLYPHS.REVIEW);
+    return chip("Review required", STATUS_TONE.ATTENTION, CHIP_GLYPHS.REVIEW);
   }
   if (merging?.checks === CHECK_SUMMARY.FAILING || merging?.checks === CHECK_SUMMARY.PENDING) {
     return undefined;
   }
-  return chip("Blocked", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
+  return chip("Blocked", STATUS_TONE.DANGER, CHIP_GLYPHS.HELD);
 }
 
 /**
@@ -280,16 +279,16 @@ function chipOf(
   }
   switch (merge) {
     case MERGE_STATE.UNKNOWN:
-      return chip("Checking", BADGE_TONE.NEUTRAL, CHIP_GLYPHS.CHECKING);
+      return chip("Checking", STATUS_TONE.WORKING, CHIP_GLYPHS.CHECKING);
     case MERGE_STATE.CONFLICTS:
-      return chip("Conflicts", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
+      return chip("Conflicts", STATUS_TONE.DANGER, CHIP_GLYPHS.HELD);
     case MERGE_STATE.BEHIND:
-      return chip("Behind", BADGE_TONE.ATTENTION, CHIP_GLYPHS.BEHIND);
+      return chip("Behind", STATUS_TONE.ATTENTION, CHIP_GLYPHS.BEHIND);
     case MERGE_STATE.BLOCKED:
       return blockedChip(merging);
     default:
       return action === undefined
-        ? chip("Ready", BADGE_TONE.COMPLETE, CHIP_GLYPHS.READY)
+        ? chip("Ready", STATUS_TONE.COMPLETE, CHIP_GLYPHS.READY)
         : undefined;
   }
 }
@@ -375,8 +374,8 @@ function MethodPress({
         variant={variant}
         icon={icon}
         disabled={busy && busyLabel === undefined}
-        busy={busyLabel}
         onClick={onPress}
+        {...busyProps(busyLabel)}
         menu={{ label: BOX_WORDS.CHOOSE_METHOD, ...menu.trigger() }}
       >
         {words}
@@ -396,10 +395,10 @@ function MethodPress({
 /** The question Remove from queue asks first, as stage-cli's does. */
 const DEQUEUE_QUESTION: DialogQuestion = {
   title: "Remove from the merge queue?",
-  body: "Removing this pull request from the queue could impact other pull requests in the queue.",
+  body: QUEUE_WARNING,
   verb: BOX_WORDS.DEQUEUE,
   running: BUSY_WORDS[PULL_REQUEST_ACTION.DEQUEUE],
-  tone: DIALOG_TONE.DANGER,
+  loss: CONFIRM_LOSS.AFFECTS_OTHERS,
 };
 
 /**
@@ -528,7 +527,7 @@ export function MergeControl({
     <span className="merge-control">
       {face === undefined ? null : <MergeChip face={face} sentence={sentenceOf(pullRequest)} />}
       {drawn}
-      {asked ? <ConfirmDialog confirm={confirm} question={DEQUEUE_QUESTION} /> : null}
+      <ConfirmDialog open confirm={confirm} question={DEQUEUE_QUESTION} />
     </span>
   );
 }

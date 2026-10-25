@@ -3,9 +3,10 @@
 import assert from "node:assert/strict";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { NavItem, SearchField, Shortcut, TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
+import { CommandDialog } from "@luke/ui/command";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeAll, test } from "vitest";
 import { SwitchRow } from "./settings/switch-row.js";
 import { layContainersAt, shown } from "./testing/container-width.js";
 
@@ -14,7 +15,7 @@ import { layContainersAt, shown } from "./testing/container-width.js";
  * coarse pointer), no keyboard chord is drawn as a hint: not a hover's or a
  * button's chord, not a sidebar row's, whose count stays in its place, not
  * a search field's summons, not a menu row's chord (a hint of words
- * stands), and not the command palette's foot of keys;
+ * stands), and not the command palette's foot of keys (`@luke/ui/command`);
  * a chord that is a row's whole value still is. A switch's row on a phone
  * keeps its switch beside its words, and under a finger the whole row is
  * its label's press but for a control in its description, which stands
@@ -39,6 +40,15 @@ const ignore = () => undefined;
 const roots: Root[] = [];
 
 let laid: HTMLStyleElement | undefined;
+
+beforeAll(() => {
+  // Note that jsdom lays nothing out: the palette's list measures itself, which does nothing here.
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  };
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -92,12 +102,14 @@ function hintsOn(touch: boolean) {
         onChange: ignore,
         shortcut: createElement(Shortcut, { chord: CHORD }),
       }),
-      createElement(
-        "div",
-        { className: "command-palette-footer" },
-        createElement(Shortcut, { chord: CHORD }),
-        "Open",
-      ),
+      createElement(CommandDialog, {
+        open: true,
+        onOpenChange: ignore,
+        label: "Command palette",
+        placeholder: "Search",
+        groups: [],
+        foot: createElement("span", null, createElement(Shortcut, { chord: CHORD }), " Open"),
+      }),
       createElement(
         "span",
         { className: "luke-menu-item-hint chord-hint" },
@@ -116,7 +128,8 @@ function hintsOn(touch: boolean) {
     rowChord: shown(found(page, ".home-row .luke-nav-item-shortcut")),
     rowCount: shown(found(page, ".luke-nav-item-count")),
     fieldChord: shown(found(page, ".luke-search-field .luke-shortcut")),
-    paletteFoot: shown(found(page, ".command-palette-footer")),
+    // The palette stands at the body, its foot the last thing it draws.
+    paletteFoot: shown(found(document.body, "[cmdk-root] > :last-child")),
     value: shown(found(page, ".value-row .luke-shortcut")),
     menuChord: shown(found(page, ".chord-hint")),
     menuWords: shown(found(page, ".words-hint")),
@@ -174,7 +187,7 @@ test("under a finger a switch row's whole body is its label's press, and a butto
     createElement(SwitchRow, {
       label: "Video calls",
       detail: createElement(TextButton, {
-        tone: TEXT_BUTTON_TONE.LINK,
+        tone: TEXT_BUTTON_TONE.ACCENT,
         onClick: ignore,
         children: "Send feedback",
       }),

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
-import { LINK_PLACE } from "./luke-link.js";
+import { LINK_PLACE } from "./link-grammar.js";
 import { openTargetOf } from "./open-address.js";
 
 /**

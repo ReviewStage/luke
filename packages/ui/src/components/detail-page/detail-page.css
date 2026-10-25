@@ -1,4 +1,4 @@
-/* detail-page.css -- one thing's page: a still header over a main column
+/* detail-page.css -- one thing's page: a still bar over a main column
    and an optional secondary column, each its own scroll, at one measure
    centred in the room. The measure is a collection page's, a plan's
    reading width in the window and the admin's wider column on the web,
@@ -6,7 +6,8 @@
    page queries its own width rather than the viewport's, so a page in a
    narrow pane narrows as it would in a narrow window; a container query
    cannot read a custom property, so the widths it narrows under are
-   literals here. Under the window's toolbar the page draws no header, and
+   literals here. The header opens the main column's scroll under the
+   page's bar. Under the window's toolbar the page draws neither, and
    content that scrolls sideways stands across the room. */
 
 @layer components {
@@ -57,70 +58,25 @@
   }
 
   /* Under 480px of room a desktop page gives back half its inset. */
-  @container (max-width: 479px) {
+  @container (width < 480px) {
     .luke-detail-page > * {
       --luke-detail-page-inset: var(--luke-page-inset-narrow);
     }
   }
 
-  /* The header stands still above the scrolls, and reserves a scrollbar's
-     gutter as they do, so its acts end on the secondary column's edge. Its
-     end gap is the content's room under it, which keeps a focus ring on an
-     act inside what it clips. In a pane too short for it, it takes half its
-     height at most and scrolls itself, so the content keeps the rest. */
-  .luke-detail-page-top {
-    flex: none;
-    box-sizing: border-box;
-    max-height: 50%;
-    overflow-x: hidden;
-    overflow-y: auto;
-    scrollbar-gutter: stable;
-    padding-bottom: var(--luke-section-gap);
-  }
-
-  /* The title's acts are centred on its first line, whatever a control's
-     height is beside the title's leading. They share the title's line
-     while the title fits beside them unbroken, however narrow the page;
-     a title too long for that takes the line and they wrap under it, and
-     wrap among themselves past the line's width, so no act stands outside
-     the page. */
+  /* The header (`PageHeader`) opens the main column at the page's inset
+     below the bar, and scrolls with it, so it can scroll away and the bar
+     pick up its name; its end gap is the content's room under it. */
   .luke-detail-page-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: var(--luke-control-gap);
-    padding: var(--luke-detail-page-inset) var(--luke-detail-page-side) 0;
+    padding: var(--luke-detail-page-inset) 0 var(--luke-section-gap);
   }
 
-  .luke-detail-page-heading {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-wrap: anywhere;
+  /* Beside it, the secondary column opens level with the title. */
+  .luke-detail-page[data-frame="page"] .luke-detail-page-secondary > .luke-detail-page-content {
+    padding-top: var(--luke-detail-page-inset);
   }
 
-  .luke-detail-page-title {
-    margin: 0;
-    font-size: var(--luke-type-title-size);
-    line-height: var(--luke-type-title-leading);
-    font-weight: var(--luke-weight-bold);
-  }
-
-  .luke-detail-page-description {
-    margin: var(--luke-space-4) 0 0;
-    color: var(--luke-color-text-muted);
-  }
-
-  .luke-detail-page-actions {
-    display: flex;
-    flex: 0 1 auto;
-    flex-wrap: wrap;
-    align-items: center;
-    min-width: 0;
-    gap: var(--luke-control-gap);
-    margin-top: calc((var(--luke-type-title-leading) - var(--luke-control-height)) / 2);
-  }
-
-  /* The columns under the header: the main one takes what the secondary
+  /* The columns under the bar: the main one takes what the secondary
      leaves, and each reaches the page's edge on its own side, so the wheel
      moves it from anywhere over it. */
   .luke-detail-page-body {
@@ -214,7 +170,7 @@
 
   /* In a pane too narrow for two columns, the secondary one follows the
      main in the one scroll, both at the page's inset. */
-  @container (max-width: 719px) {
+  @container (width < 720px) {
     .luke-detail-page-body,
     .luke-detail-page-body:has(> .luke-detail-page-secondary) {
       display: block;
@@ -245,9 +201,7 @@
     }
 
     /* The secondary column follows the main one's end gap, no more. */
-    .luke-detail-page[data-frame="toolbar"]
-      .luke-detail-page-secondary
-      > .luke-detail-page-content {
+    .luke-detail-page[data-frame] .luke-detail-page-secondary > .luke-detail-page-content {
       padding-top: 0;
     }
   }

@@ -18,14 +18,19 @@
   }
 
   .luke-note-line[data-look="list"],
-  .luke-note-line[data-look="inset"] {
-    color: var(--luke-color-text-subtle);
+  .luke-note-line[data-look="inset"],
+  .luke-note-line[data-look="rows"] {
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
   }
 
   .luke-note-line[data-look="list"] {
-    padding: var(--luke-space-8) var(--luke-space-12);
+    padding: var(--luke-row-inset) var(--luke-list-inset);
+  }
+
+  .luke-note-line[data-look="rows"] {
+    margin: var(--luke-space-4) var(--luke-row-inset);
   }
 
   .luke-note-line[data-fill] {

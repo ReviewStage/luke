@@ -257,6 +257,62 @@ export const DEFAULT_LIST_DISPLAY: TasksDisplay = {
   properties: TASK_PROPERTY_ORDER.filter((property) => property !== TASK_PROPERTY.CREATOR),
 };
 
+/**
+ * The properties a List's row folds away as the list's width runs short,
+ * the first folded first: who made it, its agents' work, its repository,
+ * its key, and what waits on the reader. Its chips and its time never fold,
+ * so a phone's List, which has no room for any of these, draws those alone.
+ */
+export const LIST_FOLD_ORDER: readonly TaskProperty[] = [
+  TASK_PROPERTY.CREATOR,
+  TASK_PROPERTY.AGENTS,
+  TASK_PROPERTY.REPOSITORY,
+  TASK_PROPERTY.KEY,
+  TASK_PROPERTY.WAITING,
+];
+
+/** The room, in CSS pixels, each property's column takes in a List's row at its widest, the gap before it included. */
+const LIST_COLUMN_ROOM = {
+  [TASK_PROPERTY.PRIORITY]: 32,
+  [TASK_PROPERTY.KEY]: 72,
+  [TASK_PROPERTY.STATUS]: 32,
+  [TASK_PROPERTY.WAITING]: 36,
+  [TASK_PROPERTY.REPOSITORY]: 160,
+  [TASK_PROPERTY.ASSIGNEE]: 32,
+  [TASK_PROPERTY.CREATOR]: 140,
+  [TASK_PROPERTY.AGENTS]: 100,
+  [TASK_PROPERTY.UPDATED]: 76,
+} as const satisfies Record<TaskProperty, number>;
+
+/** The room a List's row takes whatever it draws, in CSS pixels: its insets, and its ⋯ with the gap before it. */
+const LIST_ROW_ROOM = 52;
+
+/** The least room, in CSS pixels, a task's name keeps in a List's row before a property folds away for it: about thirty letters. */
+const LIST_NAME_ROOM = 240;
+
+/**
+ * The properties a List as wide as `width` draws of those its display
+ * chose: each in `LIST_FOLD_ORDER` folded away in turn until the rest
+ * leave its name `LIST_NAME_ROOM`, so a narrowing list gives up its
+ * properties one by one, always in the same order, before it squeezes the
+ * name. Each column is counted at its widest, so a name never stands
+ * squeezed for a column that turned out narrower than counted.
+ */
+export function listPropertiesFitting(
+  properties: readonly TaskProperty[],
+  width: number,
+): readonly TaskProperty[] {
+  const needs = (shown: readonly TaskProperty[]) =>
+    shown.reduce((room, property) => room + LIST_COLUMN_ROOM[property], LIST_ROW_ROOM);
+  return LIST_FOLD_ORDER.reduce(
+    (shown, folding) =>
+      needs(shown) + LIST_NAME_ROOM <= width
+        ? shown
+        : shown.filter((property) => property !== folding),
+    properties,
+  );
+}
+
 /** The Board until its reader changes it: a column for every status, every one standing, the most pressing first, the settled finished in the past week, each card drawing all but its creator and when it was last updated. */
 export const DEFAULT_BOARD_DISPLAY: TasksDisplay = {
   grouping: TASKS_GROUPING.STATUS,

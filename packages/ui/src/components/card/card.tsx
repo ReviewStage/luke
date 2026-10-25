@@ -1,4 +1,6 @@
-import { createElement, type HTMLAttributes, type ReactNode, type Ref } from "react";
+import type { HTMLAttributes, ReactNode, Ref } from "react";
+import { Card as ShadcnCard } from "../../shadcn/card.js";
+import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 
 /**
  * card.tsx -- a surface that frames one group of content on a page: its edge, its corner, its ground, and the room inside it.
@@ -19,6 +21,12 @@ import { createElement, type HTMLAttributes, type ReactNode, type Ref } from "re
  * carried over wears `CARD_DROP_TARGET` while it is, and is ringed and washed.
  * It is the element its place reads it as (`CARD_ELEMENT`), and keeps its
  * owner's class only to be named and placed by it, never to be drawn.
+ *
+ * It is drawn by shadcn/ui's card (`../../shadcn/card.tsx`) in Tailwind
+ * utilities over the theme, each choice's ground, edge, corner, and inset
+ * picked here, so where two choices touch one property (a raised card's
+ * corner and a menu's, a raised card's room past its edge and a flush
+ * card's clip) the one that wins is said once, in `frameClass`.
  */
 
 /** The room between a card's edge and what it holds, by what it holds. */
@@ -103,6 +111,110 @@ export type CardHover = (typeof CARD_HOVER)[keyof typeof CARD_HOVER];
 /** What a card a dragged row is carried over wears while it is, set by the drag on the element itself. */
 export const CARD_DROP_TARGET = "data-drop-target";
 
+/** Each padding's room inside the edge. */
+const PADDING_CLASS: Record<CardPadding, string> = {
+  [CARD_PADDING.FLUSH]: "p-0",
+  [CARD_PADDING.NONE]: "p-0",
+  [CARD_PADDING.SNUG]: "px-card py-card-snug",
+  [CARD_PADDING.COMPACT]: "px-card py-card-compact",
+  [CARD_PADDING.REGULAR]: "p-card",
+};
+
+/**
+ * Each look's ground and edge. Note that a well's edge is there but unseen,
+ * so ringed as a drop target the card keeps its size, the ring fading in as
+ * a hover does, unless the card lifts, whose own transition says it.
+ */
+const LOOK_CLASS: Record<CardLook, string> = {
+  [CARD_LOOK.SURFACE]: "bg-card-surface border-border",
+  [CARD_LOOK.RAISED]: "bg-background border-border-strong",
+  [CARD_LOOK.TINT]: "bg-muted border-border",
+  [CARD_LOOK.CODE]: "bg-card-code border-border",
+  [CARD_LOOK.OUTLINE]: "bg-transparent border-border",
+  [CARD_LOOK.WELL]: "bg-well border-transparent",
+};
+
+/** The shadow a card stands on, by `CARD_SHADOW`. */
+const SHADOW_CLASS: Record<CardShadow, string> = {
+  [CARD_SHADOW.NONE]: "",
+  [CARD_SHADOW.SOFT]: "shadow-card-soft",
+  [CARD_SHADOW.MENU]: "shadow-menu",
+};
+
+/**
+ * How a card answers the pointer resting on it, or holds that look while
+ * `lit`. Note that the wash is laid over the card's own ground as an image,
+ * so a card on an opaque ground stays opaque under it and one with none
+ * takes the wash alone; a card that lifts strengthens its edge and deepens
+ * its shadow, its edge left to a drop target's ring while it is one.
+ */
+const HOVER_CLASS: Record<CardHover, string> = {
+  [CARD_HOVER.NONE]: "",
+  [CARD_HOVER.WASH]:
+    "[&:is(:hover,[data-lit=true])]:bg-[linear-gradient(var(--color-muted),var(--color-muted))]",
+  [CARD_HOVER.LIFT]:
+    "[&:is(:hover,[data-lit=true]):not([data-drop-target=true])]:border-border-strong [&:is(:hover,[data-lit=true])]:shadow-card-lift",
+};
+
+/** The card a dragged row is carried over, ringed and washed, so it reads as the one the row will land in. */
+const DROP_TARGET_CLASS =
+  "data-[drop-target=true]:border-card-drop data-[drop-target=true]:bg-[linear-gradient(var(--color-muted),var(--color-muted))]";
+
+/** A card's corner: a menu's where asked, else a raised card's smaller one, else the corner asked for. */
+function cornerClass(look: CardLook, corner: CardCorner): string {
+  if (corner === CARD_CORNER.MENU) return "rounded-menu";
+  if (look === CARD_LOOK.RAISED) return "rounded-card-raised";
+  return corner === CARD_CORNER.CONTROL ? "rounded-control" : "rounded-card";
+}
+
+/**
+ * What a card does with what stands past its edge. Note that a raised card
+ * lets it stand there, because its fields open their suggestion menus over
+ * its top and a clip would hide their rows; a flush card clips what it
+ * holds, because content drawn to its edge would otherwise paint square
+ * corners over the card's round ones, without becoming a scroller, so a
+ * focus inside never scrolls it, and draws a ring inside a card that clips
+ * inside its control, where the clip cannot cut it.
+ */
+function overflowClass(look: CardLook, padding: CardPadding): string {
+  if (look === CARD_LOOK.RAISED) return "overflow-visible";
+  if (padding !== CARD_PADDING.FLUSH) return "";
+  return "overflow-clip [--luke-focus-ring-offset:var(--luke-focus-ring-inset)]";
+}
+
+/** The edge's fade, a well's alone, since a card that lifts rides its own (`card.css`). */
+function transitionClass(look: CardLook, hover: CardHover): string {
+  if (look !== CARD_LOOK.WELL || hover === CARD_HOVER.LIFT) return "";
+  return "transition-[border-color] duration-(--luke-duration-hover) ease-plain";
+}
+
+/** Every class a card's frame wears for the choices made, its owner's last. */
+function frameClass(
+  look: CardLook,
+  corner: CardCorner,
+  padding: CardPadding,
+  shadow: CardShadow,
+  hover: CardHover,
+  dashed: boolean,
+  className: string | undefined,
+): string {
+  return [
+    "luke-card",
+    LOOK_CLASS[look],
+    cornerClass(look, corner),
+    PADDING_CLASS[padding],
+    overflowClass(look, padding),
+    dashed ? "border-dashed" : "",
+    SHADOW_CLASS[shadow],
+    HOVER_CLASS[hover],
+    DROP_TARGET_CLASS,
+    transitionClass(look, hover),
+    className ?? "",
+  ]
+    .filter((part) => part !== "")
+    .join(" ");
+}
+
 /** `children` framed by a card, `padding` in from its edge. */
 export function Card({
   as: Element = CARD_ELEMENT.DIV,
@@ -135,27 +247,34 @@ export function Card({
   ref?: Ref<HTMLElement> | undefined;
   children: ReactNode;
 }): React.JSX.Element {
-  // Note that the element is made rather than written, because a ref typed
-  // for any of them is no ref for their union.
-  return createElement(
-    Element,
-    {
-      ...rest,
-      ref,
-      className: className === undefined ? "luke-card" : `luke-card ${className}`,
-      "data-look": look,
-      "data-corner": corner,
-      "data-padding": padding,
-      "data-shadow": shadow === CARD_SHADOW.NONE ? undefined : shadow,
-      "data-hover": hover === CARD_HOVER.NONE ? undefined : hover,
-      "data-lit": lit ? "true" : undefined,
-      "data-dashed": dashed ? "true" : undefined,
-    },
-    children,
+  return (
+    <ShadcnCard
+      {...rest}
+      as={Element}
+      ref={ref}
+      className={frameClass(look, corner, padding, shadow, hover, dashed, className)}
+      data-look={look}
+      data-corner={corner}
+      data-padding={padding}
+      data-shadow={shadow === CARD_SHADOW.NONE ? undefined : shadow}
+      data-hover={hover === CARD_HOVER.NONE ? undefined : hover}
+      data-lit={lit ? "true" : undefined}
+      data-dashed={dashed ? "true" : undefined}
+    >
+      {children}
+    </ShadcnCard>
   );
 }
 
-/** A card's head: a line of muted caption words, a kind and where it stands, wrapping where the room runs out. */
+/** A card's head: a line in the group role, a kind and where it stands, wrapping where the room runs out. */
 export function CardHead({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className="luke-card-head">{children}</div>;
+  return (
+    <Text
+      as={TEXT_ELEMENT.DIV}
+      variant={TEXT_VARIANT.GROUP}
+      className="luke-card-head flex min-h-control min-w-0 flex-wrap items-center justify-between gap-x-card-head-gap gap-y-card-head-block px-card-head-inline py-card-head-block"
+    >
+      {children}
+    </Text>
+  );
 }

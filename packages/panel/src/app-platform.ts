@@ -4,8 +4,9 @@
  * The bridge (`app-bridge.ts`) reaches the host; this reaches what stands
  * beside it. Copying words or a picture, saving a file, bringing the panel forward, the address
  * an agent's page is drawn from, the folder the panel's static files are
- * served from, the menu bar, a shortcut being recorded, a counted surface
- * event, and a link opened outside the window are each
+ * served from, the menu bar, the key a chord's Command is pressed with, a
+ * shortcut being recorded, a counted surface event, and a link opened
+ * outside the window are each
  * answered by whatever shell holds the window, the desktop through main and
  * a browser through its own APIs, so the panel names the capability here and
  * never the act or the event a shell answers it with. Note that this is a
@@ -16,7 +17,12 @@
 import type { ProductEventPropertiesFor, ProductSurfaceEventName } from "@luke/features/analytics";
 import type { FramedPage } from "@luke/features/page-frame";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
-import type { AppCommand } from "@luke/settings/shortcuts";
+import {
+  type AppCommand,
+  COMMAND_KEY,
+  type CommandKey,
+  installCommandKey,
+} from "@luke/settings/shortcuts";
 import type { NotificationsGrantor } from "@luke/voice/settings-controls";
 import type { OpenBrowserLive } from "./tasks/cloud-browser-live.js";
 
@@ -54,6 +60,12 @@ export interface AppPlatform {
    * name, because the document's own address need not be that folder.
    */
   assetBase(): string;
+  /**
+   * The key a chord's Command is pressed with, which every chord matched and
+   * drawn reads (`@luke/settings/shortcuts`): Ctrl in a browser on Windows or
+   * Linux. A shell on a Mac, the Mac app always, leaves this out, for ⌘.
+   */
+  commandKey?: CommandKey;
   /** Hears each command chosen from the shell's menu, until the returned function is called. */
   onMenuCommand(listener: (command: AppCommand) => void): () => void;
   /** Counts one surface event. */
@@ -102,12 +114,18 @@ export interface AppPlatform {
   /**
    * Hears the ask standing each time a page comes to hold unsaved work, and
    * nothing once none does, so a shell that can leave the page by ways of its
-   * own, a browser tab closed, reloaded, or sent elsewhere, asks first while
-   * there is work to lose and only then. `ask` takes the way out once the
-   * developer says to leave. The Mac app, whose window's close is main's,
-   * leaves this out.
+   * own asks first while there is work to lose and only then: a browser tab
+   * closed, reloaded, or sent elsewhere, and the Mac app quit, restarted to
+   * update, or signed out. `ask` takes the way out once the developer says to
+   * leave.
    */
   unsavedWork?(ask: ((leave: () => void) => void) | undefined): void;
+  /**
+   * Hears whether a plan holds words not saved each time that changes. No
+   * page's ask covers them, since the panel's own doors save them as a task
+   * is left, so a shell whose ways out save nothing asks before those too.
+   */
+  unsavedPlanWords?(unsaved: boolean): void;
 }
 
 let installed: AppPlatform | undefined;
@@ -115,8 +133,11 @@ let installed: AppPlatform | undefined;
 /** Installs what this window's shell can do; its root does this once, before anything is drawn, and calls what it answers as it closes. */
 export function installAppPlatform(platform: AppPlatform): () => void {
   installed = platform;
+  const restoreCommandKey = installCommandKey(platform.commandKey ?? COMMAND_KEY.META);
   return () => {
-    if (installed === platform) installed = undefined;
+    if (installed !== platform) return;
+    installed = undefined;
+    restoreCommandKey();
   };
 }
 

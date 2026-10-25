@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { test } from "vitest";
 import {
+  SETTINGS_NO_MATCH_WORDS,
+  type SettingsSearchEntry,
   type SettingsSearchInput,
   searchSettings,
   settingsSearchEntries,
@@ -71,9 +74,10 @@ test("Members finds the members for every workspace", () => {
   }
 });
 
-test("Integrations, Linear, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
+test("Workspace connections, Integrations, Linear, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
   const found = [SETTINGS_SECTION.GITHUB_REPOSITORIES];
   const queries = [
+    "Workspace connections",
     "Integrations",
     "Linear",
     "manage",
@@ -91,7 +95,7 @@ test("Integrations, Linear, and every word GitHub repositories was found by, fin
   }
 });
 
-test("the Workspace page's group reads Integrations, under its Workspace page apart from the Integrations page's rows", () => {
+test("Integrations finds the Workspace page's group as Workspace connections, under its Workspace page apart from the Integrations page's rows", () => {
   const groups =
     searchSettings(
       settingsSearchEntries({
@@ -107,7 +111,7 @@ test("the Workspace page's group reads Integrations, under its Workspace page ap
 
   assert.deepEqual(
     workspaceGroup?.items.map((entry) => [entry.id, entry.label]),
-    [[SETTINGS_SECTION.GITHUB_REPOSITORIES, "Integrations"]],
+    [[SETTINGS_SECTION.GITHUB_REPOSITORIES, "Workspace connections"]],
   );
   assert.equal(
     groups
@@ -142,6 +146,25 @@ test("searching GitHub while signed in finds Integrations' GitHub row and Profil
     ),
     [[SETTINGS_SEARCH_ROW.GITHUB_ACCESS]],
   );
+});
+
+test("the OpenAI key a call or dictation runs on is found by those words, on Codex's row in Agents, where it is kept", () => {
+  const entries = settingsSearchEntries({
+    settings: settingsView({ voiceAvailable: true }),
+    voiceControlsDrawn: true,
+    accountDrawn: true,
+    capabilities: DESKTOP_CAPABILITIES,
+  });
+  for (const query of ["voice key", "call key", "dictation key"]) {
+    const agents = (searchSettings(entries, query)?.groups ?? []).find(
+      (group) => group.page === SETTINGS_VIEW.CODING_AGENTS,
+    );
+    assert.deepEqual(
+      agents?.items.map((entry) => entry.id),
+      [SETTINGS_SECTION.CODEX],
+      query,
+    );
+  }
 });
 
 /** Where `query` leads on the Experimental page, signed in or not. */
@@ -182,13 +205,13 @@ test("an experiment is found by its name, what it brings, and what other apps ca
     assert.deepEqual(
       experimentalFound(query, true),
       [
+        "Memory",
         "Luke, your operator",
         "Inbox-first sidebar",
         "Code review",
         "Browser tab",
         "Chat",
         "Video calls",
-        "Memory",
       ],
       query,
     );
@@ -242,4 +265,131 @@ test("a writing chord is found by its name and by the Markdown typed for it, on 
   assert.deepEqual(shortcutsFound("Strikethrough"), ["Strikethrough"]);
   assert.deepEqual(shortcutsFound("~~"), ["Strikethrough"]);
   assert.ok(shortcutsFound("markdown").includes("Divider"), "a rule with no chord is listed too");
+});
+
+test("Escape and the keys that answer in place are found on the Keyboard shortcuts page, Escape by every word for leaving", () => {
+  const shortcutsFound = (query: string) =>
+    (
+      searchSettings(
+        settingsSearchEntries({
+          settings: settingsView(),
+          voiceControlsDrawn: false,
+          accountDrawn: true,
+          capabilities: DESKTOP_CAPABILITIES,
+          workspace: undefined,
+        }),
+        query,
+      )?.groups ?? []
+    )
+      .filter((group) => group.page === SETTINGS_VIEW.SHORTCUTS)
+      .flatMap((group) => group.items.map((entry) => entry.label));
+
+  assert.deepEqual(shortcutsFound("exit"), ["Close what's open, or step back"]);
+  assert.deepEqual(shortcutsFound("inbox option"), ["Choose an inbox option by its number"]);
+  assert.ok(shortcutsFound("link").includes("Link selected words"));
+});
+
+/** Every page's rows as a signed-in desktop reader of a workspace they administer sees them. */
+const FULL_INPUT: SettingsSearchInput = {
+  settings: settingsView({ voiceAvailable: true }),
+  voiceControlsDrawn: true,
+  accountDrawn: true,
+  capabilities: DESKTOP_CAPABILITIES,
+  workspace: { ...TEAM, role: WORKSPACE_ROLE.ADMIN },
+};
+
+/** The labels of the rows `query` finds, in the order they are listed. */
+function labelsFound(query: string, input: SettingsSearchInput = FULL_INPUT): readonly string[] {
+  return (searchSettings(settingsSearchEntries(input), query)?.groups ?? []).flatMap((group) =>
+    group.items.map((entry) => entry.label),
+  );
+}
+
+test("repositories, skills, test notification and rename each find the row the page draws", () => {
+  assert.ok(labelsFound("repositories").includes("Repositories on this Mac"));
+  assert.ok(labelsFound("skills").includes("Add a skill"));
+  assert.deepEqual(labelsFound("test notification"), ["Test notification"]);
+  assert.deepEqual(labelsFound("rename"), ["Rename workspace"]);
+});
+
+test("the Mac repositories need a terminal here, and renaming needs a workspace the reader manages that is not their own first", () => {
+  const withoutTerminal = {
+    ...FULL_INPUT,
+    capabilities: DESKTOP_CAPABILITIES.filter(
+      (capability) => capability !== HOST_CAPABILITY.MAC_TERMINAL,
+    ),
+  };
+  assert.equal(
+    labelsFound("repositories", withoutTerminal).includes("Repositories on this Mac"),
+    false,
+  );
+  assert.equal(
+    labelsFound("add a skill", { ...FULL_INPUT, workspace: undefined }).includes("Add a skill"),
+    false,
+    "the Skills page draws no Add a skill row while its workspace is unread or failed",
+  );
+  assert.deepEqual(labelsFound("rename", { ...FULL_INPUT, workspace: TEAM }), []);
+  assert.deepEqual(
+    labelsFound("rename", { ...FULL_INPUT, workspace: { ...FIRST, personal: true } }),
+    [],
+  );
+});
+
+test("model finds the default model and the Chapters model, each under a label no other page's row wears", () => {
+  assert.deepEqual(
+    labelsFound("model").filter((label) => label.toLowerCase().includes("model")),
+    ["Default model", "Chapters model"],
+  );
+});
+
+test("no two rows on different pages wear the same label", () => {
+  const pagesOf = new Map<string, Set<string>>();
+  for (const entry of settingsSearchEntries(FULL_INPUT)) {
+    pagesOf.set(entry.label, (pagesOf.get(entry.label) ?? new Set()).add(entry.page));
+  }
+  assert.deepEqual(
+    [...pagesOf].filter(([, pages]) => pages.size > 1).map(([label]) => label),
+    [],
+  );
+});
+
+test("a search that finds nothing says what to try", () => {
+  assert.equal(searchSettings(settingsSearchEntries(FULL_INPUT), "zzzz")?.matched, 0);
+  assert.match(SETTINGS_NO_MATCH_WORDS, /^No results match\. Try /u);
+});
+
+/** Rows on one page, each its own words: what a query ranks and marks. */
+function entryOf(id: string, label: string, ...words: string[]): SettingsSearchEntry {
+  return { id, label, page: SETTINGS_VIEW.APPEARANCE, haystack: [label, ...words] };
+}
+
+test("a row named by the query or beginning with it ranks above one whose words are scattered, and one found by its description last", () => {
+  const entries = [
+    entryOf("described", "Colours", "Follows the system theme"),
+    entryOf("scattered", "Dark theme for diffs"),
+    entryOf("prefix", "Theme colours"),
+    entryOf("exact", "Theme"),
+  ];
+  const found = searchSettings(entries, "theme");
+
+  assert.deepEqual(
+    found?.groups.flatMap((group) => group.items.map((entry) => entry.id)),
+    ["exact", "prefix", "scattered", "described"],
+  );
+});
+
+test("a result marks the letters of its name that the words typed found, and one found by its description marks none", () => {
+  const found = searchSettings(
+    [entryOf("diffs", "Dark theme for diffs"), entryOf("colours", "Colours", "System theme")],
+    "theme",
+  );
+  const marks = new Map(found?.groups.flatMap((group) => group.items.map((e) => [e.id, e.marks])));
+
+  assert.deepEqual(marks.get("diffs"), [{ start: 5, end: 10 }]);
+  assert.deepEqual(marks.get("colours"), []);
+});
+
+test("letters typed in order do not find a row: thm no longer finds Theme", () => {
+  assert.equal(searchSettings(settingsSearchEntries(FULL_INPUT), "thm")?.matched, 0);
+  assert.ok(labelsFound("theme").includes("Theme"));
 });

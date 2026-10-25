@@ -67,6 +67,7 @@ import {
   nativeRuntimesOfReached,
   operatorReplaced,
   pinCodingAgent,
+  readArchivedOperator,
   readCodingAgent,
   readCodingAgentHeaderOfConversation,
   readCodingAgentOfConversation,
@@ -75,12 +76,14 @@ import {
   readEveRunStanding,
   readNativeRunStanding,
   readRunnerTokenConversation,
+  readStandingOperator,
   recordCodingAgentAuthor,
   recordCodingAgentNativeSession,
   recordCodingAgentPublished,
   recordCodingAgentRunnerToken,
   recordTurnFastRefused,
   renameCodingAgent,
+  restoreOperatorAgent,
   settleCodingAgentAuthor,
   taskHasMergedPullRequest,
   taskNamesOf,
@@ -2376,6 +2379,62 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
         yield* archiveOperatorAgent(member, workspace, fresh.agent.id);
         const back = yield* archiveCodingAgent(member, old.agent.id, false);
         assert.equal(Option.getOrThrow(back).archivedAt, null);
+      }),
+  );
+
+  it.effect(
+    "a restore brings back the member's own archived operator in place of the one read standing, in one write, and nothing for another's, a standing one, or a stale read",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(member);
+        yield* joinWorkspace(workspace, teammate);
+        const old = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        yield* archiveOperatorAgent(member, workspace, old.agent.id);
+        const fresh = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const archivedAt = (agentId: string) =>
+          Effect.map(
+            readCodingAgent(member, agentId),
+            (read) => Option.getOrThrow(read).archivedAt,
+          );
+
+        const byTeammate = yield* restoreOperatorAgent(
+          teammate,
+          workspace,
+          old.agent.id,
+          undefined,
+        );
+        const unread = yield* readArchivedOperator(teammate, workspace, old.agent.id);
+        const standingOne = yield* restoreOperatorAgent(
+          member,
+          workspace,
+          fresh.agent.id,
+          fresh.agent.id,
+        );
+        const stale = yield* restoreOperatorAgent(member, workspace, old.agent.id, old.agent.id);
+        assert.deepEqual(
+          [Option.isNone(byTeammate), Option.isNone(unread), Option.isNone(standingOne)],
+          [true, true, true],
+        );
+        assert.ok(Option.isNone(stale), "a read of another than the one standing writes nothing");
+        assert.equal(yield* archivedAt(fresh.agent.id), null);
+        assert.notEqual(yield* archivedAt(old.agent.id), null);
+
+        const restored = Option.getOrThrow(
+          yield* restoreOperatorAgent(member, workspace, old.agent.id, fresh.agent.id),
+        );
+
+        assert.deepEqual(
+          [restored.agent.id, restored.retiredId, restored.agent.archivedAt],
+          [old.agent.id, fresh.agent.id, null],
+        );
+        assert.ok(restored.txid !== undefined);
+        assert.notEqual(yield* archivedAt(fresh.agent.id), null);
+        assert.equal(
+          Option.getOrThrow(yield* readStandingOperator(member, workspace)).id,
+          old.agent.id,
+        );
       }),
   );
 

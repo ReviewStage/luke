@@ -21,7 +21,12 @@ import { withMentions } from "./mention-node.js";
  * as its source, and only a block the developer changed or added is
  * re-printed. A block the editor cannot draw faithfully (block HTML, a link
  * definition, a paragraph holding inline HTML or a footnote) opens as a
- * locked raw block and is written back byte for byte.
+ * locked raw block and is written back byte for byte. A quote re-printed
+ * keeps a GitHub alert's marker (`> [!NOTE]`) as it was written, unescaped,
+ * so GitHub still draws it as an alert. A document saved with CRLF line
+ * endings, as github.com saves a description edited on the web, is read
+ * with LF ones and written back with its own (`lineEndingOf`), since the
+ * lexer reads each CR as words of its own.
  *
  * A save answers with the document as merged with what Luke wrote since its
  * base. Luke's part of it, the blocks that differ between what was sent and
@@ -33,6 +38,13 @@ import { withMentions } from "./mention-node.js";
 
 /** A paragraph's footnote reference or definition, which TipTap's Markdown would escape. */
 const FOOTNOTE = /\[\^[^\]\s]+\]/u;
+
+/**
+ * A GitHub alert's marker as TipTap's Markdown re-prints a quote opening on
+ * one, its brackets escaped as any words' are (`> \[!NOTE\]`), which GitHub
+ * no longer draws as an alert.
+ */
+const ESCAPED_ALERT = /^(>[^\S\n]*)\\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\\]/iu;
 
 /** What separates a re-printed block from the next. */
 const BLOCK_GAP = "\n\n";
@@ -104,6 +116,26 @@ export interface HeldSources {
   readonly ending: string;
 }
 
+/** The line ending a document written back keeps: CRLF where it was saved with them, as github.com saves a description edited on the web, LF otherwise. */
+const LINE_ENDING = { LF: "\n", CRLF: "\r\n" } as const;
+
+type LineEnding = (typeof LINE_ENDING)[keyof typeof LINE_ENDING];
+
+/** A document's line ending, CRLF where any of its lines ends so. */
+export function lineEndingOf(markdown: string): LineEnding {
+  return markdown.includes(LINE_ENDING.CRLF) ? LINE_ENDING.CRLF : LINE_ENDING.LF;
+}
+
+/** A document with LF line endings, as the editor reads one; the lexer would read each CR as words of its own. */
+export function withLf(markdown: string): string {
+  return markdown.replaceAll(LINE_ENDING.CRLF, LINE_ENDING.LF);
+}
+
+/** A document the editor wrote, with LF line endings, written with `ending`. */
+export function withLineEnding(markdown: string, ending: LineEnding): string {
+  return ending === LINE_ENDING.LF ? markdown : markdown.replaceAll(LINE_ENDING.LF, ending);
+}
+
 /** The Markdown manager over the editor's own extensions, so a block is read and written as the editor does. */
 export function documentManager(extensions: AnyExtension[]): MarkdownManager {
   return new MarkdownManager({ extensions });
@@ -156,12 +188,15 @@ function trailing(source: string): string {
   return /\s*$/u.exec(source)?.[0] ?? "";
 }
 
+/** A block re-printed, a quote opening on a GitHub alert's marker keeping it unescaped, so it stays an alert. */
+function reprinted(manager: MarkdownManager, node: PmNode): string {
+  const markdown = manager.serialize({ type: "doc", content: [node.toJSON()] }).trimEnd();
+  return node.type.name === "blockquote" ? markdown.replace(ESCAPED_ALERT, "$1[!$2]") : markdown;
+}
+
 /** One block as it would be written now: its source while it is the node it opened as, re-printed otherwise. */
 function blockMarkdown(manager: MarkdownManager, node: PmNode, held: HeldSources): string {
-  return (
-    held.sources.get(node) ??
-    manager.serialize({ type: "doc", content: [node.toJSON()] }).trimEnd() + BLOCK_GAP
-  );
+  return held.sources.get(node) ?? reprinted(manager, node) + BLOCK_GAP;
 }
 
 /**

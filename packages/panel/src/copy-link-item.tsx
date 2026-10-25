@@ -1,4 +1,4 @@
-import { LINK_PLACE, type LinkPlace, linkOf } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace, linkOf } from "@luke/features/link-grammar";
 import { LinkIcon } from "lucide-react";
 import { createContext, useContext } from "react";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
@@ -7,7 +7,7 @@ import type { MenuAction } from "./desktop/action-menu.js";
 /**
  * copy-link-item.tsx -- Copy link as any menu offers it: the one item every thing's ⋯ and right-click menu holds, copying the thing's Luke link and saying Link copied.
  *
- * A menu names its thing by place (`@luke/features/luke-link`), and the
+ * A menu names its thing by place (`@luke/features/link-grammar`), and the
  * item writes it under the workspace the surface's links are written in,
  * which the surface hands down: a task's page its workspace's slug, an
  * agent's page its agent's. Where none is handed down, as in a test of

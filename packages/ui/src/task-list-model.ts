@@ -1,5 +1,5 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
-import { agentTabLabel } from "@luke/features/model-label";
+import { agentName } from "@luke/features/model-label";
 import {
   TASK_STATUS,
   TASK_STATUS_ORDER,
@@ -125,9 +125,9 @@ export function agentRow(agent: TasklessAgent): TaskRow {
   return { kind: TASK_ROW.AGENT, agent };
 }
 
-/** The row's name: its task's, or its agent's as its tab names it (`agentTabLabel`). */
+/** The row's name: its task's, or its agent's as its tab names it (`agentName`). */
 export function taskRowName(row: TaskRow): string {
-  return row.kind === TASK_ROW.TASK ? row.task.name : agentTabLabel(row.agent);
+  return row.kind === TASK_ROW.TASK ? row.task.name : agentName(row.agent);
 }
 
 /** The repository the row works in; null for a task with none chosen yet. */

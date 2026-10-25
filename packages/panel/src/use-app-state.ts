@@ -1,5 +1,9 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import {
+  type AppStateDelivery,
+  type AppStateSnapshot,
+  withAppStateDelivery,
+} from "@luke/host/app-state";
 import {
   type Experiment,
   type ExperimentChoices,
@@ -8,19 +12,24 @@ import {
   NO_EXPERIMENTS,
 } from "@luke/settings";
 import { type AppSettingsView, appSettingsView } from "@luke/settings/wire";
-import { keepIdentity } from "@luke/wire";
 import { type Cause, Data, Effect, Option, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { appBridge } from "./app-bridge.js";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
+import { loadedTasksFixture, loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 
 /** The two bridge calls a window reads its state through, and nothing else. */
 interface AppStateSource {
-  subscribe: (onDelivered: (delivered: AppStateSnapshot) => void) => () => void;
+  subscribe: (onDelivered: (delivered: AppStateDelivery) => void) => () => void;
   read: () => Promise<AppStateSnapshot>;
 }
+
+/** One reading of the document: the read that bootstraps the window, or a delivery of what moved in it since. */
+type AppStateReading =
+  | { readonly read: AppStateSnapshot }
+  | { readonly delivered: AppStateDelivery };
 
 /**
  * The bridge refused the one read, so this window has no document to draw.
@@ -48,7 +57,7 @@ type AppStateUnavailable = AppStateUnread | Cause.NoSuchElementError;
  */
 const appStateSourceAtom: Atom.Writable<AppStateSource> = Atom.keepAlive(
   Atom.make({
-    subscribe: (onDelivered: (delivered: AppStateSnapshot) => void) =>
+    subscribe: (onDelivered: (delivered: AppStateDelivery) => void) =>
       appBridge().onAppState(onDelivered),
     read: () => appBridge().requestAppState(),
   }),
@@ -60,13 +69,13 @@ const appStateSourceAtom: Atom.Writable<AppStateSource> = Atom.keepAlive(
  * flight is then kept rather than lost, which is what makes that read a
  * bootstrap and not a race.
  */
-const deliveries = (source: AppStateSource): Stream.Stream<AppStateSnapshot, AppStateUnread> =>
-  Stream.callback<AppStateSnapshot, AppStateUnread>((queue) =>
+const readings = (source: AppStateSource): Stream.Stream<AppStateReading, AppStateUnread> =>
+  Stream.callback<AppStateReading, AppStateUnread>((queue) =>
     Effect.gen(function* () {
       yield* Effect.acquireRelease(
         Effect.sync(() =>
           source.subscribe((delivered) => {
-            Queue.offerUnsafe(queue, delivered);
+            Queue.offerUnsafe(queue, { delivered });
           }),
         ),
         (stop) => Effect.sync(stop),
@@ -79,7 +88,7 @@ const deliveries = (source: AppStateSource): Stream.Stream<AppStateSnapshot, App
           }),
           {
             onFailure: (refusal) => Queue.fail(queue, refusal),
-            onSuccess: (answered) => Queue.offer(queue, answered),
+            onSuccess: (read) => Queue.offer(queue, { read }),
           },
         ),
       );
@@ -90,28 +99,64 @@ const deliveries = (source: AppStateSource): Stream.Stream<AppStateSnapshot, App
  * The one rule a window adopts a delivery by. A delivery older than the one
  * held is dropped and nothing else is: the version rises with the document,
  * and a delivery that repeats it is this window's own facts having moved — its
- * mode, or the display under it — which the document does not number and
- * every reader still has to be told.
+ * mode, or the display under it — which the document does not number.
+ */
+function adopt(held: AppStateSnapshot, delivery: AppStateDelivery): AppStateSnapshot {
+  return delivery.version < held.version ? held : withAppStateDelivery(held, delivery);
+}
+
+/** The document as this window holds it, and the deliveries heard before the read that bootstraps it answered. */
+interface Adopting {
+  readonly held: Option.Option<AppStateSnapshot>;
+  readonly early: readonly AppStateDelivery[];
+}
+
+/**
+ * The document this window draws, one reading at a time. A delivery is what
+ * moved since the last its stream sent, so one heard before the read answered
+ * waits for it and is laid over it then, by the same rule as any later one.
  *
- * What is adopted keeps the identity of every part of the held document it
- * did not change. A delivery arrives as a new tree, parsed from the text it
- * crossed into this window in, so without that every slice of it would be a
- * new object each time, and every memo and comparison keyed on one would
- * miss, and every reader redraw, whatever moved.
+ * What is adopted keeps the identity of every part of the held document a
+ * delivery did not move (`withAppStateDelivery`): an entry it does not name
+ * is the very object held, and one it names keeps every part of it that
+ * said nothing new. A delivery crossed into this window as text, so without
+ * that every memo and comparison keyed on what it carried would miss, and
+ * every reader redraw, whatever moved.
  */
 const adopted = (
-  delivered: Stream.Stream<AppStateSnapshot, AppStateUnread>,
+  read: Stream.Stream<AppStateReading, AppStateUnread>,
 ): Stream.Stream<AppStateSnapshot, AppStateUnread> =>
   Stream.mapAccum(
-    delivered,
-    () => Option.none<AppStateSnapshot>(),
-    (held, delivery) => {
-      if (Option.isNone(held)) return [Option.some(delivery), [delivery]];
-      if (delivery.version < held.value.version) return [held, []];
-      const kept = keepIdentity(held.value, delivery);
-      return [Option.some(kept), [kept]];
+    read,
+    (): Adopting => ({ held: Option.none(), early: [] }),
+    (state, reading): [Adopting, AppStateSnapshot[]] => {
+      if ("read" in reading) {
+        const held = state.early.reduce(adopt, reading.read);
+        return [{ held: Option.some(held), early: [] }, [held]];
+      }
+      if (Option.isNone(state.held)) {
+        return [{ ...state, early: [...state.early, reading.delivered] }, []];
+      }
+      const next = adopt(state.held.value, reading.delivered);
+      if (next === state.held.value) return [state, []];
+      return [{ held: Option.some(next), early: [] }, [next]];
     },
   );
+
+/**
+ * The document as this window draws it: main's, but in a fixture run, which
+ * signs in to nothing, with what its profile stages laid over it, such as a
+ * synthetic account signed in (`tasks-fixture.ts`'s `fixtureAppState`). Note
+ * that the fixture is imported before the run's first document is handed
+ * on, because no reader may draw that document unstaged first.
+ */
+function staged(state: AppStateSnapshot): Effect.Effect<AppStateSnapshot> {
+  if (!state.run.fixtureMode) return Effect.succeed(state);
+  return Effect.map(
+    Effect.promise(loadTasksFixture),
+    () => loadedTasksFixture()?.fixtureAppState(state) ?? state,
+  );
+}
 
 /**
  * This window's copy of the one document main holds, and the one subscription
@@ -124,7 +169,11 @@ const adopted = (
  * listening, and the window going away is the whole of its life.
  */
 const appStateAtom: Atom.Atom<AsyncResult.AsyncResult<AppStateSnapshot, AppStateUnavailable>> =
-  Atom.keepAlive(rendererRuntime.atom((get) => adopted(deliveries(get(appStateSourceAtom)))));
+  Atom.keepAlive(
+    rendererRuntime.atom((get) =>
+      Stream.mapEffect(adopted(readings(get(appStateSourceAtom))), staged),
+    ),
+  );
 
 /**
  * The document as main holds it, read before anything is drawn over it: the
@@ -189,6 +238,7 @@ export const APP_SLICE = {
   UPDATE: sliceAtom("update"),
   AUDIO: sliceAtom("audio"),
   VOICE: sliceAtom("voice"),
+  CALL_TRANSCRIPT: sliceAtom("callTranscript"),
   TASKS: sliceAtom("tasks"),
   CODING_AGENTS: sliceAtom("codingAgents"),
   INBOX: sliceAtom("inbox"),

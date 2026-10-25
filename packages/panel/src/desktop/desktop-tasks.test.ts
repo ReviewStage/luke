@@ -24,7 +24,13 @@ import {
   type InboxMessage,
   type InboxReadAsk,
 } from "@luke/features/inbox-wire";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import {
+  PLAN_ACTOR,
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type Task,
+  type TaskStanding,
+} from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -33,11 +39,13 @@ import { experimentsOn } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
@@ -48,9 +56,11 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
+import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 const TASK: Task = {
@@ -105,6 +115,9 @@ test("a task the service will not hand the reader, as a link to another workspac
     container.textContent ?? "",
     /Not foundThis task doesn't exist, or you don't have access to it\./u,
   );
+  // The frame keeps the window's bar, which the words saying so stand under.
+  const frame = container.querySelector("section[aria-label='Not found']");
+  assert.equal(frame?.firstElementChild?.tagName, "HEADER");
   assert.deepEqual(left, [TASK.id]);
   act(() => root.unmount());
   container.remove();
@@ -131,9 +144,12 @@ test("while the task is read, its column's toolbar and the side panel stand thei
   const blocks = (row: Element | null) =>
     [...(row?.querySelectorAll(":scope > .luke-skeleton") ?? [])].length;
 
-  assert.equal(blocks(container.querySelector(".desktop-toolbar > .main-tabs")), 2);
+  assert.equal(
+    blocks(container.querySelector(".luke-toolbar > .luke-toolbar-heading > .main-tabs")),
+    2,
+  );
   assert.equal(blocks(container.querySelector("aside[aria-label='Panel'] .side-panel-tabs")), 2);
-  const acts = [...container.querySelectorAll(".desktop-toolbar-actions > .luke-skeleton")];
+  const acts = [...container.querySelectorAll(".luke-toolbar-actions > .luke-skeleton")];
   assert.equal(
     acts.at(-1)?.getAttribute("style"),
     "--luke-skeleton-width: var(--luke-control-height);",
@@ -228,6 +244,17 @@ test("the Code tab waits while the task's code is unread, and says there is none
   assert.equal(none.querySelector("[role=status]"), null);
 });
 
+test("the panel's tab panel is labelled by its chosen tab, which controls it", () => {
+  const side = codeTab([]).querySelector("aside[aria-label='Panel']");
+  const panel = side?.querySelector<HTMLElement>("[role=tabpanel]:not([hidden])");
+  const chosen = side?.querySelector<HTMLElement>("[role=tab][aria-selected=true]");
+  assert.ok(panel && chosen, "the panel shows its chosen tab");
+  assert.equal(panel.getAttribute("aria-labelledby"), chosen.id);
+  assert.equal(chosen.getAttribute("aria-controls"), panel.id);
+  const others = side?.querySelectorAll("[role=tab][aria-selected=false][aria-controls]");
+  assert.equal(others?.length, 0, "a tab with no panel standing names none");
+});
+
 test("the Code tab whose code read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
   let retries = 0;
   const container = document.createElement("div");
@@ -290,7 +317,6 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          notice: undefined,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
@@ -419,7 +445,6 @@ async function narrowTaskInbox(
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          notice: undefined,
           tasks: tasksControl({
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
@@ -468,7 +493,7 @@ async function narrowTaskInbox(
         each === shown ? `[${each.textContent}]` : (each.textContent ?? ""),
       );
       act(() => shown?.click());
-      return [tab.querySelector(".inbox-tasks header h1")?.textContent, ...words];
+      return [tab.querySelector(".inbox-tasks .luke-pane-bar-title")?.textContent, ...words];
     },
     /** Shows the scope named `name` from the view's menu. */
     pressScope: async (name: string) => {
@@ -500,10 +525,18 @@ async function narrowTaskInbox(
       );
       return [alert?.textContent?.includes("The inbox could not be read.") ?? false, retry];
     },
+    /** What the list's foot says of a refresh that did not land, and whether it offers Retry. */
+    refreshFailure: () => {
+      const alert = tab.querySelector('.inbox-tasks [role="alert"]');
+      const retry = [...tab.querySelectorAll(".inbox-tasks button")].some((button) =>
+        button.textContent?.includes("Retry"),
+      );
+      return [alert?.firstElementChild?.nextElementSibling?.textContent ?? null, retry];
+    },
     back: () =>
-      [
-        ...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
-      ].find((button) => button.textContent === "Inbox") ?? null,
+      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .luke-toolbar button")].find(
+        (button) => button.textContent === "Inbox",
+      ) ?? null,
     row: (title: string) =>
       [
         ...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
@@ -573,20 +606,20 @@ test("a task's Inbox heads its list with the Inbox's name and a view's menu offe
   ];
   let inbox = await narrowTaskInbox(items, 1_200);
   assert.equal(document.querySelector('.inbox-tasks [role="tab"]'), null, "no tab bar stands");
-  assert.deepEqual(await inbox.head(), ["Inbox", "[To do]", "All"]);
+  assert.deepEqual(await inbox.head(), ["Inbox", "[For you]", "All"]);
   assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
   await inbox.pressScope("All");
-  assert.deepEqual(await inbox.head(), ["Inbox · All", "To do", "[All]"]);
+  assert.deepEqual(await inbox.head(), ["Inbox · All", "For you", "[All]"]);
   assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   inbox.unmount();
 
   inbox = await narrowTaskInbox(items, 1_200);
   assert.deepEqual(
     await inbox.head(),
-    ["Inbox · All", "To do", "[All]"],
+    ["Inbox · All", "For you", "[All]"],
     "the scope outlives a relaunch",
   );
-  await inbox.pressScope("To do");
+  await inbox.pressScope("For you");
   assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
   inbox.unmount();
   window.localStorage.clear();
@@ -629,9 +662,9 @@ test("a task's Inbox whose Needs you was pressed before the tabs opens on To do,
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
   ];
   for (const [key, kept, shown] of [
-    [TASK_EARLIER_SHOW_KEY, true, "[To do]"],
+    [TASK_EARLIER_SHOW_KEY, true, "[For you]"],
     [TASK_EARLIER_SHOW_KEY, false, "[All]"],
-    [TASK_SHOW_KEY, "unread", "[To do]"],
+    [TASK_SHOW_KEY, "unread", "[For you]"],
     [TASK_SHOW_KEY, "open", "[All]"],
   ] as const) {
     window.localStorage.clear();
@@ -658,7 +691,7 @@ test("one column wide, a task's Inbox on To do pages through only what it lists"
   assert.equal(inbox.pager(), "1 of 3");
 
   act(() => inbox.back()?.click());
-  await inbox.pressScope("To do");
+  await inbox.pressScope("For you");
   act(() => inbox.row("Alert at 80%?")?.click());
   assert.equal(inbox.pager(), "1 of 2", "the settled item is passed over");
   window.localStorage.clear();
@@ -673,11 +706,11 @@ test("one column wide, a task's Inbox filtered down to one item still offers its
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ]);
   act(() => inbox.back()?.click());
-  await inbox.pressScope("To do");
+  await inbox.pressScope("For you");
   act(() => inbox.row("Expire after 7 days?")?.click());
   assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
   act(() => inbox.back()?.click());
-  assert.deepEqual(await inbox.head(), ["Inbox", "[To do]", "All"]);
+  assert.deepEqual(await inbox.head(), ["Inbox", "[For you]", "All"]);
   window.localStorage.clear();
   inbox.unmount();
 });
@@ -730,7 +763,7 @@ test("on To do, the item a task's Inbox chose for itself stays shown once it is 
   const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
   const read = heldAnswer();
   const inbox = await narrowTaskInbox([asked], 1_200, read.promise);
-  await inbox.pressScope("To do");
+  await inbox.pressScope("For you");
   assert.equal(inbox.title(), "Expire after 7 days?");
   await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
   assert.deepEqual(inbox.rows(), ["Expire after 7 days?"], "the answered row stays while chosen");
@@ -750,18 +783,18 @@ test("a task's Inbox holding only settled items, read, on To do lists no row and
   ];
   const wide = await narrowTaskInbox(items, 1_200);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  await wide.pressScope("To do");
-  assert.deepEqual(await wide.head(), ["Inbox", "[To do]", "All"]);
+  await wide.pressScope("For you");
+  assert.deepEqual(await wide.head(), ["Inbox", "[For you]", "All"]);
   assert.deepEqual(wide.rows(), [], "the item read is not listed under a filter leaving it out");
   assert.deepEqual(wide.filteredOut(), [undefined, "Nothing to do", "Show all"]);
   assert.equal(wide.title(), "Resend on bounce?", "the item read stays shown beside the list");
   wide.showAll();
-  assert.deepEqual(await wide.head(), ["Inbox · All", "To do", "[All]"]);
+  assert.deepEqual(await wide.head(), ["Inbox · All", "For you", "[All]"]);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
-  await wide.pressScope("To do");
+  await wide.pressScope("For you");
   wide.unmount();
 
-  // Opened again one column wide, To do kept, nothing stands chosen, so the list stands alone and says so.
+  // Opened again one column wide, For you kept, nothing stands chosen, so the list stands alone and says so.
   const narrow = await narrowTaskInbox(items);
   assert.deepEqual(narrow.standing(), ["list", ""]);
   assert.equal(narrow.filteredOut()?.[2], "Show all");
@@ -771,7 +804,7 @@ test("a task's Inbox holding only settled items, read, on To do lists no row and
     ["list", ""],
     "Show all leaves the rows it brings back standing",
   );
-  assert.deepEqual(await narrow.head(), ["Inbox · All", "To do", "[All]"]);
+  assert.deepEqual(await narrow.head(), ["Inbox · All", "For you", "[All]"]);
   assert.deepEqual(narrow.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   window.localStorage.clear();
   narrow.unmount();
@@ -783,14 +816,31 @@ test("a task's Inbox whose read failed offers Retry though To do lists nothing i
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ];
   const first = await narrowTaskInbox(settled, 1_200);
-  await first.pressScope("To do");
+  await first.pressScope("For you");
   first.unmount();
 
   const read = heldAnswer();
   const inbox = await narrowTaskInbox(settled, 1_200, read.promise);
-  assert.deepEqual(inbox.rows(), [], "To do, kept from before, lists nothing");
+  assert.deepEqual(inbox.rows(), [], "For you, kept from before, lists nothing");
   await read.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   assert.deepEqual(inbox.failure(), [true, true]);
+  window.localStorage.clear();
+  inbox.unmount();
+});
+
+test("a task's Inbox whose refresh failed keeps the rows it holds and says Could not refresh with Retry at their foot", async () => {
+  window.localStorage.clear();
+  showEverything();
+  const items = [
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ];
+  const refresh = heldAnswer();
+  const inbox = await narrowTaskInbox(items, 1_200, refresh.promise);
+  assert.deepEqual(inbox.refreshFailure(), [null, false], "nothing is said while the read stands");
+  await refresh.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+  assert.deepEqual(inbox.refreshFailure(), ["Could not refresh", true]);
   window.localStorage.clear();
   inbox.unmount();
 });
@@ -853,7 +903,7 @@ test("a plan's document opens on its title, with who created it and last edited 
 
   assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
   assert.equal(body?.previousElementSibling, null, "nothing stands over the document's title");
-  assert.ok(first?.querySelector(".task-title"), "the title leads the document");
+  assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title leads the document");
   assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
   assert.match(byline?.textContent ?? "", /^Created by .*Last edited by .*Lee Park/u);
   act(() => root.unmount());
@@ -988,8 +1038,12 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   container.remove();
 });
 
-/** The task's column on its Chat tab over the fixture's chat, its plan channel this task's where `ownChannel`. */
-async function chatTabMounted(ownChannel: boolean) {
+/** The task's column on its Chat tab over the fixture's chat, its plan channel this task's where `ownChannel`, its view as `view` changes it. */
+async function chatTabMounted(
+  ownChannel: boolean,
+  view: Partial<ReturnType<typeof tasksControl>["chatView"]> = {},
+  room: ShellRoom = SHELL_ROOM.WIDE,
+) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -1017,22 +1071,30 @@ async function chatTabMounted(ownChannel: boolean) {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
-          looks: NO_LOOKS,
-          notice: undefined,
-          tasks: tasksControl({
-            page: TASKS_PAGE.DOCUMENT,
-            activeTaskId: TASK.id,
-            region: { kind: DOCUMENT_REGION.READY, task: TASK },
-            sidePanel: {
-              ...tasksControl().sidePanel,
-              open: true,
-              tab: SIDE_PANEL_TAB.CHAT,
-            },
-            chatView: { ...tasksControl().chatView, available: true, chat },
+        // Note that the shell hands its room to every tab's body, as the window's root does.
+        createElement(
+          ShellRoomContext.Provider,
+          { value: room },
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            room,
+            away: { label: "Inbox", onPress: () => undefined },
+            tasks: tasksControl({
+              page: TASKS_PAGE.DOCUMENT,
+              activeTaskId: TASK.id,
+              region: { kind: DOCUMENT_REGION.READY, task: TASK },
+              sidePanel: {
+                ...tasksControl().sidePanel,
+                open: true,
+                fullScreen: room === SHELL_ROOM.NARROW,
+                fullScreenOnly: room === SHELL_ROOM.NARROW,
+                tab: SIDE_PANEL_TAB.CHAT,
+              },
+              chatView: { ...tasksControl().chatView, available: true, chat, ...view },
+            }),
           }),
-        }),
+        ),
       ),
     ),
   );
@@ -1047,7 +1109,10 @@ test("a task's Chat tab in the side panel shows its task channel at reading size
   const own = await chatTabMounted(true);
   const tab = own.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
   assert.ok(tab, "the task's Chat tab");
-  assert.equal(tab.querySelector(".chat-head h1")?.textContent, "teammate-invitations");
+  assert.equal(
+    tab.querySelector(".chat-stream .luke-pane-bar-lead")?.textContent,
+    "teammate-invitations",
+  );
   assert.match(
     tab.querySelector(".chat-composer")?.textContent ?? "",
     /Message #teammate-invitations/u,
@@ -1064,6 +1129,67 @@ test("a task's Chat tab in the side panel shows its task channel at reading size
   );
   act(() => none.root.unmount());
   none.container.remove();
+});
+
+test("a task's Chat tab whose chat could not be read says so with Retry, never that nothing is posted, nor a loading placeholder, and Retry reads again; an unavailable chat says it is unavailable", async () => {
+  let retried = 0;
+  const failed = await chatTabMounted(true, {
+    chat: undefined,
+    failed: true,
+    onRetry: () => {
+      retried += 1;
+    },
+  });
+  const tab = failed.container.querySelector("section.desktop-task-chat");
+  assert.equal(
+    tab?.querySelector('[role="alert"]')?.textContent,
+    "The workspace's chat could not be read.Retry",
+  );
+  assert.equal(tab?.querySelector('[role="status"]'), null, "no loading placeholder");
+  assert.doesNotMatch(tab?.textContent ?? "", /Nothing is posted/u);
+  const retry = [...(tab?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Retry",
+  );
+  act(() => retry?.click());
+  assert.equal(retried, 1);
+  act(() => failed.root.unmount());
+  failed.container.remove();
+
+  // Note that the column draws the tab only where the chat is available, so the tab itself is mounted here.
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(TaskChatTab, {
+          tasks: tasksControl({
+            chatView: { ...tasksControl().chatView, available: false, chat: undefined },
+          }),
+          taskId: TASK.id,
+        }),
+      ),
+    ),
+  );
+  assert.match(container.textContent ?? "", /Chat is not available yet\./u);
+  assert.doesNotMatch(container.textContent ?? "", /Nothing is posted/u);
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("on a phone a task's Chat tab draws no channel head under the task's header, which names it, and keeps its composer", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const phone = await chatTabMounted(true, {}, SHELL_ROOM.NARROW);
+  const tab = phone.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
+  assert.ok(tab, "the task's Chat tab");
+  assert.equal(tab.querySelector(".chat-stream .luke-pane-bar"), null, "no channel head");
+  assert.match(
+    tab.querySelector(".chat-composer")?.textContent ?? "",
+    /Message #teammate-invitations/u,
+  );
+  assert.equal(phone.container.querySelector(".task-head h1")?.textContent, "Chat");
+  act(() => phone.root.unmount());
+  phone.container.remove();
 });
 
 test("with Chat off for the account, a Chat tab kept in the side panel draws nothing", async () => {
@@ -1112,7 +1238,7 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
 });
 
 test("a plan's own Inbox acknowledges the reader's own notice as it opens it, and leaves a teammate's open", async () => {
-  // Note that the Inbox opens on All, since To do leaves the teammate's notice out.
+  // Note that the Inbox opens on All, since For you leaves the teammate's notice out.
   window.localStorage.clear();
   showEverything();
   fakeAppBridge({});
@@ -1166,7 +1292,6 @@ function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
           createElement(DesktopTasks, {
             summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
-            notice: undefined,
             tasks: tasksControl({
               page: TASKS_PAGE.DOCUMENT,
               activeTaskId: TASK.id,
@@ -1228,5 +1353,94 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
   act(() => runAppCommand(APP_COMMAND.CLOSE_TAB));
 
   assert.deepEqual(closed, ["panel"]);
+  page.unmount();
+});
+
+/** The open task's page, standing In progress at High priority, whose changes of standing the service keeps or refuses as `keeps` says, and the changes it was sent. */
+function standingPageMounted(keeps: boolean) {
+  fakeAppPlatform(QUIET_PANEL);
+  fakeAppBridge({});
+  const task: Task = {
+    ...TASK,
+    number: 7,
+    status: TASK_STATUS.IN_PROGRESS,
+    priority: TASK_PRIORITY.HIGH,
+  };
+  const sent: TaskStanding[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          Fragment,
+          null,
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            tasks: tasksControl({
+              page: TASKS_PAGE.DOCUMENT,
+              activeTaskId: task.id,
+              region: { kind: DOCUMENT_REGION.READY, task },
+              sidePanel: DOCUMENT_PANEL,
+              onSetTaskStanding: (_taskId, standing) => {
+                sent.push(standing);
+                return Promise.resolve(keeps);
+              },
+            }),
+          }),
+          createElement(ToastHost),
+        ),
+      ),
+    ),
+  );
+  /** The chip named `label`, which says its value after its name. */
+  const chip = (label: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
+      each.getAttribute("aria-label")?.startsWith(`${label}:`),
+    );
+  /** Picks `words` from the menu the `label` chip drops, and lets the answer land. */
+  const pick = async (label: string, words: string) => {
+    act(() => chip(label)?.click());
+    const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
+      each.textContent?.includes(words),
+    );
+    assert.ok(row, `the ${label} menu offers ${words}`);
+    act(() => row.click());
+    await act(async () => undefined);
+  };
+  return {
+    sent,
+    chip,
+    pick,
+    unmount: () => {
+      act(() => root.unmount());
+      container.remove();
+    },
+  };
+}
+
+test("a status or priority the service refuses raises the toast the rows raise, and the chip goes on showing the value that stands", async () => {
+  const page = standingPageMounted(false);
+
+  await page.pick("Status", "Done");
+  assert.deepEqual(page.sent, [{ status: TASK_STATUS.DONE }]);
+  assert.match(document.body.textContent ?? "", /The task could not be changed\. Try again\./u);
+  assert.equal(page.chip("Status")?.getAttribute("aria-label"), "Status: In progress");
+
+  await page.pick("Priority", "Low");
+  assert.deepEqual(page.sent[1], { priority: TASK_PRIORITY.LOW });
+  assert.equal(page.chip("Priority")?.getAttribute("aria-label"), "Priority: High");
+  page.unmount();
+});
+
+test("a status the service keeps raises no toast", async () => {
+  const page = standingPageMounted(true);
+
+  await page.pick("Status", "Done");
+
+  assert.deepEqual(page.sent, [{ status: TASK_STATUS.DONE }]);
+  assert.doesNotMatch(document.body.textContent ?? "", /could not be changed/u);
   page.unmount();
 });

@@ -492,7 +492,7 @@ const taskAgentLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The agent's title; null where it has none, when it is named by its model. */
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** What kind of agent it is, said only of a member's operator, which every window names Luke (`agentTabLabel`); absent for a coder, and from a service before it was said. */
+  /** What kind of agent it is, said only of a member's operator, which every window names Luke (`agentName`); absent for a coder, and from a service before it was said. */
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
@@ -516,7 +516,7 @@ const taskAgentLineSchema = EffectSchema.Struct({
 export type TaskAgentLine = typeof taskAgentLineSchema.Type;
 
 /** A pull request one of a task's agents opened, as GitHub last answered the service: where it stands and its size. */
-const taskPullRequestLineSchema = EffectSchema.Struct({
+export const taskPullRequestLineSchema = EffectSchema.Struct({
   number: countedNumber,
   title: EffectSchema.String,
   state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
@@ -532,6 +532,14 @@ const taskPullRequestLineSchema = EffectSchema.Struct({
 });
 
 export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;
+
+/** Every pull request of one plan, uncapped, in the order its row names them: what a card naming them all reads, where the row names the first few. */
+export const taskPullRequestsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.String,
+  pullRequests: EffectSchema.Array(taskPullRequestLineSchema),
+});
+
+export type TaskPullRequests = typeof taskPullRequestsSchema.Type;
 
 /**
  * What a task's coding agents are doing and what they published, in brief:
@@ -601,8 +609,8 @@ export const planEditorSchema = memberRefSchema;
 
 export type PlanEditor = typeof planEditorSchema.Type;
 
-/** The newest revision of a plan, as its "Edited by" line reads it. */
-const planLastEditSchema = EffectSchema.Struct({
+/** The newest revision of a plan, as its "Edited by" line reads it, and as a conflict over the developer's edit names who wrote the text it met. */
+export const planLastEditSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
   /** The member who wrote it; absent for a coding agent's, for one nobody can be named for, and from a service before writers were kept. */
   by: EffectSchema.optionalKey(planEditorSchema),

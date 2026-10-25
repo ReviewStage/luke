@@ -17,10 +17,10 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-caption-weight);
     white-space: nowrap;
     animation:
-      luke-saved-tick-fade var(--luke-duration-quick) ease-out backwards,
+      luke-saved-tick-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-saved-tick-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards,
       luke-saved-tick-out var(--luke-duration-exit) var(--luke-motion-exit)
       calc(var(--luke-duration-fast) + var(--luke-confirm-delay)) forwards;

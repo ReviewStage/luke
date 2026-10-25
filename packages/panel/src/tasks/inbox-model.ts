@@ -38,7 +38,7 @@ import {
   inboxReplyRefusal,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
 import { insideCode, linksIn } from "@luke/features/mention-link";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
@@ -46,7 +46,7 @@ import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { matchesTokens } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
-import type { CountNoun } from "../desktop/sidebar-group-header.js";
+import type { CountNoun } from "../desktop/sidebar-fold.js";
 import type { SnippetLines } from "./code-snippet-model.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
 import { plainWords } from "./tool-call-model.js";
@@ -194,15 +194,22 @@ export function inboxCommentFiles(
 /** The board as the tab draws it. */
 export interface InboxBoardView {
   readonly open: readonly InboxItem[];
+  /** The open items that wait on the reader (`readersItem`), in the order of `open`: what the task's Inbox counts, since a teammate's open item waits on the teammate. */
+  readonly waiting: readonly InboxItem[];
   readonly settled: readonly InboxItem[];
 }
 
-/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first. */
-export function inboxBoard(items: readonly InboxItem[]): InboxBoardView {
+/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first; `readerId` says which of what waits waits on the reader. */
+export function inboxBoard(
+  items: readonly InboxItem[],
+  readerId: string | undefined,
+): InboxBoardView {
+  const open = items
+    .filter((item) => item.status === INBOX_STATUS.OPEN)
+    .toSorted((a, b) => a.postedAt - b.postedAt);
   return {
-    open: items
-      .filter((item) => item.status === INBOX_STATUS.OPEN)
-      .toSorted((a, b) => a.postedAt - b.postedAt),
+    open,
+    waiting: open.filter((item) => readersItem(item, readerId)),
     settled: items
       .filter((item) => item.status !== INBOX_STATUS.OPEN)
       .toSorted((a, b) => b.updatedAt - a.updatedAt),
@@ -411,6 +418,15 @@ export type InboxDoAsk = Extract<InboxKnownAsk, { type: typeof INBOX_ASK.DO }>;
 /** Whether an ask read off the wire is one this build knows, which its type decides. */
 export function knownAsk(ask: InboxReadAsk): ask is InboxKnownAsk {
   return Object.values<string>(INBOX_ASK).includes(ask.type);
+}
+
+/**
+ * Whether an ask is a form of several fields, which Enter alone must not
+ * send: it only picks, or breaks a line, since the rest may not be filled in
+ * yet, and ⌘ or Ctrl with Enter sends.
+ */
+export function severalFields(ask: InboxAsk): boolean {
+  return ask.type === INBOX_ASK.ANSWER && (ask.fields?.length ?? 0) > 1;
 }
 
 /** The message whose ask waits on an answer, and the ask; none where nothing waits. */
@@ -652,7 +668,7 @@ export function inboxThreadSend(
   return refusal === undefined ? { text, attachments, answers } : undefined;
 }
 
-/** Which way an answer goes: ahead, a check in green, or holding back, a turn back in red. */
+/** Which way an answer goes: ahead, a check in green, or holding back, a turn back in grey, since holding back failed nothing. */
 export const ANSWER_TONE = {
   AHEAD: "ahead",
   BACK: "back",
@@ -670,7 +686,7 @@ export interface AnswerStamp {
 const DONE_WORDS: ReadonlyMap<string, string> = new Map([
   ["Approve", "Approved"],
   ["Decline", "Declined"],
-  ["Request changes", "Requested changes"],
+  ["Request changes", "Changes requested"],
 ]);
 
 /** The two buttons' pick an answer makes, and which of the two it is; none where the ask is no pair of buttons. */
@@ -721,7 +737,7 @@ const SENT_WORDS = {
 
 /**
  * What a sent answer's stamp says on the thread, in the past: "Approved",
- * "Requested changes", "Chose 7 days", "Done 3/3", "Couldn't do it 1/3",
+ * "Changes requested", "Chose 7 days", "Done 3/3", "Couldn't do it 1/3",
  * a to-do's steps ticked with no press, "Ticked 2/3", "Submitted", or
  * "Answered". The ask it answers is read where the thread
  * still carries it.
@@ -1365,13 +1381,14 @@ export const EVERYONES: InboxWhose = { kind: INBOX_WHOSE.EVERYONE };
 
 /**
  * Where an item stands, as a list grouped by status heads it: needing the
- * reader, waiting on the teammate whose agent asks it, or answered, which
- * an item its agent took back stands under too.
+ * reader, waiting on the teammate whose agent asks it, answered, or closed
+ * with no answer, its ask withdrawn by its agent or resolved by a member.
  */
 export const INBOX_STATUS_GROUP = {
   NEEDS_YOU: "needs-you",
   WAITING: "waiting",
   ANSWERED: "answered",
+  CLOSED: "closed",
 } as const;
 
 export type InboxStatusGroupKind = (typeof INBOX_STATUS_GROUP)[keyof typeof INBOX_STATUS_GROUP];
@@ -1381,6 +1398,7 @@ const STATUS_KEY = {
   [INBOX_STATUS_GROUP.NEEDS_YOU]: "status:needs-you",
   [INBOX_STATUS_GROUP.WAITING]: "status:waiting",
   [INBOX_STATUS_GROUP.ANSWERED]: "status:answered",
+  [INBOX_STATUS_GROUP.CLOSED]: "status:closed",
 } as const satisfies Record<InboxStatusGroupKind, string>;
 
 /** How many items each scope lists, filtered out by the scope shown or not. */
@@ -1560,7 +1578,8 @@ const SORT_ORDER = {
 
 /** Where an item stands for the reader, as a list grouped by status heads it. */
 function statusOf(item: InboxItem, readerId: string | undefined): InboxStatusGroupKind {
-  if (item.status !== INBOX_STATUS.OPEN) return INBOX_STATUS_GROUP.ANSWERED;
+  if (item.status === INBOX_STATUS.ANSWERED) return INBOX_STATUS_GROUP.ANSWERED;
+  if (item.status === INBOX_STATUS.CLOSED) return INBOX_STATUS_GROUP.CLOSED;
   return readersItem(item, readerId) ? INBOX_STATUS_GROUP.NEEDS_YOU : INBOX_STATUS_GROUP.WAITING;
 }
 
@@ -1578,7 +1597,7 @@ export interface InboxPlace {
 /** No item's place held: every item stands where it is now. */
 export const NO_PLACES: ReadonlyMap<string, InboxPlace> = new Map();
 
-/** The items, in the order given, under where each stands: what needs the reader, what waits on others, and what is answered, a status with nothing in it left out. */
+/** The items, in the order given, under where each stands: what needs the reader, what waits on others, what is answered, and what closed with no answer, a status with nothing in it left out. */
 function statusGroups(
   items: readonly InboxListed[],
   statusOfItem: (item: InboxItem) => InboxStatusGroupKind,

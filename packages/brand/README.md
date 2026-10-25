@@ -77,8 +77,9 @@ any of them has drifted.
 ## Modes
 
 `-dark` assets are light ink (`#f5f5f7`) for dark UIs; `-light` assets are near-black
-(`#1d1d1f`) for light UIs. The brand accent, when one is needed, is Apple system blue
-`#0A84FF`. The app icon follows the same naming: a space-black tile with a white face
+(`#1d1d1f`) for light UIs. The brand accent, when one is needed, is the app's own:
+the desktop's system blue `#0071e3` and the site's cyan `#5cd5ff`, both set in `@luke/ui`'s
+`src/tokens/palettes.css`, which is the one place an accent is named. The app icon follows the same naming: a space-black tile with a white face
 for dark mode, a porcelain tile with a near-black face for light. The packaged `.icns`
 is cut from the dark set, which reads on either desktop; the running app swaps the
 Dock image between the two.

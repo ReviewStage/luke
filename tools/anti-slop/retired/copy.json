@@ -1,0 +1,29 @@
+{
+  "instead": "Copy with CopyButton from @luke/ui (its chip look for a name that is shown and copied); the window's copy acts are in copy-feedback.tsx.",
+  "classes": [
+    { "class": "copy-glyph", "allow": [] },
+    { "class": "pull-request-branch-glyph", "allow": [] }
+  ],
+  "patterns": [
+    {
+      "import": "./copy-feedback.js",
+      "names": ["useCopyFeedback", "CopyGlyph"],
+      "allow": ["packages/ui/src/components/copy-button/"]
+    },
+    {
+      "import": "../copy-feedback.js",
+      "names": ["useCopyFeedback", "CopyGlyph"],
+      "allow": ["packages/ui/src/components/copy-button/"]
+    },
+    {
+      "import": "../../copy-feedback.js",
+      "names": ["useCopyFeedback", "CopyGlyph"],
+      "allow": ["packages/ui/src/components/copy-button/"]
+    },
+    {
+      "import": "@luke/panel/copy-feedback",
+      "names": ["useCopyFeedback", "CopyGlyph"],
+      "allow": ["packages/ui/src/components/copy-button/"]
+    }
+  ]
+}

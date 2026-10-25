@@ -150,7 +150,6 @@ function RowSkeleton({
     >
       {() =>
         shape.controls.map((control, place) => (
-          // oxlint-disable-next-line react/no-array-index-key -- a placeholder's controls have nothing but their place.
           <SettingsControlSkeleton key={place} control={control} />
         ))
       }
@@ -163,7 +162,6 @@ function RowsSkeleton({ rows }: { rows: readonly SettingsRowSkeletonShape[] }): 
   return (
     <div className="luke-settings-skeleton-rows">
       {rows.map((shape, at) => (
-        // oxlint-disable-next-line react/no-array-index-key -- a placeholder's rows have nothing but their place.
         <RowSkeleton key={at} at={at} shape={shape} />
       ))}
     </div>
@@ -179,7 +177,7 @@ export function SettingsRowsSkeleton({
   label,
   rows,
 }: {
-  /** What is being read, said to a reader: "Loading the members"; none where a region around them says it. */
+  /** What is being read, said to a reader: "Reading the members"; none where a region around them says it. */
   label?: string | undefined;
   /** The rows likely to land, each in its shape, from what the loaded rows are drawn from. */
   rows: readonly SettingsRowSkeletonShape[];
@@ -217,7 +215,7 @@ export function SettingsSectionsSkeleton({
   label,
   sections,
 }: {
-  /** What is being read, said to a reader: "Loading the integrations". */
+  /** What is being read, said to a reader: "Reading the integrations". */
   label: string;
   /** The sections likely to land, each in its shape, from what the page's sections are drawn from. */
   sections: readonly SettingsSectionSkeletonShape[];
@@ -226,7 +224,6 @@ export function SettingsSectionsSkeleton({
     <SkeletonRegion label={label}>
       <div className="luke-settings-skeleton">
         {sections.map((shape, at) => (
-          // oxlint-disable-next-line react/no-array-index-key -- a placeholder's sections have nothing but their place.
           <SectionSkeleton key={at} at={at} shape={shape} />
         ))}
       </div>

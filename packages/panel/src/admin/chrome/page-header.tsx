@@ -2,23 +2,22 @@ import {
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
-  BREADCRUMBS_VARIANT,
-  Breadcrumbs,
+  BackButton,
   CollectionPage,
   type CollectionState,
   DetailPage,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
   PAGE_FRAME,
   Skeleton,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TOOLBAR_INSET,
+  Toolbar,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import { createContext, useContext } from "react";
+import { PhoneHead } from "../../desktop/phone-head.js";
 import type { AdminTab } from "../routing.js";
 import { adminPlace } from "./places.js";
 
@@ -64,26 +63,12 @@ export interface AdminWayBack {
   onBack: () => void;
 }
 
-/** A page under a section, headed by the way back to it and then its own name, in the toolbar's heading type. */
-function WayBackHeading({ title, back }: { title: string; back: AdminWayBack }): React.JSX.Element {
-  const section = adminPlace(back.tab);
-  return (
-    <Breadcrumbs
-      label="Path"
-      variant={BREADCRUMBS_VARIANT.TITLE}
-      crumbs={[
-        { label: section.label, icon: section.icon, onPress: back.onBack },
-        { label: title, current: true },
-      ]}
-    />
-  );
-}
-
 /**
  * What leads every admin toolbar under it, before the page's heading: the
  * app's way back to the section list where a narrow room stands a view
  * alone (`desktop-admin.tsx`), as a version's toolbar leads with its way
- * back to the versions. None elsewhere.
+ * back to the versions, which makes the toolbar a phone's header. None
+ * elsewhere, the web page's included.
  */
 const AdminToolbarLeadContext = createContext<React.ReactNode>(undefined);
 
@@ -96,10 +81,13 @@ export function useAdminToolbarLead(): React.ReactNode {
 }
 
 /**
- * The page's toolbar, the app's own (`shell.css`): the page's title at the
- * dialog heading's size, or, under a section, the way back to it and then
- * the page's name; and the view's controls at its end. It stands still over
- * the page's scroll, and a folded sidebar's toggle stands over its start.
+ * The page's toolbar: the page's title, or, under a section, the way back to
+ * it and then the page's name; the note on what it covers after it; and the
+ * view's controls at its end. It stands still over the page's scroll, and a
+ * folded sidebar's toggle stands over its start. Where the app stands a view
+ * alone on a phone, it is a phone's header (`phone-head.tsx`): one way back,
+ * to the section a page stands under or else to the list, the title and what
+ * it covers centred, and the view's one control, its View options.
  */
 function AdminToolbar({
   title,
@@ -114,35 +102,48 @@ function AdminToolbar({
   controls: React.ReactNode;
 }): React.JSX.Element {
   const lead = useContext(AdminToolbarLeadContext);
-  // Note that a narrow room's toolbar wraps its controls under its heading
-  // rather than cut the heading down to a letter or two; the heading then
-  // asks for its words' width, which the shared sheet's `flex: 1` gives up,
-  // and stands a control's height, so its words stay level with the toggle.
+  const section = back === undefined ? undefined : adminPlace(back.tab);
+  const tag =
+    note === undefined ? undefined : (
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+        {note}
+      </Text>
+    );
+  // Note that a phone has room for one way back, so a page under a section goes back to the section, the list one step further.
+  if (lead !== undefined) {
+    return (
+      <PhoneHead
+        place="admin"
+        start={
+          back === undefined || section === undefined ? (
+            lead
+          ) : (
+            <BackButton
+              label={section.label}
+              place={section.label.toLowerCase()}
+              onBack={back.onBack}
+            />
+          )
+        }
+        title={title}
+        tag={tag}
+        end={controls ?? null}
+      />
+    );
+  }
   return (
-    <header className="desktop-toolbar in-data-[room=narrow]:flex-wrap">
-      {lead}
-      <div className="desktop-toolbar-heading flex items-baseline gap-(--luke-space-8) in-data-[room=narrow]:min-h-(--luke-control-height) in-data-[room=narrow]:basis-auto! in-data-[room=narrow]:items-center">
-        {back === undefined ? (
-          <OneLine
-            as={ONE_LINE_ELEMENT.H1}
-            end={ONE_LINE_END.ELLIPSIS}
-            className="desktop-toolbar-title"
-          >
-            {title}
-          </OneLine>
-        ) : (
-          <WayBackHeading title={title} back={back} />
-        )}
-        {note === undefined ? null : (
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {note}
-          </Text>
-        )}
-      </div>
-      {controls === null || controls === undefined ? null : (
-        <div className="desktop-toolbar-actions">{controls}</div>
-      )}
-    </header>
+    <Toolbar
+      lead={lead}
+      start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN}
+      title={title}
+      trail={
+        back === undefined || section === undefined
+          ? undefined
+          : [{ label: section.label, icon: section.icon, onPress: back.onBack }]
+      }
+      tag={tag}
+      actions={controls}
+    />
   );
 }
 

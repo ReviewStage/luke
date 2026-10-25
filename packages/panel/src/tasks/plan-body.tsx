@@ -6,6 +6,7 @@ import {
   type PlanMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
+import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
 import { type PlanSection, planSections } from "@luke/features/plan-document";
 import {
   PLAN_ACTOR,
@@ -13,13 +14,19 @@ import {
   type PlanSectionEdit,
   type Task,
 } from "@luke/features/task-wire";
+import { agoText, momentText, sinceText } from "@luke/features/time-format";
 import {
   Button,
   EDITABLE_BLOCK_CLASS,
-  EllipsisIcon,
-  IconButton,
+  MoreButton,
+  moreLabel,
+  motionHeld,
+  PageHeader,
   SavedTick,
+  STATUS_TONE,
   TEXT_BUTTON_LINES,
+  TEXT_TONE,
+  Text,
   TextButton,
   Tooltip,
   useMenu,
@@ -29,10 +36,10 @@ import {
 import { actorName } from "@luke/ui/actor-model";
 import type { MarkdownTaskToggler } from "@luke/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
-import { agoText, momentText, sinceText } from "@luke/ui/time-format";
 import { LinkIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
+import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
@@ -44,9 +51,10 @@ import {
   MarkdownMessage,
 } from "../markdown-message.js";
 import { useCreator } from "../member-directory.js";
-import type { PlanEditorHandle } from "../plan-editor/contract.js";
+import { PLACEMENT_END, PLAN_PLACEHOLDER, type PlanEditorHandle } from "../plan-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { prefersReducedMotion } from "../use-reduced-motion.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
+import { centreWithin } from "./code-pane.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
   type EditAgents,
@@ -169,10 +177,10 @@ interface LinkedTask {
 }
 
 /** What a section's ⋯ is called. */
-const SECTION_MENU_LABEL = "Section actions";
+const SECTION_THING = "Section";
 
 /** What the title's ⋯ is called. */
-const TITLE_MENU_LABEL = "Title actions";
+const TITLE_THING = "Title";
 
 /** The room left above a section scrolled to, so its heading does not stand flush against the document's top edge. */
 const REVEAL_MARGIN = 16;
@@ -181,6 +189,23 @@ const REVEAL_MARGIN = 16;
 function revealMargin(scroller: HTMLElement): number {
   const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingTop);
   return Number.isNaN(padding) ? REVEAL_MARGIN : Math.max(padding, REVEAL_MARGIN);
+}
+
+/**
+ * Scrolls `scroller` alone until `target` stands within it, clear of the faded
+ * edges its scroll padding reserves, and does nothing while it already does. Note
+ * that this is not `scrollIntoView`, which scrolls every box around the
+ * target too, and the document stands in a pane that may still be gliding.
+ */
+function keepInView(scroller: HTMLElement, target: HTMLElement): void {
+  const box = scroller.getBoundingClientRect();
+  const at = target.getBoundingClientRect();
+  const top = box.top + revealMargin(scroller);
+  // Note that the room below is the scroller's scroll padding, which clears its faded bottom edge.
+  const below = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom);
+  const bottom = box.bottom - (Number.isNaN(below) ? 0 : below);
+  if (at.top < top) scroller.scrollTop -= top - at.top;
+  else if (at.bottom > bottom) scroller.scrollTop += at.bottom - bottom;
 }
 
 /** The document the chase was last aimed at, the last edit it was, and where its typing stands. */
@@ -274,6 +299,27 @@ function EditTime({
       </TextButton>
     );
   return short ? <Tooltip label={momentText(at)}>{time}</Tooltip> : time;
+}
+
+/**
+ * What an editable plan with no text says at rest, the editor's own
+ * placeholder in a quieter ink, so the room does not read as blank; its
+ * press opens the editor, and the pointer or the keyboard reaching it reads
+ * the editor's bundle ahead, as a section's block does.
+ */
+function EmptyPlanLine({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+  const prefetchEditorBundle = usePrefetchEditorBundle();
+  return (
+    <Text tone={TEXT_TONE.MUTED}>
+      <TextButton
+        onPointerEnter={prefetchEditorBundle}
+        onFocus={prefetchEditorBundle}
+        onClick={onOpen}
+      >
+        {PLAN_PLACEHOLDER}
+      </TextButton>
+    </Text>
+  );
 }
 
 /** The press that opens the history from a plan's last edit, by how long ago it was. */
@@ -472,9 +518,6 @@ function pictureNoteOf(marks: SectionMarks, heading: string): React.JSX.Element 
 /** The class every unit of the text wears, one per section in the order the sections stand. */
 const UNIT_CLASS = "plan-unit";
 
-/** The class of a unit lit as it settles. */
-const FRESH_CLASS = "plan-fresh";
-
 /** The class of the unit the caret is typing in, whose heading wears the writing mark. */
 const WRITING_CLASS = "plan-writing";
 
@@ -516,7 +559,7 @@ function aimed(chase: Chase, task: Task, reader: TaskReader): Chase {
     isReader(task.lastEdit, reader) &&
     lastEditAt !== chase.lastEditAt;
   // Read at the retarget rather than held, since it is the one moment it decides anything.
-  const aim = { reduced: ownEdit || prefersReducedMotion() };
+  const aim = { reduced: ownEdit || motionHeld() };
   const state = chaseRetargeted(chase.state, body, aim);
   return { taskId: task.id, body, lastEditAt, state };
 }
@@ -558,9 +601,9 @@ function unitClass(view: UnitView, changed: boolean): string {
   const lit = changed ? ` ${CHANGED_CLASS}` : "";
   if (view.writing) return `${UNIT_CLASS} ${WRITING_CLASS}${lit}`;
   if (view.resting) {
-    return `${UNIT_CLASS} ${RESTING_CLASS}${view.fresh ? ` ${FRESH_CLASS}` : ""}${lit}`;
+    return `${UNIT_CLASS} ${RESTING_CLASS}${lit}`;
   }
-  return view.fresh ? `${UNIT_CLASS} ${FRESH_CLASS}${lit}` : `${UNIT_CLASS}${lit}`;
+  return `${UNIT_CLASS}${lit}`;
 }
 
 /**
@@ -612,18 +655,89 @@ const NO_DRAFT = (_name: string | undefined): void => undefined;
 /** A task item's opening as written: its list marker, then its box, unticked or ticked. */
 const TASK_ITEM = /^(?:[-*+]|\d{1,9}[.)])[ \t]+\[([ \txX])\]/u;
 
-/**
- * The text with the task item whose marker starts at `at` ticked or
- * cleared, every other character as it was; nothing where no task item
- * starts there.
- */
-function toggledTask(text: string, at: number): string | undefined {
+/** The task item whose marker starts at `at`: where its box stands, and its line with the box blanked, which reads the same ticked or not; nothing where no task item starts there. */
+function taskItemAt(text: string, at: number): { box: number; line: string } | undefined {
   const item = TASK_ITEM.exec(text.slice(at));
   if (item === null) return undefined;
   const box = at + item[0].length - 2;
-  const ticked = item[1] === "x" || item[1] === "X";
-  return `${text.slice(0, box)}${ticked ? " " : "x"}${text.slice(box + 1)}`;
+  const end = text.indexOf("\n", at);
+  return {
+    box,
+    line: `${text.slice(at, box)} ${text.slice(box + 1, end === -1 ? undefined : end)}`,
+  };
 }
+
+/**
+ * The text with the task item whose marker starts at `at` ticked or cleared
+ * as `ticked` says, every other character as it was; nothing where no task
+ * item starts there, or where its line no longer reads `line`.
+ */
+function taskSet(text: string, at: number, line: string, ticked: boolean): string | undefined {
+  const item = taskItemAt(text, at);
+  if (item === undefined || item.line !== line) return undefined;
+  return `${text.slice(0, item.box)}${ticked ? "x" : " "}${text.slice(item.box + 1)}`;
+}
+
+/**
+ * A plan's writes from its words at rest, ticks and dates, in the order they
+ * were made: the last one out, which the next waits on, and the text the last
+ * one saved left, with the task and the drawn text it was written over, which
+ * stands until the saved plan is drawn.
+ */
+interface PlanWrites {
+  last: Promise<boolean>;
+  saved: { readonly taskId: string; readonly over: string; readonly text: string } | undefined;
+}
+
+/** The plan as drawn when a write is sent: its task and its text. */
+interface DrawnPlan {
+  readonly id: string;
+  readonly body: string;
+}
+
+/** The plan's text as it stands: the text a write saved while its task's plan drawn is still the one it was written over, or the plan drawn. */
+function planTextNow(writes: PlanWrites, drawn: DrawnPlan): string {
+  const saved = writes.saved;
+  return saved !== undefined && saved.taskId === drawn.id && saved.over === drawn.body
+    ? saved.text
+    : drawn.body;
+}
+
+/** `write` sent once every write before it settles, answering whether it saved. */
+function queuedWrite(
+  writes: PlanWrites,
+  write: () => Promise<boolean> | boolean,
+): Promise<boolean> {
+  const sent = writes.last.then(write);
+  writes.last = sent;
+  return sent;
+}
+
+/**
+ * The plan saved from `base` to `value` while `drawn` stands, answering
+ * whether it saved; once saved, `kept` stands as the plan's text until the
+ * plan drawn moves, or nothing does where it is not known.
+ */
+function savedOver(
+  writes: PlanWrites,
+  save: PlanEditDoor,
+  drawn: DrawnPlan,
+  edit: { readonly base: string; readonly value: string },
+  kept: string | undefined,
+): Promise<boolean> {
+  return save({ document: edit }).then(
+    (answer) => {
+      if (!("saved" in answer)) return false;
+      writes.saved =
+        kept === undefined ? undefined : { taskId: drawn.id, over: drawn.body, text: kept };
+      return true;
+    },
+    () => false,
+  );
+}
+
+/** What a toast says where a tick or a date written from the plan at rest was not saved. */
+const PLAN_NOT_SAVED = "The plan could not be saved.";
 
 /** A list item with a box, as anywhere in a unit's words it may stand: under a quote's marker, say. */
 const TASK_ITEM_ANYWHERE = /(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ \txX]\]/u;
@@ -656,11 +770,12 @@ function attributed(
  * menu over `items`, shown while the pointer or the keyboard is on its unit.
  */
 function UnitMenu({
-  label,
+  thing,
   items,
   tabbable,
 }: {
-  label: string;
+  /** What the unit is, which names its ⋯ and its menu. */
+  thing: string;
   items: readonly MenuAction[];
   /** Whether it is a Tab stop: only beside the document's one, its unit's block. */
   tabbable: boolean;
@@ -671,22 +786,24 @@ function UnitMenu({
     <>
       {/* The box shows the ⋯ while the pointer or the keyboard is on its unit. */}
       <span className="plan-unit-more">
-        <Tooltip label={label}>
-          <IconButton
-            icon={<EllipsisIcon />}
-            label={label}
-            tabbable={tabbable}
-            {...trigger}
-            onClick={(event) => {
-              // Note that the press stops here, because a click into a section opens its editor.
-              event.stopPropagation();
-              trigger.onClick(event);
-            }}
-          />
-        </Tooltip>
+        <MoreButton
+          thing={thing}
+          tabbable={tabbable}
+          {...trigger}
+          onClick={(event) => {
+            // Note that the press stops here, because a click into a section opens its editor.
+            event.stopPropagation();
+            trigger.onClick(event);
+          }}
+        />
       </span>
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
+        <ActionMenu
+          label={moreLabel(thing)}
+          menu={menu.drawn}
+          groups={[items]}
+          onClose={menu.close}
+        />
       )}
     </>
   );
@@ -714,7 +831,7 @@ function SectionMenu({
     icon: <LinkIcon aria-hidden="true" />,
     onSelect: copyLink,
   };
-  return <UnitMenu label={SECTION_MENU_LABEL} items={[item]} tabbable={tabbable} />;
+  return <UnitMenu thing={SECTION_THING} items={[item]} tabbable={tabbable} />;
 }
 
 /**
@@ -744,7 +861,7 @@ function TitleMenu({
     ...(onRename === undefined ? [] : [renameTaskItem(onRename)]),
     ...(onShowHistory === undefined ? [] : [versionHistoryItem(() => onShowHistory(undefined))]),
   ];
-  return <UnitMenu label={TITLE_MENU_LABEL} items={items} tabbable={tabbable} />;
+  return <UnitMenu thing={TITLE_THING} items={items} tabbable={tabbable} />;
 }
 
 /**
@@ -755,9 +872,9 @@ function TitleMenu({
 function useCommentedEdit(
   edit: MarkdownEdit | undefined,
   section: PlanSection | undefined,
+  threads: readonly PlanCommentThread[] | undefined,
   planText: string | undefined,
 ): MarkdownEdit | undefined {
-  const threads = usePlanCommentsControl()?.threads;
   const { active, pending } = useCommentFocus();
   return useMemo(() => {
     if (threads === undefined || section === undefined) return edit;
@@ -830,6 +947,8 @@ interface DocumentUnitProps {
   entry: boolean;
   /** Ticks or clears a task item pressed, offsets in the unit's words; every checkbox is read-only without it. */
   onTask?: MarkdownTaskToggler | undefined;
+  /** The plan's comment threads, which mark its words; none off a page that reads them. */
+  threads: readonly PlanCommentThread[] | undefined;
   /** The plan's text as saved, which a thread being started is laid over; none while no thread is being started. */
   planText: string | undefined;
 }
@@ -849,6 +968,7 @@ function sameUnit(left: DocumentUnitProps, right: DocumentUnitProps): boolean {
     left.anchor === right.anchor &&
     left.entry === right.entry &&
     left.onTask === right.onTask &&
+    left.threads === right.threads &&
     left.planText === right.planText
   );
 }
@@ -869,16 +989,18 @@ const DocumentUnit = memo(function DocumentUnit({
   anchor,
   entry,
   onTask,
+  threads,
   planText,
 }: DocumentUnitProps): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
   const picture = usePlanPictureDrawer();
-  const edit = useCommentedEdit(view.edit, section, planText);
+  const edit = useCommentedEdit(view.edit, section, threads, planText);
   const drawn = (
     <MarkdownMessage
       words={view.words}
       className={unitClass(view, changed)}
+      landed={view.fresh}
       edit={edit}
       link={link}
       openLink={openLink}
@@ -956,31 +1078,40 @@ export function PlanBodyColumn({
 }
 
 /**
- * The head of a page drawn as a plan, Settings › Plan template: its name in
- * the title's place with the page's actions on its line, then its last edit
- * and its note, which the page and its placeholder both draw.
+ * The head of a page drawn as a plan, Settings › Plan template: a document's
+ * header (`PageHeader`) naming the page once, as its `h1`, with the line
+ * saying what the page is under it and the page's actions on its line, then
+ * its last edit, which the page and its placeholder both draw.
  */
 export function PlanPageHead({
   name,
+  description,
   actions,
   edited,
-  note,
 }: {
   name: string;
+  description: React.ReactNode;
   actions: React.ReactNode;
   edited?: React.ReactNode;
-  note: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <header className="task-page-head">
-      <div className="task-title-line">
-        <TaskTitle name={name} />
-        {actions}
-      </div>
+    <div className="task-page-head">
+      <PageHeader title={name} description={description} actions={actions} />
       {edited}
-      {note}
-    </header>
+    </div>
   );
+}
+
+/**
+ * The open task's one rename door as its title reads it (`desktop-tasks.tsx`):
+ * how many times Rename was asked for, each putting the caret in the title,
+ * the name a refused rename asked for, which the title goes on drawing until
+ * the next, and how the title's ⋯ asks.
+ */
+export interface TitleRename {
+  readonly asks: number;
+  readonly asked: string | undefined;
+  readonly onBegin: () => void;
 }
 
 /**
@@ -990,7 +1121,8 @@ export function PlanPageHead({
  * byline's "Last edited by", on the plan as it stands, and from a section's, on the
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the task's
- * name through `onDraftName` as they are typed; without them the document is
+ * name through `onDraftName` as they are typed, and with `rename` the title's ⋯
+ * offers Rename through the open task's door; without them the document is
  * drawn read-only. A date chip in an editable plan's words at rest opens
  * its picker where it stands, and a date changed there saves the plan
  * through `onEdit` with the date written anew (`SectionDates`), as a task
@@ -998,8 +1130,9 @@ export function PlanPageHead({
  * panel's empty room, as a document editor's page does (`useTextRoom`): at
  * the end under its last line, or anywhere where it has no text yet, and on
  * the nearest line beside it. With `page` the document is drawn as a Settings page,
- * as the plan template is: the page's actions end the title's line, and the
- * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
+ * as the plan template is: the page's line saying what it is stands in the
+ * title's header, its actions end the title's line, and the "Edited by" line
+ * stands under the title. `looks` are the sections changed since the developer last
  * looked, which the task's region keeps (`use-task-looks.ts`); without them
  * none are. `readMark` is whether the plan is marked unread, which the
  * title's ⋯ offers to flip.
@@ -1015,6 +1148,7 @@ export const PlanBody = memo(function PlanBody({
   onEdit,
   onRename,
   onDraftName = NO_DRAFT,
+  rename,
   looks = NO_LOOKS,
   readMark,
   page,
@@ -1033,11 +1167,13 @@ export const PlanBody = memo(function PlanBody({
   onRename?: ((name: string) => Promise<boolean>) | undefined;
   /** Draws the name typed into the title wherever the task is named, or none once it is left. */
   onDraftName?: ((name: string | undefined) => void) | undefined;
+  /** The open task's rename door, which the title's ⋯ asks and whose asks put the caret in the title; without it, the ⋯ offers no Rename. */
+  rename?: TitleRename | undefined;
   looks?: TaskLooks;
   /** Whether the plan is marked unread, and the mark the title's ⋯ sets; without it, the ⋯ offers none. */
   readMark?: ReadMark;
-  /** The Settings page the document is drawn as: its actions and its note. */
-  page?: { actions: React.ReactNode; note: React.ReactNode };
+  /** The Settings page the document is drawn as: its actions and the line saying what it is. */
+  page?: { actions: React.ReactNode; description: React.ReactNode };
   /** What the task's own page does with its sections' links; without it, sections have none and mentions are words. */
   sectionLinks?: SectionLinks;
   /** Who reads it, whose own edits are named "you"; without it, no edit is. */
@@ -1054,7 +1190,6 @@ export const PlanBody = memo(function PlanBody({
   const { views, behind, jumps } = useTaskChase(task, live, reader);
   const editable = onEdit !== undefined;
   const text = editable ? task.document.body : undefined;
-  const editing = usePlanEditing(task.id, text, onEdit ?? NO_EDIT);
   const editReader = useEditReader(reader);
   // Note that what each section is drawn from is held steady across draws,
   // because a section drawn again parses its Markdown again
@@ -1070,6 +1205,7 @@ export const PlanBody = memo(function PlanBody({
     () => ({ reader: editReader, sections: sectionEdits, agents: steadyAgents }),
     [editReader, sectionEdits, steadyAgents],
   );
+  const editing = usePlanEditing(task.id, text, onEdit ?? NO_EDIT, place);
   const showHistory = useSteadyDoor(onShowHistory);
   const marks = useMemo<SectionMarks>(
     () => ({
@@ -1105,8 +1241,6 @@ export const PlanBody = memo(function PlanBody({
     open: false,
     onPlace: editable && editing.editor === undefined ? editing.open : undefined,
   });
-  // How many times Rename was chosen from the title's ⋯, each putting the caret in the title.
-  const [renaming, setRenaming] = useState(0);
   const anchors = sectionAnchors(views.map((view) => view.heading));
   const linkedWorkspace = sectionLinks?.workspace;
   const linked = useMemo<LinkedTask | undefined>(
@@ -1121,8 +1255,8 @@ export const PlanBody = memo(function PlanBody({
   const scrolledAway = useRef(false);
   /** The caret's jumps when the view last followed it. */
   const followedJumps = useRef(jumps);
-  /** Whether a task item's tick is out, while which another press does nothing. */
-  const ticking = useRef(false);
+  /** The ticks and dates written from the words at rest, each sent once the one before it settles. */
+  const writes = useRef<PlanWrites>({ last: Promise.resolve(true), saved: undefined });
 
   useEffect(() => {
     const element = scroller.current;
@@ -1198,8 +1332,10 @@ export const PlanBody = memo(function PlanBody({
     const jumped = jumps !== followedJumps.current;
     followedJumps.current = jumps;
     if (!behind || scrolledAway.current) return;
-    const block = jumped ? "center" : "nearest";
-    scroller.current?.querySelector(".markdown-caret")?.scrollIntoView({ block });
+    const caret = scroller.current?.querySelector<HTMLElement>(".markdown-caret");
+    if (scroller.current === null || !caret) return;
+    if (jumped) centreWithin(scroller.current, caret);
+    else keepInView(scroller.current, caret);
   });
 
   // The sections as the plan's text holds them, where the chase draws them so, which is where comments are marked and measured.
@@ -1224,54 +1360,78 @@ export const PlanBody = memo(function PlanBody({
     const words = views[section]?.words;
     return onEdit !== undefined && words !== undefined && cut[section]?.text === words;
   };
-  // Note that one tick is out at a time, from the plan as drawn, so a door
-  // that keeps one text (the plan template's) is never asked from another;
-  // a press while one is out, or before the saved plan comes back, does nothing.
-  const tick = (section: number, at: number): Promise<boolean> => {
-    const unit = cut[section];
-    const base = task.document.body;
-    const value =
-      ticking.current || unit === undefined || !tickable(section)
-        ? undefined
-        : toggledTask(base, unit.from + at);
-    if (onEdit === undefined || value === undefined) return Promise.resolve(false);
-    ticking.current = true;
-    return onEdit({ document: { base, value } })
-      .then(
-        (answer) => "saved" in answer,
-        () => false,
-      )
-      .finally(() => {
-        ticking.current = false;
-      });
+  // A tick or a date that did not save goes back, and says so here, since nothing beside the box or the chip does.
+  const toast = useToast();
+  const sayNotSaved = useCallback(
+    () => toast({ words: PLAN_NOT_SAVED, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+    [toast],
+  );
+  // The plan as drawn last, which a tick waiting its turn and a date read as the picker closes are written over.
+  const latestPlan = useRef({ cut, views, id: task.id, body: task.document.body, onEdit });
+  latestPlan.current = { cut, views, id: task.id, body: task.document.body, onEdit };
+  // Note that ticks are sent one at a time, in the order pressed, each over
+  // the text the one before it saved, since that plan may not be drawn yet;
+  // so a door that keeps one text (the plan template's) is never asked from
+  // another. A tick is placed by its item's offset and line as drawn at the
+  // press, and writes nothing where the text no longer holds that line.
+  const tick = (section: number, at: number, ticked: boolean): Promise<boolean> => {
+    const unit = tickable(section) ? cut[section] : undefined;
+    const item = unit === undefined ? undefined : taskItemAt(unit.text, at);
+    const save = onEdit;
+    const pressedOn = task.id;
+    const queue = writes.current;
+    const sent = queuedWrite(queue, () => {
+      const now = latestPlan.current;
+      if (save === undefined || unit === undefined || item === undefined) return false;
+      if (now.id !== pressedOn) return false;
+      const base = planTextNow(queue, now);
+      const value = taskSet(base, unit.from + at, item.line, ticked);
+      if (value === undefined) return false;
+      if (value === base) return true;
+      return savedOver(queue, save, now, { base, value }, value);
+    });
+    return sent.then((saved) => {
+      if (!saved) sayNotSaved();
+      return saved;
+    });
   };
   const latestTick = useRef(tick);
   latestTick.current = tick;
   // A date changed from the plan at rest is written over the text as it then stands, read as the picker closes.
-  const latestDates = useRef({ cut, views, id: task.id, body: task.document.body, onEdit });
-  latestDates.current = { cut, views, id: task.id, body: task.document.body, onEdit };
   const planDates = useMemo<PlanDates | undefined>(
     () =>
       editable
         ? {
-            taskId: () => latestDates.current.id,
-            text: () => latestDates.current.body,
+            taskId: () => latestPlan.current.id,
+            text: () => planTextNow(writes.current, latestPlan.current),
             from: (section) => {
-              const { cut: now, views: drawn } = latestDates.current;
+              const { cut: now, views: drawn } = latestPlan.current;
               const unit = now[section];
               return unit !== undefined && unit.text === drawn[section]?.words
                 ? unit.from
                 : undefined;
             },
             write: (value, base) => {
-              const save = latestDates.current.onEdit;
+              const { onEdit: save, id: pickedOn } = latestPlan.current;
               if (save === undefined) return;
-              // Note that a save not taken leaves the date as it was, as an unticked box flips back.
-              save({ document: { base, value } }).catch(() => undefined);
+              const queue = writes.current;
+              // Note that a date waits its turn behind the ticks out, and that
+              // one saved since the picker read the plan is not under its text,
+              // so nothing after it is written over that text. A save not
+              // taken leaves the date as it was, as an unticked box flips back, and says so.
+              const sent = queuedWrite(queue, () => {
+                const now = latestPlan.current;
+                if (now.id !== pickedOn) return false;
+                const kept = planTextNow(queue, now) === base ? value : undefined;
+                return savedOver(queue, save, now, { base, value }, kept);
+              });
+              sent.then((saved) => {
+                if (!saved) sayNotSaved();
+              });
             },
           }
         : undefined,
-    [editable],
+    [editable, sayNotSaved],
   );
   // Each section's toggler stands across draws and ticks from the plan as drawn last, so a section is not drawn again for a new one.
   const togglers = useRef(new Map<number, MarkdownTaskToggler>());
@@ -1282,7 +1442,7 @@ export const PlanBody = memo(function PlanBody({
     }
     const held = togglers.current.get(section);
     if (held !== undefined) return held;
-    const toggler: MarkdownTaskToggler = (at) => latestTick.current(section, at);
+    const toggler: MarkdownTaskToggler = (at, ticked) => latestTick.current(section, at, ticked);
     togglers.current.set(section, toggler);
     return toggler;
   };
@@ -1319,6 +1479,7 @@ export const PlanBody = memo(function PlanBody({
             anchor={anchors[section] ?? ""}
             entry={entry === view.id}
             onTask={taskToggler(section)}
+            threads={comments?.threads}
             planText={pendingText}
           />
         </SectionDates>
@@ -1332,6 +1493,7 @@ export const PlanBody = memo(function PlanBody({
         link={link}
         linked={linked}
         anchor={anchors[section] ?? ""}
+        threads={comments?.threads}
         planText={pendingText}
         // Note that a document that cannot be edited has no block Tab stop, so each ⋯ is one.
         entry
@@ -1350,7 +1512,7 @@ export const PlanBody = memo(function PlanBody({
         // Note that a document that cannot be edited has no block Tab stop, so the ⋯ is one.
         tabbable={editable ? entry === EDITOR_PLACE.TITLE : true}
         readMark={readMark}
-        onRename={titled ? () => setRenaming((count) => count + 1) : undefined}
+        onRename={titled ? rename?.onBegin : undefined}
         onShowHistory={onShowHistory}
       />
     );
@@ -1368,28 +1530,26 @@ export const PlanBody = memo(function PlanBody({
               <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
             )}
             {titled ? (
-              attributed(
-                // Keyed by the plan, so words typed for one are saved to it as another opens.
-                <EditableTitle
-                  key={task.id}
-                  name={task.name}
-                  entry={entry === EDITOR_PLACE.TITLE}
-                  editing={editing}
-                  renaming={renaming}
-                  onRename={onRename}
-                  onDraft={onDraftName}
-                />,
-                null,
-                titleMenu,
-              )
+              // Keyed by the plan, so words typed for one are saved to it as another opens.
+              <EditableTitle
+                key={task.id}
+                // A refused name stays in the title, beside the refusal, until the next rename.
+                name={rename?.asked ?? task.name}
+                entry={entry === EDITOR_PLACE.TITLE}
+                editing={editing}
+                renaming={rename?.asks ?? 0}
+                actions={titleMenu}
+                onRename={onRename}
+                onDraft={onDraftName}
+              />
             ) : page === undefined ? (
-              attributed(<TaskTitle name={task.name} />, null, titleMenu)
+              <TaskTitle name={task.name} actions={titleMenu} />
             ) : (
               <PlanPageHead
                 name={task.name}
+                description={page.description}
                 actions={page.actions}
                 edited={editedNote}
-                note={page.note}
               />
             )}
             {page === undefined ? (
@@ -1409,7 +1569,11 @@ export const PlanBody = memo(function PlanBody({
               </>
             ) : null}
             {editing.editor === undefined ? (
-              sections
+              editable && views.length === 0 ? (
+                <EmptyPlanLine onOpen={() => editing.open(PLACEMENT_END)} />
+              ) : (
+                sections
+              )
             ) : (
               <PlanDocumentEditor
                 task={task}

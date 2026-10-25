@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { COUNT_TONE, linesCount } from "../choice/count-part.js";
+import { STATUS_TONE } from "../../status-tone.js";
+import { linesCount } from "../choice/count-part.js";
 import {
   CHOICE_BAR_FOCUS,
   CHOICE_BAR_FOLD,
@@ -57,7 +58,7 @@ const OPEN_ITEMS: readonly ChoiceItem<View>[] = [
   {
     value: VIEW.CHECKS,
     label: "Checks",
-    count: [{ text: "1", tone: COUNT_TONE.DANGER, glyph: "×", glyphLabel: "failing" }],
+    count: [{ text: "1", tone: STATUS_TONE.DANGER, glyph: "×", glyphLabel: "failing" }],
   },
   { value: VIEW.FILES, label: "Files" },
 ];
@@ -289,6 +290,7 @@ test("↑ and ↓ step a radio group and leave a tablist alone, and a key held w
   pressKey("ArrowDown");
   pressKey("ArrowUp");
   assert.deepEqual(reading(tabs).chosen, ["Checks"]);
+  assert.equal(focused(), "Checks", "nor does the keyboard move along the tablist");
   const radios = render(createElement(Held, { items: OPEN_ITEMS, start: VIEW.CHECKS }));
   act(() => option(radios, "Checks").focus());
   pressKey("ArrowDown");

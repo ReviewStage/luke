@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { IntegrationTool } from "@luke/features/integration-health";
+import { SIGN_IN } from "@luke/features/integration-sign-in";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -9,14 +10,17 @@ import {
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationProvider,
   type IntegrationStatus,
+  type IntegrationToolsProblemReason,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import type { IntegrationStatuses } from "../integration-statuses.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { restOn } from "../testing/hint-rest.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { AgentServersButton } from "./agent-servers.js";
 
 /**
@@ -93,6 +97,9 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  releaseMotion();
+  vi.restoreAllMocks();
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
 const statuses: IntegrationStatuses = {
@@ -115,20 +122,22 @@ async function opened(standing: IntegrationStatuses = statuses) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const render = (statuses: IntegrationStatuses) =>
+    act(() =>
+      root.render(
+        createElement(AgentServersButton, {
+          servers: {
+            disabled: [],
+            onSwitch: (next) => switched.push(next),
+            onOpenSettings: () => undefined,
+          },
+          statuses,
+        }),
+      ),
+    );
+  render(standing);
   act(() =>
-    root.render(
-      createElement(AgentServersButton, {
-        servers: {
-          disabled: [],
-          onSwitch: (next) => switched.push(next),
-          onOpenSettings: () => undefined,
-        },
-        statuses: standing,
-      }),
-    ),
-  );
-  act(() =>
-    container.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]')?.click(),
+    container.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]')?.click(),
   );
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
@@ -147,7 +156,7 @@ async function opened(standing: IntegrationStatuses = statuses) {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, text);
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-  return { container, switched, field, key, type };
+  return { container, switched, field, key, type, render };
 }
 
 /** Each section's heading and its rows' names, as drawn. */
@@ -173,6 +182,18 @@ function serverPress(container: HTMLElement, name: string): HTMLElement | undefi
     [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")]
       .find((row) => row.textContent?.includes(name))
       ?.querySelector<HTMLElement>("button") ?? undefined
+  );
+}
+
+/** The button saying `words` on the home's row whose name holds `name`. */
+function serverButton(container: HTMLElement, name: string, words: string): HTMLButtonElement {
+  const row = [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")].find((each) =>
+    each.textContent?.includes(name),
+  );
+  return (
+    [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+      (button) => button.textContent === words,
+    ) ?? assert.fail(`no ${words} on ${name}`)
   );
 }
 
@@ -269,6 +290,23 @@ test("the arrows move the highlight, and Space on an empty search flips the high
   key(" ");
 
   assert.deepEqual(switched, [[VERCEL]]);
+});
+
+test("a server page's back is hinted \"Back to MCP servers\", names no key since the popover's own keys step back, and returns to the servers", async () => {
+  const { container } = await opened();
+  openVercel(container);
+  const back =
+    container.querySelector<HTMLButtonElement>(
+      ".agent-servers-page-head > .luke-folding-button button",
+    ) ?? assert.fail("no back on the page");
+
+  restOn(back);
+  const hint = document.querySelector('[role="tooltip"]:not([inert])');
+
+  assert.equal(hint?.textContent, "Back to Integrations");
+  assert.equal(back.getAttribute("aria-keyshortcuts"), null);
+  act(() => back.click());
+  assert.equal(container.querySelector(".agent-servers-page-title"), null);
 });
 
 test("a pointer's press on a server page's switch leaves the focus in the filter, so Backspace still goes back", async () => {
@@ -418,9 +456,7 @@ test("a press on a tool opens its page with the popover standing open, and its b
   );
 
   act(() =>
-    container
-      .querySelector<HTMLButtonElement>('button[aria-label="Back to Vercel tools"]')
-      ?.click(),
+    container.querySelector<HTMLButtonElement>(".integration-tool-detail-head button")?.click(),
   );
   assert.equal(container.querySelector(".integration-tool-detail"), null);
   assert.equal(container.querySelector(".agent-servers-page-title")?.textContent, "Vercel");
@@ -464,8 +500,11 @@ test("two accounts at a provider stand as two rows, each named by its label, and
   assert.deepEqual(switched, [["notion-2"]]);
 });
 
-/** The act port answering where each provider stands and each server's tools, Linear's refused, as the service would. */
-function answerLinearRefused(): void {
+/** The act port answering where each provider stands and each server's tools, Linear's with `problem`, as the service would. */
+function answerLinear(problem: {
+  readonly reason: IntegrationToolsProblemReason;
+  readonly message?: string;
+}): void {
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_STATUS]: () =>
       Promise.resolve({
@@ -480,10 +519,15 @@ function answerLinearRefused(): void {
     [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) =>
       Promise.resolve(
         (payload.connection ?? payload.provider) === LINEAR
-          ? { problem: { reason: INTEGRATION_TOOLS_PROBLEM.REFUSED } }
+          ? { problem }
           : { tools: TOOLS.get(payload.connection ?? payload.provider) ?? [] },
       ),
   });
+}
+
+/** The act port answering as `answerLinear` does, Linear's sign-in refused. */
+function answerLinearRefused(): void {
+  answerLinear({ reason: INTEGRATION_TOOLS_PROBLEM.REFUSED });
 }
 
 test("a server's problem fades where its row cuts it short, as every cut line of the app does, rather than ending in an ellipsis", async () => {
@@ -493,6 +537,25 @@ test("a server's problem fades where its row cuts it short, as every cut line of
   const problem = container.querySelector(".agent-servers-problem");
   assert.equal(problem?.textContent, "Linear refused the sign-in.");
   assert.equal(problem?.getAttribute("data-end"), "fade");
+});
+
+test("a server's own error is no part of its row's sentence, and stands quoted after it in the problem's hint", async () => {
+  answerLinear({
+    reason: INTEGRATION_TOOLS_PROBLEM.REJECTED,
+    message: "workspace is suspended",
+  });
+  const { container } = await opened();
+  const problem = container.querySelector(".agent-servers-problem") ?? assert.fail("no problem");
+  const words = problem.textContent;
+
+  restOn(problem);
+  const hint = document.querySelector('[role="tooltip"]:not([inert])');
+
+  assert.equal(words, "Linear could not be reached.");
+  assert.equal(
+    hint?.textContent,
+    "Linear could not be reached. Linear said: “workspace is suspended”",
+  );
 });
 
 test("a server's row hangs the server's card beside it, and a tool a search found hangs the card of its tool", async () => {
@@ -539,6 +602,88 @@ test("a server that is not connected hangs its card too, though its press is no 
   );
 });
 
+/** The words on each button standing on `name`'s row, with whether it is busy or off. */
+function buttonsOf(container: HTMLElement, name: string) {
+  const row = [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")].find((each) =>
+    each.textContent?.includes(name),
+  );
+  // Note that the row's own press holds its name; what stands beside it is the row's buttons.
+  const beside = [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].filter(
+    (button) => button.querySelector(".agent-servers-name") === null,
+  );
+  return beside.map((button) => ({
+    words: button.textContent,
+    busy: button.getAttribute("aria-busy") === "true",
+    off: button.disabled,
+  }));
+}
+
+test("a Connect shows it is working until the browser has been sent to sign in", async () => {
+  const connect = Promise.withResolvers<{ opened: true }>();
+  fakeActPort({
+    [ACT_KIND.INTEGRATIONS_TOOLS]: () => Promise.resolve({ tools: [] }),
+    [ACT_KIND.INTEGRATIONS_CONNECT]: () => connect.promise,
+  });
+  const { container } = await opened();
+  assert.deepEqual(buttonsOf(container, "Mercury"), [
+    { words: "Connect", busy: false, off: false },
+  ]);
+
+  await act(async () => serverButton(container, "Mercury", "Connect").click());
+
+  assert.deepEqual(
+    buttonsOf(container, "Mercury").map(({ busy, off }) => [busy, off]),
+    [[true, false]],
+  );
+  await act(async () => connect.resolve({ opened: true }));
+  assert.deepEqual(
+    buttonsOf(container, "Mercury").map(({ busy }) => busy),
+    [false],
+  );
+});
+
+test("a Cancel shows it is working while Reopen waits, and a sign-in that failed offers Retry", async () => {
+  const cancel = Promise.withResolvers<boolean>();
+  const waiting = { kind: SIGN_IN.WAITING, since: 1, deadline: 1000, seenPending: true } as const;
+  const failed = { kind: SIGN_IN.FAILED, since: 2 } as const;
+  const { container } = await opened({
+    ...statuses,
+    signInOf: (server) => (server === INTEGRATION_PROVIDER.MERCURY ? waiting : undefined),
+    cancelSignIn: () => cancel.promise,
+  });
+  assert.deepEqual(
+    buttonsOf(container, "Mercury").map(({ words }) => words),
+    ["Reopen", "Cancel"],
+  );
+
+  await act(async () => serverButton(container, "Mercury", "Cancel").click());
+
+  assert.deepEqual(
+    buttonsOf(container, "Mercury").map(({ words, busy, off }) => [words, busy, off]),
+    [
+      ["Reopen", false, true],
+      ["Cancel", true, false],
+    ],
+  );
+  await act(async () => cancel.resolve(true));
+  assert.deepEqual(
+    buttonsOf(container, "Mercury").map(({ busy, off }) => [busy, off]),
+    [
+      [false, false],
+      [false, false],
+    ],
+  );
+
+  const { container: after } = await opened({
+    ...statuses,
+    signInOf: (server) => (server === INTEGRATION_PROVIDER.MERCURY ? failed : undefined),
+  });
+  assert.deepEqual(
+    buttonsOf(after, "Mercury").map(({ words }) => words),
+    ["Retry"],
+  );
+});
+
 test("a connected server that lists no tools has no page to open, so a press on its row flips its switch", async () => {
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) =>
@@ -554,4 +699,128 @@ test("a connected server that lists no tools has no page to open, so a press on 
   act(() => serverPress(container, "Linear")?.click());
 
   assert.deepEqual(switched, [[LINEAR]]);
+});
+
+/** The popover's panel in `container`, while it is drawn. */
+function panelIn(container: HTMLElement): HTMLElement | null {
+  return container.querySelector<HTMLElement>('[role="dialog"]');
+}
+
+/** One exit running on every panel that is ending, as the engine would run its fade, until `finish` ends them: jsdom plays no motion of its own. */
+function holdPanelExits() {
+  const exits: EventTarget[] = [];
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    configurable: true,
+    value(this: Element) {
+      if (!this.hasAttribute("data-ending-style")) return [];
+      const exit = new EventTarget();
+      exits.push(exit);
+      return [exit];
+    },
+  });
+  return () => {
+    for (const exit of exits.splice(0)) exit.dispatchEvent(new Event("finish"));
+  };
+}
+
+test("Escape from the home fades the popover out, inert and ending, then takes it away, and it opens afresh", async () => {
+  const finishExits = holdPanelExits();
+  const { container, key, type, field } = await opened();
+  const button = () =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]') ??
+    assert.fail("no button");
+  type("deploy");
+
+  key("Escape");
+  const fading = panelIn(container);
+  const ending = fading?.hasAttribute("data-ending-style");
+  const inert = fading?.hasAttribute("inert");
+  const expanded = button().getAttribute("aria-expanded");
+  act(() => finishExits());
+  const gone = panelIn(container) === null;
+  act(() => button().click());
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+
+  assert.ok(fading, "the popover stands while it fades");
+  assert.equal(ending, true, "it is in its ending state");
+  assert.equal(inert, true, "it takes nothing while it fades");
+  assert.equal(expanded, "false", "its button already says it is closed");
+  assert.equal(gone, true, "it goes once its fade has run");
+  assert.equal(field().value, "", "opened again it holds no search from before");
+});
+
+test("Escape from the home takes the popover away at once where motion is held", async () => {
+  holdPanelExits();
+  holdMotion();
+  const { container, key } = await opened();
+
+  key("Escape");
+
+  assert.equal(panelIn(container), null);
+});
+
+/** How tall a row is drawn, in the layout given. */
+const ROW = 40;
+
+/** Each row standing under the rows before it in the list, as a layout would; jsdom lays nothing out. */
+function layRowsInOrder() {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const rows = [...(this.closest(".agent-servers-list")?.querySelectorAll("li") ?? [])];
+    const top = this.matches("li") ? rows.indexOf(this) * ROW : 0;
+    return { top, bottom: top + ROW, left: 0, right: 0, width: 0, height: ROW } as DOMRect;
+  });
+}
+
+/** The statuses with `provider` standing as `standing`. */
+function withStanding(provider: string, standing: IntegrationStatus): IntegrationStatuses {
+  return {
+    ...statuses,
+    statusOf: (server) => (server === provider ? standing : statuses.statusOf(server)),
+  };
+}
+
+test("a server that connects glides from Not connected into Connected, followed by its connection", async () => {
+  const motions = playListMotions();
+  try {
+    const { container, render } = await opened();
+    layRowsInOrder();
+    const mercury = () =>
+      [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")].find((row) =>
+        row.textContent?.includes("Mercury"),
+      ) ?? assert.fail("no Mercury row");
+    assert.equal(mercury().dataset.motionKey, INTEGRATION_PROVIDER.MERCURY);
+
+    render(withStanding(INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.CONNECTED));
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+
+    assert.deepEqual(sections(container), [["Connected", ["Linear", "Mercury", "Vercel"]]]);
+    const glide = motions.played.find((each) => each.element === mercury());
+    assert.deepEqual(glide?.keyframes[0], { transform: `translate(0px, ${ROW}px)` });
+  } finally {
+    motions.remove();
+  }
+});
+
+test("with motion held still, a server that connects takes its place and nothing plays", async () => {
+  const motions = playListMotions();
+  try {
+    for (const name of ["--luke-duration-exit", "--luke-duration-shape"]) {
+      document.documentElement.style.setProperty(name, "0ms");
+    }
+    const { container, render } = await opened();
+    layRowsInOrder();
+
+    render(withStanding(INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.CONNECTED));
+
+    assert.deepEqual(sections(container), [["Connected", ["Linear", "Mercury", "Vercel"]]]);
+    assert.deepEqual(motions.played, []);
+  } finally {
+    motions.remove();
+  }
 });

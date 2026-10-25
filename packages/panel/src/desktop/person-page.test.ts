@@ -24,10 +24,11 @@ import { TASK_STATUS, type TaskAgentLine, type TaskSummary } from "@luke/feature
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
@@ -36,6 +37,7 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
@@ -272,6 +274,24 @@ beforeEach(() => {
       }
       return membersRefused ? Promise.reject(refusedOnPort("Not here.")) : Promise.resolve(MEMBERS);
     },
+    // An agent read by its own id stands at rest, as its page reads it.
+    [ACT_KIND.CODING_AGENTS_PAGE]: ({ agentId }: { agentId: string }) =>
+      Promise.resolve({
+        agent: {
+          id: agentId,
+          planId: CACHE.id,
+          model: CACHE_KEYS.model,
+          effort: CACHE_KEYS.effort,
+          title: CACHE_KEYS.title,
+          createdAt: 1,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+          automationId: null,
+          workspaceId: ACME.id,
+          repository: "acme/relay",
+          startedBy: CHARLES,
+        },
+      }),
     [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () =>
       formerRefused ? Promise.reject(refusedOnPort("Not here.")) : Promise.resolve(FORMER),
   });
@@ -302,47 +322,55 @@ function mountWith(
   userId = DEAN.userId,
   name?: string,
   memberCount = MEMBERS.length,
+  away?: { label: string; onPress: () => void },
 ) {
   const opened: Opened = { tasks: [], agents: [], inbox: [], settings: [] };
-  const tasks = tasksControl({
-    me: DEAN.userId,
-    workspace: { ...ACME, memberCount },
-    tasks: TASKS,
-    listed: { tasks: TASKS, ...HOLDING },
-    ...HOLDING,
-    onSelect: (taskId) => opened.tasks.push(taskId),
-    onShowAgent: (taskId, agentId) => opened.agents.push([taskId, agentId]),
-    inboxView: {
-      open: false,
-      chosen: undefined,
-      onOpen: () => opened.inbox.push("inbox"),
-      onOpenList: () => undefined,
-      onClose: () => undefined,
-      onChoose: (chosen) => opened.inbox.push(chosen),
-      onOpenItem: () => undefined,
-      listed: false,
-      onListed: () => undefined,
-      pages: undefined,
-      onTaskAgents: () => undefined,
-    },
-    ...overrides,
-  });
+  const control = (more: Partial<TasksControl>) =>
+    tasksControl({
+      me: DEAN.userId,
+      workspace: { ...ACME, memberCount },
+      tasks: TASKS,
+      listed: { tasks: TASKS, ...HOLDING },
+      ...HOLDING,
+      onSelect: (taskId) => opened.tasks.push(taskId),
+      onShowAgent: (taskId, agentId) => opened.agents.push([taskId, agentId]),
+      inboxView: {
+        open: false,
+        chosen: undefined,
+        onOpen: () => opened.inbox.push("inbox"),
+        onOpenList: () => undefined,
+        onClose: () => undefined,
+        onChoose: (chosen) => opened.inbox.push(chosen),
+        onOpenItem: () => undefined,
+        listed: false,
+        onListed: () => undefined,
+        pages: undefined,
+        onTaskAgents: () => undefined,
+      },
+      ...overrides,
+      ...more,
+    });
+  const registry = AtomRegistry.make();
+  const draw = (tasks: TasksControl) =>
+    act(() =>
+      root?.render(
+        onRegistry(
+          registry,
+          createElement(
+            OpenSettingsProvider,
+            { value: (link: SettingsLink) => opened.settings.push(link) },
+            createElement(PersonPage, { tasks, userId, name, away }),
+          ),
+        ),
+      ),
+    );
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(
-          OpenSettingsProvider,
-          { value: (link: SettingsLink) => opened.settings.push(link) },
-          createElement(PersonPage, { tasks, userId, name }),
-        ),
-      ),
-    ),
-  );
-  return { page: container, opened };
+  draw(control({}));
+  /** Draws the page again over the workspace with `more` on top of what it was mounted with. */
+  const redraw = (more: Partial<TasksControl>) => draw(control(more));
+  return { page: container, opened, redraw };
 }
 
 async function settle(): Promise<void> {
@@ -361,14 +389,47 @@ function sections(page: HTMLElement): Record<string, string[]> {
   );
 }
 
+/** What an element says to a reader: its words without its marks, which are hidden from one. */
+function said(element: Element): string {
+  const copy = element.cloneNode(true) as Element;
+  for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
+  return copy.textContent ?? "";
+}
+
+/** The page's header: its title, and the line under it. */
 function head(page: HTMLElement): string[] {
-  return [...page.querySelectorAll(".person-head p")].map((line) => line.textContent ?? "");
+  return [...page.querySelectorAll(".luke-page-header-heading > *")].map(said);
+}
+
+/** The page's headings of the first level. */
+function titles(page: HTMLElement): string[] {
+  return [...page.querySelectorAll("h1")].map(said);
 }
 
 /** What each placeholder on the page says it is waiting on, in order. */
 function waits(page: HTMLElement): string[] {
   return [...page.querySelectorAll('[role="status"][aria-busy="true"]')].map(
     (region) => region.textContent ?? "",
+  );
+}
+
+/** Opens the menu of the row named `name` by its ⋯, named for the row's `thing`, and answers its items' words. */
+function openRowMenu(page: HTMLElement, name: string, thing: string): string[] {
+  const more = button(page, name)
+    .closest("li")
+    ?.querySelector<HTMLButtonElement>(`button[aria-label="${thing} actions"]`);
+  act(() => (more ?? assert.fail(`${name} offers its ⋯`)).click());
+  return [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent ?? "");
+}
+
+/** A page over the fixture workspace with its slug, standing in it, as a link opens it. */
+function mountLinked(userId: string) {
+  return mountWith(
+    {
+      workspaces: [{ ...ACME, slug: "acme" }],
+      personView: { ...tasksControl().personView, userId, workspaceId: ACME.id },
+    },
+    userId,
   );
 }
 
@@ -394,14 +455,22 @@ test("a teammate's page names them as the members read does and lists their work
   });
 });
 
+test("the page names its person once: exactly one h1, their name, and no second heading saying it", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  assert.deepEqual(titles(page), ["Charles Pan"]);
+  assert.equal(said(page).split("Charles Pan").length - 1, 1);
+});
+
 test("the reader's own page says You and what waits on them", async () => {
   const { page } = mount(DEAN.userId);
   await settle();
 
-  assert.deepEqual(head(page), ["Dean StratakosYou", "Owner · dean@example.com"]);
+  assert.deepEqual(head(page), ["Dean Stratakos", "You Owner · dean@example.com"]);
   assert.deepEqual(sections(page), {
     "Working now": ["Limiter flag"],
-    "Waiting on you": ["Ship the limiter at 10%?"],
+    "Needs you": ["Ship the limiter at 10%?"],
     "Created by you": ["Edge cache keys"],
     Automations: ["Weekly dependency bumps"],
   });
@@ -437,14 +506,20 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
-test("a waiting item is the Inbox's own row: its task named in a chip before its preview, the marks of its Inbox row and its time at the end, and its card hung beside it", async () => {
+test("a waiting item is the Inbox's own row: its task named on a line of its own over its preview, its time at the end, and its card hung beside it, which names the agent its row leaves out", async () => {
   const { page } = mount(CHARLES.userId);
   await settle();
 
   const row = button(page, "Retry 429s too?");
   assert.equal(row.querySelector(".home-row-context"), null, "no task name at the row's end");
-  assert.equal(row.querySelector(".luke-list-row-lead")?.textContent, RETRIES.name);
-  assert.ok(row.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
+  const lead = row.querySelector('.luke-list-row-lead[data-at="line"]');
+  assert.equal(lead?.textContent, RETRIES.name);
+  assert.equal(
+    lead?.closest(".luke-list-row-description"),
+    null,
+    "the task stands on its own line",
+  );
+  assert.equal(row.querySelector('.actor-mark[data-kind="agent"]'), null, "no agent's tile leads");
   assert.ok(row.querySelector(".home-row-meta time"), "its time stands at its end");
 
   restOn(row);
@@ -483,7 +558,7 @@ test("an Inbox that could not be read says so and offers Retry, and never passes
   const { page } = mount("user-sam");
   await settle();
 
-  assert.match(page.textContent ?? "", /Some Inbox items could not be read\./u);
+  assert.match(page.textContent ?? "", /Some inbox items could not be read\./u);
   assert.ok(button(page, "Retry"));
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });
@@ -514,7 +589,7 @@ test("the reader's own page lists no question of an agent with no task, whose st
   });
   await settle();
 
-  assert.deepEqual(sections(page)["Waiting on you"], ["Ship the limiter at 10%?"]);
+  assert.deepEqual(sections(page)["Needs you"], ["Ship the limiter at 10%?"]);
 });
 
 /** The sidebar's views as this Mac keeps them, by workspace. */
@@ -522,7 +597,7 @@ function keptViews(): Record<string, { createdBy?: string; assignedTo?: string }
   return JSON.parse(window.localStorage.getItem("luke.sidebarTaskViews") ?? "{}");
 }
 
-test("Their tasks in sidebar lists every task assigned to them, letting go of a filter by creator", async () => {
+test("Show their tasks in the sidebar lists every task assigned to them, letting go of a filter by creator", async () => {
   window.localStorage.setItem(
     "luke.sidebarTaskViews",
     JSON.stringify({
@@ -532,12 +607,12 @@ test("Their tasks in sidebar lists every task assigned to them, letting go of a 
   const { page } = mount(CHARLES.userId);
   await settle();
 
-  button(page, "Their tasks in sidebar").click();
+  button(page, "Show their tasks in the sidebar").click();
   const kept = keptViews()[ACME.id];
   assert.deepEqual([kept?.assignedTo, kept?.createdBy], [CHARLES.userId, undefined]);
 });
 
-test("a person's tasks assigned to them stand above those they created, a task both listed once as assigned, and Show all lists every one assigned in the sidebar", async () => {
+test("a person's tasks assigned to them stand above those they created, a task both listed once as assigned, and its foot counts the two it leaves out and lists every one assigned in the sidebar", async () => {
   // Six tasks Dean created for Charles, one more than the page draws, and one Charles made for himself.
   const handed = [5, 6, 7, 8, 9, 10].map((n) =>
     task(n, `Handed over ${n}`, DEAN, n * MINUTE, [], CHARLES),
@@ -560,7 +635,7 @@ test("a person's tasks assigned to them stand above those they created, a task b
   // Each section wears no face, the page's head saying whose they are.
   assert.equal(page.querySelector('section[aria-label="Assigned"] .actor-mark'), null);
 
-  button(page, "Show all 7 in sidebar").click();
+  button(page, "Show 2 more").click();
   assert.equal(keptViews()[ACME.id]?.assignedTo, CHARLES.userId);
 });
 
@@ -592,26 +667,31 @@ test("a workspace of one offers no sidebar filter, since its sidebar filters by 
   const { page } = mount(DEAN.userId, undefined, 1);
   await settle();
 
-  assert.doesNotMatch(page.textContent ?? "", /tasks in sidebar/u);
+  assert.doesNotMatch(page.textContent ?? "", /tasks in the sidebar/u);
 });
 
-test("the reader's own page offers nothing to edit: its toolbar lists their tasks in the sidebar and ⋯ alone", async () => {
+test("the reader's own page offers nothing to edit: its header lists their tasks in the sidebar and ⋯ alone", async () => {
   const { page } = mount(DEAN.userId);
   await settle();
 
   assert.deepEqual(
-    [...page.querySelectorAll(".desktop-toolbar-actions button")].map(
+    [...page.querySelectorAll(".luke-page-header-actions button")].map(
       (each) => each.getAttribute("aria-label") ?? each.textContent,
     ),
-    ["My tasks in sidebar", "More"],
+    ["Show my tasks in the sidebar", "Person actions"],
+  );
+  // Note that a filter act is quiet: only a page's one primary act is filled.
+  assert.equal(
+    page.querySelector(".luke-page-header-actions button")?.getAttribute("data-variant"),
+    "quiet",
   );
 });
 
-test("More offers their page's link and a member's email to copy and, to an owner, the workspace's members in Settings", async () => {
+test("Person actions offers their page's link and a member's email to copy and, to an owner, the workspace's members in Settings", async () => {
   const { page, opened } = mount(CHARLES.userId);
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   const items = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
   assert.deepEqual(
     items.map((item) => item.textContent),
@@ -623,11 +703,11 @@ test("More offers their page's link and a member's email to copy and, to an owne
   ]);
 });
 
-test("someone who left offers only their page's link in More: no email to copy, and no row in Settings to manage", async () => {
+test("someone who left offers only their page's link in Person actions: no email to copy, and no row in Settings to manage", async () => {
   const { page } = mount(PRIYA.userId);
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
     ["Copy link"],
@@ -648,7 +728,7 @@ test("Copy link copies their page's link under the slug of the workspace it stan
   );
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   act(() => button(document.body, "Copy link").click());
   await settle();
 
@@ -659,7 +739,7 @@ test("a page whose workspace is not known offers no Copy link, rather than a lin
   const { page } = mountWith({ workspace: undefined, workspaces: [] }, CHARLES.userId);
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   assert.doesNotMatch(document.body.textContent ?? "", /Copy link/u);
 });
 
@@ -668,14 +748,14 @@ test("a page for someone neither the members nor those who left name, as a link 
   await settle();
 
   assert.match(page.textContent ?? "", /Not found/u);
-  assert.equal(page.querySelector('button[aria-label="More"]'), null);
+  assert.equal(page.querySelector('button[aria-label="Person actions"]'), null);
 });
 
 test("someone who left heads their page with their own picture", async () => {
   const { page } = mount(PRIYA.userId);
   await settle();
 
-  const face = page.querySelector<HTMLElement>(".person-head .actor-mark");
+  const face = page.querySelector<HTMLElement>(".luke-page-header .actor-mark");
   assert.equal(face?.querySelector("img")?.getAttribute("src"), PRIYA_PICTURE);
 });
 
@@ -780,7 +860,7 @@ test("a members read that was refused says so and offers Retry in the head's pla
 
   assert.match(page.textContent ?? "", /Their profile could not be read\./u);
   assert.deepEqual(waits(page), []);
-  assert.equal(page.querySelector(".desktop-toolbar-title")?.textContent, "Profile");
+  assert.deepEqual(titles(page), ["Profile"]);
   assert.doesNotMatch(page.textContent ?? "", /Someone|Not in this workspace|Nothing of theirs/u);
 
   membersRefused = false;
@@ -789,7 +869,7 @@ test("a members read that was refused says so and offers Retry in the head's pla
 
   assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
   assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
-  assert.equal(page.querySelector(".desktop-toolbar-title")?.textContent, "Sam Ortiz");
+  assert.deepEqual(titles(page), ["Sam Ortiz"]);
 });
 
 test("a read of who left that was refused says so and offers Retry, and Retry names them as a former member", async () => {
@@ -832,4 +912,161 @@ test("a link to someone who left whom only the former members read names opens t
 
   assert.deepEqual(head(page), [OLA.name, "Former member"]);
   assert.doesNotMatch(page.textContent ?? "", /Not found/u);
+});
+
+test("on a phone the page is headed by its way back's glyph, their name centred, and one ⋯ holding the sidebar's filter beside the page's own actions", async () => {
+  const left: string[] = [];
+  const { page } = mountWith({}, CHARLES.userId, undefined, MEMBERS.length, {
+    label: "Chat",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".person-page-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map(
+      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
+    ),
+    ["Chat", "Person actions"],
+    "one control a corner",
+  );
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Person actions"]')?.click());
+  assert.ok(
+    [...document.querySelectorAll('[role="menuitem"]')].some(
+      (each) => each.textContent === "Show their tasks in the sidebar",
+    ),
+    "the filter is in the ⋯",
+  );
+  act(() => head.querySelector<HTMLButtonElement>("button")?.click());
+  assert.deepEqual(left, ["away"]);
+});
+
+test("on a phone a page for someone nobody names still leads with its way back", async () => {
+  const left: string[] = [];
+  const { page } = mountWith({}, "user-stranger", undefined, MEMBERS.length, {
+    label: "Chat",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+  assert.match(page.textContent ?? "", /Not found/u);
+  const back = [...page.querySelectorAll<HTMLButtonElement>(".person-page-head button")].find(
+    (each) => each.textContent?.trim() === "Chat",
+  );
+  assert.ok(back, "the way back stands");
+  act(() => back.click());
+  assert.deepEqual(left, ["away"]);
+});
+
+test("a task's row offers the sidebar's acts from its ⋯, and Rename makes its name the field", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  const items = openRowMenu(page, "Retry budget dashboard", "Task");
+  for (const act of ["Copy link", "Rename", "Permanently delete"]) {
+    assert.ok(
+      items.some((item) => item.startsWith(act)),
+      `${act} is offered`,
+    );
+  }
+  act(() => button(document.body, "Rename").click());
+  await settle();
+
+  const field = page.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
+  assert.equal(field?.value, DASHBOARD.name);
+});
+
+test("an agent's row offers Copy link and Archive, and Copy link copies its link under the page's workspace", async () => {
+  const { page } = mountLinked(CHARLES.userId);
+  await settle();
+
+  const items = openRowMenu(page, "Tenant cache keys", "Agent");
+  assert.ok(
+    items.includes("Copy link") && items.includes("Archive"),
+    "Copy link and Archive stand",
+  );
+  act(() => button(document.body, "Copy link").click());
+  await settle();
+
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${CACHE.id}/agent/${CACHE_KEYS.id}`]);
+});
+
+test("an automation's row offers Copy link, copying its link under the page's workspace", async () => {
+  const { page } = mountLinked(CHARLES.userId);
+  await settle();
+
+  assert.ok(openRowMenu(page, "Morning Sentry triage", "Automation").includes("Copy link"));
+  act(() => button(document.body, "Copy link").click());
+  await settle();
+
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/automation/${AUTOMATIONS[0]?.id}`]);
+});
+
+test("a waiting item's row offers Copy link, written under the page's workspace", async () => {
+  const { page } = mountLinked(CHARLES.userId);
+  await settle();
+
+  assert.ok(openRowMenu(page, "Retry 429s too?", "Inbox item").includes("Copy link"));
+});
+
+test("a task no longer theirs slides out of its section, drawn on out of reach until its exit has played", async () => {
+  const motions = playListMotions();
+  onTestFinished(motions.remove);
+  const { page, redraw } = mount(CHARLES.userId);
+  await settle();
+
+  const left = TASKS.filter((each) => each.id !== DASHBOARD.id);
+  redraw({ tasks: left, listed: { tasks: left, ...HOLDING } });
+  const leaving = page.querySelector(`[data-motion-key="${DASHBOARD.id}"]`);
+  assert.equal(leaving?.hasAttribute("data-leaving"), true, "drawn on while it goes");
+  assert.equal(leaving?.hasAttribute("inert"), true, "out of reach");
+  assert.ok(
+    motions.played.some((motion) => motion.element === leaving),
+    "its exit plays",
+  );
+
+  act(() => {
+    for (const each of motions.played.splice(0)) each.finish();
+  });
+  assert.deepEqual(sections(page).Created, ["Relay retries on 502"]);
+});
+
+test("a teammate's agent at rest is archived from its row at once, read again by its own id though no task is open", async () => {
+  const archived: string[] = [];
+  const { page } = mountWith(
+    {
+      agents: {
+        ...tasksControl().agents,
+        me: DEAN.userId,
+        onArchive: (agentId) => {
+          archived.push(agentId);
+          return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+        },
+      },
+    },
+    CHARLES.userId,
+  );
+  await settle();
+
+  openRowMenu(page, "Tenant cache keys", "Agent");
+  act(() => button(document.body, "Archive").click());
+  await settle();
+
+  assert.deepEqual(archived, [CACHE_KEYS.id]);
+  assert.equal(
+    document.querySelector('[role="alertdialog"], [role="dialog"]'),
+    null,
+    "nothing asked",
+  );
+});
+
+test("a task marked unread from its row stands unread, and its menu then offers Mark as read", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  openRowMenu(page, "Retry budget dashboard", "Task");
+  act(() => button(document.body, "Mark as unread").click());
+  await settle();
+
+  assert.equal(button(page, "Retry budget dashboard").closest("li")?.dataset.unread, "true");
+  assert.ok(openRowMenu(page, "Retry budget dashboard", "Task").includes("Mark as read"));
 });

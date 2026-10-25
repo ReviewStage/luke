@@ -11,7 +11,7 @@ import { member } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { getTestDB, joinWorkspace, openWorkspace, WORKSPACE_ROLE } from "@luke/database/testing";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { Effect, Option } from "effect";
+import { DateTime, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { openGithubUser } from "../testing/github-app-fake.js";
 import {
@@ -30,7 +30,8 @@ import {
  * account, so a retry of the same installation changes nothing but its
  * names, a reinstall on the account moves the account's own row onto the new
  * installation within its workspace, and an account that stands for one
- * workspace is never taken by another, however the two race; the callback's
+ * workspace is never taken by another, however the two race, until Luke is
+ * uninstalled from it, when another workspace's install takes it; the callback's
  * link reads the account's role again before it writes; a webhook's status
  * reaches its own installation alone; and a workspace's GitHub accounts are
  * read by its members and nobody else.
@@ -268,6 +269,83 @@ it.layer(getTestDB())("a workspace's GitHub installations in the store", (it) =>
             createdAt: before?.createdAt,
           },
         ]);
+      }),
+  );
+
+  it.effect(
+    "an account Luke was uninstalled from is taken over by another workspace's install, as if newly linked there",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const first = yield* openWorkspace(owner);
+        const second = yield* openWorkspace(owner);
+        const installation = freshInstallation();
+        yield* linkInstallation(first, installation);
+        yield* setInstallationStatus(
+          installation.installationId,
+          GITHUB_INSTALLATION_STATUS.DELETED,
+        );
+        yield* TestClock.adjust("1 hour");
+        const installedAgain = {
+          ...installation,
+          installationId: installation.installationId + 1,
+          accountLogin: "octo-renamed",
+        };
+
+        const outcome = yield* linkInstallation(second, installedAgain);
+
+        assert.equal(outcome, LINK_OUTCOME.LINKED);
+        assert.deepEqual(yield* installationsOfWorkspace(first), []);
+        assert.deepEqual(
+          (yield* installationsOfWorkspace(second)).map(
+            ({ installationId, accountLogin, status }) => ({
+              installationId,
+              accountLogin,
+              status,
+            }),
+          ),
+          [
+            {
+              installationId: installedAgain.installationId,
+              accountLogin: "octo-renamed",
+              status: GITHUB_INSTALLATION_STATUS.ACTIVE,
+            },
+          ],
+        );
+        const [row] = yield* rowsOfAccount(installation.accountId);
+        assert.equal(row?.createdAt.getTime(), (yield* DateTime.nowAsDate).getTime());
+      }),
+  );
+
+  it.effect(
+    "an account whose installation is live, active or suspended, is never taken by another workspace's install",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const holder = yield* openWorkspace(owner);
+        const other = yield* openWorkspace(owner);
+        const active = freshInstallation("acme-org");
+        const suspended = { ...freshInstallation("acme-labs"), suspended: true };
+        yield* linkInstallation(holder, active);
+        yield* linkInstallation(holder, suspended);
+        const kept = yield* rowsOf(active.installationId, suspended.installationId);
+        yield* TestClock.adjust("1 hour");
+
+        const outcomes = yield* Effect.forEach([active, suspended], (installation) =>
+          linkInstallation(other, {
+            ...installation,
+            installationId: installation.installationId + 1,
+            accountLogin: "taken",
+            suspended: false,
+          }),
+        );
+
+        assert.deepEqual(outcomes, [
+          LINK_OUTCOME.ALREADY_CONNECTED,
+          LINK_OUTCOME.ALREADY_CONNECTED,
+        ]);
+        assert.deepEqual(yield* installationsOfWorkspace(other), []);
+        assert.deepEqual(yield* rowsOf(active.installationId, suspended.installationId), kept);
       }),
   );
 

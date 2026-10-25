@@ -1,3 +1,4 @@
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
   ArrowDownIcon,
@@ -9,7 +10,6 @@ import {
   CopyIcon,
   DocumentIcon,
   dropBelowStart,
-  EllipsisIcon,
   FolderIcon,
   GAP,
   HoverCard,
@@ -29,8 +29,10 @@ import {
   MenuGlyph,
   MenuItem,
   MenuSurface,
+  MoreButton,
   PencilIcon,
   SearchField,
+  Shortcut,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -60,8 +62,13 @@ const ignore = () => undefined;
 
 const TASK_ACTIONS: readonly (readonly MenuEntry[])[] = [
   [
-    { label: "Rename", icon: <PencilIcon />, hint: "⌘R", onSelect: ignore },
-    { label: "Copy link", icon: <CopyIcon />, hint: "⇧⌘C", onSelect: ignore },
+    { label: "Rename", icon: <PencilIcon />, onSelect: ignore },
+    {
+      label: "Copy link",
+      icon: <CopyIcon />,
+      hint: <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COPY_LINK].chord} />,
+      onSelect: ignore,
+    },
     { label: "Move to workspace", onSelect: ignore, disabled: true },
     { label: "Archive", icon: <ArchiveIcon />, onSelect: ignore },
   ],
@@ -73,7 +80,7 @@ function TaskMenu(): React.JSX.Element {
   const menu = useMenu(true);
   return (
     <>
-      <IconButton icon={<EllipsisIcon />} label="Task actions" {...menu.trigger()} />
+      <MoreButton thing="Task" {...menu.trigger()} />
       {menu.drawn && (
         <Menu label="Task actions" menu={menu.drawn} groups={TASK_ACTIONS} onClose={menu.close} />
       )}
@@ -196,25 +203,17 @@ function PeopleMenu(): React.JSX.Element {
 }
 
 /**
- * A row a right-click, or a touch held on it, opens the task's menu on, at
- * the pointer; its press drops the same menu under it.
+ * A row's menu: its ⋯, a right-click or a touch held on it, and the menu key
+ * open the one menu of the task's acts.
  */
 function RightClickRow(): React.JSX.Element {
-  const menu = useMenu(true);
   return (
-    <>
-      <List label="Tasks" variant={LIST_VARIANT.CARD}>
-        <ListRow
-          title="Right-click anywhere in this row, or hold it on a touch screen."
-          onPress={menu.trigger(dropBelowStart).onClick}
-          menuOpen={menu.drawn !== undefined}
-          contextMenu={menu.contextMenu()}
-        />
-      </List>
-      {menu.drawn && (
-        <Menu label="Task actions" menu={menu.drawn} groups={TASK_ACTIONS} onClose={menu.close} />
-      )}
-    </>
+    <List label="Tasks" variant={LIST_VARIANT.CARD}>
+      <ListRow
+        title="Right-click anywhere in this row, or hold it on a touch screen."
+        menu={{ thing: "Task", groups: TASK_ACTIONS }}
+      />
+    </List>
   );
 }
 

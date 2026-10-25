@@ -1,0 +1,18 @@
+{
+  "instead": "Say a failure with FailureNote and a muted line with NoteLine (a read that did not land is an ErrorState), all from @luke/ui.",
+  "classes": [
+    { "class": "sidebar-note", "allow": [] },
+    { "class": "sidebar-failure", "allow": [] },
+    { "class": "error-message", "allow": [] },
+    { "class": "agent-undelivered", "allow": [] },
+    { "class": "tool-error", "allow": [] },
+    { "class": "todos-error", "allow": [] },
+    { "class": "subagent-error", "allow": [] },
+    { "class": "task-issue-links-note", "allow": [] },
+    { "class": "automation-form-problem", "allow": [] },
+    { "class": "automation-save-refusal", "allow": [] },
+    { "class": "file-crumb-notice", "allow": [] },
+    { "class": "image-diff-note", "allow": [] },
+    { "class": "section-icon-note", "allow": [] }
+  ]
+}

@@ -3,21 +3,42 @@
  *
  * A plan's text holds no title line, since its name is its own and is
  * renamed apart from the text (`docs/TASKS.md`). So the window draws the
- * name over the text, in the look of a `#` heading, as an element of its own
+ * name over the text: as a document's own header (`PageHeader`), where it is
+ * the page's one `h1`, with the title's ⋯ at its end, as an element of its own
  * ahead of the text's first section, where the title can be edited in the
  * same flow as the text (`plan-document-editor.tsx`). Nothing here reads or
  * writes the name but the task it is handed.
  */
 
-import { MARKDOWN_CLASS } from "@luke/ui/markdown-class";
+import { PageHeader, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 
-/** The title over a plan's text, drawn as a `#` heading. */
-export function TaskTitle({ name }: { name: string }): React.JSX.Element {
+/** The title over a plan's text: the page's `h1`, and `actions` (the title's ⋯) at its end. */
+export function TaskTitle({
+  name,
+  actions,
+}: {
+  name: string;
+  actions?: React.ReactNode;
+}): React.JSX.Element {
+  // Note that the unit's class lets the ⋯ show as the pointer or the keyboard comes onto its title, as a section's does.
   return (
-    <div className={`${MARKDOWN_CLASS.ROOT} task-title`}>
-      <p className={MARKDOWN_CLASS.HEADING} data-level="1">
+    <div className="task-title plan-unit-attributed">
+      <PageHeader title={name} actions={actions} />
+    </div>
+  );
+}
+
+/**
+ * The name in the page title's role, for a page whose bar already names it by
+ * its `h1`: a version of the plan, which the bar names by when it was saved.
+ * Note that it is no heading, so such a page keeps the one `h1` it has.
+ */
+export function TextTitle({ name }: { name: string }): React.JSX.Element {
+  return (
+    <div className="task-title">
+      <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.P}>
         {name}
-      </p>
+      </Text>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { SIGNED_OUT_WORDS } from "@luke/features/words";
 import { EXPERIMENTS, HOST_CAPABILITY, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
@@ -112,15 +113,15 @@ export function SettingsPanel({
             {panelView ? <PrivacySection view={panelView} writes={writes} /> : null}
           </>
         ) : (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             Not signed in.
           </Text>
         )
       ) : null}
 
       {view !== SETTINGS_VIEW.WORKSPACE ? null : !signedIn ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-          Sign in to see your workspaces.
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {SIGNED_OUT_WORDS}
         </Text>
       ) : workspace ? (
         <WorkspacePage control={workspace} readerId={account.id} />
@@ -131,6 +132,8 @@ export function SettingsPanel({
           signedIn={signedIn}
           workspace={workspace ? shownWorkspace(workspace) : undefined}
           readerId={signedIn ? account.id : undefined}
+          workspacesFailed={workspace?.listFailed ?? false}
+          onRetryWorkspaces={workspace?.onRetryList}
         />
       ) : null}
 
@@ -143,8 +146,8 @@ export function SettingsPanel({
       {view !== SETTINGS_VIEW.SKILLS ? null : signedIn ? (
         <SkillsPage control={workspace} readerId={account.id} />
       ) : (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-          Sign in to install skills.
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {SIGNED_OUT_WORDS}
         </Text>
       )}
 

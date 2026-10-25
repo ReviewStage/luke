@@ -6,18 +6,8 @@ import {
   type SettingsPageGroup,
   type SettingsView,
 } from "@luke/settings/settings-views";
-import {
-  DisplayIcon,
-  DocumentIcon,
-  KeyboardIcon,
-  LaptopIcon,
-  MemoryIcon,
-  PlugIcon,
-  SpeakerIcon,
-  TerminalIcon,
-  UserIcon,
-} from "@luke/ui";
-import { BellIcon, BookOpenIcon, FlaskConicalIcon, InfoIcon, UsersIcon } from "lucide-react";
+import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon, SpeakerIcon } from "@luke/ui";
+import { BellIcon, FlaskConicalIcon, GLYPH, InfoIcon } from "@luke/ui/icons";
 import { settingsPageShown } from "./settings-rows.js";
 
 /** A page's name and glyph. */
@@ -30,39 +20,38 @@ interface SettingsPage {
  * What each page is called in the Settings sidebar and at its own head. One
  * table, because the row that opens a page and the title over it must never
  * disagree about its name. The name and the glyph are the whole row: what a
- * page holds is one press away. Account's own page is Profile, so its row
- * does not repeat the heading it stands under; the Workspace page's row is
- * Workspace under the listed workspace's name, and its head names that
- * workspace.
+ * page holds is one press away. Account's own page is Account, because it is
+ * where the account itself is kept, and "Your profile" in the account menu
+ * opens the person page; the Workspace page's row is Workspace under the
+ * listed workspace's name, and its head names that workspace.
  */
 const SETTINGS_PAGE = {
-  [SETTINGS_VIEW.ACCOUNT]: { title: "Profile", icon: <UserIcon /> },
-  [SETTINGS_VIEW.WORKSPACE]: {
-    title: "Workspace",
-    icon: <UsersIcon className="settings-icon" />,
-  },
-  [SETTINGS_VIEW.CODING_AGENTS]: { title: "Agents", icon: <TerminalIcon /> },
+  [SETTINGS_VIEW.ACCOUNT]: { title: "Account", icon: <GLYPH.PERSON /> },
+  [SETTINGS_VIEW.WORKSPACE]: { title: "Workspace", icon: <GLYPH.PEOPLE /> },
+  [SETTINGS_VIEW.CODING_AGENTS]: { title: "Agents", icon: <GLYPH.AGENT /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
-  [SETTINGS_VIEW.SKILLS]: {
-    title: "Skills",
-    icon: <BookOpenIcon className="settings-icon" />,
-  },
-  [SETTINGS_VIEW.PLAN_TEMPLATE]: { title: "Plan template", icon: <DocumentIcon /> },
-  [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <MemoryIcon /> },
+  [SETTINGS_VIEW.SKILLS]: { title: "Skills", icon: <GLYPH.SKILL /> },
+  [SETTINGS_VIEW.PLAN_TEMPLATE]: { title: "Plan template", icon: <GLYPH.PLAN /> },
+  [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <GLYPH.MEMORY /> },
   [SETTINGS_VIEW.VOICE]: { title: "Voice", icon: <SpeakerIcon /> },
   [SETTINGS_VIEW.APPEARANCE]: { title: "Appearance", icon: <DisplayIcon /> },
-  [SETTINGS_VIEW.NOTIFICATIONS]: {
-    title: "Notifications",
-    icon: <BellIcon className="settings-icon" />,
-  },
+  [SETTINGS_VIEW.NOTIFICATIONS]: { title: "Notifications", icon: <BellIcon /> },
   [SETTINGS_VIEW.THIS_MAC]: { title: "This Mac", icon: <LaptopIcon /> },
-  [SETTINGS_VIEW.EXPERIMENTAL]: {
-    title: "Experimental",
-    icon: <FlaskConicalIcon className="settings-icon" />,
-  },
-  [SETTINGS_VIEW.ABOUT]: { title: "About", icon: <InfoIcon className="settings-icon" /> },
+  [SETTINGS_VIEW.EXPERIMENTAL]: { title: "Experimental", icon: <FlaskConicalIcon /> },
+  [SETTINGS_VIEW.ABOUT]: { title: "About", icon: <InfoIcon /> },
   [SETTINGS_VIEW.SHORTCUTS]: { title: "Keyboard shortcuts", icon: <KeyboardIcon /> },
 } satisfies Record<SettingsView, SettingsPage>;
+
+/**
+ * The Workspace page's group of what the workspace connects for everyone, its
+ * heading and its search result alike. Named for the workspace, because the
+ * account's own Integrations page holds what the reader connects for
+ * themself, and the two once shared one name.
+ */
+export const WORKSPACE_CONNECTIONS = "Workspace connections";
+
+/** The Workspace page's group of where each repository is cloned on this Mac, its heading and its search result alike. */
+export const MAC_REPOSITORIES = "Repositories on this Mac";
 
 /** What each of the Settings sidebar's groups is headed by where no workspace is listed to name the first. */
 const SETTINGS_GROUP_HEADING = {

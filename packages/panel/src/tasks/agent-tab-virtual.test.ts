@@ -13,6 +13,7 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode, useMemo } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -24,6 +25,7 @@ import { FindScope } from "../find-in-tab.js";
 import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { focusRestOn } from "../testing/hint-rest.js";
+import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
 import type { TranscriptFollower } from "./use-agent-transcript.js";
@@ -32,7 +34,7 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
 /**
  * agent-tab-virtual.test.ts -- a long agent transcript draws only the rows
  * near its view: it opens on its newest rows, a find counts and reaches a
- * match in a row it has not drawn, a page that lands leaves every message it
+ * match in a row it has not drawn and one past a long fence's cut, a page that lands leaves every message it
  * did not touch undrawn again, and older messages put before the first leave
  * the reader where they were.
  *
@@ -48,6 +50,9 @@ declare global {
 beforeAll(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 });
+
+// A fence is drawn once the markdown parser it is read with has landed.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 let root: Root | undefined;
 
@@ -223,7 +228,7 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')
+  return document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
     ?.textContent;
 }
 
@@ -253,6 +258,153 @@ test("⌘F finds words in a row the log has not drawn, scrolls the log to it, an
   assert.equal(litRange.toString().toLowerCase(), "lantern");
   const litRow = litRange.startContainer.parentElement?.closest("[data-row-key]");
   assert.equal(litRow?.getAttribute("data-row-key"), "m-7");
+});
+
+test("⌘F counts a match in a closed call's answer far up the log, steps to it, and opens the fold on it", async () => {
+  const held = messages(0, 400);
+  held[7] = {
+    id: "m-7",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      { type: "step-start" },
+      {
+        type: "tool-run_command",
+        toolCallId: "m-7-grep",
+        state: "output-available",
+        input: { command: "rg TTL" },
+        output: { exitCode: 0, stdout: "src/lantern.ts", stderr: "" },
+      },
+      { type: "step-start" },
+      { type: "text", text: "Found where it is set." },
+    ],
+    startedAt: 7_000,
+    finishedAt: 7_500,
+  };
+  const { follower } = following(page(held));
+  const { container, box } = await drawTab(
+    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
+  );
+  layOut(box);
+  assert.ok(!drawnRows(container).includes("m-7"), "the seventh reply's row is not drawn");
+
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("lantern");
+  await act(settled);
+
+  assert.equal(findTally(), "1 of 1");
+  assert.ok(drawnRows(container).includes("m-7"), "the seventh reply's row is drawn");
+  const lit = [...(CSS.highlights.get("find-current") ?? [])] as Range[];
+  assert.equal(lit.length, 1, "one match is lit as the one the find is at");
+  const litRange = lit[0] ?? assert.fail("the lit match");
+  assert.equal(litRange.toString(), "lantern");
+  const output =
+    litRange.startContainer.parentElement?.closest("[data-tool-output]") ??
+    assert.fail("the match is in the call's answer");
+  assert.equal(output.closest("[hidden]"), null, "the fold around the answer stands open");
+});
+
+/** A finished reply of the agent's at index 7 of `messages`, holding `parts`. */
+function farReply(parts: readonly WireRecord[]): CodingAgentMessage {
+  return {
+    id: "m-7",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "step-start" }, ...parts],
+    startedAt: 7_000,
+    finishedAt: 7_500,
+  };
+}
+
+/** The tally a find for `query` reads over a 400-message log whose eighth message is `far`, while that row is not drawn. */
+async function farTally(far: CodingAgentMessage, query: string) {
+  const held = messages(0, 400);
+  held[7] = far;
+  const { follower } = following(page(held));
+  const { container, box } = await drawTab(
+    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
+  );
+  layOut(box);
+  assert.ok(!drawnRows(container).includes("m-7"), "the eighth message's row is not drawn");
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind(query);
+  await act(settled);
+  return findTally();
+}
+
+test("⌘F finds a phrase across a far call's verb and subject, as its line reads", async () => {
+  const shown = {
+    type: "tool-show_page",
+    toolCallId: "m-7-page",
+    state: "output-available",
+    input: { title: "Pricing explorer", path: "/tmp/pricing.html" },
+    output: { status: "accepted" },
+  };
+  assert.equal(await farTally(farReply([shown]), "page: Pricing"), "1 of 1");
+});
+
+test("⌘F counts nothing in a far integration call's connection_execute, which its row never draws", async () => {
+  const wrapper = {
+    type: "tool-connection_execute",
+    toolCallId: "call-connection_execute",
+    state: "output-available",
+    input: {
+      connection: "linear",
+      tool: "list_issues",
+      input: { team: "LUKE" },
+      why: "quartermaster",
+    },
+    output: { issues: [] },
+  };
+  const remote = {
+    type: "tool-linear_remote",
+    toolCallId: "call-linear_remote",
+    state: "output-available",
+    input: {
+      remoteTool: "list_issues",
+      parentCallId: "call-connection_execute",
+      input: { team: "LUKE" },
+    },
+    output: { issues: [] },
+  };
+  assert.equal(await farTally(farReply([wrapper, remote]), "quartermaster"), "No results");
+});
+
+test("⌘F finds a word on a long fence's 55th line, past its cut, and opens the card on that line", async () => {
+  const fence = Array.from({ length: 60 }, (_, at) =>
+    at === 54 ? "const lantern = 55;" : `const line${at + 1} = ${at + 1};`,
+  ).join("\n");
+  const { follower } = following(
+    page([message(0), message(1, `The block:\n\n\`\`\`ts\n${fence}\n\`\`\`\n`)]),
+  );
+  const { container, box } = await drawTab(
+    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
+  );
+  layOut(box);
+  const card = container.querySelector(".luke-code-card") ?? assert.fail("the fence's card");
+  const pressNamed = (name: string) =>
+    [...card.querySelectorAll("button")].some((button) => button.textContent === name);
+  assert.ok(pressNamed("Show all"), "the fence is cut");
+
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("lantern");
+  await act(settled);
+
+  assert.equal(findTally(), "1 of 1");
+  const lit = [...(CSS.highlights.get("find-current") ?? [])] as Range[];
+  assert.equal(lit.length, 1, "one match is lit as the one the find is at");
+  const litRange = lit[0] ?? assert.fail("the lit match");
+  assert.equal(litRange.toString(), "lantern");
+  assert.ok(card.contains(litRange.startContainer), "the match is in the fence's card");
+  assert.equal(card.querySelector("[hidden]"), null, "the card shows its lines past the cut");
+  assert.ok(pressNamed("Show less"), "the card stands whole");
 });
 
 /** The turn a running agent is still writing, as a page reads it. */

@@ -9,7 +9,8 @@ import { VIDEO_PLAYER_PLACE, VideoPlayer } from "../../index.js";
  * video-player.test.ts -- while focus is in a video's player, Space or K
  * plays and pauses it and the arrows seek five seconds within its length,
  * none of them reaching the place around it, whose arrows may walk files; a
- * button's own Space is left to the button. The browser's media element is
+ * button's own Space is left to the button. In the viewer it starts at
+ * once, unless motion is held still. The browser's media element is
  * the boundary, so a stand-in plays, pauses, and seeks as one does, telling
  * its events, and the player is read by what its bar shows.
  */
@@ -19,8 +20,12 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  document.documentElement.style.removeProperty(DURATION_FAST);
   vi.restoreAllMocks();
 });
+
+/** The motion token reduced motion zeroes, which says motion is held still. */
+const DURATION_FAST = "--luke-duration-fast";
 
 /** A WebM's bytes as a picture read answers them; the stand-in element never decodes them. */
 const WEBM_URL = "data:video/webm;base64,GkXfow==";
@@ -150,4 +155,34 @@ test("a held Space or K plays or pauses once, while a held arrow goes on seeking
   press("ArrowRight");
   press("ArrowRight", undefined, true);
   expect(seekAt()).toBe("10");
+});
+
+/** Draws a player in the viewer, as the file viewer an Expand opens does, and answers its video. */
+function mountInViewer(): HTMLVideoElement {
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:recording");
+  vi.spyOn(URL, "revokeObjectURL").mockReturnValue(undefined);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(VideoPlayer, {
+        dataUrl: WEBM_URL,
+        label: "Inviting a member",
+        place: VIDEO_PLAYER_PLACE.VIEWER,
+      }),
+    ),
+  );
+  return container.querySelector("video") ?? expect.unreachable("the player draws its video");
+}
+
+test("in the viewer the video starts at once", () => {
+  expect(mountInViewer().autoplay).toBe(true);
+});
+
+test("in the viewer the video waits for Play where motion is held still", () => {
+  // Note that reduced motion holds motion at the tokens, which the setting's stylesheet would zero.
+  document.documentElement.style.setProperty(DURATION_FAST, "1ms");
+  expect(mountInViewer().autoplay).toBe(false);
 });

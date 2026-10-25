@@ -9,12 +9,16 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import { noMatchWords, readFailedWords, TERM } from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   CHIP_WIDTH,
+  ErrorState,
   GAP,
   Inline,
+  type MenuRow,
+  POPOVER_ALIGN,
   Spinner,
   TaskPriorityMark,
   TaskStatusMark,
@@ -28,8 +32,7 @@ import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
-import type { MenuRow } from "../searchable-menu.js";
-import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
+import { Picker } from "../settings/picker-row.js";
 
 /**
  * task-standing.tsx -- a task's key over its name, and the chips under it that say and change where it stands and how much it matters.
@@ -130,7 +133,7 @@ function TaskAssigneePicker({
   /** Where a pick is sent; without one the chip only says. */
   onPick: ((assigneeId: string | null) => void) | undefined;
 }): React.JSX.Element {
-  const { members, readerId, membersReading } = useMemberDirectory();
+  const { members, readerId, membersReading, membersRefused, retry } = useMemberDirectory();
   const person = usePerson(assignee);
   return (
     <Picker
@@ -146,9 +149,15 @@ function TaskAssigneePicker({
       }
       rows={assigneeRows(members, readerId)}
       placeholder="Assign to…"
-      noMatch="No people match"
-      note={membersReading ? <Spinner delay label="Reading members" /> : undefined}
-      align={PICKER_ALIGN.START}
+      noMatch={noMatchWords(TERM.MEMBER)}
+      note={
+        membersRefused ? (
+          <ErrorState onRetry={retry}>{readFailedWords(TERM.MEMBER.many)}</ErrorState>
+        ) : membersReading ? (
+          <Spinner delay label="Reading members" />
+        ) : undefined
+      }
+      align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       disabled={onPick === undefined}
       onPick={(id) => {
@@ -170,7 +179,7 @@ export interface TaskStandingDoor {
  * page over its title, its hover card and an Inbox row's card at the head,
  * the Tasks list's row, the board's card, and ⌘K's row, where the words
  * typed that found it are marked in it. Plain caption-size words in the
- * subtle ink, monospace with even figures, never a chip, and never shrunk by
+ * muted ink, monospace with even figures, never a chip, and never shrunk by
  * what stands beside it, so a chip there gives way instead. Nothing for a
  * task from a service before keys, or where the window holds no such
  * workspace.
@@ -193,7 +202,7 @@ export function TaskKey({
     <span className="task-key" data-task-key="" aria-hidden={decorative ? true : undefined}>
       <Text
         variant={TEXT_VARIANT.CAPTION}
-        tone={TEXT_TONE.SUBTLE}
+        tone={TEXT_TONE.MUTED}
         font={TEXT_FONT.MONO}
         as={TEXT_ELEMENT.SPAN}
       >
@@ -242,7 +251,7 @@ function TaskStatusPicker({
       valueIcon={<TaskStatusMark status={status} />}
       rows={STATUS_ROWS}
       noMatch="No statuses match"
-      align={PICKER_ALIGN.START}
+      align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       disabled={onPick === undefined}
       onPick={(id) => {
@@ -277,7 +286,7 @@ export function TaskStandingChips({
           valueIcon={<TaskPriorityMark priority={priority} />}
           rows={PRIORITY_ROWS}
           noMatch="No priorities match"
-          align={PICKER_ALIGN.START}
+          align={POPOVER_ALIGN.START}
           width={CHIP_WIDTH.AUTO}
           disabled={onSet === undefined}
           onPick={(id) => {

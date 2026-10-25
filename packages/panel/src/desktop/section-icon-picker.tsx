@@ -9,10 +9,13 @@ import {
   type TaskSectionIconColor,
   taskSectionIconSchema,
 } from "@luke/features/task-section-wire";
+import { noMatchWords, readingWords } from "@luke/features/words";
 import {
   CHOICE_BAR_LOOK,
   ChoiceBar,
   IconButton,
+  NOTE_LINE_LOOK,
+  NoteLine,
   ScrollArea,
   SearchField,
   Swatch,
@@ -123,6 +126,18 @@ const GRID_STEPS = new Map([
 const LOAD_FAILED = {
   [ICON_TAB.ICONS]: "The icons could not be loaded.",
   [ICON_TAB.EMOJI]: "The emoji could not be loaded.",
+} as const satisfies Record<IconTab, string>;
+
+/** What the picker says while a set is loaded. */
+const READING = {
+  [ICON_TAB.ICONS]: readingWords("icons"),
+  [ICON_TAB.EMOJI]: readingWords("emoji"),
+} as const satisfies Record<IconTab, string>;
+
+/** What the picker says where the search found nothing in a set. */
+const NO_MATCH = {
+  [ICON_TAB.ICONS]: noMatchWords({ one: "icon", many: "icons" }),
+  [ICON_TAB.EMOJI]: noMatchWords({ one: "emoji", many: "emoji" }),
 } as const satisfies Record<IconTab, string>;
 
 /** Whether a value is an icon the wire takes. */
@@ -240,18 +255,16 @@ function GridChoice({
 function PanelNote({
   loaded,
   tab,
-  query,
 }: {
   loaded: AsyncResult.AsyncResult<unknown, Error>;
   tab: IconTab;
-  query: string;
 }): React.JSX.Element {
   const words = AsyncResult.isFailure(loaded)
     ? LOAD_FAILED[tab]
     : AsyncResult.isSuccess(loaded)
-      ? `Nothing matches “${query.trim()}”.`
-      : "Loading…";
-  return <p className="section-icon-note">{words}</p>;
+      ? NO_MATCH[tab]
+      : READING[tab];
+  return <NoteLine look={NOTE_LINE_LOOK.LIST}>{words}</NoteLine>;
 }
 
 /** The Icons tab: every glyph the search finds, each in the color chosen; the one chosen, or the first, is the grid's tab stop. */
@@ -271,7 +284,7 @@ const GlyphPanel = memo(function GlyphPanel({
   const choices = useMemo(() => glyphChoices(Object.keys(icons ?? {})), [icons]);
   const found = useMemo(() => findGlyphs(choices, query), [choices, query]);
   if (icons === undefined || found.length === 0) {
-    return <PanelNote loaded={loaded} tab={ICON_TAB.ICONS} query={query} />;
+    return <PanelNote loaded={loaded} tab={ICON_TAB.ICONS} />;
   }
   const stop = found.find((choice) => chosenGlyph(icon, choice.glyph)) ?? found[0];
   return (
@@ -306,14 +319,20 @@ const EmojiPanel = memo(function EmojiPanel({
   const loaded = useAtomValue(emojiAtom);
   const groups = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const found = useMemo(() => findEmoji(groups ?? [], query), [groups, query]);
-  if (found.length === 0) return <PanelNote loaded={loaded} tab={ICON_TAB.EMOJI} query={query} />;
+  if (found.length === 0) return <PanelNote loaded={loaded} tab={ICON_TAB.EMOJI} />;
   const all = found.flatMap((group) => group.emojis);
   const stop = all.find((one) => chosenEmoji(icon, one.emoji)) ?? all[0];
   return (
     <>
       {found.map((group) => (
         <section key={group.name} className="section-emoji-group" aria-label={group.name}>
-          <h3 className="section-emoji-group-name">{group.name}</h3>
+          <Text
+            as={TEXT_ELEMENT.H3}
+            variant={TEXT_VARIANT.GROUP}
+            className="section-emoji-group-name"
+          >
+            {group.name}
+          </Text>
           <div className="section-icon-grid">
             {group.emojis.map((one) => (
               <GridChoice

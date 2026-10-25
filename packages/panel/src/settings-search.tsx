@@ -1,5 +1,6 @@
 import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { noMatchWords, TERM } from "@luke/features/words";
 import { managesWorkspace } from "@luke/features/workspace-role";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import {
@@ -31,31 +32,41 @@ import {
   FILES_CHANGED_GROUP_TITLE,
   FILES_CHANGED_KEYS_LISTED,
   FILES_CHANGED_SHORTCUTS,
+  IN_CONTEXT_KEY,
+  IN_CONTEXT_SHORTCUTS,
+  type InContextKey,
+  inContextShown,
   shownShortcutGroups,
   WRITING_ACTIONS_LISTED,
   WRITING_GROUP_TITLE,
+  WRITING_KEYS_IN_CONTEXT,
   WRITING_SHORTCUTS,
   type WritingShortcut,
 } from "@luke/settings/shortcuts";
 import {
   commandKeyshortcuts,
   GAP,
+  GroupHeader,
   LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
+  NOTE_LINE_LOOK,
+  NoteLine,
   SearchField,
   Shortcut,
   Stack,
 } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
-import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
+import { land } from "@luke/ui/landed";
+import { searchHit } from "@luke/ui/search-score";
+import { type MatchRange, searchTokens } from "@luke/ui/search-tokens";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useEffect, useRef } from "react";
 import { useAppCommand } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
-import { settingsPageOf } from "./settings/pages.js";
+import { MAC_REPOSITORIES, settingsPageOf, WORKSPACE_CONNECTIONS } from "./settings/pages.js";
 import { settingsPageShown } from "./settings/settings-rows.js";
 
 /**
@@ -123,6 +134,12 @@ export function resultPageWord(page: SettingsView): string {
   return settingsPageOf(page).title;
 }
 
+/**
+ * What an empty search says, the words module's miss line and then what to try,
+ * because a miss that only says it missed leaves the reader nothing to do.
+ */
+export const SETTINGS_NO_MATCH_WORDS = `${noMatchWords(TERM.RESULT)}. Try a page's name, such as Voice, or fewer words.`;
+
 /** The words every integration's row can be found by, beside its own name. */
 const INTEGRATION_WORDS = "connect disconnect integration mcp";
 
@@ -132,8 +149,23 @@ const EXPERIMENT_WORDS = "experiment preview beta labs early try";
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */
 const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
 
+/** The words the one Escape row answers to besides, which stands for every layer the key steps back from. */
+const ESCAPE_WORDS = "escape esc exit leave back";
+
 /** The words every writing chord and Markdown rule answers to besides. */
 const WRITING_WORDS = "format formatting markdown editor text";
+
+/** A key that answers in place, as the Keyboard shortcuts page lists it under `group`. */
+function inContextEntry(key: InContextKey, group: string): SettingsSearchEntry {
+  const { label } = IN_CONTEXT_SHORTCUTS[key];
+  const leaving = key === IN_CONTEXT_KEY.STEP_BACK ? ESCAPE_WORDS : "";
+  return {
+    id: key,
+    label,
+    page: SETTINGS_VIEW.SHORTCUTS,
+    haystack: [label, WINDOW_SHORTCUT_WORDS, group, leaving],
+  };
+}
 
 /**
  * The rows that are not stored settings, each gated by the condition that
@@ -239,9 +271,9 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL,
-          label: "Model",
+          label: "Default model",
           page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Model", "default model coding agent claude gpt start"],
+          haystack: ["Default model", "model coding agent claude gpt start"],
         }
       : undefined,
     input.accountDrawn
@@ -291,7 +323,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           page: SETTINGS_VIEW.CODING_AGENTS,
           haystack: [
             "Codex",
-            "openai api key byok own key gpt chatgpt plan subscription billing provider credential",
+            "openai api key byok own key gpt chatgpt plan subscription billing provider credential voice call dictation dictate",
           ],
         }
       : undefined,
@@ -325,23 +357,66 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     input.workspace
       ? {
           id: SETTINGS_SECTION.GITHUB_REPOSITORIES,
-          label: "Integrations",
+          label: WORKSPACE_CONNECTIONS,
           page: SETTINGS_VIEW.WORKSPACE,
           haystack: [
-            "Integrations",
-            "GitHub Linear issues repositories connect choose manage disconnect organization",
+            WORKSPACE_CONNECTIONS,
+            "integrations GitHub Linear issues repositories connect choose manage disconnect organization",
           ],
         }
       : undefined,
+    // Where each repository is cloned on this Mac, drawn on the Workspace page only where the app can run a terminal there.
+    input.workspace && input.capabilities.includes(HOST_CAPABILITY.MAC_TERMINAL)
+      ? {
+          id: SETTINGS_SECTION.MAC_REPOSITORIES,
+          label: MAC_REPOSITORIES,
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: [
+            MAC_REPOSITORIES,
+            "repository repositories clone folder checkout git command run checks terminal path",
+          ],
+        }
+      : undefined,
+    // The workspace's name, which an owner or an admin changes on the identity row, but not the account's first workspace, which its owner's account name names.
+    input.workspace !== undefined &&
+    managesWorkspace(input.workspace) &&
+    input.workspace.personal !== true
+      ? {
+          id: SETTINGS_SEARCH_ROW.WORKSPACE_RENAME,
+          label: "Rename workspace",
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: ["Rename workspace", "rename name change workspace photo"],
+        }
+      : undefined,
+    // The Skills page's one standing row, drawn once the page has the workspace it lists the skills of: the skills themselves are read from the service and listed under it.
+    input.workspace
+      ? {
+          id: SETTINGS_SEARCH_ROW.ADD_SKILL,
+          label: "Add a skill",
+          page: SETTINGS_VIEW.SKILLS,
+          haystack: [
+            "Add a skill",
+            "skills skill install import github repository SKILL.md instructions agents",
+          ],
+        }
+      : undefined,
+    // The Notifications page's test, drawn wherever the page is.
+    {
+      id: SETTINGS_SEARCH_ROW.TEST_NOTIFICATION,
+      label: "Test notification",
+      page: SETTINGS_VIEW.NOTIFICATIONS,
+      haystack: ["Test notification", "notifications send alert banner permission allow"],
+    },
     // The window's own chords, fixed rather than chosen, listed below them; a gated feature's only while its experiment is on.
-    ...shownShortcutGroups(input.settings.experiments, input.capabilities).flatMap((group) =>
-      group.commands.map((command) => ({
+    ...shownShortcutGroups(input.settings.experiments, input.capabilities).flatMap((group) => [
+      ...group.commands.map((command) => ({
         id: command,
         label: APP_SHORTCUTS[command].label,
         page: SETTINGS_VIEW.SHORTCUTS,
         haystack: [APP_SHORTCUTS[command].label, WINDOW_SHORTCUT_WORDS, group.title],
       })),
-    ),
+      ...group.keys.map((key) => inContextEntry(key, group.title)),
+    ]),
     // The writing chords and Markdown rules, listed under the window's, found by the rule typed too.
     ...WRITING_ACTIONS_LISTED.map((action) => {
       const { label, markdown }: WritingShortcut = WRITING_SHORTCUTS[action];
@@ -358,6 +433,10 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         ],
       };
     }),
+    // A link's ⌘K and the @ list's keys, after the writing chords.
+    ...WRITING_KEYS_IN_CONTEXT.filter((key) => inContextShown(key, input.capabilities)).map((key) =>
+      inContextEntry(key, WRITING_GROUP_TITLE),
+    ),
     // Files changed's own keys, listed under Writing.
     ...FILES_CHANGED_KEYS_LISTED.map((key) => ({
       id: key,
@@ -422,16 +501,19 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     }));
 }
 
-/** One page's matches: the page that heads the group, and the rows under it. */
+/** A row a query found, with the stretches of its name that say why. */
+export interface SettingsSearchResult extends SettingsSearchEntry {
+  marks: readonly MatchRange[];
+}
+
+/** One page's matches: the page that heads the group, and the rows under it, best first. */
 interface SettingsSearchGroup {
   page: SettingsView;
-  items: readonly SettingsSearchEntry[];
+  items: readonly SettingsSearchResult[];
 }
 
 /** What became of the query, reported so no narrowing is ever silent. */
 export interface SettingsSearchOutcome {
-  /** The query's words, lowercased — what each entry was actually read against. */
-  tokens: readonly string[];
   /** The kept rows grouped under their pages, in the Settings sidebar's own order. */
   groups: readonly SettingsSearchGroup[];
   /** How many rows the query kept, across every group. */
@@ -439,33 +521,36 @@ export interface SettingsSearchOutcome {
 }
 
 /**
- * The query read over the corpus: every word must land somewhere in an
- * entry's haystack. A blank query is no search at all. The kept rows come
- * back grouped by page, because that is how the results are drawn.
+ * The query read over the corpus by the one tiered scorer (`searchHit`), the
+ * way ⌘K reads its rows: every word must land somewhere in an entry, its
+ * name first and the words it is known by after, and a row whose name is the
+ * query or begins with it ranks above one whose words are scattered, a row
+ * found only by what its name does not say last. Letters typed in order
+ * find nothing, so "thm" is not Theme. A blank query is no search at all.
+ * The kept rows come back grouped by page, because that is how the results
+ * are drawn, each page's rows best first and equals in the corpus's order.
  */
 export function searchSettings(
   entries: readonly SettingsSearchEntry[],
   query: string,
 ): SettingsSearchOutcome | undefined {
-  const tokens = searchTokens(query);
-  if (tokens.length === 0) return undefined;
-  const kept = entries.filter((entry) => matchesTokens(entry.haystack, tokens));
+  if (searchTokens(query).length === 0) return undefined;
+  const kept = entries.flatMap((entry): { entry: SettingsSearchResult; score: number }[] => {
+    const hit = searchHit({ label: entry.label, keywords: entry.haystack }, query);
+    return hit === undefined ? [] : [{ entry: { ...entry, marks: hit.label }, score: hit.score }];
+  });
   const groups = SETTINGS_PAGE_LIST.flatMap((page): SettingsSearchGroup[] => {
-    const items = kept.filter((entry) => entry.page === page);
+    const items = kept
+      .filter(({ entry }) => entry.page === page)
+      .sort((a, b) => b.score - a.score)
+      .map(({ entry }) => entry);
     return items.length > 0 ? [{ page, items }] : [];
   });
-  return { tokens, groups, matched: kept.length };
+  return { groups, matched: kept.length };
 }
 
 /** Whether the landing can hold the keyboard, or only be scrolled into view. */
 const FOCUSABLE = "button, select, input, textarea, [tabindex]";
-
-/**
- * What a landed row wears for the stylesheet to ring it once, so the eye finds
- * the row the view just moved to. The ring is a one-shot animation in
- * `search.css`; the attribute stays until the row is landed on again.
- */
-const SETTINGS_SEARCH_LANDED_ATTRIBUTE = "data-search-landed";
 
 /**
  * Takes the view to the row a pressed result named, waiting out the page swap
@@ -474,7 +559,8 @@ const SETTINGS_SEARCH_LANDED_ATTRIBUTE = "data-search-landed";
  * found by the anchor it wears, and is scrolled to the top of the view — the
  * scroller's own scroll padding keeps it clear of a pinned header — with a
  * control also taking the keyboard, without a second scroll of its own, and
- * the row ringed for a moment. It lands after the page's own header focus on
+ * the row lit for a moment, as every place landed on is (`land`), once more
+ * each time it is landed on. It lands after the page's own header focus on
  * purpose: the result named a row, so the row is where the view belongs. A
  * row the page is not drawing is given up on quietly.
  */
@@ -489,12 +575,7 @@ export function landOnSettingsRow(id: string): () => void {
       // keyboard; a row of several anchors the row and takes none, since
       // choosing among its buttons is not the landing's to do.
       if (element.matches(FOCUSABLE)) element.focus({ preventScroll: true });
-      // Note that the attribute comes off and back on across a style flush,
-      // because an animation only restarts when its rule is matched afresh,
-      // and a row landed on twice should ring twice.
-      element.removeAttribute(SETTINGS_SEARCH_LANDED_ATTRIBUTE);
-      element.getBoundingClientRect();
-      element.setAttribute(SETTINGS_SEARCH_LANDED_ATTRIBUTE, "");
+      land(element);
     },
   });
 }
@@ -639,28 +720,30 @@ export function SettingsSearchResults({
 }): React.JSX.Element {
   if (search.matched === 0) {
     return (
-      <p className="sidebar-note" role="status">
-        No results
-      </p>
+      <NoteLine look={NOTE_LINE_LOOK.ROWS} status>
+        {SETTINGS_NO_MATCH_WORDS}
+      </NoteLine>
     );
   }
   return (
     <div className="settings-search-results">
       {search.groups.map((group) => (
         <section key={group.page} aria-label={resultPageWord(group.page)}>
-          <h2 className="section-heading">{resultPageWord(group.page)}</h2>
-          <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
-            {group.items.map((entry) => (
-              <li key={entry.id}>
-                <NavItem
-                  current={entry.id === opened ? NAV_CURRENT.LOCATION : undefined}
-                  onClick={() => onOpen(entry)}
-                >
-                  <Highlighted text={entry.label} tokens={search.tokens} />
-                </NavItem>
-              </li>
-            ))}
-          </Stack>
+          <GroupHeader label={resultPageWord(group.page)}>
+            <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
+              {group.items.map((entry) => (
+                <li key={entry.id}>
+                  <NavItem
+                    current={entry.id === opened ? NAV_CURRENT.LOCATION : undefined}
+                    roving
+                    onClick={() => onOpen(entry)}
+                  >
+                    <Highlighted text={entry.label} ranges={entry.marks} />
+                  </NavItem>
+                </li>
+              ))}
+            </Stack>
+          </GroupHeader>
         </section>
       ))}
     </div>

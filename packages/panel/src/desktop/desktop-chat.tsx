@@ -1,31 +1,32 @@
 import { CHANNEL_KIND, type ChatChannel } from "@luke/features/chat-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { MentionLines, MentionPlace } from "@luke/features/mention-link";
 import { inPinOrder } from "@luke/features/pin-order";
 import type { CodeRef } from "@luke/features/task-wire";
+import { readFailedWords, readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
-  BackIcon,
+  BackButton,
   BUTTON_SIZE,
-  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
-  FoldingButton,
-  type FoldingButtonHint,
+  GROUP_SURFACE,
+  GroupHeader,
   IconButton,
+  joinRefs,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   List,
+  ListMotion,
   ListRow,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
+  MoreButton,
+  moreLabel,
   PencilIcon,
   PlusIcon,
   RESIZE_EDGE_SIDE,
@@ -35,12 +36,18 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SpinnerRegion,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Time,
+  TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
   UnarchiveIcon,
   useMenu,
   useMinute,
   useResizeEdge,
+  useRovingKeys,
   VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
@@ -54,6 +61,7 @@ import {
   FOR_YOU,
 } from "@luke/ui/chat-model";
 import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
+import { Schema } from "effect";
 import {
   AtSignIcon,
   HashIcon,
@@ -88,7 +96,8 @@ import { markReadItem } from "../tasks/task-menu-items.js";
 import { useTaskStatus } from "../tasks/use-known-names.js";
 import { useOpenLink, useOpenTask } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { keptKey, useKept } from "../use-kept.js";
+import { ActionMenu, type MenuAction, rowMenu } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";
 import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
@@ -96,7 +105,7 @@ import { strandedHome } from "./move-task-dialog.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { type MenuAsk, PhoneHead, PlaceMore, useAskedMenu, useMenuAsk } from "./phone-head.js";
 import { sectionGlyph } from "./section-icon-picker.js";
-import { SidebarGroupHeader } from "./sidebar-group-header.js";
+import { groupCount, sidebarFold } from "./sidebar-fold.js";
 import { TaskRowMark, taskCardOf } from "./task-card.js";
 
 /**
@@ -107,7 +116,7 @@ import { TaskRowMark, taskCardOf } from "./task-card.js";
  * The rail is drawn from the sidebar's own pieces: For you at its head,
  * counting what needs the developer in the Inbox's words (`NEEDS_YOU`),
  * then the channels, the tasks', and the direct messages, each group under
- * the sidebar's own group header (`SidebarGroupHeader`), each row wearing
+ * the sidebar's own group header (`GroupHeader`), each row wearing
  * the Inbox's unread dot and the unread weight while anything in it is
  * unread (`chat-model.ts`). A direct message's row leads with the other
  * member's mark and is named by who it is with; a direct message between
@@ -126,7 +135,7 @@ import { TaskRowMark, taskCardOf } from "./task-card.js";
  * place in the pane beside the rail (`chat-pane.tsx`), whose head ends on
  * the channel's menu, as an Inbox item's bar ends on the item's: Mark as
  * read and Copy link for every channel, Open task for a task's, and Edit
- * and Archive, or Bring back, for a topic. The agents are named from the
+ * and Archive, or Unarchive, for a topic. The agents are named from the
  * plans' summaries, the way the sidebar names them, from the lines the
  * chat read carries where those name more, and from a read of each agent
  * drawn past both (`useChatNames`). With nothing read, it says
@@ -299,7 +308,7 @@ function useTaskDoors(
 const CHAT_LIST = "Chat";
 
 /** What a reader hears while the chat is read, under the rail's placeholder rows. */
-const READING_CHAT = "Reading chat…";
+const READING_CHAT = readingWords("chat");
 
 /** What View options' toggle of the archived channels is called. */
 const SHOW_ARCHIVED = "Show archived channels";
@@ -307,15 +316,8 @@ const SHOW_ARCHIVED = "Show archived channels";
 /** What a task channel's menu opens its task with. */
 const OPEN_TASK = "Open task";
 
-/**
- * The way back's pill, which says where it goes and names Back's chord
- * whether its word is folded away or not, as the Inbox's way back does.
- */
-const BackHint: FoldingButtonHint = ({ children }) => (
-  <Tooltip label="Back to chat" command={APP_COMMAND.BACK}>
-    {children}
-  </Tooltip>
-);
+/** Where the way back from a place to the rail leads, as its hint names it. */
+const CHAT_RAIL_PLACE = "chat";
 
 /**
  * How the rail groups the tasks' channels: as the reader's sidebar groups
@@ -450,20 +452,36 @@ function railGroups(
   };
 }
 
-/** Which of the rail's groups stand folded, for as long as Chat stands: each as it starts until toggled, the toggled kept apart for each space. */
+/** The rail's folds as kept: each space's groups the reader toggled, by key. */
+const storedRailFolds = Schema.fromJsonString(
+  Schema.Struct({
+    [RAIL_SPACE.RAIL]: Schema.Array(Schema.String),
+    [RAIL_SPACE.TASKS]: Schema.Array(Schema.String),
+  }),
+);
+
+/** The view choices Chat keeps on this Mac. */
+const KEPT = {
+  RAIL_FOLDS: keptKey("luke.chatRailFolds", storedRailFolds),
+} as const;
+
+const NO_RAIL_FOLDS = { [RAIL_SPACE.RAIL]: [], [RAIL_SPACE.TASKS]: [] } as const;
+
+/** Which of the rail's groups stand folded: each as it starts until toggled, the toggled kept apart for each space, and kept on this Mac. */
 function useRailFolds() {
-  const [toggled, setToggled] = useState<Readonly<Record<RailSpace, ReadonlySet<string>>>>({
-    [RAIL_SPACE.RAIL]: new Set(),
-    [RAIL_SPACE.TASKS]: new Set(),
-  });
+  const [toggled, keep] = useKept(KEPT.RAIL_FOLDS, NO_RAIL_FOLDS);
   return {
-    folded: (group: RailGroupShown) => group.foldedAtFirst !== toggled[group.space].has(group.key),
-    toggle: (group: RailGroupShown) =>
-      setToggled((was) => {
-        const next = new Set(was[group.space]);
-        if (!next.delete(group.key)) next.add(group.key);
-        return { ...was, [group.space]: next };
-      }),
+    folded: (group: RailGroupShown) =>
+      group.foldedAtFirst !== toggled[group.space].includes(group.key),
+    toggle: (group: RailGroupShown) => {
+      const held = toggled[group.space];
+      keep({
+        ...toggled,
+        [group.space]: held.includes(group.key)
+          ? held.filter((each) => each !== group.key)
+          : [...held, group.key],
+      });
+    },
   };
 }
 
@@ -474,7 +492,7 @@ const NEW_CHANNEL = "New channel";
 const NO_CHAT = "Chat is not available yet.";
 
 /** What the view says where the workspace's chat could not be read. */
-const CHAT_FAILED = "The workspace's chat could not be read.";
+const CHAT_FAILED = readFailedWords("the workspace's chat");
 
 /** Whether a row stands for the place shown. */
 function shows(place: ChatPlace, row: ChatRailRow): boolean {
@@ -530,7 +548,7 @@ function topicActionGroups(channel: ChatChannel, dialogs: ChannelDialogs): MenuA
     return [
       [
         {
-          label: "Bring back channel",
+          label: "Unarchive",
           icon: <UnarchiveIcon />,
           onSelect: () => dialogs.askArchive(channel),
         },
@@ -538,10 +556,10 @@ function topicActionGroups(channel: ChatChannel, dialogs: ChannelDialogs): MenuA
     ];
   }
   return [
-    [{ label: "Edit channel", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(channel) }],
+    [{ label: "Edit", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(channel) }],
     [
       {
-        label: "Archive channel",
+        label: "Archive",
         icon: <ArchiveIcon />,
         onSelect: () => dialogs.askArchive(channel),
       },
@@ -636,7 +654,7 @@ function RailRow({
  * where something in it needs the reader, as an Inbox item's needing them
  * wears it, what its row says there and when it last spoke, and under it
  * who said what last. It hangs its card, or its name alone, while the
- * pointer rests on it, a right-click opens its menu where it has one, and
+ * pointer rests on it, its ⋯, a right-click and the menu key open its menu where it has one, and
  * while something waits unread in it, Mark as read stands at its end on
  * hover and a swipe right does it, as an Inbox row's do.
  */
@@ -666,7 +684,7 @@ function PlaceRow({
   card: React.ReactNode;
   /** Said at the line's end before its time: a task's agent at work or its pull request, or a direct message's agent's failed mark. */
   end: React.ReactNode;
-  /** Its menu's groups of actions, a right-click away; none opens no menu. */
+  /** Its menu's groups of actions, behind its ⋯, a right-click and the menu key; none opens no menu. */
   groups: readonly MenuAction[][];
   /** Whether Chat is on screen, which its menu does not outlive. */
   shown: boolean;
@@ -674,79 +692,82 @@ function PlaceRow({
   onRead: (() => void) | undefined;
   onChoose: () => void;
 }): React.JSX.Element {
-  const menu = useMenu(shown);
-  const press = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
   const region = useRef<HTMLElement | null>(null);
   const hold = useCallback((element: HTMLElement | null) => {
-    press.current = element;
     region.current = element?.parentElement ?? null;
   }, []);
   return (
-    <>
-      <RowHintOptions card={card} cardBeside cardRegion={region}>
-        <ListRow
-          ref={hold}
-          leading={
-            <>
-              {/* Note that the gutter stands on every row, so the marks line up whether a row wears the dot or not. */}
-              <span className="inbox-row-gutter">
-                {unread ? <span className="inbox-row-unread" /> : null}
-              </span>
-              <span className="inbox-row-mark">{mark}</span>
-            </>
-          }
-          title={title}
-          description={preview}
-          meta={
-            <span className="home-row-meta">
-              {unread ? <VisuallyHidden>{UNREAD_WORDS}</VisuallyHidden> : null}
-              {needsYou ? (
-                <span className="inbox-row-attention">
-                  <AttentionMark />
-                  <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
-                </span>
-              ) : null}
-              {end}
-              {at === undefined ? null : <Time at={at} hint={false} />}
+    <RowHintOptions card={card} cardBeside cardRegion={region}>
+      <ListRow
+        ref={hold}
+        leading={
+          <>
+            {/* Note that the gutter stands on every row, so the marks line up whether a row wears the dot or not. */}
+            <span className="inbox-row-gutter">
+              {unread ? <span className="inbox-row-unread" /> : null}
             </span>
-          }
-          ink={LIST_ROW_INK.SIDEBAR}
-          current={current ? LIST_ROW_CURRENT.PAGE : undefined}
-          unread={unread}
-          menuOpen={menu.open !== undefined}
-          hint={{ Hint: RowHint, label: title }}
-          onPress={onChoose}
-          contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
-          actions={
-            onRead === undefined ? undefined : (
-              <Tooltip label={MARK_READ}>
-                <IconButton
-                  icon={<MailOpenIcon />}
-                  label={MARK_READ}
-                  size={BUTTON_SIZE.COMPACT}
-                  onClick={onRead}
-                />
-              </Tooltip>
-            )
-          }
-          actionsAt={LIST_ROW_ACTIONS.HOVER}
-          swipe={
-            onRead === undefined
-              ? undefined
-              : { label: SWIPE_READ, icon: <MailOpenIcon />, onAct: onRead }
-          }
-        />
-      </RowHintOptions>
-      {menu.drawn === undefined || groups.length === 0 ? null : (
-        <ActionMenu
-          label={`${title} actions`}
-          menu={menu.drawn}
-          groups={groups}
-          onClose={menu.close}
-        />
-      )}
-    </>
+            <span className="inbox-row-mark">{mark}</span>
+          </>
+        }
+        title={title}
+        description={preview}
+        meta={
+          <span className="home-row-meta">
+            {unread ? <VisuallyHidden>{UNREAD_WORDS}</VisuallyHidden> : null}
+            {needsYou ? (
+              <span className="inbox-row-attention">
+                <AttentionMark />
+                <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
+              </span>
+            ) : null}
+            {end}
+            {at === undefined ? null : <Time at={at} hint={false} />}
+          </span>
+        }
+        ink={LIST_ROW_INK.SIDEBAR}
+        current={current ? LIST_ROW_CURRENT.PAGE : undefined}
+        unread={unread}
+        hint={{ Hint: RowHint, label: title }}
+        onPress={onChoose}
+        menu={rowMenu(title, groups, shown)}
+        actions={
+          onRead === undefined ? undefined : (
+            <Tooltip label={MARK_READ}>
+              <IconButton
+                icon={<MailOpenIcon />}
+                label={MARK_READ}
+                size={BUTTON_SIZE.COMPACT}
+                onClick={onRead}
+              />
+            </Tooltip>
+          )
+        }
+        actionsAt={LIST_ROW_ACTIONS.HOVER}
+        swipe={
+          onRead === undefined
+            ? undefined
+            : { label: SWIPE_READ, icon: <MailOpenIcon />, onAct: onRead }
+        }
+      />
+    </RowHintOptions>
+  );
+}
+
+/** A group's places, as one list. */
+function RailRows({
+  name,
+  rows,
+  row,
+}: {
+  name: string;
+  rows: readonly ChatRailRow[];
+  row: (each: ChatRailRow) => React.JSX.Element;
+}): React.JSX.Element {
+  return (
+    <List label={name} density={LIST_DENSITY.DENSE} joinsWalk moves>
+      {rows.map(row)}
+    </List>
   );
 }
 
@@ -778,7 +799,6 @@ function RailGroup({
   row: (each: ChatRailRow) => React.JSX.Element;
   current: (each: ChatRailRow) => boolean;
 }): React.JSX.Element {
-  const drawn = folded ? rows.filter(current) : rows;
   const unread = rows.filter((each) => each.unread > 0);
   const menu = useMenu(shown);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
@@ -792,42 +812,33 @@ function RailGroup({
       },
     ],
   ];
+  const standing = rows.filter(current);
   return (
     <div className="sidebar-repository">
-      <SidebarGroupHeader
+      <GroupHeader
         glyph={glyph}
-        name={name}
-        folded={folded}
-        count={unread.length}
-        noun={UNREAD_NOUN}
-        steady
+        label={name}
+        fold={sidebarFold(folded, onToggle)}
+        count={unread.length === 0 ? undefined : groupCount(unread.length, UNREAD_NOUN)}
+        surface={GROUP_SURFACE.NARROW}
         menuOpen={menu.open !== undefined}
         contextMenu={menu.contextMenu(ellipsis)}
-        onToggle={onToggle}
-        actions={
-          <Tooltip label="Group actions">
-            <IconButton
-              ref={ellipsis}
-              icon={<EllipsisIcon />}
-              label={`Actions for ${name}`}
-              size={BUTTON_SIZE.COMPACT}
-              {...menu.trigger()}
-            />
-          </Tooltip>
+        standing={
+          standing.length === 0 ? undefined : <RailRows name={name} rows={standing} row={row} />
         }
-      />
+        actions={
+          <MoreButton ref={ellipsis} thing={name} size={BUTTON_SIZE.COMPACT} {...menu.trigger()} />
+        }
+      >
+        {rows.length === 0 ? null : <RailRows name={name} rows={rows} row={row} />}
+      </GroupHeader>
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={`${name} actions`}
+          label={moreLabel(name)}
           menu={menu.drawn}
           groups={groups}
           onClose={menu.close}
         />
-      )}
-      {drawn.length === 0 ? null : (
-        <List label={name} density={LIST_DENSITY.DENSE}>
-          {drawn.map(row)}
-        </List>
       )}
     </div>
   );
@@ -878,6 +889,8 @@ function nextUnread(groups: RailGroupsShown, place: ChatPlace): ChatPlace | unde
  * holding anything unread. The row a key lands on takes the keyboard where
  * the rail stands, as the Inbox's row does, so the keys go on from there;
  * where the place stands alone, the narrow focus hands it on instead.
+ * Answers the place the keys last stepped to, whose box leaves the caret
+ * out of it so the keys go on.
  */
 function useChannelKeys({
   groups,
@@ -895,8 +908,11 @@ function useChannelKeys({
   active: boolean;
   railShown: boolean;
   rail: React.RefObject<HTMLDivElement | null>;
-}): void {
+}): ChatPlace | undefined {
   const stepped = useRef(false);
+  const [steppedTo, setSteppedTo] = useState<ChatPlace | undefined>(undefined);
+  // Note that a step is spent once another place is shown, so a press that opens it again later is a press.
+  if (steppedTo !== undefined && !samePlace(steppedTo, place)) setSteppedTo(undefined);
   const steps = groups === undefined ? [] : drawnSteps(groups, folded, place);
   const at = steps.findIndex((each) => samePlace(each, place));
   const go = (to: ChatPlace | undefined) =>
@@ -904,6 +920,7 @@ function useChannelKeys({
       ? undefined
       : () => {
           stepped.current = true;
+          setSteppedTo(to);
           onChoose(to);
         };
   const previous = at > 0 ? steps[at - 1] : undefined;
@@ -921,6 +938,7 @@ function useChannelKeys({
       ?.querySelector<HTMLElement>('.chat-rail [aria-current]:not([aria-current="false"])')
       ?.focus();
   });
+  return steppedTo;
 }
 
 /**
@@ -1013,7 +1031,7 @@ function ChatView({
     rail === undefined
       ? undefined
       : railGroups(rail, showArchived, (each) => shows(view.place, each));
-  useChannelKeys({
+  const steppedTo = useChannelKeys({
     groups,
     folded: folds.folded,
     place: view.place,
@@ -1022,6 +1040,11 @@ function ChatView({
     railShown: !hidden.list,
     rail: screen,
   });
+  // The rail's places, For you and every group's, are one Tab stop that ↑↓ walk.
+  const railKeys = useRovingKeys<HTMLDivElement>();
+  // Note that the rail's body is the root its rows' motion plays under, so a direct message that gets a message glides to the top.
+  const railBody = useRef<HTMLDivElement | null>(null);
+  const railBodyRef = useMemo(() => joinRefs(railBody, railKeys.ref), [railKeys.ref]);
   // Note that the window's Chat stands on no task's page, so a task's channel is handed its task's mentions here.
   const taskDoors = useTaskDoors(tasks, true);
   const mentionPlace = useMemo(() => mentionPlaceOf(tasks.workspace), [tasks.workspace]);
@@ -1043,12 +1066,14 @@ function ChatView({
       ),
     [answer, names, dialogs, view.open, readChannels, onSelect],
   );
+  // A phone's way back is the glyph alone, named for where it goes, as every phone's page leads (`phone-head.tsx`).
+  const phone = room === SHELL_ROOM.NARROW;
   const lead = useMemo(
     () =>
-      single ? (
-        <FoldingButton label={CHAT_LIST} icon={<BackIcon />} onClick={onList} hint={BackHint} />
+      phone || single ? (
+        <BackButton label={CHAT_LIST} place={CHAT_RAIL_PLACE} onBack={onList} />
       ) : undefined,
-    [single, onList],
+    [phone, single, onList],
   );
   if (read === undefined || view.failed || rail === undefined || groups === undefined) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
@@ -1135,27 +1160,29 @@ function ChatView({
           )}
         />
         <ScrollArea fade={SCROLL_FADE.START}>
-          <div className="chat-rail-body">
-            <List label="For you" density={LIST_DENSITY.DENSE}>
-              <PlaceRow
-                mark={<AtSignIcon />}
-                title="For you"
-                preview={needsYouWords(rail.forYou)}
-                at={undefined}
-                unread={false}
-                needsYou={rail.forYou > 0}
-                current={view.place.kind === CHAT_PLACE.FOR_YOU}
-                card={undefined}
-                end={undefined}
-                groups={forYouGroups}
-                shown={view.open}
-                onRead={undefined}
-                onChoose={() => view.onChoose(FOR_YOU)}
-              />
-            </List>
-            {groups.lead.map(group)}
-            {groups.tasks.map(group)}
-            {groups.trail.map(group)}
+          <div className="chat-rail-body" {...railKeys} ref={railBodyRef}>
+            <ListMotion root={railBody}>
+              <List label="For you" density={LIST_DENSITY.DENSE} joinsWalk>
+                <PlaceRow
+                  mark={<AtSignIcon />}
+                  title="For you"
+                  preview={needsYouWords(rail.forYou)}
+                  at={undefined}
+                  unread={false}
+                  needsYou={rail.forYou > 0}
+                  current={view.place.kind === CHAT_PLACE.FOR_YOU}
+                  card={undefined}
+                  end={undefined}
+                  groups={forYouGroups}
+                  shown={view.open}
+                  onRead={undefined}
+                  onChoose={() => view.onChoose(FOR_YOU)}
+                />
+              </List>
+              {groups.lead.map(group)}
+              {groups.tasks.map(group)}
+              {groups.trail.map(group)}
+            </ListMotion>
           </div>
         </ScrollArea>
         {single ? null : <ResizeEdge edge={edge} />}
@@ -1171,10 +1198,12 @@ function ChatView({
         onAnswer={view.onAnswer}
         channelActions={channelActions}
         onOpen={view.onChoose}
+        takesCaret={steppedTo === undefined || !samePlace(steppedTo, view.place)}
         onBringBack={dialogs.askArchive}
         readPicture={view.readPicture}
         taskDoors={taskDoors}
         lead={lead}
+        phone={phone}
         hidden={hidden.item}
       />
       {dialogs.dialog}
@@ -1216,13 +1245,18 @@ function RailBar({
           place="chat-rail"
           start={newChannel}
           title={
-            <>
-              <h1 className="desktop-toolbar-title">{CHAT_LIST}</h1>
-              <ExperimentTag narrow />
-            </>
+            <Text
+              as={TEXT_ELEMENT.H1}
+              variant={TEXT_VARIANT.TOOLBAR_TITLE}
+              className="luke-toolbar-title"
+            >
+              {CHAT_LIST}
+            </Text>
           }
+          tag={<ExperimentTag narrow />}
           end={
             <PlaceMore
+              thing="Chat"
               shown
               groups={(opener) =>
                 [
@@ -1247,23 +1281,19 @@ function RailBar({
     );
   }
   return (
-    <header className="desktop-toolbar chat-rail-bar">
-      <div className="desktop-toolbar-heading">
-        <OneLine
-          as={ONE_LINE_ELEMENT.H1}
-          end={ONE_LINE_END.ELLIPSIS}
-          className="desktop-toolbar-title"
-        >
-          {CHAT_LIST}
-        </OneLine>
-        <ExperimentTag narrow={narrow} />
-      </div>
-      <div className="desktop-toolbar-actions">
-        {viewOptions?.(undefined)}
-        {newChannel}
-        <SendFeedbackButton experiment={EXPERIMENT.CHAT} />
-      </div>
-    </header>
+    <Toolbar
+      title={CHAT_LIST}
+      tag={<ExperimentTag />}
+      end={TOOLBAR_INSET.COLUMN}
+      folded
+      actions={
+        <>
+          {viewOptions?.(undefined)}
+          {newChannel}
+          <SendFeedbackButton experiment={EXPERIMENT.CHAT} />
+        </>
+      }
+    />
   );
 }
 
@@ -1319,7 +1349,7 @@ function ChatViewOptions({
  * A channel's menu at its head's end, as an Inbox item's bar ends on the
  * item's: Mark as read while anything in it is unread, and Copy link, for
  * every channel; Open task for a task's; and for a topic, Edit and Archive,
- * or Bring back once archived.
+ * or Unarchive once archived.
  */
 function ChannelActions({
   channel,
@@ -1342,7 +1372,7 @@ function ChannelActions({
   const menu = useMenu(shown);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.CHAT, channelId: channel.id });
   const taskStatus = useTaskStatus(channel.planId);
-  const label = `${title} actions`;
+  const label = moreLabel(title);
   const read: MenuAction = {
     ...markReadItem({ unread: true, onMark: onMarkRead }),
     disabled: !unread,
@@ -1367,9 +1397,7 @@ function ChannelActions({
   );
   return (
     <>
-      <Tooltip label="Channel actions">
-        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={title} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
@@ -1416,9 +1444,12 @@ export function TaskChatTab({
             {CHAT_FAILED}
           </ErrorState>
         ) : read === undefined && view.available ? (
-          <SpinnerRegion delay label="Loading chat" />
+          <SpinnerRegion delay label={readingWords("chat")} />
         ) : (
-          <EmptyState icon={<MessagesSquareIcon />}>{NO_TASK_CHANNEL}</EmptyState>
+          // Note that a chat nothing could be read of says so, rather than that nothing is posted in it.
+          <EmptyState icon={<MessagesSquareIcon />}>
+            {read === undefined ? NO_CHAT : NO_TASK_CHANNEL}
+          </EmptyState>
         )}
       </section>
     );

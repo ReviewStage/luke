@@ -9,8 +9,14 @@ import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { keepIdentity } from "@luke/wire";
-import { type Context, Effect, Equal, type Scope, Stream, SubscriptionRef } from "effect";
-import { type AppState, type AppStateSnapshot, NO_ACCESS } from "../app-state.js";
+import { type Context, Effect, type Scope, Stream, SubscriptionRef } from "effect";
+import {
+  type AppState,
+  type AppStateSnapshot,
+  type AppWindowFacts,
+  NO_ACCESS,
+} from "../app-state.js";
+import { stagedCallState } from "../fixture-stage.js";
 import type { HostBootstrap } from "../host-operator.js";
 import type { RunMode } from "../run-mode.js";
 import { idleUpdateSnapshot } from "../update-service.js";
@@ -20,8 +26,8 @@ type AppStateSlice = Exclude<keyof AppState, "version">;
 /**
  * One shallow slice replacement per key; a slice is replaced whole, never
  * merged field-wise. It lives here rather than beside the document because
- * the store is the one thing that patches one: a window is handed whole
- * snapshots.
+ * the store is the one thing that patches one: a window is handed what moved
+ * in the document (`AppStateDelivery`), never a patch.
  */
 type AppStatePatch = { readonly [Slice in AppStateSlice]?: AppState[Slice] };
 
@@ -158,60 +164,25 @@ interface WindowRole {
 }
 
 /**
- * One slice as a window draws it: the voice window draws no voice view,
- * because that view is the one it reports itself (`reportVoiceView`), so a
- * view it sent is never handed back to it.
+ * The document as one window is handed it, its own facts beside it. The call
+ * transcript reaches the panels alone, which draw it: the voice window
+ * reports it and the call window draws no line of it. And the voice window
+ * is handed no view, because the view is the one it reports itself
+ * (`reportVoiceView`); what it reads of the voice slice is the avatar. Each
+ * stream sends a window only what moved in what it is handed
+ * (`push-procedures.ts`), so a caption the voice window reports reaches it
+ * as nothing, and the call window as the view alone.
  */
-function drawnSlice(snapshot: AppStateSnapshot, slice: keyof AppStateSnapshot, window: WindowRole) {
-  if (slice === "voice" && window.voice) {
-    const { view: _view, ...drawn } = snapshot.voice;
-    return drawn;
-  }
-  return snapshot[slice];
-}
-
-/**
- * Whether a window last handed `sent` has anything new to draw in `next`: a
- * slice it draws, or its own facts. The version alone is not news, since a
- * reader keeps any delivery at least as new as the one it holds.
- */
-function drawnMoved(sent: AppStateSnapshot, next: AppStateSnapshot, window: WindowRole): boolean {
-  // SAFETY: `Object.keys` of a snapshot names its own slices, the window's facts, and its version.
-  const slices = Object.keys(next) as (keyof AppStateSnapshot)[];
-  return slices.some(
-    (slice) =>
-      slice !== "version" &&
-      !Equal.equals(drawnSlice(sent, slice, window), drawnSlice(next, slice, window)),
-  );
-}
-
-/**
- * The document as each window was last handed it, so a window is handed it
- * again only when a slice it draws, or its own facts, moved: the voice window
- * is not told of the view it just reported. Note that a
- * window is held weakly, by the platform's handle on it, so a window that
- * goes takes its entry with it; and one that reloads reads the document on
- * its first read, so the entry its old page left skips nothing it needs.
- */
-export class WindowAppStates<Window extends object> {
-  readonly #sent = new WeakMap<Window, AppStateSnapshot>();
-
-  /**
-   * Hands `send` the snapshot, unless nothing the window draws moved since
-   * the last one it took;
-   * `send` answers whether the window took it, which one with no stream open
-   * does not.
-   */
-  offer(
-    window: Window,
-    role: WindowRole,
-    snapshot: AppStateSnapshot,
-    send: (shown: AppStateSnapshot) => boolean,
-  ): void {
-    const sent = this.#sent.get(window);
-    if (sent !== undefined && !drawnMoved(sent, snapshot, role)) return;
-    if (send(snapshot)) this.#sent.set(window, snapshot);
-  }
+export function windowAppState(
+  held: AppState,
+  role: WindowRole,
+  window: AppWindowFacts,
+): AppStateSnapshot {
+  if (!role.voice && !role.call) return { ...held, window };
+  const { callTranscript: _callTranscript, ...drawn } = held;
+  return role.voice
+    ? { ...drawn, voice: { avatar: held.voice.avatar }, window }
+    : { ...drawn, window };
 }
 
 /**
@@ -222,6 +193,15 @@ export class WindowAppStates<Window extends object> {
  */
 export function voiceWindowGone(held: AppState["voice"]): AppState["voice"] {
   return { avatar: held.avatar };
+}
+
+/**
+ * The voice slice once the voice window has been given up on for the run:
+ * gone as above, and voice unavailable until Luke is reopened, which every
+ * panel says where it offers a call.
+ */
+export function voiceWindowGaveUp(held: AppState["voice"]): AppState["voice"] {
+  return { ...voiceWindowGone(held), unavailable: true };
 }
 
 /** What a launch knows of itself before the host answers anything, which is the run slice's own facts. */
@@ -241,7 +221,8 @@ interface ClientRunFacts {
 /**
  * The document as a launch begins it: this process's own facts, what the
  * platform offers, and an empty
- * standing for everything the host has not answered yet. Nothing here reads
+ * standing for everything the host has not answered yet, but the call a
+ * call profile's fixture run stages (`fixture-stage.ts`). Nothing here reads
  * a device or the host — the first bootstrap and the events after it are
  * what fill the rest in.
  */
@@ -251,6 +232,8 @@ export function initialAppState(
   capabilities: readonly HostCapability[],
 ): Omit<AppState, "version"> {
   const { launch, runMode } = config;
+  // A call profile's fixture run opens on its staged call, as no voice window reports one.
+  const staged = stagedCallState(launch);
   return {
     run: {
       profile: launch.profile,
@@ -268,13 +251,14 @@ export function initialAppState(
     access: NO_ACCESS,
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
-    voice: { avatar: AVATAR_OFF },
-    tasks: IDLE_TASKS_VIEW,
+    voice: staged?.voice ?? { avatar: AVATAR_OFF },
+    tasks: staged?.tasks ?? IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [], chat: [] },
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
+    ...(staged === undefined ? undefined : { callTranscript: staged.callTranscript }),
   };
 }

@@ -1,10 +1,10 @@
 import type { AdminDailyUsage } from "@luke/features/admin-answer-wire";
+import { formatCount } from "@luke/features/number-format";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "@luke/ui/activity-calendar";
 import { formatTooltipDay } from "@luke/ui/admin-format";
 import { ChartTooltipFrame } from "@luke/ui/chart";
 import { partialDayKey } from "@luke/ui/daily-series";
-import { formatCount } from "@luke/ui/time-format";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { ChartFrame, ChartFrameSkeleton } from "./chart-frame.js";
 import { USAGE_CHART } from "./usage-chart.js";

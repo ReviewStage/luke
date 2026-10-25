@@ -19,9 +19,11 @@
  * message, so a note is told from a brief whose prose holds its heading,
  * with a replay or without.
  *
- * A tool call's step marker also names where the call stood and its
- * input's length, so its input and its output are read apart from its words
- * by length rather than by what they say, and a line's names who sent it.
+ * A tool call's step marker also names where the call stood, its input's
+ * length, and the tool it called, so its input and its output are read
+ * apart from its words by length rather than by what they say, and the
+ * call is drawn as the live transcript draws a call of that tool; a line's
+ * names who sent it and when.
  *
  * Every marker that a run of text follows says that text's length in
  * `chars=N`, counted as JavaScript counts a string's length, in UTF-16
@@ -63,6 +65,14 @@ export const REPLAY_TOOL_STATE = {
 
 export type ReplayToolState = (typeof REPLAY_TOOL_STATE)[keyof typeof REPLAY_TOOL_STATE];
 
+/** How a tool call's input or output is spelled in its words: as the text it was, or as the JSON of a value that was no text. */
+export const REPLAY_VALUE_FORM = {
+  TEXT: "text",
+  JSON: "json",
+} as const;
+
+export type ReplayValueForm = (typeof REPLAY_VALUE_FORM)[keyof typeof REPLAY_VALUE_FORM];
+
 /** Who sent a line: a member of the workspace, Luke, an automation, GitHub, another agent, or the developer where the row named none. */
 export const REPLAY_SENDER = {
   DEVELOPER: "developer",
@@ -85,8 +95,10 @@ interface ReplaySender {
  * One step: its kind, its summary on one line, and its words as sent, a
  * tool call's input and result whole. A tool call also carries where it
  * stood, its input, and its output, its result or its error, none while it
- * ran; a line carries who sent it. Each is read from the step's marker, so
- * a step written before the marker named them carries none of them.
+ * ran, the tool it called, and whether its input and its output were text
+ * or a value spelled as JSON; a line carries who sent it and when, in
+ * milliseconds since the epoch. Each is read from the step's marker, so a
+ * step written before the marker named them carries none of them.
  */
 export interface ReplayStep {
   readonly kind: ReplayStepKind;
@@ -95,7 +107,11 @@ export interface ReplayStep {
   readonly state?: ReplayToolState;
   readonly input?: string;
   readonly output?: string;
+  readonly tool?: string;
+  readonly inputForm?: ReplayValueForm;
+  readonly outputForm?: ReplayValueForm;
   readonly sender?: ReplaySender;
+  readonly at?: number;
 }
 
 /** The words a tool call's step says, as the model reads them: its input, then its result, its failure, or that it had none yet. */
@@ -106,12 +122,15 @@ const TOOL_WORDS = {
   NO_RESULT: "(no result: the call was still under way)",
 } as const;
 
-/** A tool call as a step, its words spelled from where it stood, its input, and its output. */
+/** A tool call as a step, its words spelled from where it stood, its input, and its output, and the tool it called where it is named. */
 export function toolStep(call: {
   readonly summary: string;
   readonly state: ReplayToolState;
   readonly input: string;
   readonly output?: string;
+  readonly tool?: string;
+  readonly inputForm?: ReplayValueForm;
+  readonly outputForm?: ReplayValueForm;
 }): ReplayStep {
   const result =
     call.state === REPLAY_TOOL_STATE.RUNNING
@@ -124,6 +143,11 @@ export function toolStep(call: {
     state: call.state,
     input: call.input,
     ...(call.state === REPLAY_TOOL_STATE.RUNNING ? undefined : { output: call.output ?? "" }),
+    ...(call.tool === undefined ? undefined : { tool: call.tool }),
+    ...(call.inputForm === undefined ? undefined : { inputForm: call.inputForm }),
+    ...(call.state === REPLAY_TOOL_STATE.RUNNING || call.outputForm === undefined
+      ? undefined
+      : { outputForm: call.outputForm }),
   };
 }
 
@@ -184,8 +208,10 @@ const STEP_OPEN =
   /^<!-- luke:step kind=([a-z]+)((?: [a-z-]+=[A-Za-z0-9_.:@-]+)*) chars=(\d+) -->\n/u;
 const STEP_ATTRIBUTE = / ([a-z-]+)=([A-Za-z0-9_.:@-]+)/gu;
 const ATTRIBUTE_VALUE = /^[A-Za-z0-9_.:@-]+$/u;
+const INSTANT_VALUE = /^\d+$/u;
 const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(REPLAY_TOOL_STATE));
 const SENDER_KINDS: ReadonlySet<string> = new Set(Object.values(REPLAY_SENDER));
+const VALUE_FORMS: ReadonlySet<string> = new Set(Object.values(REPLAY_VALUE_FORM));
 const SUMMARY_OPEN = /^<!-- luke:summary by=luke steps=(\d+) chars=(\d+) -->\n/u;
 
 const STEP_KINDS: ReadonlySet<string> = new Set(Object.values(REPLAY_STEP_KIND));
@@ -196,16 +222,29 @@ function oneLine(text: string): string {
   return text.replace(/\s+/gu, " ").trim();
 }
 
-/** What a step's marker names beside its kind: a tool call's state and its input's length, or a line's sender and member. */
+/** A value the marker can spell as one attribute, or none where it cannot, which leaves the attribute out. */
+function spelled(key: string, value: string | undefined): string {
+  return value !== undefined && ATTRIBUTE_VALUE.test(value) ? ` ${key}=${value}` : "";
+}
+
+/** When a line was sent as its marker spells it, or none where it is no whole moment. */
+function instant(at: number | undefined): string {
+  return at !== undefined && Number.isSafeInteger(at) && at >= 0 ? ` at=${at}` : "";
+}
+
+/** What a step's marker names beside its kind: a tool call's state, its input's length, its tool, and the forms of its input and output, or a line's sender, member, and when it was sent. */
 function stepAttributes(step: ReplayStep): string {
   if (step.kind === REPLAY_STEP_KIND.TOOL && step.state !== undefined && step.input !== undefined) {
-    return ` state=${step.state} input-chars=${step.input.length}`;
+    const forms = `${spelled("input-form", step.inputForm)}${spelled("output-form", step.outputForm)}`;
+    return ` state=${step.state} input-chars=${step.input.length}${spelled("tool", step.tool)}${forms}`;
   }
-  if (step.kind !== REPLAY_STEP_KIND.LINE || step.sender === undefined) return "";
-  const member = step.sender.memberId;
+  if (step.kind !== REPLAY_STEP_KIND.LINE) return "";
   // A member id the marker cannot spell is left out, and the line is still the member's.
-  const named = member !== undefined && ATTRIBUTE_VALUE.test(member) ? ` member=${member}` : "";
-  return ` sender=${step.sender.kind}${named}`;
+  const sender =
+    step.sender === undefined
+      ? ""
+      : ` sender=${step.sender.kind}${spelled("member", step.sender.memberId)}`;
+  return `${sender}${instant(step.at)}`;
 }
 
 /** One step as the block spells it. */
@@ -214,8 +253,33 @@ function stepText(step: ReplayStep): string {
   return `<!-- luke:step kind=${step.kind}${stepAttributes(step)} chars=${body.length}${MARKER_END}${body}\n`;
 }
 
-/** A tool call's state, input, and output read back from its marker and its words; none where they do not add up. */
+/** A value's form read back from its marker; none where it names none it knows. */
+function formOf(value: string | undefined): ReplayValueForm | undefined {
+  // SAFETY: the value was checked against the vocabulary in the same expression.
+  return value !== undefined && VALUE_FORMS.has(value) ? (value as ReplayValueForm) : undefined;
+}
+
+/** A tool call's state, input, output, tool, and the forms of its input and output read back from its marker and its words; none where they do not add up. */
 function toolFields(
+  attributes: ReadonlyMap<string, string>,
+  words: string,
+): Pick<ReplayStep, "state" | "input" | "output" | "tool" | "inputForm" | "outputForm"> {
+  const called = calledFields(attributes, words);
+  if (called.state === undefined) return called;
+  const tool = attributes.get("tool");
+  const inputForm = formOf(attributes.get("input-form"));
+  const outputForm =
+    called.output === undefined ? undefined : formOf(attributes.get("output-form"));
+  return {
+    ...called,
+    ...(tool === undefined ? undefined : { tool }),
+    ...(inputForm === undefined ? undefined : { inputForm }),
+    ...(outputForm === undefined ? undefined : { outputForm }),
+  };
+}
+
+/** A tool call's state, input, and output read back from its marker and its words; none where they do not add up. */
+function calledFields(
   attributes: ReadonlyMap<string, string>,
   words: string,
 ): Pick<ReplayStep, "state" | "input" | "output"> {
@@ -235,8 +299,15 @@ function toolFields(
   return { state: known, input, output: result.slice(TOOL_WORDS.FAILED.length) };
 }
 
+/** A line's sender and when it was sent read back from its marker; none of either where it names none it knows. */
+function lineFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep, "sender" | "at"> {
+  const at = attributes.get("at") ?? "";
+  const when = INSTANT_VALUE.test(at) && Number.isSafeInteger(Number(at)) ? { at: Number(at) } : {};
+  return { ...senderFields(attributes), ...when };
+}
+
 /** A line's sender read back from its marker; none where it names none it knows. */
-function lineFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep, "sender"> {
+function senderFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep, "sender"> {
   const kind = attributes.get("sender") ?? "";
   if (!SENDER_KINDS.has(kind)) return {};
   const member = attributes.get("member");

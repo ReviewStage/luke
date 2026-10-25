@@ -138,7 +138,7 @@ const hasColumn = (table: string, column: string) =>
 
 it.layer(getTestDB())("a task deleted after the migration", (it) => {
   it.effect(
-    "leaves nothing of its old Luke's conversation unstamped, and the purge takes it, its child, and its session's sandbox thirty days on",
+    "leaves nothing of its old Luke's conversation unstamped, and the purge takes it, its child, and its session's sandbox seven days on",
     () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;

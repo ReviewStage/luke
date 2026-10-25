@@ -11,7 +11,7 @@
  * the glyph, named still, whose hint then says the words.
  */
 
-import { RetryIcon } from "../../face/glyphs.js";
+import { RetryIcon } from "../../icons/lucide-glyphs.js";
 import { FoldingButton } from "../folding-button/folding-button.js";
 
 const RETRY_WORD = "Retry";

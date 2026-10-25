@@ -4,19 +4,22 @@ import {
   CARD_PADDING,
   Card,
   isVideoDataUrl,
+  PictureStandIn,
   PictureTile,
-  Spinner,
   VideoPlayer,
 } from "@luke/ui";
 import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
-import { ImageOffIcon } from "lucide-react";
 
 /**
  * picture-block.tsx -- a picture drawn in written words: its own block, at its own size up to the column's, its caption under it, a press opening it over the window.
  *
  * While its bytes are read it is a quiet box on the section's fill with the
  * window's spinner; a picture this reader cannot reach, or whose bytes are
- * gone, is its alt text and says it is not available. The block is left out
+ * gone, is its alt text and says it is not available, as a tile of a set
+ * says it (`@luke/ui`'s `PictureStandIn`); one whose read did not land this
+ * time says it could not be read, with Retry, in the same box. A gone picture
+ * is plain words, never a `role="img"` named by its alt, which would hide the
+ * "not available" beside it and leave an empty alt with no name at all. The block is left out
  * of the screen recording (`ph-no-capture`), because a picture can hold
  * words and the recording carries none (`session-replay.ts`), and because a
  * `data:` address is megabytes of attribute a recording has no use for even
@@ -26,12 +29,6 @@ import { ImageOffIcon } from "lucide-react";
  * opens is its Expand. Nothing here knows whose picture it is; the place
  * drawing one hands its state and what a press does.
  */
-
-/** What a picture that is not there says, after its alt text where it has any. */
-const MISSING_WORDS = "not available";
-
-/** What the spinner says to a reader while the bytes are read. */
-const READING_LABEL = "Reading the picture";
 
 /** The picture's own block, by where its read stands. */
 export function PictureBlock({
@@ -126,7 +123,22 @@ export function PictureBlock({
           padding={CARD_PADDING.FLUSH}
           className="picture-frame picture-pending"
         >
-          <Spinner delay label={READING_LABEL} />
+          <PictureStandIn state={PICTURE_STATE.READING} words={alt} />
+        </Card>
+        {said}
+      </span>
+    );
+  }
+  if (state.kind === PICTURE_STATE.FAILED) {
+    return (
+      <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
+        <Card
+          as={CARD_ELEMENT.SPAN}
+          corner={CARD_CORNER.CONTROL}
+          padding={CARD_PADDING.NONE}
+          className="picture-frame picture-missing"
+        >
+          <PictureStandIn state={PICTURE_STATE.FAILED} words={alt} onRetry={state.retry} />
         </Card>
         {said}
       </span>
@@ -139,12 +151,9 @@ export function PictureBlock({
         corner={CARD_CORNER.CONTROL}
         padding={CARD_PADDING.NONE}
         dashed
-        role="img"
-        aria-label={alt}
         className="picture-frame picture-missing"
       >
-        <ImageOffIcon aria-hidden="true" />
-        <span>{alt === "" ? `This picture is ${MISSING_WORDS}` : `${alt} · ${MISSING_WORDS}`}</span>
+        <PictureStandIn state={PICTURE_STATE.MISSING} words={alt} />
       </Card>
       {said}
     </span>

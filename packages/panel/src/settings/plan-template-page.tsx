@@ -6,43 +6,39 @@ import {
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
+import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
-  BANNER_LOOK,
-  Banner,
   BUTTON_VARIANT,
   Button,
-  ConfirmDialog,
-  type DialogQuestion,
   EmptyState,
-  ERROR_STATE_PLACEMENT,
   ErrorState,
   Fill,
   GAP,
   IconButton,
-  ResetIcon,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  STATUS_TONE,
   Stack,
   TEXT_ELEMENT,
-  TEXT_TONE,
   TEXT_VARIANT,
   Text,
   Tooltip,
-  useConfirmDialog,
 } from "@luke/ui";
 import type { PersonActor } from "@luke/ui/actor-model";
+import { GLYPH, HistoryIcon } from "@luke/ui/icons";
+import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
+import { PhoneHead, PlaceMore } from "../desktop/phone-head.js";
 import { DocumentScroll } from "../tasks/document-frame.js";
 import type { TaskReader } from "../tasks/edit-ref.js";
 import { PlanBody, PlanBodyColumn, PlanPageHead } from "../tasks/plan-body.js";
 import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
-import { TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 
 /**
  * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.
@@ -51,17 +47,23 @@ import { TOAST_TONE, useToast } from "../toast.js";
  * page beside Settings' page list, with no top bar: the document is the
  * plan's own (`../tasks/plan-body.tsx`), at the Settings pages' width and
  * in a plan's type, read as sections until a click or Return opens the same
- * editor on the same words with the same keyboard. Its title is the page's
- * name, at a page title's place and size, which is
+ * editor on the same words with the same keyboard. The page names itself
+ * once, by the header every document draws (`PageHeader`): its title, the
+ * page's one `h1`, is the page's name, which is
  * no name of the account's to change, so it is drawn and never edited, and
  * the page's actions stand at the end of its line: the version history
  * (`plan-template-history.tsx`), which the "Edited by" line under the
- * title opens too, and Reset to default while the account holds a
- * template of its own. The reset asks first, since it replaces every word of
- * the account's, kept since only in the template's history, and waits for a
- * save already out so the default lands last. A quiet note under the
- * title, drawn as an archived task's banner is, says what the template is
- * for.
+ * title opens too, and Reset to defaults while the account holds a
+ * template of its own. The reset asks nothing: it waits for a save already
+ * out so the default lands last, and says it landed in a toast whose Undo
+ * writes back the template the page held, through the same door once the
+ * reset's own write is in, since the words stay in the template's history
+ * and on the page until then. The header's line under the title says what
+ * the template is for and, as every Settings page's does, where it is kept.
+ *
+ * On a phone the page stands under a phone's bar (`../desktop/phone-head.tsx`):
+ * the way back to the page list, and a ⋯ holding the page's actions, which
+ * leave the title's line.
  *
  * The template is the account's, kept on the service, so the page reads it
  * afresh as it opens and every Mac the account signs in on edits the same
@@ -69,9 +71,10 @@ import { TOAST_TONE, useToast } from "../toast.js";
  * leave the editor (`../tasks/use-plan-editing.ts`), here as a write of
  * the whole template, which is the developer's alone and so never meets
  * words of Luke's to merge. A save that failed says so under the editor
- * with a Retry, or, once the page has gone, in a toast whose Retry sends the
- * same words; a template past its bound is refused before it is sent. With
- * no account signed in there is no template to show, and the page says so.
+ * with a Retry, or, once the page has gone, in the document's toast whose
+ * Retry sends the same words, and coming back opens the editor on them; a
+ * template past its bound is refused before it is sent. With no account
+ * signed in there is no template to show, and the page says so.
  * The document stands under `ph-no-capture`, so the session recording keeps
  * neither the words nor the rhythm of the typing.
  */
@@ -82,12 +85,13 @@ export const TEMPLATE_TITLE = "Plan template";
 /** What the page says. */
 const PAGE_LINE = {
   NOTE: "New plans start as a copy of this template.",
-  NOTE_DETAIL: "Editing it doesn't change existing plans.",
-  SIGNED_OUT: "Sign in to edit the template your new plans start from.",
+  SIGNED_OUT: SIGNED_OUT_WORDS,
   READ_FAILED: "The template could not be read.",
-  READING: "Loading your plan template",
-  LEFT_UNSAVED: "Your plan template could not be saved.",
+  READING: readingWords("your plan template"),
+  RESET_DONE: "Plan template reset",
   RESET_FAILED: "The template could not be reset. Try again.",
+  UNDO_FAILED: "The template could not be put back. Try again.",
+  UNDO_CHANGED: "The template changed since the reset, so it was not put back.",
 } as const;
 
 /** The id the template is drawn under as a plan's document, which names no task of the account's. */
@@ -98,6 +102,9 @@ const TEMPLATE_WORKSPACE_ID = "plan-template";
 
 /** What the title line's button that opens the template's version history says, as a task's menu item says it. */
 const HISTORY_LABEL = "Version history";
+
+/** What the page's reset says. */
+const RESET_LABEL = "Reset to defaults";
 
 /** How wide the placeholder's headings and the lines under each stand, as shares of their lines, a plan's sections in the body's type. */
 const TEMPLATE_SKELETON = [
@@ -115,12 +122,16 @@ const TEMPLATE_READ = {
 
 type TemplateRead = (typeof TEMPLATE_READ)[keyof typeof TEMPLATE_READ];
 
-const RESET_QUESTION: DialogQuestion = {
-  title: "Reset plan template?",
-  body: "Your current template stays in its version history.",
-  verb: "Reset",
-  running: "Resetting",
-};
+/** Why a replacement of the whole template was not written: the service did not take it, or what it keeps is no longer what the replacement was asked over. */
+const REPLACE_REFUSAL = {
+  UNANSWERED: "unanswered",
+  CHANGED: "changed",
+} as const;
+
+type ReplaceRefusal = (typeof REPLACE_REFUSAL)[keyof typeof REPLACE_REFUSAL];
+
+/** What a replacement of the whole template came to: the words kept before and after it, or why it was not written. */
+type Replaced = { before: string; after: string } | { refused: ReplaceRefusal };
 
 /** One write of the template, read as the template kept or nothing at all. */
 function written(
@@ -166,36 +177,40 @@ interface TemplateControl {
   /** Its newest revision, or the developer's edit here since; none for a template never edited. */
   lastEdit: PlanLastEdit | undefined;
   edit: PlanEditDoor;
-  reset: () => Promise<ActionResult>;
+  /**
+   * Writes `template` over the whole of it, the default for `null`, only
+   * while the service still keeps `over` where it is named, answering the
+   * words kept before and after.
+   */
+  replace: (template: string | null, over?: string) => Promise<Replaced>;
 }
 
 /**
  * What the page's writes read and change as they land, which no render
  * stands between: the template as the service last kept it, which every
- * edit the document sends was written from; the write out; whether a reset
- * is under way; words whose save failed while the page stood, until another
- * save is sent; and whether the page still stands.
+ * edit the document sends was written from; the write out; how many
+ * replacements of the whole, a reset or its Undo, are under way.
  */
 interface HeldWrites {
   kept: string;
   flight: Promise<unknown> | undefined;
-  resetting: boolean;
-  failed: string | undefined;
-  standing: boolean;
+  replacing: number;
 }
 
 /**
  * The service's template, read as the page opens and again on Retry, and
  * written through the document's edit door. Note that an edit written from
  * a template the service no longer keeps is dropped, because it was queued
- * behind a reset the developer confirmed, and landing after the reset it
- * would undo it. Words whose save failed are sent once more as the
- * page goes, because the editor holds a failed save back from its own
- * leaving; and a save that fails once the page has gone is said in a toast
- * whose Retry sends the same words, because the page and its Retry are gone
- * with them.
+ * behind a reset or its Undo, and landing after it would take it back.
+ * Words whose save failed as the page went are kept and said by the
+ * document's own leaving (`../tasks/use-plan-editing.ts`). `onSaved` hears
+ * each edit the service took.
  */
-function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl {
+function useTemplate(
+  signedIn: boolean,
+  act: ActHandle["act"],
+  onSaved: () => void,
+): TemplateControl {
   const [read, setRead] = useState<TemplateRead>(TEMPLATE_READ.READING);
   const [attempt, setAttempt] = useState(0);
   const [text, setText] = useState("");
@@ -204,11 +219,8 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
   const held = useRef<HeldWrites>({
     kept: "",
     flight: undefined,
-    resetting: false,
-    failed: undefined,
-    standing: true,
+    replacing: 0,
   });
-  const toast = useToast();
 
   const take = useCallback((answer: PlanTemplateAnswer, edited: PlanLastEdit | undefined) => {
     held.current.kept = answer.template;
@@ -246,42 +258,18 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
 
   const save = (words: string): Promise<TasksEditAnswer> => {
     const writes = held.current;
-    writes.failed = undefined;
     if (words.length > PLAN_TEMPLATE_BOUNDS.MAX_CHARS) {
       return Promise.resolve({ failure: PLAN_EDIT_REFUSAL.TOO_LONG });
     }
     const sent = written(act, words).then((answer): TasksEditAnswer => {
-      if (answer !== undefined) {
-        if (writes.standing) take(answer, editedNow());
-        return { saved: true };
-      }
-      if (writes.standing) {
-        writes.failed = words;
-      } else {
-        toast({
-          words: PAGE_LINE.LEFT_UNSAVED,
-          tone: TOAST_TONE.FAILED,
-          persists: true,
-          action: { label: "Retry", onPress: () => save(words) },
-        });
-      }
-      return { failure: TASK_CALL_FAILURE.UNANSWERED };
+      if (answer === undefined) return { failure: TASK_CALL_FAILURE.UNANSWERED };
+      take(answer, editedNow());
+      onSaved();
+      return { saved: true };
     });
     writes.flight = sent;
     return sent;
   };
-
-  // The page going sends words whose save failed a turn later, once the document's own leaving has sent anything newer.
-  useEffect(() => {
-    const writes = held.current;
-    writes.standing = true;
-    return () => {
-      writes.standing = false;
-      Promise.resolve().then(() => {
-        if (writes.failed !== undefined) save(writes.failed);
-      });
-    };
-  }, []);
 
   return {
     read,
@@ -291,47 +279,114 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     lastEdit,
     edit: (request) => {
       const writes = held.current;
-      if (writes.resetting || request.document.base !== writes.kept) {
+      if (writes.replacing > 0 || request.document.base !== writes.kept) {
         return Promise.resolve({ saved: true });
       }
       return save(request.document.value);
     },
-    reset: async (): Promise<ActionResult> => {
-      // The write already out lands before the null is sent, so the default is what the service keeps.
+    replace: async (template: string | null, over?: string): Promise<Replaced> => {
+      // The write already out lands before this one is sent, so what this sends is what the service keeps.
       const writes = held.current;
-      writes.resetting = true;
-      writes.failed = undefined;
+      writes.replacing += 1;
       await writes.flight;
-      const answer = await written(act, null);
-      writes.resetting = false;
-      if (answer === undefined) {
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.RESET_FAILED };
+      const before = writes.kept;
+      if (over !== undefined && before !== over) {
+        writes.replacing -= 1;
+        return { refused: REPLACE_REFUSAL.CHANGED };
       }
+      const sent = written(act, template);
+      writes.flight = sent;
+      const answer = await sent;
+      writes.replacing -= 1;
+      if (answer === undefined) return { refused: REPLACE_REFUSAL.UNANSWERED };
       take(answer, editedNow());
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+      return { before, after: answer.template };
     },
   };
 }
 
-/**
- * The note under the template's title, drawn as an archived task's banner
- * is: what the template is for. It is what a settings search for the
- * template lands on.
- */
-function TemplateNote(): React.JSX.Element {
-  return (
-    <div className="template-note" {...searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}>
-      <Banner look={BANNER_LOOK.CARD} glyph={<InfoIcon />}>
-        <Text variant={TEXT_VARIANT.SECTION}>{PAGE_LINE.NOTE}</Text>
-        <Text tone={TEXT_TONE.MUTED}>{PAGE_LINE.NOTE_DETAIL}</Text>
-      </Banner>
-    </div>
-  );
+/** The reset's Undo standing, by its toast's subject: stood as a reset lands, withdrawn on `withdraw` and as the page goes. */
+interface UndoStanding {
+  stand: (subject: string) => void;
+  withdraw: () => void;
 }
 
-/** Where the page's actions stand, at the end of its title line. */
-function TitleActionsLine({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <span className="task-title-actions">{children}</span>;
+/**
+ * The reset's Undo, which stands only while it would put back what the reset
+ * took and nothing since: an edit the service takes after the reset, or the
+ * page leaving, whose next opening reads the template afresh and would not
+ * hear the Undo's write, withdraws it.
+ */
+function useUndoStanding(): UndoStanding {
+  const standing = useRef<string | undefined>(undefined);
+  const withdrawToast = useWithdrawToast();
+  const withdraw = useCallback(() => {
+    if (standing.current !== undefined) withdrawToast(standing.current);
+    standing.current = undefined;
+  }, [withdrawToast]);
+  useEffect(() => withdraw, [withdraw]);
+  return {
+    stand: (subject) => {
+      withdraw();
+      standing.current = subject;
+    },
+    withdraw,
+  };
+}
+
+/**
+ * The reset of the whole template, at once: a refusal is said in a failure's
+ * toast, and a reset that landed in a toast whose Undo writes back the
+ * words the page held before it, over the default the reset left and
+ * nothing else. The control rests while the reset is out; the Undo needs
+ * none, since the reset takes the control away with the template of the
+ * account's own, and the Undo's write brings both back.
+ */
+function useTemplateReset(
+  template: TemplateControl,
+  undoable: UndoStanding,
+): { busy: boolean; reset: () => void } {
+  const toast = useToast();
+  const failed = (words: string) =>
+    toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+  const undo = (before: string, after: string) => {
+    undoable.withdraw();
+    return template.replace(before, after).then((put) => {
+      if (!("refused" in put)) return;
+      failed(
+        put.refused === REPLACE_REFUSAL.CHANGED ? PAGE_LINE.UNDO_CHANGED : PAGE_LINE.UNDO_FAILED,
+      );
+    });
+  };
+  const { busy, run } = useSettingWrite(() =>
+    template.replace(null).then((put): ActionResult => {
+      if ("refused" in put) {
+        failed(PAGE_LINE.RESET_FAILED);
+        return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.RESET_FAILED };
+      }
+      const subject = crypto.randomUUID();
+      undoable.stand(subject);
+      toast({
+        ...undoToast(PAGE_LINE.RESET_DONE, () => void undo(put.before, put.after)),
+        subject,
+      });
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    }),
+  );
+  return { busy, reset: () => run(undefined) };
+}
+
+/**
+ * The line under the template's title, in its header: what the template is
+ * for, then where it is kept, as a row's detail ends in it. It is what a
+ * settings search for the template lands on.
+ */
+function TemplateNote({ keep }: { keep: string | undefined }): React.JSX.Element {
+  return (
+    <span className="template-note" {...searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}>
+      {keep === undefined ? PAGE_LINE.NOTE : `${PAGE_LINE.NOTE} ${keep}.`}
+    </span>
+  );
 }
 
 /** The template's document as the page draws it, in a plan's type and kept out of a recording. */
@@ -340,168 +395,261 @@ function TemplateFrame({ children }: { children: React.ReactNode }): React.JSX.E
 }
 
 /**
- * The page's actions at the right end of its title line, as every Settings
- * page carries its own: the version history, and Reset to default while the
- * account holds a template of its own. They are `@luke/ui`'s quiet
- * `IconButton` and outline `Button`.
+ * The page's actions at the end of its header's title line
+ * (`PageHeader`'s actions), as every Settings page carries its own: the
+ * version history, and Reset to defaults while the account holds a template of
+ * its own. They are `@luke/ui`'s quiet `IconButton` and outline `Button`.
  */
 function TitleActions({
   custom,
+  resetting,
   onShowHistory,
   onReset,
 }: {
   custom: boolean;
+  /** Whether the reset is under way. */
+  resetting: boolean;
   onShowHistory: () => void;
   onReset: () => void;
 }): React.JSX.Element {
   return (
-    <TitleActionsLine>
+    <>
       <Tooltip label={HISTORY_LABEL}>
         <IconButton icon={<HistoryIcon />} label={HISTORY_LABEL} onClick={onShowHistory} />
       </Tooltip>
       {custom ? (
-        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ResetIcon />} onClick={onReset}>
-          Reset to default
+        <Button
+          variant={BUTTON_VARIANT.QUIET}
+          icon={<GLYPH.GO_BACK />}
+          busy={resetting}
+          busyLabel="Resetting"
+          onClick={onReset}
+        >
+          {RESET_LABEL}
         </Button>
       ) : null}
-    </TitleActionsLine>
+    </>
   );
 }
 
-/** The template read: the note, the template as a plan's document, and the reset's question. */
+/** The template read: its head's line and the template as a plan's document. */
 function TemplateDocument({
   template,
   reader,
   onShowHistory,
+  note,
+  actions,
 }: {
   template: TemplateControl;
   /** The account reading it, whose every edit it is. */
   reader: TaskReader;
   onShowHistory: () => void;
+  /** The line under the title. */
+  note: React.ReactNode;
+  /** What ends the title's line: the page's actions, or none where a phone's bar holds them. */
+  actions: React.ReactNode;
 }): React.JSX.Element {
-  const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
   return (
-    <>
-      <TemplateFrame>
-        <PlanBody
-          task={templateDocument(template.text, template.lastEdit)}
-          live={false}
-          reader={reader}
-          onEdit={template.edit}
-          onShowHistory={onShowHistory}
-          page={{
-            actions: (
-              <TitleActions
-                custom={template.custom}
-                onShowHistory={onShowHistory}
-                onReset={reset.ask}
-              />
-            ),
-            note: <TemplateNote />,
-          }}
-        />
-      </TemplateFrame>
-      <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
-    </>
+    <TemplateFrame>
+      <PlanBody
+        task={templateDocument(template.text, template.lastEdit)}
+        live={false}
+        reader={reader}
+        onEdit={template.edit}
+        onShowHistory={onShowHistory}
+        page={{ actions, description: note }}
+      />
+    </TemplateFrame>
   );
 }
 
 /**
- * The template while it is read, drawn in the document's own frame: the
- * page's head as the document draws it, its name and note whole, since
- * neither waits on the read, and a block for its history's press; then
- * headings over their lines in the plan's own type, so the template lands
- * where the blocks stood.
+ * What stands under the page's head while the template is not drawn, in the
+ * document's own frame: the page's head as the document draws it, its name and
+ * line whole, since neither waits on the read, and `children` under it. The
+ * head names the page once in every state, so a page with no template to show
+ * still has its heading.
  */
-function TemplateSkeleton(): React.JSX.Element {
+function TemplateHeadFrame({
+  note,
+  actions,
+  children,
+}: {
+  note: React.ReactNode;
+  actions: React.ReactNode;
+  children: React.ReactNode;
+}): React.JSX.Element {
   return (
     <TemplateFrame>
       <DocumentScroll>
         <PlanBodyColumn>
-          <PlanPageHead
-            name={TEMPLATE_TITLE}
-            actions={
-              <TitleActionsLine>
-                <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />
-              </TitleActionsLine>
-            }
-            note={<TemplateNote />}
-          />
-          <SkeletonRegion label={PAGE_LINE.READING}>
-            <Stack gap={GAP.SECTION}>
-              {TEMPLATE_SKELETON.map((section) => (
-                <Stack key={section.heading} gap={GAP.TIGHT}>
-                  <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.DIV}>
-                    <Skeleton width={section.heading} />
-                  </Text>
-                  <div>
-                    {section.lines.map((width, at) => (
-                      // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
-                      <Skeleton key={at} width={width} />
-                    ))}
-                  </div>
-                </Stack>
-              ))}
-            </Stack>
-          </SkeletonRegion>
+          <PlanPageHead name={TEMPLATE_TITLE} description={note} actions={actions} />
+          {children}
         </PlanBodyColumn>
       </DocumentScroll>
     </TemplateFrame>
   );
 }
 
-/** What stands in the document's place: no account, the read under way, or the read failed with its Retry. */
+/**
+ * The template while it is read: the head, and a block for its history's
+ * press; then headings over their lines in the plan's own type, so the
+ * template lands where the blocks stood.
+ */
+function TemplateSkeleton({
+  note,
+  phone,
+}: {
+  note: React.ReactNode;
+  phone: boolean;
+}): React.JSX.Element {
+  return (
+    <TemplateHeadFrame
+      note={note}
+      actions={
+        phone ? null : (
+          <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />
+        )
+      }
+    >
+      <SkeletonRegion label={PAGE_LINE.READING}>
+        <Stack gap={GAP.SECTION}>
+          {TEMPLATE_SKELETON.map((section) => (
+            <Stack key={section.heading} gap={GAP.TIGHT}>
+              <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.DIV}>
+                <Skeleton width={section.heading} />
+              </Text>
+              <div>
+                {section.lines.map((width, at) => (
+                  <Skeleton key={at} width={width} />
+                ))}
+              </div>
+            </Stack>
+          ))}
+        </Stack>
+      </SkeletonRegion>
+    </TemplateHeadFrame>
+  );
+}
+
+/** What stands in the document's place: no account, the read under way, or the read failed with its Retry, each under the page's head. */
 function TemplateState({
   signedIn,
   template,
+  note,
+  phone,
 }: {
   signedIn: boolean;
   template: TemplateControl;
+  /** The line under the title. */
+  note: React.ReactNode;
+  /** Whether a phone's bar holds the page's actions, so its head stands no block for them. */
+  phone: boolean;
 }): React.JSX.Element {
   if (!signedIn) {
     return (
-      <Fill className="desktop-empty-region">
+      <TemplateHeadFrame note={note} actions={null}>
         <EmptyState>{PAGE_LINE.SIGNED_OUT}</EmptyState>
-      </Fill>
+      </TemplateHeadFrame>
     );
   }
   if (template.read === TEMPLATE_READ.FAILED) {
     return (
-      <Fill className="desktop-empty-region">
-        <ErrorState onRetry={template.retry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-          {PAGE_LINE.READ_FAILED}
-        </ErrorState>
-      </Fill>
+      <TemplateHeadFrame note={note} actions={null}>
+        <ErrorState onRetry={template.retry}>{PAGE_LINE.READ_FAILED}</ErrorState>
+      </TemplateHeadFrame>
     );
   }
   // While the read is out the page's head stands where the document's will, the template's blocks under it.
-  return <TemplateSkeleton />;
+  return <TemplateSkeleton note={note} phone={phone} />;
+}
+
+/**
+ * A phone's bar over the page: the way back to the page list, and a ⋯
+ * holding the page's actions while the template is drawn, Version history
+ * and, while the account holds a template of its own, Reset to defaults. The
+ * document's own head names the page, as every Settings page's does.
+ */
+function TemplateBar({
+  lead,
+  drawn,
+  custom,
+  resetting,
+  onShowHistory,
+  onReset,
+}: {
+  lead: React.ReactNode;
+  drawn: boolean;
+  custom: boolean;
+  /** Whether the reset is under way. */
+  resetting: boolean;
+  onShowHistory: () => void;
+  onReset: () => void;
+}): React.JSX.Element {
+  return (
+    <PhoneHead
+      place="settings-page"
+      start={lead}
+      title={null}
+      end={
+        drawn ? (
+          <PlaceMore
+            thing={TEMPLATE_TITLE}
+            shown
+            groups={() => [
+              [
+                { label: HISTORY_LABEL, icon: <HistoryIcon />, onSelect: onShowHistory },
+                ...(custom
+                  ? [
+                      {
+                        label: RESET_LABEL,
+                        icon: <GLYPH.GO_BACK />,
+                        disabled: resetting,
+                        onSelect: onReset,
+                      },
+                    ]
+                  : []),
+              ],
+            ]}
+          />
+        ) : null
+      }
+    />
+  );
 }
 
 /**
  * Settings › Plan template beside Settings' page list: the template as a
- * plan's document, its title line carrying the page's actions.
- * `onShowHistory` opens the history, from the button or the "Edited by"
- * line, a section's opening it on the template as it stands.
+ * plan's document, its title line carrying the page's actions, or on a
+ * phone under a bar whose ⋯ holds them. `onShowHistory` opens the history,
+ * from the button or the "Edited by" line, a section's opening it on the
+ * template as it stands.
  */
 export function PlanTemplatePage({
   account,
-  bar,
+  keep,
+  lead,
   hidden,
   onShowHistory,
 }: {
   /** The signed-in account, whose every edit of the template is; none while signed out. */
   account: PersonActor | undefined;
-  /** The head of the page's column, as every Settings page's (`desktop-settings.tsx`). */
-  bar: React.ReactNode;
+  /** Where the template is kept, said as every Settings page's head says it (`settingsPageKeep`); none while nothing is kept. */
+  keep: string | undefined;
+  /** The way back to the page list, which leads a phone's bar over the page; none beside the list, where the window's drag strip heads it. */
+  lead: React.ReactNode;
   /** Whether the page is hidden, as a narrow room hides it behind the page list. */
   hidden: boolean;
   onShowHistory: () => void;
 }): React.JSX.Element {
   const signedIn = account !== undefined;
   const { act } = useAct();
-  const template = useTemplate(signedIn, act);
+  const undoable = useUndoStanding();
+  const template = useTemplate(signedIn, act, undoable.withdraw);
   const drawn = account !== undefined && template.read === TEMPLATE_READ.READ;
+  const reset = useTemplateReset(template, undoable);
+  const phone = lead !== undefined;
+  const note = <TemplateNote keep={keep} />;
   return (
     <section
       className="settings-page"
@@ -509,16 +657,38 @@ export function PlanTemplatePage({
       aria-busy={signedIn && template.read === TEMPLATE_READ.READING ? true : undefined}
       hidden={hidden}
     >
-      {/* Settings has no top bar: the page's title and its actions stand in the page. */}
-      {bar}
+      {/* Settings has no top bar but a phone's: the page's title and its actions stand in the page. */}
+      {phone ? (
+        <TemplateBar
+          lead={lead}
+          drawn={drawn}
+          custom={template.custom}
+          resetting={reset.busy}
+          onShowHistory={onShowHistory}
+          onReset={reset.reset}
+        />
+      ) : (
+        <div className="desktop-drag-strip" />
+      )}
       {drawn ? (
         <TemplateDocument
           template={template}
           reader={{ readerId: account.userId, owner: account }}
           onShowHistory={() => onShowHistory()}
+          note={note}
+          actions={
+            phone ? null : (
+              <TitleActions
+                custom={template.custom}
+                resetting={reset.busy}
+                onShowHistory={onShowHistory}
+                onReset={reset.reset}
+              />
+            )
+          }
         />
       ) : (
-        <TemplateState signedIn={signedIn} template={template} />
+        <TemplateState signedIn={signedIn} template={template} note={note} phone={phone} />
       )}
     </section>
   );

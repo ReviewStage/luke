@@ -1,15 +1,19 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   Button,
   cssCustomProperties,
-  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
   Fill,
   MENU_SURFACE_FLOW,
   MenuSurface,
   ScrollArea,
+  SpinnerRegion,
   TooltipPill,
   useHintRest,
+  usePressAway,
 } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { MessageSquarePlusIcon } from "lucide-react";
 import {
@@ -41,6 +45,7 @@ import {
   sameLook,
   sameNotes,
 } from "../diff-view/contract.js";
+import { CHANGES_WORDS } from "./changes-model.js";
 
 /**
  * diff-list.tsx -- a pull request's files as Files changed draws them: one list, every file under a header of its own, drawn by Pierre's list (`../diff-view/`'s `mountList`), only the files near the view drawn at all.
@@ -219,6 +224,9 @@ function sameFiles(a: readonly DiffListFile[], b: readonly DiffListFile[]): bool
 /** No lines. */
 const NO_LINES: readonly number[] = [];
 
+/** The class of the element a file's header is drawn in, which Pierre stands in the list once it draws the file. */
+const HEAD_SLOT = "diff-list-head-slot";
+
 /** The element kept by `key` in `held`, made with `className` the first time it is asked for. */
 function keptElement(held: Map<string, HTMLDivElement>, key: string, className: string) {
   const kept = held.get(key);
@@ -233,7 +241,9 @@ function keptElement(held: Map<string, HTMLDivElement>, key: string, className: 
  * The files of `entries` drawn as one list in `look`, in a `ScrollArea`
  * that fills the File tab's place and scrolls up and down, each file's
  * unwrapped lines scrolling sideways in Pierre's own way; while the bundle
- * loads the place stands empty, and where it failed to load it says so.
+ * loads the place says the changes are still being read, as the tab does
+ * while it reads them, and stands busy until Pierre has drawn the first of
+ * its files; where it failed to load it says so.
  */
 export function PierreDiffList({
   entries,
@@ -272,10 +282,16 @@ export function PierreDiffList({
   /** The lines to scroll to and light a moment once the list draws their file open; each ask once. */
   flash?: DiffListFlash | undefined;
 }): React.JSX.Element {
-  const loaded = useAtomValue(useSideBundles().diffView);
+  const { diffView } = useSideBundles();
+  const loaded = useAtomValue(diffView);
+  const retry = useAtomRefresh(diffView);
   // The hint over the gap control under the pointer or the focus, which Pierre draws in a shadow root no hint of the window's own reaches.
   const [hint, setHint] = useState<GapHint | undefined>(undefined);
   const hintId = useId();
+  // The pill is drawn through its exit as it last stood, so letting the hint go fades it rather than snapping it away.
+  const [hintDrawn, setHintDrawn] = useState<GapHint | undefined>(hint);
+  if (hint !== undefined && hint !== hintDrawn) setHintDrawn(hint);
+  const pill = useDisclosure(hint !== undefined);
   // Note that the hint waits the window's rest before it is drawn, as every
   // other hint does, so the pointer crossing the gaps mounts nothing.
   const { rest, stop } = useHintRest();
@@ -327,7 +343,7 @@ export function PierreDiffList({
   const headers = useRef(new Map<string, HTMLDivElement>());
   const notes = useRef(new Map<string, Map<string, HTMLDivElement>>());
   const renderHeader = useCallback(
-    (path: string) => keptElement(headers.current, path, "diff-list-head-slot"),
+    (path: string) => keptElement(headers.current, path, HEAD_SLOT),
     [],
   );
   const renderAnnotation = useCallback((path: string, key: string) => {
@@ -377,6 +393,24 @@ export function PierreDiffList({
       mounted.unmount();
     };
   }, [module, door]);
+
+  // Note that Pierre draws the files a beat after the list is mounted, its
+  // highlighter readied, so the list is said to be busy until the first
+  // file's header stands in the scroller, rather than standing empty.
+  const [filesDrawn, setFilesDrawn] = useState(false);
+  useEffect(() => {
+    const element = host.current;
+    if (module === undefined || element === null) return undefined;
+    const look = (watch: MutationObserver) => {
+      if (element.querySelector(`.${HEAD_SLOT}`) === null) return;
+      watch.disconnect();
+      setFilesDrawn(true);
+    };
+    const watch = new MutationObserver((_changes, self) => look(self));
+    watch.observe(element, { childList: true, subtree: true });
+    look(watch);
+    return () => watch.disconnect();
+  }, [module]);
 
   useEffect(() => {
     if (handle.current === undefined) return;
@@ -432,20 +466,16 @@ export function PierreDiffList({
   });
 
   // A press anywhere but on the offer lets it go; one in the list the bundle tells of itself.
-  const offered = offer !== undefined;
-  useEffect(() => {
-    if (!offered) return undefined;
-    const press = (event: PointerEvent) => {
-      if (!(event.target instanceof Node) || offerBox.current?.contains(event.target) !== true) {
-        setOffer(undefined);
-      }
-    };
-    document.addEventListener("pointerdown", press, true);
-    return () => document.removeEventListener("pointerdown", press, true);
-  }, [offered]);
+  usePressAway(offerBox, () => undefined, {
+    onPressAway: offer === undefined ? undefined : () => setOffer(undefined),
+  });
 
   if (AsyncResult.isFailure(loaded)) {
-    return <EmptyState>{DIFF_LOAD_FAILED}</EmptyState>;
+    return (
+      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+        {DIFF_LOAD_FAILED}
+      </ErrorState>
+    );
   }
   // Note that the area holds no React of its own, because Pierre draws the
   // list into it as the scroller it virtualizes over and empties it when
@@ -455,13 +485,19 @@ export function PierreDiffList({
       ref={holdBox}
       className="diff-view diff-list"
       data-diff-layout={look.layout}
+      aria-busy={filesDrawn ? undefined : true}
       onPointerOver={(event) => hang(event.nativeEvent)}
       onPointerLeave={letGoHint}
       onPointerDown={letGoHint}
     >
-      <ScrollArea ref={host} data-diff-list-scroller="">
-        {null}
-      </ScrollArea>
+      {/* Note that the wait stands in the scroller's place, which is drawn in the same commit the bundle lands in, before the mount reads it. */}
+      {module === undefined ? (
+        <SpinnerRegion delay label={CHANGES_WORDS.READING} />
+      ) : (
+        <ScrollArea ref={host} data-diff-list-scroller="">
+          {null}
+        </ScrollArea>
+      )}
       {offer === undefined || onComment === undefined ? null : (
         <MenuSurface
           ref={offerBox}
@@ -487,8 +523,14 @@ export function PierreDiffList({
           </Button>
         </MenuSurface>
       )}
-      {hint === undefined ? null : (
-        <TooltipPill id={hintId} anchor={hint.anchor} label={hint.label} />
+      {!pill.mounted || hintDrawn === undefined ? null : (
+        <TooltipPill
+          id={hintId}
+          anchor={hintDrawn.anchor}
+          label={hintDrawn.label}
+          leaving={pill.leaving}
+          ref={pill.ref}
+        />
       )}
       {entries.map((entry) => (
         <Fragment key={entry.path}>

@@ -1,11 +1,11 @@
 import {
-  DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
   type DiagramAppearance,
   type DiagramDrawing,
   type DiagramModule,
 } from "@luke/ui/diagram-contract";
 import mermaid, { type MermaidConfig } from "mermaid";
+import { diagramThemeVariables } from "./diagram-theme.js";
 
 /**
  * index.ts -- the diagram bundle: Mermaid drawing a plan's fence as a picture the panel's policy admits, imported by the panel (`@luke/ui/diagram-contract`).
@@ -32,67 +32,13 @@ import mermaid, { type MermaidConfig } from "mermaid";
 /** The window's own type, as `styles/base.css` sets it, so a label reads as the words around it. */
 const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif';
 
-/**
- * Mermaid's colours in each appearance, from the window's tokens
- * (`styles/base.css`), made opaque over the section's fill a diagram is drawn
- * on, since Mermaid derives its shades from a colour it can mix: the
- * primary ink for words, the secondary ink for lines and arrows, the
- * strong hairline for a box's edge, and the section's fill a step raised
- * for a box's ground.
- */
-const THEME_VARIABLES = {
-  [DIAGRAM_APPEARANCE.LIGHT]: {
-    darkMode: false,
-    background: "transparent",
-    primaryColor: "#ffffff",
-    primaryBorderColor: "#c9c9cf",
-    primaryTextColor: "#1f1f1f",
-    secondaryColor: "#f5f5f6",
-    tertiaryColor: "#f5f5f6",
-    lineColor: "#8a8a92",
-    textColor: "#1f1f1f",
-    actorBkg: "#ffffff",
-    actorBorder: "#c9c9cf",
-    actorTextColor: "#1f1f1f",
-    signalColor: "#666666",
-    signalTextColor: "#1f1f1f",
-    noteBkgColor: "#f5f5f6",
-    noteBorderColor: "#c9c9cf",
-    noteTextColor: "#1f1f1f",
-    edgeLabelBackground: "#f5f5f6",
-    clusterBkg: "#fafafa",
-    clusterBorder: "#dcdce0",
-    fontSize: "14px",
-  },
-  [DIAGRAM_APPEARANCE.DARK]: {
-    darkMode: true,
-    background: "transparent",
-    primaryColor: "#2c2c30",
-    primaryBorderColor: "#55555c",
-    primaryTextColor: "#f2f2f3",
-    secondaryColor: "#333338",
-    tertiaryColor: "#26262a",
-    lineColor: "#8e8e96",
-    textColor: "#f2f2f3",
-    actorBkg: "#2c2c30",
-    actorBorder: "#55555c",
-    actorTextColor: "#f2f2f3",
-    signalColor: "#a3a3a8",
-    signalTextColor: "#f2f2f3",
-    noteBkgColor: "#3a3a3f",
-    noteBorderColor: "#55555c",
-    noteTextColor: "#f2f2f3",
-    edgeLabelBackground: "#1e1e21",
-    clusterBkg: "#232326",
-    clusterBorder: "#46464c",
-    fontSize: "14px",
-  },
-} as const satisfies Record<DiagramAppearance, MermaidConfig["themeVariables"]>;
+/** A label's size, as the plan's words around a diagram are set. */
+const FONT_SIZE = "14px";
 
 /** What a refused fence answers. */
 const REFUSED: DiagramDrawing = { kind: DIAGRAM_DRAWING.REFUSED };
 
-/** Mermaid's configuration in an appearance. */
+/** Mermaid's configuration in an appearance, its colours read off the window's palette as the draw begins (`diagram-theme.ts`). */
 function configIn(appearance: DiagramAppearance): MermaidConfig {
   return {
     startOnLoad: false,
@@ -100,7 +46,11 @@ function configIn(appearance: DiagramAppearance): MermaidConfig {
     suppressErrorRendering: true,
     theme: "base",
     fontFamily: FONT_FAMILY,
-    themeVariables: THEME_VARIABLES[appearance],
+    themeVariables: {
+      ...diagramThemeVariables(appearance),
+      background: "transparent",
+      fontSize: FONT_SIZE,
+    },
     sequence: { mirrorActors: false },
   };
 }

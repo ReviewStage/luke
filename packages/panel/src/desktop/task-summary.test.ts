@@ -8,6 +8,7 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@luke/features/inbox-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { TASK_STATUS, type Task } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -17,6 +18,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { ChipCards } from "../tasks/chip-cards.js";
+import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -116,7 +118,11 @@ afterEach(() => {
 });
 
 /** The summary of a task whose running agent opened the pull request, the task's column showing `shown`; every agent it opens recorded. */
-function mount(shown: "agent" | "plan", linkWorkspace?: string) {
+function mount(
+  shown: "agent" | "plan",
+  linkWorkspace?: string,
+  inbox: InboxBoardView = { open: [], waiting: [], settled: [] },
+) {
   const opened: string[] = [];
   const base = tasksControl();
   const tasks = tasksControl({
@@ -146,7 +152,7 @@ function mount(shown: "agent" | "plan", linkWorkspace?: string) {
             tasks,
             layout: PINNED,
             cardId: "summary-card",
-            inbox: { open: [], settled: [] },
+            inbox,
             held: HELD,
             repository: "acme/relay",
             onOpenAgent: (agentId) => opened.push(agentId),
@@ -198,7 +204,7 @@ test("a page's row hangs the page's tab's card, previewing its newest version", 
           tasks,
           layout: PINNED,
           cardId: "summary-card",
-          inbox: { open: [], settled: [] },
+          inbox: { open: [], waiting: [], settled: [] },
           held: HELD,
           repository: "acme/relay",
           onOpenAgent: () => undefined,
@@ -264,7 +270,7 @@ test("the plan's row hangs the task's card, as the Plan tab does", () => {
             tasks,
             layout: PINNED,
             cardId: "summary-card",
-            inbox: { open: [], settled: [] },
+            inbox: { open: [], waiting: [], settled: [] },
             held: HELD,
             repository: "acme/relay",
             onOpenAgent: () => undefined,
@@ -306,7 +312,7 @@ test("the agent's card hung from a Changes card previews its running step while 
   assert.doesNotMatch(latestStep("plan"), /Writing the expiry tests\./u);
 });
 
-test("an agent's row in the summary offers Copy link on a right-click, copying the agent's link under its task, before Archive agent", async () => {
+test("an agent's row in the summary offers Copy link on a right-click, copying the agent's link under its task, before Archive", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount("plan", "acme");
@@ -323,12 +329,33 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
   assert.ok(copy);
   await act(async () => copy.click());
 
-  assert.deepEqual(labels, ["Copy link", "Archive agent"]);
+  assert.deepEqual(labels, ["Copy link", "Show details⌥↓", "Archive"]);
   assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}`]);
 });
 
+test("the Inbox's row counts what needs the reader in the attention tone its rows' marks wear", () => {
+  const asking: InboxItem = {
+    id: "6c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+    agentId: AGENT.id,
+    key: "3e4f",
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title: "Expire after 7 days?",
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: 1_000,
+    updatedAt: 1_000,
+  };
+  const { page } = mount("plan", undefined, { open: [asking], waiting: [asking], settled: [] });
+  const count =
+    page.querySelector<HTMLElement>(".task-summary .inbox-row-count") ??
+    assert.fail("the Inbox's row counts what needs the reader");
+  assert.equal(count.textContent, "1 needs you");
+  assert.equal(count.dataset.tone, "attention");
+});
+
 /** What the plan's own inbox holds in these tests: nothing. */
-const NO_INBOX = { open: [], settled: [] };
+const NO_INBOX = { open: [], waiting: [], settled: [] };
 
 /** The plan's column as the shell lays it out: the toolbar's button over the summary, laid out by the column's own width. */
 function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
@@ -400,6 +427,22 @@ test("Escape takes the card the toolbar's button hung back down and hands the fo
   });
   assert.equal(toggle.getAttribute("aria-expanded"), "false", "the card is taken down");
   assert.equal(document.activeElement, toggle, "the toolbar's button has the focus back");
+});
+
+test("a press outside the card the toolbar's button hung takes it down, and a press inside it leaves it", () => {
+  const column = columnAt(280);
+  const toggle =
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle summary"]') ??
+    assert.fail("the toolbar's button stands");
+  act(() => toggle.click());
+  const card = document.querySelector('[role="dialog"][aria-label="Summary"]');
+  assert.ok(card, "the card hangs");
+
+  act(() => card.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  assert.equal(toggle.getAttribute("aria-expanded"), "true", "a press inside leaves it hung");
+
+  act(() => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  assert.equal(toggle.getAttribute("aria-expanded"), "false", "a press outside takes it down");
 });
 
 test("where the summary pins beside the document, the toolbar's button says whether it stands pinned", () => {

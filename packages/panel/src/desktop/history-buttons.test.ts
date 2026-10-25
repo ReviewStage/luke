@@ -13,7 +13,7 @@ import { HistoryButtons } from "./desktop-sidebar.js";
 
 /**
  * history-buttons.test.ts -- Back and Forward list the steps along their
- * way on a right-click or a held press, as a browser's do, each named as the
+ * way on a right-click, a held press, or the menu key, as a browser's do, each named as the
  * window called it, a page's steps gathered together, and any of them gone
  * to at once; a plain press still takes one step.
  */
@@ -107,6 +107,34 @@ test("a right-click on Back lists the steps behind, the nearest first, each name
     "—",
     "InboxDesktop shell",
   ]);
+});
+
+test.each([
+  ["the menu key", { key: "ContextMenu" }],
+  ["⇧F10", { key: "F10", shiftKey: true }],
+])("%s on Back lists its steps from the keyboard", (_name, init) => {
+  const window = mount(BACK);
+  act(() => {
+    window.back.dispatchEvent(
+      new KeyboardEvent("keydown", { ...init, bubbles: true, cancelable: true }),
+    );
+  });
+  assert.deepEqual(menuWords(), [
+    "Auth refactorFix token refresh · Code",
+    "Auth refactorFix token refresh · Plan",
+    "—",
+    "InboxDesktop shell",
+  ]);
+});
+
+test("the menu key on a Back with nothing behind it lists nothing", () => {
+  const window = mount([]);
+  act(() => {
+    window.back.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+    );
+  });
+  assert.equal(document.querySelector('[role="menu"]'), null);
 });
 
 test("choosing a step from Back's list goes straight to it, without a step of Back's own", () => {

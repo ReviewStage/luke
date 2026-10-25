@@ -21,7 +21,7 @@
     color: var(--luke-color-on-accent);
     font-size: var(--luke-type-caption-size);
     font-variant-numeric: tabular-nums;
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
     line-height: var(--luke-space-16);
     text-align: center;
   }

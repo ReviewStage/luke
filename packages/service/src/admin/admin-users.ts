@@ -45,6 +45,18 @@ export function searchLikePattern(term: string): string {
   return `%${term.replace(/[\\%_]/g, "\\$&")}%`;
 }
 
+/**
+ * One pattern per word of the term, which a row must satisfy all of: "jane
+ * acme" finds Jane at Acme, as the panel's own word search does for the rows
+ * it already holds.
+ */
+export function searchLikePatterns(term: string): readonly string[] {
+  return term
+    .split(/\s+/)
+    .filter((word) => word.length > 0)
+    .map(searchLikePattern);
+}
+
 export interface AdminUserListSource {
   total: number;
   signIn: AdminSignIn;

@@ -24,7 +24,8 @@ import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
  * the agent's own turn: a set it showed stays out of the finished turn's
  * fold and reads each picture once through the door it is given; two calls
  * one after another are one set; an integration's call keeps its row and
- * gains its pictures as chips under it, one left out saying so; a refused
+ * gains its pictures as tiles under it, one left out saying so; a tile
+ * whose bytes are gone says so in words and opens nothing; a refused
  * call is a row where its error is read; a picture written in the
  * agent's words is a link, never an image; a WebM it showed plays in a
  * player of its own, from a `blob:` address let go of as the player goes;
@@ -38,6 +39,9 @@ import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
  */
 
 const roots: Root[] = [];
+
+/** The tiles of a set the agent showed, as a reader finds them: the items of the list it names. */
+const SHOWN_TILES = 'ul[aria-label="Pictures the agent showed"] > li';
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -141,11 +145,11 @@ test("a set the agent showed stays out of the finished turn's fold, each picture
     ]),
   );
 
-  const tiles = [...container.querySelectorAll<HTMLElement>(".picture-set-tile")];
+  const tiles = [...container.querySelectorAll<HTMLElement>(SHOWN_TILES)];
   assert.equal(tiles.length, 2, "the set is drawn though the work before it folded");
   assert.deepEqual(
-    tiles.map((tile) => tile.querySelector(".picture-set-frame")?.getAttribute("style")),
-    ["aspect-ratio: 1200 / 720;", "aspect-ratio: 390 / 700;"],
+    tiles.map((tile) => tile.style.getPropertyValue("--luke-picture-ratio")),
+    [String(1200 / 720), String(390 / 700)],
   );
   assert.deepEqual(
     [...container.querySelectorAll("img")].map((image) => image.getAttribute("src")),
@@ -170,13 +174,20 @@ test("two shown sets one after another are one set, and one picture alone is its
   );
   const single = await drawn(finished([shown("call-c", [alone]), text("One.")]));
 
-  assert.equal(joined.container.querySelectorAll(".picture-set-tile").length, 2);
-  assert.equal(joined.container.querySelectorAll(".picture-set").length, 1);
+  assert.equal(joined.container.querySelectorAll(SHOWN_TILES).length, 2);
+  assert.equal(joined.container.querySelectorAll("figure").length, 1);
   assert.equal(single.container.querySelectorAll(".picture-block").length, 1);
   assert.equal(single.container.querySelector(".picture-caption")?.textContent, "Screen 1");
+  const image = single.container.querySelector("img");
+  assert.ok(image, "the picture is drawn");
+  assert.notEqual(
+    image.getAttribute("alt"),
+    "Screen 1",
+    "the caption is drawn once, not read again as the picture's own alt",
+  );
 });
 
-test("an integration's call keeps its row and gains its pictures as chips, one left out saying so with its size", async () => {
+test("an integration's call keeps its row and gains its pictures as tiles, one left out saying so with its size and opening nothing", async () => {
   const kept = picture(390, 700);
   const answered = await drawn({
     id: "turn",
@@ -194,12 +205,44 @@ test("an integration's call keeps its row and gains its pictures as chips, one l
       ]),
     ],
   });
-  const chips = [
+  const tiles = [
     ...answered.container.querySelectorAll('ul[aria-label="Pictures the call answered"] > li'),
   ];
-  assert.equal(chips.length, 2);
-  assert.equal(chips[0]?.querySelector("img")?.getAttribute("alt"), "extract_images-1");
-  assert.equal(chips[1]?.textContent, "Not kept6.4 MB");
+  assert.equal(tiles.length, 2);
+  assert.equal(tiles[0]?.querySelector("img")?.getAttribute("alt"), "extract_images-1");
+  assert.equal(tiles[1]?.textContent, "extract_images-2 · not kept · 6.4 MB");
+  assert.equal(tiles[1]?.querySelector("button"), null, "a picture not kept opens nothing");
+});
+
+test("a call draws every picture it answered in its order, so a kept one after six not kept opens and none hides behind a count", async () => {
+  const kept = picture(390, 700);
+  const omitted = {
+    type: "image",
+    mimeType: "image/png",
+    omitted: PICTURE_OMISSION.TOO_LARGE,
+    byteCount: 6_400_000,
+  };
+  const answered = await drawn({
+    id: "turn",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      toolPart("linear_remote", "call-late-kept", { remoteTool: "extract_images" }, [
+        ...Array.from({ length: 6 }, () => omitted),
+        { type: "image", mimeType: "image/png", picture: kept },
+      ]),
+    ],
+  });
+  const tiles = [
+    ...answered.container.querySelectorAll('ul[aria-label="Pictures the call answered"] > li'),
+  ];
+  const open = tiles.at(-1)?.querySelector<HTMLButtonElement>("button");
+
+  assert.equal(tiles.length, 7);
+  assert.match(tiles[0]?.textContent ?? "", /not kept · 6\.4 MB/u);
+  assert.equal(open?.getAttribute("aria-label"), "Enlarge extract_images-7");
+  assert.doesNotMatch(answered.container.textContent ?? "", /\+\d/u, "no count hides a picture");
+  await act(async () => open?.click());
+  assert.ok(document.querySelector('[role="dialog"] img'), "the viewer opens on the kept picture");
 });
 
 test("a browser call's screenshots are thumbnails in a strip under its row, masked from the replay, and a press opens the window's viewer walking them", async () => {
@@ -242,7 +285,7 @@ test("a browser call's screenshots are thumbnails in a strip under its row, mask
   const strip = container.querySelector('ul[aria-label="Pictures the call answered"]');
   const thumbnails = [...(strip?.querySelectorAll("li img") ?? [])];
 
-  assert.ok(strip?.classList.contains("ph-no-capture"), "the strip is left out of the replay");
+  assert.ok(strip?.closest(".ph-no-capture"), "the strip is left out of the replay");
   assert.deepEqual(
     thumbnails.map((image) => [image.getAttribute("alt"), image.getAttribute("src")]),
     [
@@ -301,7 +344,7 @@ test("a refused set is a row that failed, its reason read in it, and nothing wai
     true,
   );
 
-  assert.equal(container.querySelectorAll(".picture-block, .picture-set").length, 0);
+  assert.equal(container.querySelectorAll(`.picture-block, ${SHOWN_TILES}`).length, 0);
   // The group the call stands in, then the call's own row, each opened as a reader would.
   for (let opened = 0; opened < 3; opened += 1) {
     const closed = container.querySelector<HTMLElement>("details:not([open]) > summary");
@@ -311,10 +354,72 @@ test("a refused set is a row that failed, its reason read in it, and nothing wai
   assert.match(container.textContent ?? "", /Not shown: a picture is kept up to 4 MB/u);
 });
 
+test("a tile of a set whose bytes are gone says so in its words and opens nothing, while the rest still open", async () => {
+  const [kept, gone] = [picture(800, 450), picture(800, 450)];
+  assert.ok(kept && gone);
+  const { container } = await drawn(
+    finished([shown("call-gone", [kept, gone]), text("Two.")]),
+    false,
+    (id) =>
+      Promise.resolve(
+        id === gone.id
+          ? { failure: "not-found" }
+          : { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" },
+      ),
+  );
+  const tiles = [...container.querySelectorAll(SHOWN_TILES)];
+
+  assert.equal(tiles.length, 2);
+  assert.ok(tiles[0]?.querySelector("button"), "the picture still here opens");
+  assert.equal(tiles[1]?.querySelectorAll("button").length, 0, "the one gone opens nothing");
+  assert.equal(
+    tiles[1]?.querySelector('[role="img"]')?.getAttribute("aria-label"),
+    "Screen 2 · not available",
+  );
+  assert.match(tiles[1]?.textContent ?? "", /Screen 2 · not available/u);
+});
+
+test("a tile whose read did not land says it could not be read, and its Retry reads it again and opens it", async () => {
+  const [kept, failing] = [picture(800, 450), picture(800, 450)];
+  assert.ok(kept && failing);
+  let refusing = true;
+  const { container, read } = await drawn(
+    finished([shown("call-failed", [kept, failing]), text("Two.")]),
+    false,
+    (id) =>
+      id === failing.id && refusing
+        ? Promise.reject(new Error("The host did not answer."))
+        : Promise.resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }),
+  );
+  const failed = () => [...container.querySelectorAll(SHOWN_TILES)][1];
+  assert.match(failed()?.textContent ?? "", /Screen 2 could not be read\./u);
+  const retry = failed()?.querySelector("button");
+  assert.equal(retry?.textContent, "Retry");
+
+  refusing = false;
+  await act(async () => retry?.click());
+
+  assert.deepEqual(
+    read.filter((id) => id === failing.id),
+    [failing.id, failing.id],
+  );
+  assert.equal(failed()?.querySelector("button")?.getAttribute("aria-label"), "Enlarge Screen 2");
+});
+
+test("a set of eight draws six, the last saying how many more, and says how many it holds", async () => {
+  const pictures = Array.from({ length: 8 }, () => picture(800, 450));
+  const { container } = await drawn(finished([shown("call-counted", pictures), text("Eight.")]));
+  const tiles = [...container.querySelectorAll(SHOWN_TILES)];
+
+  assert.equal(tiles.length, 6);
+  assert.equal(tiles.at(-1)?.querySelector('[aria-hidden="true"]')?.textContent, "+2");
+  assert.equal(container.querySelector("figcaption")?.textContent, "8 pictures");
+});
+
 test("the viewer over a set of eight walks all eight, the two the turn did not draw among them", async () => {
   const pictures = Array.from({ length: 8 }, () => picture(800, 450));
   const { container } = await drawn(finished([shown("call-eight", pictures), text("All eight.")]));
-  const first = container.querySelector<HTMLButtonElement>(".picture-set-tile button");
+  const first = container.querySelector<HTMLButtonElement>(`${SHOWN_TILES} button`);
   assert.ok(first);
 
   await act(async () => first.click());
@@ -336,7 +441,7 @@ test("a finished turn that ends on its pictures, with no words after them, keeps
     ]),
   );
 
-  assert.equal(container.querySelectorAll(".picture-set-tile").length, 2);
+  assert.equal(container.querySelectorAll(SHOWN_TILES).length, 2);
   assert.match(container.textContent ?? "", /2 tool calls/u);
 });
 
@@ -349,7 +454,7 @@ test("a set shown beside reasoning alone, with its words after, stands apart fro
     ]),
   );
 
-  assert.equal(container.querySelectorAll(".picture-set-tile").length, 2);
+  assert.equal(container.querySelectorAll(SHOWN_TILES).length, 2);
 });
 
 test("a set shown between calls stands on its own row, never in a group that folds once the agent moves on", async () => {
@@ -441,7 +546,7 @@ test("the viewer opened on the first picture to land reaches the rest as their r
             held.push(() => resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }));
           }),
   );
-  const tile = container.querySelector<HTMLButtonElement>(".picture-set-tile button");
+  const tile = container.querySelector<HTMLButtonElement>(`${SHOWN_TILES} button`);
   assert.ok(tile);
 
   await act(async () => tile.click());

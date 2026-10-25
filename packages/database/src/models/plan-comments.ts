@@ -46,8 +46,9 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * outside the workspace reads no plan here, exactly as in `task-store.ts`.
  * Each write takes the plan row's lock first, as the plan's own save does,
  * so a thread started while the text is saved lands on the text as saved. A comment
- * is edited or deleted only by its writer; the rest, resolving and reopening
- * and deleting a whole thread among them, is any member's or agent's.
+ * is edited or deleted only by its writer, and a whole thread deleted only by
+ * its starter, or by any member where Luke or an agent started it; the rest,
+ * resolving and reopening, is any member's or agent's.
  *
  * A thread's anchor is offsets into the plan's text (`schemas/plan-comment.ts`).
  * A thread is started over the text the client measured it in, carried over
@@ -546,6 +547,15 @@ function writtenBy(row: EntryRow, writer: PlanCommentWriterRef): boolean {
   return row.userId === writer.userId;
 }
 
+/**
+ * Whether the writer may delete the whole thread: its starter may, and any
+ * member may where Luke or an agent started it, since no member wrote it.
+ */
+function mayDeleteThread(starter: EntryRow, writer: PlanCommentWriterRef): boolean {
+  if (writtenBy(starter, writer)) return true;
+  return starter.actor !== PLAN_COMMENT_ACTOR.MEMBER && writer.actor === PLAN_COMMENT_ACTOR.MEMBER;
+}
+
 /** The plan's threads, oldest first, each with its entries; nothing where the account reaches no such plan. */
 export function readPlanCommentThreads(
   userId: string,
@@ -735,7 +745,8 @@ function settled(
 /**
  * What a member, Luke, or an agent does to one thread of the plan: answer
  * it, edit or delete a comment of its own (deleting the first deletes the
- * thread), resolve or reopen it, or delete it whole. Nothing where the
+ * thread), resolve or reopen it, or delete it whole, which only its starter
+ * does, or any member where Luke or an agent started it. Nothing where the
  * account reaches no such plan, or the plan no such thread.
  */
 export function actOnPlanCommentThread(
@@ -761,8 +772,13 @@ export function actOnPlanCommentThread(
           return yield* settled(place, thread, writer, PLAN_COMMENT_STATUS.RESOLVED, now);
         case PLAN_COMMENT_ACTION.REOPEN:
           return yield* settled(place, thread, writer, PLAN_COMMENT_STATUS.OPEN, now);
-        case PLAN_COMMENT_ACTION.DELETE_THREAD:
+        case PLAN_COMMENT_ACTION.DELETE_THREAD: {
+          const starter = entries.find((each) => each.kind === PLAN_COMMENT_ENTRY.COMMENT);
+          if (starter !== undefined && !mayDeleteThread(starter, writer)) {
+            return refused(PLAN_COMMENT_REFUSAL.NOT_YOURS);
+          }
           return yield* deletedThread(threadId);
+        }
         case PLAN_COMMENT_ACTION.ASK:
           return yield* askedOf(place, thread, writer, request, now);
         case PLAN_COMMENT_ACTION.EDIT:

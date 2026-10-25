@@ -8,7 +8,6 @@ import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
 import { FOR_YOU } from "@luke/ui/chat-model";
-import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -94,6 +93,7 @@ function versionHistoryControl(
     onList: ignore,
     onStand: ignore,
     onRetry: ignore,
+    onRetryVersion: ignore,
     onLoadEarlier: () => Promise.resolve(false),
     onRestore: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     ...overrides,
@@ -140,6 +140,7 @@ export function codingAgentsControl(
     listMissing: false,
     onRetryList: ignore,
     models: undefined,
+    modelsFailed: false,
     readModels: ignore,
     readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onUnarchive: undefined,
@@ -160,6 +161,7 @@ export function codingAgentsControl(
     onSwitchServers: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onOpenIntegrations: ignore,
     onOpenApiKeys: ignore,
+    pending: { titles: new Map(), archives: new Map() },
     onRename: () => Promise.resolve(false),
     onArchive: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
     onDelete: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
@@ -332,19 +334,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onSectionRevealed: ignore,
     onShowInbox: ignore,
     onShowChat: ignore,
-    secondCall: {
-      confirm: {
-        stage: CONFIRM_STAGE.RESTING,
-        rejection: undefined,
-        busy: false,
-        ask: ignore,
-        keep: ignore,
-        clear: ignore,
-        run: ignore,
-        standing: false,
-      },
-      question: { title: "", body: "", verb: "", running: "" },
-    },
     inbox: [],
     inboxShown: null,
     chatShown: null,
@@ -432,6 +421,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       repositoriesIn: () => NO_REPOSITORIES,
       start: () => Promise.resolve(undefined),
       models: undefined,
+      modelsFailed: false,
       readModels: ignore,
       readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
       onClose: ignore,

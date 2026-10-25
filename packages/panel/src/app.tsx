@@ -2,7 +2,8 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, linkOf, type ReadLink } from "@luke/features/link-grammar";
+import type { ModelProvider } from "@luke/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -13,10 +14,11 @@ import {
 } from "@luke/host/app-state";
 import type { ChatShown } from "@luke/host/contract";
 import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
-import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { agentKeyLink, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { cssCustomProperties } from "@luke/ui";
+import { cssCustomProperties, STATUS_TONE } from "@luke/ui";
 import { callBarAgentId } from "@luke/ui/call-card-model";
+import { isComposingKey } from "@luke/ui/composing-key";
 import { useLinkOpener } from "@luke/ui/held-link";
 import { EXPERIMENT_OFF_LINK, LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
 import { forgetPictures } from "@luke/ui/picture-cache";
@@ -55,6 +57,7 @@ import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { installPressIntent } from "./press-intent.js";
+import { settingsPageOf } from "./settings/pages.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { SHELL_ROOM } from "./shell-room.js";
@@ -67,11 +70,12 @@ import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { useInboxToasts } from "./tasks/inbox-toast.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
-import { useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
+import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
+import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast.js";
+import { TOAST_HOLD, ToastHost, useToast } from "./toast.js";
 import { useUpdatedToast } from "./update-toast.js";
 import {
   APP_SETTINGS_VIEW,
@@ -255,7 +259,7 @@ export function App(): React.JSX.Element {
 }
 
 function AppWindow(): React.JSX.Element {
-  const { act, tell, updateSetting } = useAct();
+  const { act, press, tell, updateSetting } = useAct();
   // What main holds, each slice read on its own, so the window is drawn again
   // for a slice it draws from and for no other: a setting that moves draws
   // Settings and ⌘K, which read their own (`app-settings.ts`), and leaves the
@@ -277,8 +281,15 @@ function AppWindow(): React.JSX.Element {
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   useInboxSettlingOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
-  const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.TASKS);
-  const settingsPlace = useSettingsPlace();
+  // A fixture run's profile may open the window on a page of Settings at launch (`tasks-fixture.ts`).
+  const [launched] = useState(() => {
+    const place = loadedTasksFixture()?.fixturePlace(run ?? IDLE_RUN);
+    return place !== undefined && "settings" in place ? place.settings : undefined;
+  });
+  const [tab, setTab] = useStateWithRef<PanelTab>(
+    launched === undefined ? PANEL_TAB.TASKS : PANEL_TAB.SETTINGS,
+  );
+  const settingsPlace = useSettingsPlace(launched?.page);
   const { onEnter: enterSettings, onChoose: chooseSettingsView } = settingsPlace;
   /** The note being written to the people who make Luke, while its dialog stands. */
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>();
@@ -293,8 +304,13 @@ function AppWindow(): React.JSX.Element {
   useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY));
   usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  // The shell hears the ask too, so its own ways out of the page ask first.
+  // The shell hears the ask too, and whether a plan holds words not saved, which no page's ask
+  // covers, so its own ways out of the page and the app ask first.
   const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
+  const planWordsUnsaved = usePlanWordsUnsaved();
+  useEffect(() => {
+    appPlatform().unsavedPlanWords?.(planWordsUnsaved);
+  }, [planWordsUnsaved]);
   const { guard: guardLeave } = leaveGuard;
   const changeTab = useCallback(
     (next: PanelTab) =>
@@ -339,7 +355,7 @@ function AppWindow(): React.JSX.Element {
     [openSettings],
   );
   const openApiKeys = useCallback(
-    () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
+    (provider: ModelProvider | undefined) => openSettings(agentKeyLink(provider)),
     [openSettings],
   );
 
@@ -377,7 +393,7 @@ function AppWindow(): React.JSX.Element {
     } catch {
       return {
         status: ACTION_RESULT_STATUS.REJECTED,
-        reason: "Luke could not delete the account. Try again in a moment.",
+        reason: "The account could not be deleted. Try again.",
       };
     }
   }, [act]);
@@ -391,7 +407,7 @@ function AppWindow(): React.JSX.Element {
   const room = stage.room;
   // The Tasks tab, which reads the call standing where it draws it.
   const tasks = useTasksTab({
-    acts: { act, tell },
+    acts: { act, press, tell },
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
@@ -416,6 +432,7 @@ function AppWindow(): React.JSX.Element {
     listedId: tasks.workspace?.id,
     workspaces: tasks.workspaces,
     settingsShown: tab === PANEL_TAB.SETTINGS,
+    launched: launched?.workspaceId,
   });
   linkWorkspace.current = settingsWorkspace.link;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
@@ -479,7 +496,18 @@ function AppWindow(): React.JSX.Element {
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
     } else if (route.kind === LINK_ROUTE.EXPERIMENT_OFF) {
-      toast({ words: EXPERIMENT_OFF_LINK, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      // Note that the toast names the page the experiment is turned on in by its own name, as a link to it.
+      const { settings } = route;
+      toast({
+        words: EXPERIMENT_OFF_LINK,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        action: {
+          label: settingsPageOf(settings.page).title,
+          href: linkOf({ kind: LINK_PLACE.SETTINGS, page: settings.page }, link.workspace),
+          onPress: () => openSettings(settings),
+        },
+      });
     } else {
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);
@@ -618,8 +646,13 @@ function AppWindow(): React.JSX.Element {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // Muting an open microphone comes before any of it. Closing the panel
+      if (event.key !== "Escape" || isComposingKey(event)) return;
+      // A field or dialog that took the press for itself is the nearest layer
+      // of all, ahead of the call, the sign-in wait, and every page: an Escape
+      // that clears a search or withdraws a question has been answered, and
+      // an input method's own is never the window's.
+      if (event.defaultPrevented) return;
+      // Muting an open microphone comes before the layers below. Closing the panel
       // or a sheet mid-sentence would strand the microphone open, and the
       // same press asks Luke for quiet mid-sentence: a reply being spoken is
       // the most open thing there is, and Escape ends it without opening a
@@ -643,8 +676,6 @@ function AppWindow(): React.JSX.Element {
         signIn.cancelSignIn();
         return;
       }
-      // A dialog that took the press for itself is the nearest layer of all.
-      if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: Settings, a plan's version history, an agent's or a person's page, the Automations page, or the Board, back to wherever it was
       // opened from, then a side panel filling the window back beside its
@@ -684,9 +715,14 @@ function AppWindow(): React.JSX.Element {
   useEffect(() => installPressIntent(window), []);
 
   // The doors the window hands every page are held across draws, each part that reads one holding while it does.
+  // Note that the request answers once the host has handed it on, which is how Allow knows to stop waiting; the system's own prompt follows, and its answer arrives as the microphone's status.
   const requestMicrophone = useCallback(
-    () => tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS }),
-    [tell],
+    () =>
+      act(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS }).then(
+        () => undefined,
+        () => undefined,
+      ),
+    [act],
   );
   const leftWorkspace = useSteadyDoor((workspaceId: string) => {
     tasks.onLeftWorkspace(workspaceId);
@@ -699,15 +735,16 @@ function AppWindow(): React.JSX.Element {
       workspaceId: settingsWorkspace.shownId,
       // A leave closes Settings onto the Tasks tab, which rests on its page with no task open.
       onLeft: leftWorkspace,
-      listFailed: tasks.listFailed,
-      onRetryList: tasks.onRetryList,
+      // Note that the workspaces are followed apart from the tasks, so a task list that read says nothing of them.
+      listFailed: tasks.workspacesFailed,
+      onRetryList: tasks.onRetryWorkspaces,
     }),
     [
       tasks.workspaces,
       settingsWorkspace.shownId,
       leftWorkspace,
-      tasks.listFailed,
-      tasks.onRetryList,
+      tasks.workspacesFailed,
+      tasks.onRetryWorkspaces,
     ],
   );
   // What Settings and ⌘K answer through; the settings themselves they read where they draw them.

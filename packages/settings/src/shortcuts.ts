@@ -1,10 +1,11 @@
 /**
  * shortcuts.ts -- the window's keyboard shortcuts: one table the menu bar, the renderer's keymap, the hovers, and the Keyboard shortcuts page all read.
  *
- * Every shortcut but Escape, the Inbox's and Chat's J and K, and the tab switcher's
- * ⌃Tab holds Command, the way a
+ * Every shortcut but Escape, the Inbox's and Chat's J and K, the tab switcher's
+ * ⌃Tab, and the ⌥↓ that opens a focused control's card holds Command, the way a
  * Mac app's own chords do, since Command chords belong to whichever app is
- * frontmost. J
+ * frontmost; in a browser on Windows or Linux, Command is pressed as Ctrl, as
+ * every app there has it, and drawn so (`COMMAND_KEY`). J
  * and K are a letter alone, as Linear's and Superhuman's are, and R, which
  * replies to an agent's words selected as GitHub's R quotes them, answered
  * only where the press is not typing, and the menu bar never offers them. Each is a command the window runs and
@@ -45,6 +46,7 @@ export const APP_COMMAND = {
   HIDE: "hide",
   HIDE_OTHERS: "hide-others",
   QUIT: "quit",
+  RELOAD: "reload",
   ACTUAL_SIZE: "actual-size",
   ZOOM_IN: "zoom-in",
   ZOOM_OUT: "zoom-out",
@@ -52,6 +54,8 @@ export const APP_COMMAND = {
   TOGGLE_SPEAKER: "toggle-speaker",
   MOVE_TAB_LEFT: "move-tab-left",
   MOVE_TAB_RIGHT: "move-tab-right",
+  MOVE_ROW_UP: "move-row-up",
+  MOVE_ROW_DOWN: "move-row-down",
   NEW_TAB: "new-tab",
   CLOSE_TAB: "close-tab",
   REOPEN_CLOSED_TAB: "reopen-closed-tab",
@@ -92,6 +96,7 @@ export const APP_COMMAND = {
   NEW_TERMINAL: "new-terminal",
   MENTION_LINES: "mention-lines",
   GROUP_TASKS_BY_REPOSITORY: "group-tasks-by-repository",
+  GROUP_TASKS_BY_ASSIGNEE: "group-tasks-by-assignee",
   GROUP_TASKS_BY_CREATOR: "group-tasks-by-creator",
   LIST_TASKS_UNGROUPED: "list-tasks-ungrouped",
   ORDER_TASKS_BY_UPDATED: "order-tasks-by-updated",
@@ -102,6 +107,7 @@ export const APP_COMMAND = {
   INSERT_PICTURE: "insert-picture",
   NEXT_RECENT_TAB: "next-recent-tab",
   PREVIOUS_RECENT_TAB: "previous-recent-tab",
+  SHOW_DETAILS: "show-details",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
@@ -133,6 +139,7 @@ const PALETTE_COMMAND_LABELS = {
   [APP_COMMAND.CHAT]: "Chat",
   [APP_COMMAND.ADMIN]: "Admin",
   [APP_COMMAND.GROUP_TASKS_BY_REPOSITORY]: "Group tasks by repository",
+  [APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE]: "Group tasks by assignee",
   [APP_COMMAND.GROUP_TASKS_BY_CREATOR]: "Group tasks by creator",
   [APP_COMMAND.LIST_TASKS_UNGROUPED]: "Show tasks in one list",
   [APP_COMMAND.ORDER_TASKS_BY_UPDATED]: "Order tasks by last updated",
@@ -252,6 +259,34 @@ const KEY_GLYPHS: ReadonlyMap<string, string> = new Map(
   Object.values(SHORTCUT_KEY).map((key) => [key.accelerator, key.glyph]),
 );
 
+/**
+ * The key a chord's Command is pressed with: ⌘ on a Mac, as every Mac app has
+ * it, and Ctrl on Windows and Linux, as every app there has it, where Meta is
+ * the Windows key the system keeps for itself. The window's shell names it
+ * once (`installCommandKey`); the desktop is a Mac's alone and names none.
+ */
+export const COMMAND_KEY = {
+  META: "meta",
+  CONTROL: "control",
+} as const;
+
+export type CommandKey = (typeof COMMAND_KEY)[keyof typeof COMMAND_KEY];
+
+/**
+ * The window's command key, ⌘ until its shell installs another. Note that this
+ * is module state, as `@luke/panel`'s platform door is, because every reader
+ * (a press matched, a chord drawn or spelled for a reader) reads it at the
+ * moment it reads, never at load, and the shell knows it before anything is
+ * drawn.
+ */
+let commandKey: CommandKey = COMMAND_KEY.META;
+
+/** How `aria-keyshortcuts` names each command key. */
+const COMMAND_ARIA = {
+  [COMMAND_KEY.META]: "Meta",
+  [COMMAND_KEY.CONTROL]: "Control",
+} as const satisfies Record<CommandKey, string>;
+
 /** The modifiers' glyphs in the order macOS writes a chord in. */
 const MODIFIER_GLYPHS = ["⌃", "⌥", "⇧", "⌘"] as const;
 
@@ -268,17 +303,43 @@ const MODIFIER_GLYPH = {
   CmdOrCtrl: "⌘",
 } as const satisfies Record<string, (typeof MODIFIER_GLYPHS)[number]>;
 
+/** The modifiers' words in the order Windows and Linux write a chord in, where Command is pressed as Ctrl. */
+const MODIFIER_WORDS = ["Ctrl", "Alt", "Shift"] as const;
+
+/** The same names folded to the word Windows and Linux spell each in: Command is Ctrl there, so it and Control are one key. */
+const MODIFIER_WORD = {
+  Control: "Ctrl",
+  Ctrl: "Ctrl",
+  Alt: "Alt",
+  Option: "Alt",
+  Shift: "Shift",
+  Command: "Ctrl",
+  Cmd: "Ctrl",
+  CommandOrControl: "Ctrl",
+  CmdOrCtrl: "Ctrl",
+} as const satisfies Record<keyof typeof MODIFIER_GLYPH, (typeof MODIFIER_WORDS)[number]>;
+
+/** How a chord's modifiers are drawn for each command key: their order, and the name each accelerator's modifier is drawn as. */
+const MODIFIER_SPELLING = {
+  [COMMAND_KEY.META]: { order: MODIFIER_GLYPHS, names: MODIFIER_GLYPH },
+  [COMMAND_KEY.CONTROL]: { order: MODIFIER_WORDS, names: MODIFIER_WORD },
+} as const;
+
 function modifierGlyph(name: string): string {
-  if (!Object.hasOwn(MODIFIER_GLYPH, name)) return name;
+  const { names } = MODIFIER_SPELLING[commandKey];
+  if (!Object.hasOwn(names, name)) return name;
   // SAFETY: Object.hasOwn narrows name to a key the glyph table documents.
-  return MODIFIER_GLYPH[name as keyof typeof MODIFIER_GLYPH];
+  return names[name as keyof typeof names];
 }
 
 /**
  * A chord: Command, the modifiers named here, and the key. A `bare` chord is
- * the key alone, which only Escape is: the window's Escape steps back one
- * layer at a time in `app.tsx`, so the keymap leaves it there, and the table
- * names it so the menu bar and the shortcuts page can say what it does. A
+ * the key alone. In the command table only Escape is bare: the window's
+ * Escape steps back one layer at a time in `app.tsx`, so the keymap leaves it
+ * there, and the table names it so the menu bar and the shortcuts page can say
+ * what it does. Outside the table a surface draws its own keys as bare chords
+ * to spell them in a hint, the palette's arrows and Return among them, which
+ * it answers itself and the keymap never sees. A
  * `plain` chord is a letter alone too, which the keymap answers itself, but
  * only where the press is not typing into a field, and which no menu item
  * carries, since a menu's bare key would take the letter from every field.
@@ -331,7 +392,8 @@ export interface AppShortcut {
  * Safari have them, ⌃Tab and ⌃⇧Tab through the tabs used last as VS Code
  * and Chrome have them, ⇧⌘⏎ to fill the window
  * with a pane as iTerm and Warp have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
- * keys VS Code's Move Editor Left and Right end in, ⌘T to open a tab, ⌘W
+ * keys VS Code's Move Editor Left and Right end in, ⇧⌘↑ and ⇧⌘↓ to move the focused
+ * row of a list that reorders up or down it, ⌘T to open a tab, ⌘W
  * to close the tab chosen, ⇧⌘T to reopen the tab closed last, and ⇧⌘W to
  * close the window as Chrome and VS Code have them,
  * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
@@ -343,8 +405,9 @@ export interface AppShortcut {
  * found, as every Mac app has them, and ⌘+, ⌘−, and ⌘0 to zoom as every
  * browser has them.
  *
- * The system's own chords stand here too — ⌘H, ⌥⌘H, ⌘Q, ⌘M, and ⌃⌘F, which
- * every Mac app answers through the menu bar's standard items — so the menu
+ * The system's own chords stand here too — ⌘H, ⌥⌘H, ⌘Q, ⌘M, ⌃⌘F, and ⌘R,
+ * which every Mac app answers through the menu bar's standard items, ⌘R
+ * reloading the window as a browser and Slack do — so the menu
  * reads them from here and the shortcuts page lists them. No control ever
  * offers their commands, so the keymap never claims their keys, and the
  * menu's own items answer them.
@@ -387,24 +450,57 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.FULL_SCREEN]: {
     label: "Toggle full screen",
     chord: { key: SHORTCUT_KEY.F, control: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
   },
-  [APP_COMMAND.MINIMIZE]: { label: "Minimize", chord: { key: SHORTCUT_KEY.M } },
-  [APP_COMMAND.HIDE]: { label: "Hide Luke", chord: { key: SHORTCUT_KEY.H } },
+  [APP_COMMAND.MINIMIZE]: {
+    label: "Minimize",
+    chord: { key: SHORTCUT_KEY.M },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [APP_COMMAND.HIDE]: {
+    label: "Hide Luke",
+    chord: { key: SHORTCUT_KEY.H },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
   [APP_COMMAND.HIDE_OTHERS]: {
     label: "Hide others",
     chord: { key: SHORTCUT_KEY.H, option: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
   },
-  [APP_COMMAND.QUIT]: { label: "Quit Luke", chord: { key: SHORTCUT_KEY.Q } },
-  [APP_COMMAND.ACTUAL_SIZE]: { label: "Actual size", chord: { key: SHORTCUT_KEY.ZERO } },
-  [APP_COMMAND.ZOOM_IN]: { label: "Zoom in", chord: { key: SHORTCUT_KEY.PLUS } },
-  [APP_COMMAND.ZOOM_OUT]: { label: "Zoom out", chord: { key: SHORTCUT_KEY.MINUS } },
+  [APP_COMMAND.QUIT]: {
+    label: "Quit Luke",
+    chord: { key: SHORTCUT_KEY.Q },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  // Note that Reload is the desktop's alone, because on the web the browser's own ⌘R reloads the tab.
+  [APP_COMMAND.RELOAD]: {
+    label: "Reload",
+    chord: { key: SHORTCUT_KEY.R },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  // Note that the zoom chords are the desktop's alone, because only its window zooms: on the web the browser's own zoom keeps them.
+  [APP_COMMAND.ACTUAL_SIZE]: {
+    label: "Actual size",
+    chord: { key: SHORTCUT_KEY.ZERO },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [APP_COMMAND.ZOOM_IN]: {
+    label: "Zoom in",
+    chord: { key: SHORTCUT_KEY.PLUS },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [APP_COMMAND.ZOOM_OUT]: {
+    label: "Zoom out",
+    chord: { key: SHORTCUT_KEY.MINUS },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
   [APP_COMMAND.TOGGLE_MICROPHONE]: {
-    label: "Toggle microphone",
+    label: "Mute or unmute microphone",
     chord: { key: SHORTCUT_KEY.M, shift: true },
     capability: HOST_CAPABILITY.VOICE,
   },
   [APP_COMMAND.TOGGLE_SPEAKER]: {
-    label: "Toggle speaker",
+    label: "Mute or unmute speaker",
     chord: { key: SHORTCUT_KEY.S, shift: true },
     capability: HOST_CAPABILITY.VOICE,
   },
@@ -416,6 +512,15 @@ export const APP_SHORTCUTS = {
     label: "Move tab right",
     chord: { key: SHORTCUT_KEY.RIGHT, shift: true },
   },
+  // Note that a row takes the chords a tab's pair does, turned a quarter, because a list runs up and down where a strip runs along.
+  [APP_COMMAND.MOVE_ROW_UP]: {
+    label: "Move row up",
+    chord: { key: SHORTCUT_KEY.UP, shift: true },
+  },
+  [APP_COMMAND.MOVE_ROW_DOWN]: {
+    label: "Move row down",
+    chord: { key: SHORTCUT_KEY.DOWN, shift: true },
+  },
   [APP_COMMAND.NEW_TAB]: { label: "New tab", chord: { key: SHORTCUT_KEY.T } },
   [APP_COMMAND.CLOSE_TAB]: { label: "Close tab", chord: { key: SHORTCUT_KEY.W } },
   [APP_COMMAND.REOPEN_CLOSED_TAB]: {
@@ -425,6 +530,7 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.CLOSE_WINDOW]: {
     label: "Close window",
     chord: { key: SHORTCUT_KEY.W, shift: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
   },
   [APP_COMMAND.SETTINGS]: { label: "Settings", chord: { key: SHORTCUT_KEY.COMMA } },
   [APP_COMMAND.KEYBOARD_SHORTCUTS]: {
@@ -547,16 +653,154 @@ export const APP_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.TAB, control: true, shift: true, switching: true },
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
+  // Note that a card opens on ⌥↓ without Command, as a closed list box opens on it, because only the focused control that hangs the card answers it (`hint.tsx` in `@luke/ui`), so nothing offers it to the window's keymap and a field keeps it for its caret.
+  [APP_COMMAND.SHOW_DETAILS]: {
+    label: "Show details",
+    chord: { key: SHORTCUT_KEY.DOWN, option: true, plain: true },
+  },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
 /**
- * The shortcuts as the Keyboard shortcuts page and the command palette list
- * them: in groups that follow the menu bar, under the group's name in
- * sentence case, every keyed command in exactly one.
+ * A key the Keyboard shortcuts page lists that no app command holds: the
+ * window's layered Escape, named once for every layer it steps back from,
+ * or one that answers in one place alone, where focus or a selection
+ * stands. The window's keymap never claims one and no menu item carries it;
+ * each place answers it itself, and this table only names it for the page.
+ */
+export const IN_CONTEXT_KEY = {
+  STEP_BACK: "in-context-step-back",
+  INBOX_OPTION: "in-context-inbox-option",
+  NEW_TASK_ISSUE: "in-context-new-task-issue",
+  TAB_STRIP_PREVIOUS: "in-context-tab-strip-previous",
+  TAB_STRIP_NEXT: "in-context-tab-strip-next",
+  TAB_STRIP_CLOSE: "in-context-tab-strip-close",
+  SWITCHER_NEXT: "in-context-switcher-next",
+  SWITCHER_PREVIOUS: "in-context-switcher-previous",
+  SWITCHER_GO: "in-context-switcher-go",
+  VIEWER_PREVIOUS: "in-context-viewer-previous",
+  VIEWER_NEXT: "in-context-viewer-next",
+  VIEWER_ZOOM_IN: "in-context-viewer-zoom-in",
+  VIEWER_ZOOM_OUT: "in-context-viewer-zoom-out",
+  VIEWER_FIT: "in-context-viewer-fit",
+  LINK: "in-context-link",
+  MENTION_WRITE: "in-context-mention-write",
+  MENTION_OPEN: "in-context-mention-open",
+} as const;
+
+export type InContextKey = (typeof IN_CONTEXT_KEY)[keyof typeof IN_CONTEXT_KEY];
+
+/**
+ * One key the page lists in its place: its name, its chord, and, for a run
+ * of keys, the last of them (`through`), 1 through 9. A platform feature's
+ * key is listed only where the platform offers it (`capability`).
+ */
+export interface InContextShortcut {
+  label: string;
+  chord: ShortcutChord;
+  through?: ShortcutChord;
+  capability?: HostCapability;
+}
+
+/**
+ * The keys that answer in place, each read where its place answers it: the
+ * window's layered Escape, once for every layer it steps back from
+ * (`app.tsx` in `@luke/panel`); an Inbox ask's options by their number
+ * (`inbox-ask-controls.tsx`); New task's ⌘L for its issue
+ * (`issue-picker-chip.tsx`); a tab strip's arrows and Delete (`tabs.tsx` in
+ * `@luke/ui`); the tab switcher's keys while ⌃ is held (`tab-switcher.tsx`);
+ * the file viewer's arrows and its picture's zoom (`attachment-viewer.tsx`,
+ * `zoom-image.tsx` in `@luke/ui`); ⌘K over selected words for a link
+ * (`writing-format.ts`); and the `@` list's Tab and → (`mention-picker.tsx`).
+ */
+export const IN_CONTEXT_SHORTCUTS = {
+  [IN_CONTEXT_KEY.STEP_BACK]: {
+    label: "Close what's open, or step back",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+  },
+  [IN_CONTEXT_KEY.INBOX_OPTION]: {
+    label: "Choose an inbox option by its number",
+    chord: { key: SHORTCUT_KEY.ONE, plain: true },
+    through: { key: SHORTCUT_KEY.NINE, plain: true },
+  },
+  [IN_CONTEXT_KEY.NEW_TASK_ISSUE]: {
+    label: "Choose an issue for a new task",
+    chord: { key: SHORTCUT_KEY.L },
+  },
+  [IN_CONTEXT_KEY.TAB_STRIP_PREVIOUS]: {
+    label: "Focus previous tab in strip",
+    chord: { key: SHORTCUT_KEY.LEFT, plain: true },
+  },
+  [IN_CONTEXT_KEY.TAB_STRIP_NEXT]: {
+    label: "Focus next tab in strip",
+    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
+  },
+  [IN_CONTEXT_KEY.TAB_STRIP_CLOSE]: {
+    label: "Close focused tab",
+    chord: { key: SHORTCUT_KEY.BACKSPACE, plain: true },
+  },
+  [IN_CONTEXT_KEY.SWITCHER_NEXT]: {
+    label: "Next card in tab switcher",
+    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [IN_CONTEXT_KEY.SWITCHER_PREVIOUS]: {
+    label: "Previous card in tab switcher",
+    chord: { key: SHORTCUT_KEY.LEFT, plain: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [IN_CONTEXT_KEY.SWITCHER_GO]: {
+    label: "Go to chosen card",
+    chord: { key: SHORTCUT_KEY.ENTER, plain: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [IN_CONTEXT_KEY.VIEWER_PREVIOUS]: {
+    label: "Previous file in viewer",
+    chord: { key: SHORTCUT_KEY.LEFT, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIEWER_NEXT]: {
+    label: "Next file in viewer",
+    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIEWER_ZOOM_IN]: {
+    label: "Zoom image in",
+    chord: { key: SHORTCUT_KEY.EQUALS, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIEWER_ZOOM_OUT]: {
+    label: "Zoom image out",
+    chord: { key: SHORTCUT_KEY.MINUS, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIEWER_FIT]: {
+    label: "Fit image",
+    chord: { key: SHORTCUT_KEY.ZERO, plain: true },
+  },
+  [IN_CONTEXT_KEY.LINK]: {
+    label: "Link selected words",
+    chord: { key: SHORTCUT_KEY.K },
+  },
+  [IN_CONTEXT_KEY.MENTION_WRITE]: {
+    label: "Mention highlighted row",
+    chord: { key: SHORTCUT_KEY.TAB, plain: true },
+  },
+  [IN_CONTEXT_KEY.MENTION_OPEN]: {
+    label: "Open highlighted folder or place",
+    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
+  },
+} as const satisfies Record<InContextKey, InContextShortcut>;
+
+/**
+ * The shortcuts as the Keyboard shortcuts page lists them, under the group's
+ * name in sentence case: the keyed commands, every one in exactly one group,
+ * which the command palette lists too, then the keys that answer in place
+ * (`keys`), every one but the writing ones (`WRITING_KEYS_IN_CONTEXT`) in
+ * exactly one. The groups are by what the keys act on, not the menu bar's
+ * menus. The page lists none of the commands the layered Escape reaches,
+ * since one row names it (`IN_CONTEXT_KEY.STEP_BACK`), though each stays
+ * here for the palette's and the hovers' sake.
  */
 export const APP_SHORTCUT_GROUPS = [
   {
     title: "General",
+    keys: [IN_CONTEXT_KEY.STEP_BACK],
     commands: [
       APP_COMMAND.COMMAND_PALETTE,
       APP_COMMAND.SETTINGS,
@@ -564,6 +808,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.FIND,
       APP_COMMAND.FIND_NEXT,
       APP_COMMAND.FIND_PREVIOUS,
+      APP_COMMAND.SHOW_DETAILS,
       APP_COMMAND.EXIT_SETTINGS,
       APP_COMMAND.HIDE,
       APP_COMMAND.HIDE_OTHERS,
@@ -572,6 +817,7 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Tasks",
+    keys: [IN_CONTEXT_KEY.INBOX_OPTION, IN_CONTEXT_KEY.NEW_TASK_ISSUE],
     commands: [
       APP_COMMAND.NEW_TASK,
       APP_COMMAND.COPY_PLAN,
@@ -602,6 +848,11 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Tabs & panels",
+    keys: [
+      IN_CONTEXT_KEY.TAB_STRIP_PREVIOUS,
+      IN_CONTEXT_KEY.TAB_STRIP_NEXT,
+      IN_CONTEXT_KEY.TAB_STRIP_CLOSE,
+    ],
     commands: [
       APP_COMMAND.TOGGLE_SIDEBAR,
       APP_COMMAND.TOGGLE_SIDE_PANEL,
@@ -612,6 +863,8 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.REOPEN_CLOSED_TAB,
       APP_COMMAND.MOVE_TAB_LEFT,
       APP_COMMAND.MOVE_TAB_RIGHT,
+      APP_COMMAND.MOVE_ROW_UP,
+      APP_COMMAND.MOVE_ROW_DOWN,
       APP_COMMAND.SHOW_TERMINAL,
       APP_COMMAND.MENTION_LINES,
       APP_COMMAND.INSERT_PICTURE,
@@ -619,10 +872,16 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Call",
+    keys: [],
     commands: [APP_COMMAND.TOGGLE_MICROPHONE, APP_COMMAND.TOGGLE_SPEAKER],
   },
   {
     title: "Navigation",
+    keys: [
+      IN_CONTEXT_KEY.SWITCHER_NEXT,
+      IN_CONTEXT_KEY.SWITCHER_PREVIOUS,
+      IN_CONTEXT_KEY.SWITCHER_GO,
+    ],
     commands: [
       APP_COMMAND.BACK,
       APP_COMMAND.FORWARD,
@@ -634,7 +893,9 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Window",
+    keys: [],
     commands: [
+      APP_COMMAND.RELOAD,
       APP_COMMAND.FULL_SCREEN,
       APP_COMMAND.MINIMIZE,
       APP_COMMAND.ZOOM_IN,
@@ -643,7 +904,29 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.CLOSE_WINDOW,
     ],
   },
-] as const satisfies readonly { title: string; commands: readonly KeyedCommand[] }[];
+  {
+    title: "Image viewer",
+    keys: [
+      IN_CONTEXT_KEY.VIEWER_PREVIOUS,
+      IN_CONTEXT_KEY.VIEWER_NEXT,
+      IN_CONTEXT_KEY.VIEWER_ZOOM_IN,
+      IN_CONTEXT_KEY.VIEWER_ZOOM_OUT,
+      IN_CONTEXT_KEY.VIEWER_FIT,
+    ],
+    commands: [],
+  },
+] as const satisfies readonly {
+  title: string;
+  keys: readonly InContextKey[];
+  commands: readonly KeyedCommand[];
+}[];
+
+/** The keys that answer in place which the Keyboard shortcuts page lists under Writing, after the writing chords: a link over selected words, and the `@` list's own. */
+export const WRITING_KEYS_IN_CONTEXT: readonly InContextKey[] = [
+  IN_CONTEXT_KEY.LINK,
+  IN_CONTEXT_KEY.MENTION_WRITE,
+  IN_CONTEXT_KEY.MENTION_OPEN,
+];
 
 /**
  * What a key does in Files changed, the Pull request tab's view of its files.
@@ -974,15 +1257,39 @@ export function shortcutShown(
   return experimentStands && capabilityStands;
 }
 
-/** The shortcut groups with only the commands that stand for the account's experiments and the platform's capabilities, as every list of them reads them. */
+/** Whether a key that answers in place stands in the page's lists for the platform's capabilities. */
+export function inContextShown(
+  key: InContextKey,
+  capabilities: readonly HostCapability[],
+): boolean {
+  const shortcut: InContextShortcut = IN_CONTEXT_SHORTCUTS[key];
+  return shortcut.capability === undefined || capabilities.includes(shortcut.capability);
+}
+
+/**
+ * The shortcut groups as the Keyboard shortcuts page and its settings search
+ * list them: only the commands that stand for the account's experiments and
+ * the platform's capabilities, none the layered Escape reaches, which the
+ * group's one Escape key names for them all, and only the keys in place the
+ * platform offers.
+ */
 export function shownShortcutGroups(
   experiments: ExperimentChoices,
   capabilities: readonly HostCapability[],
-): readonly { readonly title: string; readonly commands: readonly KeyedCommand[] }[] {
+): readonly {
+  readonly title: string;
+  readonly commands: readonly KeyedCommand[];
+  readonly keys: readonly InContextKey[];
+}[] {
   return APP_SHORTCUT_GROUPS.map((group) => ({
-    ...group,
-    commands: group.commands.filter((command) => shortcutShown(command, experiments, capabilities)),
-  })).filter((group) => group.commands.length > 0);
+    title: group.title,
+    commands: group.commands.filter(
+      (command) =>
+        !shortcutLayered(APP_SHORTCUTS[command].chord) &&
+        shortcutShown(command, experiments, capabilities),
+    ),
+    keys: group.keys.filter((key) => inContextShown(key, capabilities)),
+  })).filter((group) => group.commands.length + group.keys.length > 0);
 }
 
 /** A command's name as the window says it, keyed, the menu bar's own, or ⌘K's own. */
@@ -1009,31 +1316,64 @@ export function shortcutAccelerator(chord: ShortcutChord): string {
     .join("+");
 }
 
+/** Installs the window's command key, which its shell names once before anything is drawn; answers the function that puts back the one before. */
+export function installCommandKey(key: CommandKey): () => void {
+  const before = commandKey;
+  commandKey = key;
+  return () => {
+    commandKey = before;
+  };
+}
+
 /**
  * Any chord's glyphs as the window draws them, one per key: the modifiers in
- * the order macOS writes them, ⌃⌥⇧⌘, then the key. It reads Electron's
- * accelerator, the one spelling the window's chords (`shortcutAccelerator`)
- * share, so every chord is drawn by one rule: a key the window's table names
- * takes its glyph, ⏎ for Return and ⌫
- * for Delete, and any other, Space or a letter, its name.
+ * the order macOS writes them, ⌃⌥⇧⌘, then the key, or, where Command is Ctrl
+ * (`COMMAND_KEY.CONTROL`), the modifiers' words in the order Windows writes
+ * them, Ctrl Alt Shift. It reads Electron's accelerator, the one spelling the
+ * window's chords (`shortcutAccelerator`) share, so every chord is drawn by
+ * one rule: a key the window's table names takes its glyph, ⏎ for Return and
+ * ⌫ for Delete, and any other, Space or a letter, its name.
  */
 export function shortcutGlyphs(accelerator: string): readonly string[] {
+  const { order } = MODIFIER_SPELLING[commandKey];
   const parts = accelerator.split("+");
   const key = parts.at(-1) ?? "";
   const held = new Set(parts.slice(0, -1).map(modifierGlyph));
   // A name no modifier answers to is kept, ahead of the ones that do, rather than dropped.
-  const unknown = [...held].filter((glyph) => !MODIFIER_GLYPHS.some((each) => each === glyph));
-  const ordered = MODIFIER_GLYPHS.filter((glyph) => held.has(glyph));
+  const unknown = [...held].filter((glyph) => !order.some((each) => each === glyph));
+  const ordered = order.filter((glyph) => held.has(glyph));
   return [...unknown, ...ordered, KEY_GLYPHS.get(key) ?? key];
 }
 
-/** The chord as `aria-keyshortcuts` spells it. */
+/** The window's command key now, which a chord drawn in words reads. */
+export function commandKeyNow(): CommandKey {
+  return commandKey;
+}
+
+/**
+ * Whether a press on a surface that hands keys on to something of its own, a
+ * terminal's shell or a remote page, stays that surface's, the window
+ * yielding it. Where Command is Ctrl, every Ctrl chord does, as VS Code's
+ * terminal keeps them on Windows and Linux, because a shell and a page read
+ * Ctrl as their own (Ctrl+C, Ctrl+[ for Escape, Ctrl+B for bold). On a Mac
+ * none does here, since the window's chords there are ⌘ ones, which each
+ * surface sorts itself.
+ */
+export function surfaceKeepsPress(press: { ctrlKey: boolean; metaKey: boolean }): boolean {
+  return commandKey === COMMAND_KEY.CONTROL && press.ctrlKey && !press.metaKey;
+}
+
+/** The chord as `aria-keyshortcuts` spells it, its Command as the window's command key. */
 export function shortcutAria(chord: ShortcutChord): string {
-  return [
-    commandless(chord) ? undefined : "Meta",
+  // Note that a set, because where Command is Ctrl a chord naming Control too names one key.
+  const held = new Set([
+    commandless(chord) ? undefined : COMMAND_ARIA[commandKey],
     chord.control ? "Control" : undefined,
     chord.option ? "Alt" : undefined,
     chord.shift ? "Shift" : undefined,
+  ]);
+  return [
+    ...held,
     chord.key.aria ?? (chord.key.key.length === 1 ? chord.key.key.toUpperCase() : chord.key.key),
   ]
     .filter((part) => part !== undefined)
@@ -1053,10 +1393,31 @@ interface ShortcutKeyPress {
   ctrlKey: boolean;
   metaKey: boolean;
   shiftKey: boolean;
+  /** `KeyboardEvent.getModifierState`, which tells AltGr, which Windows reports as Ctrl and Alt, from the two held. */
+  getModifierState?(key: string): boolean;
 }
 
 /**
- * Whether a key press is the chord: Command, unless the chord goes without, and exactly the chord's other
+ * Whether the press holds exactly the chord's Control and Command, Command
+ * pressed as the window's command key. Where that is ⌘, Control is the chord's
+ * own. Where it is Ctrl, Meta is never the window's, since Windows keeps it,
+ * and the tab switcher's ⌃Tab, a Control chord without Command, is Ctrl too;
+ * no chord with Command is Tab, so the two stay apart.
+ */
+function heldAsChord(chord: ShortcutChord, event: ShortcutKeyPress): boolean {
+  const command = !commandless(chord);
+  const control = chord.control === true;
+  if (commandKey === COMMAND_KEY.META)
+    return event.metaKey === command && event.ctrlKey === control;
+  // Note that a chord naming both, the system's ⌃⌘F, has no spelling where Ctrl is Command, and that AltGr is typing, never Ctrl and Alt.
+  if (command && control) return false;
+  if (event.getModifierState?.("AltGraph") === true) return false;
+  return !event.metaKey && event.ctrlKey === (command || control);
+}
+
+/**
+ * Whether a key press is the chord: Command, pressed as the window's command
+ * key, unless the chord goes without, and exactly the chord's other
  * modifiers, and the key. The character is read where it can be,
  * which is what the menu bar matches too, and the physical key where Option
  * has changed the character, or where a plain chord's key is read by its
@@ -1065,8 +1426,7 @@ interface ShortcutKeyPress {
  * is the keyboard layout's to say.
  */
 export function shortcutMatches(chord: ShortcutChord, event: ShortcutKeyPress): boolean {
-  if (event.metaKey === commandless(chord)) return false;
-  if (event.ctrlKey !== (chord.control === true)) return false;
+  if (!heldAsChord(chord, event)) return false;
   const shiftFree = chord.key.unshifted !== undefined;
   if (event.altKey !== (chord.option === true)) return false;
   if (!shiftFree && event.shiftKey !== (chord.shift === true)) return false;

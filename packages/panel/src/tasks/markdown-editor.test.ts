@@ -233,3 +233,131 @@ test("a document with nothing above its text leaves ↑ on its first line to the
 
   assert.equal(up.defaultPrevented, false);
 });
+
+test("a word changed inside a GitHub alert keeps its marker unescaped, so GitHub still draws it as an alert", () => {
+  const { editor, last } = mounted(BODY);
+
+  const { from, to } = positionsOf(editor, "behaves");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.insertText("works", from, to));
+  });
+
+  assert.equal(last(), BODY.replace("The plan behaves as before.", "The plan works as before."));
+});
+
+test("a body saved with Windows line endings comes back byte for byte untouched, and keeps them where a word is changed", () => {
+  const crlf = BODY.replaceAll("\n", "\r\n");
+  const { editor, handle, last } = mounted(crlf);
+
+  assert.equal(handle.markdown(), crlf);
+
+  const { from, to } = positionsOf(editor, "lifts");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.insertText("moves", from, to));
+  });
+
+  assert.equal(last(), crlf.replace("This lifts the editor", "This moves the editor"));
+});
+
+/** The editor's root as a reader is told of it: its role, and the list and the row it names. */
+function named(editor: Editor) {
+  const root = editor.view.dom;
+  return {
+    role: root.getAttribute("role"),
+    multiline: root.getAttribute("aria-multiline"),
+    expanded: root.getAttribute("aria-expanded"),
+    controls: root.getAttribute("aria-controls"),
+    active: root.getAttribute("aria-activedescendant"),
+  };
+}
+
+/** A key pressed in the editor's words. */
+function press(editor: Editor, key: string): void {
+  act(() => {
+    editor.view.dom.dispatchEvent(
+      new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+    );
+  });
+}
+
+/** The list standing over the text, and the id of its highlighted row. */
+function standing(container: HTMLElement) {
+  const list =
+    container.querySelector<HTMLElement>('[role="listbox"]') ?? assert.fail("a list stands");
+  return { list: list.id, active: list.querySelector('[role="option"][aria-selected="true"]')?.id };
+}
+
+/** The textbox the root is while no list stands over it. */
+const TEXTBOX = {
+  role: "textbox",
+  multiline: "true",
+  expanded: null,
+  controls: null,
+  active: null,
+};
+
+test("while the / menu stands the text is a combobox naming the menu and its highlighted row, and a textbox again once the menu closes", () => {
+  const { container, editor } = mounted("Intro.\n");
+  act(() => {
+    editor.view.focus();
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+  });
+  const before = named(editor);
+
+  type(editor, " /");
+  const opened = standing(container);
+  const open = named(editor);
+  press(editor, "ArrowDown");
+  const moved = standing(container);
+  const after = named(editor);
+  press(editor, "Escape");
+
+  assert.deepEqual(before, TEXTBOX);
+  assert.ok(opened.list !== "" && opened.active !== undefined, "the menu's list and row have ids");
+  assert.deepEqual(open, {
+    role: "combobox",
+    multiline: null,
+    expanded: "true",
+    controls: opened.list,
+    active: opened.active,
+  });
+  assert.notEqual(moved.active, opened.active);
+  assert.equal(after.active, moved.active);
+  assert.deepEqual(offered(container), [], "Escape closes the menu");
+  assert.deepEqual(named(editor), TEXTBOX);
+});
+
+test("while the @ list stands over a plan's text the text is a combobox naming the list and its highlighted row, and a textbox again once the list closes", () => {
+  const { container, editor } = mounted("## Rollout\n\nIntro.\n", {
+    mentions: {
+      doors: {
+        taskId: "task-1",
+        place: { workspace: "acme", repository: null },
+        anchors: new Set(),
+        onOpenTask: () => undefined,
+        onOpenFile: undefined,
+      },
+      source: { taskId: "task-1", taskName: "Ship it", workspace: "acme", repository: null },
+    },
+  });
+  act(() => {
+    editor.view.focus();
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+  });
+
+  type(editor, " @roll");
+  const opened = standing(container);
+  const open = named(editor);
+  press(editor, "Escape");
+
+  assert.ok(opened.list !== "" && opened.active !== undefined, "the list and its row have ids");
+  assert.deepEqual(open, {
+    role: "combobox",
+    multiline: null,
+    expanded: "true",
+    controls: opened.list,
+    active: opened.active,
+  });
+  assert.equal(container.querySelector('[role="listbox"]'), null, "Escape closes the list");
+  assert.deepEqual(named(editor), TEXTBOX);
+});

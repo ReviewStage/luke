@@ -1,8 +1,10 @@
-/* scroll-area.css -- the one box that scrolls: the axis it names and no
-   other, its overscroll held inside it or handed on, filling its parent's room or as
-   tall as what it holds, and the edges it fades dissolving into whatever
-   ground it stands on. No padding: the caller's is on its own element
-   inside, so the scroll bar stands at the area's edge. */
+/* scroll-area.css -- what a scroll area's utilities (`./scroll-area.tsx`)
+   cannot say: the edges it fades dissolving into whatever ground it stands
+   on, eased in by a scroll timeline over registered lengths, and the depth of
+   both read from the profile's `--luke-scroll-fade` and `--luke-scroll-band`,
+   which an app may set (a pull request's band). The lengths and keyframes are
+   also what a transcript's table and a note's table fade with (`@luke/panel`'s
+   tasks.css, `../prose/prose.css`). */
 
 /* Each edge's depth is a registered length, so a scroll timeline can ease
    it from none to the whole fade over the first (or the last) stretch of
@@ -54,30 +56,21 @@
 }
 
 @layer components {
-  .luke-scroll-area {
-    box-sizing: border-box;
-    min-width: 0;
-    min-height: 0;
-  }
-
-  /* Held, a swipe that reaches an end stops there. Handed on, the browser's
-     own chaining is left alone, so a swipe past the end, or up and down over
-     an area that scrolls only sideways, moves whatever scrolls around it.
-     Note that a contained axis an area does not scroll still swallows a
-     swipe along it, which is why a short box inside a scroller hands on. */
-  .luke-scroll-area[data-overscroll="contain"] {
-    overscroll-behavior: contain;
-  }
-
   /* An area out of the tab order is focused by script alone, so its keys
-     scroll it, and draws no ring; one in the tab order keeps the app's. */
+     scroll it, and draws no ring; one in the tab order keeps the app's. It
+     stays here, under utilities, because it hides the window's ring, which
+     no vendored utility may (`../../shadcn/shadcn-focus.test.ts`). */
   .luke-scroll-area[tabindex="-1"] {
     outline: none;
   }
 
   /* Note that each axis names both overflows, because `overflow-y: auto`
      alone computes `overflow-x` to `auto`, and a pixel of a ring or a
-     dragged row past the edge would then scroll the area sideways. */
+     dragged row past the edge would then scroll the area sideways. The axis
+     stays keyed on `data-axis` here rather than in utilities, because the
+     panel's sheet tests lay an area's markup by hand (`.luke-scroll-area`
+     with its `data-axis`, `@luke/panel`'s narrow-document.test.ts) and read
+     its overflow from this sheet. */
   .luke-scroll-area[data-axis="vertical"] {
     overflow-x: hidden;
     overflow-y: auto;
@@ -91,26 +84,6 @@
   .luke-scroll-area[data-axis="both"] {
     overflow-x: auto;
     overflow-y: auto;
-  }
-
-  .luke-scroll-area[data-gutter="stable"] {
-    scrollbar-gutter: stable;
-  }
-
-  /* Filling, it takes the rest of a flex column or row, and the whole of a
-     box or a grid cell that is no flex container. Note that its basis is a
-     percentage, so in a column of no fixed height, where that resolves to
-     what it holds, it stands as tall as that rather than collapsing. */
-  .luke-scroll-area[data-size="fill"] {
-    flex: 1 1 0%;
-    block-size: 100%;
-  }
-
-  /* As tall as what it holds, it gives way where its parent runs short of
-     room, a flex column's or a box's, and scrolls the rest. */
-  .luke-scroll-area[data-size="content"] {
-    flex: 0 1 auto;
-    max-block-size: 100%;
   }
 
   /* It is a mask, not a gradient in a ground colour, so its black is an

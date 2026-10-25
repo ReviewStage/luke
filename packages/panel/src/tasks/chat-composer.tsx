@@ -1,11 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { pasteCutWords } from "@luke/features/words";
 import {
-  ErrorState,
-  GAP,
-  Inline,
-  SUBMIT_STATE,
+  ANNOUNCE,
+  ComposerFoot,
+  type ComposerNote as FootNote,
   TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
   TEXT_ELEMENT,
@@ -13,34 +13,27 @@ import {
   TEXT_VARIANT,
   Text,
   TextArea,
-  Tooltip,
+  useAnnounce,
 } from "@luke/ui";
 import { cutReply, QUOTE_GAP, quoteOf } from "@luke/ui/reply-quote";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTools,
-  submitPromptInput,
-} from "../ai-elements/prompt-input.js";
+import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { type ChatDraftPlace, DRAFT_PLACE, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useLinkWorkspace } from "../copy-link-item.js";
 import { enterKeyHint, enterSubmitKey } from "../enter-sends.js";
-import { imageFiles } from "../feedback-images.js";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
   type MentionNode,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { useFileDrop } from "../use-file-drop.js";
+import { useAttachedFiles } from "../use-attached-files.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { readFiles, withFiles } from "./attached-files.js";
-import { ComposerField } from "./composer-field.js";
+import { ATTACH_TAKES } from "./attached-files.js";
+import { ComposerField, typingElsewhere } from "./composer-field.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { type MentionDoors, MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import {
@@ -60,8 +53,9 @@ import { useKnownNames } from "./use-known-names.js";
  *
  * The box is the shared composer card (`prompt-input.tsx`) around the agent
  * box's own editor (`composer-field.tsx`), as the agent tab's, the Inbox's,
- * and a plan comment's are, and under it the card's foot saying what it
- * takes, the microphone, and the shared round send. Enter sends, Shift-Enter
+ * and a plan comment's are, and under it the shared foot (`ComposerFoot`) holding
+ * the files, what the box takes, the counter, the microphone, the round send,
+ * and the one note under them. Enter sends, Shift-Enter
  * starts a new line, and the box is empty at once, keeping the caret, so
  * the next post can be written while this one goes, drawn in the stream as
  * on its way (`chat-pane.tsx`). A post refused comes back into the box with
@@ -86,11 +80,11 @@ import { useKnownNames } from "./use-known-names.js";
  * The microphone records a dictation and lays its words in at the
  * caret (`use-dictation.ts`), listening for the chat's members' names and
  * its channels' (`chatKeywords`). Pictures go with a post as files go with an Inbox
- * answer (`attached-files.ts`): the "+" at the foot's left opens the
+ * answer (`use-attached-files.ts`): the "+" at the foot's left opens the
  * system's picker for images, an image pasted into the box is taken, and
- * images dropped on the card are, each drawn as a chip above the words with
+ * images dropped on the card are, each drawn as a chip over the foot with
  * its way off, PNG, JPEG, and WebP kept and any other image re-encoded; a
- * file that cannot come says why under the card, and a post may be
+ * file that cannot come says why under the foot's bar, and a post may be
  * pictures alone. While pictures are read the post waits for them. Where
  * the editor's bundle could not be loaded, a plain textarea stands in with
  * no list and no pictures, as a plan comment's does, so a message can
@@ -112,9 +106,6 @@ const ATTACH = "Attach images";
 
 /** The pictures the system's picker offers: any image, re-encoded where it is none of the three a post keeps. */
 const PICKS_IMAGES = "image/*";
-
-/** Why a file that is no image did not come, in the words the box's note says. */
-const NOT_IMAGE = (name: string) => `${name} can't be attached. Attach images.`;
 
 /** What the box says where a post of its words would address more members than a post tells. */
 const CROWDED = `Only ${CHAT_BOUNDS.MAX_STEERS_PER_POST} members are notified of a post.`;
@@ -151,6 +142,13 @@ interface ChatComposerProps {
   readonly keywords: readonly string[];
   /** Whether it stands under a thread, a line high, rather than at a place's foot. */
   readonly compact?: boolean;
+  /**
+   * Whether a place's foot takes the caret as it first draws, unless the
+   * developer is typing elsewhere, as it does where a press, ⌘K, or a link
+   * opened its place; none where K and J stepped there. A thread's box is
+   * opened by a press, so it always takes it.
+   */
+  readonly takesCaret?: boolean;
   /** Where the box hands the chat's Reply the door that lays a quote in, answering whether it did; none where nothing replies. */
   readonly replyDoor?: RefObject<((words: string) => boolean) | undefined> | undefined;
   /** A quote to lay in once the box can take it, as a Reply that opened the box hands it, `onQuoted` told once it is in. */
@@ -172,29 +170,6 @@ export function ChatComposer(props: ChatComposerProps): React.JSX.Element {
       {...props}
       module={AsyncResult.isSuccess(bundle) ? bundle.value : undefined}
     />
-  );
-}
-
-/** The bar under the box, as the agent box's and the Inbox's stand: the parts it leads with (the + of pictures), then the parts the box hands it (dictation's) and the round send at its end. */
-function ComposerFoot({
-  empty,
-  lead,
-  children,
-}: {
-  empty: boolean;
-  lead?: React.ReactNode;
-  children?: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <PromptInputFooter>
-      <PromptInputTools>{lead}</PromptInputTools>
-      <Inline gap={GAP.TIGHT} wrap={false}>
-        {children}
-        <Tooltip label={SEND}>
-          <PromptInputSubmit label={SEND} status={SUBMIT_STATE.READY} disabled={empty} />
-        </Tooltip>
-      </Inline>
-    </PromptInputFooter>
   );
 }
 
@@ -246,14 +221,25 @@ function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"])
   const { attachments } = kept;
   // How many posts the box has sent, each of which hands the caret back to it.
   const [sends, setSends] = useState(0);
-  // How many hand-offs of files are still being read, during which the post waits.
-  const [reading, setReading] = useState(0);
   const [note, setNote] = useState<ComposerNote | undefined>(undefined);
+  // Note that the post waits while pictures handed to the box are still read.
+  const files = useAttachedFiles({
+    holder: {
+      attachments,
+      update: (next) => update((was) => ({ ...was, attachments: next(was.attachments) })),
+    },
+    takes: ATTACH_TAKES.IMAGES,
+    most: CHAT_BOUNDS.MAX_POST_PICTURES,
+    onRefusal: (words) => setNote(plainNote(words)),
+  });
+  // Whether the last paste was cut to the room the box has left, until the words change again.
+  const [cut, setCut] = useState(false);
   const empty = draft.trim() === "" && attachments.length === 0;
   const send = () => {
-    if (empty || reading > 0) return;
+    if (empty || files.reading) return;
     const sent = kept;
     setNote(undefined);
+    setCut(false);
     setSends((count) => count + 1);
     // Note that only what was sent is let go, so words typed meanwhile in another window stay.
     update((now) =>
@@ -270,69 +256,39 @@ function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"])
       return back;
     });
   };
-  const setDraft = (text: string) => update((was) => ({ ...was, text }));
-  /** Reads the images among the files handed in and takes them after those the box holds; the first that cannot come says why. */
-  const attach = (files: readonly File[]) => {
-    if (files.length === 0) return;
-    const images = imageFiles(files);
-    const other = files.find((file) => !images.includes(file));
-    setNote(plainNote(other === undefined ? undefined : NOT_IMAGE(other.name)));
-    if (images.length === 0) return;
-    setReading((count) => count + 1);
-    readFiles(images)
-      .then((read) => {
-        // Taken after whatever the draft holds as the read lands, so neither a
-        // read that landed first nor a chip taken off meanwhile is undone.
-        let refusal = read.refusal;
-        update((was) => {
-          const taken = withFiles(was.attachments, read, CHAT_BOUNDS.MAX_POST_PICTURES);
-          refusal = taken.refusal;
-          return { ...was, attachments: taken.attachments };
-        });
-        const said = refusal;
-        if (said !== undefined) setNote((was) => was ?? plainNote(said));
-      })
-      .finally(() => setReading((count) => count - 1));
-  };
-  const remove = (index: number) => {
-    setNote(undefined);
-    update((was) => ({ ...was, attachments: was.attachments.filter((_, at) => at !== index) }));
+  const setDraft = (text: string) => {
+    setCut(false);
+    update((was) => ({ ...was, text }));
   };
   return {
     draft,
     setDraft,
-    attachments,
-    attach,
-    remove,
+    files,
     sends,
-    reading: reading > 0,
     empty,
-    note,
+    // Note that a note of the box's own, a refusal or a dictation's, is said before the cut paste's.
+    note: note ?? (cut ? plainNote(pasteCutWords(CHAT_BOUNDS.MAX_TEXT_CHARS)) : undefined),
     setNote,
+    // Note that a paste that was cut takes down the file's or the dictation's note, which was said of what came before, but never a refused post's, whose Retry stands.
+    cutPaste: () => {
+      setCut(true);
+      setNote((was) => (was?.retries === true ? was : undefined));
+    },
     send,
   };
 }
 
-/** Where a box's note stands, under the card: why a post did not go, with Retry beside it, or why a file or a dictation came to nothing. */
-function NoteLine({
-  note,
-  onRetry,
-}: {
-  note: ComposerNote | undefined;
-  onRetry: () => void;
-}): React.JSX.Element | null {
-  if (note === undefined) return null;
-  return (
-    <div className="agent-composer-note">
-      <ErrorState onRetry={note.retries ? onRetry : undefined}>{note.words}</ErrorState>
-    </div>
-  );
+/** What the box says under its foot's bar as the foot draws it: Retry beside a refused post's words, which sends them again. */
+function footNote(note: ComposerNote | undefined, onRetry: () => void): FootNote | undefined {
+  if (note === undefined) return undefined;
+  return { words: note.words, onRetry: note.retries ? onRetry : undefined };
 }
 
 /** A line under the box where a post would address more members than a post tells, since those past the first few hear nothing of it. */
 function CrowdedNote({ shown }: { shown: boolean }): React.JSX.Element {
+  useAnnounce(ANNOUNCE.POLITE, shown ? CROWDED : "");
   return (
-    <div className="chat-composer-crowded" role="status">
+    <div className="chat-composer-crowded">
       {shown ? (
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {CROWDED}
@@ -419,28 +375,21 @@ function EditorChatComposer({
   mentions,
   keywords,
   compact,
+  takesCaret,
   replyDoor,
   pendingQuote,
   onSend,
   module,
 }: ChatComposerProps & { module: PlanEditorModule | undefined }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
+  // Note that how the place was opened is read as the box first draws, since the editor's bundle may land later.
+  const [takes] = useState(takesCaret === true);
   const room = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
-  const fileDrop = useFileDrop((files) => attach(Array.from(files)));
-  const {
-    draft,
-    setDraft,
-    attachments,
-    attach,
-    remove,
-    sends,
-    reading,
-    empty,
-    note,
-    setNote,
-    send,
-  } = useChatSend(chatPlace(channelId, replyTo), onSend);
+  const { draft, setDraft, files, sends, empty, note, setNote, cutPaste, send } = useChatSend(
+    chatPlace(channelId, replyTo),
+    onSend,
+  );
   const dictation = useDictation({
     editor,
     keywords,
@@ -491,16 +440,15 @@ function EditorChatComposer({
       ref={card}
       className="agent-composer chat-composer"
       data-compact={String(compact === true)}
-      {...fileDrop.target}
+      {...files.drop.target}
     >
       <PromptInput
-        dropping={fileDrop.dropping}
+        dropping={files.drop.dropping}
         onSubmit={() => {
           refocus.current = card.current?.contains(document.activeElement) === true;
           send();
         }}
       >
-        <AttachedFileChips files={attachmentChips(attachments)} onRemove={remove} />
         <ComposerField
           module={module}
           editor={editor}
@@ -524,13 +472,8 @@ function EditorChatComposer({
           onEnter={() => {
             if (room.current !== null) submitPromptInput(room.current);
           }}
-          onPasteFiles={(files) => {
-            // Only images are taken from the clipboard; text pastes as it always does.
-            const pasted = imageFiles(files);
-            if (pasted.length === 0) return false;
-            attach(pasted);
-            return true;
-          }}
+          onPasteFiles={files.paste}
+          onPasteCut={cutPaste}
           onTrigger={() => undefined}
           chip={() => null}
           quote={(quote) => <ComposerQuoteView quote={quote} held={dictating} />}
@@ -546,29 +489,26 @@ function EditorChatComposer({
             ),
             pasted,
           }}
-          // Note that a thread's box is opened by a press, so it takes the caret; a place's foot
-          // leaves it where it is, as the Inbox's box does, because K and J step the chat's places
-          // while the caret is out of the box.
-          takesFocus={false}
+          // Note that a place's foot leaves the caret where K and J stepped to it, since they step
+          // the chat's places only while the caret is out of the box.
+          takesFocus={takes}
           focus={compact === true ? true : undefined}
         >
           {picker.menu}
         </ComposerField>
-        {dictating ? (
-          <PromptInputFooter>
-            <DictationStrip dictation={dictation} />
-          </PromptInputFooter>
-        ) : (
-          <ComposerFoot
-            empty={empty || reading}
-            lead={<AttachFilesButton label={ATTACH} accept={PICKS_IMAGES} onFiles={attach} />}
-          >
-            <DictateButton dictation={dictation} disabled={module === undefined} />
-          </ComposerFoot>
-        )}
+        <ComposerFoot
+          files={
+            <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
+          }
+          tools={<AttachFilesButton label={ATTACH} accept={PICKS_IMAGES} onFiles={files.attach} />}
+          counter={{ length: draft.length, limit: CHAT_BOUNDS.MAX_TEXT_CHARS }}
+          actions={<DictateButton dictation={dictation} disabled={module === undefined} />}
+          strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
+          send={{ label: SEND, empty: empty || files.reading }}
+          note={footNote(note, send)}
+        />
       </PromptInput>
       <CrowdedNote shown={mentions.crowded(draft)} />
-      <NoteLine note={note} onRetry={send} />
     </div>
   );
 }
@@ -580,11 +520,14 @@ function PlainChatComposer({
   label,
   mentions,
   compact,
+  takesCaret,
   replyDoor,
   pendingQuote,
   onSend,
 }: ChatComposerProps): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
+  // Note that the plain box takes the caret where the editor box would, read as it first draws.
+  const [takes] = useState(() => compact === true || (takesCaret === true && !typingElsewhere()));
   const { draft, setDraft, empty, note, send } = useChatSend(chatPlace(channelId, replyTo), onSend);
   // Note that the plain box has no quote block, so a reply's quote is written at its end as the Markdown it sends as.
   useReplyDoor(
@@ -612,21 +555,23 @@ function PlainChatComposer({
             label={label}
             placeholder={label}
             rows={compact === true ? 1 : 2}
+            autoFocus={takes}
             maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
             enterKeyHint={enterKeyHint()}
             submitKey={enterSubmitKey()}
             value={draft}
             onChange={setDraft}
+            // Escape leaves the box and keeps its words, as the editor box's does.
+            onEscape={() => field.current?.blur()}
             // Note that a send goes through the form, whose held submit holds it too.
             onSubmit={() => {
               if (field.current !== null) submitPromptInput(field.current);
             }}
           />
         </div>
-        <ComposerFoot empty={empty} />
+        <ComposerFoot send={{ label: SEND, empty }} note={footNote(note, send)} />
       </PromptInput>
       <CrowdedNote shown={mentions.crowded(draft)} />
-      <NoteLine note={note} onRetry={send} />
     </div>
   );
 }

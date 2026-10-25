@@ -1,4 +1,5 @@
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
+import { playheadText } from "@luke/features/time-format";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import {
   ExitFullScreenIcon,
@@ -7,6 +8,7 @@ import {
   PauseIcon,
   PlayIcon,
 } from "../../face/glyphs.js";
+import { motionHeld } from "../../motion-timing.js";
 import { notePictureOrigin } from "../../picture-expand.js";
 import { BUTTON_VARIANT, IconButton } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card } from "../card/card.js";
@@ -35,7 +37,8 @@ import { Tooltip } from "../tooltip/hint.js";
  * has a viewer to open hands `onExpand`: Expand pauses the video here and
  * opens the viewer, which grows from the frame as it grows from a picture's
  * tile. In the viewer (`VIEWER`) the video plays at once, as large as the
- * card lets it.
+ * card lets it, unless motion is held still (`motionHeld`: reduced motion or
+ * a capture run), where it waits on its first frame for Play.
  *
  * The bytes arrive as a picture's do, as a `data:` URL the window's picture
  * reads hold (`picture-cache.ts`, the inbox's and the chat's own), and play
@@ -57,8 +60,8 @@ const VIDEO_LABEL = {
   EXIT_FULL_SCREEN: "Exit full screen",
 } as const;
 
-/** The seconds in a minute, for how far a video has run. */
-const MINUTE_S = 60;
+/** The milliseconds in a second, for the player's playhead in the one clock a recording is told in. */
+const MS_PER_SECOND = 1_000;
 
 /** How finely the scrubber moves, in seconds. */
 const SEEK_STEP_S = 0.1;
@@ -104,12 +107,6 @@ export function dataUrlMediaType(dataUrl: string): string {
 /** Whether a `data:` URL a picture read answered holds a video, played rather than drawn. */
 export function isVideoDataUrl(dataUrl: string): boolean {
   return dataUrlMediaType(dataUrl) === CONVERSATION_MEDIA_TYPE.WEBM;
-}
-
-/** How far a video has run, as a player says it: minutes and two-digit seconds. */
-function runningTime(seconds: number): string {
-  const whole = Math.floor(seconds);
-  return `${String(Math.floor(whole / MINUTE_S))}:${String(whole % MINUTE_S).padStart(2, "0")}`;
 }
 
 /**
@@ -223,7 +220,7 @@ function VideoBar({
   onExpand: (() => void) | undefined;
   onFullScreen: () => void;
 }): React.JSX.Element {
-  const time = `${runningTime(playback.at)} / ${runningTime(playback.duration)}`;
+  const time = `${playheadText(playback.at * MS_PER_SECOND)} / ${playheadText(playback.duration * MS_PER_SECOND)}`;
   return (
     <span className="luke-video-player-bar">
       <BarButton
@@ -277,6 +274,8 @@ export function VideoPlayer({
   const [full, toggleFullScreen] = useFullScreen(frame);
   const [playback, setPlayback] = useState<Playback>({ playing: false, at: 0, duration: 0 });
   const viewer = place === VIDEO_PLAYER_PLACE.VIEWER;
+  // Note that whether it starts is read once, as it mounts, because a video hears autoplay only then.
+  const [starts] = useState(() => viewer && !motionHeld());
   const read = (shown: HTMLVideoElement) => {
     const duration = Number.isFinite(shown.duration) ? shown.duration : 0;
     // Note that the time is held within the length, because the seek that reads a length stands past it a moment.
@@ -307,7 +306,9 @@ export function VideoPlayer({
       tabIndex={-1}
       role="group"
       aria-label={VIDEO_LABEL.PLAYER}
-      onKeyDown={(event) => playerKey(event, video.current)}
+      // Note that the player hears a key before the control it lands on, because the scrubber's
+      // slider steps on an arrow itself and stands down only for a key already taken.
+      onKeyDownCapture={(event) => playerKey(event, video.current)}
     >
       {url === undefined ? null : (
         // Note that the player carries no captions track, because an agent's recording of its screen has no sound.
@@ -318,7 +319,7 @@ export function VideoPlayer({
           width={size?.width}
           height={size?.height}
           aria-label={label === "" ? VIDEO_LABEL.VIDEO : `${VIDEO_LABEL.VIDEO}: ${label}`}
-          autoPlay={viewer}
+          autoPlay={starts}
           muted
           playsInline
           preload={viewer ? "auto" : "metadata"}

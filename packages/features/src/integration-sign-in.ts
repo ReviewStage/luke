@@ -1,4 +1,5 @@
 import { Duration } from "effect";
+import { saidWords } from "./integration-health.js";
 import {
   INTEGRATION_NAME,
   INTEGRATION_SIGN_IN_FAILURE,
@@ -79,7 +80,7 @@ export const SIGN_IN_GRACE = Duration.seconds(10);
 export const SIGN_IN_ACTION = {
   CANCEL: "Cancel",
   REOPEN: "Reopen",
-  TRY_AGAIN: "Try again",
+  TRY_AGAIN: "Retry",
 } as const;
 
 /** One read of where a provider stands, as a sign-in hears it. */
@@ -142,25 +143,31 @@ export interface SignInLine {
   readonly text: string;
   /** Whether it is a problem, drawn in the attention tint. */
   readonly problem: boolean;
+  /** The sign-in's own words, quoted and naming it, for a line under `text`; none where it said none. */
+  readonly said?: string;
 }
 
-/** A line of Connect's as the end of a sentence: closed with a stop where it ends in none. */
-function asSentenceEnd(line: string): string {
-  return /[.!?…]$/.test(line) ? line : `${line}.`;
-}
-
-/** The line a failed sign-in draws: the developer's own cancel plainly, a refusal with why where the read said. */
+/**
+ * The line a failed sign-in draws: the developer's own cancel plainly, and a
+ * refusal in our sentence, Connect's own line quoted under it where the read
+ * carried one, else why in our words. Note that the line is said as the
+ * sign-in's, because it is Connect's or the provider's, and which one is not
+ * known here.
+ */
 function failedLine(name: string, failure: SignInFailure | undefined): SignInLine {
   if (failure?.reason === INTEGRATION_SIGN_IN_FAILURE.CANCELED) {
     return { text: `You cancelled connecting ${name}.`, problem: false };
   }
+  if (failure?.message !== undefined) {
+    return {
+      text: `${name} could not be connected.`,
+      problem: true,
+      said: saidWords(`${name}'s sign-in`, failure.message),
+    };
+  }
   const why =
-    failure?.message !== undefined
-      ? asSentenceEnd(failure.message)
-      : failure === undefined
-        ? "the sign-in came back without access."
-        : "the sign-in was refused.";
-  return { text: `Couldn't connect to ${name}: ${why}`, problem: true };
+    failure === undefined ? "the sign-in came back without access" : "the sign-in was refused";
+  return { text: `${name} could not be connected: ${why}.`, problem: true };
 }
 
 /** The line a row draws for a sign-in. */

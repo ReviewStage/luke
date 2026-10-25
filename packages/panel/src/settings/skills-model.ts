@@ -23,6 +23,7 @@ import {
   type InstalledSkillScope,
   type InstalledSkillSource,
 } from "@luke/features/installed-skill-wire";
+import { formatBytes, formatExactBytes } from "@luke/features/number-format";
 import {
   readSkillFile,
   SKILL_FILE_BOUNDS,
@@ -41,7 +42,10 @@ import {
   TASK_SKILL_SOURCE,
   type TaskSkillSource,
 } from "@luke/features/task-wire";
+import { andList, countWords, readFailedWords, TERM } from "@luke/features/words";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { CONFIRM_LOSS, type ConfirmLoss, STATUS_TONE, type StatusTone } from "@luke/ui";
+import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 
 /**
  * skills-model.ts -- Settings › Skills and its Add skill dialog as the window draws them, judged without drawing: the rows and their lines, and what a paste would install.
@@ -62,28 +66,26 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 /** How many characters of a commit a row and the dialog show. */
 const SHORT_SHA = 7;
 
-const BYTES_PER_KB = 1024;
-
 /** What the page and the dialog say that no row's data says. */
 export const SKILLS_LINE = {
   /** Above the rows: where the rest come from, and when a change reaches an agent. */
   ABOUT:
     "Repository skills come from each repository's .agents/skills folder. Changes here reach only agents started afterwards.",
-  PERSONAL: "Personal",
+  PERSONAL: "Only you",
   PASTED: "pasted",
   NONE: "No skills installed yet.",
   READ_FAILED: "Your skills could not be read.",
   ADD_SKILL: "Add skill",
   PASTE_LABEL: "Command, GitHub link, or SKILL.md text",
   PASTE_HINT:
-    "Paste an npx skills add command, a GitHub link to a repo or skill folder, or a skill's SKILL.md text.",
+    "Paste an npx skills add command, a GitHub link to a repository or skill folder, or a skill's SKILL.md text.",
   READING: "Reading…",
   INSTALLED: "Installed",
   UPDATE_AVAILABLE: "Update available",
   INSTALL: "Install",
   INSTALL_FOR: "Install for",
-  JUST_ME: "Just me",
-  VIEW: "View",
+  ONLY_YOU: "Only you",
+  VIEW: "Open",
   SHARE: "Share with workspace",
   UPDATE: "Update",
   REMOVE: "Remove",
@@ -110,13 +112,6 @@ export function workspaceGroupTitle(workspace: Pick<Workspace, "name">): string 
 /** "Everyone in Stage": the dialog's workspace scope, named for the workspace. */
 function everyoneIn(workspace: Pick<Workspace, "name">): string {
   return `Everyone in ${workspace.name}`;
-}
-
-/** A size as a line says it: bytes under a kilobyte, kilobytes to one place under ten, else whole. */
-export function sizeText(bytes: number): string {
-  if (bytes < BYTES_PER_KB) return `${bytes} B`;
-  const kb = bytes / BYTES_PER_KB;
-  return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
 }
 
 /** "1 file", "4 files". */
@@ -242,6 +237,33 @@ export function skillActions(
   return [acts, [SKILL_ACTION.REMOVE]];
 }
 
+/**
+ * What Remove asks first: the skill and its files are deleted, past undoing,
+ * so a personal skill's question is red; a workspace skill is every member's
+ * agents', so it says whose and asks in the accent, as any act on others does.
+ */
+export function removeQuestion(
+  skill: Pick<InstalledSkillSummary, "name" | "scope">,
+  workspace: Pick<Workspace, "name">,
+): {
+  readonly title: string;
+  readonly body: string;
+  readonly verb: string;
+  readonly running: string;
+  readonly loss: ConfirmLoss;
+} {
+  const shared = skill.scope === INSTALLED_SKILL_SCOPE.WORKSPACE;
+  return {
+    title: `Remove ${skill.name}?`,
+    body: shared
+      ? `${everyoneIn(workspace)} loses ${skill.name}: agents they start afterwards no longer load it, and its files are deleted.`
+      : "Its files are deleted, and agents started afterwards no longer load it. Installing it again takes the paste again.",
+    verb: "Remove",
+    running: "Removing",
+    loss: shared ? CONFIRM_LOSS.AFFECTS_OTHERS : CONFIRM_LOSS.IRREVERSIBLE,
+  };
+}
+
 /** What Share with workspace asks first: it moves the skill, so it says who gains it and that it leaves the account's own. */
 export function shareQuestion(
   skillName: string,
@@ -255,8 +277,8 @@ export function shareQuestion(
   return {
     title: `Share ${skillName} with ${workspace.name}?`,
     body: `${everyoneIn(workspace)} will get ${skillName}. It leaves your personal skills.`,
-    verb: "Share",
-    running: "Sharing…",
+    verb: SKILLS_LINE.SHARE,
+    running: "Sharing",
   };
 }
 
@@ -291,9 +313,8 @@ const NAMED_INSTALLS = 2;
 
 /** "grill-me", "grill-me and grilling", "grill-me, grilling, and 3 more". */
 function namesText(names: readonly string[]): string {
-  if (names.length <= NAMED_INSTALLS) return names.join(" and ");
-  const named = names.slice(0, NAMED_INSTALLS).join(", ");
-  return `${named}, and ${names.length - NAMED_INSTALLS} more`;
+  const more = names.length - NAMED_INSTALLS;
+  return andList(more <= 0 ? names : [...names.slice(0, NAMED_INSTALLS), `${more} more`]);
 }
 
 /**
@@ -323,25 +344,26 @@ const FILES_REFUSAL_WORDS = {
   [INSTALLED_SKILL_FILES_REFUSAL.NO_SKILL_FILE]: "has no SKILL.md in its folder.",
   [INSTALLED_SKILL_FILES_REFUSAL.DUPLICATE_PATH]: "holds two files at one path.",
   [INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES]: `holds more than ${INSTALLED_SKILL_BOUNDS.MAX_FILES} files.`,
-  [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: `is larger than ${sizeText(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} altogether.`,
+  [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: `is larger than ${formatExactBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} altogether.`,
   [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_INVALID]:
     "needs a valid name and a description in its SKILL.md.",
-  [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE]: `has a SKILL.md larger than ${sizeText(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}.`,
+  [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE]: `has a SKILL.md larger than ${formatExactBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}.`,
   [INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED]:
     "holds what looks like a credential. A skill must never carry one.",
 } as const satisfies Record<InstalledSkillFilesRefusal, string>;
 
 /** Why a call has no answer, where that is all there is to say. */
 const FAILURE_WORDS = {
-  [INSTALLED_SKILL_CALL_FAILURE.UNANSWERED]: "Luke couldn't reach the service. Try again.",
+  [INSTALLED_SKILL_CALL_FAILURE.UNANSWERED]: "The service could not be reached. Try again.",
   [INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND]: "That skill or workspace is no longer yours to reach.",
   [INSTALLED_SKILL_CALL_FAILURE.NOT_PERMITTED]:
     "Only whoever installed this skill, or the workspace's owners and admins, can change it.",
-  [INSTALLED_SKILL_CALL_FAILURE.INVALID]: "Luke couldn't install that. Check what you pasted.",
+  [INSTALLED_SKILL_CALL_FAILURE.INVALID]:
+    "The skill could not be installed. Check what you pasted.",
   [INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN]: "A skill of that name is already installed there.",
   [INSTALLED_SKILL_CALL_FAILURE.FILES_REFUSED]: "The skill's files were refused.",
   [INSTALLED_SKILL_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke can't reach that repository on GitHub. A private one needs the workspace's GitHub connected.",
+    "That repository could not be reached on GitHub. A private one needs the workspace's GitHub connected.",
   [INSTALLED_SKILL_CALL_FAILURE.REF_NOT_FOUND]:
     "That branch, tag, or commit isn't in the repository.",
   [INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED]:
@@ -364,6 +386,28 @@ export function failureLine(failed: {
   return FAILURE_WORDS[failure];
 }
 
+/** The failures of a preview that asking again may get past: the service was not reached, or GitHub did not answer. */
+const RETRYABLE_FAILURES: ReadonlySet<InstalledSkillCallFailure> = new Set([
+  INSTALLED_SKILL_CALL_FAILURE.UNANSWERED,
+  INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED,
+]);
+
+/** Whether a failed preview offers Retry. */
+export function previewRetries(failed: { readonly failure: InstalledSkillCallFailure }): boolean {
+  return RETRYABLE_FAILURES.has(failed.failure);
+}
+
+/** What a failed preview says under the box: a paste not reached says it could not be read, as every read does, and the rest say why in their own words. */
+export function previewFailureLine(failed: {
+  readonly failure: InstalledSkillCallFailure;
+  readonly skillName?: string;
+  readonly skillRefusal?: InstalledSkillFilesRefusal;
+}): string {
+  return failed.failure === INSTALLED_SKILL_CALL_FAILURE.UNANSWERED
+    ? readFailedWords("that paste")
+    : failureLine(failed);
+}
+
 /** What keeps a found skill from installing, as a short phrase. */
 const PROBLEM_WORDS = {
   [INSTALLED_SKILL_PROBLEM.NAME_MISSING]: "No name",
@@ -371,10 +415,10 @@ const PROBLEM_WORDS = {
   [INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING]: "No description",
   [INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG]: `Description over ${TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS} characters`,
   [INSTALLED_SKILL_PROBLEM.FRONTMATTER_UNCLOSED]: "Frontmatter never closed",
-  [INSTALLED_SKILL_PROBLEM.TOO_LARGE]: `SKILL.md over ${sizeText(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}`,
+  [INSTALLED_SKILL_PROBLEM.TOO_LARGE]: `SKILL.md over ${formatExactBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}`,
   [INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED]: "Holds what looks like a credential",
   [INSTALLED_SKILL_PROBLEM.TOO_MANY_FILES]: `More than ${INSTALLED_SKILL_BOUNDS.MAX_FILES} files`,
-  [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]: `Over ${sizeText(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} of files`,
+  [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]: `Over ${formatExactBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} of files`,
 } as const satisfies Record<InstalledSkillProblem, string>;
 
 /** A skill's problems, joined into one line. */
@@ -393,19 +437,16 @@ const UNSUPPORTED_WORDS = {
   [SKILL_PASTE_UNSUPPORTED.DOWNLOAD_URL]: "Only GitHub sources for now.",
   [SKILL_PASTE_UNSUPPORTED.OTHER_COMMAND]: "Only a skills add command installs a skill.",
   [SKILL_PASTE_UNSUPPORTED.NO_SOURCE]: "That command names no repository.",
-  [SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE]: "Luke can't read a GitHub repository from that.",
+  [SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE]: "A GitHub repository could not be read from that.",
 } as const satisfies Record<SkillPasteUnsupportedReason, string>;
 
 /* ----- The dialog ----- */
 
-/** How a line under the box reads: understood, a wait, or a problem. */
-export const DETECTED_TONE = {
-  DETECTED: "detected",
-  WAITING: "waiting",
-  PROBLEM: "problem",
-} as const;
-
-export type DetectedTone = (typeof DETECTED_TONE)[keyof typeof DETECTED_TONE];
+/** How a line under the box reads, of the status tones: understood, a wait, or a problem. */
+export type DetectedTone =
+  | typeof STATUS_TONE.COMPLETE
+  | typeof STATUS_TONE.NEUTRAL
+  | typeof STATUS_TONE.ATTENTION;
 
 /** The line under the box. */
 export interface DetectedLine {
@@ -423,34 +464,29 @@ export function pastedLine(paste: SkillPaste): DetectedLine | undefined {
     case SKILL_PASTE_KIND.EMPTY:
       return undefined;
     case SKILL_PASTE_KIND.UNSUPPORTED:
-      return { text: UNSUPPORTED_WORDS[paste.reason], tone: DETECTED_TONE.PROBLEM };
+      return { text: UNSUPPORTED_WORDS[paste.reason], tone: STATUS_TONE.ATTENTION };
     case SKILL_PASTE_KIND.SOURCE:
       return {
         text: `Reading ${paste.owner}/${paste.repo}…`,
-        tone: DETECTED_TONE.WAITING,
+        tone: STATUS_TONE.NEUTRAL,
       };
     case SKILL_PASTE_KIND.TEXT:
       return {
         text: `Skill text${paste.name === undefined ? "" : ` · ${paste.name}`} · ${SKILLS_LINE.READING}`,
-        tone: DETECTED_TONE.WAITING,
+        tone: STATUS_TONE.NEUTRAL,
       };
   }
-}
-
-/** "3 skills", "1 skill". */
-function skillsText(count: number): string {
-  return count === 1 ? "1 skill" : `${count} skills`;
 }
 
 /** What a preview that leaves nothing to show says under the box: no skill in the repository, or a source Luke does not read. */
 export function previewLine(preview: InstalledSkillPreview): DetectedLine | undefined {
   if (preview.kind === SKILL_PASTE_KIND.UNSUPPORTED) {
-    return { text: UNSUPPORTED_WORDS[preview.reason], tone: DETECTED_TONE.PROBLEM };
+    return { text: UNSUPPORTED_WORDS[preview.reason], tone: STATUS_TONE.ATTENTION };
   }
   if (preview.kind !== SKILL_PASTE_KIND.SOURCE || preview.skills.length > 0) return undefined;
   return {
     text: `No skills found in ${preview.owner}/${preview.repo} @ ${preview.sha.slice(0, SHORT_SHA)}.`,
-    tone: DETECTED_TONE.PROBLEM,
+    tone: STATUS_TONE.ATTENTION,
   };
 }
 
@@ -511,11 +547,11 @@ export function addSkillTitle(
 
 /** The one line the box folds into once previewed: where the skills come from, or the text's size. */
 export function previewSourceLine(screen: AddSkillScreen, preview: InstalledSkillPreview): string {
-  if (preview.kind === SKILL_PASTE_KIND.TEXT) return `Pasted text · ${sizeText(preview.bytes)}`;
+  if (preview.kind === SKILL_PASTE_KIND.TEXT) return `Pasted text · ${formatBytes(preview.bytes)}`;
   if (preview.kind !== SKILL_PASTE_KIND.SOURCE) return "";
   const where = `${preview.owner}/${preview.repo} @ ${preview.sha.slice(0, SHORT_SHA)}`;
   return screen === ADD_SKILL_SCREEN.BROWSE
-    ? `${where} · ${skillsText(preview.skills.length)}`
+    ? `${where} · ${countWords(preview.skills.length, TERM.SKILL)}`
     : `From ${where}`;
 }
 
@@ -524,18 +560,18 @@ export function missingLine(preview: InstalledSkillPreview): string | undefined 
   if (preview.kind !== SKILL_PASTE_KIND.SOURCE || preview.missing.length === 0) return undefined;
   const names = preview.missing.join(", ");
   const noun = preview.missing.length === 1 ? "skill" : "skills";
-  return `No ${noun} named ${names} in ${preview.owner}/${preview.repo}. Pick from its ${skillsText(preview.skills.length)}.`;
+  return `No ${noun} named ${names} in ${preview.owner}/${preview.repo}. Pick from its ${countWords(preview.skills.length, TERM.SKILL)}.`;
 }
 
-/** "36 other skills in this repo", under the cards. */
+/** "36 other skills in this repository", under the cards. */
 export function othersLine(count: number): string {
-  return `${count} other ${count === 1 ? "skill" : "skills"} in this repo`;
+  return `${count} other ${count === 1 ? "skill" : "skills"} in this repository`;
 }
 
-/** What a found skill holds and where: "2 files · 0.4 KB · skills/productivity/grill-me". */
+/** What a found skill holds and where: "2 files · 0.4 kB · skills/productivity/grill-me". */
 export function candidateFacts(candidate: InstalledSkillCandidate): string {
   const where = candidate.path === "" ? "repository root" : candidate.path;
-  return `${filesText(candidate.fileCount)} · ${sizeText(candidate.bytes)} · ${where}`;
+  return `${filesText(candidate.fileCount)} · ${formatBytes(candidate.bytes)} · ${where}`;
 }
 
 /** Whether a found skill may be ticked at all: one with problems never installs. */
@@ -565,20 +601,10 @@ export function installable(
   return tickable(candidate) && standingIn(candidate, scope) === undefined;
 }
 
-/** How a mark beside a found skill's name reads, as a badge's tone does. */
-export const SKILL_MARK_TONE = {
-  NEUTRAL: "neutral",
-  COMPLETE: "complete",
-  WORKING: "working",
-  ATTENTION: "attention",
-} as const;
-
-export type SkillMarkTone = (typeof SKILL_MARK_TONE)[keyof typeof SKILL_MARK_TONE];
-
 /** One mark beside a found skill's name. */
 export interface SkillMark {
   readonly text: string;
-  readonly tone: SkillMarkTone;
+  readonly tone: StatusTone;
 }
 
 /** The skills.sh partners the `skills` tool names, by the key skills.sh answers under. */
@@ -660,16 +686,16 @@ export function candidateMarks(
   const marks: SkillMark[] = [];
   const standing = standingIn(candidate, scope);
   if (standing === INSTALLED_SKILL_STANDING.CURRENT) {
-    marks.push({ text: SKILLS_LINE.INSTALLED, tone: SKILL_MARK_TONE.COMPLETE });
+    marks.push({ text: SKILLS_LINE.INSTALLED, tone: STATUS_TONE.COMPLETE });
   } else if (standing === INSTALLED_SKILL_STANDING.UPDATE) {
-    marks.push({ text: SKILLS_LINE.UPDATE_AVAILABLE, tone: SKILL_MARK_TONE.WORKING });
+    marks.push({ text: SKILLS_LINE.UPDATE_AVAILABLE, tone: STATUS_TONE.WORKING });
   } else if (standing === INSTALLED_SKILL_STANDING.TAKEN) {
     marks.push({
       text: `Name taken in ${scopeName(scope, workspace)}`,
-      tone: SKILL_MARK_TONE.ATTENTION,
+      tone: STATUS_TONE.ATTENTION,
     });
   }
-  if (candidate.hasScripts === true) marks.push({ text: "scripts", tone: SKILL_MARK_TONE.NEUTRAL });
+  if (candidate.hasScripts === true) marks.push({ text: "scripts", tone: STATUS_TONE.NEUTRAL });
   return marks;
 }
 
@@ -679,16 +705,16 @@ export function candidateNote(
   scope: InstalledSkillScope,
 ): DetectedLine | undefined {
   if (!tickable(candidate)) {
-    return { text: problemsLine(candidate.problems), tone: DETECTED_TONE.PROBLEM };
+    return { text: problemsLine(candidate.problems), tone: STATUS_TONE.ATTENTION };
   }
   const standing = standingIn(candidate, scope);
   if (standing === INSTALLED_SKILL_STANDING.UPDATE) {
-    return { text: "Update it from the Skills page instead.", tone: DETECTED_TONE.WAITING };
+    return { text: "Update it from the Skills page instead.", tone: STATUS_TONE.NEUTRAL };
   }
   if (standing === INSTALLED_SKILL_STANDING.TAKEN) {
     return {
       text: `Another skill named ${candidate.name} is installed there. Remove it first, or install for the other scope.`,
-      tone: DETECTED_TONE.WAITING,
+      tone: STATUS_TONE.NEUTRAL,
     };
   }
   return undefined;
@@ -859,14 +885,9 @@ export interface SkillListGroup {
   readonly skills: readonly InstalledSkillCandidate[];
 }
 
-/** Whether a skill answers the search: its name or its description holds the words, in any case. */
-function answers(candidate: InstalledSkillCandidate, query: string): boolean {
-  const words = query.trim().toLocaleLowerCase();
-  if (words === "") return true;
-  return (
-    candidate.name.toLocaleLowerCase().includes(words) ||
-    (candidate.description?.toLocaleLowerCase().includes(words) ?? false)
-  );
+/** Whether a skill answers the search: each word of it is in the name or the description, in any case. */
+function answers(candidate: InstalledSkillCandidate, tokens: readonly string[]): boolean {
+  return matchesTokens([candidate.name, candidate.description ?? ""], tokens);
 }
 
 /**
@@ -879,8 +900,9 @@ export function skillList(
   skills: readonly InstalledSkillCandidate[],
   query: string,
 ): readonly SkillListGroup[] {
+  const tokens = searchTokens(query);
   const shown = skills
-    .filter((each) => answers(each, query))
+    .filter((each) => answers(each, tokens))
     .sort((one, other) => one.name.localeCompare(other.name));
   if (!skills.some((each) => each.group !== undefined)) {
     return shown.length === 0 ? [] : [{ title: undefined, skills: shown }];
@@ -935,7 +957,7 @@ export function withRefusal(
 export function installScopes(
   workspace: Workspace,
 ): readonly { readonly value: InstalledSkillScope; readonly label: string }[] {
-  const mine = { value: INSTALLED_SKILL_SCOPE.PERSONAL, label: SKILLS_LINE.JUST_ME };
+  const mine = { value: INSTALLED_SKILL_SCOPE.PERSONAL, label: SKILLS_LINE.ONLY_YOU };
   if (workspace.personal === true) return [mine];
   return [mine, { value: INSTALLED_SKILL_SCOPE.WORKSPACE, label: everyoneIn(workspace) }];
 }

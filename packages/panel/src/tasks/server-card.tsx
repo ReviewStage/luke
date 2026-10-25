@@ -1,8 +1,14 @@
 import type { IntegrationTool } from "@luke/features/integration-health";
 import { byName } from "@luke/features/integration-tool-model";
 import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
-import { moreText } from "@luke/features/task-agents-model";
-import { HoverCard, HoverCardNote, HoverCardRule, ProviderMark, SwitchMark } from "@luke/ui";
+import {
+  HoverCard,
+  HoverCardNote,
+  HoverCardRule,
+  HoverCardScroll,
+  ProviderMark,
+  SwitchMark,
+} from "@luke/ui";
 import {
   SERVER_HANDED,
   SERVER_ROW,
@@ -27,7 +33,7 @@ import { ServerRowWords, useServerRows } from "./agent-servers.js";
  * for one turn alone, the one they open, or, where they reached a turn
  * already under way, the next, and the switch stays off; a server not
  * connected is handed to no agent. Under a rule stand the server's tools
- * as the popover's page lists them, a few and a count of the rest, and a
+ * as the popover's page lists them, every one, scrolling past a few, and a
  * tool's mention its one tool's line, of those the server answered with. Where the words are no agent's, as a
  * plan's or Luke's are, the row has no switch and the note says nothing of
  * one.
@@ -41,9 +47,6 @@ import { ServerRowWords, useServerRows } from "./agent-servers.js";
  * where every connection stands and the one server's tools, while the card
  * hangs.
  */
-
-/** The most tools a server's card lists before it counts the rest. */
-const CARD_TOOLS = 5;
 
 /** The agent words are written to, as a server's chip in them reads it. */
 export interface MentionedServersPlace {
@@ -107,14 +110,14 @@ function unreadRow(provider: IntegrationProvider, connection: string): ServerRow
 
 /**
  * The tools the card lists, of those the server answered with: the one a
- * tool's mention names, else the first few. Note that a tool the server
+ * tool's mention names, else every one. Note that a tool the server
  * does not list, or a server not read, lists nothing, because a name the
  * mention kept is no tool the server offers now.
  */
 function shownTools(row: ServerRow, tool: string | undefined): readonly IntegrationTool[] {
   const tools = row.tools ?? [];
   if (tool !== undefined) return tools.filter((each) => each.name === tool);
-  return byName(tools).slice(0, CARD_TOOLS);
+  return byName(tools);
 }
 
 /** The card a mention of a server, or of one of its tools, hangs. */
@@ -136,7 +139,6 @@ export function ServerCard({
     rows.find((each) => each.connection === connection) ?? unreadRow(provider, connection);
   const note = serverMentionNote(row, place === undefined ? undefined : { handed: place.handed });
   const tools = shownTools(row, tool);
-  const more = tool === undefined ? moreText(row.tools?.length ?? 0, tools.length) : undefined;
   return (
     <HoverCard data-server-card="">
       <div className="task-card-line agent-servers-row">
@@ -154,8 +156,9 @@ export function ServerCard({
       {tools.length === 0 ? null : (
         <>
           <HoverCardRule />
-          <IntegrationToolList server={row.name} tools={tools} tokens={[]} current={undefined} />
-          {more === undefined ? null : <HoverCardNote>{more}</HoverCardNote>}
+          <HoverCardScroll>
+            <IntegrationToolList server={row.name} tools={tools} tokens={[]} current={undefined} />
+          </HoverCardScroll>
         </>
       )}
     </HoverCard>

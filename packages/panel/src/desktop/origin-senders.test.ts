@@ -16,6 +16,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
@@ -129,7 +130,6 @@ async function mount(input: {
         createElement(DesktopTasks, {
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
-          notice: undefined,
           tasks: control,
         }),
       ),
@@ -155,7 +155,7 @@ function words(line: Element | null | undefined): string {
 /** The line under the card a transcript opens on, in `place`. */
 function senderLine(place: Element): HTMLElement {
   return (
-    place.querySelector<HTMLElement>(".agent-origin .message-sender") ??
+    place.querySelector<HTMLElement>(".agent-origin .luke-message-line-sender") ??
     assert.fail("the card is named by who sent it")
   );
 }
@@ -189,13 +189,31 @@ test("the line naming who sent the plan stands under its card, then when it was 
     card.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING,
     "the sender's line follows the card",
   );
-  const meta = line.closest(".message-meta") ?? assert.fail("the sender's line is the card's meta");
+  const meta =
+    line.closest(".luke-message-line") ?? assert.fail("the sender's line is the card's meta");
   const time = meta.querySelector("time") ?? assert.fail("the meta says when the plan was sent");
   assert.equal(time.getAttribute("datetime"), new Date(BRIEF_SENT_AT).toISOString());
   assert.ok(
     line.compareDocumentPosition(time) & Node.DOCUMENT_POSITION_FOLLOWING,
     "the time follows who sent it",
   );
+});
+
+test("the card a transcript opens on offers Copy, which copies the brief's text", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  const { container } = await mount({ reader: DEAN.userId, main: { agent: AGENT.id } });
+
+  const copy = container.querySelector<HTMLButtonElement>(
+    '.agent-origin button[aria-label="Copy message"]',
+  );
+  assert.ok(copy, "the card has Copy");
+  await act(async () => {
+    copy.click();
+    await Promise.resolve();
+  });
+
+  assert.deepEqual(copied, ["# Teammate invitations\n\nExpire invites after seven days."]);
 });
 
 test("a worker's tab opens on its task sent by the agent that delegated it, whose name opens that agent's tab", async () => {

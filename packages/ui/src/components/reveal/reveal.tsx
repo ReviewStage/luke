@@ -59,13 +59,19 @@ export function revealArea(): ReturnType<typeof motionRows> {
  */
 export function RevealArea({
   root,
+  own = false,
   children,
 }: {
   root: RefObject<HTMLElement | null>;
+  own?: boolean;
   children: ReactNode;
 }): React.JSX.Element {
   const outer = useContext(RevealAreaContext);
-  return <RevealAreaContext.Provider value={outer ?? root}>{children}</RevealAreaContext.Provider>;
+  return (
+    <RevealAreaContext.Provider value={own ? root : (outer ?? root)}>
+      {children}
+    </RevealAreaContext.Provider>
+  );
 }
 
 /** What a reveal's motion is told while it draws nothing, so a commit that keeps it hidden plays nothing. */

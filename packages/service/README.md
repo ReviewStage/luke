@@ -2033,8 +2033,8 @@ A plan's text has one write, `src/tasks/plan-notes.ts`, and three
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
 whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what others wrote meanwhile
-where it can be, and answered as a conflict with the text as it stands, with
-nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
+where it can be, and answered as a conflict with the text as it stands and
+the plan's last edit, naming who wrote it, with nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
 restore above is the second. A coding agent's
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`), the third, answers with notes
 (`packages/features/src/plan-template.ts`): a point added under a heading, a
@@ -2800,7 +2800,7 @@ only on production deployments.
 
 The sweep ends what no request will, and it reads no word of any account.
 It runs three things in turn and answers what each did: the purge of
-conversations stamped deleted more than thirty days ago, which is what a
+conversations stamped deleted more than seven days ago, which is what a
 deleted task's agents' conversations come to, counted as `purged`; the
 sweep over turns still running past their kind's bound, an hour for a turn
 of any other conversation and a day and an hour for a coding agent's

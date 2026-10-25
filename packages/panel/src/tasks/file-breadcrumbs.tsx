@@ -1,20 +1,20 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   BREADCRUMB_POPUP,
   BREADCRUMB_SHOWN,
   type BreadcrumbShown,
   Breadcrumbs,
   type Crumb,
-  Fill,
-  MENU_DROP,
   MenuSurface,
+  POPOVER_SIDE,
+  RectFloat,
 } from "@luke/ui";
-import { visibleViewport } from "@luke/ui/visible-viewport";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
-import type { ReadFolder } from "../file-tree/contract.js";
+import { useEffect, useRef, useState } from "react";
+import { useSideBundles } from "../bundle-loader.js";
+import type { FileTreeHandle, ReadFolder, TreeStanding } from "../file-tree/contract.js";
+import { useHeldThroughExit } from "../use-held-through-exit.js";
+import { FileTreeStage, TREE_READING } from "./file-tree-pane.js";
 
 /**
  * file-breadcrumbs.tsx -- a File tab's path as breadcrumbs: the repository, then each folder the file stands in, then the file, each a press that opens the tree where it stands.
@@ -54,8 +54,8 @@ const FOLDED_ALL = -2;
 
 /** A row of the tree as the compact density draws it, which the box's height is counted in. */
 const ROW_HEIGHT = 24;
-/** The tallest a crumb's tree stands before it scrolls, its width, and the room it keeps from the window's edges. */
-const TREE_BOUNDS = { MAX_HEIGHT: 360, WIDTH: 280, MARGIN: 8, INSET: 4 } as const;
+/** The tallest a crumb's tree stands before it scrolls, and the inset around its rows. */
+const TREE_BOUNDS = { MAX_HEIGHT: 360, INSET: 4 } as const;
 
 /** A crumb's tree standing open: the tab's file it was opened over; the crumb, by its place in the path; the folder the tree is rooted at; and the tab's file from that folder, which it reveals. */
 interface Opened {
@@ -78,132 +78,135 @@ function fromRoot(folder: string, path: string): string {
 }
 
 /**
- * A crumb's tree, hung under the crumb over the window as a menu is, as
- * tall as the rows it shows up to its bound and no taller than the room
- * left under the crumb, its rows scrolling within. It closes as a menu
- * does: Escape, which hands the keyboard back to the crumb, a press
- * elsewhere, or the window losing the keyboard or changing its size.
+ * A crumb's tree, hung under the crumb as a menu is (`@luke/ui`'s
+ * `RectFloat`), as tall as the rows it shows up to its bound, its rows
+ * scrolling within. It closes as a menu does: Escape, which hands the
+ * keyboard back to the crumb, a press elsewhere, which the layer hears, or
+ * the window losing the keyboard or changing its size; and it fades out as
+ * it closes, as a menu does, its owner holding it drawn until it is gone.
  */
 function CrumbTree({
   label,
   opened,
+  open,
   listFolder,
   onOpen,
   onClose,
+  onExited,
 }: {
   label: string;
   opened: Opened;
+  /** Whether it stands; closed, it fades out before its owner lets go of it. */
+  open: boolean;
   listFolder: ReadFolder;
   onOpen: (path: string, newTab: boolean) => void;
   onClose: (returnFocus: boolean) => void;
+  onExited: () => void;
 }): React.JSX.Element {
-  const loaded = useAtomValue(useSideBundles().fileTree);
+  const { fileTree } = useSideBundles();
+  const loaded = useAtomValue(fileTree);
+  const retryBundle = useAtomRefresh(fileTree);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const box = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
+  const handle = useRef<FileTreeHandle | undefined>(undefined);
   const [rows, setRows] = useState<number | undefined>(undefined);
-  const [at, setAt] = useState<{ left: number; top: number; height?: number } | undefined>(
-    undefined,
-  );
+  const [standing, setStanding] = useState<TreeStanding>(TREE_READING);
   const latest = useRef({ listFolder, onOpen, onClose });
   latest.current = { listFolder, onOpen, onClose };
   const { folder, file, opener } = opened;
-
   // Note that the box stands as tall as its words until the tree counts its rows.
-  useLayoutEffect(() => {
-    const bounds = opener.getBoundingClientRect();
-    const seen = visibleViewport();
-    const widest = seen.right - TREE_BOUNDS.WIDTH - TREE_BOUNDS.MARGIN;
-    const top = bounds.bottom + MENU_DROP;
-    const left = Math.max(seen.left + TREE_BOUNDS.MARGIN, Math.min(bounds.left, widest));
-    if (rows === undefined) return setAt({ left, top });
-    const fewest = ROW_HEIGHT + 2 * TREE_BOUNDS.INSET;
-    const room = seen.bottom - top - TREE_BOUNDS.MARGIN;
-    const wanted = Math.min(rows * ROW_HEIGHT + 2 * TREE_BOUNDS.INSET, TREE_BOUNDS.MAX_HEIGHT);
-    setAt({ left, top, height: Math.max(fewest, Math.min(wanted, room)) });
-  }, [opener, rows]);
+  const height =
+    rows === undefined
+      ? undefined
+      : Math.min(rows * ROW_HEIGHT + 2 * TREE_BOUNDS.INSET, TREE_BOUNDS.MAX_HEIGHT);
 
   // Note that the box takes the keyboard itself until the tree's reveal
   // takes it to the file, and keeps it where the tree has no row to take
   // it, so Escape still reaches it.
-  const placed = at !== undefined;
   useEffect(() => {
     const element = box.current;
-    if (!placed || element === null || element.contains(document.activeElement)) return;
+    if (element === null || element.contains(document.activeElement)) return;
     element.focus({ preventScroll: true });
-  }, [placed]);
+  }, []);
 
   useEffect(() => {
     const element = host.current;
     if (module === undefined || element === null) return undefined;
     const tree = module.mount(element, {
       readFolder: (path) => latest.current.listFolder(fromRoot(folder, path)),
+      onStanding: setStanding,
       onOpen: (path, newTab) => {
         latest.current.onClose(false);
         latest.current.onOpen(fromRoot(folder, path), newTab);
       },
       onRows: setRows,
     });
+    handle.current = tree;
     tree.reveal(file, { focus: true });
-    return tree.unmount;
+    return () => {
+      handle.current = undefined;
+      tree.unmount();
+    };
   }, [module, folder, file]);
 
-  // Note that a press on the crumb is left to the crumb, whose own press
-  // is what closes the tree it opened.
   useEffect(() => {
-    const pressed = (event: PointerEvent) => {
-      const target = event.target instanceof Node ? event.target : null;
-      if (box.current?.contains(target) || opener.contains(target)) return;
-      latest.current.onClose(false);
-    };
     const leave = () => latest.current.onClose(false);
     // The bar resized, its panel dragged, may fold the crumb the tree hangs
     // from out of sight (planning.css), so the tree goes, as it does when the
     // window resizes. Note that it watches only while a tree stands, and
     // reads nothing of the layout.
-    const bar = opener.closest(".file-view-bar");
+    const bar = opener.closest(".luke-pane-bar");
     let first = true;
     const folded = new ResizeObserver(() => {
       if (first) first = false;
       else leave();
     });
     if (bar !== null) folded.observe(bar);
-    document.addEventListener("pointerdown", pressed, true);
     window.addEventListener("blur", leave);
     window.addEventListener("resize", leave);
     return () => {
       folded.disconnect();
-      document.removeEventListener("pointerdown", pressed, true);
       window.removeEventListener("blur", leave);
       window.removeEventListener("resize", leave);
     };
   }, [opener]);
 
-  return createPortal(
-    <MenuSurface
-      ref={box}
-      className="file-crumb-tree ph-no-capture"
-      role="dialog"
-      aria-label={label}
-      tabIndex={-1}
-      placed={placed}
-      style={{ ...at, width: TREE_BOUNDS.WIDTH }}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        // Note that the Escape is stopped here, because the window's own would close the panel behind the tree.
-        event.stopPropagation();
-        latest.current.onClose(true);
-      }}
+  // Note that a press on the crumb is left to the crumb, whose own press
+  // is what closes the tree it opened.
+  return (
+    <RectFloat
+      open={open}
+      onExited={onExited}
+      anchor={() => opener.getBoundingClientRect()}
+      side={POPOVER_SIDE.BELOW}
+      onPressAway={() => latest.current.onClose(false)}
+      holds={(target) => opener.contains(target)}
     >
-      {module === undefined ? (
-        <p className="file-crumb-notice">
-          {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}
-        </p>
-      ) : (
-        <Fill className="file-tree-host" ref={host} />
-      )}
-    </MenuSurface>,
-    document.body,
+      <MenuSurface
+        ref={box}
+        className="file-crumb-tree ph-no-capture"
+        role="dialog"
+        aria-label={label}
+        tabIndex={-1}
+        style={height === undefined ? undefined : { height }}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          // Note that the Escape is stopped here, because the window's own would close the panel behind the tree.
+          event.stopPropagation();
+          latest.current.onClose(true);
+        }}
+      >
+        <FileTreeStage
+          module={module}
+          missed={AsyncResult.isFailure(loaded)}
+          host={host}
+          standing={standing}
+          onRetry={() => handle.current?.relist()}
+          onRetryBundle={retryBundle}
+        />
+      </MenuSurface>
+    </RectFloat>
   );
 }
 
@@ -225,6 +228,8 @@ export function FileBreadcrumbs({
   const [asked, setOpened] = useState<Opened | undefined>(undefined);
   // A tree opened over another file, the tab having moved on, is let go.
   const opened = asked?.path === path ? asked : undefined;
+  // The tree closed is held drawn through its fade, and let go once it is gone.
+  const { held, onExited } = useHeldThroughExit(opened);
 
   const close = (returnFocus: boolean) => {
     if (returnFocus) opened?.opener.focus();
@@ -300,14 +305,16 @@ export function FileBreadcrumbs({
   return (
     <>
       <Breadcrumbs label="Path" crumbs={crumbs} />
-      {opened === undefined ? null : (
+      {held === undefined ? null : (
         <CrumbTree
-          key={opened.at}
-          label={opened.folder === "" ? repository : opened.folder}
-          opened={opened}
+          key={held.at}
+          label={held.folder === "" ? repository : held.folder}
+          opened={held}
+          open={opened !== undefined}
           listFolder={listFolder}
           onOpen={onOpen}
           onClose={close}
+          onExited={onExited}
         />
       )}
     </>

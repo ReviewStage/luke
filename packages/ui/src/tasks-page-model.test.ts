@@ -15,6 +15,7 @@ import {
   EARLIER_BOARD_PROPERTIES,
   EARLIER_LIST_PROPERTIES,
   keptTasksDisplay,
+  listPropertiesFitting,
   NO_TASKS_FILTER,
   TASK_MAKER,
   TASK_PROPERTY,
@@ -667,4 +668,38 @@ test("a display kept since rows offered the assignee keeps it off where its read
   ).properties;
 
   expect(offAgain).not.toContain(TASK_PROPERTY.ASSIGNEE);
+});
+
+test("a List narrowing folds its properties away one by one, creator, agents, repository, key, then waiting, so its name keeps its room, and never its chips or its time", () => {
+  const every = Object.values(TASK_PROPERTY);
+  const drawn = (width: number) => listPropertiesFitting(every, width);
+  const { PRIORITY, KEY, STATUS, WAITING, REPOSITORY, ASSIGNEE, AGENTS, UPDATED } = TASK_PROPERTY;
+
+  expect(drawn(1100)).toEqual(every);
+  expect(drawn(900)).toEqual([
+    PRIORITY,
+    KEY,
+    STATUS,
+    WAITING,
+    REPOSITORY,
+    ASSIGNEE,
+    AGENTS,
+    UPDATED,
+  ]);
+  expect(drawn(800)).toEqual([PRIORITY, KEY, STATUS, WAITING, REPOSITORY, ASSIGNEE, UPDATED]);
+  expect(drawn(700)).toEqual([PRIORITY, KEY, STATUS, WAITING, ASSIGNEE, UPDATED]);
+  expect(drawn(560)).toEqual([PRIORITY, STATUS, WAITING, ASSIGNEE, UPDATED]);
+  expect(drawn(480)).toEqual([PRIORITY, STATUS, ASSIGNEE, UPDATED]);
+  expect(drawn(300)).toEqual([PRIORITY, STATUS, ASSIGNEE, UPDATED]);
+});
+
+test("a List folds only for the columns its display draws, so one drawing few keeps them where one drawing all would fold", () => {
+  const { PRIORITY, STATUS, AGENTS, UPDATED } = TASK_PROPERTY;
+  const few = [PRIORITY, STATUS, AGENTS, UPDATED];
+
+  expect(listPropertiesFitting(DEFAULT_LIST_DISPLAY.properties, 880)).toEqual(
+    DEFAULT_LIST_DISPLAY.properties,
+  );
+  expect(listPropertiesFitting(few, 600)).toEqual(few);
+  expect(listPropertiesFitting(Object.values(TASK_PROPERTY), 600)).not.toContain(AGENTS);
 });

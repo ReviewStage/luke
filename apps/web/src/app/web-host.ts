@@ -40,7 +40,7 @@ import {
   WindowPushes,
 } from "@luke/host/act-port";
 import { AgentNoticeDoors } from "@luke/host/agent-notices";
-import { RUN_PROFILE } from "@luke/host/app-state";
+import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import type { AppBridge } from "@luke/host/bridge";
 import {
   AppStateStore,
@@ -89,6 +89,7 @@ import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
 import { FILES_KEY, localStorageFileSystem, tabStorage } from "./local-storage-file-system";
 import { type PageLeave, tabLeave } from "./page-leave";
 import { addressHere } from "./web-address";
+import { developmentFixtureProfile } from "./web-fixture";
 import {
   notificationsOffered,
   notificationsStatusNow,
@@ -183,10 +184,10 @@ function filesChangedElsewhere(storage: Storage): Stream.Stream<void> {
 }
 
 /** Every seam the host's kernel and assembly stand on, as the tab answers it. */
-function seamLayers(storage: Storage) {
+function seamLayers(storage: Storage, fixture: RunProfile | undefined) {
   return Layer.mergeAll(
     Layer.succeed(StateRoot, STATE_ROOT),
-    Layer.succeed(RunMode, runModeFor({ capture: false, fixture: false })),
+    Layer.succeed(RunMode, runModeFor({ capture: false, fixture: fixture !== undefined })),
     Layer.succeed(AppIdentity, { appVersion, packaged: true }),
     // A tab has no environment to read an override from.
     Layer.succeed(Environment, ConfigProvider.fromEnv({ env: {} })),
@@ -416,6 +417,7 @@ const composedWeb = (
   fork: WebHostOptions["fork"],
   tab: PageLeave,
   linkPlatform: LinkPlatform | undefined,
+  fixture: RunProfile | undefined,
 ) =>
   Layer.effect(
     ComposedWebTag,
@@ -426,8 +428,12 @@ const composedWeb = (
       const state = new AppStateStore(
         initialAppState(
           {
-            launch: { profile: RUN_PROFILE.IDLE, captureMode: false, fixtureMode: false },
-            runMode: runModeFor({ capture: false, fixture: false }),
+            launch: {
+              profile: fixture ?? RUN_PROFILE.IDLE,
+              captureMode: false,
+              fixtureMode: fixture !== undefined,
+            },
+            runMode: runModeFor({ capture: false, fixture: fixture !== undefined }),
             appVersion,
             packaged: true,
             platform: RUN_PLATFORM.WEB,
@@ -457,7 +463,11 @@ const composedWeb = (
       });
       // No voice window stands beside the panel.
       operator.link({ sendToVoice: () => undefined });
-      yield* linkNetworkWatch({ state, isOnline: () => navigator.onLine });
+      yield* linkNetworkWatch({
+        state,
+        isOnline: () => navigator.onLine,
+        regained: operator.host.tasksResync(),
+      });
       // A session that changes under the tab leaves it with a full page load (Neon's "When the session changes"), dropping the previous account's live reads.
       yield* linkSessionReload({ state, reload: () => location.reload() });
 
@@ -506,7 +516,11 @@ const composedWeb = (
         actPort,
         actPortClient: tabs.portClient,
         platform: webPlatform(
-          { recordSurfaceEvent: count, unsavedWork: tab.unsavedWork },
+          {
+            recordSurfaceEvent: count,
+            unsavedWork: tab.unsavedWork,
+            unsavedPlanWords: tab.unsavedPlanWords,
+          },
           linkPlatform,
         ),
         operator,
@@ -530,10 +544,12 @@ export function composeWeb(
   const tab = tabLeave();
   // Read once, so the files and the word of another tab's write are the same storage, in memory where the browser blocks it.
   const storage = tabStorage();
+  // Only a development tab's address can name one, so a production tab's host is always live.
+  const fixture = developmentFixtureProfile(location.search);
   const assembly = Layer.provide(
     hostAssemblyLayer([HOST_PLATFORM_CONCERN.TERMINALS]),
     Layer.mergeAll(
-      Layer.provideMerge(hostKernelLayer, seamLayers(storage)),
+      Layer.provideMerge(hostKernelLayer, seamLayers(storage, fixture)),
       localStorageFileSystem(storage),
       Path.layer,
       httpClient,
@@ -554,7 +570,7 @@ export function composeWeb(
     ),
   );
   return launched.pipe(
-    Layer.provideMerge(composedWeb(fork, tab, linkPlatform)),
+    Layer.provideMerge(composedWeb(fork, tab, linkPlatform, fixture)),
     Layer.provideMerge(assembly),
     Layer.provide(httpClient),
   );

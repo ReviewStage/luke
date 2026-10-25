@@ -91,11 +91,12 @@ test("a schedule the picker writes is said in words in its zone's city, and any 
   const said = (cron: string, timezone = "America/New_York") =>
     automationTriggerText({ kind: AUTOMATION_TRIGGER.SCHEDULE, cron, timezone });
 
-  assert.equal(said("0 9 * * 1-5"), "Weekdays at 9:00 · New York");
-  assert.equal(said("30 7 * * *", "Europe/London"), "Every day at 7:30 · London");
-  assert.equal(said("0 9 * * 1"), "Mondays at 9:00 · New York");
-  assert.equal(said("0 9 * * 0"), "Sundays at 9:00 · New York");
+  assert.equal(said("0 9 * * 1-5"), "Weekdays at 9:00 AM · New York");
+  assert.equal(said("30 7 * * *", "Europe/London"), "Every day at 7:30 AM · London");
+  assert.equal(said("0 9 * * 1"), "Mondays at 9:00 AM · New York");
+  assert.equal(said("0 9 * * 0"), "Sundays at 9:00 AM · New York");
   assert.equal(said("0 * * * *", "UTC"), "Every hour · UTC");
+  assert.equal(said("5 14 * * *"), "Every day at 2:05 PM · New York");
   assert.equal(said("0 9 1 * *"), "0 9 1 * * · New York");
   assert.equal(said("*/30 9-17 * * 1-5"), "*/30 9-17 * * 1-5 · New York");
 });
@@ -267,13 +268,18 @@ test("a run's line says why it did not start, else where its agent stands, or th
     automationRunLine(run({ status: AUTOMATION_RUN_STATUS.QUEUED })),
     "Waiting to start",
   );
+  assert.equal(automationRunLine(run({ status: AUTOMATION_RUN_STATUS.FAILED })), "Couldn't start");
+  assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.STARTING) })), "Starting…");
+  assert.equal(
+    automationRunLine(
+      run({ status: AUTOMATION_RUN_STATUS.FAILED, reason: AUTOMATION_RUN_REASON.GITHUB_SIGN_IN }),
+    ),
+    "Its GitHub sign-in expired.",
+  );
   assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.RUNNING) })), "Working");
   assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.COMPLETED) })), "Finished");
   assert.equal(automationRunLine(run({ agent: null })), "Its agent is gone");
-  assert.equal(
-    automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.FAILED) })),
-    "Its agent failed",
-  );
+  assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.FAILED) })), "Failed");
   assert.equal(
     automationRunLine(
       run({
@@ -283,7 +289,7 @@ test("a run's line says why it did not start, else where its agent stands, or th
         },
       }),
     ),
-    "Its agent failed: the sandbox or checkout failed",
+    "Failed: the sandbox or checkout failed",
   );
   const keyRefused = run({
     agent: {
@@ -293,10 +299,14 @@ test("a run's line says why it did not start, else where its agent stands, or th
   });
   assert.equal(
     automationRunLine(keyRefused, "its creator"),
-    "Its agent failed: its creator's API key was refused or can't be read",
+    "Failed: its creator's API key was refused or cannot be read",
     "another's automation names whose key, and no Settings the reader cannot mend",
   );
-  assert.match(automationRunLine(keyRefused), /check Settings › Agents$/u);
+  assert.equal(
+    automationRunLine(keyRefused),
+    "Failed: your API key was refused or cannot be read",
+    "the reader's own key names no path to a Settings page",
+  );
   const onTeammatesAgent = run({
     agent: {
       ...agent(CODING_AGENT_STATUS.FAILED),
@@ -306,10 +316,10 @@ test("a run's line says why it did not start, else where its agent stands, or th
   });
   assert.equal(
     automationRunLine(onTeammatesAgent),
-    "Its agent failed: its owner's API key was refused or can't be read",
+    "Failed: its owner's API key was refused or cannot be read",
     "a same-agent run on a teammate's agent names that agent's owner, whoever made the automation",
   );
-  assert.match(
+  assert.equal(
     automationRunLine(
       run({
         agent: {
@@ -320,7 +330,7 @@ test("a run's line says why it did not start, else where its agent stands, or th
       }),
       "its creator",
     ),
-    /check Settings › Agents$/u,
+    "Failed: your API key was refused or cannot be read",
     "the reader's own agent is the reader's key, even on another's automation",
   );
 });

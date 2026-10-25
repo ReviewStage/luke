@@ -29,7 +29,7 @@
     inset: 0;
     border-radius: var(--luke-control-radius);
     outline-offset: calc(-1 * var(--luke-focus-ring-width));
-    transition: background-color var(--luke-duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-card-press[data-corner="menu"] > .luke-card-press-reach {
@@ -43,5 +43,11 @@
 
   .luke-card-press:active:not(:disabled) > .luke-card-press-reach {
     background: var(--luke-color-fill-pressed);
+  }
+
+  /* A card chosen in a selection takes the selected fill over its reach, as
+     a chosen list row does. */
+  .luke-card-press[data-selected="true"] > .luke-card-press-reach {
+    background: var(--luke-color-fill-selected);
   }
 }

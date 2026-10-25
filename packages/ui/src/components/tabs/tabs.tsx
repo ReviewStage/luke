@@ -1,3 +1,4 @@
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type {
   ComponentType,
   FocusEventHandler,
@@ -13,14 +14,17 @@ import {
   isValidElement,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
-  useState,
 } from "react";
 import { flushSync } from "react-dom";
+import { cn } from "../../cn.js";
 import { cssCustomProperties } from "../../css.js";
 import { CloseIcon } from "../../face/glyphs.js";
+import { joinRefs } from "../../join-refs.js";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
+import { ANNOUNCE, announce } from "../announcer/announcer.js";
 import { BUTTON_SIZE, IconButton } from "../button/button.js";
 import {
   type ContextMenuProps,
@@ -29,7 +33,14 @@ import {
   type MenuPlacement,
   opensMenu,
 } from "../menu/menu.js";
+import {
+  ROVING_ORIENTATION,
+  ROVING_STOP,
+  rovingItem,
+  useRovingKeys,
+} from "../roving-keys/roving-keys.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
+import { Tooltip } from "../tooltip/hint.js";
 import { type TabMove, useTabDrag } from "./use-tab-drag.js";
 
 /**
@@ -38,8 +49,9 @@ import { type TabMove, useTabDrag } from "./use-tab-drag.js";
  * A tab is its glyph and its label in a compact pill: raised while it is the
  * chosen one, plain and muted otherwise. A tab that may be closed carries an
  * × at its end, standing on the chosen tab and shown on the others while the
- * pointer is on them. The strip is one stop for Tab: the arrow keys, Home,
- * and End move between its tabs, Return or Space chooses the one focused,
+ * pointer is on them. The strip is one stop for Tab, on its chosen tab
+ * (`useRovingKeys`): the arrow keys, Home, and End move between its tabs,
+ * bringing each into view, Return or Space chooses the one focused,
  * and Delete or Backspace closes it, handing focus to the tab chosen in its
  * place. The × is for the pointer alone, so it takes no stop of its own.
  *
@@ -47,8 +59,7 @@ import { type TabMove, useTabDrag } from "./use-tab-drag.js";
  * along it (`use-tab-drag.ts`), or the focused one stepped a place either
  * way by the owner's own chords through `controls`, with focus kept on it.
  * Either way the strip says where the tab now stands to whoever reads it
- * aloud. A tab anchored at the strip's start stands there for good, as a
- * browser's pinned tab does: it is not moved, and no tab is moved before it.
+ * aloud.
  *
  * A tab something arrived on while another was chosen reads in semibold
  * until it is chosen, and says "New result" in its hint and to a reader. A
@@ -84,8 +95,32 @@ import { type TabMove, useTabDrag } from "./use-tab-drag.js";
 
 const TAB = '[role="tab"]';
 
-/** A tab that moves: every one but those anchored at the strip's start. */
-const MOVABLE_TAB = `.luke-tab:not([data-anchored="true"]) ${TAB}`;
+/*
+ * The strip's plain looks, in Tailwind over the theme as shadcn/ui's tabs
+ * draw theirs: each box's layout, type, and the inks no state changes. Note
+ * that the strip is Luke's own rather than Base UI's tabs, because an
+ * editor's strip chooses with Return, closes with Delete, reorders, and
+ * holds each tab's choice in the tab, which Base UI's tabs, owning the
+ * value and their roving focus, are not for; and that what a state, a
+ * fold, a pinned tab, or the pointer changes stays in tabs.css, the sizes,
+ * inks, insets, masks, and fades it restyles from the same layer, where a
+ * utility would outrank it.
+ */
+
+/** The strip: tabs in a row that scrolls along with no bar drawn; that it scrolls is tabs.css's, which an app's narrow layout reads. */
+const STRIP =
+  "luke-tabs relative flex min-w-0 items-center gap-list-gap overscroll-x-contain [scrollbar-width:none]";
+
+/** A tab's pill, in a label's type; where it stands, pinned while chosen, is tabs.css's. */
+const PILL = "luke-tab flex items-center rounded-control text-label font-label";
+
+/** The pill's button, or the field a rename stands in its place: the pill's height and corner, in its type and ink. */
+const TAB_BUTTON =
+  "luke-tab-button relative flex min-w-0 flex-[1_1_auto] items-center gap-icon-gap h-control m-0 [border:0] rounded-[inherit] bg-transparent bg-none text-inherit [font:inherit]";
+
+/** A mark at the pill's end, the × or a failed run's, centred on its line; whether it stands, a fold's, is tabs.css's. */
+const END_SLOT =
+  "absolute top-1/2 right-(--luke-tab-close-inset) [transform:translateY(-50%)] transition-opacity duration-(--luke-duration-hover) ease-motion-exit";
 
 /** What a wheel's delta counts, as its `deltaMode` says: pixels, lines, or pages. */
 const WHEEL_DELTA = {
@@ -106,6 +141,8 @@ export const TABS_GROUND = {
   WELL: "well",
   /** A column's own ground. */
   GROUND: "ground",
+  /** The window's frame, above the sheet it heads: the chosen tab is lifted in the sheet's ground, as a browser's is. */
+  FRAME: "frame",
 } as const;
 
 export type TabsGround = (typeof TABS_GROUND)[keyof typeof TABS_GROUND];
@@ -133,7 +170,7 @@ export interface TabPlace {
 export interface TabsControls {
   /** Moves the focused tab `by` places along, keeping focus on it; nothing where no tab that moves has focus, or past an end. */
   readonly step: (by: number) => void;
-  /** Where `tab`, a tab of the strip, stands among the tabs that move; none for one anchored, or a strip whose tabs stay put. */
+  /** Where `tab`, a tab of the strip, stands among the tabs that move; none for a strip whose tabs stay put. */
   readonly placeOf: (tab: HTMLElement) => TabPlace | undefined;
 }
 
@@ -160,41 +197,18 @@ export type TabHint = ComponentType<{
   children: ReactElement<TabHintProps>;
 }>;
 
-/** The words a tab's hint joins: its label where it is cut short, what the tab adds, and its news. */
+/** The words a tab's hint joins: its label where it is cut short, and its news. */
 function tabHint(input: {
   label: string;
   /** Whether the label may not be read whole: cut short, or a tab other than the chosen one, which a narrow strip may draw as its glyph alone. */
   clipped: boolean;
-  tooltip: string | undefined;
   unread: boolean;
 }): string | undefined {
   const words = [
     input.clipped ? input.label : undefined,
-    input.tooltip,
     input.unread ? UNREAD_TAB_NOTE : undefined,
   ].filter((word) => word !== undefined);
   return words.length === 0 ? undefined : words.join(" · ");
-}
-
-/**
- * The tab a navigation key moves to from the focused one, or nothing for any
- * other key. Note that a key held with a modifier moves nothing, because an
- * owner's chords move the tab itself rather than focus.
- */
-function tabAfter(event: React.KeyboardEvent, at: number, count: number): number | undefined {
-  if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return undefined;
-  switch (event.key) {
-    case "ArrowRight":
-      return (at + 1) % count;
-    case "ArrowLeft":
-      return (at <= 0 ? count : at) - 1;
-    case "Home":
-      return 0;
-    case "End":
-      return count - 1;
-    default:
-      return undefined;
-  }
 }
 
 function closesTab(key: string): boolean {
@@ -262,7 +276,7 @@ export function tabMenuPlacement(tab: HTMLElement): MenuPlacement {
 
 /** The strip's tabs that move, in order. */
 function movableTabs(strip: HTMLElement | null): HTMLElement[] {
-  return [...(strip?.querySelectorAll<HTMLElement>(MOVABLE_TAB) ?? [])];
+  return [...(strip?.querySelectorAll<HTMLElement>(TAB) ?? [])];
 }
 
 /**
@@ -292,9 +306,16 @@ export function Tabs({
   children: ReactNode;
 }): React.JSX.Element {
   const strip = useRef<HTMLDivElement | null>(null);
+  // Note that a key held with a modifier moves no focus, which the roving
+  // keys leave alone, because an owner's chords move the tab itself.
+  const roving = useRovingKeys<HTMLDivElement>({
+    orientation: ROVING_ORIENTATION.HORIZONTAL,
+    stop: ROVING_STOP.CHOSEN,
+    moveTo: (tab) => focusTab(strip.current, tab),
+  });
+  const stripRef = useMemo(() => joinRefs(strip, roving.ref), [roving.ref]);
   // How many tabs the strip draws, which it asks room for at their widest (tabs.css).
   const count = Children.toArray(children).filter(isValidElement).length;
-  const [movedSaid, setMovedSaid] = useState("");
   // Where a tab was closed from the keyboard, until focus has moved on from it.
   const closedAt = useRef<number | undefined>(undefined);
   // The chosen tab last brought into view, so a tab newly chosen, opened
@@ -319,14 +340,12 @@ export function Tabs({
     revealed.current = chosen;
     reveal(strip.current, chosen, drawn);
   });
-  // Note that a move's places count the tabs that move alone, as the drag
-  // does, so a tab anchored at the start is no place of theirs.
   const move =
     onMove === undefined
       ? undefined
       : (from: number, to: number) => {
           const tabs = movableTabs(strip.current);
-          setMovedSaid(movedLine(tabs[from], to, tabs.length));
+          announce(ANNOUNCE.POLITE, movedLine(tabs[from], to, tabs.length));
           onMove(from, to);
         };
   const onPointerDown = useTabDrag(move);
@@ -359,10 +378,7 @@ export function Tabs({
       if (pill?.getAttribute("data-closable") === "true") closedAt.current = at;
       return;
     }
-    const next = tabAfter(event, at, tabs.length);
-    if (next === undefined) return;
-    event.preventDefault();
-    focusTab(strip.current, tabs[next]);
+    roving.onKeyDown(event);
   };
 
   // A wheel turned up and down runs the strip along, as a browser's tab strip
@@ -383,36 +399,29 @@ export function Tabs({
     scrollStrip(node, event.deltaY * unit, false);
   };
 
-  // The line a move says stands before the strip, so the control after the
-  // strip is still the one a closed last tab hands focus to.
   return (
-    <>
-      {move === undefined ? null : (
-        <span className="luke-visually-hidden" role="status">
-          {movedSaid}
-        </span>
-      )}
-      <div
-        ref={strip}
-        role="tablist"
-        aria-label={label}
-        className="luke-tabs"
-        data-ground={ground}
-        data-fold={fold}
-        style={cssCustomProperties({ "--luke-tab-count": count })}
-        onKeyDown={keyDown}
-        onPointerDown={onPointerDown}
-        onWheel={wheel}
-        onFocus={(event) => {
-          if (within(event.currentTarget, event.target)) onFocusChange?.(true);
-        }}
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) onFocusChange?.(false);
-        }}
-      >
-        {children}
-      </div>
-    </>
+    <div
+      ref={stripRef}
+      data-roving={roving["data-roving"]}
+      role="tablist"
+      aria-label={label}
+      className={STRIP}
+      data-ground={ground}
+      data-fold={fold}
+      style={cssCustomProperties({ "--luke-tab-count": count })}
+      onKeyDown={keyDown}
+      onPointerDown={onPointerDown}
+      onWheel={wheel}
+      onFocus={(event) => {
+        roving.onFocus(event);
+        if (within(event.currentTarget, event.target)) onFocusChange?.(true);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onFocusChange?.(false);
+      }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -425,31 +434,27 @@ export function Tabs({
  * under the pointer, as an editor's tab trades its unsaved dot for its ×.
  * `editor`, while given, is drawn in the label's place as a field of its
  * own, outside the tab's role, so a reader reaches it. A label cut short is
- * said whole in the tab's `hint`, before what `tooltip` adds and an unread
- * tab's news; `card`, while given, hangs in the hint's place whether or not
- * the label is cut short, and says the whole name itself. `contextMenu`
+ * said whole in the tab's `hint`, before an unread tab's news; `card`, while
+ * given, hangs in the hint's place whether or not the label is cut short, and
+ * says the whole name itself. The × says which tab it closes in a hint of its
+ * own, with ⌘W on the chosen tab's alone. `contextMenu`
  * (`useMenu`'s) opens the tab's own actions from a right-click or a long
  * press, and `onMenu` opens them where it says from the keyboard's menu
- * keys. A `quiet` tab draws no fill at rest, chosen or not, and the hover
- * fill under the pointer: a lone tab, always the chosen one, need not be
- * told from the others. An `anchored` tab stands at the strip's start for
- * good, never moved.
+ * keys.
  */
 export function Tab({
+  id,
+  controls,
   icon,
   label,
   detail,
   endMark,
   selected,
   unread = false,
-  tooltip,
   card,
   hint: Hint,
-  keyshortcuts,
   editor,
   tabRef,
-  quiet = false,
-  anchored = false,
   preview = false,
   onSelect,
   onKeep,
@@ -457,6 +462,10 @@ export function Tab({
   contextMenu,
   onMenu,
 }: {
+  /** The id the tab stands under, which the panel it shows names itself by (`aria-labelledby`). */
+  id?: string | undefined;
+  /** The id of the tab panel this tab shows while chosen (`aria-controls`); none where no panel stands for it. */
+  controls?: string | undefined;
   icon: React.JSX.Element;
   label: string;
   /** Words after the label, dimmed: a count, as an Inbox tab's. */
@@ -466,17 +475,12 @@ export function Tab({
   selected: boolean;
   /** Something arrived on the tab while another was chosen: its label in semibold until it is chosen. */
   unread?: boolean;
-  /** What the pointer resting on the tab says beyond its label. */
-  tooltip?: string | undefined;
   /** What the pointer resting on the tab shows in its hint's place: a card naming it whole and saying what it last did. */
   card?: ReactNode;
   /** The app's hint the tab hangs its words or its card from; none drawn where absent. */
   hint?: TabHint | undefined;
-  keyshortcuts?: string | undefined;
   editor?: ReactNode;
   tabRef?: RefObject<HTMLButtonElement | null> | undefined;
-  quiet?: boolean;
-  anchored?: boolean;
   /** Stands as its strip's preview, which the next one opened takes the place of: its label in italics, as VS Code draws one. */
   preview?: boolean;
   onSelect: () => void;
@@ -492,20 +496,25 @@ export function Tab({
   // Note that a tab other than the chosen one is named in its hint whether or
   // not its label shows, because a narrow strip may draw it as its glyph
   // alone, which the label's own measure cannot see.
-  const said = tabHint({ label, clipped: clipped || !selected, tooltip, unread });
+  const said = tabHint({ label, clipped: clipped || !selected, unread });
   const own = useRef<HTMLButtonElement | null>(null);
   const button = tabRef ?? own;
-  const glyph = <span className="luke-tab-icon">{icon}</span>;
+  const glyph = (
+    <span className="luke-tab-icon relative flex flex-none text-muted-foreground [--luke-glyph-size:var(--luke-control-icon)] [&_svg]:size-control-icon">
+      {icon}
+    </span>
+  );
   const tab = (
     <button
       ref={button}
       type="button"
       role="tab"
-      className="luke-tab-button"
+      id={id}
+      className={TAB_BUTTON}
       aria-selected={selected}
-      aria-keyshortcuts={keyshortcuts}
+      aria-controls={controls}
       aria-description={unread ? UNREAD_TAB_NOTE : undefined}
-      tabIndex={selected ? 0 : -1}
+      {...rovingItem()}
       onClick={(event) => {
         // Note that the tab around the button is the pill a press is seen on.
         pulsePress(event.currentTarget.closest<HTMLElement>(".luke-tab") ?? event.currentTarget);
@@ -525,16 +534,30 @@ export function Tab({
       }}
     >
       {glyph}
-      <span ref={words} className="luke-tab-label" data-overflow={String(clipped)}>
+      <span
+        ref={words}
+        className="luke-tab-label overflow-hidden whitespace-nowrap"
+        data-overflow={String(clipped)}
+      >
         {label}
         {detail === undefined ? null : (
           <>
             {" "}
-            <span className="luke-tab-detail">{detail}</span>
+            <span className="luke-tab-detail text-muted-foreground">{detail}</span>
           </>
         )}
       </span>
-      {endMark === undefined ? null : <span className="luke-tab-end-mark">{endMark}</span>}
+      {endMark === undefined ? null : (
+        <span
+          className={cn(
+            "luke-tab-end-mark",
+            END_SLOT,
+            "size-(--luke-tab-close) items-center justify-center",
+          )}
+        >
+          {endMark}
+        </span>
+      )}
     </button>
   );
   const hung =
@@ -547,11 +570,9 @@ export function Tab({
     );
   return (
     <div
-      className="luke-tab"
+      className={PILL}
       data-selected={String(selected)}
       data-closable={String(onClose !== undefined)}
-      data-quiet={String(quiet)}
-      data-anchored={String(anchored)}
       data-preview={String(preview)}
       data-unread={String(unread)}
       data-marked={String(endMark !== undefined)}
@@ -559,20 +580,22 @@ export function Tab({
       {editor === undefined ? (
         hung
       ) : (
-        <span className="luke-tab-button" data-editing="true">
+        <span className={TAB_BUTTON} data-editing="true">
           {glyph}
-          <span className="luke-tab-rename">{editor}</span>
+          <span className="luke-tab-rename grid w-[24ch] min-w-0">{editor}</span>
         </span>
       )}
       {onClose === undefined || editor !== undefined ? null : (
-        <span className="luke-tab-close">
-          <IconButton
-            icon={<CloseIcon />}
-            label={`Close ${label}`}
-            size={BUTTON_SIZE.COMPACT}
-            tabbable={false}
-            onClick={onClose}
-          />
+        <span className={cn("luke-tab-close", END_SLOT)}>
+          <Tooltip label={`Close ${label}`} command={selected ? APP_COMMAND.CLOSE_TAB : undefined}>
+            <IconButton
+              icon={<CloseIcon />}
+              label={`Close ${label}`}
+              size={BUTTON_SIZE.COMPACT}
+              tabbable={false}
+              onClick={onClose}
+            />
+          </Tooltip>
         </span>
       )}
     </div>
@@ -588,7 +611,11 @@ export function TabCards({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="luke-tab-cards" role="listbox" aria-label={label}>
+    <div
+      className="luke-tab-cards flex gap-2 p-3 overflow-x-auto"
+      role="listbox"
+      aria-label={label}
+    >
       {children}
     </div>
   );
@@ -639,7 +666,7 @@ export function TabCard({
       // the keys stay where they were while a switcher is held; one picked on
       // the click is a Tab stop, so the keys reach it.
       tabIndex={pickOnPress ? -1 : 0}
-      className="luke-tab-card"
+      className="luke-tab-card group/card flex w-[176px] min-w-0 flex-none flex-col gap-1 p-1.5 border border-solid border-transparent rounded-luke-10 cursor-default aria-[selected=true]:border-border-selected aria-[selected=true]:bg-fill-strong"
       data-here={here}
       onPointerEnter={onPoint}
       onPointerDown={
@@ -661,24 +688,31 @@ export function TabCard({
       }}
       onContextMenu={pickOnPress ? (event) => event.preventDefault() : undefined}
     >
-      <div className="luke-tab-card-preview ph-no-capture">
+      <div className="luke-tab-card-preview ph-no-capture flex h-[110px] items-center justify-center mb-0.5 border border-solid border-border rounded-luke-6 bg-surface overflow-hidden group-data-[here=true]/card:opacity-55">
         {still === undefined ? (
-          <span className="luke-tab-card-glyph">{icon}</span>
+          <span className="luke-tab-card-glyph inline-flex text-muted-foreground [--luke-glyph-size:28px] [&_:is(svg,img)]:size-[28px]">
+            {icon}
+          </span>
         ) : (
-          <img className="luke-tab-card-still" src={still} alt="" draggable={false} />
+          <img
+            className="luke-tab-card-still size-full object-cover object-left-top"
+            src={still}
+            alt=""
+            draggable={false}
+          />
         )}
       </div>
-      <div className="luke-tab-card-name">
+      <div className="luke-tab-card-name flex min-w-0 items-center gap-icon-gap px-0.5 whitespace-nowrap [--luke-glyph-size:var(--luke-menu-glyph)] [&>:is(svg,img)]:size-menu-glyph [&>:is(svg,img)]:flex-none [&>.luke-text]:min-w-0 [&>.luke-text]:flex-auto [&>.luke-text]:overflow-hidden [&>.luke-text]:text-ellipsis">
         {icon}
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
           {label}
         </Text>
       </div>
-      <div className="luke-tab-card-detail">
+      <div className="luke-tab-card-detail flex items-center gap-1 whitespace-nowrap [&>.luke-text]:min-w-0 [&>.luke-text]:overflow-hidden [&>.luke-text]:text-ellipsis">
         {detail === undefined ? null : (
           <>
             {detailIcon}
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {detail}
             </Text>
           </>

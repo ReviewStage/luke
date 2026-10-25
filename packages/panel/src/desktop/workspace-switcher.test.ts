@@ -185,9 +185,7 @@ test("New workspace asks a name and creates it, and a refusal is said on the car
   open(page.switcher());
   const offered = menuItems().map(labelOf);
   choose("New workspace");
-  const field =
-    document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]') ??
-    assert.fail("no name field");
+  const field = nameInput() ?? assert.fail("no name field");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(field, "  Platform  ");
@@ -197,22 +195,20 @@ test("New workspace asks a name and creates it, and a refusal is said on the car
   await act(async () => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
-  const refused = document.querySelector('[role="alertdialog"] [role="alert"]')?.textContent;
+  const refused = document.querySelector(
+    '[role="dialog"] [data-slot="field-error"]:not(:empty)',
+  )?.textContent;
   refusal = undefined;
-  const create = [
-    ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
-  ].find((button) => button.textContent === "Create workspace");
+  const create = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+    (button) => button.textContent === "Create workspace",
+  );
   assert.ok(create, "the card offers Create workspace");
   await act(async () => create.click());
 
   assert.deepEqual(offered, ["Personal", "New workspace", "Workspace settings"]);
   assert.deepEqual(asked, ["Platform", "Platform"]);
   assert.equal(refused, "Could not make that workspace on this system.");
-  assert.equal(
-    document.querySelector('[role="alertdialog"]'),
-    null,
-    "a workspace made closes the card",
-  );
+  assert.equal(document.querySelector('[role="dialog"]'), null, "a workspace made closes the card");
 });
 
 test("no workspace listed draws no head, as before the workspaces are read or once signed out", () => {
@@ -232,13 +228,20 @@ test("the workspace menu closes when the sidebar folds away", () => {
   assert.deepEqual(menuItems(), []);
 });
 
+/** The name field of the open New workspace card, found by the visible label that names it. */
+function nameInput(): HTMLInputElement | null {
+  const label = [...document.querySelectorAll<HTMLLabelElement>('[role="dialog"] label')].find(
+    (candidate) => candidate.textContent === "Workspace name",
+  );
+  const input = label === undefined ? null : document.getElementById(label.htmlFor);
+  return input instanceof HTMLInputElement ? input : null;
+}
+
 /** Opens New workspace and types `name` into its field, which it answers. */
 function nameWorkspace(page: { switcher: () => HTMLButtonElement | null }, name: string) {
   open(page.switcher());
   choose("New workspace");
-  const field =
-    document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]') ??
-    assert.fail("no name field");
+  const field = nameInput() ?? assert.fail("no name field");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(field, name);
@@ -254,39 +257,41 @@ test("a name typed after a refusal keeps the card up, takes the refusal away, an
     workspace: PERSONAL,
     onCreateWorkspace: (name) => {
       asked.push(name);
-      return Promise.resolve(undefined);
+      return Promise.resolve(name === "Taken" ? "That name is taken." : undefined);
     },
   });
-  const field = nameWorkspace(page, "");
+  const field = nameWorkspace(page, "Taken");
   await act(async () => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
-  const refused = document.querySelector('[role="alertdialog"] [role="alert"]')?.textContent;
+  const refused = document.querySelector(
+    '[role="dialog"] [data-slot="field-error"]:not(:empty)',
+  )?.textContent;
 
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(field, "P");
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  const typed = document.querySelector<HTMLInputElement>(
-    '[role="alertdialog"] input[aria-label="Workspace name"]',
-  )?.value;
-  const refusalAfterTyping = document.querySelector('[role="alertdialog"] [role="alert"]');
+  const typed = nameInput()?.value;
+  const refusalAfterTyping = document.querySelector(
+    '[role="dialog"] [data-slot="field-error"]:not(:empty)',
+  );
   await act(async () => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
 
-  assert.equal(refused, "Name the workspace.");
+  assert.equal(refused, "That name is taken.");
   assert.equal(typed, "P", "the card stays up with what was typed");
   assert.equal(refusalAfterTyping, null);
-  assert.deepEqual(asked, ["P"]);
+  assert.deepEqual(asked, ["Taken", "P"]);
 });
 
 test("New workspace opens on an empty name each time, so a cancelled name is not offered again", () => {
   const page = mount({ workspaces: [PERSONAL], workspace: PERSONAL });
   nameWorkspace(page, "Platform");
   const cancel =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
       (button) => button.textContent === "Cancel",
     ) ?? assert.fail("no Cancel");
   act(() => cancel.click());
@@ -294,10 +299,7 @@ test("New workspace opens on an empty name each time, so a cancelled name is not
   open(page.switcher());
   choose("New workspace");
 
-  assert.equal(
-    document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]')?.value,
-    "",
-  );
+  assert.equal(nameInput()?.value, "");
 });
 
 test("Enter while an input method composes creates nothing, and a press dragged from the field onto the dimmed window cancels nothing", async () => {
@@ -325,7 +327,7 @@ test("Enter while an input method composes creates nothing, and a press dragged 
   });
 
   assert.deepEqual(asked, []);
-  assert.ok(document.querySelector('[role="alertdialog"]'), "the card still stands");
+  assert.ok(document.querySelector('[role="dialog"]'), "the card still stands");
 });
 
 test("each workspace in the menu wears its tile, its first letter, and a rename keeps the tile's hue", () => {

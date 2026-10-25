@@ -1,4 +1,4 @@
-import { matchRanges } from "@luke/ui/search-tokens";
+import { type MatchRange, matchRanges } from "@luke/ui/search-tokens";
 import { focusSeek } from "./focus-seek.js";
 
 /**
@@ -29,18 +29,21 @@ export function focusSearchField(
 
 /**
  * One drawn line with the query's words marked where they landed, so a
- * result says why it matched. A line the words did not land on is returned as
- * it was.
+ * result says why it matched: the stretches a search hit gave (`ranges`,
+ * `@luke/ui/search-score`), or else wherever the words typed (`tokens`)
+ * stand in it. A line the words did not land on is returned as it was.
  */
 export function Highlighted({
   text,
   tokens,
+  ranges: given,
 }: {
   text: string;
   tokens?: readonly string[] | undefined;
+  /** The stretches to mark, where a scorer said them, in place of the words' own. */
+  ranges?: readonly MatchRange[] | undefined;
 }): React.JSX.Element {
-  if (!tokens || tokens.length === 0) return <>{text}</>;
-  const ranges = matchRanges(text, tokens);
+  const ranges = given ?? (tokens === undefined ? [] : matchRanges(text, tokens));
   if (ranges.length === 0) return <>{text}</>;
   const parts: React.ReactNode[] = [];
   let from = 0;

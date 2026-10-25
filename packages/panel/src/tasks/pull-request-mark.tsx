@@ -4,13 +4,13 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
-import { CHIP_TONE, type ChipTone } from "@luke/ui";
+import { STATUS_TONE, type StatusTone } from "@luke/ui";
 import {
   GitMergeIcon,
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
 import { pullRequestNumberLabel, pullRequestPillLabel } from "./coding-agent-model.js";
 
 /**
@@ -22,7 +22,8 @@ import { pullRequestNumberLabel, pullRequestPillLabel } from "./coding-agent-mod
  * the same in all of them: open in the success green, a draft in the
  * muted ink, merged in the merged purple, and closed in the danger red. An
  * open one GitHub holds in its merge queue is drawn as its Pull request
- * tab's pill draws it: the merge's glyph in the attention tone, said queued.
+ * tab's pill draws it: the merge's glyph in the attention orange, said queued,
+ * so its words, not its colour alone, tell it from a merged one.
  * Its checks never change its colour: failed checks are said in its words
  * for a reader who cannot see it, and drawn where the checks themselves
  * are. The colour is the stylesheet's, keyed on
@@ -30,24 +31,25 @@ import { pullRequestNumberLabel, pullRequestPillLabel } from "./coding-agent-mod
  * says the same in the shared palette's tone for it (`PULL_REQUEST_TONE`).
  */
 
-/** The glyph a pull request is drawn with for where it stands, as GitHub draws it. */
+/** What a mark is drawn and coloured for: where the pull request stands, or queued for an open one in the merge queue. */
+export const PULL_REQUEST_MARK_QUEUED = "queued";
+
+/** The glyph a pull request is drawn with for where it stands, as GitHub draws it; a queued one wears the merge's. */
 const PULL_REQUEST_GLYPH = {
   [PULL_REQUEST_STATE.OPEN]: GitPullRequestIcon,
   [PULL_REQUEST_STATE.DRAFT]: GitPullRequestDraftIcon,
   [PULL_REQUEST_STATE.MERGED]: GitMergeIcon,
   [PULL_REQUEST_STATE.CLOSED]: GitPullRequestClosedIcon,
+  [PULL_REQUEST_MARK_QUEUED]: GitMergeIcon,
 } as const;
 
 /** The chip tone a pull request is named in for where it stands: GitHub's colour for it, in the shared palette. */
 export const PULL_REQUEST_TONE = {
-  [PULL_REQUEST_STATE.OPEN]: CHIP_TONE.COMPLETE,
-  [PULL_REQUEST_STATE.DRAFT]: CHIP_TONE.NEUTRAL,
-  [PULL_REQUEST_STATE.MERGED]: CHIP_TONE.MERGED,
-  [PULL_REQUEST_STATE.CLOSED]: CHIP_TONE.DANGER,
-} as const satisfies Record<PullRequestState, ChipTone>;
-
-/** What a mark is drawn and coloured for: where the pull request stands, or queued for an open one in the merge queue. */
-export const PULL_REQUEST_MARK_QUEUED = "queued";
+  [PULL_REQUEST_STATE.OPEN]: STATUS_TONE.COMPLETE,
+  [PULL_REQUEST_STATE.DRAFT]: STATUS_TONE.NEUTRAL,
+  [PULL_REQUEST_STATE.MERGED]: STATUS_TONE.MERGED,
+  [PULL_REQUEST_STATE.CLOSED]: STATUS_TONE.DANGER,
+} as const satisfies Record<PullRequestState, StatusTone>;
 
 /** Where a pull request's mark says it stands: queued where it is open and the merge queue holds it, else where it stands. */
 export function pullRequestMarkState(
@@ -86,7 +88,7 @@ export function PullRequestMark({
   className?: string;
 }): React.JSX.Element {
   const state = pullRequestMarkState(pullRequest);
-  const Glyph = state === PULL_REQUEST_MARK_QUEUED ? GitMergeIcon : PULL_REQUEST_GLYPH[state];
+  const Glyph = PULL_REQUEST_GLYPH[state];
   return (
     <Glyph
       className={className === undefined ? "pull-request-mark" : `pull-request-mark ${className}`}

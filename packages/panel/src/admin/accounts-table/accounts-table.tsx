@@ -1,5 +1,6 @@
+import { formatCount } from "@luke/features/number-format";
+import { formatDayTick } from "@luke/features/time-format";
 import {
-  BADGE_TONE,
   Badge,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -9,12 +10,14 @@ import {
   Inline,
   SKELETON_SHAPE,
   Skeleton,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextButton,
   TextLink,
+  Tooltip,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import {
@@ -26,7 +29,7 @@ import {
   nextSort,
   sortAccountsRows,
 } from "@luke/ui/accounts-sort";
-import { formatCount, formatDayTick } from "@luke/ui/time-format";
+import { StarIcon } from "@luke/ui/icons";
 import { useState } from "react";
 import { useAdminDoorsIfAny } from "../admin-doors.js";
 import { AccountAvatar } from "../chrome/page-header.js";
@@ -65,21 +68,6 @@ interface AccountsFavorite<Row> {
   onToggle: (id: string, favorite: boolean) => void;
 }
 
-function StarIcon({ filled }: { filled: boolean }): React.JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill={filled ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M8 1.9l1.87 3.79 4.18.61-3.02 2.95.71 4.16L8 11.44l-3.74 1.97.71-4.16-3.02-2.95 4.18-.61L8 1.9z" />
-    </svg>
-  );
-}
-
 /** The leading star column, whose press asks to star or unstar a row's account. */
 function favoriteColumn<Row extends AccountsTableRow>(
   favorite: AccountsFavorite<Row>,
@@ -88,14 +76,19 @@ function favoriteColumn<Row extends AccountsTableRow>(
     key: FAVORITE_COLUMN,
     label: "Favorite",
     kind: DATA_TABLE_COLUMN_KIND.MARK,
-    cell: (row) => (
-      <IconButton
-        icon={<StarIcon filled={favorite.starred(row)} />}
-        label={`${favorite.starred(row) ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
-        pressed={favorite.starred(row)}
-        onClick={() => favorite.onToggle(row.id, !favorite.starred(row))}
-      />
-    ),
+    cell: (row) => {
+      const label = `${favorite.starred(row) ? "Unfavorite" : "Favorite"} ${row.name || row.email}`;
+      return (
+        <Tooltip label={label}>
+          <IconButton
+            icon={<StarIcon fill={favorite.starred(row) ? "currentColor" : "none"} />}
+            label={label}
+            pressed={favorite.starred(row)}
+            onClick={() => favorite.onToggle(row.id, !favorite.starred(row))}
+          />
+        </Tooltip>
+      );
+    },
   };
 }
 
@@ -167,7 +160,7 @@ export function AccountCell({
           <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
             {accountLabel(account)}
           </Text>
-          {account.admin ? <Badge tone={BADGE_TONE.NEUTRAL}>Admin</Badge> : null}
+          {account.admin ? <Badge tone={STATUS_TONE.NEUTRAL}>Admin</Badge> : null}
         </Inline>
       }
       email={

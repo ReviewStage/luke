@@ -7,7 +7,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { HISTORY_READ, type PlanHistoryControl } from "../tasks/use-plan-history.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -39,7 +39,7 @@ afterEach(() => {
 });
 
 /** The plan's version history over the window, its list as `list` says. */
-function drawn(list: PlanHistoryControl["list"]): HTMLElement {
+function drawn(list: PlanHistoryControl["list"], room: ShellRoom = SHELL_ROOM.WIDE): HTMLElement {
   const base = tasksControl();
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -63,7 +63,7 @@ function drawn(list: PlanHistoryControl["list"]): HTMLElement {
           onResize: ignore,
           staged: false,
         },
-        room: SHELL_ROOM.WIDE,
+        room,
         history: {
           canGoBack: false,
           canGoForward: false,
@@ -116,6 +116,15 @@ test("while the versions are read, each placeholder row stands a version's own p
 
 test("while the version it opens on is found, the page's bar stands blocks where its moment and its Restore will", () => {
   const page = drawn({ kind: HISTORY_READ.READING }).querySelector(".version-page");
-  assert.ok(page?.querySelector(".desktop-toolbar-title .luke-skeleton"), "the moment's place");
-  assert.ok(page?.querySelector(".desktop-toolbar-actions .luke-skeleton"), "Restore's place");
+  assert.ok(page?.querySelector(".luke-toolbar-title .luke-skeleton"), "the moment's place");
+  assert.ok(page?.querySelector(".luke-toolbar-actions .luke-skeleton"), "Restore's place");
+});
+
+test("in a narrow room the page's bar is led by the way back to the list, which stands at the column's own edge", () => {
+  const page = drawn({ kind: HISTORY_READ.READING }, SHELL_ROOM.NARROW).querySelector(
+    ".version-page",
+  );
+  const banner = page?.querySelector("header.luke-toolbar");
+  assert.equal(banner?.getAttribute("data-start"), "column");
+  assert.ok(banner?.querySelector(".luke-toolbar-lead button"), "the way back leads the bar");
 });

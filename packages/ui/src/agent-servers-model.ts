@@ -13,6 +13,7 @@ import {
   type IntegrationStatus,
   integrationAccountNames,
 } from "@luke/features/integration-wire";
+import { INTEGRATION_LABEL, readFailedWords } from "@luke/features/words";
 import { matchIntegration } from "./integration-search.js";
 import { searchTokens } from "./search-tokens.js";
 
@@ -73,11 +74,11 @@ type ServerRowKind = (typeof SERVER_ROW)[keyof typeof SERVER_ROW];
 export const SERVER_ACTION = {
   CONNECT: "Connect",
   RECONNECT: "Reconnect",
-  RETRY: "Try again",
+  RETRY: "Retry",
 } as const;
 
 /** What the popover and its button are called. */
-export const SERVERS_LABEL = "MCP servers";
+export const SERVERS_LABEL = INTEGRATION_LABEL.many;
 
 /** One server's row. */
 export interface ServerRow {
@@ -96,6 +97,8 @@ export interface ServerRow {
   readonly tools?: readonly IntegrationTool[];
   /** Why a connected server lists no tools, where it answered why, or why its sign-in failed. */
   readonly problem?: string;
+  /** The server's or the sign-in's own words behind `problem`, quoted and naming who said them, where they said any. */
+  readonly said?: string;
   /** Where a sign-in stands that is no problem: waiting on the browser, or never finished. */
   readonly note?: string;
 }
@@ -131,19 +134,45 @@ function kindOf(
   }
 }
 
+/** Someone else's words behind a row's problem, where there are any. */
+function saidOf(said: string | undefined): Pick<ServerRow, "said"> {
+  return said === undefined ? {} : { said };
+}
+
 /** What a row says of where it stands in words: a connected server's problem, or its sign-in's line. */
 function wordsOf(
   provider: IntegrationProvider,
   status: IntegrationStatus | undefined,
   health: ConnectionHealth,
   signIn: SignIn | undefined,
-): Pick<ServerRow, "problem" | "note"> | undefined {
+): Pick<ServerRow, "problem" | "said" | "note"> | undefined {
   if (status === INTEGRATION_STATUS.CONNECTED) {
-    return health.kind === CONNECTION_HEALTH.BROKEN ? { problem: health.problem } : undefined;
+    if (health.kind === CONNECTION_HEALTH.BROKEN) {
+      return { problem: health.problem, ...saidOf(health.said) };
+    }
+    // Note that a read Luke's own service could not answer is said, never drawn as a server that works.
+    return health.kind === CONNECTION_HEALTH.FAILED
+      ? { problem: readFailedWords("the tools") }
+      : undefined;
   }
   if (signIn === undefined) return undefined;
-  const { text, problem } = signInLine(provider, signIn);
-  return problem ? { problem: text } : { note: text };
+  const { text, problem, said } = signInLine(provider, signIn);
+  return problem ? { problem: text, ...saidOf(said) } : { note: text };
+}
+
+/**
+ * A server's name as its row and card say it: its provider's, and where the
+ * provider holds more than one account, the account's name after it.
+ */
+export function serverName(
+  provider: IntegrationProvider,
+  connection: string,
+  accounts: readonly IntegrationAccount[],
+): string {
+  const named = integrationAccountNames(accounts).get(connection);
+  return named !== undefined && accounts.length > 1
+    ? `${INTEGRATION_NAME[provider]} · ${named}`
+    : INTEGRATION_NAME[provider];
 }
 
 /**
@@ -168,7 +197,6 @@ export function serverRows(input: {
   );
   return offered.flatMap((provider) => {
     const accounts = input.accountsOf?.(provider) ?? [];
-    const names = integrationAccountNames(accounts);
     const servers = accounts.length > 0 ? accounts : [undefined];
     return servers.map((account): ServerRow => {
       const connection = account?.connection ?? provider;
@@ -176,16 +204,12 @@ export function serverRows(input: {
       const health = input.healthOf(connection);
       const signIn = input.signInOf(connection);
       const connected = status === INTEGRATION_STATUS.CONNECTED;
-      const named = names.get(connection);
       return {
         provider,
         connection,
         ...(account !== undefined ? { account } : undefined),
         accounts: accounts.length,
-        name:
-          named !== undefined && accounts.length > 1
-            ? `${INTEGRATION_NAME[provider]} · ${named}`
-            : INTEGRATION_NAME[provider],
+        name: serverName(provider, connection, accounts),
         kind: kindOf(status, health, signIn, input.readFailed),
         on: !input.disabled.includes(connection),
         ...(connected && health.kind === CONNECTION_HEALTH.WORKING
@@ -357,7 +381,7 @@ export const SERVER_MENTION_NOTE = {
   OFF_STEERS:
     "Off for this agent. Sent into a turn under way, this message hands it to the next turn alone; the switch stays off.",
   NOT_CONNECTED: "Not connected, so no agent is handed it.",
-  EXPIRED: "Its sign-in expired, so a call to it asks for it to be reconnected first.",
+  EXPIRED: "Sign-in expired. A call to it asks you to reconnect it first.",
 } as const;
 
 /**

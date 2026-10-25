@@ -122,15 +122,15 @@ test("the pointer moves the highlight, and a press chooses the row", () => {
 test("a menu with nothing left in it says so", () => {
   const { menu } = mount([{ label: BLOCK_MENU_GROUP.BASIC, rows: [] }]);
   expect(rows(menu)).toEqual([]);
-  expect(menu.textContent).toContain("Nothing matches");
+  expect(menu.textContent).toContain("No blocks match");
 });
 
 test("its foot names the keys it hears, and is read by nobody", () => {
   const { menu } = mount(GROUPS);
   const foot = menu.querySelector('[aria-hidden="true"]:has(kbd)');
   expect([...(foot?.children ?? [])].map((key) => key.textContent)).toEqual([
-    "↑↓ Move",
-    "↵ Insert",
-    "esc Close",
+    "↑↓Move",
+    "⏎⇥Insert",
+    "EscClose",
   ]);
 });

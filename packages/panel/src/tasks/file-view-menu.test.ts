@@ -15,10 +15,11 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { onPhone } from "../testing/phone-tab.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { installScrollTo, wholeFileDrawn, wholeFileRoot } from "../testing/whole-file.js";
 import { WHOLE_TEXT } from "./file-tab-model.js";
-import { FileView, FileViewMenu } from "./file-view.js";
+import { FileView, FileViewBar, useFileViewEnd } from "./file-view.js";
 import { WholeFile } from "./whole-file.js";
 
 const PATH = "src/billing/plan.ts";
@@ -69,6 +70,16 @@ function drawnLines(container: HTMLElement) {
   };
 }
 
+/** A File tab's bar with the end its tab hands it. */
+function Bar(): React.JSX.Element {
+  const end = useFileViewEnd({
+    path: PATH,
+    ready: true,
+    readText: () => Promise.resolve({ kind: WHOLE_TEXT.READ, text: "" }),
+  });
+  return createElement(FileViewBar, { lead: null, github: undefined, ...end });
+}
+
 /** Draws the bar's end beside the look the tab's lines follow. */
 function mount(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
@@ -78,16 +89,7 @@ function mount(): HTMLElement {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(
-          "div",
-          null,
-          createElement(FileViewMenu, {
-            path: PATH,
-            ready: true,
-            readText: () => Promise.resolve({ kind: WHOLE_TEXT.READ, text: "" }),
-          }),
-          createElement(DrawnLines),
-        ),
+        createElement("div", null, createElement(Bar), createElement(DrawnLines)),
       ),
     ),
   );
@@ -105,11 +107,11 @@ function press(container: HTMLElement, name: string): void {
 test("View settings on a File tab offers its lines' wrap, numbers, minimized notes, syntax theme, and type, and each is drawn on its lines at once", async () => {
   const container = mount();
   await wholeFileDrawn(container);
-  press(container, "View settings");
+  press(container, "View options");
   const popover = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
 
   assert.deepEqual(
-    [...popover.querySelectorAll("h3")].map((heading) => heading.textContent),
+    [...popover.querySelectorAll("section h2")].map((heading) => heading.textContent),
     ["Lines", "Text"],
   );
   assert.deepEqual(
@@ -224,4 +226,75 @@ test("Copy file contents copies the text the tab draws, read at its commit, rath
 
   assert.deepEqual(copied, ["const seats = 3;\n"]);
   assert.equal(asked.length, 2, "nothing more is read for the copy");
+});
+
+test("on a phone a File tab draws no bar, and the task's header's ⋯ offers every control of it, the tree standing for the path's crumbs", async () => {
+  installScrollTo();
+  fakeAppPlatform(copyingInto([]));
+  const steps: string[] = [];
+  const opened: string[] = [];
+  const readFile = (request: TaskFileRequest): Promise<TasksFileAnswer> =>
+    Promise.resolve(
+      request.raw === true
+        ? { text: { path: PATH, repository: "acme/relay", branch: "main", text: "x\n" } }
+        : {
+            file: {
+              path: PATH,
+              repository: "acme/relay",
+              branch: "main",
+              commit: HEAD,
+              firstLine: 1,
+              lineCount: 1,
+              lines: ["x"],
+            },
+          },
+    );
+  const { element, handed } = onPhone(
+    createElement(FileView, {
+      taskId: "task-1",
+      repository: "acme/relay",
+      file: { path: PATH, range: undefined, opened: 1 },
+      snippet: undefined,
+      shownCode: [],
+      readFile,
+      readFolder: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+      readWhole: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+      openGitHub: (url) => opened.push(url),
+      treeOpen: false,
+      onToggleTree: () => undefined,
+      onBrowse: () => undefined,
+      history: { canGoBack: true, canGoForward: false, onStep: (step) => steps.push(step) },
+      onFoldNote: () => undefined,
+    }),
+  );
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  await wholeFileDrawn(container);
+
+  assert.equal(container.querySelector(".file-view-bar"), null);
+  assert.deepEqual(handed.labels(), [
+    "Back",
+    "Forward",
+    "Show files",
+    "Open on GitHub",
+    "View options",
+    "Copy file name",
+    "Copy path",
+    "Copy file contents",
+    "Download file",
+  ]);
+  assert.deepEqual(handed.item("Forward"), { disabled: true });
+  assert.deepEqual(handed.item("Show files"), { disabled: false, detail: PATH });
+
+  handed.press("Back");
+  handed.press("Open on GitHub");
+  assert.deepEqual(steps, ["back"]);
+  assert.equal(opened.length, 1, "the file opens on GitHub");
+
+  handed.press("Show files");
+  assert.ok(handed.labels().includes("Hide files"), "the tree floats over the file");
+  const floated = container.querySelector('.luke-over-pane[aria-label="Files"]');
+  assert.equal(floated?.getAttribute("data-state"), "open", "the tree floats open over the file");
 });

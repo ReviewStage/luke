@@ -14,8 +14,8 @@
      its own (`.luke-markdown-heading`), so only a document's real headings
      take these. */
   .luke-prose :is(h1, h2, h3) {
-    font-weight: var(--luke-weight-semibold);
-    letter-spacing: -0.01em;
+    font-weight: var(--luke-type-section-weight);
+    letter-spacing: var(--luke-type-title-tracking);
   }
 
   /* The user agent's markers, discs then circles down a nesting, which the
@@ -96,8 +96,8 @@
   }
 
   .luke-markdown-heading {
-    font-weight: var(--luke-weight-semibold);
-    letter-spacing: -0.01em;
+    font-weight: var(--luke-type-section-weight);
+    letter-spacing: var(--luke-type-title-tracking);
   }
 
   .luke-markdown-heading[data-level="1"] {
@@ -115,7 +115,7 @@
   /* A code span is the prose one above, on the note's own tint, a step
      heavier because the thread's words are small. */
   .luke-markdown code {
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
     letter-spacing: 0;
   }
 
@@ -137,7 +137,7 @@
   /* A fence's code drops the span's dress, as the prose's does above. */
   .luke-markdown pre code {
     display: block;
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-body-weight);
     line-height: var(--luke-type-reading-leading);
     white-space: pre;
   }
@@ -249,7 +249,7 @@
 
   .luke-markdown th {
     opacity: 0.8;
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   .luke-markdown tbody tr:last-child td {
@@ -292,8 +292,8 @@
     margin: 0 0 var(--luke-space-32);
     font-size: var(--luke-type-title-size);
     line-height: var(--luke-type-title-leading);
-    font-weight: var(--luke-weight-bold);
-    letter-spacing: -0.02em;
+    font-weight: var(--luke-type-title-weight);
+    letter-spacing: var(--luke-type-title-tracking);
   }
 
   .luke-prose-document h2 {

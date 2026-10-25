@@ -55,7 +55,7 @@ import { SqlSchema } from "effect/sql";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { lastNDayKeys } from "./admin-metrics.js";
 import { ACCOUNT_FACE_COLUMNS, ACCOUNT_FACE_FIELDS } from "./admin-queries.js";
-import { searchLikePattern } from "./admin-users.js";
+import { searchLikePatterns } from "./admin-users.js";
 import {
   ADMIN_WORKSPACES_ACTIVITY_DAYS,
   ADMIN_WORKSPACES_LIMIT,
@@ -150,7 +150,9 @@ function keptByFilter(filter: WorkspaceFilter): SQL | undefined {
   return and(
     keptByScope(filter.scope),
     filter.kind === ADMIN_WORKSPACES_KIND.ALL ? undefined : SHARED,
-    filter.search === null ? undefined : ilike(WORKSPACE_NAME, searchLikePattern(filter.search)),
+    ...(filter.search === null
+      ? []
+      : searchLikePatterns(filter.search).map((pattern) => ilike(WORKSPACE_NAME, pattern))),
   );
 }
 

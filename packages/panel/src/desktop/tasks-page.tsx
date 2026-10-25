@@ -3,10 +3,10 @@ import {
   CHOICE_BAR_LOOK,
   CHOICE_BAR_SIZE,
   ChoiceBar,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
-  PageToolbar,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  Toolbar,
 } from "@luke/ui";
 import {
   BOARD_PROPERTIES,
@@ -26,14 +26,14 @@ import {
   type TasksDisplay,
   type TasksFilter,
 } from "@luke/ui/tasks-page-model";
-import { Schema } from "effect";
+import { Schema, SchemaTransformation } from "effect";
 import { KanbanIcon, ListFilterIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
-import { useState } from "react";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
-import { readKept, writeKept } from "../kept-storage.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { keptKey, useKept } from "../use-kept.js";
+import { storedScrolls, useKeptScroll } from "../use-kept-scroll.js";
 import { NewTaskButton } from "./new-task-button.js";
 import { PhoneHead, PlaceMore, useMenuAsk } from "./phone-head.js";
 import { TasksBoard } from "./tasks-board.js";
@@ -59,7 +59,8 @@ import {
  * The filter is the page's, one for both views and one for each workspace,
  * since a creator and a repository are a workspace's own; each view keeps a
  * display of its own (`tasks-page-model.ts`). Which view it shows, the
- * filter, and both displays are kept on this Mac.
+ * filter, both displays, and where each view stood scrolled when the reader
+ * left it are kept on this Mac.
  *
  * The List is `tasks-list.tsx`, and the Board `tasks-board.tsx`. A display
  * is kept with the properties its view offered then, so a property a view
@@ -77,14 +78,6 @@ export const TASKS_VIEW = {
 } as const;
 
 export type TasksView = (typeof TASKS_VIEW)[keyof typeof TASKS_VIEW];
-
-/** Where the view shown last, the filters (each workspace's by its id), and each view's display are kept in the renderer's storage. */
-const VIEW_KEY = "luke.tasksPageView";
-const FILTER_KEY = "luke.tasksFilter";
-const DISPLAY_KEY = {
-  [TASKS_VIEW.LIST]: "luke.tasksListDisplay",
-  [TASKS_VIEW.BOARD]: "luke.tasksBoardDisplay",
-} as const satisfies Record<TasksView, string>;
 
 const storedView = Schema.fromJsonString(Schema.Literals(Object.values(TASKS_VIEW)));
 
@@ -137,7 +130,33 @@ const INITIAL_DISPLAY = {
   [TASKS_VIEW.BOARD]: DEFAULT_BOARD_DISPLAY,
 } as const satisfies Record<TasksView, TasksDisplay>;
 
-/** The List | Board switch beside the page's title. */
+/** A view's display as kept, over its own initial one; its own where none was kept. A property the view offered only since it was kept stands as its own display draws it, and one kept is kept with the properties its view offers now. */
+function storedDisplayOf(view: TasksView) {
+  return storedDisplay.pipe(
+    Schema.decodeTo(
+      Schema.declare(
+        (display): display is TasksDisplay => typeof display === "object" && display !== null,
+      ),
+      SchemaTransformation.transform({
+        decode: (kept) => keptTasksDisplay(kept, INITIAL_DISPLAY[view], EARLIER_OFFERED[view]),
+        encode: (display) => ({ ...display, offered: OFFERED[view] }),
+      }),
+    ),
+  );
+}
+
+/** Where the view shown last, the filters (each workspace's by its id), each view's display, and where each view stood scrolled when the reader left it, by the view's name, are kept on this Mac. */
+const KEPT = {
+  VIEW: keptKey("luke.tasksPageView", storedView),
+  FILTERS: keptKey("luke.tasksFilter", storedFilters),
+  DISPLAY: {
+    [TASKS_VIEW.LIST]: keptKey("luke.tasksListDisplay", storedDisplayOf(TASKS_VIEW.LIST)),
+    [TASKS_VIEW.BOARD]: keptKey("luke.tasksBoardDisplay", storedDisplayOf(TASKS_VIEW.BOARD)),
+  },
+  SCROLLS: keptKey("luke.tasksScroll", storedScrolls),
+} as const;
+
+/** The List | Columns switch beside the page's title. */
 function ViewSwitch({
   view,
   onView,
@@ -150,7 +169,7 @@ function ViewSwitch({
       label="Tasks view"
       items={[
         { value: TASKS_VIEW.LIST, label: "List" },
-        { value: TASKS_VIEW.BOARD, label: "Board" },
+        { value: TASKS_VIEW.BOARD, label: "Columns" },
       ]}
       value={view}
       look={CHOICE_BAR_LOOK.SEGMENTED}
@@ -158,12 +177,6 @@ function ViewSwitch({
       onChange={onView}
     />
   );
-}
-
-/** A view's display as kept, over its own initial one; its own where none was kept. A property the view offered only since it was kept stands as its own display draws it. */
-function readDisplay(view: TasksView): TasksDisplay {
-  const kept = readKept(DISPLAY_KEY[view], storedDisplay, {});
-  return keptTasksDisplay(kept, INITIAL_DISPLAY[view], EARLIER_OFFERED[view]);
 }
 
 /** The Tasks page, in the plan's place: the List or the Board, as the reader last chose, under its Filter and View options. */
@@ -174,32 +187,34 @@ export function TasksPage({
   tasks: TasksControl;
   room: ShellRoom;
 }): React.JSX.Element {
-  const [view, setView] = useState(() => readKept(VIEW_KEY, storedView, TASKS_VIEW.LIST));
-  const [displays, setDisplays] = useState(() => ({
-    [TASKS_VIEW.LIST]: readDisplay(TASKS_VIEW.LIST),
-    [TASKS_VIEW.BOARD]: readDisplay(TASKS_VIEW.BOARD),
-  }));
-  const [filters, setFilters] = useState<Readonly<Record<string, TasksFilter>>>(() =>
-    readKept(FILTER_KEY, storedFilters, {}),
+  const [view, keepView] = useKept(KEPT.VIEW, TASKS_VIEW.LIST);
+  const [listDisplay, onListDisplay] = useKept(
+    KEPT.DISPLAY[TASKS_VIEW.LIST],
+    INITIAL_DISPLAY[TASKS_VIEW.LIST],
+  );
+  const [boardDisplay, onBoardDisplay] = useKept(
+    KEPT.DISPLAY[TASKS_VIEW.BOARD],
+    INITIAL_DISPLAY[TASKS_VIEW.BOARD],
+  );
+  const [filters, , changeFilters] = useKept<Readonly<Record<string, TasksFilter>>>(
+    KEPT.FILTERS,
+    {},
   );
   const workspaceId = tasks.workspace?.id;
   const filter =
     workspaceId === undefined ? NO_TASKS_FILTER : (filters[workspaceId] ?? NO_TASKS_FILTER);
+  // Note that the record is read again before it is written, so another tab's filter for another workspace is kept, over this tab's own where storage keeps nothing.
   const onFilter = (next: TasksFilter) => {
     if (workspaceId === undefined) return;
-    // Note that the record is read again before it is written, so another tab's filter for another workspace is kept, over this tab's own where storage keeps nothing.
-    const kept = { ...filters, ...readKept(FILTER_KEY, storedFilters, {}), [workspaceId]: next };
-    setFilters(kept);
-    writeKept(FILTER_KEY, storedFilters, kept);
+    changeFilters((held) => ({ ...held, [workspaceId]: next }));
   };
-  const display = displays[view];
-  const onDisplay = (next: TasksDisplay) => {
-    setDisplays((held) => ({ ...held, [view]: next }));
-    writeKept(DISPLAY_KEY[view], storedDisplay, { ...next, offered: OFFERED[view] });
-  };
+  const display = view === TASKS_VIEW.LIST ? listDisplay : boardDisplay;
+  const onDisplay = view === TASKS_VIEW.LIST ? onListDisplay : onBoardDisplay;
+  // Note that each view stands where its reader left it, put back once as the page has its tasks and never as they refresh.
+  const scroll = useKeptScroll(KEPT.SCROLLS, view, tasks.listRead);
   const choose = (next: TasksView) => {
-    setView(next);
-    writeKept(VIEW_KEY, storedView, next);
+    scroll.keep();
+    keepView(next);
   };
   const shared = (tasks.workspace?.memberCount ?? 1) > 1;
   const listed = tasks.listed.tasks;
@@ -220,14 +235,23 @@ export function TasksPage({
       <PhoneHead
         place="tasks"
         start={<NewTaskButton tasks={tasks} />}
-        title={<h1 className="desktop-toolbar-title">{TASKS}</h1>}
+        title={
+          <Text
+            as={TEXT_ELEMENT.H1}
+            variant={TEXT_VARIANT.TOOLBAR_TITLE}
+            className="luke-toolbar-title"
+          >
+            {TASKS}
+          </Text>
+        }
         end={
           <PlaceMore
+            thing="Task list"
             shown={tasks.shown}
             groups={(opener) => [
               [
                 viewItem(TASKS_VIEW.LIST, "List", <ListIcon />),
-                viewItem(TASKS_VIEW.BOARD, "Board", <KanbanIcon />),
+                viewItem(TASKS_VIEW.BOARD, "Columns", <KanbanIcon />),
               ],
               [
                 {
@@ -271,19 +295,9 @@ export function TasksPage({
   const toolbar = phone ? (
     phoneHead
   ) : (
-    <PageToolbar
-      lead={
-        <div className="desktop-toolbar-heading tasks-page-heading">
-          <OneLine
-            as={ONE_LINE_ELEMENT.H1}
-            end={ONE_LINE_END.ELLIPSIS}
-            className="desktop-toolbar-title"
-          >
-            {TASKS}
-          </OneLine>
-          <ViewSwitch view={view} onView={choose} />
-        </div>
-      }
+    <Toolbar
+      title={TASKS}
+      tag={<ViewSwitch view={view} onView={choose} />}
       actions={
         <>
           <TasksFilterButton
@@ -308,7 +322,7 @@ export function TasksPage({
   );
   // Note that the line stands while nothing is filtered, hidden, so its first chip scales in and its last scales out.
   const chips = <TasksFilterChips tasks={listed} filter={filter} onFilter={onFilter} />;
-  const frame = { toolbar, chips, filter, display, onDisplay };
+  const frame = { toolbar, chips, filter, display, onDisplay, scroll: scroll.ref };
   // Note that find's subject is the view shown, so a search in one view is let go as the other is chosen.
   return (
     <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown}>
