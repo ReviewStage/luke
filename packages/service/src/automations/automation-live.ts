@@ -169,3 +169,54 @@ export function automationRunsLiveStatements(
     );
   return Option.map(liveStatementOf(statement), (runs) => ({ runs }));
 }
+
+/** The most runs a workspace's live runs hold, newest first. */
+export const AUTOMATION_WORKSPACE_RUNS_READ = 100;
+
+/** The statement a workspace's runs are subscribed to live. */
+export interface AutomationWorkspaceRunsLiveStatements {
+  readonly runs: LiveStatement;
+}
+
+/**
+ * The newest runs of the workspace's automations the account may read, each
+ * with its automation's id and name and its agent, written for Realtime; the
+ * reader keeps the order. Note that the newest are chosen among the readable
+ * automations' runs alone, so a teammate's busy personal automation never
+ * crowds the account's own out of the window.
+ */
+export function automationWorkspaceRunsLiveStatements(
+  userId: string,
+  workspaceId: string,
+): Option.Option<AutomationWorkspaceRunsLiveStatements> {
+  const readable = and(automationReadableBy(userId), eq(AUTOMATION_WORKSPACE, workspaceId));
+  const newest = queryBuilder
+    .select({ id: automationRun.id })
+    .from(automationRun)
+    .innerJoin(automation, eq(automation.id, automationRun.automationId))
+    .where(readable)
+    .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
+    .limit(AUTOMATION_WORKSPACE_RUNS_READ);
+  const latest = latestTurnOf(codingAgent.conversationId, "latest_turn");
+  const statement = queryBuilder
+    .select({
+      ...liveSelection(
+        {
+          id: automationRun.id,
+          firing: automationRun.firing,
+          status: automationRun.status,
+          reason: automationRun.reason,
+          automationId: automation.id,
+          automationName: automation.name,
+        },
+        { firedAt: automationRun.firedAt, settledAt: automationRun.settledAt },
+      ),
+      ...runAgentSelection(userId, latest),
+    })
+    .from(automationRun)
+    .innerJoin(automation, eq(automation.id, automationRun.automationId))
+    .leftJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+    .leftJoinLateral(latest, sql`true`)
+    .where(and(readable, inArray(automationRun.id, newest)));
+  return Option.map(liveStatementOf(statement), (runs) => ({ runs }));
+}

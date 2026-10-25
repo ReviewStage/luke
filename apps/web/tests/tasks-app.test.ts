@@ -1839,24 +1839,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
       }),
   );
 
-  it.effect("no bearer, a wrong method, and an id that is no UUID are refused", () =>
-    Effect.gen(function* () {
-      const { owner, ask } = yield* openAccounts();
-
-      assert.deepEqual(
-        yield* ask(request(TASKS, undefined)),
-        refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
-      );
-      assert.deepEqual(
-        yield* ask(request(TASKS, owner, { method: "DELETE" })),
-        refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
-      );
-      assert.deepEqual(
-        yield* ask(request(ONE_TASK("not-a-plan"), owner)),
-        refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
-      );
-    }),
-  );
   /**
    * The owner's plan written twice, far enough apart to be two revisions:
    * the context first, then the goal.

@@ -1,10 +1,8 @@
 import { ACT_KIND } from "@luke/host/acts";
 import type { MacCommandAsk } from "@luke/host/app-state";
 import { MAC_COMMAND_DECISION, type MacCommandDecision } from "@luke/host/contract";
-import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { CommandAsk } from "@luke/ui";
 import { useAct } from "./act.js";
-import { SettingsPageLink } from "./open-settings.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 import { useHeldThroughExit } from "./use-held-through-exit.js";
 
@@ -18,9 +16,6 @@ import { useHeldThroughExit } from "./use-held-through-exit.js";
  * goes; the answer goes back by the ask's id, and the card goes as main
  * drops the ask, so one answered elsewhere or timed out leaves no card
  * standing once it has faded out. An answer main refuses says why in a toast, as every press does.
- * Note that the card's link to This Mac denies the command before it opens
- * the page, because the card is modal and would stand over the page it
- * opened, and a prompt left, as one waved away by Escape, runs nothing.
  */
 
 /** The ask drawn: the earliest waiting, which main lists first. */
@@ -45,12 +40,6 @@ export function MacCommandAskDialog(): React.JSX.Element | null {
       onAllowOnce={() => answer(MAC_COMMAND_DECISION.ALLOW_ONCE)}
       onAllowAlways={() => answer(MAC_COMMAND_DECISION.ALLOW_ALWAYS)}
       onDeny={() => answer(MAC_COMMAND_DECISION.DENY)}
-      settingsPage={
-        <SettingsPageLink
-          page={SETTINGS_VIEW.THIS_MAC}
-          onLeave={() => answer(MAC_COMMAND_DECISION.DENY)}
-        />
-      }
     />
   );
 }

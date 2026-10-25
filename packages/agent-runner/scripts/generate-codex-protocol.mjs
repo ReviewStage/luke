@@ -9,7 +9,7 @@
  * made to Codex's output is each relative import's `.js` suffix, which the
  * repository's checks require of every package. The pin is `src/pins.ts`'s,
  * and the version generated from is written beside the types
- * (`generated-from.ts`), which `pins.test.ts` holds to the pin.
+ * (`generated-from.ts`).
  */
 
 import { execFileSync } from "node:child_process";

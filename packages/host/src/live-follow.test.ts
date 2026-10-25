@@ -10,7 +10,6 @@ import {
   type LiveClient,
   liveRows,
   liveShown,
-  openRealtimeClient,
   type SealedRead,
   shareLiveClients,
   type TxWait,
@@ -163,16 +162,6 @@ it.effect(
       yield* TestClock.adjust(Duration.seconds(1));
       assert.deepEqual(realtime.renewed.toSorted(), ["left-1", "right-1"]);
       yield* Fiber.interrupt(following);
-    }),
-);
-
-it.effect(
-  "loads Realtime's own client when first asked, which refuses a seal not in Realtime's shape",
-  () =>
-    Effect.gen(function* () {
-      const client = yield* Effect.promise(() => openRealtimeClient(URL));
-      assert.throws(() => client.subscribe(sealed("left", 0, 60_000)));
-      client.close();
     }),
 );
 

@@ -243,6 +243,19 @@ sheet, because they style generated HTML element by element, and so does
 `landed.css`, whose wash is played on whatever element a view brings the eye
 to, by its `data-landed` attribute alone.
 
+The chips, media, and call components are drawn the same way: `PageThumb`
+stands on shadcn's aspect ratio, and `PictureSet`'s tiles and
+`VideoPlayer`'s inline frame on its card (`Card`), while `AttachmentChip`,
+`PictureTile`, `ProviderButton`'s gate, `CardPress`, `ComposerFrame` and its
+foot, and the call's `CallBar`, `CallLive`, and `CallVideoTile` are drawn in
+the theme's utilities with no shadcn base, since shadcn/ui has no player,
+composer, or call, and its badge and button are a control's box where these
+are frames holding presses of their own. What answers a container's width,
+the call bar's, the tile's, a message box's foot's, is a container query
+variant (`@max-[280px]/luke-call-bar:`) beside the rule it changes. Their
+sheets keep only keyframes and the rules that play them, and the foot's one
+`:has()` container.
+
 ## Icons
 
 Every icon is imported through one door, `@luke/ui/icons`, built on Lucide
@@ -394,6 +407,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `literal-picker-width` | A literal `width`, `min-width` or `max-width` on a picker's, popover's or menu's class, outside `@luke/ui` | Hang the layer at one of `POPOVER_WIDTH`'s three widths (`AnchoredPopover`'s or `RectFloat`'s `width`), and let what it holds fill it |
 | `pointer-cursor` | `cursor: pointer` or `cursor-pointer`, and any cursor set under a `data-luke-profile` selector or variant | A control reads `cursor-press` (`--luke-cursor-press`: the Mac's arrow on the desktop, the hand on the web), a real link `cursor-link` (`--luke-cursor-link`: the hand on both); a control that takes no press is `cursor-default`, a busy one `cursor-progress` |
 | `literal-spacing` | A `px` or `rem` literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in `packages/panel/src/styles/*.css`; `0`, `auto` and `1px` pass | Read the spacing role (`--luke-list-gap`, `--luke-tight-gap`, `--luke-control-gap`, `--luke-row-inset`, `--luke-section-gap`, `--luke-page-section-gap`) or, where no role fits, a `--luke-space-*` step |
+| `crumb-width` | A `min-width` above zero on a path's crumb (`.luke-breadcrumbs … li`), or a crumb that takes a share of the room in a sheet that never caps its crumbs at `max-width: max-content` | Give a crumb its floor as its flex basis, `flex: 1 0 <floor>`, capped at `max-width: max-content`, so a short crumb stands as wide as its words and the next chevron follows it |
 
 No comment silences it, and it refuses one that asks to
 (`style-guard-disable`); the face's generated `face/face-motion.css` is the one
@@ -403,7 +417,7 @@ counts each file's places, and the guard fails on a file holding more than its
 count and on a count above what the file still holds. So the change that fixes a
 place lowers its count; `node tools/anti-slop/style-guard.ts --shrink` lowers
 every count to what the files hold and never raises one. A rule that started
-clean (`literal-duration`, `literal-picker-width`, `pointer-cursor`) takes no baseline at all, and a baseline is deleted
+clean (`literal-duration`, `literal-picker-width`, `crumb-width`, `pointer-cursor`) takes no baseline at all, and a baseline is deleted
 from nothing: once every count is gone, its file is `{}`.
 
 ### Folding in a narrow container

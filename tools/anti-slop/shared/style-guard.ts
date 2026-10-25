@@ -21,6 +21,7 @@ export const STYLE_RULE = {
   PICKER_WIDTH: "literal-picker-width",
   SPACING: "literal-spacing",
   CURSOR: "pointer-cursor",
+  CRUMB_WIDTH: "crumb-width",
 } as const;
 export type StyleRule = (typeof STYLE_RULE)[keyof typeof STYLE_RULE];
 
@@ -66,6 +67,11 @@ export const STYLE_RULES: Readonly<
   [STYLE_RULE.CURSOR]: {
     refuses:
       "the pointing hand spelled out (`cursor: pointer`, `cursor-pointer`) or a cursor chosen per profile: a control reads `cursor-press` (`--luke-cursor-press`), a real link `cursor-link` (`--luke-cursor-link`)",
+    backlog: false,
+  },
+  [STYLE_RULE.CRUMB_WIDTH]: {
+    refuses:
+      "a path's crumb drawn wider than its words: a `min-width` above zero, or a share of the room with no `max-width: max-content` on the sheet's crumbs, stands a gap before the next chevron",
     backlog: false,
   },
 };
@@ -468,6 +474,62 @@ function ownCursor(declaration: CssDeclaration, block: CssBlock): boolean {
   return block.preludes.some((prelude) => PROFILE_PICK.test(prelude));
 }
 
+/** A path's landmark, whose list items are its crumbs (`@luke/ui`'s `Breadcrumbs`). */
+const PATH_CLASS = /\.luke-breadcrumbs\b/u;
+
+/** A selector with what its brackets and parentheses hold taken out, so `:has(> .x)` splits as one compound. */
+function withoutArguments(selector: string): string {
+  let out = selector.replace(/\[[^\]]*\]/gu, "[]");
+  while (/\([^()]*\)/u.test(out)) out = out.replace(/\([^()]*\)/gu, "");
+  return out;
+}
+
+/** Whether a block's selector draws a path's crumb: a list item, in its last compound, of a path. */
+function isCrumbBox(block: CssBlock): boolean {
+  return withoutArguments(selectorOf(block))
+    .split(",")
+    .some((part) => {
+      const last =
+        part
+          .trim()
+          .split(/[\s>+~]+/u)
+          .at(-1) ?? "";
+      return PATH_CLASS.test(part) && /^li(?![\w-])/u.test(last);
+    });
+}
+
+/** Whether a sheet caps its crumbs at their own width, so a share of the room never stretches one. */
+function capsCrumbs(blocks: readonly CssBlock[]): boolean {
+  return blocks.some(
+    (block) =>
+      isCrumbBox(block) &&
+      block.declarations.some(
+        (declaration) =>
+          declaration.property === "max-width" && declaration.value.trim() === "max-content",
+      ),
+  );
+}
+
+/**
+ * Whether a declaration draws a crumb wider than its words. Note that a
+ * floor is a crumb's flex basis, never its `min-width`, because a
+ * `min-width` above a short crumb's words stretches its item and stands a
+ * gap before the next chevron; and a crumb that takes a share of the room
+ * grows only where the sheet caps crumbs at their own width.
+ */
+function widensCrumb(declaration: CssDeclaration, block: CssBlock, capped: boolean): boolean {
+  if (!isCrumbBox(block)) return false;
+  const { property, value } = declaration;
+  if (property === "min-width") return !/^0(?:[a-z]+)?$/u.test(value.trim());
+  const grow =
+    property === "flex-grow"
+      ? value.trim()
+      : property === "flex"
+        ? value.trim().split(/\s+/u)[0]
+        : "";
+  return !capped && grow !== undefined && /^\d*\.?\d+$/u.test(grow) && Number(grow) > 0;
+}
+
 function cssRuleOf(declaration: CssDeclaration, block: CssBlock): StyleRule | undefined {
   const { property, value } = declaration;
   const bare = bareValue(value);
@@ -690,9 +752,13 @@ export function styleViolations(
   if (!isWatched(file)) return [];
   const violations: StyleViolation[] = [];
   if (CSS_SOURCE.test(file)) {
-    for (const block of scanCss(text).blocks) {
+    const { blocks } = scanCss(text);
+    const capped = capsCrumbs(blocks);
+    for (const block of blocks) {
       for (const declaration of block.declarations) {
-        const rule = cssRuleOf(declaration, block);
+        const rule =
+          cssRuleOf(declaration, block) ??
+          (widensCrumb(declaration, block, capped) ? STYLE_RULE.CRUMB_WIDTH : undefined);
         if (rule === undefined) continue;
         violations.push({
           rule,

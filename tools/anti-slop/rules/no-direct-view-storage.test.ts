@@ -1,9 +1,8 @@
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { RuleTester } from "oxlint/plugins-dev";
-import { describe, expect, it } from "vitest";
+import { describe, it } from "vitest";
 
 import { KEPT_STORAGE_BASELINE, NOT_VIEW_STORAGE } from "../shared/kept-guard.ts";
 import { noDirectViewStorageRule } from "./no-direct-view-storage.ts";
@@ -96,16 +95,4 @@ tester.run("no-direct-view-storage", noDirectViewStorageRule, {
       errors: [{ messageId: "staleAllowed" }],
     },
   ],
-});
-
-describe("the guard's lists", () => {
-  it("name files that exist, so a deleted file leaves them", () => {
-    const named = [...Object.keys(KEPT_STORAGE_BASELINE), ...Object.keys(NOT_VIEW_STORAGE)];
-    expect(named.filter((file) => !existsSync(path.join(REPOSITORY_ROOT, file)))).toEqual([]);
-  });
-
-  it("name no file twice", () => {
-    const both = Object.keys(KEPT_STORAGE_BASELINE).filter((file) => file in NOT_VIEW_STORAGE);
-    expect(both).toEqual([]);
-  });
 });

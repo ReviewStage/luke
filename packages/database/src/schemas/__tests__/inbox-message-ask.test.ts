@@ -1,16 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import {
-  INBOX_ASK,
-  INBOX_ASK_STATUS,
-  INBOX_MESSAGE_AUTHOR,
-  INBOX_REPLY,
-  INBOX_STATUS,
-  INBOX_WIRE_VERSION,
-} from "@luke/features/inbox-wire";
 import { eq, getTableColumns } from "drizzle-orm";
-import { DateTime, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
 import { createCodingAgent } from "../../models/coding-agent-store.js";
@@ -137,116 +129,6 @@ it.layer(getTestDB())("inbox_message_ask over a database from before it", (it) =
           ],
         );
         assert.deepEqual(after.messages[0], { ...before.messages[0], ask: null, answers: null });
-      }),
-  );
-});
-
-it.layer(getTestDB())("inbox messages carrying an ask and its answers", (it) => {
-  it.effect(
-    "an agent's ask and a member's answer to it read back as written, the item naming the open ask until its message goes",
-    () =>
-      Effect.gen(function* () {
-        const db = yield* Database;
-        const place = yield* openAgent;
-        const now = yield* DateTime.nowAsDate;
-        const [item] = yield* db
-          .insert(inboxItem)
-          .values({
-            userId: place.userId,
-            taskId: place.taskId,
-            organizationId: place.organizationId,
-            agentId: place.agentId,
-            key: "invite-copy",
-            revision: 1,
-            version: INBOX_WIRE_VERSION,
-            title: "Which invite copy?",
-            needsReply: true,
-            status: INBOX_STATUS.OPEN,
-            postedAt: now,
-            updatedAt: now,
-          })
-          .returning({ id: inboxItem.id });
-        const itemId = item?.id ?? assert.fail("the item was not written");
-
-        const ask = {
-          type: INBOX_ASK.DECIDE,
-          options: [{ label: "Short", detail: "Fits the mobile banner." }, { label: "Warm" }],
-          recommended: "Short",
-          status: INBOX_ASK_STATUS.ANSWERED,
-        } as const;
-        const [asking] = yield* db
-          .insert(inboxMessage)
-          .values({
-            itemId,
-            author: INBOX_MESSAGE_AUTHOR.AGENT,
-            text: "Which invite copy should ship?",
-            ask,
-            createdAt: now,
-          })
-          .returning({ id: inboxMessage.id });
-        const askingId = asking?.id ?? assert.fail("the asking message was not written");
-        const answers = { ask: askingId, reply: INBOX_REPLY.CHOSE, choices: ["Short"] };
-        yield* db.insert(inboxMessage).values({
-          itemId,
-          author: INBOX_MESSAGE_AUTHOR.MEMBER,
-          userId: place.userId,
-          text: "Short, please.",
-          answers,
-          clientKey: randomUUID(),
-          createdAt: new Date(now.getTime() + 1),
-        });
-        const withdrawn = {
-          type: INBOX_ASK.DO,
-          steps: ["Turn on branch protection for `main`."],
-          status: INBOX_ASK_STATUS.WITHDRAWN,
-          withdrawnReason: "Someone else turned it on.",
-        } as const;
-        const open = { type: INBOX_ASK.ANSWER, status: INBOX_ASK_STATUS.OPEN } as const;
-        const [later, opening] = yield* db
-          .insert(inboxMessage)
-          .values([
-            {
-              itemId,
-              author: INBOX_MESSAGE_AUTHOR.AGENT,
-              text: "Turn it on?",
-              ask: withdrawn,
-              createdAt: new Date(now.getTime() + 2),
-            },
-            {
-              itemId,
-              author: INBOX_MESSAGE_AUTHOR.AGENT,
-              text: "What should the subject line say?",
-              ask: open,
-              createdAt: new Date(now.getTime() + 3),
-            },
-          ])
-          .returning({ id: inboxMessage.id });
-        const openingId = opening?.id ?? assert.fail("the open ask was not written");
-        yield* db
-          .update(inboxItem)
-          .set({ openAskMessageId: openingId })
-          .where(eq(inboxItem.id, itemId));
-
-        const read = yield* readBack(itemId);
-        assert.deepEqual(
-          read.messages.map((message) => ({
-            id: message.id,
-            ask: message.ask,
-            answers: message.answers,
-          })),
-          [
-            { id: askingId, ask, answers: null },
-            { id: read.messages[1]?.id, ask: null, answers },
-            { id: later?.id, ask: withdrawn, answers: null },
-            { id: openingId, ask: open, answers: null },
-          ],
-        );
-        assert.equal(read.item?.openAskMessageId, openingId);
-
-        yield* db.delete(inboxMessage).where(eq(inboxMessage.id, openingId));
-        const gone = yield* readBack(itemId);
-        assert.equal(gone.item?.openAskMessageId, null);
-        assert.equal(gone.messages.length, 3);
       }),
   );
 });

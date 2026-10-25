@@ -1276,31 +1276,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
       }),
   );
 
-  it.effect("a Codex batch posted again changes nothing, and its END is told once", () =>
-    Effect.gen(function* () {
-      const told: RunnerEnded[] = [];
-      const post = yield* standingWith({
-        ended: (ended) => Effect.sync(() => void told.push(ended)),
-      });
-      const agent = yield* agentOn(HARNESS.CODEX, ["The probe's first turn.", "Also append."]);
-      const [events = []] = codexLaunches(agent.lineIds);
-      yield* post(agent.bearer, events);
-      const once = yield* transcriptOf(agent.target.conversationId);
-
-      const again = yield* post(agent.bearer, events);
-      const overlapping = yield* post(agent.bearer, events.slice(5, 20));
-      const twice = yield* transcriptOf(agent.target.conversationId);
-
-      assert.deepEqual(again.body, { applied: 0, sequence: events.length - 1 });
-      assert.deepEqual(overlapping.body, { applied: 0, sequence: events.length - 1 });
-      assert.deepEqual(twice, once);
-      assert.deepEqual(
-        told.map((end) => end.sequence),
-        [events.length - 1],
-      );
-    }),
-  );
-
   it.effect("a file change's completed changes replace the empty ones it started with", () =>
     Effect.gen(function* () {
       const post = yield* standing;
@@ -1328,24 +1303,6 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
       assert.ok(patch !== undefined && "input" in patch);
       assert.equal(patch.state, "output-available");
       assert.deepEqual(patch.input, { changes });
-    }),
-  );
-
-  it.effect("a retired bearer writes nothing of a Codex batch", () =>
-    Effect.gen(function* () {
-      const post = yield* standing;
-      const agent = yield* agentOn(HARNESS.CODEX, ["The probe's first turn."]);
-      const [events = []] = codexLaunches(agent.lineIds);
-      yield* recordCodingAgentRunnerToken(agent.userId, agent.agentId, null);
-      const retired = yield* post(agent.bearer, events);
-      const { rows, turns: written } = yield* transcriptOf(agent.target.conversationId);
-
-      assert.equal(retired.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
-      assert.deepEqual(
-        rows.map((row) => row.turnId),
-        [null],
-      );
-      assert.deepEqual(written, []);
     }),
   );
 

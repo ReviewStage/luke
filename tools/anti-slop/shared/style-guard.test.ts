@@ -165,6 +165,24 @@ describe("a stylesheet", () => {
     ]);
   });
 
+  it("refuses a crumb drawn wider than its words, and passes a floor that is its basis under a cap", () => {
+    const floored = `.luke-breadcrumbs[data-variant="caption"] li { min-width: 11em; flex: 0 9 auto; }
+      .luke-breadcrumbs li:has(> .luke-breadcrumb-separator) { min-width: calc(var(--floor) + 12px); }
+      .luke-breadcrumbs li:last-child { flex-grow: 9; }
+      .luke-breadcrumbs li > button { min-width: 11em; }
+      .luke-breadcrumbs, .list li { min-width: 11em; }`;
+    expect(sheetRules(floored)).toEqual([
+      STYLE_RULE.CRUMB_WIDTH,
+      STYLE_RULE.CRUMB_WIDTH,
+      STYLE_RULE.CRUMB_WIDTH,
+    ]);
+    const capped = `.luke-breadcrumbs[data-variant="caption"] li {
+        flex: 1 0 var(--floor); min-width: 0; max-width: max-content; }
+      .luke-breadcrumbs li:last-child { flex-grow: 9; }
+      .luke-breadcrumbs li[data-fixed="true"] { flex: none; }`;
+    expect(sheetRules(capped)).toEqual([]);
+  });
+
   it("reads the spacing rule in the panel's sheets alone", () => {
     const css = ".a { padding: 8px; }";
     expect(sheetRules(css, "packages/panel/src/styles/desktop.css")).toEqual([STYLE_RULE.SPACING]);
