@@ -22,7 +22,8 @@
  * Escape first, and a press in one is the pane's own, since React carries
  * it through the pane (`PanePin`). It stands over the nearest positioned
  * box its owner draws it in, at that box's full height, as wide as the box
- * less a strip of the tab to press it away by, or a column's width.
+ * less a strip of the tab to press it away by, a column's width, or the
+ * whole box on a phone.
  */
 
 import { useAtomSet } from "@effect/atom-react";
@@ -58,6 +59,8 @@ export const OVER_PANE_WIDTH = {
   SHEET: "sheet",
   /** A column's width, or the sheet's where the tab is narrower: a Terminal tab's shells, the Chapters rail. */
   COLUMN: "column",
+  /** The tab's whole width, with no strip beside it, as a phone's screen stands one place at a time: a File tab's tree on a phone. */
+  FULL: "full",
 } as const;
 
 export type OverPaneWidth = (typeof OVER_PANE_WIDTH)[keyof typeof OVER_PANE_WIDTH];
@@ -90,12 +93,13 @@ const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
  * The pane: over the nearest positioned box at its full height, at that
  * box's right edge or its left, on the window's floating surface with a
  * hairline on the side facing the work, as wide as the box less a strip to
- * press it away by, or a column's width; with no ring, since only script
- * focuses it on open and what it holds rings. Its slide stays in
- * `over-pane.css`, keyframes being what a utility cannot say.
+ * press it away by, or a column's width; or the whole box, where no work
+ * stands beside it to face, so with neither hairline nor shadow; with no
+ * ring, since only script focuses it on open and what it holds rings. Its
+ * slide stays in `over-pane.css`, keyframes being what a utility cannot say.
  */
 const PANE =
-  "luke-over-pane absolute inset-y-0 z-1 flex w-over-pane min-w-0 flex-col bg-popover shadow-menu outline-none data-[width=column]:w-over-pane-column data-[edge=left]:left-0 data-[edge=left]:border-r data-[edge=left]:border-border-strong data-[edge=right]:right-0 data-[edge=right]:border-l data-[edge=right]:border-border-strong";
+  "luke-over-pane absolute inset-y-0 z-1 flex w-over-pane min-w-0 flex-col bg-popover shadow-menu outline-none data-[width=column]:w-over-pane-column data-[width=full]:w-full data-[width=full]:shadow-none data-[edge=left]:left-0 data-[edge=left]:not-data-[width=full]:border-r data-[edge=left]:border-border-strong data-[edge=right]:right-0 data-[edge=right]:not-data-[width=full]:border-l data-[edge=right]:border-border-strong";
 
 /**
  * How long the pane's slide out runs, read as the token stands on the body,

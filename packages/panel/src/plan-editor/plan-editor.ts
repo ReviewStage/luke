@@ -12,7 +12,7 @@ import { Markdown } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
-import { modEnterSends } from "../enter-sends.js";
+import { enterSends, modEnterSends } from "../enter-sends.js";
 import { anchorsLaidIn, anchorsOf, commentAnchorMark, spanIn } from "./comment-anchors.js";
 import {
   type EditorAria,
@@ -75,8 +75,9 @@ import { blockRulesOutOfCells, withoutTipTapChords, writingKeys } from "./writin
  * which an empty line under the caret offers in its placeholder, as an empty
  * heading names its level. A Mermaid code block stays code, its diagram
  * previewed under it where the panel draws one (`./diagram-preview.ts`).
- * A document's own `/` blocks lay in the Markdown they name. Esc and ⌘↩
- * finish, naming the section the caret stood in; ↑ on the text's first line
+ * A document's own `/` blocks lay in the Markdown they name. Esc and the
+ * send finish, naming the section the caret stood in, the send ⌘↩ in a
+ * document and Enter in a message box's text (`sendsOnEnter`); ↑ on the text's first line
  * goes to the title above it, where one stands. What a plan alone takes
  * (mentions, pictures, comment threads, a diagram's preview, and the title
  * above) is each left out where the document takes none, which leaves a
@@ -409,6 +410,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     className,
     onDraft,
     onFinish,
+    sendsOnEnter = false,
     onLeaveUp,
     mentions,
     drawDiagram,
@@ -438,6 +440,8 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   // The threads the editor carries marks for, and whether they are being laid on, which hands over no draft.
   let carried: readonly string[] = [];
   let laying = false;
+  // Whether a Shift+Enter is being laid in as Enter, whose key the editor's own commands hear and this handler lets by.
+  let breaking = false;
   // What ties the text to the `@` list or the `/` menu over it, which the panel hands over as either opens and closes.
   let aria: EditorAria = {};
   const editor: Editor = new Editor({
@@ -471,7 +475,12 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         pictures === undefined ? slice : copiedPictures(slice, pictures),
       handleKeyDown: (view, event) => {
         // A key an input method is composing with is its own: its Enter confirms its words, its Escape drops them.
-        if (event.isComposing || view.composing || event.keyCode === COMPOSING_KEY_CODE) {
+        if (
+          breaking ||
+          event.isComposing ||
+          view.composing ||
+          event.keyCode === COMPOSING_KEY_CODE
+        ) {
           return false;
         }
         // The keys a mention's list or the block menu takes are its own first, Escape among them, which closes it.
@@ -481,8 +490,15 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
           onFinish(caretSection(editor), FINISH.ESCAPE);
           return true;
         }
-        if (modEnterSends(event)) {
+        if (sendsOnEnter ? enterSends(event) : modEnterSends(event)) {
           onFinish(caretSection(editor), FINISH.SUBMIT);
+          return true;
+        }
+        // Note that a message box's Shift+Enter lays in what Enter does in a document, a paragraph, a list's next item or a code block's line, rather than the line break TipTap gives it.
+        if (sendsOnEnter && event.key === "Enter" && event.shiftKey) {
+          breaking = true;
+          editor.commands.keyboardShortcut("Enter");
+          breaking = false;
           return true;
         }
         const { selection } = view.state;

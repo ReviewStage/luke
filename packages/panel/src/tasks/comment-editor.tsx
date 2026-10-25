@@ -10,7 +10,7 @@ import {
 import { FileDiffIcon } from "@luke/ui/icons";
 import { markdownClass } from "@luke/ui/markdown-class";
 import { type ReactNode, type RefObject, useEffect, useRef } from "react";
-import { modEnterSends } from "../enter-sends.js";
+import { enterSends } from "../enter-sends.js";
 import {
   EDITOR_ROOT_SELECTOR,
   FINISH,
@@ -30,7 +30,7 @@ import { fencedBlock } from "./markdown-fence.js";
  * no Preview stands beside them: the format toolbar over selected words,
  * Turn into among it, the `/` menu, and the writing chords are the editor's
  * own, and each block left untouched is handed back as it was written, so
- * an edit of a comment changes only what was changed. ⌘↩ or Ctrl+↩ sends, a bare Enter adds a line, and Esc
+ * an edit of a comment changes only what was changed. Enter sends, as every box does (`enter-sends.ts`), Shift+Enter adds a line, and Esc
  * lets go, where the owner answers either; the keys the editor took go no
  * further, so a menu's Esc never closes what holds the box. The owner holds
  * the words: a change it makes, such as letting them go once GitHub took
@@ -101,7 +101,7 @@ function useOpened(value: string): { opened: Opened; said: (markdown: string) =>
 
 /**
  * The words, named `label` to a reader, on the plan's editor in a text
- * field's frame; ⌘↩ or Ctrl+↩ is `onSubmit` and Esc `onCancel` where given,
+ * field's frame; Enter is `onSubmit` and Esc `onCancel` where given,
  * `suggestion`, the lines a comment is on as they read at the head, offers
  * a suggestion where given, and `foot` stands under the words inside the
  * frame, as a reply's Cancel and send do (`reply-form.tsx`).
@@ -127,7 +127,7 @@ export function CommentEditor({
   busy: boolean;
   /** Whether the words take the keyboard as they open, at their end, once they stand in the window. */
   focus?: boolean | undefined;
-  /** What ⌘↩ or Ctrl+↩ in the words does; none passes it on. */
+  /** What Enter in the words does; none leaves Enter to write a line. */
   onSubmit?: (() => void) | undefined;
   /** What Esc in the words does; none passes it on. */
   onCancel?: (() => void) | undefined;
@@ -179,7 +179,7 @@ export function CommentEditor({
         className="comment-editor-frame relative box-border min-h-comment-editor px-control-inset py-item-gap"
         aria-busy={busy}
         onKeyDown={(event) => {
-          const finishing = event.key === "Escape" || modEnterSends(event);
+          const finishing = event.key === "Escape" || enterSends(event);
           if (!finishing || !event.defaultPrevented) return;
           // Note that a key the editor took, a menu's Esc or an answered finish, is the box's alone.
           if (unanswered.current) {
@@ -220,6 +220,7 @@ export function CommentEditor({
             onChange(markdown);
           }}
           onFinish={(_section, how) => finish(how)}
+          sendsOnEnter={onSubmit !== undefined}
           ownBlocks={block === undefined ? undefined : [block]}
         />
         {foot}

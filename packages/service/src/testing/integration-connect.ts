@@ -64,6 +64,7 @@ export const CONNECTOR_ASKED_NOTHING: ConnectorService = {
   authorize: () => Effect.die(new Error("this suite asks Connect nothing")),
   token: () => Effect.die(new Error("this suite asks Connect nothing")),
   revoke: () => Effect.die(new Error("this suite asks Connect nothing")),
+  evict: () => Effect.void,
 };
 
 /** A sign-in address as the granting Connect below answers one. */

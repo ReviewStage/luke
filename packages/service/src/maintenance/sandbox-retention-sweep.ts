@@ -28,7 +28,7 @@
 
 import { Effect, Result } from "effect";
 import type { HttpClient } from "effect/http";
-import { SANDBOX_NAME } from "../agents/coder-host/runner-sessions.js";
+import { SANDBOX_NAME } from "../agents/machine/vercel-machine.js";
 import {
   boundSnapshotRetention,
   RETENTION_ENDING,

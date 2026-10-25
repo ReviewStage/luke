@@ -2784,7 +2784,7 @@ export function SidePanel({
         >
           {/* Typing into a preview, as a review's comment or a terminal's line, keeps it as a tab of its own. */}
           <div
-            className="side-panel-keeps"
+            className="side-panel-keeps contents"
             onInputCapture={() => {
               if (panel.preview !== undefined && sameTab(panel.preview, tab)) panel.onKeep(tab);
             }}

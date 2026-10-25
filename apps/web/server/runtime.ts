@@ -1,5 +1,6 @@
 import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
 import { agentSandboxDoors } from "@luke/service/agents/luke-mcp/sandbox-door";
+import { vercelMachineLayer } from "@luke/service/agents/machine/vercel-machine";
 import { deploymentOidcToken } from "@luke/service/agents/vercel-sandbox-api";
 import { AfterResponse } from "@luke/service/http/after-response";
 import { sentryLayer } from "@luke/service/observability/sentry";
@@ -62,7 +63,10 @@ export function webServicesWith(
  * function's own OIDC token, as every other call of Luke's to Vercel
  * Sandbox is made.
  */
-export const webAgentSandboxDoor = agentSandboxDoors(runWeb, deploymentOidcToken);
+export const webAgentSandboxDoor = agentSandboxDoors(
+  runWeb,
+  vercelMachineLayer({ readToken: deploymentOidcToken, run: runWeb }),
+);
 
 /**
  * Releases what the layer acquired and leaves the next call to build it again.

@@ -340,7 +340,7 @@ test("the Filter narrows the List to the values chosen, several in one visit, a 
   ]);
   assert.match(page.textContent ?? "", /Priority: Urgent, High/);
   assert.equal(
-    page.querySelector("[data-filtered='true'] button")?.getAttribute("aria-label"),
+    page.querySelector("[data-dot='true'] button")?.getAttribute("aria-label"),
     "Filter",
   );
 
@@ -355,7 +355,7 @@ test("the Filter narrows the List to the values chosen, several in one visit, a 
   assert.ok(lift, "the chip lifts its filter");
   act(() => lift.click());
   assert.equal(groups(again).length, 4);
-  assert.equal(again.querySelector("[data-filtered='true']"), null);
+  assert.equal(again.querySelector("[data-dot='true']"), null);
 });
 
 /** The list motion's tokens, as the app's sheets set them, and an engine that records each motion rather than playing it; answers what was played and a way to take both away. */

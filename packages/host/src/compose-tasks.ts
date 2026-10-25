@@ -2282,7 +2282,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           "starting a task names it, and its repository where it has one",
         );
         if (!gate()) return carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const request = read;
+        const { quiet, ...request } = read;
+        // A quiet start, a group's quick add, opens nothing, and answers once the list carries the task.
+        if (quiet === true) {
+          return yield* writtenThenListed(
+            Effect.map(served(client.create(request)), (started) =>
+              started.ok
+                ? ([
+                    carried<TasksStartAnswer>({ planId: started.answer.task.id }),
+                    started.answer.txid,
+                  ] as const)
+                : ([carried<TasksStartAnswer>({ failure: started.failure }), undefined] as const),
+            ),
+          );
+        }
         // Note that a start answers once the task is drawn open rather than once the list carries
         // it, because nothing draws its row from the answer, so a list from before the write only
         // lacks a row it has not drawn yet, and the window opens the task's agent at once.

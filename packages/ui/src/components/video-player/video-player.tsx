@@ -1,6 +1,7 @@
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import { playheadText } from "@luke/features/time-format";
 import { type RefObject, useEffect, useRef, useState } from "react";
+import { cssCustomProperties } from "../../css.js";
 import {
   ExitFullScreenIcon,
   ExpandIcon,
@@ -36,9 +37,11 @@ import { Tooltip } from "../tooltip/hint.js";
  * frame that hugs it at its own shape up to its column's width. A place that
  * has a viewer to open hands `onExpand`: Expand pauses the video here and
  * opens the viewer, which grows from the frame as it grows from a picture's
- * tile. In the viewer (`VIEWER`) the video plays at once, as large as the
- * card lets it, unless motion is held still (`motionHeld`: reduced motion or
- * a capture run), where it waits on its first frame for Play.
+ * tile. In the viewer (`VIEWER`) the video plays at once, as wide as the
+ * place makes the player, unless motion is held still (`motionHeld`: reduced
+ * motion or a capture run), where it waits on its first frame for Play; once
+ * its size is read it says it as `--luke-video-natural-width` and
+ * `--luke-video-natural-height`, plain numbers the place may fit it by.
  *
  * The bytes arrive as a picture's do, as a `data:` URL the window's picture
  * reads hold (`picture-cache.ts`, the inbox's and the chat's own), and play
@@ -305,6 +308,8 @@ export function VideoPlayer({
   const frame = useRef<HTMLSpanElement>(null);
   const [full, toggleFullScreen] = useFullScreen(frame);
   const [playback, setPlayback] = useState<Playback>({ playing: false, at: 0, duration: 0 });
+  // The video's own pixels once its size is read, which the viewer fits it by.
+  const [natural, setNatural] = useState<VideoSize>();
   const viewer = place === VIDEO_PLAYER_PLACE.VIEWER;
   // Note that whether it starts is read once, as it mounts, because a video hears autoplay only then.
   const [starts] = useState(() => viewer && !motionHeld());
@@ -346,7 +351,7 @@ export function VideoPlayer({
         // Note that the player carries no captions track, because an agent's recording of its screen has no sound.
         <video
           ref={video}
-          className={`${VIDEO} ${viewer ? "max-h-[inherit]" : "max-h-video-player"}`}
+          className={`${VIDEO} ${viewer ? "w-full" : "max-h-video-player"}`}
           src={url}
           width={size?.width}
           height={size?.height}
@@ -360,6 +365,8 @@ export function VideoPlayer({
             toggleOf(video.current);
           }}
           onLoadedMetadata={(event) => {
+            const shown = event.currentTarget;
+            if (viewer) setNatural({ width: shown.videoWidth, height: shown.videoHeight });
             probeLength(event.currentTarget);
             read(event.currentTarget);
           }}
@@ -390,7 +397,18 @@ export function VideoPlayer({
   // In the viewer the card around it is the viewer's own.
   if (viewer) {
     return (
-      <span className={`${PLAYER} max-h-full`} data-place={place}>
+      <span
+        className={`${PLAYER} max-h-full`}
+        data-place={place}
+        style={
+          natural === undefined
+            ? undefined
+            : cssCustomProperties({
+                "--luke-video-natural-width": natural.width,
+                "--luke-video-natural-height": natural.height,
+              })
+        }
+      >
         {player}
       </span>
     );

@@ -75,7 +75,7 @@ import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "./action-m
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
-import { TaskRowMark, taskCardOf } from "./task-card.js";
+import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME, TaskRowMark, taskCardOf } from "./task-card.js";
 
 /**
  * task-actions.tsx -- one task's actions, offered alike from the toolbar's ⋯ button and from a right-click on the task in the sidebar.
@@ -722,9 +722,9 @@ export function SidebarTask({
           description={rename.refused ? <span>{RENAME_FAILED_NOTE}</span> : undefined}
           meta={
             rename.editing ? null : (
-              <span className="sidebar-task-time">
+              <span className={SIDEBAR_ROW_TIME}>
                 {repository === undefined ? null : (
-                  <OneLine className="sidebar-task-repository" words={repository}>
+                  <OneLine className={SIDEBAR_ROW_REPOSITORY} words={repository}>
                     {repository}
                   </OneLine>
                 )}

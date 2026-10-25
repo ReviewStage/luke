@@ -172,6 +172,37 @@ const CONTENT_TEXT = {
 } as const;
 
 /**
+ * The names the panel window's block of the theme adds (its layout's
+ * spacing roles, the sidebar's parts, an actor's mark, a press's corner
+ * dot), by the group tailwind-merge reads each in.
+ */
+const PANEL_WINDOW = {
+  text: ["section-size"],
+  tracking: ["workspace-head"],
+  spacing: [
+    "actor-badge",
+    "actor-badge-glyph",
+    "actor-face-share",
+    "actor-for-near",
+    "actor-for-x",
+    "actor-for-y",
+    "actor-overlap",
+    "corner-dot",
+    "list-held",
+    "offline-glyph",
+    "offline-mark",
+    "section-icon-scroll",
+    "sidebar-row-repository",
+    "sidebar-row-time",
+    "sidebar-slot-start",
+    "workspace-ref-lift",
+    "workspace-shared-glyph",
+  ],
+  shadow: ["actor-for-ring", "actor-outline", "actor-outline-ring", "actor-ring"],
+  animate: ["offline-arrive"],
+} as const;
+
+/**
  * The names the rows and navigation block of the theme adds (list row, nav
  * item, disclosure, bar item, pane bar, toolbar, over pane, folding search,
  * searchable menu), by the group tailwind-merge reads each in.
@@ -355,9 +386,6 @@ const TASK_SURFACES = {
     "todos-dock",
     "dictation-clock",
     "viewer-text",
-    "viewer-other",
-    "viewer-stage",
-    "viewer-stage-height",
     "shells-pane",
     "servers-list",
     "issue-chip",
@@ -438,6 +466,7 @@ const merge = extendTailwindMerge({
         "tag",
         ...FEEDBACK_DISPLAY.text,
         ...CONTENT_TEXT.text,
+        ...PANEL_WINDOW.text,
         ...ROWS_NAVIGATION.text,
         ...CHIPS_MEDIA_CALL.text,
         ...PAGE_PATTERNS.text,
@@ -460,6 +489,7 @@ const merge = extendTailwindMerge({
       tracking: [
         "title",
         ...PANEL_SHELL.tracking,
+        ...PANEL_WINDOW.tracking,
         ...PANEL_PLACES.tracking,
         ...TASK_SURFACES.tracking,
       ],
@@ -512,6 +542,7 @@ const merge = extendTailwindMerge({
         "dialog-action-gap",
         "dialog-action",
         "dialog-room",
+        "dialog-window-top",
         "dialog-command-top",
         "dialog-command-room",
         "dialog-command-sheet",
@@ -538,6 +569,7 @@ const merge = extendTailwindMerge({
         ...PANEL_WORK_COLUMN.spacing,
         ...FEEDBACK_DISPLAY.spacing,
         ...CONTENT_TEXT.spacing,
+        ...PANEL_WINDOW.spacing,
         ...ROWS_NAVIGATION.spacing,
         ...PANEL_SHELL.spacing,
         ...PANEL_SIDE.spacing,
@@ -579,6 +611,7 @@ const merge = extendTailwindMerge({
         ...PANEL_WORK_COLUMN.shadow,
         ...FEEDBACK_DISPLAY.shadow,
         ...CONTENT_TEXT.shadow,
+        ...PANEL_WINDOW.shadow,
         ...ROWS_NAVIGATION.shadow,
         ...CHIPS_MEDIA_CALL.shadow,
         ...PAGE_PATTERNS.shadow,
@@ -609,6 +642,7 @@ const merge = extendTailwindMerge({
         "tooltip-in",
         "tooltip-leave",
         ...PANEL_SIDE.animate,
+        ...PANEL_WINDOW.animate,
         ...PANEL_WORK_COLUMN.animate,
       ],
     },

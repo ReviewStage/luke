@@ -22,6 +22,12 @@
  * that did not go; it stands after Retry in the same row, and holds the
  * line's control-tall first row on its own where there is no Retry.
  *
+ * Inside what it failed in the line takes no inset of its own, standing
+ * where the words around it stand (`LINE`). Where it stands in a list's
+ * place instead, as a tree whose files could not be listed, it stands at the
+ * start of that room at the rows' inset (`LIST`), as a `NoteLine` does there,
+ * so the two read as one list's notes.
+ *
  * It is drawn in Tailwind utilities over the theme with no shadcn base:
  * shadcn's alert is a block of its own, a titled card or strip (Luke's
  * `Banner`), where a failure note is one line among the words of what it
@@ -36,9 +42,17 @@ import { GLYPH } from "../../icons/glyph-registry.js";
 import { STATUS_TONE } from "../../status-tone.js";
 import { RetryButton } from "../retry-button/retry-button.js";
 
-/** The line: the mark, the words, and the presses on one row, in the danger tone's ink at a caption's size. */
+/** Where a failure note stands: among the words of what failed, or in a list's place. */
+export const FAILURE_NOTE_LOOK = {
+  LINE: "line",
+  LIST: "list",
+} as const;
+
+export type FailureNoteLook = (typeof FAILURE_NOTE_LOOK)[keyof typeof FAILURE_NOTE_LOOK];
+
+/** The line: the mark, the words, and the presses on one row, in the danger tone's ink at a caption's size, inset as a list's note where it stands in a list's place. */
 const LINE =
-  "luke-failure-note m-0 flex min-w-0 items-start gap-icon-gap font-ui text-caption text-tone-ink";
+  "luke-failure-note m-0 flex min-w-0 items-start gap-icon-gap font-ui text-caption text-tone-ink data-[look=list]:px-list-inset data-[look=list]:py-row-inset";
 
 /**
  * Each part, by whether a press stands in the first row, which is then a
@@ -61,12 +75,14 @@ const PART = {
 /** The presses after the words, Retry then `also`. */
 const ACTS = "luke-failure-note-retry flex flex-none items-center gap-icon-gap";
 
-/** A failure's words, `children`, behind the failed mark in the danger tone, and Retry after them where `onRetry` is given, then `also`. */
+/** A failure's words, `children`, behind the failed mark in the danger tone, and Retry after them where `onRetry` is given, then `also`, standing as `look` asks. */
 export function FailureNote({
+  look = FAILURE_NOTE_LOOK.LINE,
   onRetry,
   also,
   children,
 }: {
+  look?: FailureNoteLook;
   /** Retry's press; with none, the line says its words alone, and any `also`. */
   onRetry?: (() => void) | undefined;
   /** A second act after Retry, drawn by the caller as a `@luke/ui` control; with neither, the line says its words alone. */
@@ -80,6 +96,7 @@ export function FailureNote({
   return (
     <p
       className={LINE}
+      data-look={look}
       data-tone={STATUS_TONE.DANGER}
       data-retry={acts ? "" : undefined}
       role="alert"

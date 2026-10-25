@@ -59,4 +59,5 @@ export const EXPERIMENT_ANCHOR = {
   [EXPERIMENT.INBOX_FIRST]: "experiment-inbox-first",
   [EXPERIMENT.OPERATOR]: "experiment-operator",
   [EXPERIMENT.MEMORY]: "experiment-memory",
+  [EXPERIMENT.LOCAL_AGENTS]: "experiment-local-agents",
 } as const satisfies Record<Experiment, string>;

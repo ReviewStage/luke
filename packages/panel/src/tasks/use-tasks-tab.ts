@@ -582,6 +582,19 @@ function agentRequest(handed: NewTaskAgent) {
   };
 }
 
+/** Where a group's quick add puts the task it adds: the group's status, priority, or assignee, or its repository. */
+export interface QuickAddInto {
+  readonly standing?: TaskStanding;
+  readonly repository?: string;
+}
+
+/** What a quick add asks of where its task stands: a status, a priority, or an assignee, as given; no one assigned is where a task starts, so it is asked nothing. */
+function startingStanding(standing: TaskStanding | undefined) {
+  if (standing === undefined) return undefined;
+  const { assigneeId, ...rest } = standing;
+  return assigneeId === undefined || assigneeId === null ? rest : { ...rest, assigneeId };
+}
+
 /** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), or the card a start refused after it closed opens again on. */
 export interface NewTaskPreset {
   readonly repository?: string;
@@ -832,6 +845,12 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
+  /**
+   * Adds a task named `name` to a Tasks page group with no agent, in the
+   * listed workspace, and opens nothing: what a group's quick add asks.
+   * Answers why it was not added, or nothing once the list carries it.
+   */
+  onQuickAdd: (name: string, into: QuickAddInto) => Promise<Failure | undefined>;
   /** New task's card for the agent that makes an automation: what the Automations page's Create with an agent asks. */
   onNewAutomationAgent: () => void;
   /** The New task dialog: whether it stands, what its press chose, and the two presses it makes. */
@@ -2732,7 +2751,7 @@ export function useTasksTab(input: {
       ? region.task.repository
       : null);
 
-  // A fixture's task has no history, as it is read from nowhere.
+  // A fixture's task reads its staged history through the same acts (`tasks-fixture.ts`).
   const historySource = useMemo(
     (): PlanHistorySource => ({
       readPage: (taskId, before) =>
@@ -2750,8 +2769,7 @@ export function useTasksTab(input: {
   );
   const history = usePlanHistory({
     source: historySource,
-    taskId:
-      fixture === undefined && region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined,
+    taskId: region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined,
     editedAt: region.kind === DOCUMENT_REGION.READY ? region.task.lastEdit?.at : undefined,
     name: region.kind === DOCUMENT_REGION.READY ? region.task.name : undefined,
     shown: shown && historyOpen,
@@ -2874,6 +2892,24 @@ export function useTasksTab(input: {
 
   // Note that New task's start is a steady door, so the dialog handed it holds while nothing it draws moves.
   const steadyStartTask = useSteadyDoor(startTask);
+
+  // A group's quick add starts a task with no agent and no call, quietly, so
+  // the window stays on the Tasks page and the task lands in its group.
+  const quickAdd: TasksControl["onQuickAdd"] = (name, into) =>
+    act(ACT_KIND.TASKS_START, {
+      name,
+      ...(into.repository === undefined ? undefined : { repository: into.repository }),
+      ...(listedWorkspace === undefined ? undefined : { workspaceId: listedWorkspace.id }),
+      ...startingStanding(into.standing),
+      planning: false,
+      quiet: true,
+    }).then(
+      (answer): Failure | undefined =>
+        "failure" in answer
+          ? { reason: FAILURE_REASON.OTHER, text: startFailureNote(answer.failure) }
+          : undefined,
+      (refused: Error): Failure => ({ reason: FAILURE_REASON.OTHER, text: refused.message }),
+    );
 
   // The dialog matches its name against the Linear issues of the workspace
   // it starts in, and searches them, where that workspace has Linear connected.
@@ -3760,6 +3796,7 @@ export function useTasksTab(input: {
     },
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
+    onQuickAdd: quickAdd,
     onNewAutomationAgent: () => newTaskWith({ purpose: NEW_TASK_PURPOSE.AUTOMATION }),
     newTask: {
       open: newTaskAsk !== undefined,

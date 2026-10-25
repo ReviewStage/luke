@@ -1,5 +1,5 @@
 import type { IntegrationProvider } from "@luke/features/integration-wire";
-import { pgTable, primaryKey, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, primaryKey, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 
@@ -39,6 +39,10 @@ export const workspaceIntegrationConnection = pgTable(
     }),
     /** When a sign-in last completed; null until one has. */
     connectedAt: timestamptz("connected_at"),
+    /** The tools Linear's MCP server last listed on the workspace's grant, as `integration.ts`'s own are kept. */
+    tools: jsonb("tools").$type<unknown>(),
+    /** When the read that listed `tools` began; null whenever they are. */
+    toolsListedAt: timestamptz("tools_listed_at"),
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
   },
   (table) => [

@@ -58,6 +58,7 @@ import {
   Redacted,
   Result,
 } from "effect";
+import type { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { TURN_ORIGIN, TURN_STATUS } from "../../core.js";
@@ -86,16 +87,16 @@ import {
   PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { RUNNER_TAG, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
-import { SESSION_TAG } from "../vercel-sandbox-api.js";
+import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
 import { claudeCodeSessions } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import {
   RUNNER_ENDED,
-  RUNNER_TAG,
   type RunnerSessionsOptions,
   retireWarmRunner,
   runnerEnded,
@@ -147,6 +148,14 @@ const NO_KEYS: HostedEnvironmentValues = {
   providerKeyEncryptionKeys: Redacted.make(RING),
 };
 
+/** The agent's machine over the fake Vercel the client given answers as, its checkout run on this test's own runner. */
+function machineOver<E, R>(http: Layer.Layer<HttpClient.HttpClient, E, R>) {
+  return vercelMachineLayer({
+    readToken: deploymentOidcToken,
+    run: (effect) => Effect.runPromise(effect),
+  }).pipe(Layer.provide(http));
+}
+
 /** Everything but the store, around the fake Vercel given. */
 function services(
   api: ReturnType<typeof runnerSandboxApi>,
@@ -155,6 +164,7 @@ function services(
 ) {
   return Layer.mergeAll(
     http,
+    machineOver(http),
     GITHUB_APP_WITH_TOKENS,
     Layer.succeed(HostedEnvironment, NO_KEYS),
     Layer.succeed(AgentSandboxImage, {
@@ -219,7 +229,6 @@ function sessionsFor(userId: string, sequence: { next: number }) {
     integrations: () => Effect.succeed([LINEAR_SERVER]),
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
-    run: (effect) => Effect.runPromise(effect),
   };
   return claudeCodeSessions(options);
 }
@@ -360,6 +369,7 @@ const repositoryAgent = (
       Effect.provide(
         Layer.mergeAll(
           github.layer,
+          machineOver(github.layer),
           Layer.succeed(HostedEnvironment, NO_KEYS),
           Layer.succeed(AgentSandboxImage, {
             snapshotId: seams.snapshotId ?? Effect.succeed(Option.some(SNAPSHOT)),
@@ -1978,7 +1988,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           integrations: () => Effect.sync(() => handed.servers),
           instructions: () => Effect.succeed(INSTRUCTIONS),
           nextSequence: () => Effect.succeed(0),
-          run: (effect) => Effect.runPromise(effect),
         }).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);

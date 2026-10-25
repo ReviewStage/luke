@@ -263,6 +263,18 @@ test("a press zooms a fitted picture to its own pixels and a second fits it agai
   assert.equal(viewer.state.closed, false, "a press on the picture no longer closes the viewer");
 });
 
+test("a press on the room around a picture closes the viewer, as one on the dimmed window would, and a press from the picture ending there does not", () => {
+  const viewer = opened();
+  const image = viewer.picture();
+  const room = image.parentElement ?? assert.fail("the picture stands in its room");
+  viewer.fire(image, viewer.pointer("pointerdown", 400, 250, 1));
+  viewer.fire(room, viewer.pointer("click", 790, 490, 0));
+  assert.equal(viewer.state.closed, false);
+  viewer.fire(room, viewer.pointer("pointerdown", 790, 490, 1));
+  viewer.fire(room, viewer.pointer("click", 790, 490, 0));
+  assert.equal(viewer.state.closed, true);
+});
+
 test("a zoomed picture is moved by a drag, and the press the drag ends on leaves it zoomed", () => {
   const viewer = opened();
   const image = viewer.picture();

@@ -26,6 +26,7 @@ import {
   DRAFT_PLACE,
   type DraftControl,
   type DraftWriter,
+  holdsUnkept,
   useDraft,
   useDraftsOwner,
   useDraftWriter,
@@ -521,6 +522,28 @@ test("the files attached to a draft while only the account's address was known s
     ["login.png"],
     "the picture is kept in this window alone, and moves with the words",
   );
+});
+
+test("a window holds what a reload would lose while a draft holds files, and not once only its words are left", async () => {
+  const place = { kind: DRAFT_PLACE.CHAT, channelId: "channel-1" } as const;
+  const picture = { name: "login.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+  let held: DraftControl | undefined;
+  function Box(): null {
+    useDraftsOwner(DEAN);
+    held = useDraft(place);
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  await act(async () => root.render(onRegistry(registry, createElement(Box))));
+  const box = () => held ?? assert.fail("the box is drawn");
+
+  act(() => box().update((was) => ({ ...was, text: "Like this" })));
+  assert.equal(holdsUnkept(registry), false, "words alone are written to storage as the page goes");
+
+  act(() => box().update((was) => ({ ...was, attachments: [picture] })));
+  assert.equal(holdsUnkept(registry), true, "the picture is kept in this window alone");
 });
 
 test("an inbox answer's picture moves with it as the id lands before its words reach storage, its unset steps and press read as storage leaves them out", async () => {
