@@ -1,3 +1,4 @@
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
   ArrowDownIcon,
@@ -31,6 +32,7 @@ import {
   MoreButton,
   PencilIcon,
   SearchField,
+  Shortcut,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -60,8 +62,13 @@ const ignore = () => undefined;
 
 const TASK_ACTIONS: readonly (readonly MenuEntry[])[] = [
   [
-    { label: "Rename", icon: <PencilIcon />, hint: "⌘R", onSelect: ignore },
-    { label: "Copy link", icon: <CopyIcon />, hint: "⇧⌘C", onSelect: ignore },
+    { label: "Rename", icon: <PencilIcon />, onSelect: ignore },
+    {
+      label: "Copy link",
+      icon: <CopyIcon />,
+      hint: <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COPY_LINK].chord} />,
+      onSelect: ignore,
+    },
     { label: "Move to workspace", onSelect: ignore, disabled: true },
     { label: "Archive", icon: <ArchiveIcon />, onSelect: ignore },
   ],
