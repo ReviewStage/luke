@@ -395,7 +395,7 @@ function AnswerCard({
   const channels = useExperiment(EXPERIMENT.CHANNELS);
   const nodded = acknowledgedOnOpen(item, readerId, channels) && !control.failed;
   // Note that under Channels a notice addressed to nobody offers no Got it, since it is only read.
-  const nod = asksNod(item, channels) && emptyBox(draft) && !nodded;
+  const nod = asksNod(item, readerId, channels) && emptyBox(draft) && !nodded;
   const held = sending || files.reading;
   // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
   const sendable = nod || inboxThreadSend(thread, draft) !== undefined;

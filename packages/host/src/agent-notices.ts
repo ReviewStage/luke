@@ -190,6 +190,8 @@ export interface AgentNotices {
   shown(agentId: string | null): void;
   /** The developer marked the agent as read by hand: its unseen dot goes, whichever page shows. */
   seen(agentId: string): void;
+  /** Chat or Channels turned on or off: the badge counts what last waited again, since no answer moves with an experiment. */
+  recount(): void;
 }
 
 /** What the ledger keeps of one agent: enough to tell one turn's end from the next's. */
@@ -272,6 +274,7 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
     automationName: item.automationName,
     repository: item.repository,
     ...(item.startedBy === undefined ? undefined : { startedBy: item.startedBy }),
+    ...(item.waitsOn === undefined ? undefined : { waitsOn: item.waitsOn }),
     ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
   }));
 }
@@ -633,6 +636,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         seen(agentId);
       },
       seen,
+      recount: () => {
+        if (waiting !== undefined)
+          doors.badge(countedOf(waiting.answer) + chatOf(waiting.answer).length);
+      },
     };
 
     // Each account's inbox followed in turn, the follow for the last one

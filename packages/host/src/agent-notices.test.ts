@@ -1011,6 +1011,29 @@ it.effect(
     }),
 );
 
+it.effect(
+  "Channels turning on counts the badge again from what last waited, with no answer moving",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_A, { waitsOn: ACCOUNT_ID, asking: true }),
+          waitingItem(ITEM_B, { waitsOn: ACCOUNT_ID, asking: false }),
+        ],
+        cursor: "1",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      const before = f.badges.at(-1);
+      f.turnChannels(true);
+      notices.recount();
+
+      assert.deepEqual([before, f.badges.at(-1)], [2, 1]);
+    }),
+);
+
 it.effect("a badge door that throws loses that count alone: the next answer still badges", () =>
   Effect.gen(function* () {
     const f = fixture();

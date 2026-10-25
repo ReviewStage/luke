@@ -72,6 +72,7 @@ import {
   shownTicks,
   taskHolder,
   tasklessGroups,
+  waitsOnReader,
   withChoice,
   withDoPress,
   withStep,
@@ -1460,6 +1461,19 @@ test("a notice, open with no ask open on its thread, waits on the reader's nod, 
   assert.equal(awaitsNod({ ...notice, status: INBOX_STATUS.ANSWERED }), false);
 });
 
+test("an item of an agent with no task waits on the member it is addressed to, else on its starter", () => {
+  const teammate = CHARLES.userId;
+
+  assert.deepEqual(
+    [
+      waitsOnReader({ startedBy: teammate, waitsOn: READER }, READER),
+      waitsOnReader({ startedBy: READER, waitsOn: teammate }, READER),
+      waitsOnReader({ startedBy: READER }, READER),
+    ],
+    [true, false, true],
+  );
+});
+
 test("under Channels a notice offers Got it, and is nodded to on open, only where its agent addressed it to the reader; one addressed to nobody is only read", () => {
   const notice = item({
     id: "a1b2c3d4-0000-4000-8000-000000000011",
@@ -1475,16 +1489,19 @@ test("under Channels a notice offers Got it, and is nodded to on open, only wher
   const addressed = { ...notice, addressed: true };
 
   assert.deepEqual(
-    [asksNod(notice, true), acknowledgedOnOpen(notice, READER, true)],
+    [asksNod(notice, READER, true), acknowledgedOnOpen(notice, READER, true)],
     [false, false],
   );
   assert.deepEqual(
-    [asksNod(addressed, true), acknowledgedOnOpen(addressed, READER, true)],
+    [asksNod(addressed, READER, true), acknowledgedOnOpen(addressed, READER, true)],
     [true, true],
   );
-  assert.equal(
-    acknowledgedOnOpen({ ...addressed, waitsOn: CHARLES }, READER, true),
-    false,
+  assert.deepEqual(
+    [
+      asksNod({ ...addressed, waitsOn: CHARLES }, READER, true),
+      acknowledgedOnOpen({ ...addressed, waitsOn: CHARLES }, READER, true),
+    ],
+    [false, false],
     "a notice addressed to a teammate is theirs to nod to",
   );
 });
