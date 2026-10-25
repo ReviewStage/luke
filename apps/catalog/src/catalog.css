@@ -32,6 +32,44 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* One ring for every control, in the apps' own tokens (`--luke-focus-ring-*`,
+   `tokens/profiles.css`) and on the same controls as their reset
+   (`packages/panel/src/styles/base.css`), so a control rings here as it does
+   there. Note that the gate is `:focus-visible` alone, which a browser tab
+   answers right, where the apps track the keyboard themselves
+   (`keyboard-modality.ts`) because their Electron window guesses wrong. In
+   the base layer, so a component's own rule for its focus still wins. */
+@layer base {
+  :is(
+    button,
+    a[href],
+    summary,
+    input:is([type="checkbox"], [type="radio"], [type="range"]),
+    [role="button"],
+    [role="tab"],
+    [role="switch"],
+    [role="option"],
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible:not(:has(> [data-focus-ring])) {
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: var(--luke-focus-ring-offset);
+  }
+
+  /* A control whose drawn shape is a part of it, a card's reach or a
+     picture's face, rings that part alone, which says so with
+     `data-focus-ring`, as in the apps. */
+  :focus-visible:has(> [data-focus-ring]) {
+    outline: none; /* no ring: the part it names rings */
+  }
+
+  :focus-visible > [data-focus-ring] {
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: var(--luke-focus-ring-offset);
+  }
+}
+
 /* A field holding the caret wears no ring, as in the apps (desktop base.css). */
 :is(
   textarea,
@@ -118,11 +156,6 @@ body {
 .catalog-link[aria-current="page"] {
   background: var(--luke-color-fill-selected);
   color: var(--luke-color-text);
-}
-
-.catalog-link:focus-visible {
-  outline: 2px solid var(--luke-color-focus-ring);
-  outline-offset: 1px;
 }
 
 .catalog-stage {
