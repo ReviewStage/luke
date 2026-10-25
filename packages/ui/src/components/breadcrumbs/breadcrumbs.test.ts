@@ -20,8 +20,10 @@ import {
  * pressed; a crumb that opens something says what and whether it stands
  * open; a crumb's own name stands over its words and its hint raises its
  * words; a crumb's glyph is hidden from a reader, who hears its words, and
- * its card hangs from the app's hint, a crumb with no press's included; and
- * a toolbar's way back is a button named by its words.
+ * its card hangs from the app's hint, a crumb with no press's included; a
+ * toolbar's way back is a button named by its words; and a path that does
+ * not fit its bar folds its first crumbs into one "…" naming them, the
+ * last crumb standing, and one that fits folds nothing.
  */
 
 declare global {
@@ -47,6 +49,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /** Draws a path of `crumbs` and hands back what it was drawn into. */
@@ -178,4 +181,44 @@ test("a toolbar's way back is a button named by its words, answering a press", (
   act(() => button(container, "Issues").click());
   expect(pressed).toEqual(["back"]);
   expect(container.querySelector("[aria-current='page']")?.textContent).toBe("REL-1");
+});
+
+/**
+ * Lays the path out at a hundred pixels a crumb in a bar `room` wide, which
+ * jsdom does not: a path is as wide as the crumbs it draws.
+ */
+function layOut(room: number): void {
+  vi.spyOn(HTMLOListElement.prototype, "scrollWidth", "get").mockImplementation(function (
+    this: HTMLOListElement,
+  ) {
+    return this.children.length * 100;
+  });
+  vi.spyOn(HTMLOListElement.prototype, "clientWidth", "get").mockReturnValue(room);
+}
+
+const THREE_CRUMBS: Crumb[] = [
+  { label: "Teammate invitations", onPress: () => undefined },
+  { label: "Build teammate invitations", onPress: () => undefined },
+  { label: "What the expired invite page says", current: true },
+];
+
+test("a path too wide for its bar folds its first crumbs into one … naming them, the last standing", () => {
+  layOut(250);
+  const container = draw({ label: "Path", crumbs: THREE_CRUMBS });
+  const items = [...container.querySelectorAll("ol > li")].map((item) => item.textContent);
+  expect(items).toEqual(["…", "What the expired invite page says"]);
+  expect(container.querySelector("[aria-current='page']")?.textContent).toBe(
+    "What the expired invite page says",
+  );
+});
+
+test("a path that fits its bar folds nothing", () => {
+  layOut(1000);
+  const container = draw({ label: "Path", crumbs: THREE_CRUMBS });
+  const items = [...container.querySelectorAll("ol > li")].map((item) => item.textContent);
+  expect(items).toEqual([
+    "Teammate invitations",
+    "Build teammate invitations",
+    "What the expired invite page says",
+  ]);
 });
