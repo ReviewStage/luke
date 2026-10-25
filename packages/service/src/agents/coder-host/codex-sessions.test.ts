@@ -283,6 +283,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           integrations: [LINEAR_SERVER],
           tokenUrl: TOKEN_URL,
           installedSkills: "/opt/luke/installed-skills",
+          warm: true,
         });
         assert.deepEqual(first, {
           type: INPUT_LINE.MESSAGE,

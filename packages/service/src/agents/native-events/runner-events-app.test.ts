@@ -737,10 +737,13 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a warm launch's IDLE settles its turn as a turn's end does, and the END that retires it later settles nothing more",
+    "a warm launch's IDLE settles its turn as a turn's end does and is told once, and the END that retires it later settles nothing more",
     () =>
       Effect.gen(function* () {
-        const post = yield* standing;
+        const told: RunnerEnded[] = [];
+        const post = yield* standingWith({
+          idled: (idled) => Effect.sync(() => void told.push(idled)),
+        });
         const agent = yield* agentWithBearer;
         const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
         const turn = [
@@ -771,6 +774,10 @@ it.layer(getTestDB())("the runner events route", (it) => {
         );
         assert.deepEqual(idle.rows.at(-1)?.parts.map(drawn), [["step-start"], ["text", "Done."]]);
         assert.deepEqual(ended, idle);
+        assert.deepEqual(
+          told.map((each) => [each.target, each.sequence]),
+          [[agent.target, turn.length - 1]],
+        );
       }),
   );
 

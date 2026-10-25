@@ -88,6 +88,7 @@ import {
   releaseCodingAgentRunnerLease,
 } from "@luke/database/models/coding-agent-runner-lease";
 import {
+  awaitingLinesOfReached,
   type CodingAgent,
   hasRepository,
   latestTurnsOfReached,
@@ -95,6 +96,7 @@ import {
   readCodingAgent,
   readCodingAgentOfConversation,
   readCodingAgentRouting,
+  readNativeRunStanding,
   recordCodingAgentRunnerToken,
   type WithRepository,
 } from "@luke/database/models/coding-agent-store";
@@ -1657,13 +1659,38 @@ export interface RunnerEnding {
 }
 
 /**
+ * Whether the agent's runner may have taken a message since its turn ended:
+ * a turn of its run queued or running, or a line of the developer's written
+ * since that turn ended that no turn has taken yet, and not so long ago
+ * that it reads as unanswered (`CODER.LINE_GRACE`). A send writes its line's
+ * row before it takes the runner lease, so read under the lease this sees
+ * every message a send wrote to the runner ahead of it.
+ */
+const runnerMayBeAtWork = (agentId: string, now: Date) =>
+  Effect.gen(function* () {
+    const standing = yield* readNativeRunStanding(agentId);
+    if (Option.isNone(standing)) return false;
+    const { conversationId, endedAt } = standing.value;
+    if (endedAt === null) return true;
+    const awaiting = (yield* awaitingLinesOfReached([conversationId])).get(conversationId);
+    return (
+      awaiting !== undefined &&
+      awaiting.getTime() > endedAt.getTime() &&
+      now.getTime() - awaiting.getTime() <= Duration.toMillis(CODER.LINE_GRACE)
+    );
+  });
+
+/**
  * A warm runner asked to end, under the agent's runner lease: its sandbox
  * read again once the lease is held, and the retire line written to the
  * runner the sandbox runs now, where it still runs in the session given.
  * The runner ends only where it is still warm, so a message a `send` wrote
  * ahead of the line, on the same stdin, keeps it (`INPUT_LINE.RETIRE`); its
- * END then stops the sandbox as any launch's end does. Answers whether the
- * line was written.
+ * END then stops the sandbox as any launch's end does. Nothing is written
+ * where the runner may have taken a message since its turn ended
+ * (`runnerMayBeAtWork`), since the runner would decline the line and its
+ * tags, cleared here, would send the next message to a second runner beside
+ * it; its next turn's end retires it. Answers whether the line was written.
  */
 export const retireWarmRunner = Effect.fn("web/retireWarmRunner")(function* (retiring: {
   readonly sessionId: string;
@@ -1674,6 +1701,7 @@ export const retireWarmRunner = Effect.fn("web/retireWarmRunner")(function* (ret
   return yield* holdingRunner(
     retiring.agentId,
     Effect.gen(function* () {
+      if (yield* runnerMayBeAtWork(retiring.agentId, yield* DateTime.nowAsDate)) return false;
       const found = yield* sandboxOf(api, retiring.sessionId);
       if (Option.isNone(found)) return false;
       const live = yield* liveRunner(api, found.value);
@@ -1718,6 +1746,29 @@ export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: Runne
   // A sandbox no agent's tag names was never launched into, so no runner of it has a lease to wait out.
   if (agentId === undefined) return yield* stoppedAtEnd(api, ending);
   return yield* holdingRunner(agentId, stoppedAtEnd(api, ending));
+});
+
+/**
+ * A launch's IDLE, its runner warm past the agent's turn, where the warm
+ * window is zero (`CODER.RUNNER_WARM`): the runner retired at once
+ * (`retireWarmRunner`), whose END then stops the sandbox. Retiring under
+ * the runner lease is what keeps a message sent at the turn's end: one a
+ * send wrote first is taken by the runner, which still reads its stdin, and
+ * one sent after finds the runner no longer told of and relaunches. Nothing
+ * for an IDLE older than the launch its sandbox runs now. Answers whether
+ * the retire line was written.
+ */
+export const runnerIdled = Effect.fn("web/runnerIdled")(function* (idle: RunnerEnding) {
+  const api = yield* vercelSandboxApi(deploymentOidcToken);
+  const found = yield* sandboxOf(api, idle.sessionId);
+  if (Option.isNone(found)) return false;
+  const agentId = found.value.tags?.[RUNNER_TAG.AGENT];
+  const launch = taggedLaunch(found.value.tags ?? {});
+  const running = found.value.currentSessionId;
+  if (agentId === undefined || running === undefined) return false;
+  if (found.value.status !== SANDBOX_STATUS.RUNNING) return false;
+  if (launch !== undefined && idle.sequence < launch.firstSequence) return false;
+  return yield* retireWarmRunner({ sessionId: idle.sessionId, agentId, running });
 });
 
 /** The stop `runnerEnded` decides, on the sandbox as it stands when read here. */

@@ -46,7 +46,7 @@ import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import { KEY_REFUSAL, PLAN_REFUSAL } from "../brain-host/eve-sessions.js";
 import { SKILL_ROOT } from "../repository-skills.js";
-import { CODER, runnerStaysWarm } from "./bounds.js";
+import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import {
@@ -208,8 +208,8 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
         integrations: yield* options.integrations(agent),
         allowedDomains: [...ALLOWED_DOMAINS],
         installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
-        // The runner stays warm past the agent's turn while the window allows, for the sweep to retire (`retireWarmRunner`).
-        ...(runnerStaysWarm() ? { warm: true } : undefined),
+        // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
+        warm: true,
       };
       return written;
     });
