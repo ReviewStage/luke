@@ -459,9 +459,9 @@ export function ActorMark({
         "actor-mark relative inline-grid flex-none align-middle text-foreground",
         "[--state-glyph-size:var(--spacing-avatar-glyph-share)] [&_.state-glyph>:is(svg,img)]:size-full",
         squared(actor) ? "rounded-avatar-square" : "rounded-disc",
-        // Luke wears his blue on his face, the colour his voice already answers in, his face filling more of his square than a glyph does.
+        // Luke wears his blue on his face, the colour his voice already answers in, his face filling more of his square than a glyph does. Note that the size is important, because base.css sizes every face outside the layers.
         actor.kind === ACTOR_KIND.LUKE &&
-          "text-working [&_.luke-face]:size-actor-face-share [&_.luke-face]:text-inherit",
+          "text-working [&_.luke-face]:size-actor-face-share! [&_.luke-face]:text-inherit",
         actor.kind === ACTOR_KIND.SOMEONE && "text-muted-foreground",
         // A member who left keeps their own face, grayed and muted on the tile, their name saying they left.
         leftWithFace(actor) && "bg-actor-tile [&>*]:opacity-80 [&>*]:grayscale",
