@@ -22,6 +22,11 @@ import { useAnnounceShown } from "../use-announce-shown.js";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { paneToggleAction, TreeToggle, usePaneRoom } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
+import {
+  TERMINAL_BODY_CLASS,
+  TERMINAL_HOST_CLASS,
+  TERMINAL_SCREEN_CLASS,
+} from "./terminal-look.js";
 import { TerminalShells } from "./terminal-shells.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { useTerminalSession } from "./use-terminal-session.js";
@@ -94,30 +99,30 @@ function StateBar({
   useAnnounceShown(ANNOUNCE.POLITE, bar.late && !revealed ? "" : bar.words);
   return (
     <div
-      className="terminal-bar"
+      className="terminal-bar flex min-h-7 flex-none flex-wrap items-center gap-x-control-gap gap-y-list-gap whitespace-nowrap border-b border-border bg-muted py-tight-gap pr-list-inset pl-luke-16 font-mono text-caption text-muted-foreground"
       data-late={String(bar.late)}
       onAnimationEnd={() => setRevealed(true)}
     >
       {/* Note that the glyph and the words are one item, so a bar too narrow for its action puts the action on a line of its own rather than the glyph apart from its words. */}
-      <span className="terminal-bar-lead">
+      <span className="flex min-w-0 flex-initial items-center gap-control-gap">
         {bar.busy ? (
-          <span className="terminal-bar-busy" aria-hidden="true">
+          <span className="flex-none tracking-busy text-muted-foreground" aria-hidden="true">
             ⋯
           </span>
         ) : null}
         <OneLine className="terminal-bar-words">{bar.words}</OneLine>
       </span>
-      <span className="terminal-bar-end">
+      <span className="terminal-bar-end ml-auto inline-flex items-center gap-control-gap">
         {bar.since === undefined ? null : (
-          <WorkingTime startedAt={bar.since} className="terminal-bar-note" />
+          <WorkingTime startedAt={bar.since} className="text-muted-foreground" />
         )}
-        {bar.note === undefined ? null : <span className="terminal-bar-note">{bar.note}</span>}
+        {bar.note === undefined ? null : <span className="text-muted-foreground">{bar.note}</span>}
         {action === undefined ? null : (
           <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => onAction(action.kind)}>
             {action.label}
             <Shortcut
               chord={{ key: SHORTCUT_KEY.ENTER, bare: true }}
-              className="terminal-bar-key"
+              className="ms-tight-gap [--luke-shortcut-ink:currentColor]"
             />
           </TextButton>
         )}
@@ -179,7 +184,7 @@ export function TerminalTab({
         <PaneBar
           middle={
             // Note that the name and where the connection stands share one shrinking box, so a long name gives way to the toggle rather than running under it.
-            <span className="terminal-tab-title">
+            <span className="terminal-tab-title inline-flex min-w-0 items-center gap-item-gap overflow-hidden whitespace-nowrap text-muted-foreground">
               <AgentRef
                 subject={subject}
                 models={agents.models}
@@ -187,7 +192,7 @@ export function TerminalTab({
                 glyph={<AgentGlyph agent={subject.agent} />}
                 label={subject.name}
               />
-              <span className="terminal-tab-standing">
+              <span className="terminal-tab-standing flex-none">
                 <span className="terminal-tab-sandbox">· sandbox </span>· {look.words}
               </span>
             </span>
@@ -195,8 +200,8 @@ export function TerminalTab({
           actions={<TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />}
         />
       )}
-      <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body" {...room.body}>
-        <div className="terminal-tab-host">
+      <Fill flow={FILL_FLOW.ROW} clip className={TERMINAL_BODY_CLASS} {...room.body}>
+        <div className={TERMINAL_HOST_CLASS}>
           {bar === undefined ? null : (
             // Note that each entry into a state's bar is a bar of its own, because a late bar's reveal runs again and its words wait for it, even when the state it follows was late too.
             <StateBar key={session.state.kind} bar={bar} onAction={session.onAction} />
@@ -206,7 +211,11 @@ export function TerminalTab({
               {TERMINAL_LOAD_FAILED}
             </ErrorState>
           ) : (
-            <div ref={session.screen} className="terminal-tab-screen" data-dim={String(look.dim)} />
+            <div
+              ref={session.screen}
+              className={TERMINAL_SCREEN_CLASS}
+              data-dim={String(look.dim)}
+            />
           )}
         </div>
         <TerminalShells

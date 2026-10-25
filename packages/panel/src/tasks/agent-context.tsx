@@ -14,6 +14,10 @@ import {
 } from "@luke/ui";
 import { useId, useRef, useState } from "react";
 import {
+  CONTEXT_LEVEL,
+  CONTEXT_PART,
+  type ContextLevel,
+  type ContextPart,
   contextFullLine,
   contextHint,
   contextLevel,
@@ -53,20 +57,36 @@ const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 /** What the ring and its popover are called. */
 const CONTEXT_LABEL = "Context usage";
 
+/** The ring's fill: muted with room to spare, amber within a tenth of the window of eve's compaction, and red at or past it. */
+const LEVEL_STROKE = {
+  [CONTEXT_LEVEL.ROOM]: "stroke-muted-foreground",
+  [CONTEXT_LEVEL.NEAR]: "stroke-attention",
+  [CONTEXT_LEVEL.OVER]: "stroke-destructive",
+} as const satisfies Record<ContextLevel, string>;
+
+/** Each part of the context's one colour, on the bar and on its legend row's square. */
+const PART_GROUND = {
+  [CONTEXT_PART.SYSTEM_PROMPT]: "bg-chart-2",
+  [CONTEXT_PART.TOOL_DEFINITIONS]: "bg-chart-1",
+  [CONTEXT_PART.BRIEF]: "bg-chart-3",
+  [CONTEXT_PART.CONVERSATION]: "bg-muted-foreground",
+} as const satisfies Record<ContextPart, string>;
+
 /** The ring itself: a faint track and the share filled over it, from twelve o'clock. */
-function ContextRing({ share }: { share: number }): React.JSX.Element {
+function ContextRing({ share, level }: { share: number; level: ContextLevel }): React.JSX.Element {
   const filled = Math.min(1, Math.max(0, share)) * RING_LENGTH;
   return (
-    <svg className="agent-context-ring" viewBox="0 0 16 16" aria-hidden="true">
+    <svg className="-rotate-90 fill-none" viewBox="0 0 16 16" aria-hidden="true">
       <circle
-        className="agent-context-track"
+        className="stroke-border-strong"
         cx="8"
         cy="8"
         r={RING_RADIUS}
         strokeWidth={RING_STROKE}
       />
       <circle
-        className="agent-context-fill"
+        className={`transition-[stroke-dasharray] ${LEVEL_STROKE[level]}`}
+        strokeLinecap="round"
         cx="8"
         cy="8"
         r={RING_RADIUS}
@@ -90,15 +110,18 @@ function ContextBody({
 
   return (
     <>
-      <p className="agent-context-summary">
-        <span className="agent-context-full">{contextFullLine(context)}</span>
-        <span className="agent-context-total">{contextTotalLine(context)}</span>
+      <p className="m-0 flex justify-between gap-control-gap tabular-nums">
+        <span className="font-luke-semibold">{contextFullLine(context)}</span>
+        <span className="text-muted-foreground">{contextTotalLine(context)}</span>
       </p>
-      <div className="agent-context-bar" aria-hidden="true">
+      <div
+        className="flex h-1.5 gap-list-gap overflow-hidden rounded-luke-full bg-fill-strong"
+        aria-hidden="true"
+      >
         {rows.map((row) => (
           <span
             key={row.part}
-            className="agent-context-segment"
+            className={`flex-none ${PART_GROUND[row.part]}`}
             data-part={row.part}
             style={{ width: `${rowWidth(row, context)}%` }}
           />
@@ -106,10 +129,13 @@ function ContextBody({
       </div>
       <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM}>
         {rows.map((row) => (
-          <li key={row.part} className="agent-context-row" data-part={row.part}>
-            <span className="agent-context-swatch" aria-hidden="true" />
-            <span className="agent-context-label">{row.label}</span>
-            <span className="agent-context-count">{rowCount(row)}</span>
+          <li key={row.part} className="flex items-center gap-icon-gap" data-part={row.part}>
+            <span
+              className={`size-luke-8 flex-none rounded-luke-6 ${PART_GROUND[row.part]}`}
+              aria-hidden="true"
+            />
+            <span className="m-0 min-w-0 flex-1 text-muted-foreground">{row.label}</span>
+            <span className="m-0 tabular-nums">{rowCount(row)}</span>
           </li>
         ))}
       </Stack>
@@ -120,7 +146,9 @@ function ContextBody({
           </Fact>
         ))}
       </Facts>
-      <p className="agent-context-note">As of the agent's last step. ~ marks an estimate.</p>
+      <p className="m-0 text-caption-inline text-muted-foreground">
+        As of the agent's last step. ~ marks an estimate.
+      </p>
     </>
   );
 }
@@ -187,12 +215,12 @@ export function AgentContextRing({
   };
 
   return (
-    <div className="agent-context" ref={root}>
+    <div className="agent-context relative flex min-w-0" ref={root}>
       <span className="agent-context-button flex" data-level={contextLevel(context)}>
         <Tooltip label={contextHint(context)}>
           <IconButton
             ref={trigger}
-            icon={<ContextRing share={contextShare(context)} />}
+            icon={<ContextRing share={contextShare(context)} level={contextLevel(context)} />}
             label={CONTEXT_LABEL}
             aria-haspopup="dialog"
             aria-expanded={open}

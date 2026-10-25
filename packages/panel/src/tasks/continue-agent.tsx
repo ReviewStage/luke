@@ -295,7 +295,7 @@ export function ContinuedComposerNote({
   return (
     <>
       <div className={COMPOSER_ROOM_CLASS}>
-        <ComposerFrame className="continued-composer">
+        <ComposerFrame className="continued-composer py-row-inset pr-row-inset pl-list-inset">
           <Banner
             look={BANNER_LOOK.ROW}
             glyph={<ArrowRightIcon aria-hidden="true" />}
