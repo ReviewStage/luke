@@ -52,6 +52,8 @@ const DECLARED_TABLES = [
   "attachment",
   "automation",
   "automation_run",
+  "channel",
+  "channel_look",
   "chat_channel",
   "chat_member",
   "chat_message",
