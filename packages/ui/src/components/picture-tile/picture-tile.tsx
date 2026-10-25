@@ -29,10 +29,27 @@ import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
  * sinking, while a key's press still opens it. A viewer the press opens
  * that asks for it (`usePictureExpand`) grows from the face's own rect and
  * shrinks back into it.
+ *
+ * It is drawn in Tailwind utilities over the theme, with no shadcn/ui base:
+ * shadcn's button is a control's box, and a tile has no box of its own, its
+ * face being the picture its place frames.
  */
 
 /** What a press is named for, the picture's words after it. */
 const ENLARGE_LABEL = "Enlarge";
+
+/** The press: no box of its own, hugging its picture or filling its room, the zooming pointer where a pointer's press opens it. */
+const TILE =
+  "luke-picture-tile group/picture-tile relative m-0 flex w-fit min-w-0 max-w-full cursor-zoom-in flex-col gap-luke-4 border-0 bg-transparent p-0 text-start text-inherit [font:inherit] data-[fill=true]:w-full data-[pointer-opens=false]:cursor-auto";
+
+/**
+ * The face, the picture's shape, so the ring rounds as its frame does, which
+ * sinks under a pointer's press and springs back. Note that a picture sinks
+ * less than a button's words do, because a whole picture shrinking by a
+ * button's share reads as a jump.
+ */
+const FACE =
+  "luke-picture-tile-face relative block min-w-0 max-w-full rounded-control transition-transform duration-(--luke-duration-fast) ease-spring-fast group-active/picture-tile:[transform:scale(0.98)] group-data-[pointer-opens=false]/picture-tile:group-active/picture-tile:[transform:none]";
 
 /** What an app's hint hands the tile it wraps: when to show and go, and the chord it names. */
 type HintProps = Pick<
@@ -75,7 +92,7 @@ export function PictureTile({
   return (
     <button
       type="button"
-      className="luke-picture-tile"
+      className={TILE}
       data-fill={fill}
       data-pointer-opens={pointerOpens}
       aria-label={name === "" ? ENLARGE_LABEL : `${ENLARGE_LABEL} ${name}`}
@@ -94,7 +111,7 @@ export function PictureTile({
         onOpen(event);
       }}
     >
-      <span className="luke-picture-tile-face" data-focus-ring="">
+      <span className={FACE} data-focus-ring="">
         {children}
       </span>
       {caption}

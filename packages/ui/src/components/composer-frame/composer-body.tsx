@@ -14,8 +14,21 @@ import type { ReactNode } from "react";
  * It owns the order and nothing else: the field is the owner's, and what
  * stands over the files (a question's controls, a send that did not go) and
  * the foot under the field (`ComposerFoot`) stay where the owner puts them.
- * A row that holds nothing drawn takes no room (`composer-body.css`).
+ * A row that holds nothing drawn takes no room. It is drawn in Tailwind
+ * utilities over the theme, inset as the foot under the field stands in its
+ * frame (`ComposerFrame`'s look).
  */
+
+/**
+ * The files' row: at a card's inset, a step tighter in a field's or an
+ * input's well, and flush with the words under it in a bare frame, since the
+ * card around it insets both; hidden while it holds nothing drawn.
+ */
+const FILES =
+  "luke-composer-files flex flex-wrap gap-tight-gap px-luke-12 pt-luke-12 pb-0 " +
+  "group-data-[look=field]/composer:px-luke-6 group-data-[look=field]/composer:pt-luke-6 " +
+  "group-data-[look=input]/composer:px-luke-6 group-data-[look=input]/composer:pt-luke-6 " +
+  "group-data-[look=bare]/composer:p-0 [&:not(:has(>:not([hidden])))]:hidden";
 
 /** A box's field, `children`, under the chips of the files handed to it, where it holds any. */
 export function ComposerBody({
@@ -29,9 +42,7 @@ export function ComposerBody({
 }): React.JSX.Element {
   return (
     <>
-      {files === undefined || files === null ? null : (
-        <div className="luke-composer-files">{files}</div>
-      )}
+      {files === undefined || files === null ? null : <div className={FILES}>{files}</div>}
       {children}
     </>
   );

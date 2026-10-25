@@ -235,6 +235,19 @@ sheet, because they style generated HTML element by element, and so does
 `landed.css`, whose wash is played on whatever element a view brings the eye
 to, by its `data-landed` attribute alone.
 
+The chips, media, and call components are drawn the same way: `PageThumb`
+stands on shadcn's aspect ratio, and `PictureSet`'s tiles and
+`VideoPlayer`'s inline frame on its card (`Card`), while `AttachmentChip`,
+`PictureTile`, `ProviderButton`'s gate, `CardPress`, `ComposerFrame` and its
+foot, and the call's `CallBar`, `CallLive`, and `CallVideoTile` are drawn in
+the theme's utilities with no shadcn base, since shadcn/ui has no player,
+composer, or call, and its badge and button are a control's box where these
+are frames holding presses of their own. What answers a container's width,
+the call bar's, the tile's, a message box's foot's, is a container query
+variant (`@max-[280px]/luke-call-bar:`) beside the rule it changes. Their
+sheets keep only keyframes and the rules that play them, and the foot's one
+`:has()` container.
+
 ## Icons
 
 Every icon is imported through one door, `@luke/ui/icons`, built on Lucide
