@@ -578,6 +578,39 @@
   --radius-choice-box: var(--luke-space-4);
   --text-caption-inline: var(--luke-type-caption-size);
 
+  /* The content and text components' own (`components/text/`, `text-link/`,
+     `inline-ref/`, `code-card/`, `shortcut/`, `glyph-slot/`, `mark-strip/`,
+     `saved-tick/`, `working-mark/`, `thinking-dots/`): the top bar's title
+     role and the reading leading; a link's hairline corner and its
+     underline, a faint wash of its words' own ink; the placement hooks a
+     glyph's seat, a chord, and the working mark read, each with the size it
+     stands at where unset; a strip's mark's ink; the code's inks, a run's in the appearance
+     it stands in, and a diff row's tints; and a token's pill widths, its
+     wash's bleed, and a wash's name at least a mark tall. */
+  --text-toolbar-title: var(--luke-type-toolbar-title-size);
+  --text-toolbar-title--line-height: var(--luke-type-toolbar-title-leading);
+  --font-weight-toolbar-title: var(--luke-type-toolbar-title-weight);
+  --leading-reading: var(--luke-type-reading-leading);
+  --radius-text-link: 2px; /* off-scale: a hairline corner the keyboard's ring hugs the words by */
+  --color-link-underline: color-mix(in srgb, currentColor 32%, transparent);
+  --spacing-glyph: var(--luke-glyph-size, var(--luke-space-16));
+  --color-shortcut-ink: var(--luke-shortcut-ink, var(--luke-color-text-muted));
+  --text-shortcut: var(--luke-shortcut-text, var(--luke-type-caption-size));
+  --spacing-working-mark: var(--luke-working-mark-size, var(--luke-space-12));
+  --color-mark-strip-ink: var(--luke-mark-strip-ink);
+  --spacing-thinking-dot: 5px; /* off-scale: a wait's dot */
+  --color-code: var(--luke-color-code-text);
+  --color-code-run: light-dark(
+    var(--luke-code-run-light, var(--luke-color-code-text)),
+    var(--luke-code-run-dark, var(--luke-color-code-text))
+  );
+  --color-code-added: color-mix(in srgb, var(--luke-color-complete) 14%, transparent);
+  --color-code-removed: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
+  --container-inline-ref-pill: min(var(--luke-inline-ref-pill-width), 100%);
+  --container-inline-ref-pill-stated: min(var(--luke-inline-ref-pill-stated-width), 100%);
+  --shadow-inline-ref-wash: 0 0 0 3px var(--luke-color-fill-hover); /* off-scale: the wash's bleed */
+  --spacing-inline-ref-mark: max(0px, calc((16px - 1lh) / 2)); /* off-scale: the mark's 16px */
+
   /* Rows and navigation (`components/list-row/`, `nav-item/`, `disclosure/`,
      `bar-item/`, `pane-bar/`, `toolbar/`, `over-pane/`, `resize-corner/`,
      `folding-search/`, `searchable-menu/`): the inks, lengths, and lifts a
@@ -729,3 +762,11 @@
     }
   }
 }
+
+/* A screen with no hover (`no-hover:`), where a turn's actions show on a
+   tap; and a finger with no hover (`finger:`), where a chord shown as a
+   hint is not drawn, since there is no keyboard to press it on. Both
+   features are asked for the second, so a tablet worked with a trackpad
+   keeps its hints. */
+@custom-variant no-hover (@media (hover: none));
+@custom-variant finger (@media (hover: none) and (pointer: coarse));

@@ -8,5 +8,5 @@
   "packages/ui/src/components/tabs/tabs.tsx": 2,
   "packages/ui/src/components/text-button/text-button.tsx": 1,
   "packages/ui/src/components/text-field/text-field.tsx": 1,
-  "packages/ui/src/components/text/text.css": 1
+  "packages/ui/src/components/text/text.tsx": 1
 }

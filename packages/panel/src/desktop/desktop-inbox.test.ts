@@ -2601,7 +2601,7 @@ test("an item's card names its task as the window names a task everywhere: the k
     assert.fail("the row's card is hung");
   const head = card.querySelector('.task-card-standing[data-line="one"]');
   assert.deepEqual(
-    [...(head?.children ?? [])].map((each) => [each.className, each.textContent]),
+    [...(head?.children ?? [])].map((each) => [each.classList[0], each.textContent]),
     [
       ["task-key", "STAG-182"],
       ["luke-inline-ref", LONG],

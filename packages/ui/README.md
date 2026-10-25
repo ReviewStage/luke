@@ -220,6 +220,21 @@ its look in React, trimmed where a `DisclosureFrame` lays it out. The
 combobox's field wears shadcn's input classes (`INPUT_FIELD`,
 `INPUT_CONTROL`), and the last `.luke-text-field` is gone.
 
+The content and text components are drawn the same way: `Text` and
+`TextLink` read one table of the type roles' utilities
+(`components/text/text-role.ts`), and `InlineRef`, `MessageFrame`,
+`MessageActions`, `MessageLine`, `CodeCard`, `CopyButton`, `MarkStrip`,
+`GlyphSlot`, `SelectionBar`, `SavedTick`, `RollingNumber`, `WorkingMark`, and
+`ThinkingDots` are drawn in the theme's utilities with no shadcn base.
+`Shortcut` stands on shadcn's kbd, its chord a `KbdGroup` and each key a
+`Kbd`. Their sheets keep their keyframes and the rules that play them, a cut
+name's fade, and the copy glyph's answer to the chip around it;
+`.luke-visually-hidden` keeps its rule, since other components put the class
+on words of their own. `Prose` and the window's Markdown (`prose.css`) stay a
+sheet, because they style generated HTML element by element, and so does
+`landed.css`, whose wash is played on whatever element a view brings the eye
+to, by its `data-landed` attribute alone.
+
 The chips, media, and call components are drawn the same way: `PageThumb`
 stands on shadcn's aspect ratio, and `PictureSet`'s tiles and
 `VideoPlayer`'s inline frame on its card (`Card`), while `AttachmentChip`,
