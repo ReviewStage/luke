@@ -1,6 +1,6 @@
 {
   "name": "@luke/agent-runner",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "private": true,
   "type": "module",
   "description": "The runner in a coding agent's sandbox: Claude Code through the Agent SDK or Codex through its app-server, Luke's messages in on stdin, the harness's messages out to Luke",
