@@ -651,22 +651,26 @@ test("the tree stands as wide as the panel keeps it, and its edge asks for anoth
   assert.deepEqual(held.widths, [264], "Enter puts back the tree's own width");
 });
 
-test("the tree's edge moves the tree from the width it is drawn at, where the box leaves the diff its least", async () => {
+test("the tree's edge moves the tree from the width it is drawn at, its share of the box", async () => {
   files = [changed("a.ts")];
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    const width = this.classList.contains("file-view-body") ? 500 : 0;
+    const width = this.classList.contains("file-view-body") ? 800 : 0;
     return new DOMRect(0, 0, width, 0);
   });
-  const { tree, held } = heldTree(true, 264);
+  const { tree, held } = heldTree(true, 400);
   await drawTab({ tree });
 
   const edge =
     document.querySelector<HTMLElement>('.file-tree-pane [role="separator"]') ??
     assert.fail("an edge");
   press(edge, { key: "ArrowRight" });
-  assert.deepEqual(held.widths, [248], "a step narrower than the 264px the tree is drawn at");
+  assert.deepEqual(
+    held.widths,
+    [304],
+    "a step narrower than 320px, 40% of the 800px box, though the tree was left at 400px",
+  );
 });
 
 test("while the tree is hidden a strip stands in its place, a mark for each file, and resting on it peeks the tree", async () => {
