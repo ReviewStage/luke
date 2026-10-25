@@ -942,6 +942,31 @@ it.effect(
 );
 
 it.effect(
+  "a panel saying it is watching once a minute stays open past the idle bound and moves the lease on, though it sends nothing else",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+      for (let minute = 0; minute < 10; minute += 1) {
+        yield* TestClock.adjust(Duration.minutes(1));
+        yield* panel.push({ type: BROWSER_LIVE_CLIENT.WATCHING });
+        yield* settle;
+      }
+      assert.deepEqual(panel.closed, [], "a watched panel stays open");
+      assert.deepEqual(panel.ofType(BROWSER_LIVE_SERVER.REFUSED), [], "watching drives nothing");
+      assert.equal(store.holds.length, 11, "each minute's watching moved the lease on");
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+it.effect(
   "closing one window leaves the tab to the same member's other window that moved the takeover on since",
   () =>
     Effect.gen(function* () {

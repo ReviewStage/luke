@@ -6,9 +6,11 @@
  * under the account's bearer, the web's from its own page under the session
  * cookie. Everything past the door is here, the same on both. A socket is
  * sized with the viewport the pane draws at as soon as it opens, and again
- * each time the pane resizes; nothing is sent to keep it open, so a view
- * nobody acts on is closed by the relay as idle and lets its agent's sandbox
- * stop (`browser-live/relay.ts`). A socket that drops is
+ * each time the pane resizes, and says the member is watching once a minute
+ * while it stands, which keeps the relay from closing it as idle. The pane
+ * holds a view only while it is shown and its window's page visible
+ * (`cloud-browser-pane.tsx`), so a hidden one holds no socket and lets its
+ * agent's sandbox stop (`browser-live/relay.ts`). A socket that drops is
  * opened again after a wait that doubles to thirty seconds and starts over
  * once a socket has been heard on; one whose agent has not opened its
  * sandbox is asked after every five seconds; and one the relay closed as
@@ -76,6 +78,9 @@ const CLOUD_BROWSER_RECONNECT = {
   /** The wait between asks while the agent has not opened its sandbox. */
   NOT_OPENED_EVERY: Duration.seconds(5),
 } as const;
+
+/** How often the panel says it is watching while the socket stands, well inside the relay's idle bound. */
+const CLOUD_BROWSER_WATCHING_EVERY = Duration.minutes(1);
 
 /** Where a view stands. */
 export const CLOUD_BROWSER_PHASE = {
@@ -301,8 +306,16 @@ export function cloudBrowserLive(input: {
                 opened.close();
               }),
           );
-          // The viewport goes as the socket opens; the pane sends it again on each resize.
+          // The viewport goes as the socket opens, and the pane sends it again on each resize; watching goes on the beat.
           yield* Effect.sync(sendViewport);
+          yield* Effect.forkScoped(
+            Effect.forever(
+              Effect.andThen(
+                Effect.sleep(CLOUD_BROWSER_WATCHING_EVERY),
+                Effect.sync(() => send({ type: BROWSER_LIVE_CLIENT.WATCHING })),
+              ),
+            ),
+          );
           let reason: BrowserLiveCloseReason | undefined;
           let code: number | undefined;
           let live = false;

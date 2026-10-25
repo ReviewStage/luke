@@ -47,8 +47,9 @@
  * watched the socket holds the sandbox through the lease every terminal of
  * it shares (`sandbox-terminal-lease.ts`), on the terminal's terms: the
  * connection holds it, and each message the panel sends moves it on,
- * written at most once a minute; a viewport moves it on only where it
- * resizes the view, since the same size sent again is no one watching. The
+ * written at most once a minute: the panel says it is watching while it is
+ * shown, and a viewport moves it on only where it resizes the view, since
+ * an older panel sends the same size again whether shown or not. The
  * socket closes as idle once the panel has sent nothing that counts for the
  * idle bound, and the sweep stops the sandbox once the lease lapses. While
  * the browser is reached, the connection also keeps the sandbox alive past
@@ -263,7 +264,8 @@ type InputMessage = Exclude<
       | typeof BROWSER_LIVE_CLIENT.HAND_BACK
       | typeof BROWSER_LIVE_CLIENT.VIEWPORT
       | typeof BROWSER_LIVE_CLIENT.NAVIGATE
-      | typeof BROWSER_LIVE_CLIENT.HISTORY;
+      | typeof BROWSER_LIVE_CLIENT.HISTORY
+      | typeof BROWSER_LIVE_CLIENT.WATCHING;
   }
 >;
 
@@ -655,7 +657,8 @@ function resizes(view: LiveView, size: PixelSize): Effect.Effect<boolean> {
 /**
  * Note that a viewport counts as someone watching only where it resizes the
  * view, because an older panel sends the same size again every minute to keep
- * the socket open, and a pane nobody looks at would hold its sandbox for good.
+ * the socket open, shown or not, and a pane nobody looks at would hold its
+ * sandbox for good; a panel that is shown says so with its own message.
  */
 function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Effect<void> {
   return Effect.gen(function* () {
@@ -673,6 +676,8 @@ function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Ef
       case BROWSER_LIVE_CLIENT.NAVIGATE:
       case BROWSER_LIVE_CLIENT.HISTORY:
         return yield* steer(view, message, at);
+      case BROWSER_LIVE_CLIENT.WATCHING:
+        return;
       default:
         return yield* drive(view, message, at);
     }
