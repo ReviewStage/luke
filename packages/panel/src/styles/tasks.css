@@ -4845,13 +4845,13 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   touch-action: none;
 }
 
-/* A video plays on black, centred, as large as the card leaves it under
+/* A video plays on the veil, centred, as large as the card leaves it under
    its header at its own shape (`@luke/ui`'s VideoPlayer). */
 .attachment-viewer[data-view="video"] .attachment-viewer-body {
   display: grid;
   overflow: hidden;
   place-items: center;
-  background: #000; /* off-scale: a video's letterbox */
+  background: var(--luke-color-veil);
 }
 
 .attachment-viewer-body > .luke-video-player {

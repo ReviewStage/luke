@@ -90,20 +90,21 @@
     --luke-button-ink: var(--luke-color-ground);
   }
 
-  /* Over a picture or a video's frame, as a player's controls stand: white
-     in either theme, since what is under it is the frame's, not the
-     window's, and a white wash under the pointer. */
+  /* Over a picture or a video's frame, as a player's controls stand: in the
+     words a veil carries, the same in either theme, since what is under it
+     is the frame's, not the window's, and a wash of that ink under the
+     pointer. */
   .luke-button[data-variant="media"] {
     --luke-button-fill: transparent;
-    --luke-button-ink: #fff; /* off-scale: over any frame, light or dark */
+    --luke-button-ink: var(--luke-color-on-veil);
   }
 
   .luke-button[data-variant="media"]:hover:not(:disabled, [aria-disabled="true"]) {
-    --luke-button-fill: rgba(255, 255, 255, 0.18); /* off-scale: the same */
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-on-veil) 18%, transparent);
   }
 
   .luke-button[data-variant="media"]:active:not(:disabled, [aria-disabled="true"]) {
-    --luke-button-fill: rgba(255, 255, 255, 0.28); /* off-scale: the same */
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-on-veil) 28%, transparent);
   }
 
   .luke-button[data-variant="working-tint"] {
