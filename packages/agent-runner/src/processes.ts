@@ -19,7 +19,12 @@
  * a child of the harness running `socat` on exactly that socket, so a
  * `socat` or a server of the agent's own still reads as the agent's. Counted
  * as the agent's, it held every wait the whole launch, and the sandbox under
- * it, until the wakeup came.
+ * it, until the wakeup came. This is the one bridge the pinned SDK
+ * (`@anthropic-ai/claude-agent-sdk` 0.3.304) starts; its sandbox runtime can
+ * also start a SOCKS bridge on `claude-socks-<id>.sock`, which this pin does
+ * not, so a bump that does would hold every wait again, never cut work off,
+ * until it is matched here too. The relays each sandboxed command starts end
+ * with that command, so none stands while the agent waits.
  *
  * Where `/proc` cannot be read, the answer is that one runs, so a wait is
  * never released on a guess; so is a process whose command line cannot be
