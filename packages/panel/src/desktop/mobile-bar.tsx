@@ -2,7 +2,7 @@ import { BarItem, EllipsisIcon } from "@luke/ui";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon, ListTodoIcon, MessagesSquareIcon } from "lucide-react";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { automationsTab, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
@@ -32,8 +32,8 @@ export function mobileBarShown(room: ShellRoom, tasks: TasksControl, chatOn: boo
   if (inboxView.open) return inboxView.listed || inboxView.chosen === undefined;
   if (agentView.agentId !== undefined || personView.userId !== undefined) return false;
   if (boardView.open) return true;
-  // Note that an automation's editor and its runs keep the whole screen, as an item does; only the list stands over the bar.
-  if (automationsView.open) return automationsView.place.kind === AUTOMATIONS_PAGE.LIST;
+  // Note that an automation's editor and its runs keep the whole screen, as an item does; only the list and the Runs tab stand over the bar.
+  if (automationsView.open) return automationsTab(automationsView.place);
   return tasks.page === TASKS_PAGE.HOME;
 }
 

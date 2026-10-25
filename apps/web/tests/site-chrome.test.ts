@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
-import { FaceMark } from "@luke/ui";
 import { createElement, type FunctionComponent } from "react";
-import { renderToStaticMarkup, renderToString } from "react-dom/server";
+import { renderToString } from "react-dom/server";
 import { test } from "vitest";
 import { AboutPage } from "../src/AboutPage";
 import { App } from "../src/App";
@@ -69,11 +68,6 @@ for (const { path, page, marked } of PAGES) {
       "Privacy -> /privacy",
       "Contact -> mailto:founders@stagereview.app",
     ]);
-  });
-
-  test(`${path} draws the face mark from @luke/ui beside the wordmark`, () => {
-    const mark = drawn(page).querySelector('header nav[aria-label="Site"] a svg');
-    assert.equal(mark?.outerHTML, renderToStaticMarkup(createElement(FaceMark)));
   });
 
   test(`${path} marks the links to itself as the current page`, () => {

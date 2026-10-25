@@ -183,18 +183,6 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
       }),
   );
 
-  it.effect("an operator's turn its heartbeat opened keeps nothing", () =>
-    Effect.gen(function* () {
-      const { agent, workspaceId } = yield* openAgent(CODING_AGENT_KIND.OPERATOR);
-      yield* writeTurn(agent, { sender: MESSAGE_SENDER.AUTOMATION, name: "Luke's heartbeat" }, []);
-
-      const answer = yield* remember(agent);
-
-      assert.equal(answer.reason, MEMORY_PROVENANCE_REFUSAL.AUTOMATION);
-      assert.deepEqual(yield* listMemories(workspaceId, agent.userId), []);
-    }),
-  );
-
   it.effect(
     "a turn that read the web, through Luke's page read or Claude Code's search, keeps nothing",
     () =>

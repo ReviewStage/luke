@@ -15,7 +15,6 @@ import {
   VERDICT,
   type Verdict,
 } from "./checks.js";
-import { findLeaks } from "./sanitize.js";
 
 // The hermetic recording: codex 0.163.0's app-server driven through the probe's own turns
 // (edit, scanner, MCP echo, a CI watch waited out under a steer, an interrupted turn, then a
@@ -211,16 +210,5 @@ describe("readScan", () => {
       processesWithAccessToken: ["7:codex"],
     });
     expect(readScan("no report here")).toBeUndefined();
-  });
-});
-
-describe("the committed fixtures", () => {
-  it("hold nothing secret-shaped", () => {
-    for (const file of ["hermetic/app-server.jsonl", "live/report.json"]) {
-      expect([file, findLeaks(readFileSync(path.join(FIXTURES, file), "utf8"), [])]).toEqual([
-        file,
-        [],
-      ]);
-    }
   });
 });

@@ -65,36 +65,28 @@ function post(
   });
 }
 
-it.effect("each forwarded event names the account at its top level, as the capture docs ask", () =>
-  Effect.gen(function* () {
-    const processor = upstream();
-    assert.deepEqual(yield* post("user-1", { events: [LAUNCH] }, processor), { accepted: 1 });
-    const [item] = processor.forwarded[0]?.body.batch ?? [];
-    assert.equal(item?.distinct_id, "user-1");
-    assert.equal(item?.properties.distinct_id, undefined);
-    assert.equal(item?.properties.$geoip_disable, true);
-  }),
-);
+it.effect(
+  "an accepted batch posts every event under the account at its top level, as the capture docs ask, with geolocation off",
+  () =>
+    Effect.gen(function* () {
+      const posthog = upstream();
+      const answer = yield* post("user-document", { events: [LAUNCH, LAUNCH] }, posthog);
 
-it.effect("an accepted batch posts every event under the account with geolocation off", () =>
-  Effect.gen(function* () {
-    const posthog = upstream();
-    const answer = yield* post("user-document", { events: [LAUNCH, LAUNCH] }, posthog);
-
-    assert.deepEqual(answer, { accepted: 2 });
-    assert.equal(posthog.forwarded.length, 1);
-    const [sent] = posthog.forwarded;
-    assert.equal(sent?.url, "https://us.i.posthog.com/batch/");
-    assert.equal(sent?.body.api_key, PROJECT_KEY);
-    assert.equal(sent?.body.historical_migration, false);
-    assert.equal(sent?.body.batch.length, 2);
-    for (const item of sent?.body.batch ?? []) {
-      assert.equal(item.event, PRODUCT_EVENT.APP_LAUNCH);
-      assert.equal(item.distinct_id, "user-document");
-      assert.equal(item.properties.$geoip_disable, true);
-      assert.equal(item.properties.app_version, "0.2.0");
-    }
-  }),
+      assert.deepEqual(answer, { accepted: 2 });
+      assert.equal(posthog.forwarded.length, 1);
+      const [sent] = posthog.forwarded;
+      assert.equal(sent?.url, "https://us.i.posthog.com/batch/");
+      assert.equal(sent?.body.api_key, PROJECT_KEY);
+      assert.equal(sent?.body.historical_migration, false);
+      assert.equal(sent?.body.batch.length, 2);
+      for (const item of sent?.body.batch ?? []) {
+        assert.equal(item.event, PRODUCT_EVENT.APP_LAUNCH);
+        assert.equal(item.distinct_id, "user-document");
+        assert.equal(item.properties.distinct_id, undefined);
+        assert.equal(item.properties.$geoip_disable, true);
+        assert.equal(item.properties.app_version, "0.2.0");
+      }
+    }),
 );
 
 it.effect(

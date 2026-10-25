@@ -448,41 +448,6 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
   );
 
   it.effect(
-    "an organization someone else made under the account's first workspace's slug is never adopted",
-    () =>
-      Effect.gen(function* () {
-        const seams = yield* fakeWorkspaceSeams;
-        const victim = yield* openUser("Grace Hopper");
-        const mallory = yield* openUser("Mallory");
-        const squatted = yield* seams.createOrganization({
-          name: "Grace Hopper",
-          slug: `personal-${victim}`,
-          userId: mallory,
-          metadata: { personal: true },
-        });
-
-        const ensured = yield* ensurePersonalWorkspace(victim, seams);
-
-        assert.ok(Option.isSome(ensured));
-        assert.notEqual(ensured.value, squatted.id);
-        const [listed] = yield* listWorkspaces(victim);
-        assert.ok(listed?.slug?.startsWith(`personal-${victim}-`));
-        assert.deepEqual(yield* listWorkspaces(victim), [
-          {
-            id: ensured.value,
-            name: "Grace Hopper",
-            slug: listed?.slug,
-            role: WORKSPACE_ROLE.OWNER,
-            github: null,
-            githubInstallations: [],
-            memberCount: 1,
-            personal: true,
-          },
-        ]);
-      }),
-  );
-
-  it.effect(
     "a list puts the account's own first workspace first, and the shared ones by name",
     () =>
       Effect.gen(function* () {

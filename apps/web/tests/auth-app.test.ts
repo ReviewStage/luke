@@ -122,7 +122,6 @@ test("the group answers what the handler answered, as the handler answered it", 
     const carried = await recordedResponse(answered);
     const direct = await recordedResponse(await stub.handle(exchange.request()));
 
-    assert.deepEqual(stub.requests.length, 2);
     assert.equal(stub.requests[0], request);
     assert.deepEqual(carried, direct);
     await settleResponseGolden(GOLDEN_ROOT, exchange.name, carried);

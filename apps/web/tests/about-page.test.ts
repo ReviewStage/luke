@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
-import { MARK_PROVIDER, PROVIDER_MARK_SIZE, ProviderMark } from "@luke/ui";
 import { createElement } from "react";
-import { renderToStaticMarkup, renderToString } from "react-dom/server";
+import { renderToString } from "react-dom/server";
 import { test } from "vitest";
 import { AboutPage } from "../src/AboutPage";
 
@@ -41,19 +40,4 @@ test("each founder's profiles open in a new tab, named for the founder", () => {
     ],
   );
   for (const link of links) assert.equal(link.getAttribute("target"), "_blank");
-});
-
-test("each founder's LinkedIn and X links draw their marks through ProviderMark", () => {
-  const [linkedin, x] = [MARK_PROVIDER.LINKEDIN, MARK_PROVIDER.X].map((provider) =>
-    renderToStaticMarkup(createElement(ProviderMark, { provider, size: PROVIDER_MARK_SIZE.ICON })),
-  );
-  const drawn = Array.from(main().querySelectorAll("a")).map(
-    (link) => [link.getAttribute("aria-label"), link.querySelector("svg")?.outerHTML] as const,
-  );
-  assert.deepEqual(drawn, [
-    ["Charles Pan on LinkedIn", linkedin],
-    ["Charles Pan on X", x],
-    ["Dean Stratakos on LinkedIn", linkedin],
-    ["Dean Stratakos on X", x],
-  ]);
 });

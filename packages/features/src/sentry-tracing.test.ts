@@ -9,9 +9,6 @@ import { sentryTracesRequest } from "./sentry-tracing.js";
 test("a renderer's report to main is never traced", () => {
   assert.equal(sentryTracesRequest("sentry-ipc://envelope/sentry_key"), false);
   assert.equal(sentryTracesRequest("sentry-ipc://scope/sentry_key"), false);
-});
-
-test("the scheme is matched whatever its case", () => {
   assert.equal(sentryTracesRequest("SENTRY-IPC://envelope/sentry_key"), false);
 });
 

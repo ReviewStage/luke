@@ -624,3 +624,16 @@ export const automationRunAnswerSchema = EffectSchema.Struct({
 export const automationRunsAnswerSchema = EffectSchema.Struct({
   runs: EffectSchema.Array(automationRunSummarySchema),
 });
+
+/** One run of a workspace's runs: the run as an automation's history shows it, and the automation it is a run of. */
+export const automationWorkspaceRunSchema = EffectSchema.Struct({
+  ...automationRunSummarySchema.fields,
+  automation: EffectSchema.Struct({ id: wireUuidSchema, name: EffectSchema.String }),
+});
+
+export type AutomationWorkspaceRun = typeof automationWorkspaceRunSchema.Type;
+
+/** Every run of a workspace's automations the account may read, newest first. */
+export const automationWorkspaceRunsAnswerSchema = EffectSchema.Struct({
+  runs: EffectSchema.Array(automationWorkspaceRunSchema),
+});
