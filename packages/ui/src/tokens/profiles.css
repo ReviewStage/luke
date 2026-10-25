@@ -170,7 +170,11 @@
      window is, so the card stands two thirds of the window tall (four fifths
      as a sheet) or what that takes, never past the window less a margin,
      and its top yields to make room. Where the window cannot hold all of
-     it, the card takes the window and the list scrolls. */
+     it, the card takes the window and the list scrolls. In a short window,
+     where that share is less than a card's full height
+     (`--luke-command-full`), the card goes on down to the window's foot
+     less the margin before its list is cut, rather than leaving the room
+     under it empty. */
   --luke-command-chrome: calc(
     var(--luke-touch-target) +
     var(--luke-control-height) +
@@ -182,22 +186,35 @@
     var(--luke-menu-inset)
   );
   --luke-command-least: calc(var(--luke-command-chrome) + 3 * var(--luke-menu-row-height));
-  --luke-command-room: min(
+  --luke-command-full: 480px;
+  --luke-command-share: min(
     calc(var(--luke-stage-height) - 2 * var(--luke-space-8)),
     max(calc(var(--luke-stage-height) * 0.64), var(--luke-command-least))
-  );
-  --luke-command-sheet: min(
-    var(--luke-stage-height),
-    max(calc(var(--luke-stage-height) * 0.8), var(--luke-command-least))
   );
   --luke-command-top: max(
     var(--luke-space-8),
     min(
       calc(var(--luke-stage-height) * 0.18),
       var(--luke-stage-height) -
-      var(--luke-command-room) -
+      var(--luke-command-share) -
       var(--luke-space-8)
     )
+  );
+  --luke-command-room: max(
+    var(--luke-command-share),
+    min(
+      var(--luke-stage-height) -
+      var(--luke-command-top) -
+      var(--luke-space-8),
+      var(--luke-command-full)
+    )
+  );
+  --luke-command-sheet: max(
+    min(
+      var(--luke-stage-height),
+      max(calc(var(--luke-stage-height) * 0.8), var(--luke-command-least))
+    ),
+    min(var(--luke-stage-height) - var(--luke-space-8), var(--luke-command-full))
   );
 
   /* A hover hint: the pill's own corner and lift, as it was drawn before it
@@ -417,7 +434,11 @@
      window is, so the card stands two thirds of the window tall (four fifths
      as a sheet) or what that takes, never past the window less a margin,
      and its top yields to make room. Where the window cannot hold all of
-     it, the card takes the window and the list scrolls. */
+     it, the card takes the window and the list scrolls. In a short window,
+     where that share is less than a card's full height
+     (`--luke-command-full`), the card goes on down to the window's foot
+     less the margin before its list is cut, rather than leaving the room
+     under it empty. */
   --luke-command-chrome: calc(
     var(--luke-touch-target) +
     var(--luke-control-height) +
@@ -429,22 +450,35 @@
     var(--luke-menu-inset)
   );
   --luke-command-least: calc(var(--luke-command-chrome) + 3 * var(--luke-menu-row-height));
-  --luke-command-room: min(
+  --luke-command-full: 480px;
+  --luke-command-share: min(
     calc(var(--luke-stage-height) - 2 * var(--luke-space-8)),
     max(calc(var(--luke-stage-height) * 0.64), var(--luke-command-least))
-  );
-  --luke-command-sheet: min(
-    var(--luke-stage-height),
-    max(calc(var(--luke-stage-height) * 0.8), var(--luke-command-least))
   );
   --luke-command-top: max(
     var(--luke-space-8),
     min(
       calc(var(--luke-stage-height) * 0.18),
       var(--luke-stage-height) -
-      var(--luke-command-room) -
+      var(--luke-command-share) -
       var(--luke-space-8)
     )
+  );
+  --luke-command-room: max(
+    var(--luke-command-share),
+    min(
+      var(--luke-stage-height) -
+      var(--luke-command-top) -
+      var(--luke-space-8),
+      var(--luke-command-full)
+    )
+  );
+  --luke-command-sheet: max(
+    min(
+      var(--luke-stage-height),
+      max(calc(var(--luke-stage-height) * 0.8), var(--luke-command-least))
+    ),
+    min(var(--luke-stage-height) - var(--luke-space-8), var(--luke-command-full))
   );
 
   /* A hover hint: the pill's own corner and lift, as it was drawn before it

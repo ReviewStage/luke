@@ -494,6 +494,13 @@ export const SCENES: readonly Scene[] = [
     title: "A failed run",
     profile: "automations-runs",
   },
+  {
+    id: "automations-runs-tab",
+    place: PLACE.AUTOMATIONS,
+    title: "Every automation's runs",
+    profile: "automations",
+    steps: [{ kind: STEP.CLICK, role: "radio", name: "Runs" }],
+  },
   // ⌘K over a task.
   {
     id: "palette",
