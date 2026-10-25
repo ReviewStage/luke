@@ -253,6 +253,30 @@ const COLUMN_WIDTH = {
   [TASK_PROPERTY.UPDATED]: "auto",
 } as const satisfies Record<TaskProperty, string>;
 
+/** A row's cell: a line in the caption's type, in its property's column, letting the pointer through to the row's press. */
+const LIST_CELL =
+  "tasks-list-cell flex min-w-0 items-center gap-item-gap text-caption text-muted-foreground tabular-nums whitespace-nowrap";
+
+/**
+ * Each cell's place in a row's reading order, priority, key, and status
+ * before the name and the rest after it, and whether it stands over the
+ * row's press: the chips take their own presses, and an assignee's cell left
+ * empty under its group's head leaves the press its own. The time ends on its
+ * last letter, so times of any length line up at their ends down the column.
+ */
+const LIST_CELL_PLACE = {
+  [TASK_PROPERTY.PRIORITY]: "pointer-events-auto relative z-1 order-1",
+  [TASK_PROPERTY.KEY]: "pointer-events-none order-2",
+  [TASK_PROPERTY.STATUS]: "pointer-events-auto relative z-1 order-3",
+  [TASK_PROPERTY.WAITING]: "pointer-events-none order-5",
+  [TASK_PROPERTY.REPOSITORY]: "pointer-events-none order-6",
+  [TASK_PROPERTY.ASSIGNEE]:
+    "pointer-events-none order-7 not-empty:pointer-events-auto not-empty:relative not-empty:z-1",
+  [TASK_PROPERTY.CREATOR]: "pointer-events-none order-8",
+  [TASK_PROPERTY.AGENTS]: "pointer-events-none order-9",
+  [TASK_PROPERTY.UPDATED]: "pointer-events-none order-10 justify-end",
+} as const satisfies Record<TaskProperty, string>;
+
 /** The properties drawn before a row's name; the rest stand after it. */
 const LEADING: readonly TaskProperty[] = [
   TASK_PROPERTY.PRIORITY,
@@ -741,21 +765,24 @@ function TaskListRow({
     .join("");
   const cell = (property: TaskProperty, content: ReactNode) =>
     drawn(property) ? (
-      <span className="tasks-list-cell" data-cell={property}>
+      <span className={`${LIST_CELL} ${LIST_CELL_PLACE[property]}`} data-cell={property}>
         {content}
       </span>
     ) : null;
   return (
     <li
-      className="tasks-list-row"
+      className="tasks-list-row relative col-span-full grid min-h-tasks-list-row grid-cols-subgrid items-center rounded-control px-row-inset py-luke-2 text-foreground [transition:transform_var(--luke-duration-fast)_var(--luke-spring-fast),background-color_var(--luke-duration-hover)_var(--luke-motion-exit),opacity_var(--luke-duration-quick)_var(--luke-motion-exit)] data-[menu-open=true]:bg-muted data-[menu-open=true]:shadow-selected-edge [&:hover]:bg-muted"
       data-task-id={task.id}
       {...motionKey(task.id)}
       {...menu.props}
       data-editing={rename.editing ? "true" : undefined}
     >
-      <span className="tasks-list-cell" data-cell="name">
+      <span
+        className="tasks-list-cell pointer-events-auto order-4 flex min-w-0 flex-col items-stretch gap-0 text-label text-foreground tabular-nums whitespace-nowrap"
+        data-cell="name"
+      >
         {rename.editing ? (
-          <span className="tasks-list-press">
+          <span className="tasks-list-press flex min-w-0 items-center font-luke-regular">
             <InlineEdit
               value={rename.asked ?? task.name}
               label="Task name"
@@ -778,7 +805,10 @@ function TaskListRow({
               onOpen();
             }}
           >
-            <span id={nameId} className="tasks-list-press">
+            <span
+              id={nameId}
+              className="tasks-list-press flex min-w-0 items-center font-luke-medium"
+            >
               <OneLine>{task.name}</OneLine>
               {spoken === "" ? null : (
                 <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
@@ -786,7 +816,9 @@ function TaskListRow({
             </span>
           </CardPress>
         )}
-        {rename.refused ? <span className="tasks-list-note">{RENAME_FAILED_NOTE}</span> : null}
+        {rename.refused ? (
+          <span className="tasks-list-note text-caption text-danger">{RENAME_FAILED_NOTE}</span>
+        ) : null}
       </span>
       {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
       {cell(
@@ -838,7 +870,7 @@ function TaskListRow({
               as={TEXT_ELEMENT.SPAN}
               variant={TEXT_VARIANT.INHERIT}
               truncate
-              className="tasks-list-maker"
+              className="tasks-list-maker max-w-tasks-list-maker"
             >
               {actorName(maker.actor)}
             </Text>
@@ -854,7 +886,7 @@ function TaskListRow({
         TASK_PROPERTY.UPDATED,
         <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,
       )}
-      <span className="tasks-list-cell" data-cell="more">
+      <span className={`${LIST_CELL} pointer-events-auto relative z-1 order-11`} data-cell="more">
         {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
       </span>
       {menu.popup}
@@ -905,7 +937,7 @@ function TasksListGroup({
         <Text
           variant={TEXT_VARIANT.CAPTION}
           tone={TEXT_TONE.MUTED}
-          className="tasks-list-group-empty"
+          className="tasks-list-group-empty px-row-inset py-tight-gap"
         >
           {draggable && ordered(group.head) ? DRAG_HERE : NO_TASKS}
         </Text>
@@ -915,7 +947,7 @@ function TasksListGroup({
         as={LAYOUT_ELEMENT.UL}
         gap={GAP.NONE}
         moves
-        className="tasks-list-rows"
+        className="tasks-list-rows col-span-full m-0 grid list-none grid-cols-subgrid content-start gap-x-[normal] p-0 data-[dragging=true]:cursor-grabbing"
         aria-label={head.name}
         data-row-drop-rows={ordered(group.head) ? "" : undefined}
         onPointerDown={draggable ? drag : undefined}
@@ -931,7 +963,7 @@ function TasksListGroup({
   );
   return (
     <section
-      className="tasks-list-group"
+      className="tasks-list-group col-span-full grid grid-cols-subgrid content-start gap-y-list-gap rounded-luke-10 transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit data-leaving:grid-cols-tasks-list data-leaving:gap-x-block-gap data-[drop-target=true]:bg-muted [&>:not(.tasks-list-rows)]:col-span-full"
       aria-label={head.name}
       {...motionKey(groupKey(group.head))}
       data-row-drop={draggable ? zone : undefined}
@@ -1184,7 +1216,7 @@ export function TasksList({
           <div
             {...roving}
             ref={listRef}
-            className="tasks-list"
+            className="tasks-list grid grid-cols-tasks-list gap-x-block-gap gap-y-section-gap pb-luke-24"
             data-row-drop-scope=""
             {...motionRows()}
             style={cssCustomProperties({ "--tasks-list-columns": gridColumns(properties) })}
@@ -1194,7 +1226,7 @@ export function TasksList({
               <Text
                 variant={TEXT_VARIANT.CAPTION}
                 tone={TEXT_TONE.MUTED}
-                className="tasks-list-none"
+                className="tasks-list-none col-span-full"
               >
                 {NONE_STANDING}
               </Text>
@@ -1245,7 +1277,7 @@ export function TasksList({
         </ListMotion>
       </SelectionRegion>
       {/* Note that the bar floats at the page's foot rather than over the rows, so choosing a row moves none under the pointer. */}
-      <div className="tasks-list-selection">
+      <div className="tasks-list-selection pointer-events-none sticky bottom-luke-16 z-4 flex justify-center *:pointer-events-auto">
         <SelectionBar count={selected.size} acts={acts} onClear={clear} controls={regionId} />
       </div>
     </CollectionPage>

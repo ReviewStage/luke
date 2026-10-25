@@ -311,20 +311,20 @@ function TaskBoardCard({
       shadow={CARD_SHADOW.SOFT}
       hover={CARD_HOVER.LIFT}
       lit={menu.open}
-      className="tasks-board-card"
+      className="tasks-board-card flex flex-col gap-item-gap pt-row-inset pr-row-inset pb-item-gap pl-list-inset"
       data-task-id={task.id}
       {...motionKey(task.id)}
       {...menu.props}
       data-editing={rename.editing ? "true" : undefined}
     >
       {/* Note that the first line stands under the card's press, but for the creator's face, which hangs their card. */}
-      <span className="tasks-board-card-head">
+      <span className="tasks-board-card-head flex min-h-luke-20 items-center gap-item-gap text-muted-foreground">
         {drawn(TASK_PROPERTY.KEY) ? (
           <TaskKey workspaceName={workspaceName} number={task.number} decorative />
         ) : null}
-        <span className="tasks-board-card-marks">
+        <span className="tasks-board-card-marks ml-auto inline-flex min-w-0 items-center gap-item-gap text-caption text-muted-foreground tabular-nums">
           {drawn(TASK_PROPERTY.WAITING) && waiting > 0 ? (
-            <span className="tasks-board-waiting">
+            <span className="tasks-board-waiting flex flex-none">
               <WaitingBadge count={waiting} />
             </span>
           ) : null}
@@ -332,13 +332,13 @@ function TaskBoardCard({
             <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
           ) : null}
           {drawn(TASK_PROPERTY.CREATOR) ? (
-            <span className="tasks-board-face">
+            <span className="tasks-board-face inline-flex min-w-0 items-center gap-tight-gap">
               {maker === undefined ? null : (
                 <Text
                   as={TEXT_ELEMENT.SPAN}
                   variant={TEXT_VARIANT.INHERIT}
                   truncate
-                  className="tasks-board-maker"
+                  className="tasks-board-maker text-muted-foreground"
                 >
                   {actorName(maker.actor)}
                 </Text>
@@ -348,12 +348,12 @@ function TaskBoardCard({
           ) : null}
         </span>
       </span>
-      <span className="tasks-board-card-title">
+      <span className="tasks-board-card-title flex min-w-0 items-start gap-luke-4 [&>:last-child]:min-w-0 [&>:last-child]:flex-auto">
         {drawn(TASK_PROPERTY.STATUS) ? (
           <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
         ) : null}
         {rename.editing ? (
-          <span className="tasks-board-name">
+          <span className="tasks-board-name flex overflow-visible text-label font-luke-medium text-foreground wrap-anywhere">
             <InlineEdit
               value={rename.asked ?? task.name}
               label="Task name"
@@ -375,7 +375,10 @@ function TaskBoardCard({
               onOpen();
             }}
           >
-            <span id={nameId} className="tasks-board-name">
+            <span
+              id={nameId}
+              className="tasks-board-name line-clamp-3 text-label font-luke-medium text-foreground wrap-anywhere"
+            >
               {task.name}
             </span>
             {/* Note that the key stands drawn on the first line, outside the press, so the press says it to a screen reader, and find skips it, which finds it drawn. */}
@@ -385,9 +388,11 @@ function TaskBoardCard({
           </CardPress>
         )}
       </span>
-      {rename.refused ? <span className="tasks-board-card-note">{RENAME_FAILED_NOTE}</span> : null}
-      <div className="tasks-board-card-foot">
-        <div className="tasks-board-card-pills">
+      {rename.refused ? (
+        <span className="tasks-board-card-note text-caption text-danger">{RENAME_FAILED_NOTE}</span>
+      ) : null}
+      <div className="tasks-board-card-foot pointer-events-none relative z-1 flex min-w-0 items-end gap-tight-gap">
+        <div className="tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 *:pointer-events-auto">
           {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
           {drawn(TASK_PROPERTY.PRIORITY) ? (
             <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
@@ -403,7 +408,7 @@ function TaskBoardCard({
           ) : null}
           <TaskBoardTags task={task} />
         </div>
-        <span className="tasks-board-card-more">
+        <span className="tasks-board-card-more pointer-events-auto flex flex-none">
           {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
         </span>
       </div>
@@ -544,7 +549,7 @@ function TaskBoardColumnView({
       look={CARD_LOOK.WELL}
       corner={CARD_CORNER.CONTROL}
       padding={CARD_PADDING.NONE}
-      className="tasks-board-column"
+      className="tasks-board-column flex min-h-0 w-tasks-board-column flex-none flex-col px-item-gap pt-tight-gap pb-item-gap"
       data-task-column={value}
       data-row-drop={value}
       aria-label={words}
@@ -559,12 +564,19 @@ function TaskBoardColumnView({
       />
       {cards.length === 0 ? (
         column.older === undefined ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-board-empty">
+          <Text
+            variant={TEXT_VARIANT.CAPTION}
+            tone={TEXT_TONE.MUTED}
+            className="tasks-board-empty px-item-gap pt-luke-2 pb-item-gap"
+          >
             {NO_TASKS}
           </Text>
         ) : null
       ) : (
-        <div className="tasks-board-column-scroll" {...roving}>
+        <div
+          className="tasks-board-column-scroll -mx-ring-reach mt-0 -mb-ring-reach flex min-h-0 flex-initial flex-col"
+          {...roving}
+        >
           {/* Note that the cards hand a swipe on, because a contained area swallows a sideways one it cannot scroll, and the board scrolls sideways under them. */}
           {/* Note that the gutter is kept, because the column is as tall as its cards measured without a scroll bar, so a bar that takes room and rewraps a card's pills taller would leave a column that fits scrolling and faded. */}
           <ScrollArea
@@ -577,7 +589,7 @@ function TaskBoardColumnView({
               as={LAYOUT_ELEMENT.UL}
               gap={GAP.ITEM}
               inset={INSET.RING}
-              className="tasks-board-cards"
+              className="tasks-board-cards data-[dragging=true]:cursor-grabbing"
               moves
               onPointerDown={narrow ? undefined : drag}
             >
@@ -660,7 +672,7 @@ export function TasksBoard({
   const panelId = `${ids}panel`;
   const tabs =
     narrow && columns.length > 0 ? (
-      <div className="tasks-board-tabs">
+      <div className="tasks-board-tabs flex min-w-0 grow basis-full flex-col">
         <ChoiceBar
           label={COLUMN_TABS}
           items={columns.map((column) => {
@@ -710,7 +722,12 @@ export function TasksBoard({
         <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
       ) : null}
       <ListMotion root={board}>
-        <div ref={board} className="tasks-board" data-row-drop-scope="" {...crossing}>
+        <div
+          ref={board}
+          className="tasks-board relative flex min-h-0 min-w-min flex-[1_1_0] gap-block-gap leading-[normal] [--carried-ground:var(--luke-color-surface)]"
+          data-row-drop-scope=""
+          {...crossing}
+        >
           {columns.length === 0 ? (
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {NONE_STANDING}
