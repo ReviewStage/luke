@@ -461,7 +461,7 @@ test("a first read that did not land says so in the row's place, and Try again r
   press([...container.querySelectorAll("button")].find((each) => each.textContent === "Retry"));
   await settle();
 
-  assert.equal(said, "Luke did not answer. Try again.");
+  assert.equal(said, "Luke did not answer.");
   assert.deepEqual(
     rows(container).map(({ key }) => key),
     ["#312"],

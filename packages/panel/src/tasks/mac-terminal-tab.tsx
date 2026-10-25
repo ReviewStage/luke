@@ -220,7 +220,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
           tell(
             number === undefined
               ? "This agent has pushed no branch yet. Ask it to push its work, then press Run again."
-              : `Pull request #${number} could not be read from GitHub. Press Run again to retry.`,
+              : `Pull request #${number} could not be read from GitHub.`,
           );
           setStanding({ kind: "idle" });
           return;
