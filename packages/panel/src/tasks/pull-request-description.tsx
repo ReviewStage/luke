@@ -16,7 +16,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { PLACEMENT_END, type PlanEditorPlacement } from "../plan-editor/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { MarkdownEditor } from "./markdown-editor.js";
+import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
 import { documentWordsUnder, editsOnClick } from "./plan-document-editor.js";
 import {
   PullRequestWriteNote,
@@ -158,7 +158,7 @@ function DescriptionNote({
   useAnnounceShown(ANNOUNCE.ALERT, changed ? DESCRIPTION_WORDS.CHANGED : "");
   if (changed) {
     return (
-      <div className="plan-editor-note">
+      <div className={EDITOR_NOTE_CLASS}>
         <span>{DESCRIPTION_WORDS.CHANGED}</span>
         <Button onClick={onReload}>{DESCRIPTION_WORDS.RELOAD}</Button>
       </div>
