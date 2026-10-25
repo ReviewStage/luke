@@ -5821,3 +5821,11 @@ ul.actor-stack {
 :where(:root)[data-luke-room="narrow"] .inbox-view[data-channels-stream] > .inbox-view-items {
   border-left: 0;
 }
+
+/* A phone's list of channels (`ChannelList`), on the column's inset. */
+.channels-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
+}

@@ -21,7 +21,8 @@ import { agentName } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxCompose } from "../tasks/inbox-compose.js";
 import { INBOX_NOT_READ, InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
-import { ChannelStream } from "../tasks/channel-stream.js";
+import { usePhoneRoom } from "../stage-room.js";
+import { ChannelList, ChannelStream } from "../tasks/channel-stream.js";
 import {
   channelInfo,
   channelItemIds,
@@ -248,6 +249,7 @@ function InboxShown({
   } = listing;
   // PROTOTYPE ONLY (STAG-547): a channel of the Channels mockup is drawn as a stream, its thread beside it once opened.
   const mock = useChannelsMock();
+  const phone = usePhoneRoom();
   const streamChannel = mock.on ? channelInfo(mock.channel) : undefined;
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
@@ -454,7 +456,9 @@ function InboxShown({
                 data-columns={columns.shown}
                 data-channels-stream={streamChannel === undefined ? undefined : ""}
               >
-                {paneOnly ? null : streamChannel !== undefined ? (
+                {paneOnly ? null : streamChannel !== undefined && mock.phoneList && phone ? (
+                  <ChannelList />
+                ) : streamChannel !== undefined ? (
                   <ChannelStream
                     key={streamChannel.id}
                     channel={streamChannel}

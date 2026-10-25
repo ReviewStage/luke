@@ -25,7 +25,13 @@ import {
   BUTTON_VARIANT,
   Button,
   Comment,
+  GROUP_HEADING,
+  GroupHeader,
   IconButton,
+  NavItem,
+  SCROLL_FADE,
+  ScrollArea,
+  STATUS_TONE,
   TEXT_BUTTON_TONE,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -39,6 +45,7 @@ import {
 import { ArrowUpIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { GLYPH } from "@luke/ui/icons";
 import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
 import {
@@ -49,10 +56,14 @@ import {
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import {
   answerInStream,
+  CHANNELS,
+  channelCount,
   channelLastLooked,
+  chooseChannel,
   type ChannelInfo,
   type ChannelPost,
   openThread,
+  useChannelCounts,
   useChannelPosts,
   useStreamAnswer,
 } from "./channels-mock.js";
@@ -210,6 +221,21 @@ function StreamViewOptions({
   );
 }
 
+/**
+ * How a decision's buttons say which option its agent recommends, compared by
+ * `?rec=` in a development tab: a star after its label, as the Inbox's rows
+ * star it, or a line after the buttons naming it. Every button is drawn
+ * alike either way, so none reads as already chosen.
+ */
+const RECOMMENDED = { STAR: "star", CAPTION: "caption" } as const;
+
+type RecommendedLook = (typeof RECOMMENDED)[keyof typeof RECOMMENDED];
+
+const RECOMMENDED_LOOK: RecommendedLook =
+  new URLSearchParams(globalThis.location?.search ?? "").get("rec") === RECOMMENDED.CAPTION
+    ? RECOMMENDED.CAPTION
+    : RECOMMENDED.STAR;
+
 /** One entry of the stream: a thread, or a post made in the window. */
 type StreamEntry =
   | { readonly kind: "thread"; readonly at: number; readonly listed: InboxListed }
@@ -274,18 +300,27 @@ function AskButtons({ listed, onOpen }: { listed: InboxListed; onOpen: () => voi
             onPress: onOpen,
           },
         ];
+  const recommended =
+    ask.type === INBOX_ASK.DECIDE ? options.find((option) => option.recommended)?.label : undefined;
   return (
     <div className="channels-post-asks">
       {options.map((option) => (
         <Button
           key={option.label}
           size={BUTTON_SIZE.COMPACT}
-          variant={option.recommended ? BUTTON_VARIANT.PRIMARY : BUTTON_VARIANT.OUTLINE}
+          variant={BUTTON_VARIANT.OUTLINE}
           onClick={option.onPress}
         >
-          {option.label}
+          {option.recommended && RECOMMENDED_LOOK === RECOMMENDED.STAR
+            ? `${option.label} ★`
+            : option.label}
         </Button>
       ))}
+      {RECOMMENDED_LOOK === RECOMMENDED.CAPTION && recommended !== undefined ? (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {`Recommended: ${recommended}`}
+        </Text>
+      ) : null}
     </div>
   );
 }
@@ -564,6 +599,48 @@ export function ChannelStream({
           </div>
         )}
       </Conversation>
+    </section>
+  );
+}
+
+/**
+ * PROTOTYPE ONLY (STAG-547): a phone's list of channels, the screen its
+ * Channels tab opens, as Slack's Home lists them: each channel's glyph, its
+ * name and purpose, and how many of its threads need the reader, the
+ * standing channels and then the projects'.
+ */
+export function ChannelList(): React.JSX.Element {
+  useChannelCounts();
+  const row = (channel: ChannelInfo) => {
+    const counted = channelCount(channel.id);
+    return (
+      <NavItem
+        key={channel.id}
+        icon={<GLYPH.CHANNEL />}
+        detail={channel.purpose}
+        unread={counted.unread && counted.needsYou === 0}
+        count={{
+          value: counted.needsYou,
+          noun: counted.needsYou === 1 ? "thread needs you" : "threads need you",
+          tone: STATUS_TONE.ATTENTION,
+        }}
+        onClick={() => chooseChannel(channel.id)}
+      >
+        {channel.name}
+      </NavItem>
+    );
+  };
+  return (
+    <section className="channels-stream" aria-label="Channels">
+      <Toolbar title="Channels" end={TOOLBAR_INSET.COLUMN} />
+      <ScrollArea fade={SCROLL_FADE.BOTH}>
+        <div className="channels-list">
+          <GroupHeader heading={GROUP_HEADING.NONE} label="Channels" />
+          {CHANNELS.filter((channel) => !channel.project).map(row)}
+          <GroupHeader heading={GROUP_HEADING.NONE} label="Projects" />
+          {CHANNELS.filter((channel) => channel.project).map(row)}
+        </div>
+      </ScrollArea>
     </section>
   );
 }

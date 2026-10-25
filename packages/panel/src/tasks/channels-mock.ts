@@ -142,6 +142,8 @@ interface ChannelsMockState {
   readonly channel: MockChannel;
   /** Whether a channel's thread stands open beside its stream, as Slack's thread pane does. */
   readonly threadOpen: boolean;
+  /** Whether a phone shows the list of channels in the stream's place, as its Channels tab opens it. */
+  readonly phoneList: boolean;
 }
 
 /** A post the reader made in a channel's box, which the mockup keeps in the window alone. */
@@ -152,7 +154,12 @@ export interface ChannelPost {
   readonly at: number;
 }
 
-let state: ChannelsMockState = { on: false, channel: MOCK_CHANNEL.FOR_YOU, threadOpen: false };
+let state: ChannelsMockState = {
+  on: false,
+  channel: MOCK_CHANNEL.FOR_YOU,
+  threadOpen: false,
+  phoneList: false,
+};
 let posts: readonly ChannelPost[] = [];
 let answered: ReadonlyMap<string, string> = new Map();
 let needsReader: ReadonlySet<string> = new Set();
@@ -171,7 +178,8 @@ function publish(next: ChannelsMockState): void {
   if (
     next.on === state.on &&
     next.channel === state.channel &&
-    next.threadOpen === state.threadOpen
+    next.threadOpen === state.threadOpen &&
+    next.phoneList === state.phoneList
   )
     return;
   state = next;
@@ -205,7 +213,17 @@ export function startChannelsMock(
 export function chooseChannel(channel: MockChannel): void {
   // Note that leaving a channel is having looked at it, so its New line is gone when the reader comes back.
   if (channel !== state.channel) lastLooked = new Map([...lastLooked, [state.channel, Date.now()]]);
-  publish({ ...state, channel, threadOpen: channel === state.channel ? state.threadOpen : false });
+  publish({
+    ...state,
+    channel,
+    threadOpen: channel === state.channel ? state.threadOpen : false,
+    phoneList: false,
+  });
+}
+
+/** Shows a phone the list of channels, as its Channels tab does. */
+export function showChannelList(): void {
+  publish({ ...state, threadOpen: false, phoneList: true });
 }
 
 /** When the reader last looked at a channel; none for one never looked at. */

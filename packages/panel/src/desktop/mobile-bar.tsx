@@ -2,7 +2,7 @@ import { BarItem, EllipsisIcon } from "@luke/ui";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { GLYPH } from "@luke/ui/icons";
 import { InboxIcon, ListTodoIcon, MessagesSquareIcon } from "lucide-react";
-import { channelStreamStanding, useChannelsMock } from "../tasks/channels-mock.js";
+import { channelStreamStanding, showChannelList, useChannelsMock } from "../tasks/channels-mock.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
@@ -63,14 +63,17 @@ export function MobileBar({
   const mock = useChannelsMock();
   return (
     <nav className="mobile-bar" aria-label="Places">
-      {/* PROTOTYPE ONLY (STAG-547): in the Channels mockup the first place is Channels, which opens the last channel read and, pressed again there, the drawer that lists them all. */}
+      {/* PROTOTYPE ONLY (STAG-547): in the Channels mockup the first place is Channels, which opens the full-screen list of channels, as Slack's Home does. */}
       {mock.on ? (
         <BarItem
           icon={<GLYPH.CHANNEL />}
-          current={inInbox && !drawerOpen}
+          current={inInbox && mock.phoneList}
           count={{ value: waiting.inbox, noun: needsYouNoun(waiting.inbox) }}
-          {...(inInbox ? { onPointerDown: onPressMore } : {})}
-          onPress={inInbox ? sidebar.onToggle : inboxView.onOpenList}
+          inert={drawerOpen}
+          onPress={() => {
+            showChannelList();
+            inboxView.onOpenList();
+          }}
         >
           Channels
         </BarItem>
