@@ -169,8 +169,14 @@ describe("a stylesheet", () => {
     expect(
       sheetRules(`.a:has(> .b) > * { color: inherit; }
         .a .b:has([aria-expanded="true"]) > * { opacity: 1; }
-        .c:has(> .d) > :not(.d, .e) { opacity: 0.6; }`),
-    ).toEqual([STYLE_RULE.HAS_OVER_ANY, STYLE_RULE.HAS_OVER_ANY, STYLE_RULE.HAS_OVER_ANY]);
+        .c:has(> .d) > :not(.d, .e) { opacity: 0.6; }
+        .h:not(:has(> .i)) > * { opacity: 0; }`),
+    ).toEqual([
+      STYLE_RULE.HAS_OVER_ANY,
+      STYLE_RULE.HAS_OVER_ANY,
+      STYLE_RULE.HAS_OVER_ANY,
+      STYLE_RULE.HAS_OVER_ANY,
+    ]);
     expect(
       sheetRules(`.a:has(> .b) { --x: 1; }
         .a:has(> .b) > .c { color: inherit; }

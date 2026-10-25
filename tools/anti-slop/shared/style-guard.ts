@@ -490,6 +490,17 @@ function withoutArguments(selector: string): string {
   return out;
 }
 
+/** A selector with what its brackets and parentheses hold taken out, as `withoutArguments` does, but a `:has()` inside another's, as `:not(:has(> .b))` holds one, left standing as `:has`, so a compound still says it holds one. */
+function withoutArgumentsKeepingHas(selector: string): string {
+  let out = selector.replace(/\[[^\]]*\]/gu, "[]");
+  while (/\([^()]*\)/u.test(out)) {
+    out = out.replace(/\(([^()]*)\)/gu, (_whole, inner: string) =>
+      inner.includes(":has") ? ":has" : "",
+    );
+  }
+  return out;
+}
+
 /** A subject that is any element: `*`, or pseudo-classes and pseudo-elements alone, `:is()` and `:where()` aside, which name what they match. */
 const ANY_SUBJECT = /^\*?(?:::?(?!is$|where$|is:|where:)[\w-]+)*$/u;
 
@@ -500,7 +511,7 @@ const ANY_SUBJECT = /^\*?(?:::?(?!is$|where$|is:|where:)[\w-]+)*$/u;
  * element added anywhere under the `:has()`'s anchor restyles all of it.
  */
 function hasOverAnySubject(block: CssBlock): boolean {
-  return withoutArguments(selectorOf(block))
+  return withoutArgumentsKeepingHas(selectorOf(block))
     .split(",")
     .some((part) => {
       const compounds = part
