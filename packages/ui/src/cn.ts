@@ -178,6 +178,28 @@ const ROWS_NAVIGATION = {
 } as const;
 
 /**
+ * The names the panel Home and tasks block of the theme adds (the page's
+ * inset and section gap, the welcome, a row's context, New task's title, a
+ * card's line, the Board's column, the List's row and maker), by the group
+ * tailwind-merge reads each in.
+ */
+const PANEL_HOME_TASKS = {
+  spacing: [
+    "card-line",
+    "new-task-title",
+    "page-inset",
+    "page-section-gap",
+    "row-context",
+    "tasks-board-column",
+    "tasks-list-maker",
+    "tasks-list-row",
+    "welcome-composer",
+    "welcome-face",
+    "welcome-tile",
+  ],
+} as const;
+
+/**
  * The names the panel shell's block of the theme adds (the sidebar, a row's
  * end mark, a search's match, the call card, the settings rows), by the
  * group tailwind-merge reads each in.
@@ -345,6 +367,7 @@ const merge = extendTailwindMerge({
         ...ROWS_NAVIGATION.spacing,
         ...PANEL_SHELL.spacing,
         ...CHIPS_MEDIA_CALL.spacing,
+        ...PANEL_HOME_TASKS.spacing,
       ],
       radius: [
         "control",
