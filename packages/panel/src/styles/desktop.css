@@ -2164,81 +2164,6 @@ body,
   font-variant-numeric: tabular-nums;
 }
 
-/* The Board (`tasks-board.tsx`): the listed workspace's tasks on a column
-   for each status, each a quiet well under its heading holding its cards,
-   as Linear's board stands them. The board fills the page's height, so it
-   never scrolls down and each column scrolls its own cards; its columns
-   stand one fixed width whatever the page's width or how many there are,
-   so a card reads the same on any screen, and past the page's width the
-   board scrolls sideways. Note that the board reaches into the page's end
-   inset and pads it back, because a scroller leaves its content's end
-   padding at the room's edge, so the last column would otherwise scroll
-   flush against the page's side. */
-.tasks-board {
-  --carried-ground: var(--luke-color-surface);
-  position: relative;
-  display: flex;
-  min-width: min-content;
-  min-height: 0;
-  flex: 1 1 0;
-  gap: var(--luke-block-gap);
-  margin-inline-end: calc(-1 * var(--luke-collection-page-inset));
-  padding-inline-end: var(--luke-collection-page-inset);
-  line-height: normal;
-}
-
-/* A column: a well (`Card`), which rings and washes itself while a card is
-   carried over it (use-row-drag.ts), its head over its cards. */
-.tasks-board-column {
-  display: flex;
-  width: 320px; /* off-scale: a card's width, as Linear's board stands it */
-  min-height: 0;
-  flex: 0 0 auto;
-  flex-direction: column;
-  padding: var(--luke-tight-gap) var(--luke-item-gap) var(--luke-item-gap);
-}
-
-/* A column's head: its status's mark, its name, and how many it holds, on
-   its cards' inset. */
-.tasks-board-column-head {
-  --luke-glyph-size: var(--luke-control-icon);
-  display: flex;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  min-height: var(--luke-control-height);
-  margin: 0;
-  padding: 0 var(--luke-item-gap);
-  font-variant-numeric: tabular-nums;
-}
-
-/* A column with no task says so in one quiet line. */
-.tasks-board-empty {
-  padding: var(--luke-space-2) var(--luke-item-gap) var(--luke-item-gap);
-}
-
-/* A column's cards scroll under its head, the ring's reach spared at its
-   sides and foot so a card's ring is never cut off. */
-.tasks-board-column-scroll {
-  display: flex;
-  min-height: 0;
-  flex: 0 1 auto;
-  flex-direction: column;
-  margin: 0 calc(-1 * var(--luke-focus-ring-reach)) calc(-1 * var(--luke-focus-ring-reach));
-}
-
-/* A card: raised off its column's well, lifting under the pointer and while
-   its menu is open (`Card`), drawn as Linear's board draws one: its first
-   line, its status's mark before its name, and a row of pills that wraps.
-   Its press covers the whole card, its chips and pills standing over it, so
-   the card opens wherever it is pressed but on one of them. Its transform
-   is a drag's (use-row-drag.ts), timed by the card. */
-.tasks-board-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-item-gap);
-  padding: var(--luke-row-inset) var(--luke-row-inset) var(--luke-item-gap) var(--luke-list-inset);
-}
-
 /* The card holding the keyboard, or whose menu is open, stands over its
    neighbours, so its ring and its menu are drawn over the next card. */
 .tasks-board-card:has(:focus-visible),
@@ -2253,47 +2178,6 @@ body,
   opacity: 0.4;
 }
 
-.tasks-board-cards[data-dragging="true"] {
-  cursor: grabbing;
-}
-
-/* A card's first line: its key, and at its end what waits on the reader,
-   when it last moved, and its creator's face. It stands under the card's
-   press, so a press on it opens the card. */
-.tasks-board-card-head {
-  display: flex;
-  min-height: var(--luke-space-20);
-  align-items: center;
-  gap: var(--luke-item-gap);
-  color: var(--luke-color-text-muted);
-}
-
-.tasks-board-card-marks {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-item-gap);
-  margin-left: auto;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  font-variant-numeric: tabular-nums;
-}
-
-/* What waits on the reader is read whole, so its badge keeps its words on
-   one line, and the maker's name, cut short, gives way instead. */
-.tasks-board-waiting {
-  display: flex;
-  flex: none;
-}
-
-.tasks-board-face {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-}
-
 /* The creator's face, a press of its own that hangs their card
    (`CreatorFace`), stands over the card's press. */
 .tasks-board-card-head [data-task-creator] {
@@ -2304,13 +2188,6 @@ body,
 /* The status's mark before the name, on the name's first line, standing
    over the card's press as its pills do; the name wraps beside it. The
    press holds the name alone, its reach still covering the whole card. */
-.tasks-board-card-title {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: var(--luke-space-4);
-}
-
 .tasks-board-card-title > .luke-chip {
   position: relative;
   z-index: 1;
@@ -2353,93 +2230,6 @@ body,
   flex: 1 1 auto;
 }
 
-.tasks-board-card-title > :last-child {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-/* Who made a card's task where its member did not by hand, Luke or an
-   agent, named muted before their square, cut short rather than pushing
-   the key aside. */
-.tasks-board-maker {
-  color: var(--luke-color-text-muted);
-}
-
-/* A card's name stands whole under its line, in the label's weight,
-   wrapping to three lines at most, since a column is too narrow for the
-   list's single line. Renamed, it is its field in the same place. */
-.tasks-board-name {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
-  font-weight: var(--luke-weight-medium);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow-wrap: anywhere;
-}
-
-.tasks-board-card[data-editing="true"] .tasks-board-name {
-  display: flex;
-  overflow: visible;
-}
-
-.tasks-board-card-note {
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* A card's foot: its pills, then the ⋯ at its end, which shows while the
-   card is hovered, holds the keyboard, or has its menu open, and keeps its
-   room meanwhile, so the pills wrap the same either way. It stands over the
-   card's press, which lets the pointer through between them. */
-.tasks-board-card-foot {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  min-width: 0;
-  align-items: flex-end;
-  gap: var(--luke-tight-gap);
-  pointer-events: none;
-}
-
-/* Its priority's and its assignee's marks, drawn bare as the List draws
-   them, then the pills: its repository, its agents at work and their pull
-   requests, and the issues it links, wrapping onto as many lines as they take rather than running past the card's edge, as
-   Linear's do. A pill too long for a line alone, a repository's name, is
-   cut short within it. */
-.tasks-board-card-pills {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-6);
-}
-
-.tasks-board-card-pills > *,
-.tasks-board-card-more {
-  pointer-events: auto;
-}
-
-.tasks-board-card-more {
-  display: flex;
-  flex: none;
-}
-
-/* On a phone the Board's tabs, one for each status, take the whole line
-   above its one column, and scroll sideways where they need more; the
-   column's cards fill its height, so a card's Status menu has the column's
-   room to drop into. */
-.tasks-board-tabs {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 100%;
-  flex-direction: column;
-}
-
 :where(:root)[data-luke-room="narrow"] .desktop-shell .tasks-board-column {
   width: auto;
   flex: 1 1 auto;
@@ -2449,120 +2239,8 @@ body,
   flex: 1 1 auto;
 }
 
-/* The Tasks page's List (`tasks-list.tsx`) runs its groups down the page,
-   each headed as a Board's column is, its rows the page's own `ListRow`s
-   led by the task's priority, key, and status. It is one grid, its columns
-   the properties the view draws (`--tasks-list-columns`), and every group
-   and every row a subgrid of it, so each column lines up down the whole
-   page whatever any one row holds, as Linear's list stands its rows. */
-.tasks-list {
-  display: grid;
-  grid-template-columns: var(--tasks-list-columns);
-  column-gap: var(--luke-block-gap);
-  row-gap: var(--luke-section-gap);
-  padding-bottom: var(--luke-space-24);
-}
-
-.tasks-list-none {
-  grid-column: 1 / -1;
-}
-
-/* The selection bar floats at the foot of the page while rows are chosen,
-   centred, over the rows that scroll under it; only the bar takes the
-   pointer, so the rows beside it stay pressable. */
-.tasks-list-selection {
-  position: sticky;
-  z-index: 4;
-  bottom: var(--luke-space-16);
-  display: flex;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.tasks-list-selection > * {
-  pointer-events: auto;
-}
-
-.tasks-list-group,
-.tasks-list-rows {
-  display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: subgrid;
-  align-content: start;
-}
-
-/* Note that the rows take the list's column gap back, because the Stack
-   they are drawn as sets its gap to none, and a subgrid's own gap draws its
-   cells over the parent's, so a row's columns would touch. */
-.tasks-list-rows {
-  margin: 0;
-  padding: 0;
-  column-gap: normal;
-  list-style: none;
-}
-
-.tasks-list-group {
-  row-gap: var(--luke-list-gap);
-  border-radius: var(--luke-radius-10);
-  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
-}
-
-/* Note that a group leaving is laid over its place out of the list's grid
-   (`ListMotion`), where a subgrid has no grid to be one of, so it lays out
-   the page's columns itself, the same width as it stood. */
-.tasks-list-group[data-leaving] {
-  grid-template-columns: var(--tasks-list-columns);
-  column-gap: var(--luke-block-gap);
-}
-
-.tasks-list-group > :not(.tasks-list-rows) {
-  grid-column: 1 / -1;
-}
-
-.tasks-list-group-empty {
-  padding: var(--luke-tight-gap) var(--row-inset);
-}
-
-/* The group a row is carried over (use-row-drag.ts) is washed and its head
-   underlined, so it reads as the one the row will land in. */
-.tasks-list-group[data-drop-target="true"] {
-  background: var(--luke-color-fill-hover);
-}
-
 .tasks-list-group[data-drop-target="true"] .luke-group-header-head {
   box-shadow: inset 0 -1px var(--luke-color-focus-ring);
-}
-
-/* A row: one line of the grid's columns, lit under the pointer as a list's
-   row is. Its press is the name's column, and reaches every edge of the row
-   under its chips and its ⋯, which stand over it; its other cells let the
-   pointer through to it. Its transform is a drag's (use-row-drag.ts), on
-   the motion tokens as a Board card's is. */
-.tasks-list-row {
-  position: relative;
-  display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: subgrid;
-  /* Note that a row stands a little taller than a control, so the list
-     breathes between rows rather than reading as a dense table. */
-  min-height: calc(var(--luke-control-height) + var(--luke-space-6));
-  align-items: center;
-  padding: var(--luke-space-2) var(--row-inset);
-  border-radius: var(--luke-control-radius);
-  color: var(--luke-color-text);
-  transition:
-    transform var(--luke-duration-fast) var(--luke-spring-fast),
-    background-color var(--luke-duration-hover) var(--luke-motion-exit),
-    opacity var(--luke-duration-quick) var(--luke-motion-exit);
-}
-
-.tasks-list-row:hover,
-.tasks-list-row[data-menu-open="true"] {
-  background: var(--luke-color-fill-hover);
-}
-
-.tasks-list-row[data-menu-open="true"] {
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
 /* The row holding the keyboard, or whose menu is open, stands over its
@@ -2578,10 +2256,6 @@ body,
    cells out on a line of its own. */
 .tasks-list-rows > li[data-dragging="true"] {
   opacity: 0.4;
-}
-
-.tasks-list-rows[data-dragging="true"] {
-  cursor: grabbing;
 }
 
 .tasks-list-row[data-lifted="true"] {
@@ -2604,102 +2278,6 @@ body,
   box-shadow: inset 0 -2px 0 var(--luke-color-focus-ring);
 }
 
-/* Each cell stands in its property's column, in the order a row reads:
-   priority, key, and status before the name, the rest after it. */
-.tasks-list-cell {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-item-gap);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.tasks-list-cell[data-cell="priority"] {
-  order: 1;
-}
-
-.tasks-list-cell[data-cell="key"] {
-  order: 2;
-}
-
-.tasks-list-cell[data-cell="status"] {
-  order: 3;
-}
-
-.tasks-list-cell[data-cell="name"] {
-  order: 4;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
-  pointer-events: auto;
-}
-
-.tasks-list-cell[data-cell="waiting"] {
-  order: 5;
-}
-
-.tasks-list-cell[data-cell="repository"] {
-  order: 6;
-}
-
-.tasks-list-cell[data-cell="assignee"] {
-  order: 7;
-}
-
-.tasks-list-cell[data-cell="creator"] {
-  order: 8;
-}
-
-.tasks-list-cell[data-cell="agents"] {
-  order: 9;
-}
-
-/* The time ends on its last letter, so times of any length line up at
-   their ends down the column. */
-.tasks-list-cell[data-cell="updated"] {
-  order: 10;
-  justify-content: flex-end;
-}
-
-.tasks-list-cell[data-cell="more"] {
-  order: 11;
-}
-
-/* The chips and the ⋯ stand over the row's press and take their own presses;
-   an assignee's cell left empty under its group's head leaves the press its own. */
-.tasks-list-cell:is(
-  [data-cell="priority"],
-  [data-cell="status"],
-  [data-cell="assignee"]:not(:empty),
-  [data-cell="more"]
-) {
-  position: relative;
-  z-index: 1;
-  pointer-events: auto;
-}
-
-/* What a row's press shows, or its field while it is renamed: its name on
-   one line. The press (`CardPress`) reaches every edge of the row, under
-   its chips and its ⋯. */
-.tasks-list-press {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  font-weight: var(--luke-weight-medium);
-}
-
-.tasks-list-row[data-editing="true"] .tasks-list-press {
-  font-weight: var(--luke-weight-regular);
-}
-
 /* A group's quick add line (`quick-add.tsx`): a row of the list's cells
    raised as a card, its title bare where a row's name stands; an add still
    out stands muted until its row draws. */
@@ -2712,12 +2290,6 @@ body,
   color: var(--luke-color-text-muted);
 }
 
-.tasks-list-note {
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* A row's creator's face and each of its agents' and pull requests' marks
    (`task-row-parts.tsx`) are presses of their own, a pull request's a link
    to its page, each hanging its card,
@@ -2727,12 +2299,6 @@ body,
   position: relative;
   z-index: 1;
   pointer-events: auto;
-}
-
-/* Who made a row's task where its member did not by hand, Luke or an
-   agent, named before their square, as a Board card names them. */
-.tasks-list-maker {
-  max-width: 16ch;
 }
 
 /* What a task's agents are doing and the pull requests they opened in the
