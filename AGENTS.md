@@ -167,109 +167,110 @@ token and wakes the agent with them, as the webhook does for the App.
 
 ## Testing
 
+A test is a cost every push pays for as long as it exists. Write one only
+where it pays that back by catching a regression nothing else would catch.
+
+Each rule names what holds it: `[check: …]` is a lint rule or script that
+fails the build, so the words are only its reason; `[review]` is held by the
+reader alone. Move a rule from `[review]` to a check wherever one can hold it.
+
+### Running tests
+
 ```
-pnpm check:affected                      # optional: the checks for what changed
-./scripts/check.sh                       # CI's checks, bar the Postgres job
-pnpm exec vitest run <path>              # one file
-pnpm --filter @luke/web test:agent       # offline brain eval, scripted model, by hand
+pnpm exec vitest run <path>              # the file you changed
+pnpm check:affected                      # what changed since origin/main, from cache
+./scripts/check.sh                       # everything CI runs bar Postgres
+pnpm --filter @luke/web test:agent       # offline brain eval, by hand
 ```
 
-Push and let CI, which runs every check, gate the PR. Running the tests you
-touched (`pnpm exec vitest run <path>`) or `pnpm check:affected` before a push
-is optional; never run a whole workspace's suite to check one change.
-`check.sh` is the full local run, for a release, a broad refactor, or on
-request, and must exit 0 when it is run. Every test runs on vitest, through
-`pnpm exec vitest`.
+- `[review]` Run the test files you touched, then push: CI runs the rest and
+  gates the PR. Never run a whole workspace's suite to check one change.
+  `check.sh` is for a release, a broad refactor, or when asked, and must exit
+  0 when it runs.
+- `[review]` Run a suite once and keep its output in a file to read, rather
+  than running it again with a different filter.
+- `[review]` Say in the PR which tests you ran and which you left to CI.
 
-Each rule below names what holds it. `[check: …]` is a lint rule or script
-that fails the build, so CI is the check and the words are only the reason;
-`[review]` is held by nothing but the reader, so it is the rule an agent is
-most likely to break. A rule that can move from `[review]` to a check should.
+### Deciding to add a test
 
-### When to add a test
-
-A test costs CI time on every push for as long as it exists, so the bar is
-that it pays for itself, not that the diff has one.
-
-- `[review]` A new test must catch a regression you can name that no existing
-  test catches. Look for the test that already covers the behavior first: if
-  there is one, extend it or add a row to its `it.each` table. If you cannot
-  name the regression, do not add the test.
-- `[review]` A bug fix ships with one test that fails without the fix: run it
-  red before the fix, green after. A behavior change ships with tests for what
-  the diff changes and nothing more: no tests for code the PR leaves alone,
-  for a dependency, or for the platform.
-- `[review]` One case per behavior, never one per input: no matrix over
-  spellings, flags, variants, sizes, or themes that take the same path. A
-  regression is generalized into one meaningful test, and stops there.
-- `[review]` A test written to explore an implementation is deleted before the
-  push unless it meets the bar above.
-- `[review]` Use the smallest layer that catches the bug: a type, then a lint
-  rule, then a test through the module's public export, then a real Postgres
-  or child process. A rule about source text (a banned class, import, or
-  pattern) is a rule in `tools/anti-slop/`, never a test that reads source
+- `[review]` Name the regression first: the change a future author could make
+  that this test, and no existing one, would catch. If you cannot name it, do
+  not write the test.
+- `[review]` Look for the test that already covers the behavior. Extend it,
+  or add a row to its `it.each` table, before adding a file or a case.
+- `[review]` Test what the diff changes, and only that: not code it leaves
+  alone, a dependency, or the platform.
+- `[review]` A bug fix comes with the one test that reproduces it. Run it
+  before the fix and see it fail; a test that passes without the fix proves
+  nothing and is not committed.
+- `[review]` One case per behavior. Inputs that take the same path (spellings,
+  flags, variants, sizes, themes) are one case, not a matrix.
+- `[review]` A test you wrote to explore the code while working is deleted
+  before the push unless it passes this section.
+- `[review]` Reach for the cheapest guard that holds: a type, then a lint rule
+  in `tools/anti-slop/`, then a test. A rule about source text, such as a
+  banned class or import, is a lint rule, never a test that reads source
   files.
 
-### What a test asserts
+### What a test checks
 
-- `[review]` What a caller observes through the public export: a returned
-  value, a rendered word or accessible role, a stored row, an emitted event,
-  an error. Never private state, call or render counts, or that a fake was
-  called; never a private function exported for a test.
-- `[review]` No change detectors: an expected value computed by the code under
-  test or pasted from its output; a test of a getter, constant, token table,
-  type, re-export, or Schema round-trip on a valid value; a class name,
-  stylesheet declaration, `var(--luke-*)` value, computed style, or markup
-  shape no user perceives. How a surface looks is held by `@luke/ui`, its
-  lint rules, and looking at it in the catalog, not by tests.
-- `[review]` A removed feature takes its tests with it; never add a test that
-  asserts the removed thing is gone.
+- `[review]` Behavior a caller can see through the public export: what it
+  returns, renders as text or accessible role, stores, emits, or throws.
+- `[review]` The expected value comes from somewhere other than the code under
+  test: the requirement, a hand-worked example, or an independent oracle.
+  Never compute it with the implementation's own helpers, and never paste it
+  from the output.
+- `[review]` These are not behavior, so no test asserts them: private state;
+  call, render, or redraw counts; that a double was called; constants, token
+  tables, getters, types, and re-exports; a Schema round-trip of a valid
+  value; class names, stylesheet declarations, `var(--luke-*)` values,
+  computed styles, and markup shape. Appearance is held by `@luke/ui`, its
+  lint rules, and the catalog.
+- `[review]` Nothing is exported only so a test can reach it.
 
-### How a test is built
+### How a test is written
 
-- `[review]` Hermetic: one process, `TestClock`, a temp dir it made, PGlite.
-  No network, personal data, live provider, or real clock. It passes alone
-  and in any order.
-- `[review]` Fast: roughly 1s a test and 10s a file in CI. A file over budget
-  is cut or split; a test that needs real time or a child process says why.
-- `[review]` The real implementation, then a fake, then a stub. Mock at a
-  process boundary (provider HTTP, Apple, the model, the OS, the clock), never
-  between internal modules. For an Effect service the double is a test
-  `Layer` on its `Context.Tag`; elsewhere `vi.spyOn` over `vi.mock`, restored
-  with `vi.restoreAllMocks()`.
-- `[review]` Effect tests use `it.effect` and `TestClock.adjust`, rather than
-  running an effect themselves (`Effect.run*`, `Runtime.run*`,
-  `ManagedRuntime.make`) or waiting on real time (`setTimeout`, `setInterval`,
-  `Effect.sleep`, `it.live`). The Effect edge rules exempt a test file by
-  extension, because a test body is its own edge
-  (`tools/anti-slop/shared/effect-edges.ts`).
-- `[review]` A test that needs a database provides `getTestDB()`
-  (`@luke/database/testing`), a migrated database of its own, and a query
-  over account rows tests that one user cannot read another's. A model or
-  repository under `packages/database/src/` ships with a sibling
-  `__tests__/<name>.test.ts` in the same PR.
-- `[review]` Shared builders before inline setup: `apps/web/tests/support/`,
-  `packages/wire/src/testing/`, and `temporaryDirectory` from
-  `@luke/runtime/testing`. A shared fixture earns its place by having more
-  than one caller.
+- `[check: anti-slop/no-node-test]` Tests run on vitest.
+- `[review]` A test owns its world: one process, a temp directory it created
+  (`temporaryDirectory` from `@luke/runtime/testing`), its own database
+  (`getTestDB()` from `@luke/database/testing`), and `TestClock` for time. It
+  never touches the network, a live provider, real time, or personal data,
+  and passes alone or in any order.
+- `[review]` A test finishes in about a second, and a file in about ten, on
+  CI. One that cannot says why in a comment.
+- `[review]` Use real code first, then a fake, then a stub, and replace only
+  what crosses a process boundary: provider HTTP, Apple, the model, the OS,
+  the clock. An Effect service is replaced by a test `Layer` on its tag;
+  anything else by `vi.spyOn`, restored with `vi.restoreAllMocks()`. Never
+  `vi.mock` a module of this repository.
+- `[review]` An Effect test is `it.effect` and moves time with
+  `TestClock.adjust`. It never runs an effect itself (`Effect.run*`,
+  `Runtime.run*`, `ManagedRuntime.make`) or waits on the clock (`setTimeout`,
+  `setInterval`, `Effect.sleep`, `it.live`). The Effect edge lint rules skip
+  test files, since a test body is its own edge.
+- `[review]` A query over account rows comes with a test that one user cannot
+  read another's. A model or repository in `packages/database/src/` has a
+  sibling `__tests__/<name>.test.ts` from the PR that adds it.
+- `[review]` Set up through the shared builders (`apps/web/tests/support/`,
+  `packages/wire/src/testing/`) before writing setup inline. A helper joins
+  them once it has a second caller.
 
-### Keeping the suite honest
+### Changing and removing tests
 
-- `[review]` Never loosen or skip a test to go green: no `.only`, `.skip`,
-  `.todo`, or `it.flakyTest`, and no longer timeout or retry without evidence
-  of what was slow. Fix or delete a flaky test.
-- `[review]` A test that breaks on a refactor because it checks wiring a
-  behavior test already covers is deleted, not fixed. A PR that deletes a test
-  says which behavior test covers it.
-- `[review]` Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the
-  shared helpers, with the diff explained in the PR; never edit one by hand.
-  A JSON Schema golden is kept only for a schema a model is shown as a tool's
-  input.
-- `[check: anti-slop/no-node-test]` Every test runs on vitest; `node:test` is
-  refused in TypeScript.
+- `[review]` Never make a test pass by weakening it: no `.only`, `.skip`,
+  `.todo`, or `it.flakyTest`, no looser assertion, and no longer timeout or
+  extra retry without evidence of what was slow. A flaky test is fixed or
+  deleted.
+- `[review]` A golden is rewritten only by `LUKE_UPDATE_FIXTURES=1` through
+  the shared helpers, never by hand, and the PR explains its diff. A JSON
+  Schema golden exists only for a schema a model sees as a tool's input.
+- `[review]` A test that breaks under a refactor because it pinned wiring is
+  deleted, and the PR names the behavior test that still covers it.
+- `[review]` A feature's tests leave with the feature. Nothing asserts that a
+  removed thing is gone.
 - `[check: scripts/repository-checks.sh]` Every workspace with a
-  `vitest.config.ts` is named in the root `vitest.config.ts` projects list and
-  runs under exactly one CI test job.
+  `vitest.config.ts` is on the root `vitest.config.ts` projects list, and each
+  workspace's tests run in exactly one CI job.
 
 ## Effect idioms
 
