@@ -48,20 +48,27 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-const PROFILE = RUN_PROFILE.CHANNELS;
+/** Who each of the mockup's profiles reads as: Dean, or Charles, his teammate, to set the two windows side by side. */
+const READERS: ReadonlyMap<string, { readonly userId: string; readonly name: string }> = new Map([
+  [RUN_PROFILE.CHANNELS, { userId: "user-dean", name: "Dean Stratakos" }],
+  [RUN_PROFILE.CHANNELS_CHARLES, { userId: "user-charles", name: "Charles Pan" }],
+]);
 const REPOSITORY = "ReviewStage/luke";
 const MODEL = "anthropic/claude-opus-5.5";
 
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" } as const;
 const CHARLES = { userId: "user-charles", name: "Charles Pan" } as const;
 
-const ACCOUNT: AccountSnapshot = {
-  status: ACCOUNT_STATUS.SIGNED_IN,
-  id: DEAN.userId,
-  email: "dean@example.com",
-  name: DEAN.name,
-  provider: ACCOUNT_PROVIDER.GITHUB,
-};
+/** The account a profile signs in as. */
+function accountOf(reader: Person): AccountSnapshot {
+  return {
+    status: ACCOUNT_STATUS.SIGNED_IN,
+    id: reader.userId,
+    email: `${reader.userId.replace("user-", "")}@example.com`,
+    name: reader.name,
+    provider: ACCOUNT_PROVIDER.GITHUB,
+  };
+}
 
 const MEMBERS: readonly WorkspaceMember[] = [
   { ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER },
@@ -576,62 +583,68 @@ const META: ReadonlyMap<string, ChannelItemMeta> = new Map(
   THREADS.map((each) => [each.item.id, each.meta]),
 );
 
-/** Each channel's sidebar count: its open threads waiting on the reader, and whether any is unread. */
-const COUNTS: ReadonlyMap<MockChannel, ChannelCount> = new Map(
-  Object.values(MOCK_CHANNEL).map((channel) => {
-    const inIt = THREADS.filter(
-      ({ meta }) => channel === MOCK_CHANNEL.FOR_YOU || meta.channel === channel,
-    ).map(({ item }) => item);
-    const needsYou = inIt.filter(
-      (each) =>
-        each.status === INBOX_STATUS.OPEN &&
-        each.thread?.some((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN) === true &&
-        (each.waitsOn ?? each.startedBy)?.userId === DEAN.userId,
-    ).length;
-    return [channel, { needsYou, unread: inIt.some((each) => each.unread === true) }];
-  }),
-);
+/** The member the window reads as, which the profile names as the fixture lands. */
+let READER: Person = DEAN;
 
 /** Whether a thread asks the reader something still open. */
-function needsDean(each: InboxItem): boolean {
+function needsReader(each: InboxItem): boolean {
   return (
     each.status === INBOX_STATUS.OPEN &&
     each.thread?.some((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN) === true &&
-    (each.waitsOn ?? each.startedBy)?.userId === DEAN.userId
+    (each.waitsOn ?? each.startedBy)?.userId === READER.userId
+  );
+}
+
+/** Each channel's sidebar count: its open threads waiting on the reader, and whether any is unread. */
+function counts(): ReadonlyMap<MockChannel, ChannelCount> {
+  return new Map(
+    Object.values(MOCK_CHANNEL).map((channel) => {
+      const inIt = THREADS.filter(
+        ({ meta }) => channel === MOCK_CHANNEL.FOR_YOU || meta.channel === channel,
+      ).map(({ item }) => item);
+      const needsYou = inIt.filter(needsReader).length;
+      return [channel, { needsYou, unread: inIt.some((each) => each.unread === true) }];
+    }),
   );
 }
 
 /** The threads that ask the reader something. */
-const NEEDING: ReadonlySet<string> = new Set(
-  THREADS.filter(({ item }) => needsDean(item)).map(({ item }) => item.id),
-);
+function needing(): ReadonlySet<string> {
+  return new Set(THREADS.filter(({ item }) => needsReader(item)).map(({ item }) => item.id));
+}
 
-const HOLDINGS: readonly AppInboxTaskHolding[] = [...INBOXES]
-  .filter(([, items]) => items.length > 0)
-  .map(([taskId, items]) => ({
-    taskId,
-    items: items.length,
-    toDo: items.filter((each) => needsDean(each)).length,
-    updatedAt: newest(items),
-  }))
-  .toSorted((a, b) => b.updatedAt - a.updatedAt);
+/** Every task holding threads, as main's read of the account names it. */
+function holdings(): readonly AppInboxTaskHolding[] {
+  return [...INBOXES]
+    .filter(([, items]) => items.length > 0)
+    .map(([taskId, items]) => ({
+      taskId,
+      items: items.length,
+      toDo: items.filter(needsReader).length,
+      updatedAt: newest(items),
+    }))
+    .toSorted((a, b) => b.updatedAt - a.updatedAt);
+}
 
-const WAITING: readonly AppInboxTask[] = HOLDINGS.flatMap(({ taskId }) => {
-  const open = (INBOXES.get(taskId) ?? []).filter(
-    (each) =>
-      each.status === INBOX_STATUS.OPEN &&
-      each.thread?.some((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN) === true &&
-      (each.waitsOn ?? each.startedBy)?.userId === DEAN.userId,
-  );
-  return open.length === 0
-    ? []
-    : [
-        {
-          taskId,
-          items: open.map(({ id, agentId, title, postedAt }) => ({ id, agentId, title, postedAt })),
-        },
-      ];
-});
+/** What waits on the reader, as main counts it. */
+function waiting(): readonly AppInboxTask[] {
+  return holdings().flatMap(({ taskId }) => {
+    const open = (INBOXES.get(taskId) ?? []).filter(needsReader);
+    return open.length === 0
+      ? []
+      : [
+          {
+            taskId,
+            items: open.map(({ id, agentId, title, postedAt }) => ({
+              id,
+              agentId,
+              title,
+              postedAt,
+            })),
+          },
+        ];
+  });
+}
 
 const AGENTS: ReadonlyMap<string, CodingAgentSummary> = new Map(
   TASKS.map((task) => [
@@ -698,7 +711,7 @@ function taskSummary(task: TaskSeed): TaskSummary {
 
 /** The list as the channels profile draws it: the first workspace named Stage, holding Luke's tasks alone. */
 export function channelsTasksView(profile: string, list: TasksView): TasksView {
-  if (profile !== PROFILE) return list;
+  if (!READERS.has(profile)) return list;
   return {
     ...list,
     workspaces: list.workspaces
@@ -717,17 +730,19 @@ export function channelsTasksView(profile: string, list: TasksView): TasksView {
 
 /** The account the channels profile signs in as. */
 export function channelsReader(profile: string): string | undefined {
-  return profile === PROFILE ? DEAN.userId : undefined;
+  return READERS.get(profile)?.userId;
 }
 
 /** Main's document under the channels profile, which also turns the mockup on. */
 export function channelsAppState(state: AppStateSnapshot): AppStateSnapshot {
-  if (state.run.profile !== PROFILE) return state;
-  startChannelsMock(META, COUNTS, NEEDING);
+  const reader = READERS.get(state.run.profile);
+  if (reader === undefined) return state;
+  READER = reader.userId === CHARLES.userId ? CHARLES : DEAN;
+  startChannelsMock(META, counts(), needing());
   return {
     ...state,
-    account: ACCOUNT,
-    inbox: { ...state.inbox, waiting: WAITING, tasks: HOLDINGS },
+    account: accountOf(READER),
+    inbox: { ...state.inbox, waiting: waiting(), tasks: holdings() },
   };
 }
 
@@ -762,7 +777,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     const item: InboxItem = {
       ...found.item,
       status: INBOX_STATUS.ANSWERED,
-      answeredBy: DEAN,
+      answeredBy: READER,
       settledAt: now,
       revision: found.item.revision + 1,
     };
@@ -800,7 +815,7 @@ function replied(
     {
       id: fixtureId("e5000005", before.length + now),
       author: INBOX_MESSAGE_AUTHOR.MEMBER,
-      member: DEAN,
+      member: READER,
       text,
       clientKey,
       ...(answers === undefined ? undefined : { answers }),
@@ -814,7 +829,7 @@ function replied(
     updatedAt: now,
     ...(answers === undefined
       ? {}
-      : { status: INBOX_STATUS.ANSWERED, answeredBy: DEAN, settledAt: now }),
+      : { status: INBOX_STATUS.ANSWERED, answeredBy: READER, settledAt: now }),
   };
   (found as { item: InboxItem }).item = item;
   return item;
@@ -826,7 +841,7 @@ export function channelsActAnswer(
   kind: PortActKind,
   payload: PortActPayload<PortActKind>,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
-  if (profile !== PROFILE) return undefined;
+  if (!READERS.has(profile)) return undefined;
   // SAFETY: the table is keyed by kind, as the Inbox fixture's is.
   const answer = ANSWERS[kind] as StagedAnswer<PortActKind> | undefined;
   return answer === undefined

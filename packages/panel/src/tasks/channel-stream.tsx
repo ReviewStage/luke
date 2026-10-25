@@ -25,6 +25,7 @@ import {
   BUTTON_VARIANT,
   Button,
   Comment,
+  ComposeIcon,
   TEXT_BUTTON_TONE,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -43,7 +44,6 @@ import {
 } from "../ai-elements/conversation.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import {
-  addChannelPost,
   answerInStream,
   type ChannelInfo,
   type ChannelPost,
@@ -51,14 +51,11 @@ import {
   useChannelPosts,
   useStreamAnswer,
 } from "./channels-mock.js";
-import { ChatComposer } from "./chat-composer.js";
 import { agentActor } from "./coding-agent-model.js";
 import { INBOX_HOLDER, type InboxListed, openAskOf } from "./inbox-model.js";
-import { NO_TASK } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 const DAY = 24 * 60 * 60 * 1000;
-const NO_KEYWORDS: readonly string[] = [];
 
 /** What a day's divider says: Today, Yesterday, or the date. */
 function dayWords(at: number, now: number): string {
@@ -70,6 +67,13 @@ function dayWords(at: number, now: number): string {
     month: "long",
     day: "numeric",
   });
+}
+
+/** Whether a thread still asks someone something. */
+function asksSomeone(listed: InboxListed): boolean {
+  return (
+    listed.item.status === INBOX_STATUS.OPEN && openAskOf(listed.item.thread ?? []) !== undefined
+  );
 }
 
 /** One entry of the stream: a thread, or a post made in the window. */
@@ -169,12 +173,9 @@ function RepliesLine({
     ).values(),
   ];
   const { item } = listed;
-  const waiting = item.waitsOn;
-  const waitingOther =
-    item.status === INBOX_STATUS.OPEN &&
-    openAskOf(item.thread ?? []) !== undefined &&
-    waiting !== undefined &&
-    waiting.userId !== readerId;
+  const waiting = asksSomeone(listed) ? item.waitsOn : undefined;
+  const waitingOn =
+    waiting === undefined ? undefined : waiting.userId === readerId ? "you" : waiting.name;
   return (
     <div className="channels-post-replies">
       {repliers.map((reply) => (
@@ -185,11 +186,11 @@ function RepliesLine({
           ? "Reply in thread"
           : `${replies.length} ${replies.length === 1 ? "reply" : "replies"}`}
       </TextButton>
-      {waitingOther ? (
+      {waitingOn === undefined ? null : (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {`Waiting on ${waiting.name}`}
+          {`Waiting on ${waitingOn}`}
         </Text>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -239,6 +240,7 @@ function ThreadPost({
       className="channels-post"
       data-chosen={String(chosen)}
       data-settled={String(item.status !== INBOX_STATUS.OPEN)}
+      data-yours={String(asksSomeone(listed) && item.waitsOn?.userId === readerId)}
     >
       <Comment
         author={commentAuthor(actor)}
@@ -292,7 +294,7 @@ function LocalPost({
   );
 }
 
-/** The channel as a stream: its head, its posts by day, and the box at its foot. */
+/** The channel as a stream: its head, with New task, and its posts by day. */
 export function ChannelStream({
   channel,
   items,
@@ -301,6 +303,7 @@ export function ChannelStream({
   readerId,
   now,
   onOpen,
+  onNewTask,
 }: {
   channel: ChannelInfo;
   items: readonly InboxListed[];
@@ -310,6 +313,8 @@ export function ChannelStream({
   readerId: string | undefined;
   now: number;
   onOpen: (listed: InboxListed) => void;
+  /** Starts a task in the channel's area; none where the reader cannot start one. */
+  onNewTask: (() => void) | undefined;
 }): React.JSX.Element {
   const log = useRef<HTMLDivElement>(null);
   const posts = useChannelPosts(channel.id);
@@ -324,7 +329,22 @@ export function ChannelStream({
   let lastDay = "";
   return (
     <section className="channels-stream" aria-label={`#${channel.name}`}>
-      <Toolbar title={`#${channel.name}`} end={TOOLBAR_INSET.COLUMN} />
+      <Toolbar
+        title={`#${channel.name}`}
+        end={TOOLBAR_INSET.COLUMN}
+        actions={
+          onNewTask === undefined ? undefined : (
+            <Button
+              size={BUTTON_SIZE.COMPACT}
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<ComposeIcon />}
+              onClick={onNewTask}
+            >
+              New task
+            </Button>
+          )
+        }
+      />
       <div className="channels-head">
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} truncate>
           {channel.inFlight === ""
@@ -366,27 +386,6 @@ export function ChannelStream({
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
-      <div className="channels-composer">
-        <ChatComposer
-          key={channel.id}
-          channelId={`channels-mock-${channel.id}`}
-          label={`Message #${channel.name}`}
-          mentions={{
-            source: {
-              taskId: NO_TASK,
-              taskName: "",
-              workspace: "stage",
-              repository: "ReviewStage/luke",
-              text: () => "",
-            },
-            members: { people: [], agents: [] },
-            channels: [],
-            crowded: () => false,
-          }}
-          keywords={NO_KEYWORDS}
-          onSend={(text) => addChannelPost(channel.id, text)}
-        />
-      </div>
     </section>
   );
 }

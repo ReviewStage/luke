@@ -52,6 +52,8 @@ export const RUN_PROFILE = {
   INBOX: "inbox",
   /** PROTOTYPE ONLY: the Channels mockup over a synthetic Luke workspace (`channels-fixture.ts`). */
   CHANNELS: "channels",
+  /** PROTOTYPE ONLY: the same Channels mockup, read as Charles, Dean's teammate. */
+  CHANNELS_CHARLES: "channels-charles",
   /** The same account and items, its tasks assigned to it and its agents at work, which its own page lists. */
   PERSON: "person",
   /** The same task on its coding agent, its Pull request tab beside it: checks, reviews, and a merge queued. */

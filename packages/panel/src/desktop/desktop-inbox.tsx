@@ -462,6 +462,7 @@ function InboxShown({
                     readerId={tasks.me}
                     now={now}
                     onOpen={open}
+                    onNewTask={newTask}
                   />
                 ) : (
                   <InboxList
