@@ -125,6 +125,7 @@ import { useAnnounceShown } from "../use-announce-shown.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
+import { GroupNewTaskButton } from "./new-task-button.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
 import { useTaskMenuItems } from "./task-actions.js";
@@ -865,7 +866,7 @@ function TaskListRow({
 
 /**
  * One group: its head, a press that folds and opens it, its glyph, name,
- * and count; and its rows, or a line saying it holds none. The group is a
+ * and count, and the + that starts a task in it; and its rows, or a line saying it holds none. The group is a
  * drop zone where a row may be let go in it, and its rows are dragged
  * within it, where it keeps an order, and out of it.
  */
@@ -877,6 +878,7 @@ function TasksListGroup({
   drops,
   draggable,
   onShowOlder,
+  newTask,
   row,
 }: {
   group: TasksGroup;
@@ -888,6 +890,8 @@ function TasksListGroup({
   draggable: boolean;
   /** Shows every settled task, as the group's "+ N older" line asks. */
   onShowOlder: () => void;
+  /** The + at the head's end that starts a task in the group, where it stands for something a task can start in. */
+  newTask: ReactNode;
   /** Draws a task's row. */
   row: (task: TaskSummary) => ReactNode;
 }): React.JSX.Element {
@@ -947,6 +951,7 @@ function TasksListGroup({
           surface={GROUP_SURFACE.WIDE}
           head={GROUP_HEAD.STICKS}
           rows={GROUP_ROWS.SUBGRID}
+          actions={newTask}
         >
           {body}
         </GroupHeader>
@@ -1202,44 +1207,52 @@ export function TasksList({
             <LeavingTasksGroups
               key={display.grouping}
               groups={groups}
-              group={(group) => (
-                <TasksListGroup
-                  key={groupKey(group.head)}
-                  group={group}
-                  head={groupHead(group.head, tasks, repositories, people)}
-                  folded={folds.folded(group.head)}
-                  onToggle={() => folds.toggle(group.head)}
-                  drops={drops}
-                  draggable={!narrow}
-                  onShowOlder={() =>
-                    frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })
-                  }
-                  row={(task) => (
-                    <TaskListRow
-                      key={task.id}
-                      tasks={tasks}
-                      task={task}
-                      workspaceName={workspaceName}
-                      repositoryName={
-                        task.repository === null
-                          ? NO_REPOSITORY
-                          : repositoryLabel(task.repository, repositories)
-                      }
-                      waiting={waitingOn.get(task.id) ?? 0}
-                      now={now}
-                      properties={properties}
-                      assigneeHeld={
-                        !narrow &&
-                        group.head.kind === TASKS_GROUP.ASSIGNEE &&
-                        group.head.assigneeId === (task.assignee?.userId ?? null)
-                      }
-                      chosen={several !== undefined && selected.has(task.id) ? several : undefined}
-                      onOpen={() => tasks.onSelect(task.id)}
-                      onStanding={(standing) => setStanding(task, standing)}
-                    />
-                  )}
-                />
-              )}
+              group={(group) => {
+                const named = groupHead(group.head, tasks, repositories, people);
+                return (
+                  <TasksListGroup
+                    key={groupKey(group.head)}
+                    group={group}
+                    head={named}
+                    folded={folds.folded(group.head)}
+                    onToggle={() => folds.toggle(group.head)}
+                    drops={drops}
+                    draggable={!narrow}
+                    onShowOlder={() =>
+                      frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })
+                    }
+                    newTask={
+                      <GroupNewTaskButton tasks={tasks} head={group.head} words={named.name} />
+                    }
+                    row={(task) => (
+                      <TaskListRow
+                        key={task.id}
+                        tasks={tasks}
+                        task={task}
+                        workspaceName={workspaceName}
+                        repositoryName={
+                          task.repository === null
+                            ? NO_REPOSITORY
+                            : repositoryLabel(task.repository, repositories)
+                        }
+                        waiting={waitingOn.get(task.id) ?? 0}
+                        now={now}
+                        properties={properties}
+                        assigneeHeld={
+                          !narrow &&
+                          group.head.kind === TASKS_GROUP.ASSIGNEE &&
+                          group.head.assigneeId === (task.assignee?.userId ?? null)
+                        }
+                        chosen={
+                          several !== undefined && selected.has(task.id) ? several : undefined
+                        }
+                        onOpen={() => tasks.onSelect(task.id)}
+                        onStanding={(standing) => setStanding(task, standing)}
+                      />
+                    )}
+                  />
+                );
+              }}
             />
           </div>
         </ListMotion>

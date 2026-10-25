@@ -578,9 +578,23 @@ function agentRequest(handed: NewTaskAgent) {
   };
 }
 
-/** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), or the card a start refused after it closed opens again on. */
+/** Where a task New task starts stands, as a Tasks page group's + chose it: its status, priority, or assignee, and the words its group is headed by, which the card's pill says. */
+export interface NewTaskStanding {
+  readonly asked: TaskStanding;
+  readonly words: string;
+}
+
+/** What a start asks of where its task stands: a status, a priority, or an assignee, as given; no one assigned is where a task starts, so it is asked nothing. */
+function startingStanding(standing: TaskStanding | undefined) {
+  if (standing === undefined) return undefined;
+  const { assigneeId, ...rest } = standing;
+  return assigneeId === undefined || assigneeId === null ? rest : { ...rest, assigneeId };
+}
+
+/** What the press that opened New task chose: a repository (a repository group's +), where the task stands (a Tasks page group's +), the card's purpose (the Automations page's Create with an agent), or the card a start refused after it closed opens again on. */
 export interface NewTaskPreset {
   readonly repository?: string;
+  readonly standing?: NewTaskStanding;
   /** What the card starts; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
   /** The card as it pressed Start, and why the start was refused, where the card is opened again on a refusal. */
@@ -597,6 +611,8 @@ interface NewTaskCardKept {
   /** What the card started, which it opens again for; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
   readonly repository: string | null;
+  /** Where the task was to stand, where the card still named it. */
+  readonly standing?: NewTaskStanding;
   readonly links: readonly NewTaskLink[];
   readonly choice: ModelChoice | undefined;
   readonly press: NewTaskPress;
@@ -609,6 +625,8 @@ interface NewTaskCardKept {
  */
 export interface NewTaskStart {
   readonly issues?: readonly TaskIssueChoice[];
+  /** Where the task stands from the start, as the card's pill names it. */
+  readonly standing?: TaskStanding;
   readonly handed?: NewTaskAgent;
   /** What the card held as it pressed Start, which it opens again on where an agent's start is refused after the card closed. */
   readonly card?: NewTaskCardKept;
@@ -830,6 +848,8 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
+  /** New task with where the task stands already chosen in the dialog: what a Tasks page status, priority, or assignee group's + asks. */
+  onNewTaskAt: (standing: NewTaskStanding) => void;
   /** New task's card for the agent that makes an automation: what the Automations page's Create with an agent asks. */
   onNewAutomationAgent: () => void;
   /** The New task dialog: whether it stands, what its press chose, and the two presses it makes. */
@@ -2867,6 +2887,7 @@ export function useTasksTab(input: {
               ? undefined
               : {
                   ...(card.purpose === undefined ? undefined : { purpose: card.purpose }),
+                  ...(card.standing === undefined ? undefined : { standing: card.standing }),
                   refused: { card, note },
                 },
         });
@@ -2880,6 +2901,7 @@ export function useTasksTab(input: {
       ...(from.issues === undefined || from.issues.length === 0
         ? undefined
         : { issues: from.issues }),
+      ...startingStanding(from.standing),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
     }).then(
@@ -3832,6 +3854,7 @@ export function useTasksTab(input: {
     },
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
+    onNewTaskAt: (standing) => newTaskWith({ standing }),
     onNewAutomationAgent: () => newTaskWith({ purpose: NEW_TASK_PURPOSE.AUTOMATION }),
     newTask: {
       open: newTaskAsk !== undefined,

@@ -41,6 +41,7 @@ import {
   GAP,
   GLYPH_INK,
   GlyphSlot,
+  GROUP_ACTIONS,
   GROUP_SURFACE,
   GroupHeader,
   INSET,
@@ -108,6 +109,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
+import { GroupNewTaskButton, groupStanding } from "./new-task-button.js";
 import { groupCount } from "./sidebar-fold.js";
 import { useTaskMenuItems } from "./task-actions.js";
 import {
@@ -151,7 +153,9 @@ import { useRowDrag } from "./use-row-drag.js";
  * its parts hang their own instead (`task-part-cards.tsx`). A card dragged onto another column
  * is sent that column's status or priority, or assigned to its person, No
  * assignee's assigning it to no one, as the task page's chips send them,
- * and moves there at once; a change the service did not keep goes back
+ * and moves there at once; the + at a column's head opens New task with
+ * that same status, priority, or assignee chosen, so the task it starts
+ * lands in the column (`new-task-button.tsx`); a change the service did not keep goes back
  * where it stood and says so, whether dragged or picked. Which columns stand, what each holds, its order, and what a card
  * draws are the Tasks page's filter and the Board's own display
  * (`tasks-page-model.ts`): Backlog, Todo, In progress, and Done at first,
@@ -458,14 +462,6 @@ function columnHead(head: TasksGroupHead, people: ColumnPeople): ColumnHead {
   return { mark: null, words: "" };
 }
 
-/** What a card dropped on a column is sent: the column's status or priority, or its assignee, null for No assignee's. */
-function columnStanding(head: TasksGroupHead): TaskStanding | undefined {
-  if (head.kind === TASKS_GROUP.STATUS) return { status: head.status };
-  if (head.kind === TASKS_GROUP.PRIORITY) return { priority: head.priority };
-  if (head.kind === TASKS_GROUP.ASSIGNEE) return { assigneeId: head.assigneeId };
-  return undefined;
-}
-
 /** The value a column stands for, which names it among the Board's columns: a status, a priority, or an assignee's account id, as its grouping is. */
 function columnValue(head: TasksGroupHead): string {
   if (head.kind === TASKS_GROUP.STATUS) return head.status;
@@ -521,7 +517,7 @@ function TaskBoardColumnView({
     onDropOut: (from, zone) => {
       const task = column.tasks[from];
       const onto = columns.find((each) => columnValue(each.head) === zone);
-      const standing = onto === undefined ? undefined : columnStanding(onto.head);
+      const standing = onto === undefined ? undefined : groupStanding(onto.head);
       if (task === undefined || standing === undefined || standsAt(task, standing)) return;
       onStanding(task, standing);
     },
@@ -556,6 +552,8 @@ function TaskBoardColumnView({
         glyph={mark}
         count={column.tasks.length === 0 ? undefined : groupCount(column.tasks.length)}
         surface={GROUP_SURFACE.WIDE}
+        actions={<GroupNewTaskButton tasks={tasks} head={column.head} words={words} />}
+        actionsShown={GROUP_ACTIONS.AT_REST}
       />
       {cards.length === 0 ? (
         column.older === undefined ? (

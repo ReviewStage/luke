@@ -1828,6 +1828,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("brief" in request ? { brief: request.brief } : undefined),
           ...("status" in request ? { status: request.status } : undefined),
           ...("priority" in request ? { priority: request.priority } : undefined),
+          ...("assigneeId" in request ? { assigneeId: request.assigneeId } : undefined),
         }),
         answerOf(tasksStartAnswerSchema, TASK_UNANSWERED),
       ),
