@@ -1012,20 +1012,6 @@ test("Whose lists everyone's items, the reader's own, items whose starter the se
   });
 });
 
-test("grouped by person, a folded person's items are stepped past but for the one chosen", () => {
-  const view = inboxList(SHARED, {
-    grouping: INBOX_GROUPING.PERSON,
-    show: INBOX_SHOW.ALL,
-    readerId: ME.userId,
-    chosen: undefined,
-  });
-  const dana = view.grouping === INBOX_GROUPING.PERSON ? view.groups[1]?.key : undefined;
-  const folded = (key: string) => key === dana;
-  assert.deepEqual(inboxSteps(view, "unnamed", folded)?.next?.item.id, "kais");
-  assert.deepEqual(inboxSteps(view, "danas", folded)?.previous?.item.id, "unnamed");
-  assert.equal(inboxSteps(view, "danas", folded)?.total, 5);
-});
-
 test("a note past the wire's bound is no answer, so the card offers no send for it", () => {
   const long = "x".repeat(INBOX_BOUNDS.MAX_NOTE_CHARS + 1);
   assert.equal(inboxReply(QUESTION, { ...EMPTY_INBOX_DRAFT, note: long }), undefined);

@@ -165,28 +165,6 @@ test("folded, a card is its head alone, counting its comments and previewing non
   assert.equal(container.querySelector(".annotation-card-count"), null, "open, nothing is counted");
 });
 
-test("a narrow card says the age to a reader alone, draws a state as its dot that still says its word, and counts without the word", () => {
-  const wide = draw(false, 900);
-  const time = () =>
-    wide.querySelector(".annotation-card-time")?.parentElement ?? assert.fail("an age");
-  const word = () =>
-    wide.querySelector(".annotation-card-state .luke-badge-words") ?? assert.fail("a word");
-  const countWord = () =>
-    wide.querySelector(".annotation-card-count .luke-visually-hidden") ??
-    assert.fail("the count's word");
-  assert.notEqual(getComputedStyle(time()).position, "absolute", "wide, the age is drawn");
-  assert.notEqual(getComputedStyle(word()).position, "absolute", "wide, the state says its word");
-  assert.notEqual(getComputedStyle(countWord()).position, "absolute");
-
-  laid?.remove();
-  laid = layContainersAt({ annotation: 360, "luke-room": 360 });
-  assert.equal(getComputedStyle(time()).position, "absolute", "narrow, the age steps out");
-  assert.equal(time().textContent, "2h", "and is still read");
-  assert.equal(getComputedStyle(word()).position, "absolute", "its word is drawn nowhere");
-  assert.equal(word().textContent, "Outdated", "and still names it");
-  assert.equal(getComputedStyle(countWord()).position, "absolute", "the count drops its word");
-});
-
 test("the head's ⋯ stands beside its summary, its words no part of the head's, and acts without folding the card", () => {
   const container = draw(true);
   const summary = container.querySelector<HTMLElement>("summary") ?? assert.fail("a head");

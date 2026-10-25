@@ -64,6 +64,7 @@ import {
   taskLinkPlace,
   versionHistoryItem,
 } from "../tasks/task-menu-items.js";
+import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -613,7 +614,8 @@ function SidebarTaskCard({
 /**
  * A task in the sidebar, pinned or listed alike: led by its glyph
  * (`PlanGlyph`), its status's mark or the document where its service gives
- * it none; its name, in the
+ * it none, whose status the press says after the name, as a List row's does,
+ * since the mark is decoration to a screen reader; its name, in the
  * body's weight unless the task is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`task-card.tsx`),
@@ -709,6 +711,9 @@ export function SidebarTask({
             ) : (
               <>
                 <OneLine words={task.name}>{task.name}</OneLine>
+                {task.status === undefined ? null : (
+                  <VisuallyHidden>, {TASK_STATUS_WORDS[task.status]}</VisuallyHidden>
+                )}
                 {unread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
                 {worn === undefined ? null : <AssigneeFaceHeard face={worn} />}
               </>

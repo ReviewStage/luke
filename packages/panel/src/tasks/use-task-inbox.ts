@@ -26,9 +26,11 @@ import {
   type Draft,
   draftOfItem,
   EMPTY_DRAFT,
+  holdsPicks,
   type InboxPlace,
   useDraftWriter,
   useInboxDrafts,
+  withoutPicks,
 } from "../composer-drafts.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import { useInboxArrivals } from "./inbox-arrivals.js";
@@ -105,16 +107,17 @@ import { type InboxFollower, useFollowedInboxes } from "./use-followed-inboxes.j
  * that did not answer is held as failed, and the card offers to try again.
  *
  * What the developer has put on a card and not sent is its draft, kept by
- * item at the revision it was written against (`../composer-drafts.ts`), so
- * it waits through a look at another tab, task, or page, the Inbox's and the
- * plan's tab reading the same one, and its words outlast a relaunch; the
- * files attached to it are held in this window's memory alone, as a
- * message's are. A settled item's box keeps the message being written the
- * same way. A read of the inbox
- * lets go of the drafts of items it no longer holds at their revision, save
- * that the words and files written on an item the agent posted on again are
- * carried to it as it now stands, and a nod taken or a message written
- * lets go of its own.
+ * item (`../composer-drafts.ts`), so it waits through a look at another tab,
+ * task, or page, the Inbox's and the plan's tab reading the same one, and
+ * its words outlast a relaunch; the files attached to it are held in this
+ * window's memory alone, as a message's are. A settled item's box keeps the
+ * message being written the same way, in the same place, so a message
+ * landing on the item, the agent posting on it again or a teammate's answer
+ * settling it, never takes what is being written. Its picks are kept with
+ * the revision they were made on and stand only while the item is open at
+ * it. A read of the inbox lets go of the drafts of items it no longer holds
+ * and of the picks it holds made on an item since changed, and a message
+ * written lets go of its own.
  */
 
 /** How one nod is sent: the item, the revision it nods to, and the key the send is known by. */
@@ -287,20 +290,9 @@ function imagesNamed(
   return new Map([...images].filter(([attachmentId]) => named.has(attachmentId)));
 }
 
-/**
- * Where an item's card keeps its draft: the reply while the item is open,
- * and a message on its thread once it is settled, apart, so an answer left
- * unsent when another member settles the item never becomes a message.
- */
+/** Where an item's card keeps its draft: the item, whatever its revision or status, so a message landing on it never moves the words being written. */
 function draftPlace(item: InboxItem, taskId: string | null): InboxPlace {
-  const place: InboxPlace = {
-    kind: DRAFT_PLACE.INBOX,
-    planId: taskId,
-    agentId: item.agentId,
-    itemId: item.id,
-    revision: item.revision,
-  };
-  return item.status === INBOX_STATUS.OPEN ? place : { ...place, thread: true };
+  return { kind: DRAFT_PLACE.INBOX, planId: taskId, agentId: item.agentId, itemId: item.id };
 }
 
 /** The items with one replaced by the service's newer word on it. */
@@ -311,24 +303,40 @@ function withItem(items: readonly InboxItem[], item: InboxItem): readonly InboxI
 }
 
 /**
- * Whether a read holds the draft's item at an older revision than the draft
- * was written against, as one reader of a plan does while another has heard
- * the agent's newer post first; such a reader leaves the draft be, since its
- * read is what is out of date.
+ * Whether a draft's picks were made on its item as the read holds it or
+ * earlier, so they can be let go where they stand no longer. Note that a
+ * reader holding an older revision than the picks were made on, as one
+ * reader of a plan does while another has heard the agent's newer post
+ * first, leaves them be, since its read is what is out of date.
  */
-function behind(items: readonly InboxItem[], place: InboxPlace): boolean {
-  return items.some((item) => item.id === place.itemId && item.revision < place.revision);
+function caughtUp(item: InboxItem, draft: Draft): boolean {
+  return draft.revision === undefined || item.revision >= draft.revision;
 }
 
-/** A card's draft as the drafts keep it. */
-function keptDraft(draft: InboxDraft): Draft {
+/** A card's draft as the drafts keep it, its picks made on the item at `revision`. */
+function keptDraft(draft: InboxDraft, revision: number): Draft {
   return {
+    revision,
     text: draft.note,
     attachments: draft.attachments,
     choices: draft.choices,
     values: draft.values,
     steps: draft.steps,
     press: draft.press,
+  };
+}
+
+/**
+ * What a box holds once a reply carrying an answer is refused: the words and
+ * files that went, then any written on the thread while the answer stood
+ * settled, and the picks that went unless others were made meanwhile.
+ */
+function withRefused(now: Draft, went: Draft): Draft {
+  if (holdsNothing(now)) return went;
+  return {
+    ...(holdsPicks(now) ? now : went),
+    text: [went.text, now.text].filter((words) => words !== "").join("\n"),
+    attachments: [...went.attachments, ...now.attachments],
   };
 }
 
@@ -398,9 +406,6 @@ export function useTaskInbox(input: {
   // Note that an agent with no plan is the planId its inbox is read by.
   const readAgent = kind === INBOX_SCOPE_KIND.AGENT ? taskId : undefined;
   const drafts = useInboxDrafts(draftsOn);
-  // The drafts as last drawn, which a refusal landing later reads.
-  const draftsNow = useRef(drafts);
-  draftsNow.current = drafts;
   const writer = useDraftWriter();
   const settler = useInboxSettler();
   const attempts = useRef(new Map<string, Attempt>());
@@ -465,36 +470,6 @@ export function useTaskInbox(input: {
     [note],
   );
 
-  // A send that settled its item at once, refused, brings the item back open, where a message
-  // written on it meanwhile would read as no draft of it and be let go; so its words and files are
-  // carried into the open box beside the picks it holds. Note that they take the place of the words
-  // that went, and are joined after any the open box holds besides, as another window may have
-  // written there meanwhile, so neither is lost.
-  const reopen = useCallback(
-    (item: InboxItem, went: Pick<Draft, "text" | "attachments">) => {
-      if (item.status !== INBOX_STATUS.OPEN) return;
-      const open = draftPlace(item, draftsOn);
-      const settled: InboxPlace = { ...open, thread: true };
-      const written = draftsNow.current.find((kept) => Equal.equals(kept.place, settled));
-      if (written === undefined) return;
-      if (written.text !== "" || written.attachments.length > 0) {
-        writer.update(open, (was) => {
-          const text = was.text === went.text ? "" : was.text;
-          const attachments = Equal.equals(was.attachments, went.attachments)
-            ? []
-            : was.attachments;
-          return {
-            ...was,
-            text: [text, written.text].filter((words) => words !== "").join("\n"),
-            attachments: [...attachments, ...written.attachments],
-          };
-        });
-      }
-      writer.drop((place) => Equal.equals(place, settled));
-    },
-    [writer, draftsOn],
-  );
-
   // Note that a nod is keyed by the revision it nods to, so a press again after a lost reply is
   // taken once, and a nod to the notice posted over since goes under a key of its own.
   const onAcknowledge = useCallback(
@@ -541,17 +516,13 @@ export function useTaskInbox(input: {
             note(item.id, { words: notTakenNote(answer.item) });
             return;
           }
+          // Note that a message being written on the item meanwhile is kept, since the box takes words while the nod is out.
           settler.take(sent, answer.item);
-          // Note that a message being written on the item settled meanwhile is kept, since the box takes words while the nod is out.
-          writer.drop(
-            (place) =>
-              place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id && place.thread !== true,
-          );
           // Note that a nod the agent waits on reaches it and may open its turn, so the agents are read again.
           if (item.needsReply) latest.current.onRetryList();
         });
     },
-    [note, refused, taskId, writer, settler],
+    [note, refused, taskId, settler],
   );
 
   const onMessage = useCallback(
@@ -571,7 +542,7 @@ export function useTaskInbox(input: {
       // Note that the box lets go of what it sent at once, as the agent's box does, and takes it
       // back below where the send is refused, so it never stands holding words already sent.
       const place = draftPlace(item, draftsOn);
-      const unsent = keptDraft(draft);
+      const unsent = keptDraft(draft, item.revision);
       writer.update(place, () => EMPTY_DRAFT);
       // Note that a reply carrying an answer settles the ask, so it stands over every read the moment it is sent, as an answer does.
       const sent = answers === undefined ? undefined : settler.answer(item, { text, answers });
@@ -608,8 +579,11 @@ export function useTaskInbox(input: {
           });
           if ("failure" in answer) {
             if (sent !== undefined) settler.refuse(sent);
-            writer.update(place, (now) => (holdsNothing(now) ? unsent : now));
-            if (sent !== undefined) reopen(item, unsent);
+            // Note that a plain reply's words come back only into an empty box, and an answer's join the
+            // message written while it stood settled, after them, so neither is lost.
+            writer.update(place, (now) =>
+              sent === undefined ? (holdsNothing(now) ? unsent : now) : withRefused(now, unsent),
+            );
             refused(item.id, answer.failure);
             return;
           }
@@ -627,7 +601,7 @@ export function useTaskInbox(input: {
           latest.current.onRetryList();
         });
     },
-    [note, refused, taskId, writer, settler, draftsOn, reopen],
+    [note, refused, taskId, writer, settler, draftsOn],
   );
 
   // An item of an agent the list has not read yet, one started from another
@@ -684,44 +658,35 @@ export function useTaskInbox(input: {
 
   // The board draws the window's own answers and messages over the read until it holds them.
   const settled = useSettledItems(held.items);
-  // A read lets go of the drafts of the items it covers that it no longer holds as they were
-  // written for: a plan's, or, for an agent with no plan, that agent's alone. Note that a settled
-  // item keeps its thread's draft, and an answer left unsent on an item settled since is let go.
-  // Note that a draft of the item as the board draws it is kept too, so a message written on an
-  // item the window's own send settled stands while the read still holds the item open.
-  // Note that the agent posting on the item again moves its revision on, which starts its picks,
-  // fields, and steps afresh, but the words and files being written on it are carried to the item
-  // as it now stands, so a post landing while the developer writes never takes them.
+  // A read lets go of the drafts of the items it covers that it no longer holds: a plan's, or, for
+  // an agent with no plan, that agent's alone. Note that an item the board draws counts as held, so
+  // a message written on an item the window's own send settled stands while the read lags.
+  // Note that the agent posting on the item again, or a teammate settling it, lets only the picks go,
+  // which stand on the ask as it was, while the words and files being written stay as they are.
   const { drop, update } = writer;
   useEffect(() => {
     if (!held.read || (ownTask === undefined && readAgent === undefined)) return;
-    const stale = drafts.filter(
-      (kept) =>
-        (ownTask !== undefined || kept.place.agentId === readAgent) &&
-        !held.items.some((item) => draftOfItem(kept.place, item)) &&
-        !settled.some((item) => draftOfItem(kept.place, item)) &&
-        !behind(held.items, kept.place) &&
-        !behind(settled, kept.place),
+    const covered = drafts.filter(
+      (kept) => ownTask !== undefined || kept.place.agentId === readAgent,
     );
-    if (stale.length === 0) return;
-    for (const kept of stale) {
-      const reposted = settled.find(
-        (item) => item.id === kept.place.itemId && item.revision > kept.place.revision,
-      );
-      if (reposted === undefined || (kept.text === "" && kept.attachments.length === 0)) continue;
-      update(draftPlace(reposted, draftsOn), (was) => ({
-        ...was,
-        text: was.text === "" ? kept.text : was.text,
-        attachments: was.attachments.length === 0 ? kept.attachments : was.attachments,
-      }));
-    }
-    drop((place) => stale.some((kept) => Equal.equals(kept.place, place)));
-  }, [held.read, held.items, settled, ownTask, readAgent, drafts, drop, update, draftsOn]);
+    const gone = covered.filter(
+      (kept) =>
+        !held.items.some((item) => item.id === kept.place.itemId) &&
+        !settled.some((item) => item.id === kept.place.itemId),
+    );
+    const lapsed = covered.filter((kept) => {
+      const item = settled.find((each) => each.id === kept.place.itemId);
+      return item !== undefined && caughtUp(item, kept) && draftOfItem(kept, item) !== kept;
+    });
+    for (const kept of lapsed) update(kept.place, withoutPicks);
+    if (gone.length > 0) drop((place) => gone.some((kept) => Equal.equals(kept.place, place)));
+  }, [held.read, held.items, settled, ownTask, readAgent, drafts, drop, update]);
 
   const board = useMemo(() => inboxBoard(settled, readerId), [settled, readerId]);
   const draftOf = useCallback(
     (item: InboxItem): InboxDraft => {
-      const kept = drafts.find((each) => draftOfItem(each.place, item));
+      const found = drafts.find((each) => each.place.itemId === item.id);
+      const kept = found === undefined ? undefined : draftOfItem(found, item);
       return kept === undefined
         ? EMPTY_INBOX_DRAFT
         : {
@@ -735,11 +700,14 @@ export function useTaskInbox(input: {
     },
     [drafts],
   );
-  const drafted = drafts.some((kept) => settled.some((item) => draftOfItem(kept.place, item)));
+  const drafted = drafts.some((kept) =>
+    settled.some((item) => item.id === kept.place.itemId && !holdsNothing(draftOfItem(kept, item))),
+  );
   const onDraft = useCallback(
     (item: InboxItem, draft: InboxDraft) =>
       writer.update(draftPlace(item, draftsOn), (was) => ({
         ...was,
+        revision: item.revision,
         text: draft.note,
         choices: draft.choices,
         values: draft.values,

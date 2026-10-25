@@ -29,8 +29,9 @@ export const nativeAgents = nativeAgentSessionsLayer({ run: runWeb }).pipe(
   Layer.provide(
     Layer.merge(
       runnerBundleFromDirectory(dirname(fileURLToPath(import.meta.url))),
-      // A launch answers at once while the image is prepared: a Start's client waits two minutes, a
-      // message's ten seconds, and the panel asks again every fifteen (`image-preparing.ts`).
+      // A request answers at once while the image is prepared, a Start's client waiting two minutes
+      // and a message's ten seconds; the launch past its answer waits on the image's build instead
+      // (`runner-sessions.ts`'s `IMAGE_READY`).
       agentSandboxImageFromTemplate(deploymentOidcToken, Duration.zero),
     ),
   ),

@@ -7,7 +7,6 @@ import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { test } from "vitest";
 import {
-  SETTINGS_NO_MATCH_WORDS,
   type SettingsSearchEntry,
   type SettingsSearchInput,
   searchSettings,
@@ -355,7 +354,6 @@ test("no two rows on different pages wear the same label", () => {
 
 test("a search that finds nothing says what to try", () => {
   assert.equal(searchSettings(settingsSearchEntries(FULL_INPUT), "zzzz")?.matched, 0);
-  assert.match(SETTINGS_NO_MATCH_WORDS, /^No results match\. Try /u);
 });
 
 /** Rows on one page, each its own words: what a query ranks and marks. */

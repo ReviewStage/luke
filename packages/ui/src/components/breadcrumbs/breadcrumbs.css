@@ -71,19 +71,28 @@
      current one, last, gives way last of all. Note that the floors stay
      here, because they hang on `:has()` and on the bar's widths. */
   .luke-breadcrumbs[data-variant="caption"] li {
-    min-width: 2.5em;
+    --luke-breadcrumb-floor: 2.5em;
+    min-width: var(--luke-breadcrumb-floor);
     flex: 0 9 auto;
   }
 
+  /* Note that a crumb of words or a plain press keeps a floor its words read
+     at, because a path that squeezes every crumb to two letters says
+     nothing; a path past that folds its first crumbs into one "…"
+     (`crumb-fold.ts`) rather than shrink these further. */
+  .luke-breadcrumbs[data-variant="caption"] li[data-legible="true"] {
+    --luke-breadcrumb-floor: 11em;
+  }
+
   .luke-breadcrumbs[data-variant="caption"] li:has(> .luke-breadcrumb-separator) {
-    min-width: calc(2.5em + 12px);
+    min-width: calc(var(--luke-breadcrumb-floor) + 12px);
   }
 
   /* Note that a crumb whose chevron a width hides takes no chevron's room
      in its floor there, as below for the narrower widths. */
   .luke-breadcrumbs[data-variant="caption"]
   li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
-    min-width: 2.5em;
+    min-width: var(--luke-breadcrumb-floor);
   }
 
   /* Note that the last crumb's share is a whole one, because shares summing
@@ -130,12 +139,12 @@
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
-      min-width: calc(2.5em + 12px);
+      min-width: calc(var(--luke-breadcrumb-floor) + 12px);
     }
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
-      min-width: 2.5em;
+      min-width: var(--luke-breadcrumb-floor);
     }
   }
 
@@ -159,12 +168,12 @@
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
-      min-width: calc(2.5em + 12px);
+      min-width: calc(var(--luke-breadcrumb-floor) + 12px);
     }
 
     .luke-breadcrumbs[data-variant="caption"]
       li:has(> .luke-breadcrumb-separator[data-narrowest="false"]) {
-      min-width: 2.5em;
+      min-width: var(--luke-breadcrumb-floor);
     }
   }
 }

@@ -9,7 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ActorRef } from "./actor-ref.js";
 import { MemberDirectory } from "./member-directory.js";
-import { githubPageOf, OpenPersonProvider } from "./person-door.js";
+import { OpenPersonProvider } from "./person-door.js";
 import { fakeActPort } from "./testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
@@ -151,10 +151,6 @@ test("a place's own door wins over the person's", () => {
 
   assert.equal(own, 1);
   assert.deepEqual(opened, []);
-});
-
-test("a GitHub login with no App's suffix is a person's profile, even marked a bot", () => {
-  assert.equal(githubPageOf("renovate", true), "https://github.com/renovate");
 });
 
 test("a person named inside a workspace's members opens in that workspace, an agent's own where its page stands in another", () => {

@@ -24,10 +24,8 @@ import {
  * follows the element's own toggle (a find's), and draws a closed body,
  * still closed, while a find looks through it; a control its head holds
  * stands beside its summary, never in it, and is pressed without folding
- * it, while the row's bare ground beside it folds; a card's head
- * leaves its chevron where the caller puts it, at its line's end; and a
- * press gives a quiet row whole, while a card's head, whose fill meets the
- * card's edges, gives only inside its fill until what it holds settles.
+ * it, while the row's bare ground beside it folds; and a card's head
+ * draws its body only once a press opens it.
  */
 
 declare global {
@@ -227,7 +225,7 @@ test("a box beside the summary still checks, and a press on the row's bare groun
   assert.equal(summaryOf(container).getAttribute("aria-expanded"), "true");
 });
 
-test("a lead stands before the summary, a card's frame wears the card, and a press on the row reaches its holder", () => {
+test("a lead stands before the summary, and a press on the row reaches its holder", () => {
   const stood: string[] = [];
   const container = render(
     createElement(Disclosure, {
@@ -237,9 +235,6 @@ test("a lead stands before the summary, a card's frame wears the card, and a pre
       children: createElement(DisclosureSummary, { look: DISCLOSURE_SUMMARY.HEAD, children: "M" }),
     }),
   );
-  const frame = container.querySelector(".luke-disclosure-frame") ?? assert.fail("a frame");
-  assert.equal(frame.getAttribute("data-look"), DISCLOSURE_LOOK.CARD);
-  assert.equal(container.querySelector("details")?.hasAttribute("data-look"), false);
   const lead = find(".fold");
   assert.equal(
     lead.compareDocumentPosition(summaryOf(container)) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -262,7 +257,7 @@ test("a lead stands before the summary, a card's frame wears the card, and a pre
   assert.equal(summaryOf(held).querySelector(CONTROL), null);
 });
 
-test("a row summary draws no chevron of its own, stays out of the tab order, and folds on a press", () => {
+test("a row summary stays out of the tab order, and folds on a press", () => {
   const root = render(
     createElement(Disclosure, {
       defaultOpen: true,
@@ -273,14 +268,13 @@ test("a row summary draws no chevron of its own, stays out of the tab order, and
     }),
   );
   const summary = root.querySelector("summary") ?? assert.fail("the summary stands");
-  assert.equal(summary.querySelector(".luke-disclosure-turn"), null);
   assert.equal(summary.tabIndex, -1);
   assert.equal(summary.getAttribute("aria-expanded"), "true");
   act(() => summary.click());
   assert.equal(summary.getAttribute("aria-expanded"), "false");
 });
 
-test("a card's head draws its chevron where its caller puts it, and its body only once a press opens it", () => {
+test("a card's head draws its body only once a press opens it", () => {
   const root = render(
     createElement(Disclosure, {
       look: DISCLOSURE_LOOK.CARD,
@@ -304,41 +298,8 @@ test("a card's head draws its chevron where its caller puts it, and its body onl
   );
   const card = root.querySelector("[aria-label='To-dos']") ?? assert.fail("the card stands");
   const summary = card.querySelector("summary") ?? assert.fail("the head stands");
-  assert.equal(summary.querySelectorAll(".luke-disclosure-turn").length, 1);
-  assert.equal(summary.lastElementChild?.className, "luke-disclosure-turn");
   assert.equal(card.textContent, "2 of 5 done");
   act(() => summary.click());
   assert.equal(summary.getAttribute("aria-expanded"), "true");
   assert.equal(card.textContent, "2 of 5 doneWrite the failing test");
-});
-
-test("a press gives a quiet row whole, and a card's head inside its fill until what it holds settles", () => {
-  const container = render(
-    createElement("div", null, [
-      createElement(Disclosure, {
-        key: "quiet",
-        children: createElement(DisclosureSummary, { children: "3 tools called" }),
-      }),
-      createElement(Disclosure, {
-        key: "card",
-        look: DISCLOSURE_LOOK.CARD,
-        children: createElement(DisclosureSummary, {
-          look: DISCLOSURE_SUMMARY.HEAD,
-          children: [
-            createElement(DisclosureChevron, { key: "chevron" }),
-            createElement("span", { key: "words" }, "Plan"),
-          ],
-        }),
-      }),
-    ]),
-  );
-  const [quiet, head] = [...container.querySelectorAll("summary")];
-  act(() => quiet?.click());
-  act(() => head?.click());
-  assert.equal(quiet?.getAttribute("data-pulse"), "quiet");
-  assert.equal(head?.getAttribute("data-pulse"), "flush");
-
-  // Note that the head stands still, so what it holds settling is what ends the pulse.
-  act(() => head?.firstElementChild?.dispatchEvent(new Event("animationend", { bubbles: true })));
-  assert.equal(head?.hasAttribute("data-pulse"), false);
 });

@@ -12,6 +12,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LIVE_SERVER_EVENT } from "@luke/live";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import {
@@ -24,7 +25,7 @@ import {
 } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { eq } from "drizzle-orm";
-import { Clock, DateTime, Effect, Option, Result } from "effect";
+import { Clock, DateTime, Deferred, Effect, Fiber, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { agentPin } from "../../schemas/agent-pin.js";
@@ -53,6 +54,7 @@ import {
   createCodingAgent,
   delegationsOf,
   deleteCodingAgent,
+  dispatchMentioningServers,
   IDLE_ARCHIVE,
   linePlacesOf,
   lineSendersOf,
@@ -85,6 +87,7 @@ import {
   renameCodingAgent,
   restoreOperatorAgent,
   settleCodingAgentAuthor,
+  takeCodingAgentMentionedServers,
   taskHasMergedPullRequest,
   taskNamesOf,
   turnUsagesOf,
@@ -575,6 +578,92 @@ const tasklessAgent = (
     });
     return { agentId: id, conversationId };
   });
+
+it.layer(getTestDB())("the coding-agent store's mentioned servers", (it) => {
+  it.effect(
+    "a send the runtime refused takes back only the servers it added, so what a turn took while it was handed over is not given back",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount;
+        const workspace = yield* openWorkspace(userId);
+        const { agentId, conversationId } = yield* tasklessAgent(userId, workspace);
+        // An earlier message's mention, still standing for the agent's next turn.
+        yield* dispatchMentioningServers(
+          userId,
+          agentId,
+          [INTEGRATION_PROVIDER.LINEAR],
+          Effect.succeed(true),
+        );
+
+        let tookMeanwhile: readonly string[] = [];
+        const refused = yield* dispatchMentioningServers(
+          userId,
+          agentId,
+          [INTEGRATION_PROVIDER.NOTION, INTEGRATION_PROVIDER.LINEAR],
+          // A turn starts while the runtime has the message, and takes what stands; then the runtime refuses it.
+          Effect.map(takeCodingAgentMentionedServers(userId, conversationId), (taken) => {
+            tookMeanwhile = taken;
+            return false;
+          }),
+        );
+
+        assert.equal(refused, false);
+        assert.deepEqual(tookMeanwhile, [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.NOTION]);
+        assert.deepEqual(yield* takeCodingAgentMentionedServers(userId, conversationId), []);
+      }),
+  );
+
+  it.effect(
+    "a send interrupted mid hand-over, as at its deadline, takes back the servers it added",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount;
+        const workspace = yield* openWorkspace(userId);
+        const { agentId, conversationId } = yield* tasklessAgent(userId, workspace);
+        const began = yield* Deferred.make<void>();
+
+        const handing = yield* Effect.forkChild(
+          dispatchMentioningServers(
+            userId,
+            agentId,
+            [INTEGRATION_PROVIDER.NOTION],
+            Effect.andThen(Deferred.succeed(began, undefined), Effect.never),
+          ),
+        );
+        yield* Deferred.await(began);
+        yield* Fiber.interrupt(handing);
+
+        assert.deepEqual(yield* takeCodingAgentMentionedServers(userId, conversationId), []);
+      }),
+  );
+
+  it.effect(
+    "a send the runtime refused takes back only the servers it added, leaving one an earlier message mentioned too",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount;
+        const workspace = yield* openWorkspace(userId);
+        const { agentId, conversationId } = yield* tasklessAgent(userId, workspace);
+        yield* dispatchMentioningServers(
+          userId,
+          agentId,
+          [INTEGRATION_PROVIDER.LINEAR],
+          Effect.succeed(true),
+        );
+
+        yield* dispatchMentioningServers(
+          userId,
+          agentId,
+          [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.NOTION],
+          Effect.succeed(false),
+        );
+
+        assert.deepEqual(yield* takeCodingAgentMentionedServers(userId, conversationId), [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
+      }),
+  );
+});
 
 it.layer(getTestDB())("the coding-agent store's agents with no plan", (it) => {
   it.effect(

@@ -345,10 +345,21 @@ export interface AssigneeFace {
 }
 
 /**
+ * Whether the reader is known to be their workspace's one member, by its
+ * listed count or else by its members as read; a workspace counted neither
+ * way is not taken for one.
+ */
+function soleMember(reader: EditReader): boolean {
+  return (reader.memberCount ?? reader.members?.length) === 1;
+}
+
+/**
  * Who a task's row names by face: the member it is assigned to where that
  * is someone other than the reader, read against the members as
  * `personActor` reads them, and the unassigned mark where no one is; a
- * task assigned to the reader wears nothing. Who made it, a teammate, Luke,
+ * task assigned to the reader wears nothing. Note that a task no one is on
+ * wears nothing either in a workspace of the reader alone, because the mark
+ * is there to say someone else could take it. Who made it, a teammate, Luke,
  * or an agent, is never its face, since it is not who is on it, and stays
  * on its card and its menu's Created by.
  */
@@ -357,7 +368,7 @@ export function assigneeFace(
   reader: EditReader,
 ): AssigneeFace | undefined {
   const { assignee } = task;
-  if (assignee === undefined) return { assignee: undefined };
+  if (assignee === undefined) return soleMember(reader) ? undefined : { assignee: undefined };
   if (assignee.userId === reader.readerId) return undefined;
   return { assignee: personActor(assignee, reader.members, reader.readerId, reader.former) };
 }
@@ -411,6 +422,8 @@ export interface EditReader {
   /** Who the workspace's work names but left, whose pictures they keep, grayed. */
   readonly former?: readonly FormerMember[] | undefined;
   readonly owner?: PersonActor | undefined;
+  /** How many members the workspace has, the reader among them, as its listing counts them; absent where the window has no count. */
+  readonly memberCount?: number | undefined;
 }
 
 /** A coding agent an edit names, as the window found it among the task's agents: its harness and where its work stands. */

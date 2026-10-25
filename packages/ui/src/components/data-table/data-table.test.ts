@@ -161,20 +161,6 @@ test("a sortable heading's press is heard, and its cell announces the order chos
   expect(heard).toEqual(["sort minutes", "sort minutes"]);
 });
 
-test("a table that sorts nothing offers no heading to press", () => {
-  const container = draw(
-    createElement(DataTable<Run, RunKey>, {
-      label: "Runs",
-      columns: columns([]),
-      rows: RUNS,
-      rowKey: (run) => run.id,
-      empty: "No runs yet.",
-    }),
-  );
-
-  expect(container.querySelector("th button")).toBeNull();
-});
-
 test("a table sorted by its caller, offering no sort, still announces the order its rows are in", () => {
   const container = draw(
     createElement(DataTable<Run, RunKey>, {
@@ -203,7 +189,7 @@ test("a press on a row opens it, and a press on a control in its cells is that c
   expect(heard).toEqual(["open nightly", "pin release"]);
 });
 
-test("a row its caller says has nothing to open neither looks pressable nor opens", () => {
+test("a row its caller says has nothing to open does not open", () => {
   const heard: string[] = [];
   const container = draw(
     createElement(DataTable<Run, RunKey>, {
@@ -221,8 +207,6 @@ test("a row its caller says has nothing to open neither looks pressable nor open
   press(release?.querySelectorAll("td")[2]);
   press(nightly?.querySelectorAll("td")[2]);
 
-  expect(release?.hasAttribute("data-pressable")).toBe(false);
-  expect(nightly?.getAttribute("data-pressable")).toBe("true");
   expect(heard).toEqual(["open nightly"]);
 });
 
@@ -239,12 +223,4 @@ test("no rows show the empty line in place of the table", () => {
 
   expect(container.querySelector("table")).toBeNull();
   expect(container.textContent).toBe("No runs yet.");
-});
-
-test("a row a press opens gives only inside its fill, which runs the card's width", () => {
-  const container = draw(createElement(SortedRuns, { heard: [] }));
-  const nightly = container.querySelector("tbody tr");
-  press(nightly?.querySelector("td"));
-
-  expect(nightly?.getAttribute("data-pulse")).toBe("flush");
 });

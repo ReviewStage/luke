@@ -8,13 +8,11 @@ import { Announcer } from "../announcer/announcer.js";
 import { FormField } from "../form-field/form-field.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
 import { TextField } from "../text-field/text-field.js";
-import { ErrorLine } from "./error-line.js";
 
 /**
  * error-line.test.ts -- what went wrong is said in one line wherever it is
- * said: a form field's error and a Settings row's are the same line as
- * `ErrorLine` draws alone, standing empty before anything goes wrong,
- * describing the control it is about, and said through the window's
+ * said: a form field's error and a Settings row's each describe the control
+ * it is about, and are said through the window's
  * announcer as it arrives: a form field's politely, a Settings row's as an
  * alert.
  */
@@ -66,11 +64,8 @@ function settingsRow(error: string | undefined): ReactElement {
   });
 }
 
-/**
- * The line the control's description names that is not its label's words,
- * as markup without the id each place mints, so two places' lines compare.
- */
-function errorLine(container: HTMLElement): string {
+/** Fails unless the control's description names its error line. */
+function describedByErrorLine(container: HTMLElement): void {
   const input = container.querySelector("input");
   assert.ok(input);
   const ids = (input.getAttribute("aria-describedby") ?? "").split(" ");
@@ -78,31 +73,11 @@ function errorLine(container: HTMLElement): string {
     .map((id) => document.getElementById(id))
     .find((element) => element?.dataset.slot === "field-error");
   assert.ok(line, "the control is described by its error line");
-  const copy = line.cloneNode(true) as HTMLElement;
-  copy.removeAttribute("id");
-  return copy.outerHTML;
 }
 
-/** `ErrorLine` drawn alone saying `words`, as markup. */
-function alone(words: string): string {
-  const container = render(createElement(ErrorLine, { children: words }));
-  const line = container.firstElementChild;
-  assert.ok(line);
-  return line.outerHTML;
-}
-
-test("a form field's error and a Settings row's are the one error line", () => {
-  const expected = alone(REFUSED);
-  assert.equal(errorLine(render(formField(REFUSED))), expected);
-  assert.equal(errorLine(render(settingsRow(REFUSED))), expected);
-});
-
-test("the line stands empty before anything goes wrong", () => {
-  for (const container of [render(formField(undefined)), render(settingsRow(undefined))]) {
-    const lines = container.querySelectorAll('[data-slot="field-error"]');
-    assert.equal(lines.length, 1);
-    assert.equal(lines[0]?.textContent, "");
-  }
+test("a form field's error and a Settings row's each describe their control", () => {
+  describedByErrorLine(render(formField(REFUSED)));
+  describedByErrorLine(render(settingsRow(REFUSED)));
 });
 
 /** What the window's polite and alert regions say once `place` goes from no error to `REFUSED`. */

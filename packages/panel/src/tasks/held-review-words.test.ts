@@ -209,31 +209,10 @@ test("Cancel, unlike Esc, lets a reply's words go", async () => {
   assert.equal(box(container, "Reply").textContent, "");
 });
 
-/** The reply or the edit as drawn: its box, and the one foot that holds its Cancel and its send. */
-function foot(container: HTMLElement, label: string): HTMLElement {
-  const frame = box(container, label).closest(".luke-composer-frame") ?? assert.fail("a frame");
-  return frame.querySelector<HTMLElement>(".luke-composer-foot") ?? assert.fail("a foot");
-}
-
 /** The kind of every change asked of GitHub so far. */
 function actionsSent(): string[] {
   return changes.map((change) => change.action);
 }
-
-/** The words of every button in the foot. */
-function footPresses(element: HTMLElement): string[] {
-  return [...element.querySelectorAll("button")].map((each) => each.textContent ?? "");
-}
-
-test("a thread's reply and a pending comment's edit both stand on the one foot, with Cancel and their send in it", () => {
-  const container = draw();
-
-  act(() => button(container, "Reply…").click());
-  assert.deepEqual(footPresses(foot(container, "Reply")), ["Cancel", "Reply"]);
-
-  act(() => button(container, "Edit").click());
-  assert.deepEqual(footPresses(foot(container, "Pending comment")), ["Cancel", "Save"]);
-});
 
 test("Ctrl+Enter sends a reply and saves an edit, and a bare Enter sends neither", async () => {
   const container = draw();

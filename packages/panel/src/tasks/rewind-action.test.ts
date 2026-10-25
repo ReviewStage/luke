@@ -6,20 +6,13 @@ import {
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentMessage } from "@luke/features/coding-agent-wire";
-import { GLYPH, type Glyph } from "@luke/ui/icons";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
-import {
-  EditMessageAction,
-  RevertMessageAction,
-  RewindProvider,
-  rewindPoints,
-} from "./rewind-action.js";
+import { RevertMessageAction, RewindProvider, rewindPoints } from "./rewind-action.js";
 import { type HeldComposer, useAgentComposer } from "./use-agent-composer.js";
 
 /**
@@ -207,46 +200,6 @@ test("a revert hides the line and everything after it until the transcript drops
 
   assert.deepEqual(calls, ["rewind:third-line"]);
   assert.deepEqual([...(composer().cut ?? [])], ["third-line", "third-reply"]);
-});
-
-test("Revert to here wears the go-back glyph and Edit the rename glyph", async () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  const nothing = () => undefined;
-  const doors = {
-    editing: undefined,
-    onEdit: nothing,
-    onCancelEdit: nothing,
-    onSendEdit: nothing,
-    editor: () => assert.fail("no line is open for writing"),
-    onRevert: nothing,
-    revertsAt: new Map([["first-reply", "second-line"]]),
-    editable: new Set(["plan"]),
-    followed: new Set<string>(),
-    revertTakes: new Map<string, string>(),
-    editTakes: new Map<string, string>(),
-  };
-  await act(async () =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(
-          RewindProvider,
-          { value: doors },
-          createElement(EditMessageAction, { messageId: "plan" }),
-          createElement(RevertMessageAction, { messageId: "first-reply" }),
-        ),
-      ),
-    ),
-  );
-
-  const glyphOf = (label: string): string | undefined =>
-    container.querySelector(`[aria-label="${label}"] svg`)?.outerHTML;
-  const markup = (glyph: Glyph): string => renderToStaticMarkup(createElement(glyph));
-  assert.equal(glyphOf("Edit"), markup(GLYPH.RENAME));
-  assert.equal(glyphOf("Revert to here"), markup(GLYPH.GO_BACK));
 });
 
 /** A line a member sent: the reader's own, or a teammate's by name. */

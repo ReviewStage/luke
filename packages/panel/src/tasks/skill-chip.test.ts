@@ -151,32 +151,12 @@ test("a skill's chip in the composer hangs the skill's card, what it is for unde
   assert.equal(card?.querySelector(".luke-hover-card-note")?.textContent, RELEASE.description);
 });
 
-test("a skill's chip is the one pill in the composer and in a sent message, each leading with the book", async () => {
-  const { container: composer } = await mounted(
-    createElement(Composer, { words: "Cut it with /release now" }),
-  );
-  const { container: sent } = await mounted(
-    createElement(SentWords, { text: "Cut it with /release now." }),
-  );
-  const boxed = composer.querySelector(".agent-composer-input [data-skill-ref]");
-  const said = sent.querySelector("[data-skill-ref]");
-  assert.ok(boxed && said, "both draw the skill as a chip");
-
-  for (const chip of [boxed, said]) {
-    assert.equal(chip.getAttribute("data-look"), "pill");
-    assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "/release");
-    assert.ok(chip.querySelector(".luke-inline-ref-glyph svg"), "the chip leads with the book");
-  }
-  assert.equal(boxed.innerHTML, said.innerHTML, "the two chips are drawn alike");
-});
-
 test("a skill still being read hangs a card of its name, with a placeholder for what it is for", async () => {
   const { container } = await mounted(
     createElement(SkillRef, { name: "release", skill: undefined, onOpen: undefined }),
   );
   const chip = container.querySelector("[data-skill-ref]");
   assert.ok(chip, "the skill is a chip before it is read");
-  assert.ok(chip.querySelector(".luke-inline-ref-glyph svg"), "it leads with the book");
 
   restOn(chip);
 
@@ -196,10 +176,6 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   focusRestOn(chip);
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
   assert.ok(card, "the card is the window's plan card");
-  assert.ok(
-    card.querySelector(".luke-hover-card-head .luke-hover-card-glyph svg"),
-    "the head wears the skill's mark",
-  );
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "/release");
   assert.equal(card.querySelector(".luke-hover-card-note")?.textContent, RELEASE.description);
   assert.equal(

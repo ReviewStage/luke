@@ -1,4 +1,8 @@
 import type { HTMLAttributes, ReactNode, Ref } from "react";
+import { cn } from "../../cn.js";
+import { TEXT_ROLE_CLASS, TEXT_VARIANT, type TextVariant } from "./text-role.js";
+
+export { TEXT_VARIANT, type TextVariant } from "./text-role.js";
 
 /**
  * text.tsx -- words set in one of the type roles every app shares, on whichever element their meaning asks for.
@@ -38,22 +42,13 @@ import type { HTMLAttributes, ReactNode, Ref } from "react";
  * start so its last part stays. A truncated element still
  * holds every word, so what is read aloud is never cut; it truncates at its
  * own box's edge, so it stands as a block or a flex item.
+ *
+ * It is drawn in the Tailwind theme's utilities (`text-role.ts` names each
+ * role's), with no margin, so an `h1` set as a caption looks like a caption.
+ * A tone and a face are said on the element (`data-tone`, `data-font`) and
+ * drawn from there, so they outrank the role's own ink and face, `inherit`'s
+ * included.
  */
-
-/** How words are set: body, a label, a caption, a group's, a section's or a dialog's heading, a page's or the top bar's title, or as their surroundings set them (`inherit`, for words cut to a line inside a row that has already set its type and ink). */
-export const TEXT_VARIANT = {
-  BODY: "body",
-  LABEL: "label",
-  CAPTION: "caption",
-  GROUP: "group",
-  SECTION: "section",
-  DIALOG: "dialog",
-  TOOLBAR_TITLE: "toolbar-title",
-  TITLE: "title",
-  INHERIT: "inherit",
-} as const;
-
-export type TextVariant = (typeof TEXT_VARIANT)[keyof typeof TEXT_VARIANT];
 
 /** The ink words are drawn in: the text's own, or a step quieter. */
 export const TEXT_TONE = {
@@ -93,6 +88,24 @@ export const TEXT_ELEMENT = {
 
 export type TextElement = (typeof TEXT_ELEMENT)[keyof typeof TEXT_ELEMENT];
 
+/** What every role is drawn with: no margin, words broken anywhere at the box's edge, and a tone or a face asked on the element over the role's own. */
+const TEXT_BASE =
+  "luke-text m-0 wrap-anywhere data-[tone=muted]:text-muted-foreground data-[font=mono]:font-mono";
+
+/** A role's own type, face, and ink; `inherit` takes all three from around it, and a group's heading is a tone below the words it heads. */
+function roleClass(variant: TextVariant): string {
+  if (variant === TEXT_VARIANT.INHERIT) return "[font:inherit] text-inherit";
+  const ink = variant === TEXT_VARIANT.GROUP ? "text-muted-foreground" : "text-foreground";
+  return `${TEXT_ROLE_CLASS[variant]} font-ui ${ink}`;
+}
+
+/** One line cut with an ellipsis at the box's edge, a flex item giving up its content's width so the cut can happen at all; from the start, the line is laid right to left so its end stays and read left to right, its words kept in their own direction by a `<bdi>`. */
+function truncateClass(truncate: boolean | TextTruncate): string | undefined {
+  if (truncate === false) return undefined;
+  const cut = "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap";
+  return truncate === TEXT_TRUNCATE.START ? `${cut} [direction:rtl] text-left` : cut;
+}
+
 /** Words in `variant`, standing in `as`, the body in a paragraph unless asked. */
 export function Text({
   variant = TEXT_VARIANT.BODY,
@@ -125,7 +138,7 @@ export function Text({
       {...attributes}
       // Note that every element a role may stand in is a plain HTMLElement to a ref's reader, so the union's one element type is named here.
       ref={ref as Ref<HTMLDivElement> | undefined}
-      className={className === undefined ? "luke-text" : `luke-text ${className}`}
+      className={cn(TEXT_BASE, roleClass(variant), truncateClass(truncate), className)}
       data-variant={variant}
       data-tone={tone}
       data-font={font}

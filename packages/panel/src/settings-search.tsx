@@ -138,7 +138,7 @@ export function resultPageWord(page: SettingsView): string {
  * What an empty search says, the words module's miss line and then what to try,
  * because a miss that only says it missed leaves the reader nothing to do.
  */
-export const SETTINGS_NO_MATCH_WORDS = `${noMatchWords(TERM.RESULT)}. Try a page's name, such as Voice, or fewer words.`;
+const SETTINGS_NO_MATCH_WORDS = `${noMatchWords(TERM.RESULT)}. Try a page's name, such as Voice, or fewer words.`;
 
 /** The words every integration's row can be found by, beside its own name. */
 const INTEGRATION_WORDS = "connect disconnect integration mcp";

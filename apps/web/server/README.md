@@ -373,10 +373,11 @@ generator (`server/function-rewrites.ts`) refuses a `routes` key at the top
 level beside `services`: Vercel ignores one there rather than erroring, so a
 file generated into the old location would pass every check and 404 every
 `/api/` route in production. The project's
-environment variables reach both services alike, and each service's own
-`ignoreCommand` is what skips its build, so a commit that changes nothing under
-`apps/web`, `packages`, the workspace manifests, or `vercel.json` deploys none
-of them. A Vercel `vercel.ts` is not used: Vercel's Git builds refuse a
+environment variables reach both services alike. The project's Ignored Build
+Step (`scripts/vercel-ignore.sh`), not either service's own `ignoreCommand`,
+which Vercel does not act on, is what skips the build, so a commit that changes
+nothing the services ship (the workspaces they reach, the workspace manifests,
+or `vercel.json`) deploys neither. A Vercel `vercel.ts` is not used: Vercel's Git builds refuse a
 `{ service }` destination in a `vercel.ts` (`rewrites[0].destination should be
 string`, #2838) although `vercel.json` takes the same rewrites.
 
