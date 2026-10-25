@@ -24,10 +24,17 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A deployment's own Vercel OIDC token, as the SDK reads it from the environment: unsigned, and good for a year past any test. */
+/**
+ * An instant past any day a test runs on. Note that the SDK reads the OIDC
+ * token's and a token's expiry against the real clock, which no TestClock
+ * moves, so an expiry here is never a date that will one day pass.
+ */
+const FAR_FUTURE = Date.UTC(2100, 0, 1);
+
+/** A deployment's own Vercel OIDC token, as the SDK reads it from the environment: unsigned, and good past any test. */
 function deploymentOidcToken(): string {
   const encoded = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
-  return `${encoded({ alg: "none" })}.${encoded({ exp: Math.floor(Date.UTC(2027, 9, 25) / 1000) })}.`;
+  return `${encoded({ alg: "none" })}.${encoded({ exp: Math.floor(FAR_FUTURE / 1000) })}.`;
 }
 
 /** A Connect that begins every sign-in at `url`, and is asked nothing else. */
@@ -176,7 +183,7 @@ it.effect(
         return Promise.resolve(
           Response.json({
             token: `token-${asked}`,
-            expiresAt: Date.UTC(2027, 0, 1),
+            expiresAt: FAR_FUTURE,
             connector: { id: "c_1", uid: "oauth/linear-evicted", type: "oauth" },
           }),
         );

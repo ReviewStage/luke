@@ -49,8 +49,11 @@ import {
   deleteIntegrationConnection,
 } from "./integration-store.js";
 import {
+  grantAccessToken,
+  INTEGRATION_GRANT_HOLDER,
   type IntegrationAdmission,
   integrationAccessToken,
+  integrationGrant,
   integrationUnavailable,
 } from "./integration-token.js";
 import {
@@ -361,6 +364,39 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
         assert.equal(workspace.success.token, tokenOf(session.workspaceId));
         assert.ok(Result.isSuccess(own));
         assert.equal(own.success.token, tokenOf(session.userId));
+      }),
+  );
+
+  it.effect(
+    "a workspace's Linear grant read before the workspace disconnected reads the account's own token, as a workspace with none does",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* agentHost;
+        const session = yield* plannedSession(host, typedSeat);
+        yield* connected(session.userId);
+        const state = `workspace-state-${session.workspaceId}`;
+        yield* beginWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, session.userId, state);
+        yield* completeWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, state);
+        const account = { provider: LINEAR, connectionName: LINEAR };
+        const admission = host.admit(session.auth, session.sessionId);
+        const grants = new Map([
+          [session.userId, {}],
+          [session.workspaceId, {}],
+        ]);
+
+        const grant = yield* integrationGrant(account, admission).pipe(
+          Effect.provide(connectLayer(grants)),
+        );
+        assert.ok(Result.isSuccess(grant));
+        yield* deleteWorkspaceIntegration(session.workspaceId, LINEAR);
+        const read = yield* grantAccessToken(account, admission, grant.success).pipe(
+          Effect.provide(connectLayer(grants)),
+        );
+
+        assert.equal(grant.success.holder, INTEGRATION_GRANT_HOLDER.WORKSPACE);
+        assert.ok(Result.isSuccess(read.answer));
+        assert.equal(read.answer.success.token, tokenOf(session.userId));
+        assert.equal(read.grant.holder, INTEGRATION_GRANT_HOLDER.ACCOUNT);
       }),
   );
 

@@ -86,8 +86,12 @@ export interface Heard {
   readonly bearers: string[];
 }
 
-/** Linear's MCP server for the member: the SDK's own, admitting their bearer alone; anything else answers 401. */
-export function linearServer(bearer: string, heard: Heard) {
+/** Linear's MCP server for the member: the SDK's own, admitting their bearer alone, and listing `tools`; anything else answers 401. */
+export function linearServer(
+  bearer: string,
+  heard: Heard,
+  tools: readonly object[] = LINEAR_TOOLS,
+) {
   return fakeHttpClientLayer(async (url, init) => {
     if (url !== INTEGRATION[LINEAR].MCP_URL) {
       return new Response("not found", { status: 404 });
@@ -104,7 +108,7 @@ export function linearServer(bearer: string, heard: Heard) {
       { name: "linear-fake", version: "1.0.0" },
       { capabilities: { tools: {} } },
     );
-    server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: LINEAR_TOOLS }));
+    server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [...tools] }));
     server.setRequestHandler(CallToolRequestSchema, (request): CallToolResult => {
       heard.calls.push({ name: request.params.name, arguments: request.params.arguments });
       switch (request.params.name) {

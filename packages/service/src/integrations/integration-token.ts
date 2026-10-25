@@ -277,7 +277,11 @@ const accountToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
 });
 
-/** The workspace's Linear token on its grant, or the sentence saying why that grant could not be used. */
+/**
+ * The workspace's Linear token on its grant, or the sentence saying why that
+ * grant could not be used; nothing where the workspace's Linear was
+ * disconnected since its grant was read, so the account's own is read.
+ */
 const workspaceToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   provider: IntegrationProvider,
   organizationId: string,
@@ -294,7 +298,7 @@ const workspaceToken = /* @__PURE__ */ Effect.fnUntraced(function* (
     case LINEAR_READ_FAILURE.EXPIRED:
       return Result.fail(sentences.WORKSPACE_EXPIRED);
     case LINEAR_READ_FAILURE.NOT_CONNECTED:
-      return Result.fail(sentences.NOT_CONNECTED);
+      return undefined;
     default:
       return Result.fail(sentences.UNREACHABLE);
   }
@@ -303,8 +307,8 @@ const workspaceToken = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** Any read here failed with its sentence for unreachable, and one log line naming the failure's kind. */
 function orUnreachable<A>(
   provider: IntegrationProvider,
-  read: Effect.Effect<Result.Result<A, string>, unknown, IntegrationTokenServices>,
-): Effect.Effect<Result.Result<A, string>, never, IntegrationTokenServices> {
+  read: Effect.Effect<A, unknown, IntegrationTokenServices>,
+): Effect.Effect<A | Result.Result<never, string>, never, IntegrationTokenServices> {
   return read.pipe(
     Effect.catchCause((cause) =>
       Effect.as(
@@ -351,10 +355,10 @@ export function integrationGrant(
   );
 }
 
-/** The token on one grant, asked for now, or the sentence saying why there is none; a store the read cannot reach fails it like Connect being unreachable. */
-export function grantAccessToken(
+/** The token on one grant, or the sentence saying why there is none; nothing for a workspace grant disconnected since it was read. */
+function tokenOnGrant(
   grant: IntegrationGrantRef,
-): Effect.Effect<IntegrationTokenAnswer, never, IntegrationTokenServices> {
+): Effect.Effect<IntegrationTokenAnswer | undefined, never, IntegrationTokenServices> {
   switch (grant.holder) {
     case INTEGRATION_GRANT_HOLDER.ACCOUNT:
       return orUnreachable(grant.provider, accountToken(grant));
@@ -363,6 +367,40 @@ export function grantAccessToken(
     case INTEGRATION_GRANT_HOLDER.SIGN_IN:
       return orUnreachable(grant.provider, signedInToken(grant.provider, grant.userId));
   }
+}
+
+/** A token read on a grant: what it answered, and the grant it was read on. */
+export interface GrantTokenRead {
+  readonly answer: IntegrationTokenAnswer;
+  readonly grant: IntegrationGrantRef;
+}
+
+/**
+ * The token on the grant `integrationGrant` answered for the account, asked
+ * for now, or the sentence saying why there is none; a store the read cannot
+ * reach fails it like Connect being unreachable. Note that a workspace's
+ * Linear disconnected between the two reads is read as a workspace with
+ * none, so the grant is read again and the account's own token is asked
+ * for, and the answer names the grant it came from.
+ */
+export function grantAccessToken(
+  account: IntegrationAccountRef,
+  admission: IntegrationAdmission,
+  grant: IntegrationGrantRef,
+): Effect.Effect<GrantTokenRead, never, IntegrationTokenServices> {
+  const notConnected = integrationUnavailable(account.provider).NOT_CONNECTED;
+  return Effect.flatMap(tokenOnGrant(grant), (answer) => {
+    if (answer !== undefined) return Effect.succeed({ answer, grant });
+    return Effect.flatMap(integrationGrant(account, admission), (again) => {
+      if (Result.isFailure(again))
+        return Effect.succeed({ answer: Result.fail(again.failure), grant });
+      const next = again.success;
+      return Effect.map(tokenOnGrant(next), (read) => ({
+        answer: read ?? Result.fail(notConnected),
+        grant: next,
+      }));
+    });
+  });
 }
 
 /**
@@ -402,7 +440,7 @@ export function integrationAccessToken(
     integrationGrant(account, admission),
     (grant): Effect.Effect<IntegrationTokenAnswer, never, IntegrationTokenServices> =>
       Result.isSuccess(grant)
-        ? grantAccessToken(grant.success)
+        ? Effect.map(grantAccessToken(account, admission, grant.success), (read) => read.answer)
         : Effect.succeed(Result.fail(grant.failure)),
   );
 }

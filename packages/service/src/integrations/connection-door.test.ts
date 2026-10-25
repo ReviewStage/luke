@@ -643,4 +643,29 @@ it.layer(getTestDB())("the integrations' door", (it) => {
         );
       }),
   );
+
+  it.effect(
+    "a provider that lists no tools for a moment is listed live again at the next listing, never kept empty",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* memberWithLinear;
+        const asked: ConnectAsked = { reads: [], evicted: [] };
+        const token = linearTokenOf(member.userId);
+        const list = listConnectionTools(member.admitted, LINEAR).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              NO_GITHUB,
+              cachingConnect(token, token, asked),
+              linearServer(token, hearing(), []),
+            ),
+          ),
+        );
+
+        const first = yield* list;
+        const again = yield* list;
+
+        assert.deepEqual([first, again], [[], []]);
+        assert.equal(asked.reads.length, 2);
+      }),
+  );
 });
