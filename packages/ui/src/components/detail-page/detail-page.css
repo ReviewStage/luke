@@ -120,8 +120,11 @@
     padding-inline-end: var(--luke-detail-page-side);
   }
 
+  /* Its end leaves free what the standing toasts take of the window's foot
+     (`--luke-toast-room`, which the shell measures), so its last row can be
+     scrolled clear of them rather than read through a toast. */
   .luke-detail-page-content {
-    padding-bottom: var(--luke-detail-page-inset);
+    padding-bottom: max(var(--luke-detail-page-inset), var(--luke-toast-room, 0px));
     overflow-wrap: anywhere;
   }
 
