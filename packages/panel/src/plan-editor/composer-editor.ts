@@ -32,7 +32,7 @@ import {
 } from "@tiptap/pm/state";
 import type { EditorProps, EditorView } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
-import { enterKeyHint, submitSends } from "../enter-sends.js";
+import { enterKeyHint, enterSends } from "../enter-sends.js";
 import {
   INLINE_MARK,
   INLINE_SPAN,
@@ -798,7 +798,7 @@ function composerProps(state: ComposerState, props: ComposerEditorProps): Editor
     handleKeyDown: (view, event) => {
       if (composing(view, event)) return false;
       if (props.onKey(event) || removedChip(view, event.key)) return true;
-      if (!submitSends(event, props.submitKey?.())) return false;
+      if (!enterSends(event)) return false;
       props.onEnter();
       return true;
     },

@@ -11,7 +11,6 @@ import {
   recommendedLabels,
 } from "@luke/features/inbox-wire";
 import { FIELD_WORDS } from "@luke/features/words";
-import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import {
   Badge,
   BUTTON_SIZE,
@@ -30,7 +29,6 @@ import {
   LAYOUT_ELEMENT,
   ReadableControls,
   Stack,
-  TEXT_AREA_SUBMIT,
   TEXT_ELEMENT,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
@@ -41,7 +39,6 @@ import {
 import type { Actor } from "@luke/ui/actor-model";
 import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
 import { ActorLine, ActorRef } from "../actor-ref.js";
-import { modEnterSends } from "../enter-sends.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
   ANSWER_TONE,
@@ -54,7 +51,6 @@ import {
   INBOX_MISSING,
   type InboxDraft,
   type InboxMissing,
-  severalFields,
   shownTicks,
   withDoPress,
   withStep,
@@ -73,9 +69,9 @@ import { SentWords } from "./skill-chip.js";
  * are pressed, picked, ticked, or filled, the box's Send sending it; an
  * answered ask's stand as the answer left them, read-only and at full
  * strength. Enter on an option or in a field sends the box the controls
- * stand in (`DraftQuestion`), save in a form of several fields, where Enter
- * only picks and ⌘ or Ctrl with Enter sends, and a send lacking something
- * takes the keyboard to it (`focusMissing`). An ask's words, its options and its
+ * stand in (`DraftQuestion`), a form of several fields too, where Space or
+ * a press picks an option, and a send lacking something takes the keyboard
+ * to it (`focusMissing`). An ask's words, its options and its
  * steps, select and copy whether it is open or not (`ReadableControls`), a
  * drag over them picking and ticking nothing, and stand Reply over them as
  * the words around them do (`reply-to-selection.tsx`), a field's own
@@ -406,14 +402,6 @@ export function bareKey(event: { metaKey: boolean; ctrlKey: boolean; altKey: boo
   return !event.metaKey && !event.ctrlKey && !event.altKey;
 }
 
-/** ⌘ or Ctrl with Enter, which sends a form of several fields. */
-const MOD_ENTER_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
-
-/** The key Send's hint names for an ask: ⌘↩ where Enter only picks, nothing where Enter sends. */
-export function askSendChord(ask: InboxAsk | undefined): ShortcutChord | undefined {
-  return ask !== undefined && severalFields(ask) ? MOD_ENTER_CHORD : undefined;
-}
-
 /**
  * Sends the open item's answer from wherever in its pane the developer
  * pressed Enter, through its box's own send, so the box's checks stand: an
@@ -426,27 +414,18 @@ export function sendFromPane(pane: HTMLElement | null): void {
 
 /**
  * Enter in an open item's question, on an option or in a form's field,
- * sends the answer, and never presses the option it stands on; ⌘ or Ctrl
- * with Enter sends from anywhere in it. Where the question is a form of
- * several fields (`several`), a bare Enter sends nothing: it presses the
- * option it stands on, and goes no further than a field, which would
- * otherwise submit the box. Shift+Enter is no send, and an editor's Enter is
- * the editor's own to hand on.
+ * sends the answer, and never presses the option it stands on, which Space
+ * or a press picks. Shift+Enter is no send, and an editor's Enter is the
+ * editor's own to hand on.
  */
 function onResponseKey(
   pane: React.RefObject<HTMLElement | null>,
-  several: boolean,
   event: React.KeyboardEvent,
 ): void {
   if (event.key !== "Enter" || event.shiftKey || event.altKey || event.nativeEvent.isComposing) {
     return;
   }
   if (writesLines(event.target)) return;
-  if (several && !modEnterSends(event)) {
-    // Note that an input's Enter would submit the box, which is the send this holds back; an option's is left to press it.
-    if (event.target instanceof HTMLInputElement) event.preventDefault();
-    return;
-  }
   // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
   event.preventDefault();
   sendFromPane(pane.current);
@@ -643,13 +622,7 @@ function OpenControls({
             form={{ fields: ask.fields }}
             draft={draft}
             disabled={disabled}
-            text={(props) => (
-              <InboxFormText
-                {...props}
-                doors={doors.text}
-                submitKey={severalFields(ask) ? TEXT_AREA_SUBMIT.MOD_ENTER : TEXT_AREA_SUBMIT.ENTER}
-              />
-            )}
+            text={(props) => <InboxFormText {...props} doors={doors.text} />}
             onDraft={onDraft}
           />
         </div>
@@ -801,16 +774,13 @@ export function hasControls(ask: InboxAsk): boolean {
  * The open question's controls as the draft reply's card's body, over its
  * foot, with no card, border, or head of their own, since the agent's
  * message says what it asks: an Enter on an option or in a field sends the
- * card, and ⌘ or Ctrl with Enter sends it from anywhere in it, the only
- * send of a form of several fields.
+ * card, a form of several fields too.
  */
 export function DraftQuestion({
   pane,
-  ask,
   children,
 }: {
   pane: React.RefObject<HTMLElement | null>;
-  ask: InboxAsk;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -818,7 +788,7 @@ export function DraftQuestion({
     <div
       className="inbox-draft-ask"
       data-inbox-draft-ask=""
-      onKeyDown={(event) => onResponseKey(pane, severalFields(ask), event)}
+      onKeyDown={(event) => onResponseKey(pane, event)}
     >
       {children}
     </div>

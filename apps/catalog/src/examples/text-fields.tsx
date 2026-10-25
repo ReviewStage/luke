@@ -65,6 +65,7 @@ function SubmittedNote(): React.JSX.Element {
         value={reply}
         onChange={setReply}
         rows={3}
+        submitKey={TEXT_AREA_SUBMIT.MOD_ENTER}
         onSubmit={() => setSent(reply)}
       />
       <Text tone={TEXT_TONE.MUTED}>
@@ -90,7 +91,6 @@ function MessageBox(): React.JSX.Element {
           growLimit={TEXT_AREA_GROW_LIMIT.NONE}
           rows={1}
           enterKeyHint={ENTER_KEY_HINT.SEND}
-          submitKey={TEXT_AREA_SUBMIT.ENTER}
           value={message}
           onChange={setMessage}
           onSubmit={() => {
