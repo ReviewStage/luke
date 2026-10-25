@@ -18,6 +18,7 @@ import {
   Fill,
   LIST_ROW_CURRENT,
   LIST_ROW_LEAD,
+  LIST_ROW_META,
   LIST_VARIANT,
   List,
   ListMotion,
@@ -174,6 +175,8 @@ export function RunRow({
           : { icon: <GLYPH.AUTOMATION />, label: automationName }
       }
       leadAt={LIST_ROW_LEAD.INLINE}
+      // Note that a run's state and time stand on its title's line, as a mail's do, never centred across its two.
+      metaAt={LIST_ROW_META.TITLE}
       description={
         <Tooltip label={line}>
           <span>{line}</span>
@@ -218,6 +221,7 @@ export function RunsSkeleton({ card = false }: { card?: boolean }): React.JSX.El
             title={<Skeleton width={title} />}
             description={<Skeleton width={line} />}
             meta={<Skeleton width={SKELETON_TIME} />}
+            metaAt={LIST_ROW_META.TITLE}
           />
         ))}
       </List>
