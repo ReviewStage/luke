@@ -1201,12 +1201,14 @@ test("an @ row for an agent ends in its starter's face where a teammate started 
   ].map((row) => [
     row.querySelector(".luke-combobox-option-label")?.textContent,
     ...[...(row.querySelector(".luke-combobox-option-hint")?.children ?? [])].map((mark) =>
-      mark.matches(".actor-mark") ? `face ${mark.getAttribute("data-kind")}` : mark.className,
+      mark.matches(".actor-mark")
+        ? `face ${mark.getAttribute("data-kind")}`
+        : mark.getAttribute("aria-label"),
     ),
   ]);
   assert.deepEqual(ends, [
     ["Wire the desktop"],
-    ["Bill by seat", `face ${ACTOR_KIND.PERSON}`, "failed-mark"],
+    ["Bill by seat", `face ${ACTOR_KIND.PERSON}`, "Failed"],
     ["Sweep flaky tests"],
   ]);
 });

@@ -28,7 +28,7 @@ import { CheckIcon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { actFailureWords } from "../act.js";
 import { ActorLine, ActorRef, commentAuthor } from "../actor-ref.js";
-import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
+import { DRAFT_PLACE, type Draft, draftAt, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import {
   chatAnsweredAt,
@@ -106,10 +106,11 @@ import { SentWords } from "./skill-chip.js";
  * anything; a send that lacks something sends nothing and takes the keyboard
  * there, and Enter on an option or in a field sends as Send does. An
  * acknowledgement's Send reads Got it until a word is written. What the
- * card holds unsent, its picks and its note, is a draft kept by message at
- * the ask's revision (`composer-drafts.ts`), so the chat closing, a switch
- * away, or the card scrolling out finds it as it was; an answer taken lets
- * it go. The note line
+ * card holds unsent, its picks and its note, is a draft kept by message
+ * (`composer-drafts.ts`), so the chat closing, a switch away, the card
+ * scrolling out, or its poster changing the ask finds its note as it was,
+ * the picks standing only on the ask's revision they were made on; an
+ * answer taken lets it go. The note line
  * takes the channel's mentions, as the chat's own box does
  * (`chat-mention-source.ts`): an `@` lists the members a mention there
  * tells, then the channel's task, and a `#` names the channels. It takes a
@@ -171,9 +172,10 @@ function focusLacking(box: HTMLElement | null, missing: InboxMissing): void {
   focusMissing(box, missing);
 }
 
-/** A card's draft as the drafts keep it, its note as their words. */
-function keptAskDraft(draft: InboxDraft): Draft {
+/** A card's draft as the drafts keep it, its note as their words, its picks made on the ask at `revision`. */
+function keptAskDraft(draft: InboxDraft, revision: number): Draft {
   return {
+    revision,
     text: draft.note,
     attachments: draft.attachments,
     choices: draft.choices,
@@ -225,14 +227,16 @@ function Answer({
   onAnswer: AskCardProps["onAnswer"];
 }): React.JSX.Element {
   const box = useRef<HTMLDivElement>(null);
-  const kept = useDraft({
-    kind: DRAFT_PLACE.CHAT_ASK,
-    messageId: message.id,
-    revision: ask.revision,
-  });
-  const draft = askDraftOf(kept.draft);
+  const kept = useDraft({ kind: DRAFT_PLACE.CHAT_ASK, messageId: message.id });
+  // Note that the picks stand on the ask's revision they were made on, so its poster changing it lets them go and leaves the note.
+  const draft = askDraftOf(draftAt(kept.draft, ask.revision));
   const setDraft = (next: InboxDraft | ((was: InboxDraft) => InboxDraft)) =>
-    kept.update((was) => keptAskDraft(typeof next === "function" ? next(askDraftOf(was)) : next));
+    kept.update((was) =>
+      keptAskDraft(
+        typeof next === "function" ? next(askDraftOf(draftAt(was, ask.revision))) : next,
+        ask.revision,
+      ),
+    );
   const [sending, setSending] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Whether the last paste was cut to the room the box has left, until the words change again.

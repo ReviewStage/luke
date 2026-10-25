@@ -25,7 +25,6 @@ import {
   ErrorState,
   Fill,
   GAP,
-  GROUP_ACTIONS,
   GROUP_HEADING,
   GroupHeader,
   HoldPress,
@@ -54,6 +53,8 @@ import {
   ScrollArea,
   SearchIcon,
   Shortcut,
+  SidebarPlaces,
+  SidebarRule,
   Skeleton,
   SkeletonRegion,
   STATUS_TONE,
@@ -92,6 +93,7 @@ import {
   repositoryGroups,
   repositoryLabel,
   shownStatuses,
+  statusesFiltered,
   TASK_GROUPING,
   TASK_ROW,
   type TaskOrder,
@@ -2091,7 +2093,7 @@ function SidebarColumn({
   // (`shell-room.ts`). They hold nothing that a fresh draw loses.
   const places = (
     <>
-      <div className="sidebar-places">
+      <SidebarPlaces>
         <NewTaskButton
           tasks={tasks}
           // A person's page stands in the welcome's place without leaving its page, and draws no composer.
@@ -2128,8 +2130,8 @@ function SidebarColumn({
           onOpen={chosen(openAutomations)}
         />
         <SidebarAdminRow onOpen={chosen(openAdmin)} />
-      </div>
-      <hr className="sidebar-rule" />
+      </SidebarPlaces>
+      <SidebarRule />
     </>
   );
   return (
@@ -2263,7 +2265,6 @@ function SidebarColumn({
                       <GroupHeader
                         heading={GROUP_HEADING.NONE}
                         label="Tasks"
-                        actionsShown={GROUP_ACTIONS.AT_REST}
                         actions={
                           <>
                             {sectionsShown && tasks.workspace !== undefined ? (
@@ -2277,6 +2278,7 @@ function SidebarColumn({
                             <TaskStatusFilter
                               menu={statusMenu}
                               statuses={statuses}
+                              filtered={statusesFiltered(taskView.view)}
                               onStatuses={taskView.onStatuses}
                             />
                             <TaskViewOptions

@@ -140,6 +140,9 @@ export function showMoreWords(count: number): string {
   return `Show ${formatCount(count)} more`;
 }
 
+/** What a Terminal tab says beside the agent's name of a shell that ended. */
+export const SHELL_EXITED_WORDS = "exited";
+
 /** What the foot of a capped list says once it shows every row, which puts them back. */
 export const SHOW_LESS_WORDS = "Show less";
 

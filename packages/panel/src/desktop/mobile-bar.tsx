@@ -58,7 +58,10 @@ export function MobileBar({
   const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   const waiting = usePlacesWaiting(tasks);
   return (
-    <nav className="mobile-bar" aria-label="Places">
+    <nav
+      className="mobile-bar flex border-t border-border bg-ground px-luke-4 py-luke-2"
+      aria-label="Places"
+    >
       <BarItem
         icon={<InboxIcon />}
         current={inInbox}

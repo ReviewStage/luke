@@ -32,6 +32,7 @@ import {
   SettingsRow,
   SettingsRowMark,
   type SettingsRowSkeletonShape,
+  SettingsRowStateLine,
   SettingsRowsSkeleton,
   SettingsSection,
   type SettingsSectionSkeletonShape,
@@ -375,10 +376,17 @@ function SkillRowView({
                 </SettingsRowMark>
               ),
               label: skill.name,
-              description:
-                skill.scope === INSTALLED_SKILL_SCOPE.WORKSPACE
-                  ? `${skill.description} · ${row.line}. ${WORKSPACE_KEEP_LINE}`
-                  : `${skill.description} · ${row.line}`,
+              // Note that the source and the keep line stand under the description as the row's detail, never run onto its end.
+              description: (
+                <>
+                  {skill.description}
+                  <SettingsRowStateLine block>
+                    {skill.scope === INSTALLED_SKILL_SCOPE.WORKSPACE
+                      ? `${row.line}. ${WORKSPACE_KEEP_LINE}`
+                      : row.line}
+                  </SettingsRowStateLine>
+                </>
+              ),
               error,
               landed,
               control: <SkillSourceBadge source={row.source} />,
