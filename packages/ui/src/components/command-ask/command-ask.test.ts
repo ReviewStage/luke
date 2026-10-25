@@ -98,3 +98,10 @@ test("a long encoded payload is shortened until Show full command brings it back
   act(() => button("Show full command").click());
   assert.equal(words(), command);
 });
+
+test("a line after a payload is never shortened into it", () => {
+  const payload = "H4sIA".padEnd(200, "QUJD");
+  asked(`echo ${payload}\nreboot`);
+  const words = document.querySelector(".luke-file-text-words")?.textContent ?? "";
+  assert.ok(words.endsWith("\nreboot"), words);
+});

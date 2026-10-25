@@ -36,8 +36,12 @@ const FOLDED_RUN_MIN = 120;
 /** How much of a folded run's head stays, so a reader still sees where it starts. */
 const FOLDED_RUN_HEAD = 24;
 
-/** A run of base64 or hex, line breaks inside it included, as `base64` wraps its output. */
-const ENCODED_RUN = new RegExp(`[A-Za-z0-9+/=\\n]{${FOLDED_RUN_MIN},}`, "g");
+/**
+ * A run of base64 or hex within one line. Note that a line break ends it,
+ * because a run folded across lines would hide whatever command stands on
+ * the next one.
+ */
+const ENCODED_RUN = new RegExp(`[A-Za-z0-9+/=]{${FOLDED_RUN_MIN},}`, "g");
 
 /** `command` with each encoded run cut to its head and a count of what was cut. */
 function foldEncodedRuns(command: string): string {
