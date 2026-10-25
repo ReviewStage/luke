@@ -418,7 +418,7 @@ export const START_NEEDS_REPOSITORY = "Choose a repository";
 const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
     "Luke cannot reach this task's repository on GitHub.",
-  [CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED]: "GitHub didn't answer. Try again.",
+  [CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED]: "GitHub didn't answer.",
   [CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
@@ -442,6 +442,9 @@ const START_RETIRED = "This agent has ended. Start a new one.";
 
 /** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
 const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
+
+/** What a message that did not reach the agent says of itself, which a surface without Retry follows with Try again. */
+const MESSAGE_NOT_SENT = "The message could not be sent.";
 
 /** What the agent's own box says once a message closed it on an ended agent, beside the press that continues it in a new one (`ContinueAgent`), which says the rest. */
 const BOX_RETIRED = "This agent has ended.";
@@ -660,15 +663,26 @@ function credentialMissingWords(
   return `Connect ${harness} in Settings to ${action}.`;
 }
 
-/** What a Start refused by the plan that would pay says, to its own member, who mends it in Settings. */
+/** What a Start refused by the plan that would pay says, to its own member, beside the press that opens Settings. */
 const START_PLAN_REFUSAL = {
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
+    "Your subscription is signed out. Sign in again.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
+    "Your subscription isn't eligible to run this agent. Choose your API key.",
+} as const;
+
+/** The same refusals where no press beside them opens Settings, so the words name it. */
+const START_PLAN_REFUSAL_ALONE = {
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
     "Your subscription is signed out. Sign in again in Settings to start an agent.",
   [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
     "Your subscription isn't eligible to run this agent. Choose your API key in Settings to start one.",
 } as const;
 
-/** The one sentence an unreadable API key says: what happened, and that saving it again unblocks the action. */
+/** What an unreadable API key says beside the press that opens Settings. */
+const KEY_UNREADABLE_NOTE = "Your saved API key can't be read. Save it again.";
+
+/** What an unreadable API key says where no press beside it opens Settings: that saving it again there unblocks the action. */
 function keyUnreadableWords(action: (typeof ACTION)[keyof typeof ACTION]): string {
   return `Your saved API key can't be read. Save it again in Settings to ${action}.`;
 }
@@ -687,7 +701,7 @@ function settingsFailure(
     case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return credentialMissingFailure(refused, action);
     case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
-      return { reason: FAILURE_REASON.CONNECT_AGENTS, text: keyUnreadableWords(action) };
+      return { reason: FAILURE_REASON.CONNECT_AGENTS, text: KEY_UNREADABLE_NOTE };
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return action === ACTION.START
@@ -771,6 +785,23 @@ export function startFailureNote(refused: RefusedCall, taskId: string | null): F
     settingsFailure(refused, ACTION.START) ??
     callFailure(planRefusalWords(refused, undefined) ?? startFailureWords(refused.failure))
   );
+}
+
+/**
+ * What a Continue in new agent that did not start says beside its own press,
+ * which offers no remedy, so a refusal Settings › Agents mends names Settings.
+ */
+export function continueFailureNote(refused: RefusedCall, taskId: string | null): Failure {
+  const note = startFailureNote(refused, taskId);
+  switch (refused.failure) {
+    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+      return { ...note, text: keyUnreadableWords(ACTION.START) };
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
+      return { ...note, text: START_PLAN_REFUSAL_ALONE[refused.failure] };
+    default:
+      return note;
+  }
 }
 
 /** A refused call's words, which trying again mends. */
@@ -887,7 +918,7 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     // Note that only a dictated clip is refused for want of an OpenAI key, so a Start never hears it.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
-      return "The agent could not be started. Try again.";
+      return "The agent could not be started.";
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
       return START_RETIRED;
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
@@ -949,11 +980,25 @@ export function messageFailureNote(
   if (theirs !== undefined) return callFailure(theirs);
   return (
     settingsFailure(refused, ACTION.MESSAGE) ??
-    callFailure(planRefusalWords(refused, payer) ?? messageFailureWords(refused.failure))
+    callFailure(planRefusalWords(refused, payer) ?? messageNoteWords(refused.failure))
   );
 }
 
-/** What a message that did not reach the agent says, by why, where only the words are drawn, as an Inbox answer's are. */
+/** What a message that did not reach the agent says beside the composer's Retry, which says to try again for it. */
+function messageNoteWords(failure: CodingAgentCallFailure): string {
+  switch (failure) {
+    case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
+    case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
+    case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+      return MESSAGE_NOT_SENT;
+    case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
+      return SHARED_FAILURE_NOTE[failure];
+    default:
+      return messageFailureWords(failure);
+  }
+}
+
+/** What a message that did not reach the agent says, by why, where only the words are drawn, as an Inbox answer's are, so a refusal trying again mends says so. */
 export function messageFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
@@ -962,14 +1007,15 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
     case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
-      return "The message could not be sent. Try again.";
+      return `${MESSAGE_NOT_SENT} Try again.`;
     // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "Luke didn't hear back.";
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
       return MESSAGE_RETIRED;
-    case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
+      return `${SHARED_FAILURE_NOTE[failure]} Try again.`;
+    case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:

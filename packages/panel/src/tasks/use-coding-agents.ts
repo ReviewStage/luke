@@ -58,6 +58,7 @@ import {
   ARCHIVE_NOT_READY,
   archiveWords,
   choiceRequest,
+  continueFailureNote,
   DELETE_WORDS,
   openingLineOf,
   RENAME_FAILED,
@@ -1156,7 +1157,7 @@ export function useCodingAgents(input: {
         continues.current.delete(sourceId);
       }
       if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) failed(START_FAILED_AWAY);
-      return startFailureNote(answer, taskId ?? null);
+      return continueFailureNote(answer, taskId ?? null);
     }
     continues.current.delete(sourceId);
     landed(startsOn, answer.agent);

@@ -110,7 +110,7 @@ import {
   recentRepositories,
   renameAsked,
   renamedView,
-  repositoryFailureNote,
+  repositoryChangeFailureNote,
   repositoryPageUrl,
   STATUS_RESTORE_FAILED_NOTE,
   type StatusChange,
@@ -2662,7 +2662,7 @@ export function useTasksTab(input: {
   ): Promise<string | undefined> => {
     if (fixture !== undefined) return Promise.resolve(undefined);
     return act(ACT_KIND.TASKS_SET_REPOSITORY, { taskId, repository }).then(
-      (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
+      (answer) => ("failure" in answer ? repositoryChangeFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
     );
   };

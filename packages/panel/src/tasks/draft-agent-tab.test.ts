@@ -356,7 +356,7 @@ test("a Start GitHub did not answer says so and offers Retry alone, and one from
   ]);
   await tab.send();
 
-  assert.equal(tab.words(), "GitHub didn't answer. Try again.");
+  assert.equal(tab.words(), "GitHub didn't answer.");
   await tab.press("Retry");
   assert.equal(tab.words(), "Luke cannot reach this task's repository on GitHub.");
   assert.ok(tab.button("Retry"));

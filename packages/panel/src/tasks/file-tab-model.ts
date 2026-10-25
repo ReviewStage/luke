@@ -44,7 +44,7 @@ const FILE_REFUSAL_LINE = {
   [TASK_FILE_REFUSAL.NOT_TEXT]: "This file is too large to show, or is not text.",
   [TASK_FILE_REFUSAL.NO_REPOSITORY]: "This task has no repository.",
   [TASK_FILE_REFUSAL.NOT_REACHABLE]: "Luke's GitHub App no longer reaches this task's repository.",
-  [TASK_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read just now.",
+  [TASK_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read.",
 } as const satisfies Record<TaskFileRefusal, string>;
 
 /** The characters of a commit's SHA a line names it by, as GitHub abbreviates one. */
