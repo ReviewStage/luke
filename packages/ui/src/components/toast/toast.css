@@ -2,10 +2,10 @@
    bottom-right corner, newest at the bottom, the window's step in from its
    corner, and just above whatever docks at its foot under that corner (an
    agent's composer or its to-do list, a phone's places bar), so a toast
-   never stands over the box being typed in. A reply box flowing at a
-   thread's end is no dock: the thread's log leaves the toasts' room at its
-   end instead, so it and the newest message above it scroll clear of them,
-   and the toasts never climb over the thread. The folded sidebar's call
+   never stands over the box being typed in, a reply box flowing at a
+   thread's end once it reaches where they rest. The stack is an overlay
+   alone: it moves nothing under it, so at a thread's end it may stand over
+   the newest line until it leaves. The folded sidebar's call
    card holds the other corner, and the window is never narrow enough for
    the two to meet.
 

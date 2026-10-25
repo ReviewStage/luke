@@ -1817,10 +1817,6 @@ ul.actor-stack {
      sight stand still (`ListMotion`). */
   min-height: var(--luke-list-held-height, 0);
   padding: var(--luke-row-inset) var(--column-inset) var(--column-inset);
-  /* Its end leaves free what the standing toasts take of the window's foot
-     (`--luke-toast-room`), so its last row can be scrolled a step clear of
-     them, above a phone's places bar too. */
-  padding-bottom: max(var(--column-inset), calc(var(--luke-toast-room, 0px) + var(--luke-space-8)));
 }
 
 /* A group's room above it counts only the groups still in the layout, so a
@@ -2827,11 +2823,9 @@ ul.actor-stack {
   color: var(--luke-color-text-muted);
 }
 
-/* The rail's places, inside the `ScrollArea` that scrolls them, on the Inbox
-   list's insets, its end leaving the toasts' room as the list's does. */
+/* The rail's places, inside the `ScrollArea` that scrolls them, on the Inbox list's insets. */
 .chat-rail-body {
   padding: var(--luke-row-inset) var(--column-inset) var(--column-inset);
-  padding-bottom: max(var(--column-inset), calc(var(--luke-toast-room, 0px) + var(--luke-space-8)));
 }
 
 .chat-stream {
