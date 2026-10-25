@@ -2234,8 +2234,15 @@ test("a schedule's time is written as its summary says it, and a time that canno
   assert.equal(field().value, "7:30 AM");
   assert.match(page.textContent ?? "", /Wednesdays? at 7:30 AM/u);
 
-  type(field(), "soon");
+  // Note that "2" reads as 2:00 AM and moves the schedule before the colon after it makes the words unreadable.
+  type(field(), "2");
+  type(field(), "2:");
   assert.equal(field().getAttribute("aria-invalid"), "true");
+  const saves = changes.length;
+  act(() => button("Save").click());
+  await settle();
+  assert.equal(changes.length, saves, "no save runs over a time that cannot be read");
+  assert.match(page.textContent ?? "", /Write the time as 2:00 AM\./u);
   type(field(), "6:45 PM");
   assert.equal(field().getAttribute("aria-invalid"), null);
   act(() => button("Save").click());

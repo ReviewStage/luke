@@ -455,12 +455,16 @@ export function AutomationSwitch({
   );
 }
 
+/** What a time of day that cannot be read is told to be, under the time's row. */
+const UNREADABLE_TIME = "Write the time as 2:00 AM.";
+
 /**
  * The schedule's time of day, written as the summary says it ("2:00 AM")
  * rather than in the engine's own time input, which pads it ("02:00 AM").
- * What is typed stands as typed while the caret is in the field, a time it
- * cannot read marking the field invalid and changing nothing, and the
- * schedule's own words come back once it is left.
+ * What is typed stands as typed while it is unreadable, even after the
+ * caret leaves, marked invalid and said to the editor (`onUnreadable`),
+ * which refuses a save over it; a time that reads changes the schedule at
+ * once and the schedule's own words return once the field is left.
  */
 function ClockField({
   hour,
@@ -469,6 +473,7 @@ function ClockField({
   describedBy,
   invalid,
   onClock,
+  onUnreadable,
 }: {
   hour: number;
   minute: number;
@@ -476,9 +481,15 @@ function ClockField({
   describedBy: string | undefined;
   invalid: boolean | undefined;
   onClock: (clock: { readonly hour: number; readonly minute: number }) => void;
+  onUnreadable: (unreadable: boolean) => void;
 }): React.JSX.Element {
   const [typed, setTyped] = useState<string | undefined>(undefined);
   const unreadable = typed !== undefined && parseAutomationClock(typed) === undefined;
+  // Note that the editor is told while the words stand and told otherwise as they go, the field's leaving the schedule included, because a save must never run over words it cannot see.
+  useEffect(() => {
+    onUnreadable(unreadable);
+    return () => onUnreadable(false);
+  }, [unreadable, onUnreadable]);
   return (
     <TextField
       ref={inputRef}
@@ -492,7 +503,7 @@ function ClockField({
         const clock = parseAutomationClock(text);
         if (clock !== undefined) onClock(clock);
       }}
-      onBlur={() => setTyped(undefined)}
+      onBlur={() => setTyped(unreadable ? typed : undefined)}
     />
   );
 }
@@ -753,12 +764,15 @@ function ScheduleRows({
   problem,
   onSchedule,
   onTimezone,
+  onUnreadableTime,
 }: {
   draft: AutomationDraft;
   /** What stops a save in the schedule, said under the row it is about. */
   problem: string | undefined;
   onSchedule: (schedule: ScheduleDraft) => void;
   onTimezone: (timezone: string) => void;
+  /** Hears whether the time's field holds words that are no time. */
+  onUnreadableTime: (unreadable: boolean) => void;
 }): React.JSX.Element {
   // The cron's and the time's Escape lets go of the caret and keeps the press, as every field's here does.
   const cron = useRef<HTMLInputElement>(null);
@@ -845,6 +859,7 @@ function ScheduleRows({
                         describedBy={control["aria-describedby"]}
                         invalid={control["aria-invalid"]}
                         onClock={(clock) => onSchedule({ ...schedule, ...clock })}
+                        onUnreadable={onUnreadableTime}
                       />
                     </span>
                   )}
@@ -2122,6 +2137,7 @@ function EditorForm({
   codeReviewOn,
   sentry,
   onDraft,
+  onUnreadableTime,
 }: {
   draft: AutomationDraft;
   automation: AutomationSummary | undefined;
@@ -2140,6 +2156,8 @@ function EditorForm({
   /** The workspace's Sentry, whose trigger is offered only where this deployment holds the integration. */
   sentry: SentryOffer;
   onDraft: (patch: Partial<AutomationDraft>) => void;
+  /** Hears whether the schedule's time field holds words that are no time, which a save is refused over. */
+  onUnreadableTime: (unreadable: boolean) => void;
 }): React.JSX.Element {
   // Note that Sentry stays listed where the deployment holds no integration, unpickable and saying why, so it can be found.
   const triggers =
@@ -2202,6 +2220,7 @@ function EditorForm({
                   problem={problems[DRAFT_FIELD.SCHEDULE]}
                   onSchedule={(schedule) => onDraft({ schedule })}
                   onTimezone={(timezone) => onDraft({ timezone })}
+                  onUnreadableTime={onUnreadableTime}
                 />
               ) : kind === AUTOMATION_TRIGGER.GITHUB ? (
                 <>
@@ -2592,7 +2611,13 @@ export function AutomationEditor({
   useEffect(() => {
     if (linked?.runId !== undefined) showRuns.current();
   }, [linked]);
-  const problems = draftProblems(draft, repositoryHeld(draft, automation), new Date());
+  const [unreadableTime, setUnreadableTime] = useState(false);
+  const drafted = draftProblems(draft, repositoryHeld(draft, automation), new Date());
+  // Note that a time the field cannot read stops a save as the schedule's own problem does, since the draft holds only what read before it.
+  const problems: DraftProblems =
+    unreadableTime && drafted[DRAFT_FIELD.SCHEDULE] === undefined
+      ? { ...drafted, [DRAFT_FIELD.SCHEDULE]: UNREADABLE_TIME }
+      : drafted;
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
     setRefusal(undefined);
@@ -2747,6 +2772,7 @@ export function AutomationEditor({
             codeReviewOn={codeReviewOn}
             sentry={sentry}
             onDraft={editDraft}
+            onUnreadableTime={setUnreadableTime}
           />
         </AutomationSetup>
       }
