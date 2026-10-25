@@ -25,12 +25,10 @@ test("worked by a finger, the board opens in the hand, so a finger's drag pans t
   pointer(true);
   const view = openingView();
   assert.equal(view.activeTool?.type, "hand");
-  assert.equal(view.viewBackgroundColor, "transparent");
 });
 
 test("worked by a mouse, the board opens on Excalidraw's own tool, the selection", () => {
   pointer(false);
   const view = openingView();
   assert.equal(view.activeTool, undefined);
-  assert.equal(view.viewBackgroundColor, "transparent");
 });

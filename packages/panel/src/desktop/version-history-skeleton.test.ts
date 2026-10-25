@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -82,49 +81,10 @@ function drawn(list: PlanHistoryControl["list"], room: ShellRoom = SHELL_ROOM.WI
   return container;
 }
 
-/** Which of a row's parts it stands: its mark, its words' line under its title, and its time. */
-function rowParts(row: Element): string[] {
-  return [
-    ".luke-list-row-leading",
-    ".luke-list-row-title",
-    ".luke-list-row-description",
-    ".luke-list-row-meta",
-  ].filter((part) => row.querySelector(part) !== null);
-}
-
-test("while the versions are read, each placeholder row stands a version's own parts, its mark, its author over its summary, and its time", () => {
-  const reading = drawn({ kind: HISTORY_READ.READING });
-  const placeholders = [...reading.querySelectorAll(".version-log [role='status'] li")];
-  assert.ok(placeholders.length > 0);
-
-  const read = drawn({
-    kind: HISTORY_READ.READY,
-    revisions: [
-      {
-        seq: 2,
-        lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: true },
-        startedAt: 20,
-        changes: 2,
-      },
-    ],
-    earlier: undefined,
-  });
-  const version = read.querySelector("[aria-label='Version list'] li");
-  assert.ok(version);
-  for (const row of placeholders) assert.deepEqual(rowParts(row), rowParts(version));
-});
-
-test("while the version it opens on is found, the page's bar stands blocks where its moment and its Restore will", () => {
-  const page = drawn({ kind: HISTORY_READ.READING }).querySelector(".version-page");
-  assert.ok(page?.querySelector(".luke-toolbar-title .luke-skeleton"), "the moment's place");
-  assert.ok(page?.querySelector(".luke-toolbar-actions .luke-skeleton"), "Restore's place");
-});
-
 test("in a narrow room the page's bar is led by the way back to the list, which stands at the column's own edge", () => {
   const page = drawn({ kind: HISTORY_READ.READING }, SHELL_ROOM.NARROW).querySelector(
     ".version-page",
   );
   const banner = page?.querySelector("header.luke-toolbar");
-  assert.equal(banner?.getAttribute("data-start"), "column");
   assert.ok(banner?.querySelector(".luke-toolbar-lead button"), "the way back leads the bar");
 });

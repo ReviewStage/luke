@@ -13,7 +13,7 @@ import { asks, conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import { ASK_DISPATCH_REFUSAL, askRecord } from "../asks.js";
-import { readRewoundRevision } from "../conversation-rewind.js";
+import { REWIND_REFUSAL, readRewoundRevision, rewindConversation } from "../conversation-rewind.js";
 import { DISPATCH_CLAIM } from "../dispatch-claim.js";
 import { readMessageByClientId, sentLineStands } from "../message-reads.js";
 import {
@@ -132,6 +132,14 @@ const releaseFailsOnce = (target: ConversationTarget) =>
       `create trigger ${name} before update on conversations for each row when (old.id = '${target.conversationId}' and old.dispatch_claim is not null and new.dispatch_claim is null) execute function ${name}()`,
     );
   });
+
+/** Every waiter queued for the conversation's claim, as though the database last heard from them the given seconds ago. */
+const waitersLastSeen = (target: ConversationTarget, secondsAgo: number) =>
+  Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    Effect.asVoid(
+      sql`update dispatch_waiters set seen_at = now() - (${secondsAgo} * interval '1 second') where conversation_id = ${target.conversationId}`,
+    ),
+  );
 
 /** A waiter queued for the conversation's claim, as one the database last heard from the given seconds ago. */
 const waiterSeen = (target: ConversationTarget, secondsAgo: number) =>
@@ -323,6 +331,64 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
           seqs,
           seqs.toSorted((one, other) => one - other),
         );
+      }),
+  );
+
+  it.effect(
+    "a send that waits out a hand-over longer than a waiter's quiet keeps its place, since each ask keeps it live though the claim it finds taken rolls the ask back",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openAgentConversation;
+        const writer = yield* storeWriter({ tools: {} });
+        const db = yield* Database;
+        const heard = yield* Ref.make<readonly string[]>([]);
+        const send = (clientKey: string) =>
+          writer.writeAwaitingLine(
+            target,
+            { text: clientKey, clientKey, sender: SENDER },
+            Effect.as(
+              Ref.update(heard, (keys) => [...keys, clientKey]),
+              true,
+            ),
+          );
+        // A hand-over's claim, which stands while the sends below wait on it.
+        yield* claimLeftBy(target, randomUUID());
+
+        const earlier = yield* Effect.forkChild(send("earlier"));
+        yield* timePasses(1500);
+        // As though the hand-over had run on past a waiter's quiet: the database last heard from the waiter long ago.
+        yield* waitersLastSeen(target, 3);
+        yield* timePasses(500);
+        const later = yield* Effect.forkChild(send("later"));
+        yield* timePasses(60);
+        yield* db
+          .update(conversations)
+          .set({ dispatchClaim: null, dispatchClaimedAt: null })
+          .where(eq(conversations.id, target.conversationId));
+        yield* joinedAsTimePasses(earlier);
+        yield* joinedAsTimePasses(later);
+
+        assert.deepEqual(yield* Ref.get(heard), ["earlier", "later"]);
+      }),
+  );
+
+  it.effect(
+    "a send or a rewind for a conversation that stands no longer, as after its purge, is answered absent rather than failing",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openAgentConversation;
+        const writer = yield* storeWriter({ tools: {} });
+        const gone = { ...target, conversationId: randomUUID() };
+
+        const sent = yield* writer.writeAwaitingLine(
+          gone,
+          { text: "Fix the tile.", clientKey: "fix", sender: SENDER },
+          Effect.succeed(true),
+        );
+        const rewound = yield* rewindConversation(gone, randomUUID());
+
+        assert.deepEqual(sent, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION }));
+        assert.deepEqual(rewound, Result.fail(REWIND_REFUSAL.NOT_FOUND));
       }),
   );
 

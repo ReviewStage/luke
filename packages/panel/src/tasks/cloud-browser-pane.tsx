@@ -50,7 +50,15 @@ import {
   MousePointerClickIcon,
   RotateCwIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
@@ -89,8 +97,10 @@ import {
  * The page runs in the agent's own sandbox and arrives as frames over the
  * live view (`cloud-browser-live.ts`), drawn on a canvas sized to the page's
  * shape inside the pane, which is the viewport every point the member sends
- * is in. The pane opens its view while it is shown, and again each time it
- * is shown again, or Watch again pressed, after the relay closed it; until
+ * is in. The pane opens its view while it is shown and its window's page is
+ * visible, and closes it while either is not, so a hidden or minimized
+ * window holds no socket and no sandbox; it opens a new one each time it is
+ * shown again, or Watch again pressed, after the relay closed it; until
  * the page first paints, and while it reconnects, the window's spinner
  * stands over it, and a view closed as idle
  * offers Watch again. While the member drives the tab, the mouse, the
@@ -143,6 +153,17 @@ function modifiersOf(held: RemoteModifiers): number {
     (held.meta ? BROWSER_LIVE_MODIFIER.META : 0) |
     (held.shift ? BROWSER_LIVE_MODIFIER.SHIFT : 0)
   );
+}
+
+/** Hears the window's page shown or hidden. */
+function onVisibilityChange(changed: () => void): () => void {
+  document.addEventListener("visibilitychange", changed);
+  return () => document.removeEventListener("visibilitychange", changed);
+}
+
+/** Whether the window's page is visible: not while the window is hidden or minimized, or its browser tab is in the background. */
+function usePageVisible(): boolean {
+  return useSyncExternalStore(onVisibilityChange, () => document.visibilityState !== "hidden");
 }
 
 /** The largest box of the page's shape that fits the body, or the body itself before the shape is known. */
@@ -454,7 +475,8 @@ function darkBeneath(
 /**
  * A cloud Browser tab: its bar, then the page live. `owner` names whose
  * browser it is in, the agent's name or Luke; `shown` is whether the panel
- * is on screen and staying, which the view stands open under alone.
+ * is on screen and staying, which the view stands open under, while the
+ * window's page is visible too.
  */
 export function CloudBrowserPane({
   taskId,
@@ -474,7 +496,7 @@ export function CloudBrowserPane({
   const canvas = useRef<HTMLCanvasElement>(null);
   const [bodySize, setBodySize] = useState<CloudBrowserViewport>({ width: 0, height: 0 });
   const [aspect, setAspect] = useState<number | undefined>(undefined);
-  // Each new view of the tab: one more each time the pane is shown, or clicked once the relay closed it.
+  // Each new view of the tab Watch again opens once the relay closed it as idle.
   const [generation, setGeneration] = useState(0);
   const size = fitted(bodySize, aspect);
   const viewport = useRef<CloudBrowserViewport | undefined>(undefined);
@@ -511,6 +533,11 @@ export function CloudBrowserPane({
     },
     [readGround],
   );
+
+  // Note that the view stands only while someone can see it, because a socket left open in a hidden window holds its agent's sandbox.
+  const visible = usePageVisible();
+  const watched = shown && visible;
+  // A pane shown again opens a new view, since the one before closed as it was hidden, or as idle meanwhile.
   const live = useMemo(
     () =>
       cloudBrowserLive({
@@ -519,17 +546,13 @@ export function CloudBrowserPane({
         viewport: () => viewport.current,
         onFrame,
       }),
-    [taskId, tab.id, onFrame, generation],
+    [taskId, tab.id, onFrame, generation, watched],
   );
-  const views = useMemo(() => (shown ? rendererRuntime.atom(live.views) : RESTING), [live, shown]);
+  const views = useMemo(
+    () => (watched ? rendererRuntime.atom(live.views) : RESTING),
+    [live, watched],
+  );
   const view = AsyncResult.getOrElse(useAtomValue(views), () => OPENING_VIEW);
-
-  // A pane shown again opens a new view, since the one before may have closed as idle meanwhile.
-  const wasShown = useRef(shown);
-  useEffect(() => {
-    if (shown && !wasShown.current) setGeneration((count) => count + 1);
-    wasShown.current = shown;
-  }, [shown]);
   useLayoutEffect(() => {
     const element = body.current;
     if (element === null) return;

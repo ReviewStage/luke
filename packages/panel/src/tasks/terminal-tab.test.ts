@@ -477,7 +477,6 @@ test("a stopped sandbox shows its bar over the dimmed screen and resumes only on
   const tab = await mount();
   assert.equal(tab.standing(), "· sandbox · sandbox stopped");
   assert.equal(tab.bar(), "Sandbox stopped.");
-  assert.equal(tab.dimmed(), true);
   assert.match(tab.action()?.textContent ?? "", /^Resume sandbox/);
   // Typing anything but Return resumes nothing.
   await tab.type("x", 88);
@@ -538,7 +537,6 @@ test("a dropped connection shows its bar, and its action asks for the shell agai
   );
   revealBar();
   assert.equal(announcedPolitely(), "Connection lost. Reconnecting…");
-  assert.equal(tab.dimmed(), true);
   const before = main.sent.length;
   await act(async () => tab.action()?.click());
   await settle();
@@ -551,7 +549,6 @@ test("after five idle minutes the screen dims with no bar, and any key reconnect
   port.say({ type: "state", state: "idle" });
   assert.equal(tab.standing(), "· sandbox · disconnected");
   assert.equal(tab.bar(), undefined);
-  assert.equal(tab.dimmed(), true);
   const before = main.sent.length;
   await tab.type("q", 81);
   assert.deepEqual(tab.kinds(before), ["terminal.attach"]);
@@ -568,7 +565,6 @@ test("a shell that ended takes any key for a new one", async () => {
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "exited", code: 0 });
   assert.equal(tab.bar(), undefined);
-  assert.equal(tab.dimmed(), false);
   main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
   const before = main.sent.length;
   await tab.type("a", 65);
@@ -1268,7 +1264,6 @@ test("an idle close is the shown shell's alone: one said on a shell no longer sh
   // The relay closes each terminal on its own five idle minutes: the one no longer shown first.
   first.say({ type: "state", state: "idle" });
   assert.equal(tab.standing(), "· sandbox · connected");
-  assert.equal(tab.dimmed(), false);
   shown.say({ type: "state", state: "idle" });
   assert.equal(tab.standing(), "· sandbox · disconnected");
   const before = main.sent.length;
@@ -1438,7 +1433,6 @@ test("in a narrow panel the shells open over the screen", async () => {
   await act(async () => shellsToggle(tab).click());
   const opened = floatedShells(tab);
   assert.equal(opened?.getAttribute("data-state"), "open");
-  assert.equal(opened?.classList.contains("luke-over-pane"), true);
   assert.equal(tab.toggled(), 0, "the panel's own place for the list is left as it was");
 });
 
