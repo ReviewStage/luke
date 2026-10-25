@@ -680,7 +680,7 @@
     background: var(--luke-button-ground);
     box-shadow:
       inset 0 0 0 1px var(--luke-color-border),
-      0 6px 16px var(--luke-color-shadow-soft);
+      var(--luke-menu-shadow);
     translate: -50% 0;
   }
 
@@ -699,7 +699,7 @@
     background: var(--luke-color-well);
     box-shadow:
       inset 0 0 0 1px var(--luke-color-border),
-      0 6px 16px var(--luke-color-shadow-soft);
+      var(--luke-menu-shadow);
     translate: -50% 0;
   }
 }
@@ -3237,10 +3237,12 @@
 /* The folder gives way long before the file's name does. */
 .annotation-where-folder {
   flex: 0 1000 auto;
+  font-family: var(--luke-font-mono);
 }
 
 .annotation-where-file {
   flex: 0 1 auto;
+  font-family: var(--luke-font-mono);
   color: var(--luke-color-text);
 }
 
@@ -6020,8 +6022,8 @@ svg.lucide {
   ); /* off-scale: under the name, past the actor's 16px mark and its gap */
   padding: var(--luke-tight-gap) var(--luke-list-inset) var(--luke-row-inset);
   color: var(--luke-color-text);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
 }
 
 /* A thread at rest is one press (`CardPress`) over its words and replies,
@@ -6041,9 +6043,9 @@ svg.lucide {
 
 .comment-time {
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
-  font-weight: 400;
+  font-weight: var(--luke-type-caption-weight);
   white-space: nowrap;
 }
 
@@ -6068,7 +6070,7 @@ svg.lucide {
   gap: var(--luke-item-gap);
   margin: var(--luke-list-gap) 0 0 var(--comment-indent);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .comment-faces {
@@ -6123,17 +6125,8 @@ svg.lucide {
   gap: var(--luke-item-gap);
   margin-bottom: var(--luke-tight-gap);
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
-  font-weight: 560;
-}
-
-/* Under a finger, on a phone held at arm's length, a comment's time and the
-   line saying its words are gone are no smaller than 12px. */
-@media (pointer: coarse) {
-  .comment-time,
-  .comment-gone {
-    font-size: 12px;
-  }
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-type-label-weight);
 }
 
 .comment-gone svg {
@@ -6148,8 +6141,9 @@ svg.lucide {
   overflow: hidden;
   border-left: 2px solid var(--comment-mark-edge);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-type-body-weight);
+  line-height: var(--luke-type-label-leading);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
