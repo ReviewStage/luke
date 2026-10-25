@@ -1363,12 +1363,19 @@ export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children">
 function TodoItems({
   todos,
   live,
+  docked = false,
 }: {
   todos: CodingAgentTodos["todos"];
   live: boolean;
+  /** Whether it stands in the dock over the composer, where it keeps to under a third of what is seen and scrolls past it, so a long list leaves the transcript its room in a short window. */
+  docked?: boolean;
 }): ReactNode {
   return (
-    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} className="todo-items">
+    <Stack
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.TIGHT}
+      className={`todo-items leading-body${docked ? " max-h-todos-dock overflow-y-auto" : ""}`}
+    >
       {todos.map((todo, index) => (
         // Note that an item's place is its identity, so a write that moves
         // an item on is drawn as that item changing where it stands.
@@ -1398,7 +1405,7 @@ function TodoItem({
   const arrived = todo.status !== first;
   const done = todo.status === CODING_AGENT_TODO_STATUS.DONE;
   return (
-    <li className="todo-item" data-todo-status={todo.status}>
+    <li className="todo-item flex items-start gap-icon-gap" data-todo-status={todo.status}>
       {/* Keyed by where it stands, so each change mounts the glyph anew and its arrival runs. */}
       <GlyphSlot
         key={todo.status}
@@ -1415,7 +1422,11 @@ function TodoItem({
           <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
         )}
       </GlyphSlot>
-      <span className="todo-words">{todo.content}</span>
+      <span
+        className={`min-w-0 wrap-anywhere transition-[color] duration-(--luke-duration-quick) ease-motion-exit${done ? " text-muted-foreground" : ""}`}
+      >
+        {todo.content}
+      </span>
     </li>
   );
 }
@@ -1447,7 +1458,7 @@ export function TranscriptTodos({
         subject={subject}
         subjectIsCode={words.code}
       />
-      <FoldBody className="todos-body">
+      <FoldBody className="mt-list-gap mr-0 mb-tight-gap ml-transcript-gutter select-text">
         <TodoItems todos={todos} live={live} />
         {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
       </FoldBody>
@@ -1484,13 +1495,13 @@ export function TranscriptTodosDock({
         <GlyphSlot>
           <GLYPH.TODOS />
         </GlyphSlot>
-        <span className="todos-dock-summary">
+        <span className="shrink-0 text-muted-foreground">
           <RollingNumber value={done} /> of <RollingNumber value={total} /> done
         </span>
         <TodosDockFocus focus={focus} />
       </DisclosureSummary>
       <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
-        <TodoItems todos={todos} live />
+        <TodoItems todos={todos} live docked />
       </DisclosureBody>
     </Disclosure>
   );
@@ -1505,12 +1516,7 @@ function TodosDockFocus({ focus }: { focus: string | undefined }): ReactNode {
   const previewed = useDisclosurePreviewShown(focus !== undefined);
   if (focus === undefined || !previewed) return null;
   return (
-    <Text
-      as={TEXT_ELEMENT.SPAN}
-      variant={TEXT_VARIANT.INHERIT}
-      truncate
-      className="todos-dock-focus"
-    >
+    <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} truncate className="flex-1">
       {focus}
     </Text>
   );
