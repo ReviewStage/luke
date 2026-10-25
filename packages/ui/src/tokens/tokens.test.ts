@@ -269,9 +269,15 @@ test("every shared token a sheet reads is one some sheet sets", () => {
   }
 });
 
-/** `name`'s colour in `palette`, followed through any `var()` alias to the role it names there. */
+/** `name`'s colour in `palette`, followed through any `var()` alias to the role it names there,
+ * and a tint (`color-mix(in srgb, var(--role) N%, transparent)`) read as that role at N% alpha. */
 function paletteColour(palette: ReadonlyMap<string, string>, name: string, scheme: Scheme): Colour {
   const value = palette.get(name) ?? "";
+  const tint = /^color-mix\(in srgb, var\((--luke-[\w-]+)\) ([\d.]+)%, transparent\)$/.exec(value);
+  if (tint) {
+    const ink = paletteColour(palette, tint[1] ?? "", scheme);
+    return { ...ink, alpha: (ink.alpha * Number(tint[2])) / 100 };
+  }
   const alias = /^var\((--luke-[\w-]+)\)$/.exec(value)?.[1];
   return alias === undefined ? colourOf(value, scheme) : paletteColour(palette, alias, scheme);
 }
@@ -339,6 +345,48 @@ test("the quieter words on the accent, a primary button's shortcut, read at AA o
         ratio >= 4.5,
         `${selector}'s on-accent-muted in the ${scheme} is ${ratio.toFixed(2)}:1`,
       );
+    }
+  }
+});
+
+test("the strong border stands a step past the border on every ground, in every palette and theme, so a hovered card's edge shows", () => {
+  for (const [selector, schemes] of PALETTE_SCHEMES) {
+    const palette = ruleOf("palettes", selector).values;
+    for (const scheme of schemes) {
+      const border = paletteColour(palette, "--luke-color-border", scheme);
+      const strong = paletteColour(palette, "--luke-color-border-strong", scheme);
+      for (const [ground, behind] of groundsOf(palette, scheme)) {
+        assert.ok(
+          contrastOf(strong, behind) > contrastOf(border, behind),
+          `${selector}'s strong border over ${ground} in the ${scheme} is no stronger than its border`,
+        );
+      }
+    }
+  }
+});
+
+/** The grounds a tone's pill stands on: the window's own, never a chosen row's fill. */
+const PILL_GROUNDS = new Set([
+  "--luke-color-ground",
+  "--luke-color-surface",
+  "--luke-color-well",
+  "--luke-color-sidebar",
+]);
+
+test("the attention tone's words, the Offline mark's, read at AA on its own tint on every ground a pill stands on, in every palette and theme", () => {
+  for (const [selector, schemes] of PALETTE_SCHEMES) {
+    const palette = ruleOf("palettes", selector).values;
+    for (const scheme of schemes) {
+      const ink = paletteColour(palette, "--luke-color-attention", scheme);
+      const tint = paletteColour(palette, "--luke-color-attention-tint", scheme);
+      for (const [ground, behind] of groundsOf(palette, scheme)) {
+        if (!PILL_GROUNDS.has(ground)) continue;
+        const ratio = contrastOf(ink, over(tint, behind));
+        assert.ok(
+          ratio >= 4.5,
+          `${selector}'s attention on its tint over ${ground} in the ${scheme} is ${ratio.toFixed(2)}:1`,
+        );
+      }
     }
   }
 });
