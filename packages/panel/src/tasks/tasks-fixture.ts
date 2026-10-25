@@ -181,10 +181,12 @@ function draftOf(sections: number): PlanDocument {
 
 /**
  * The fixture task's version history, newest first, each revision beside the
- * plan it saved: its member and a teammate by hand, Luke on its call, and its
- * coding agent, over the two days before the call, so the version history
- * shows real versions by more than one writer rather than waiting on a read
- * main answers with nothing.
+ * plan it saved: its member and a teammate of its workspace by hand, Luke on
+ * its call, and a coding agent, over the two days before the call, so the
+ * version history shows real versions by more than one writer rather than
+ * waiting on a read main answers with nothing. Note that the agent's revision
+ * names no agent id, because no profile but the agent ones stands an agent on
+ * the task, and an id would offer an Open into a tab that has none.
  */
 const FIXTURE_HISTORY: readonly {
   readonly line: PlanRevisionLine;
@@ -210,11 +212,9 @@ const FIXTURE_HISTORY: readonly {
       lastEdit: {
         actor: PLAN_ACTOR.AGENT,
         label: "Invite emails",
-        agentId: FIXTURE_IDS.AGENT,
         at: CALL_AT - 2 * HOUR,
         duringCall: false,
       },
-      agentId: FIXTURE_IDS.AGENT,
       startedAt: CALL_AT - 2 * HOUR - 10 * 60_000,
       changes: 2,
     },
@@ -239,7 +239,7 @@ const FIXTURE_HISTORY: readonly {
       seq: 2,
       lastEdit: {
         actor: PLAN_ACTOR.DEVELOPER,
-        by: FIXTURE_PERSON.MAYA,
+        by: FIXTURE_PERSON.THEO,
         at: CALL_AT - DAY,
         duringCall: false,
       },
