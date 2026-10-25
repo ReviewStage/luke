@@ -235,6 +235,7 @@ function AutomationRow({
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
+  const nextWords = automationNextText(automation, now);
   // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
   const item = useRef<HTMLElement | null>(null);
   const hold = useCallback((node: HTMLElement | null) => {
@@ -290,18 +291,20 @@ function AutomationRow({
               next={
                 <>
                   {stateEndMark(state, true)}
-                  <Tooltip
-                    label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
-                  >
-                    <Text
-                      as={TEXT_ELEMENT.SPAN}
-                      variant={TEXT_VARIANT.INHERIT}
-                      truncate
-                      className="automation-row-when"
+                  {nextWords === undefined ? null : (
+                    <Tooltip
+                      label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
                     >
-                      {automationNextText(automation, now)}
-                    </Text>
-                  </Tooltip>
+                      <Text
+                        as={TEXT_ELEMENT.SPAN}
+                        variant={TEXT_VARIANT.INHERIT}
+                        truncate
+                        className="automation-row-when"
+                      >
+                        {nextWords}
+                      </Text>
+                    </Tooltip>
+                  )}
                 </>
               }
             />
