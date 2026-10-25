@@ -19,6 +19,7 @@ import {
   Button,
   ComposeIcon,
   commandKeyshortcuts,
+  DropSlot,
   dropBelowStart,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -120,11 +121,10 @@ import {
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
-import { useCoarsePointer } from "../coarse-pointer.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
@@ -393,6 +393,8 @@ interface RowContext {
   readonly inSight: boolean;
   /** Hears a row let go over a section, Tasks, or Pinned, while the account keeps sections; none while it does not. */
   readonly dropOut: ((row: TaskRow, zone: string, at: number) => void) | undefined;
+  /** Hears a row lifted into a drag and that drag ended, while which an empty Pinned stands to take it. */
+  readonly onCarried: (carried: boolean) => void;
   /** An agent's Move to section, as a task's menu offers it; none for an archived agent. */
   readonly sectionEntry: (agent: TasklessAgent) => MenuEntry | undefined;
 }
@@ -453,6 +455,7 @@ function TaskRows({
             const row = rows[from];
             if (row !== undefined) dropOut(row, zone, at);
           },
+    onCarried: context.onCarried,
   });
   const drawn = useLeaving(rows, taskRowKey);
   return (
@@ -747,8 +750,12 @@ function PinnedRows({
  * open plan, or the pinned tab on show, still stands under it, as under a
  * repository's fold. While the account keeps sections it is a drop zone as
  * a section is: a row carried in from Tasks or a section is pinned where it
- * is let go, one carried out is unpinned, and it stands though nothing is
- * pinned, saying so, so there is somewhere to drop the first pin.
+ * is let go, and one carried out is unpinned. It stands only while something
+ * is pinned, or, while nothing is, as the place a carried row drops in: its
+ * heading over an empty slot, with no fold and no count, since there is
+ * nothing to fold or count, and no words of its own, since the heading
+ * names what letting go there does and the row in hand is what it does it
+ * to. A row's hover Pin and its ⋯ menu still make the first pin.
  */
 function PinnedSection({
   rows,
@@ -757,6 +764,7 @@ function PinnedSection({
   context,
   onOpenTab,
   onDropOut,
+  carried,
 }: {
   rows: readonly PinnedRow[];
   folds: FoldedGroups;
@@ -766,20 +774,26 @@ function PinnedSection({
   onOpenTab: (pin: PinnedTab) => void;
   /** Hears a row let go over a section or Tasks, while the account keeps sections, which makes Pinned a drop zone too; none while it does not. */
   onDropOut: ((row: PinnedRow, zone: string, at: number) => void) | undefined;
+  /** Whether a row is carried, which an empty Pinned stands for, as the slot it lands in. */
+  carried: boolean;
 }): React.JSX.Element {
   const folded = folds.pinnedFolded;
   const standing = rows.filter(shown);
+  const empty = rows.length === 0;
   return (
     <nav
       className="sidebar-group"
       aria-label="Pinned"
       data-row-drop={onDropOut === undefined ? undefined : PINNED_DROP_ZONE}
+      {...motionKey(PINNED_KEY)}
     >
       <GroupHeader
         heading={GROUP_HEADING.NONE}
         label="Pinned"
-        fold={sidebarFold(folded, folds.togglePinned)}
-        count={foldedCount(folded, rows.length, PIN_NOUN, NAV_COUNT_SHOWN.ALWAYS)}
+        fold={empty ? undefined : sidebarFold(folded, folds.togglePinned)}
+        count={
+          empty ? undefined : foldedCount(folded, rows.length, PIN_NOUN, NAV_COUNT_SHOWN.ALWAYS)
+        }
         standing={
           standing.length === 0 ? undefined : (
             <PinnedRows
@@ -792,10 +806,8 @@ function PinnedSection({
           )
         }
       >
-        {rows.length === 0 ? (
-          <div className="sidebar-section-slot">
-            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here to pin them</NoteLine>
-          </div>
+        {empty ? (
+          carried && <DropSlot />
         ) : (
           <PinnedRows
             rows={rows}
@@ -856,6 +868,13 @@ function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): Me
 
 /** Pinned holds tabs as well as tasks, so its count is read as pins. */
 const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
+
+/** Pinned's key, by which it leaves the column once it stands for nothing. */
+const PINNED_KEY = "pinned";
+
+/** Pinned listed, or not, for `LeavingGroups`: constants, so a render that changes neither lists nothing new. */
+const PINNED_LISTED: readonly string[] = [PINNED_KEY];
+const NOTHING_LISTED: readonly string[] = [];
 
 /** The tasks under a repository's header; an agent with no task under it is archived from its own page. */
 function groupTasks(group: RepositoryGroup): readonly TaskSummary[] {
@@ -1733,7 +1752,8 @@ function SidebarColumn({
 }: DesktopSidebarProps): React.JSX.Element {
   const onTasks = tab === PANEL_TAB.TASKS;
   const narrow = room === SHELL_ROOM.NARROW;
-  const coarse = useCoarsePointer();
+  // Whether a row of the column is lifted into a drag, while which an empty Pinned stands to take it.
+  const [carrying, setCarrying] = useState(false);
   const overlay = useFloatingSidebar(sidebar);
   useFirstUsableSpan(tasks);
   const body = useRef<HTMLDivElement>(null);
@@ -1952,6 +1972,7 @@ function SidebarColumn({
     faces: { creator: createdBy === undefined, assignee: assignedTo === undefined },
     inSight: overlay.inSight,
     dropOut: sectionsShown ? dropRow : undefined,
+    onCarried: setCarrying,
     // Note that an archived agent stands in no section, so it is offered none until it is brought back, as an archived task.
     sectionEntry: (agent) =>
       agent.archivedAt === undefined
@@ -2158,17 +2179,27 @@ function SidebarColumn({
                   </Stack>
                 </nav>
               )}
-              {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin, for a mouse: a finger, which drags no row, draws it only once it holds one. */}
-              {tasks.signedIn && (pinnedSection.length > 0 || (sectionsShown && !coarse)) ? (
-                <PinnedSection
-                  rows={pinnedSection}
-                  folds={folds}
-                  shown={pinnedShown}
-                  context={context}
-                  onOpenTab={chosen(openPinnedTab)}
-                  onDropOut={sectionsShown ? dropPinned : undefined}
-                />
-              ) : null}
+              {/* Pinned stands once something is pinned, or, while the account keeps sections, as the place a carried row drops in, and leaves after its exit once neither holds. */}
+              <LeavingGroups
+                groups={
+                  tasks.signedIn && (pinnedSection.length > 0 || (sectionsShown && carrying))
+                    ? PINNED_LISTED
+                    : NOTHING_LISTED
+                }
+                keyOf={(key) => key}
+                group={(key) => (
+                  <PinnedSection
+                    key={key}
+                    rows={pinnedSection}
+                    folds={folds}
+                    shown={pinnedShown}
+                    context={context}
+                    onOpenTab={chosen(openPinnedTab)}
+                    onDropOut={sectionsShown ? dropPinned : undefined}
+                    carried={carrying}
+                  />
+                )}
+              />
               {listsInbox && inboxListing !== undefined ? (
                 <SidebarInbox
                   tasks={tasks}
@@ -2219,6 +2250,7 @@ function SidebarColumn({
                           />
                         ),
                       onDropRow: dropRow,
+                      onCarried: setCarrying,
                     }}
                   />
                   <nav

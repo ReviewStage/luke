@@ -25,7 +25,7 @@ import {
 } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { eq } from "drizzle-orm";
-import { Clock, DateTime, Effect, Option, Result } from "effect";
+import { Clock, DateTime, Deferred, Effect, Fiber, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { agentPin } from "../../schemas/agent-pin.js";
@@ -609,6 +609,30 @@ it.layer(getTestDB())("the coding-agent store's mentioned servers", (it) => {
 
         assert.equal(refused, false);
         assert.deepEqual(tookMeanwhile, [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.NOTION]);
+        assert.deepEqual(yield* takeCodingAgentMentionedServers(userId, conversationId), []);
+      }),
+  );
+
+  it.effect(
+    "a send interrupted mid hand-over, as at its deadline, takes back the servers it added",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount;
+        const workspace = yield* openWorkspace(userId);
+        const { agentId, conversationId } = yield* tasklessAgent(userId, workspace);
+        const began = yield* Deferred.make<void>();
+
+        const handing = yield* Effect.forkChild(
+          dispatchMentioningServers(
+            userId,
+            agentId,
+            [INTEGRATION_PROVIDER.NOTION],
+            Effect.andThen(Deferred.succeed(began, undefined), Effect.never),
+          ),
+        );
+        yield* Deferred.await(began);
+        yield* Fiber.interrupt(handing);
+
         assert.deepEqual(yield* takeCodingAgentMentionedServers(userId, conversationId), []);
       }),
   );

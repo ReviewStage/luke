@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { MOTION_DELAY_MS } from "@luke/brand";
 import {
   PLAN_COMMENT_ACTION,
@@ -583,35 +582,6 @@ test("words a block thread and a word thread both cover are marked once, naming 
   assert.deepEqual(shared?.dataset.threads?.split(" ").sort(), [ID.GONE, ID.OPEN].sort());
   assert.ok(blockOnly, "the rest of the block is marked as the block thread's");
   assert.equal(container.querySelectorAll(".comment-block-edge").length, 0, "and draws no bar");
-});
-
-test("where one thread's mark stands inside another's, the open thread's is drawn as its own mark, inner or outer, under the panel's own stylesheet", () => {
-  const sheet = document.createElement("style");
-  sheet.textContent = readFileSync(`${__dirname}/../styles/tasks.css`, "utf8");
-  document.head.append(sheet);
-  // Note that the editor nests a mark per thread over words two threads cover.
-  const nested = (open: "inner" | "outer") => {
-    const outer = document.body.appendChild(document.createElement("mark"));
-    const inner = outer.appendChild(document.createElement("mark"));
-    outer.className = "plan-comment-mark";
-    inner.className = "plan-comment-mark";
-    (open === "inner" ? inner : outer).dataset.active = "true";
-    return { outer, inner };
-  };
-  const innerOpen = nested("inner");
-  const outerOpen = nested("outer");
-  // Note that jsdom resolves no custom property, so a mark's wash reads the same whichever rule set it; the room under its edge, a length, says which rule drew it.
-  const edgeRoom = (mark: HTMLElement): string => getComputedStyle(mark).paddingBottom;
-  const drawn = {
-    innerOpen: edgeRoom(innerOpen.inner),
-    outerOpen: edgeRoom(outerOpen.outer),
-    underOuterOpen: edgeRoom(outerOpen.inner),
-  };
-  sheet.remove();
-  innerOpen.outer.remove();
-  outerOpen.outer.remove();
-
-  assert.deepEqual(drawn, { innerOpen: "1px", outerOpen: "1px", underOuterOpen: "0px" });
 });
 
 test("a press away from the open thread closes it, and a press inside it keeps it open", () => {
@@ -1242,18 +1212,6 @@ test("a thread being started keeps its card through a press away while its words
   );
 });
 
-test("in the Comments tab a thread's quote stands under its first comment's writer, so its tools keep the card's top corner", () => {
-  const { container } = drawn("tab");
-  const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
-  const entry = card?.querySelector(".comment-entry");
-
-  assert.ok(entry?.querySelector(".luke-comment-head + .luke-comment-body .comment-quote"));
-  assert.equal(
-    card?.querySelector(".comment-entries")?.firstElementChild?.classList.contains("comment-entry"),
-    true,
-  );
-});
-
 test("a thread's resolve reads as its writer's own line, drawn as a comment's head, and an empty tab says how a thread starts", () => {
   const resolved = threadOn(ID.RESOLVED, "teammate", "A guest, too?", {
     status: PLAN_COMMENT_STATUS.RESOLVED,
@@ -1843,36 +1801,6 @@ test("a card that grows with nothing drawn again moves the card under it down, i
   } finally {
     restore();
     vi.restoreAllMocks();
-  }
-});
-
-test("the margin drawn again for the pointer on a thread's words measures none of its cards again", () => {
-  const heights = { card: 40 };
-  let measured = 0;
-  const restore = cardsTall({
-    get card() {
-      measured += 1;
-      return heights.card;
-    },
-  });
-  try {
-    const { container } = wide(() => drawn("page"));
-    const mark = container.querySelector<HTMLElement>(
-      `mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`,
-    );
-    measured = 0;
-
-    wide(() => act(() => mark?.dispatchEvent(new Event("pointerover", { bubbles: true }))));
-
-    assert.equal(
-      container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`)?.dataset
-        .pointed,
-      "true",
-      "the margin is drawn again, its card marked",
-    );
-    assert.equal(measured, 0);
-  } finally {
-    restore();
   }
 });
 

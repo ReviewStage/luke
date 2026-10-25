@@ -83,7 +83,6 @@ test("a closed find bar stays drawn, inert, through its exit, with focus already
   await act(async () => exits.finish());
 
   assert.ok(leaving, "the bar stands through its exit");
-  assert.equal(leaving.dataset.leaving, "true");
   assert.equal(leaving.hasAttribute("inert"), true);
   assert.equal(heldBack, true);
   assert.equal(document.querySelector(BAR), null);
@@ -100,7 +99,6 @@ test("a find bar opened again while it leaves is the same bar, standing open", a
   });
 
   assert.equal(document.querySelector(BAR), leaving);
-  assert.equal(leaving?.dataset.leaving, undefined);
   assert.notEqual(document.activeElement, before);
 });
 

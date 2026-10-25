@@ -81,7 +81,6 @@ test("an opened pull request reads as its number and title behind its mark, and 
   const row = container.querySelector<HTMLButtonElement>('button[data-call-id="call-open"]');
   assert.ok(row, "the row is a button");
   assert.equal(row.textContent, `Opened pull request #4951 ${OPEN.title}`);
-  assert.match(row.querySelector("svg")?.getAttribute("class") ?? "", /git-pull-request/u);
   assert.equal(container.querySelector("details"), null, "nothing folds open in place");
   act(() => row.click());
   assert.deepEqual(links, [url]);

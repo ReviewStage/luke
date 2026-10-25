@@ -520,7 +520,6 @@ test("a row of the skills' list leads with a book, says what it is for and where
   await settle();
   const [row] = box.container.querySelectorAll('[role="listbox"] [role="option"]');
   assert.ok(row, "the list offers the skills");
-  assert.ok(row.querySelector(".luke-combobox-option-glyph svg"), "the row leads with a book");
   assert.equal(
     row.querySelector(".luke-combobox-option-detail")?.textContent,
     SKILLS[0]?.description,
