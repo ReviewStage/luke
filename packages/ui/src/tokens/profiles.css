@@ -262,6 +262,10 @@
   /* How tall a band stuck at a scroller's start stands, a call's checkpoint,
      which its fade begins beneath (`ScrollArea`'s `fadeInset`). */
   --luke-scroll-band: var(--luke-space-32);
+  /* How tall the foot at a scroller's end stands, a control and a step of
+     room either side, which a control floating over the end stands in and
+     its fade ends above (`ScrollArea`'s `endInset`). */
+  --luke-scroll-foot: calc(var(--luke-control-height) + 2 * var(--luke-space-8));
 
   /* How thick the keyboard's ring is and how far it stands off the control's
      edge; its colour is the palette's `--luke-color-focus-ring`. The reach is
@@ -520,6 +524,8 @@
   --luke-label-fade: 20px;
   /* How tall a band stuck at a scroller's start stands, which its fade begins beneath. */
   --luke-scroll-band: var(--luke-space-32);
+  /* How tall the foot at a scroller's end stands, which a control floating over the end stands in. */
+  --luke-scroll-foot: calc(var(--luke-control-height) + 2 * var(--luke-space-8));
 
   /* How thick the keyboard's ring is and how far it stands off the control's
      edge; its colour is the palette's `--luke-color-focus-ring`. The reach is

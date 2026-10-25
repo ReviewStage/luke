@@ -6644,6 +6644,9 @@ function boardOf(pane: HTMLElement): HTMLElement {
 
 /** Scrolls `board` to `top` as the reader would, so the pane hears it. */
 function scrollBoard(board: HTMLElement, top: number): void {
+  act(() => {
+    board.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: top - board.scrollTop }));
+  });
   board.scrollTop = top;
   act(() => {
     board.dispatchEvent(new Event("scroll", { bubbles: true }));

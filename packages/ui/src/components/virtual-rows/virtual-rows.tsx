@@ -16,6 +16,7 @@ import {
   useState,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
+import { askScroll } from "../../scroll-asked.js";
 
 /**
  * virtual-rows.tsx -- a long run of rows in a scroller of the caller's, drawing only those near the view, anchored to its last.
@@ -209,6 +210,8 @@ export function VirtualRows({
         const index = latestKeys.current.indexOf(key);
         if (index === -1) return false;
         bringing.current = { key, drawn: then };
+        const box = scroller.current;
+        if (box !== null) askScroll(box);
         virtualizer.scrollToIndex(index, { align: "center" });
         return true;
       },
