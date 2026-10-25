@@ -330,7 +330,6 @@ const CHAPTERS_TAB = lazyRoute(() =>
   import("./agent-chapters-tab.js").then((loaded) => loaded.AgentChaptersTab),
 );
 
-/** The tab's own words. */
 /**
  * A view of the tab, filling the room under the header and the tabs, the
  * others kept drawn but hidden, so switching back draws what each last read.
@@ -341,6 +340,7 @@ const CHAPTERS_TAB = lazyRoute(() =>
 const VIEW_CLASS =
   "pull-request-view [--luke-scroll-band:var(--pull-request-band)] [&[hidden]]:hidden";
 
+/** The tab's own words. */
 const PULL_REQUEST_WORDS = {
   READING: "Reading pull request",
   READING_CHECKS: "Reading checks",
