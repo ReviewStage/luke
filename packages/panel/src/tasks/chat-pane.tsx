@@ -26,6 +26,9 @@ import {
   FailureNote,
   OneLine,
   PaneBar,
+  STREAM_DIVIDER,
+  STREAM_DIVIDER_ELEMENT,
+  StreamDivider,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -59,6 +62,7 @@ import {
   postsIn,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
+import { askScroll } from "@luke/ui/scroll-asked";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -1055,7 +1059,7 @@ function ChannelStream({
   }
   const unreadFrom = opened.channelId === channelId ? opened.unreadFrom : undefined;
   const list = useRef<HTMLDivElement>(null);
-  const line = useRef<HTMLLIElement>(null);
+  const line = useRef<HTMLElement>(null);
   // Note that this runs after the log has taken itself to the channel's newest message, since a parent's layout effect follows its children's.
   useLayoutEffect(() => {
     if (opened.unreadFrom === undefined) return;
@@ -1065,6 +1069,7 @@ function ChannelStream({
     const room = Number.parseFloat(window.getComputedStyle(at).scrollMarginTop) || 0;
     const above = at.getBoundingClientRect().top - box.getBoundingClientRect().top - room;
     if (above >= 0) return;
+    askScroll(box);
     box.scrollTop += above;
     box.dispatchEvent(new Event("scroll"));
   }, [opened]);
@@ -1077,12 +1082,13 @@ function ChannelStream({
             return (
               <Fragment key={thread.message.id}>
                 {first ? (
-                  <li
+                  <StreamDivider
+                    kind={STREAM_DIVIDER.NEW}
+                    as={STREAM_DIVIDER_ELEMENT.LI}
                     ref={line}
-                    className="chat-unread-line my-control-gap flex scroll-mt-luke-16 items-center gap-control-gap text-caption-inline font-luke-semibold text-accent-ink before:flex-1 before:border-t before:border-accent-fill before:content-['']"
                   >
                     {UNREAD_LINE}
-                  </li>
+                  </StreamDivider>
                 ) : null}
                 <ThreadRow
                   message={thread.message}

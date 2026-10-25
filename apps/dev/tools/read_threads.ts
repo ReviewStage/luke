@@ -6,23 +6,19 @@ import { defineTool } from "eve/tools";
 import { runInboxTool } from "../host.js";
 
 /**
- * post_to_inbox.ts -- the agent posts a message, perhaps ending with an ask, on its thread under a key in the developer's inbox.
+ * read_threads.ts -- the agent reads its threads, in whichever channel each was posted to, each message with its ask and the answers.
  *
  * The call reaches the store through the host's door (`../host.ts`), as
- * `edit_plan` does, and answers with the agent's whole inbox as it stands
- * (`packages/service/src/agents/coder-host/inbox.ts`). A picture the body
- * draws by its path is read from the session's sandbox through the same
- * door eve hands every file tool, opened on first use, so a post with no
- * such picture opens none.
+ * `edit_plan` does, and answers with the agent's threads as they stand
+ * (`packages/service/src/agents/coder-host/inbox.ts`).
  */
 export default defineTool({
-  description: INBOX_TOOLS.POST.description,
-  inputSchema: emitJsonSchema(INBOX_TOOLS.POST.inputSchema),
+  description: INBOX_TOOLS.READ.description,
+  inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
   execute: async (input, ctx) =>
     // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
     runInboxTool(ctx.session.auth, ctx.session.id, {
-      tool: INBOX_TOOL.POST,
+      tool: INBOX_TOOL.READ,
       input: unparsedWire(input as WireBoundaryInput),
-      sandbox: () => ctx.getSandbox(),
     }),
 });

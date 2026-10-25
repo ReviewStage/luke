@@ -57,15 +57,6 @@ export interface SandboxImage<Type extends string> {
   readonly bytes: Uint8Array;
 }
 
-/** Why an image block's picture was not read, in the words the model reads; each is followed by the path. */
-const INBOX_IMAGE_REFUSAL: SandboxImageRefusals = {
-  NO_FILE: "Not posted: an image block names no file in your sandbox:",
-  NOT_IMAGE:
-    "Not posted: an image block names a file that is not a PNG, JPEG, or WebP image, or a WebM video that states its size:",
-  TOO_LARGE: `Not posted: an image block names a picture larger than ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, or a video larger than ${(INBOX_BOUNDS.MAX_VIDEO_BYTES / 1_000_000).toFixed(1)} MB; render it smaller, or record a shorter flow:`,
-  UNREADABLE: "Not posted: an image block's file could not be read from your sandbox:",
-} as const;
-
 /** The chunks as one array. */
 function joined(chunks: readonly Uint8Array[], length: number): Uint8Array {
   const bytes = new Uint8Array(length);
@@ -199,13 +190,4 @@ export function readSandboxMedia(
       return Result.succeed(media);
     }),
   );
-}
-
-/** An image block's picture or recording at the path, held to its bound, or the one sentence refusing it. */
-export function readInboxImage(
-  door: InboxSandboxDoor,
-  checkout: string,
-  path: string,
-): Effect.Effect<Result.Result<InboxImage, string>> {
-  return readSandboxMedia(door, checkout, path, INBOX_IMAGE_REFUSAL);
 }

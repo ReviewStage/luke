@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_KIND,
@@ -33,7 +32,6 @@ import {
   CODER_DEPLOYMENT_TURNS,
   coderChannelInput,
 } from "./channel.js";
-import { CHAT_TOOLS } from "./chat.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { CODER_HARNESS, coderInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
@@ -266,16 +264,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const repository of ["Acme/Relay", null]) {
       for (const memberToken of [false, true]) {
-        const args = [
-          repository,
-          brief,
-          true,
-          TASK_ADDRESS,
-          undefined,
-          true,
-          null,
-          memberToken,
-        ] as const;
+        const args = [repository, brief, true, TASK_ADDRESS, undefined, null, memberToken] as const;
         const eve = coderInstructions(...args);
         const claudeCode = coderInstructions(...args, CODER_HARNESS.CLAUDE_CODE);
         const label = `${brief} ${repository ?? "no repository"} ${memberToken ? "token" : "app"}`;
@@ -313,7 +302,6 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
       true,
       TASK_ADDRESS,
       undefined,
-      false,
       null,
       false,
       CODER_HARNESS.CLAUDE_CODE,
@@ -337,7 +325,6 @@ test("a Claude Code or Codex agent is told of its browser, which Luke's MCP serv
           true,
           TASK_ADDRESS,
           undefined,
-          true,
           null,
           false,
           harness,
@@ -383,7 +370,6 @@ test("a Codex agent is told of Codex's own tools and never of Luke's it is not o
           true,
           TASK_ADDRESS,
           undefined,
-          true,
           null,
           memberToken,
           CODER_HARNESS.CODEX,
@@ -417,7 +403,6 @@ test("a Codex agent is told of Codex's own tools and never of Luke's it is not o
       true,
       TASK_ADDRESS,
       undefined,
-      false,
       null,
       false,
       CODER_HARNESS.CODEX,
@@ -440,7 +425,7 @@ test("an agent on a task is told of the task's links, pages, and comments, and o
     ];
     assert.deepEqual(told(onTask), [true, true, true], brief);
     assert.deepEqual(told(taskless), [false, true, false], brief);
-    assert.ok(taskless.includes("## The developer's inbox"), "a planless agent keeps its inbox");
+    assert.ok(taskless.includes("## Threads"), "a planless agent keeps its threads");
     assert.ok(!taskless.includes("luke://plan/"), "nor an older message's plan link");
   }
 });
@@ -548,20 +533,18 @@ test("the session is told never to ask for a credential or a secret in a form, s
   }
 });
 
-test("the session sends whatever is ready for the developer to look at or review to the inbox, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post", () => {
+test("the session sends whatever is ready for the developer to look at or review to a thread, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post", () => {
   const READY = "ready for them to look at or review";
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const taskLink of [TASK_ADDRESS, null]) {
-      const inbox = coderInstructions("Acme/Relay", brief, true, taskLink).split(
-        "## The developer's inbox",
-      )[1];
+      const inbox = coderInstructions("Acme/Relay", brief, true, taskLink).split("## Threads")[1];
       assert.ok(inbox?.includes(READY), brief);
       assert.ok(inbox?.includes("a pull request you opened or marked ready"), brief);
       assert.ok(inbox?.includes("needs to test something by hand"), brief);
       // An agent another coding agent started sends that agent what it would post instead.
       assert.ok(
         inbox?.includes(
-          "Where another coding agent started you, as your first message says, the developer's inbox is that agent's to keep",
+          "Where another coding agent started you, as your first message says, threads to the developer are that agent's to post",
         ),
         brief,
       );
@@ -593,7 +576,7 @@ test("an agent on its starter's own token reads its checks and its pull request 
   const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const words = (memberToken: boolean) =>
-      coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER, false, null, memberToken);
+      coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER, null, memberToken);
     const onToken = words(true);
     for (const cli of ["`gh pr checks", "`gh run view", "marking a draft ready"]) {
       assert.ok(!onToken.includes(cli), `${brief}: ${cli}`);
@@ -616,7 +599,6 @@ test("an agent whose credential reads its checks waits on them with sleep until 
         true,
         TASK_ADDRESS,
         undefined,
-        false,
         null,
         memberToken,
       );
@@ -700,17 +682,13 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
 /** The task link the golden's on-task prompts were composed with. */
 const TASK_LINK = "https://tryluke.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
 
-/**
- * The instructions of an agent whose starter has not turned Chat on,
- * recorded for each brief, on a task and on none, byte for byte: no team
- * channel, and another agent messaged in a direct message.
- */
-const BEFORE_CHAT_PATH = fileURLToPath(
-  new URL("../../../fixtures/coder-instructions/chat-off.json", import.meta.url),
+/** A coding agent's instructions, recorded for each brief, on a task and on none, byte for byte. */
+const CODER_PATH = fileURLToPath(
+  new URL("../../../fixtures/coder-instructions/coder.json", import.meta.url),
 );
 
-/** The instructions with Chat off for each brief, on a task and on none, as the golden records them. */
-function chatOffInstructions(): Record<string, { onTask: string; taskless: string }> {
+/** The instructions for each brief, on a task and on none, as the golden records them. */
+function briefInstructions(): Record<string, { onTask: string; taskless: string }> {
   return Object.fromEntries(
     Object.values(CODING_AGENT_BRIEF).map((brief) => [
       brief,
@@ -724,52 +702,19 @@ function chatOffInstructions(): Record<string, { onTask: string; taskless: strin
 
 // Note that the golden is written again only under LUKE_UPDATE_FIXTURES=1, and the diff explained in the PR.
 if (process.env.LUKE_UPDATE_FIXTURES === "1") {
-  writeFileSync(BEFORE_CHAT_PATH, `${JSON.stringify(chatOffInstructions(), null, 2)}\n`);
+  writeFileSync(CODER_PATH, `${JSON.stringify(briefInstructions(), null, 2)}\n`);
 }
 
-const BEFORE_CHAT = Schema.decodeUnknownSync(
+const CODER_GOLDEN = Schema.decodeUnknownSync(
   Schema.Record(Schema.String, Schema.Struct({ onTask: Schema.String, taskless: Schema.String })),
-)(JSON.parse(readFileSync(BEFORE_CHAT_PATH, "utf8")));
+)(JSON.parse(readFileSync(CODER_PATH, "utf8")));
 
-/** What the instructions' opening adds with Chat on: that the agent is one of a team talking in its task's chat. */
-const TEAM_WORDS = / You are not working alone: [^\n]*?as its section below says\./u;
-
-/** What the instructions say of messaging another agent with Chat on, and with it off. */
-const MESSAGE_AGENT_WORDS = {
-  on: / Talk to the agents on your task in your task's chat, as its section says;[^\n]*?keep each message short and complete\./u,
-  off: " Message another agent when its work meets yours, such as a change of yours it depends on or something only it knows, and keep each message short and complete.",
-} as const;
-
-test("with Chat off the instructions are the golden's, byte for byte, and message another agent in a direct message; with it on they open on the team, add the chat section, and send the task's agents to it rather than a direct message", () => {
+test("a coding agent's instructions are the golden's, byte for byte, for each brief on a task and on none", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const before = BEFORE_CHAT[brief];
-    assert.ok(before, brief);
-    const off = {
-      onTask: coderInstructions("Acme/Relay", brief, true, TASK_LINK),
-      taskless: coderInstructions("Acme/Relay", brief, false, null),
-    };
-    assert.equal(off.onTask, before.onTask, brief);
-    assert.equal(off.taskless, before.taskless, brief);
-    const on = coderInstructions("Acme/Relay", brief, true, TASK_LINK, undefined, true);
-    assert.ok(on.includes("## Your team's chat"), brief);
-    // Chat's word on the inbox keeps the exception for an agent another coding agent started.
-    assert.ok(on.includes("or, where another coding agent started you, to that agent"), brief);
-    const section = on.slice(on.indexOf("\n\n## Your team's chat"));
-    const end = section.indexOf("\n\n## ", 2);
-    assert.match(on, MESSAGE_AGENT_WORDS.on, brief);
-    assert.match(on.split("\n")[0] ?? "", TEAM_WORDS, brief);
-    assert.equal(
-      on
-        .replace(section.slice(0, end), "")
-        .replace(MESSAGE_AGENT_WORDS.on, MESSAGE_AGENT_WORDS.off)
-        .replace(TEAM_WORDS, ""),
-      before.onTask,
-      brief,
-    );
-    // With Chat off an agent still messages another in a direct message, and no agent is told of message_agent.
-    assert.ok(off.onTask.includes(`\`${CHAT_TOOLS.POST.name}\` with \`to\``), brief);
-    assert.ok(!off.onTask.includes("## Your team's chat"), brief);
-    assert.ok(!off.onTask.includes("message_agent") && !on.includes("message_agent"), brief);
+    const recorded = CODER_GOLDEN[brief];
+    assert.ok(recorded, brief);
+    assert.equal(coderInstructions("Acme/Relay", brief, true, TASK_LINK), recorded.onTask, brief);
+    assert.equal(coderInstructions("Acme/Relay", brief, false, null), recorded.taskless, brief);
   }
 });
 
@@ -782,7 +727,6 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
       true,
       TASK_LINK,
       undefined,
-      false,
       null,
       false,
       CODER_HARNESS.EVE,
@@ -807,7 +751,6 @@ test("with Memory on, the operator is told to keep the developer's own preferenc
       false,
       null,
       undefined,
-      false,
       null,
       false,
       CODER_HARNESS.EVE,
@@ -831,15 +774,14 @@ const OPERATOR_PATH = fileURLToPath(
   new URL("../../../fixtures/coder-instructions/operator.json", import.meta.url),
 );
 
-/** An operator's instructions as its session composes them, with Chat on for its member where `chatOn` says. */
-function operatorInstructions(chatOn = false): string {
+/** An operator's instructions as its session composes them. */
+function operatorInstructions(): string {
   return coderInstructions(
     null,
     CODING_AGENT_BRIEF.BLANK,
     false,
     null,
     undefined,
-    chatOn,
     null,
     false,
     CODER_HARNESS.EVE,
@@ -859,24 +801,23 @@ const OPERATOR_GOLDEN = Schema.decodeUnknownSync(Schema.Struct({ operator: Schem
   JSON.parse(readFileSync(OPERATOR_PATH, "utf8")),
 );
 
-test("an operator's instructions are the golden's, byte for byte: its own job and Steward's rules in place of an agent's job and pull request, no team's chat even with Chat on, and no delete; a coder's are the same whatever the kind defaults to", () => {
+test("an operator's instructions are the golden's, byte for byte: its own job and Steward's rules in place of an agent's job and pull request, and no delete; a coder's are the same whatever the kind defaults to", () => {
   const operator = operatorInstructions();
   assert.equal(operator, OPERATOR_GOLDEN.operator);
-  assert.equal(operatorInstructions(true), operator, "an operator works on no task's chat");
   for (const told of [
     "You are Luke, the developer's operator in this workspace",
     "## What you may do unasked",
     "## Never",
     "Never merge or close a pull request yourself, and never ask an agent to merge or close one on your own initiative.",
-    "When the developer asks you in this conversation to merge or close a pull request, tell the agent that owns it to do it, in a direct message",
+    `When the developer asks you in this conversation to merge or close a pull request, tell the agent that owns it to do it, with \`${CODER_TOOL.MESSAGE_AGENT}\``,
     "and messaging the developer's own agents. To reach a teammate's agent, ask the developer.",
     "Never delete anything.",
     "Never answer an inbox ask for the developer",
     "Never change Settings, keys, or integrations.",
     "Never act on a teammate's agent beyond reading it:",
     "Report each action you took unasked as a line of its own in your reply",
-    "ask the developer in their inbox",
-    "reports back to you in a direct message",
+    "ask the developer in a thread",
+    `reports back to you with \`${CODER_TOOL.MESSAGE_AGENT}\``,
     "## Your opening",
     `\`${CODER_TOOL.LIST_OPEN_ASKS}\``,
   ]) {
@@ -886,7 +827,6 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
     "implement the plan",
     `\`${CODER_TOOL.OPEN_PULL_REQUEST}\``,
     `\`${CODER_TOOL.DELETE_SECTION}\``,
-    "## Your team's chat",
     "and never ask an agent to.",
     "and messaging any agent.",
     "beyond reading it and messaging it",
@@ -898,27 +838,4 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
   assert.ok(!coder.includes("## What you may do unasked"));
   assert.ok(coder.includes(`\`${CODER_TOOL.DELETE_SECTION}\``));
   assert.ok(!coder.includes(`\`${CODER_TOOL.LIST_OPEN_ASKS}\``));
-});
-
-test("with Chat on the session keeps the developer's inbox for what it needs of the developer, and is told of chat for the other agents, @luke, and people, with which to use when", () => {
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief, false, null, undefined, true);
-    assert.ok(instructions.includes("## The developer's inbox"), brief);
-    assert.ok(instructions.includes("## Your team's chat"), brief);
-    for (const tool of [...Object.values(CHAT_TOOLS), ...Object.values(INBOX_TOOLS)]) {
-      assert.ok(instructions.includes(tool.name), `${brief} names ${tool.name}`);
-    }
-    assert.ok(instructions.includes(`\`${CHAT_NOTICE_LEAD} ·\``), brief);
-    assert.ok(instructions.includes("Never put one question in both places."), brief);
-    // The voice: posts read as a person typing in Slack, not as an AI writing a report.
-    assert.ok(instructions.includes("No AI tells:"), brief);
-    // Posts are for what the team, its manager among them, would want to know, never filler.
-    assert.ok(instructions.includes("Never post filler:"), brief);
-    assert.ok(instructions.includes("their engineering manager among them"), brief);
-    assert.ok(
-      instructions.includes("- In bursts. A person fires off two or three quick posts"),
-      brief,
-    );
-    assert.ok(instructions.includes("Most posts are under fifteen words"), brief);
-  }
 });

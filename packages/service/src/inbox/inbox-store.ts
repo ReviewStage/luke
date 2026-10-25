@@ -364,6 +364,9 @@ function unreadFor(readerId: string): SQL<boolean> {
  */
 const WAITS_ON = sql<string>`coalesce(${qualified(inboxItem, inboxItem.addresseeId)}, (select ${qualified(task, task.assigneeId)} from ${task} where ${qualified(task, task.id)} = ${qualified(inboxItem, inboxItem.taskId)}), ${qualified(inboxItem, inboxItem.userId)})`;
 
+/** Whether the item's agent addressed it to a member, who `WAITS_ON` then names; qualified as `WAITS_ON` is. */
+const ADDRESSED = sql<boolean>`(${qualified(inboxItem, inboxItem.addresseeId)} is not null)`;
+
 /** The name of the member an item waits on (`WAITS_ON`), as their account holds it; none once the account is gone. */
 const WAITS_ON_NAME = sql<
   string | null
@@ -402,6 +405,7 @@ const INBOX_ITEM_COLUMNS = {
   >`(select "name" from ${user} where ${user.id} = ${inboxItem.userId})`,
   waitsOn: WAITS_ON,
   waitsOnName: WAITS_ON_NAME,
+  addressed: ADDRESSED,
   answerKey: inboxItem.answerKey,
   answeredBy: inboxItem.answeredBy,
   // A scalar read rather than a join, because `returning` projects these too and joins nothing.
@@ -469,6 +473,7 @@ const InboxRowSchema = Schema.Struct({
   startedByName: Schema.NullOr(Schema.String),
   waitsOn: Schema.String,
   waitsOnName: Schema.NullOr(Schema.String),
+  addressed: Schema.Boolean,
   answerKey: Schema.NullOr(Schema.String),
   answeredBy: Schema.NullOr(Schema.String),
   answeredByName: Schema.NullOr(Schema.String),
@@ -504,6 +509,7 @@ function storedItem(row: InboxRow): StoredInboxItem {
       ...(row.waitsOnName === null
         ? undefined
         : { waitsOn: { userId: row.waitsOn, name: row.waitsOnName } }),
+      addressed: row.addressed,
       ...(row.answeredBy === null || row.answeredByName === null
         ? undefined
         : { answeredBy: { userId: row.answeredBy, name: row.answeredByName } }),
@@ -1139,6 +1145,7 @@ const WaitingRowSchema = Schema.Struct({
   postedAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
+  asking: Schema.Boolean,
 });
 
 const findWaitingItems = SqlSchema.findAll({
@@ -1164,6 +1171,7 @@ const findWaitingItems = SqlSchema.findAll({
           postedAt: inboxItem.postedAt,
           updatedAt: inboxItem.updatedAt,
           unread: unreadFor(userId),
+          asking: ASKING,
         })
         .from(inboxItem)
         .innerJoin(task, eq(task.id, inboxItem.taskId))
@@ -1180,6 +1188,7 @@ const TasklessRowSchema = Schema.Struct({
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   startedBy: Schema.String,
+  waitsOn: Schema.String,
   automationId: Schema.NullOr(Schema.String),
   automationName: Schema.NullOr(Schema.String),
   repository: Schema.String,
@@ -1190,6 +1199,7 @@ const TasklessRowSchema = Schema.Struct({
   postedAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
+  asking: Schema.Boolean,
 });
 
 const findTasklessWaitingItems = SqlSchema.findAll({
@@ -1207,6 +1217,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
+          waitsOn: WAITS_ON,
           automationId: automation.id,
           automationName: automation.name,
           repository: codingAgent.repository,
@@ -1217,6 +1228,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           postedAt: inboxItem.postedAt,
           updatedAt: inboxItem.updatedAt,
           unread: unreadFor(userId),
+          asking: ASKING,
         })
         .from(inboxItem)
         .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
@@ -1354,6 +1366,7 @@ export function accountInboxLiveStatements(
           title: inboxItem.title,
           revision: inboxItem.revision,
           unread: unreadFor(userId),
+          asking: ASKING,
         },
         { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
       ),
@@ -1374,6 +1387,7 @@ export function accountInboxLiveStatements(
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
+          waitsOn: WAITS_ON,
           automationId: automation.id,
           automationName: automation.name,
           repository: codingAgent.repository,
@@ -1381,6 +1395,7 @@ export function accountInboxLiveStatements(
           title: inboxItem.title,
           revision: inboxItem.revision,
           unread: unreadFor(userId),
+          asking: ASKING,
         },
         { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
       ),
@@ -1515,6 +1530,7 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
             startedByName: INBOX_ITEM_COLUMNS.startedByName,
             waitsOn: WAITS_ON,
             waitsOnName: WAITS_ON_NAME,
+            addressed: ADDRESSED,
             answeredBy: inboxItem.answeredBy,
             answeredByName: INBOX_ITEM_COLUMNS.answeredByName,
             closedReason: inboxItem.closedReason,

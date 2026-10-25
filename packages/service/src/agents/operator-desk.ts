@@ -89,7 +89,7 @@ export const DESK_LEAD =
 
 /** Why `list_open_asks` answered nothing, in words the model can act on. */
 export const LIST_OPEN_ASKS_REFUSAL = {
-  NOT_OPERATOR: `Not run: only your member's operator reads their whole inbox; ${AGENT_TOOL.READ_INBOX} reads your own threads.`,
+  NOT_OPERATOR: `Not run: only your member's operator reads their whole inbox; ${AGENT_TOOL.READ_THREADS} reads your own threads.`,
 } as const;
 
 /** `list_open_asks`, as the operator is offered it: it takes nothing. */
@@ -100,7 +100,7 @@ export const LIST_OPEN_ASKS_TOOL = {
     "yours among them, and none of a teammate's: each with its key, its title, the agent that posted it (its id, " +
     "name, and mention) and its task (null for none), the kind of ask that waits (decide, do, or answer; null for a " +
     "post that only waits to be read) and its words, the latest changed first and at most " +
-    `${OPERATOR_DESK.ASKS_LISTED}. It only reads: never answer an ask for the developer. ${AGENT_TOOL.READ_INBOX} ` +
+    `${OPERATOR_DESK.ASKS_LISTED}. It only reads: never answer an ask for the developer. ${AGENT_TOOL.READ_THREADS} ` +
     "reads only your own threads.",
   inputSchema: Schema.Struct({}),
 } as const;

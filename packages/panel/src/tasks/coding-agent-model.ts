@@ -1558,6 +1558,20 @@ export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | 
 }
 
 /**
+ * The notice a transcript draws and copies a line as, the sender's rather
+ * than the developer's: a chat notice while the window offers Chat, and a
+ * message another agent sent with `message_agent`, which holds no place in
+ * any chat, whatever it offers; nothing for any other line.
+ */
+export function drawnNoticeOf(
+  message: CodingAgentMessage,
+  chatOn: boolean,
+): ChatNoticeMetadata | undefined {
+  const notice = chatNoticeOf(message);
+  return notice !== undefined && (chatOn || notice.chat_seq === undefined) ? notice : undefined;
+}
+
+/**
  * A part its page carried cut, as the tab draws it: a thought with no words
  * of its own, or a call with no answer of its own, each with the ends it was
  * cut to; a part that is neither draws as it reads.

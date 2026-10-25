@@ -120,8 +120,28 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     onInboxChanged: (inbox) => state.update({ inbox }),
     chatOn: () =>
       experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHAT),
+    channelsOn: () =>
+      experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHANNELS),
     report,
   });
+  // Chat or Channels turning moves what the badge counts with no answer moving, so it counts again.
+  yield* Effect.forkScoped(
+    Stream.runForEach(
+      Stream.map(state.changes, (document) => {
+        const experiments = document.settings?.experiments ?? NO_EXPERIMENTS;
+        return {
+          chat: experimentOn(experiments, EXPERIMENT.CHAT),
+          channels: experimentOn(experiments, EXPERIMENT.CHANNELS),
+        };
+      }).pipe(
+        Stream.changesWith(
+          (one, other) => one.chat === other.chat && one.channels === other.channels,
+        ),
+        Stream.drop(1),
+      ),
+      () => Effect.sync(() => notices.recount()),
+    ),
+  );
   // A note that throws is reported rather than left to end the fiber, which would never resume.
   yield* Effect.forkScoped(
     Stream.runForEach(

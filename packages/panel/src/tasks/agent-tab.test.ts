@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { chatNoticeReplyLine } from "@luke/features/chat-wire";
 import {
+  agentMessageReplyLine,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSubagentStanding,
@@ -1202,6 +1203,27 @@ test("with Chat off, a line a chat notice wrote is drawn as the plain line it is
   const { container } = noticeDrawn(true, false);
   assert.equal(container.querySelector("[data-chat-notice]"), null);
   assert.match(container.textContent ?? "", /Are you changing memberships\?/u);
+});
+
+test("with Chat off, a message another agent sent still draws as its sender's bubble, its words alone without who sent it or how to answer", () => {
+  const { container } = noticeDrawn(false, false, {
+    id: "message",
+    role: MESSAGE_ROLE.USER,
+    parts: [
+      {
+        type: "text",
+        text: [
+          "Message · [@Invite emails](https://tryluke.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:",
+          "Rebase before you push.",
+          agentMessageReplyLine("7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f"),
+        ].join("\n\n"),
+      },
+    ],
+    metadata: { author: "agent", channel: "chat", from: "Invite emails" },
+  });
+  const bubble = container.querySelector("[data-chat-notice]");
+  assert.ok(bubble, "the message draws as its sender's bubble");
+  assert.equal(bubble.querySelector(".chat-notice-words")?.textContent, "Rebase before you push.");
 });
 
 test("a notice of a message holding no Markdown, a link alone, keeps the notice's own words in its bubble", () => {

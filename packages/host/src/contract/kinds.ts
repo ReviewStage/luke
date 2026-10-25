@@ -92,6 +92,16 @@ export const AUTOMATION_ACT_KIND = {
   AUTOMATIONS_FOLLOW: "automations.follow",
 } as const;
 
+/** The Channels view's asks: a workspace's channels listed, made, renamed, archived, and looked at, and one's threads read. */
+export const CHANNEL_ACT_KIND = {
+  CHANNELS_LIST: "channels.list",
+  CHANNELS_CREATE: "channels.create",
+  CHANNELS_RENAME: "channels.rename",
+  CHANNELS_ARCHIVE: "channels.archive",
+  CHANNELS_LOOK: "channels.look",
+  CHANNELS_THREADS: "channels.threads",
+} as const;
+
 /**
  * A task's coding agents, the core of what the Tasks tab asks of them: the
  * models, the default, the lists, an agent started, read, messaged, changed,
@@ -594,6 +604,7 @@ export const PORT_ACT_KIND = {
   ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
+  ...CHANNEL_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
   ...INSTALLED_SKILL_ACT_KIND,
   ...INTEGRATION_ACT_KIND,

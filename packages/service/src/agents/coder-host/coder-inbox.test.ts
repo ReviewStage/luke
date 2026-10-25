@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { archiveChannel, createChannel } from "@luke/database/models/channel-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { inboxItem } from "@luke/database/schemas/inbox";
@@ -24,15 +25,17 @@ import {
   INBOX_STATUS,
   type InboxItem,
 } from "@luke/features/inbox-wire";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { paddedTo, webmBytes } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Duration, Effect, Option } from "effect";
+import { DateTime, Duration, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../../core.js";
 import {
   acknowledgeInboxItem,
   answerInboxAsk,
+  channelThreads,
   closeInboxItemAsMember,
   type InboxAgent,
   postInboxMessage,
@@ -40,7 +43,13 @@ import {
   taskInboxItems,
 } from "../../inbox/inbox-store.js";
 import { CODER } from "./bounds.js";
-import { INBOX_REFUSAL, postToInbox, readOwnInbox, withdrawAsk } from "./inbox.js";
+import {
+  INBOX_REFUSAL,
+  postToInbox,
+  readOwnInbox,
+  type ThreadPoster,
+  withdrawAsk,
+} from "./inbox.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
@@ -80,7 +89,8 @@ const openAgent = Effect.gen(function* () {
     userId,
     taskId: task.id,
     agentId: started.value.agent.id,
-  } satisfies InboxAgent;
+    organizationId: started.value.agent.organizationId,
+  } satisfies ThreadPoster;
   return { ...agent, workspaceId: task.workspaceId };
 });
 
@@ -137,7 +147,7 @@ function sandboxWith(files: Readonly<Record<string, Uint8Array>>): InboxSandboxD
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
 /** A post run as the tool runs one, over the sandbox given. */
-const post = (agent: InboxAgent, value: WireBoundaryInput, sandbox = noSandbox) =>
+const post = (agent: ThreadPoster, value: WireBoundaryInput, sandbox = noSandbox) =>
   postToInbox(agent, input(value), sandbox);
 
 /** The one thread of the agent's task, as the task's inbox reads it. */
@@ -233,6 +243,52 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           fields: [{ type: INBOX_FIELD.NUMBER, label: "Workers" }],
           status: INBOX_ASK_STATUS.OPEN,
         });
+      }),
+  );
+
+  it.effect(
+    "a post goes to the open channel it names, # or not, addressed to the member its link names; an unknown or archived channel, or a link naming no member of the workspace, is refused and posts nothing",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const now = yield* DateTime.nowAsDate;
+        const { organizationId, userId } = agent;
+        const made = (name: string) =>
+          Effect.map(
+            createChannel(
+              userId,
+              organizationId,
+              { name, purpose: "Its work.", project: false },
+              now,
+            ),
+            Result.getOrThrow,
+          );
+        const app = yield* made("app");
+        const old = yield* made("old");
+        Result.getOrThrow(yield* archiveChannel(userId, organizationId, old.id, now));
+        const person = (id: string) =>
+          `[@Ada](${encodeMention({ kind: MENTION_KIND.PERSON, userId: id }, { workspace: "acme", repository: null })})`;
+        const posted = yield* post(agent, { ...QUEUE, channel: "#app", to: person(userId) });
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+        assert.deepEqual(
+          (yield* channelThreads(userId, app.id)).map((thread) => thread.key),
+          [QUEUE.key],
+        );
+
+        const agentLink = `[@Agent](${encodeMention({ kind: MENTION_KIND.AGENT, agentId: agent.agentId }, { workspace: "acme", repository: null })})`;
+        for (const [place, reason] of [
+          [{ channel: "release" }, INBOX_REFUSAL.UNKNOWN_CHANNEL],
+          [{ channel: "old" }, INBOX_REFUSAL.ARCHIVED_CHANNEL],
+          [{ to: person(`user-${randomUUID()}`) }, INBOX_REFUSAL.NO_ADDRESSEE],
+          [{ to: agentLink }, INBOX_REFUSAL.NO_MEMBER],
+        ] as const) {
+          assert.deepEqual(
+            yield* post(agent, { ...QUEUE, key: "elsewhere", ...place }),
+            { status: ACTION_RESULT_STATUS.REJECTED, reason },
+            JSON.stringify(place),
+          );
+        }
+        assert.equal((yield* onlyItem(agent)).key, QUEUE.key);
       }),
   );
 

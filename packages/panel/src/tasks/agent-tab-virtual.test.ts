@@ -162,6 +162,7 @@ function layOut(box: HTMLElement): { readonly writes: number[] } {
 /** Scrolls the log to `top` as a reader would, so the log and its rows hear it. */
 async function scrollTo(box: HTMLElement, top: number): Promise<void> {
   await act(async () => {
+    box.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: top - box.scrollTop }));
     box.scrollTop = top;
     box.dispatchEvent(new Event("scroll"));
     await settled();

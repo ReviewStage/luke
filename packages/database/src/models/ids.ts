@@ -82,8 +82,3 @@ export function chatNoticeKey(messageId: string, revision: number, memberId: str
 export function chatAttachmentId(clientKey: string, path: string): string {
   return brainHostId([ID_KIND.CHAT_ATTACHMENT, clientKey, path]);
 }
-
-/** The id a picture a post hands on by its attachment id is kept under: one per post and attachment, so a post sent again keeps the copy it kept, and never one a path's picture is kept under. */
-export function chatForwardedAttachmentId(clientKey: string, attachmentId: string): string {
-  return brainHostId([ID_KIND.CHAT_FORWARDED_ATTACHMENT, clientKey, attachmentId]);
-}

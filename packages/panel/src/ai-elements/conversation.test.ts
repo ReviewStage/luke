@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { askScroll } from "@luke/ui/scroll-asked";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
@@ -55,12 +56,20 @@ function layOut(box: HTMLElement, layout: StandInBox): void {
   });
 }
 
-/** Scrolls `box` to `top` as a reader or the browser would, so the log hears it. */
+/** Scrolls `box` to `top` as the browser would of its own accord, so the log hears it. */
 function scroll(box: HTMLElement, top: number): void {
   box.scrollTop = top;
   act(() => {
     box.dispatchEvent(new Event("scroll", { bubbles: true }));
   });
+}
+
+/** Scrolls `box` to `top` as the reader's wheel would. */
+function readerScroll(box: HTMLElement, top: number): void {
+  act(() => {
+    box.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: top - box.scrollTop }));
+  });
+  scroll(box, top);
 }
 
 /** Draws a log of `lines` in `root`, asking for older lines through `onNearTop` where one is handed. */
@@ -114,7 +123,7 @@ test("a line that grows while the log follows is scrolled to when the window rep
 test("a reader scrolled up to an earlier line is left there when a new line comes in", () => {
   const { root, box, layout } = mount(["one", "two"]);
   scroll(box, 200);
-  scroll(box, 0);
+  readerScroll(box, 0);
   layout.writes.splice(0);
   layout.height = 400;
   draw(root, ["one", "two", "three"]);
@@ -171,6 +180,84 @@ test("a reader's wheel just before a scroll up takes the log off its newest line
   assert.deepEqual(layout.writes, [], "the reader's place stands");
 });
 
+/** A scroll heard `after` milliseconds past the moment it is sent, as one heard long after the reader's last input is. */
+function lateScroll(box: HTMLElement, top: number, after: number): void {
+  box.scrollTop = top;
+  const event = new Event("scroll", { bubbles: true });
+  Object.defineProperty(event, "timeStamp", { value: event.timeStamp + after });
+  act(() => {
+    box.dispatchEvent(event);
+  });
+}
+
+test.each([
+  {
+    how: "a key, Page Up or Home",
+    input: () => new KeyboardEvent("keydown", { bubbles: true, key: "PageUp" }),
+    after: 0,
+  },
+  {
+    how: "a scroll bar's thumb held a while before it is dragged",
+    input: () => new Event("pointerdown", { bubbles: true }),
+    after: 2000,
+  },
+])("a reader's scroll up by $how takes the log off its newest line", ({ input, after }) => {
+  const { root, box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  act(() => {
+    box.dispatchEvent(input());
+  });
+  lateScroll(box, 50, after);
+  layout.writes.splice(0);
+  layout.height = 400;
+  draw(root, ["one", "two", "three"]);
+  assert.deepEqual(layout.writes, [], "the reader's place stands");
+});
+
+test.each([
+  {
+    how: "a press elsewhere, on a rail's row",
+    input: (_box: HTMLElement) => {
+      const row = document.body.appendChild(document.createElement("div"));
+      row.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    },
+  },
+  {
+    how: "a press on the log released over another window",
+    input: (box: HTMLElement) => {
+      box.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      window.dispatchEvent(new Event("blur"));
+    },
+  },
+])("a layout's scroll up after $how keeps the log on its newest line", ({ input }) => {
+  const { box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  act(() => input(box));
+  layout.writes.splice(0);
+  lateScroll(box, 0, 2000);
+  assert.deepEqual(layout.writes, [0, 300], "the log is taken back to its end");
+});
+
+test("a log on its newest line stays on it when rows hidden and shown again in one frame leave its scroll at its first line", () => {
+  const { box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  layout.writes.splice(0);
+  // The hidden rows clamped the scroll to the top, and stand again as tall as they were.
+  scroll(box, 0);
+  assert.deepEqual(layout.writes, [0, 300], "the log is taken back to its end");
+});
+
+test("a scroll up a script asks for takes the log off its newest line", () => {
+  const { root, box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  askScroll(box);
+  scroll(box, 50);
+  layout.writes.splice(0);
+  layout.height = 400;
+  draw(root, ["one", "two", "three"]);
+  assert.deepEqual(layout.writes, [], "the line the script scrolled to stands");
+});
+
 /** Stands in for each line's place in the log: 50px a line, one under another. */
 function linesLaidOut(): void {
   vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (
@@ -188,7 +275,7 @@ test("lines put before the first keep the line the reader was on where it stood,
   const { root, box, layout } = mount(["c", "d", "e", "f"], older);
   scroll(box, 120);
   asked.splice(0);
-  scroll(box, 30);
+  readerScroll(box, 30);
   assert.deepEqual(asked, ["older"], "a reader scrolling up near the top asks for older lines");
 
   layout.writes.splice(0);

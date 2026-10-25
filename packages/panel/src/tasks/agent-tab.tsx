@@ -138,6 +138,7 @@ import {
   continuedByTitles,
   delegates,
   dockedTodos,
+  drawnNoticeOf,
   type EndLineParts,
   endLineOffersContinue,
   endLineParts,
@@ -1349,9 +1350,9 @@ export function AgentMessage({
       />
     );
   }
-  // A line a chat notice wrote is the sender's message, never the developer's bubble, while the window offers Chat.
-  if (delegation?.chatOn === true && chatNoticeOf(message) !== undefined) {
-    return <NoticeRow message={message} doors={delegation.chat} />;
+  // A line a chat notice wrote is the sender's message, never the developer's bubble, while the window offers Chat, and another agent's message always.
+  if (drawnNoticeOf(message, delegation?.chatOn === true) !== undefined) {
+    return <NoticeRow message={message} doors={delegation?.chat} />;
   }
   const named = sender === undefined ? null : <MessageSender actor={sender} />;
   if (message.role === MESSAGE_ROLE.USER) {

@@ -16,6 +16,16 @@
       "minLength": 1,
       "maxLength": 8000
     },
+    "channel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 81
+    },
+    "to": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
     "ask": {
       "anyOf": [
         {

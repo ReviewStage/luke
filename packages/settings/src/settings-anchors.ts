@@ -60,4 +60,5 @@ export const EXPERIMENT_ANCHOR = {
   [EXPERIMENT.OPERATOR]: "experiment-operator",
   [EXPERIMENT.MEMORY]: "experiment-memory",
   [EXPERIMENT.LOCAL_AGENTS]: "experiment-local-agents",
+  [EXPERIMENT.CHANNELS]: "experiment-channels",
 } as const satisfies Record<Experiment, string>;

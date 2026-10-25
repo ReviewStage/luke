@@ -39,7 +39,7 @@ import { AGENT_TOOL } from "../agent-runtime/tools.js";
  */
 
 /** Why a forward handed on nothing. */
-export const FORWARDED_IMAGE_REFUSAL = {
+const FORWARDED_IMAGE_REFUSAL = {
   /** The id names no picture the forwarder may hand on. */
   UNREACHED: "unreached",
   /** The id names a video the forwarder recorded, which no message carries as a file. */

@@ -12,7 +12,11 @@
 
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "./board-vocabulary.js";
 import { CHAT_TOOL } from "./chat-wire.js";
-import { CODING_AGENT_DELEGATE_TOOL, CODING_AGENT_TODOS_TOOL } from "./coding-agent-wire.js";
+import {
+  AGENT_MESSAGE_TOOL,
+  CODING_AGENT_DELEGATE_TOOL,
+  CODING_AGENT_TODOS_TOOL,
+} from "./coding-agent-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
 import { PLAN_COMMENT_TOOL } from "./plan-comment-wire.js";
@@ -31,6 +35,8 @@ export const AGENT_TOOL = {
   // The tools about the workspace's coding agents, named for any agent offered them.
   LIST_AGENTS: "list_agents",
   READ_AGENT: "read_agent",
+  // One agent's message to another of its workspace, shown in the two agents' transcripts alone.
+  MESSAGE_AGENT: AGENT_MESSAGE_TOOL,
   START_AGENT: "start_agent",
   STOP_AGENT: "stop_agent",
   UPDATE_AGENT: "update_agent",
@@ -71,17 +77,12 @@ export const AGENT_TOOL = {
   DELEGATE: CODING_AGENT_DELEGATE_TOOL,
   EDIT_PLAN: "edit_plan",
   WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
-  POST_TO_INBOX: INBOX_TOOL.POST,
+  POST_THREAD: INBOX_TOOL.POST,
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
-  READ_INBOX: INBOX_TOOL.READ,
+  READ_THREADS: INBOX_TOOL.READ,
   // Every open inbox ask to an operator's member, across all their agents, the operator's alone.
   LIST_OPEN_ASKS: "list_open_asks",
   OPEN_PULL_REQUEST: "open_pull_request",
-  // The workspace's chat, every coding agent's.
-  POST_CHAT: CHAT_TOOL.POST,
-  READ_CHAT: CHAT_TOOL.READ,
-  RESOLVE_ASK: CHAT_TOOL.RESOLVE,
-  EDIT_CHANNEL: CHAT_TOOL.EDIT_CHANNEL,
   // eve's own, which loads one of the skills a session is offered.
   LOAD_SKILL: "load_skill",
   // An interactive page shown in the plan's side panel, and a read of one by its id.
@@ -129,8 +130,10 @@ export const CONNECTION_TOOL = {
  * names: eve's provider-run web reads, which coding agents ran before they
  * had the public reads, the planning model's four tools about the
  * task's coding agents, since named as `AGENT_TOOL`'s agent tools, the
- * four about the workspace's own issues, gone with them, and
- * `message_agent`, since folded into `post_chat`.
+ * four about the workspace's own issues, gone with them, the inbox's
+ * post and read, since named for the channels a thread is posted to, and
+ * the workspace's chat, whose threads moved to channels and whose direct
+ * messages moved to `message_agent`.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -152,8 +155,14 @@ export const RETIRED_TOOL = {
   READ_ISSUE: "read_issue",
   CREATE_ISSUE: "create_issue",
   UPDATE_ISSUE: "update_issue",
-  // Folded into `post_chat`, whose `to` names an agent's mention link for a direct message.
-  MESSAGE_AGENT: "message_agent",
+  // Renamed `post_thread` and `read_threads`, since a thread is posted to a channel.
+  POST_TO_INBOX: "post_to_inbox",
+  READ_INBOX: "read_inbox",
+  // The workspace's chat, retired for channels' threads and `message_agent`.
+  POST_CHAT: CHAT_TOOL.POST,
+  READ_CHAT: CHAT_TOOL.READ,
+  RESOLVE_ASK: CHAT_TOOL.RESOLVE,
+  EDIT_CHANNEL: CHAT_TOOL.EDIT_CHANNEL,
 } as const;
 
 /**
@@ -181,7 +190,7 @@ export const CLAUDE_CODE_TOOL = {
   SCHEDULE_WAKEUP: "ScheduleWakeup",
 } as const;
 
-/** What Claude Code puts before a tool of Luke's MCP server (`mcpServers.luke`): `mcp__luke__read_inbox` is Luke's `read_inbox`. */
+/** What Claude Code puts before a tool of Luke's MCP server (`mcpServers.luke`): `mcp__luke__read_threads` is Luke's `read_threads`. */
 export const CLAUDE_CODE_LUKE_TOOL_PREFIX = "mcp__luke__";
 
 /**

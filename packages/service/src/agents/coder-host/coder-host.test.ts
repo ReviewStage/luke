@@ -5,17 +5,9 @@ import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { askRecord } from "@luke/database/models/asks";
 import { readBoard } from "@luke/database/models/board-store";
-import {
-  agentWorkspace,
-  ensureGeneral,
-  ensureMember,
-  ensureTaskChannel,
-  postMessage,
-  roster,
-} from "@luke/database/models/chat-store";
+import { agentWorkspace } from "@luke/database/models/chat-store";
 import { fillChildTitle } from "@luke/database/models/child-titles";
 import {
-  archiveCodingAgent,
   type CodingAgentBriefText,
   createCodingAgent,
   delegationsOf,
@@ -48,8 +40,6 @@ import {
   OPERATOR_NOTICE_KIND,
 } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
-import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
-import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_ATTACHMENT_TYPE,
@@ -58,15 +48,8 @@ import {
   type CodingAgentMessage,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import {
-  INBOX_ASK,
-  INBOX_ASK_STATUS,
-  INBOX_CURSOR_START,
-  INBOX_STATUS,
-  INBOX_TOOL,
-} from "@luke/features/inbox-wire";
+import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_STATUS, INBOX_TOOL } from "@luke/features/inbox-wire";
 import { agentTranscriptLiveRowsSchema } from "@luke/features/live-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
@@ -130,11 +113,9 @@ import { runRemember } from "../memory-tools.js";
 import { DESK_LEAD } from "../operator-desk.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
-import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
 import { contextWindowOf } from "./context.js";
 import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
-import { accountInboxPast } from "./inbox-page.js";
 import type { ProviderKeys } from "./model.js";
 import { cutMessage } from "./part-cut.js";
 import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
@@ -344,10 +325,6 @@ const openOperator = (host: CoderHost, userId: string, workspaceId: string) =>
 /** Memory turned on for the account, as Settings › Experimental turns it on. */
 const memoryOn = (userId: string) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
-
-/** Chat turned on for the account, as Settings › Experimental turns it on. */
-const chatOn = (userId: string) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
 
 /** A GitHub where the developer reaches the agent's repository through one installation, granting the App what the test says; the fixture's own grant when unsaid. */
 const reachingRelay = (permissions?: Readonly<Record<string, string>>) =>
@@ -2120,169 +2097,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
           assert.ok(asked.includes("Invite a teammate by email."), asked);
           assert.ok(!asked.includes("Understood."), asked);
-        }),
-    );
-
-    it.effect(
-      "a planless agent reaches its chat through the host, its own channel its workspace's general one",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { userId, agent, admitted } = yield* openAgent(host);
-          yield* chatOn(userId);
-          const db = yield* Database;
-          yield* db.update(codingAgent).set({ taskId: null }).where(eq(codingAgent.id, agent.id));
-          const read = yield* host
-            .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
-            .pipe(Effect.provide(reachingRelay()));
-          assert.ok("channels" in read, JSON.stringify(read));
-          assert.deepEqual(
-            read.channels.map((channel) => channel.name),
-            ["#general"],
-          );
-        }),
-    );
-
-    it.effect(
-      "an agent whose starter never turned Chat on still has its chat: a read answers, since the chat is how agents message each other",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { admitted } = yield* openAgent(host);
-          const read = yield* host
-            .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
-            .pipe(Effect.provide(reachingRelay()));
-          assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
-        }),
-    );
-
-    it.effect(
-      "a post from an archived agent is refused without stamping it as having left, so once brought back it posts again",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const post = (admitted: Parameters<CoderHost["chat"]>[0]) =>
-            host
-              .chat(admitted, {
-                tool: CHAT_TOOL.POST,
-                input: unparsedWire({ text: "Still here." }),
-                clientKey: "call-left",
-                postsInTurn: 0,
-                sandbox: () => Promise.reject(new Error("the sandbox was opened")),
-              })
-              .pipe(Effect.provide(reachingRelay()));
-          const stamped = (userId: string, agentId: string) =>
-            Effect.gen(function* () {
-              const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agentId));
-              const members = yield* roster(userId, workspace);
-              return members.some((member) => member.agentId === agentId && member.leftAt !== null);
-            });
-          const refused = { status: ACTION_RESULT_STATUS.REJECTED, reason: CHAT_TOOL_REFUSAL.LEFT };
-
-          const archived = yield* openAgent(host);
-          yield* chatOn(archived.userId);
-          yield* archiveCodingAgent(archived.userId, archived.agent.id, true);
-          assert.deepEqual(yield* post(archived.admitted), refused);
-          assert.equal(yield* stamped(archived.userId, archived.agent.id), false);
-          yield* archiveCodingAgent(archived.userId, archived.agent.id, false);
-          assert.notDeepEqual(yield* post(archived.admitted), refused, "brought back, it posts");
-        }),
-    );
-
-    it.effect(
-      "an agent's post mentioning a person tells them through their account's read, which carries who and why",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { userId, agent, admitted } = yield* openAgent(host);
-          yield* chatOn(userId);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
-          yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.HUMAN, userId });
-          const posted = yield* host
-            .chat(admitted, {
-              tool: CHAT_TOOL.POST,
-              input: unparsedWire({
-                text: `${mentionMarkdown({ kind: MENTION_KIND.PERSON, userId }, "Test User", { workspace: "acme", repository: null })} the invite table is yours.`,
-              }),
-              clientKey: "call-mention",
-              postsInTurn: 0,
-              sandbox: () => Promise.reject(new Error("the sandbox was opened")),
-            })
-            .pipe(Effect.provide(reachingRelay()));
-          assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
-          const read = yield* accountInboxPast(userId, INBOX_CURSOR_START);
-          assert.deepEqual(
-            read.chat?.map(({ reason, workspaceId }) => ({ reason, workspaceId })),
-            [{ reason: ACCOUNT_CHAT_REASON.MENTION, workspaceId: workspace }],
-          );
-        }),
-    );
-
-    it.effect(
-      "a chat post lands where the deployment names no secret or no origin for eve, the members it addresses left to read it next",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { userId, admitted } = yield* openAgent(host);
-          yield* chatOn(userId);
-          const posted = yield* host
-            .chat(admitted, {
-              tool: CHAT_TOOL.POST,
-              input: unparsedWire({ text: "Taking the invite table." }),
-              clientKey: "call-1",
-              postsInTurn: 0,
-              sandbox: () => Promise.reject(new Error("the sandbox was opened")),
-            })
-            .pipe(Effect.provide(reachingRelay()));
-          assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
-          const read = yield* host
-            .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
-            .pipe(Effect.provide(reachingRelay()));
-          assert.ok("channels" in read);
-          assert.deepEqual(
-            read.channels.map((channel) => channel.name),
-            ["#teammate-invitations"],
-          );
-        }),
-    );
-
-    it.effect(
-      "a turn opens with no chat for an agent whose starter never turned Chat on, and with what it has not read once it is on",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { userId, agent, admitted } = yield* openAgent(host);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
-          const person = Option.getOrThrow(
-            yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
-          );
-          // The agent's own channel, the one its chat is scoped to.
-          const home = Option.getOrThrow(
-            agent.taskId === null
-              ? yield* ensureGeneral(userId, workspace)
-              : yield* ensureTaskChannel(userId, agent.taskId),
-          );
-          // The agent joins before the post, as a member joins the chat at its head.
-          yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.AGENT, agentId: agent.id });
-          yield* postMessage(userId, workspace, {
-            authorMemberId: person.id,
-            to: { channelId: home.id },
-            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "The invite table is mine." }],
-            clientKey: "post-1",
-          });
-          const typed = (handed: TurnHanded) =>
-            host.turnMessage(admitted, { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined }, handed);
-          const off = yield* typed({});
-          assert.ok(!off.text?.includes(CHAT_DIGEST_HEADING), off.text ?? "");
-          yield* chatOn(userId);
-          const on = yield* typed(off.handed);
-          const text = on.text ?? "";
-          const digest = text.slice(text.indexOf(CHAT_DIGEST_HEADING));
-          assert.ok(digest.startsWith(CHAT_DIGEST_HEADING), text);
-          assert.ok(digest.endsWith("The invite table is mine."), text);
-          // The same unread chat is not handed twice: the history already holds it.
-          const again = yield* typed(on.handed);
-          assert.ok(!again.text?.includes(CHAT_DIGEST_HEADING), again.text ?? "");
         }),
     );
 

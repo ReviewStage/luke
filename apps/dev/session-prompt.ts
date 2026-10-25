@@ -41,15 +41,7 @@ export const planNotesTaken = defineState<NotesTaken>(
 );
 
 /**
- * How many chat posts the turn under way has made, in eve's durable session
- * state, counted as the plan's notes are and held to the chat's bound
- * (`packages/service/src/agents/coder-host/chat.ts`): the tool reads it before posting and
- * counts the post once it lands.
- */
-export const chatPostsMade = defineState<NotesTaken>("luke.coder.chat-posts", () => NO_NOTES_TAKEN);
-
-/**
- * What the session's turns have handed the agent of its task and its chat
+ * What the session's turns have handed the agent of its task and its desk
  * in their own messages (`TurnHanded`), in eve's durable session state:
  * read and written by the turn's message as each turn opens
  * (`instructions/turn-message.ts`), so a turn hands only what changed.
