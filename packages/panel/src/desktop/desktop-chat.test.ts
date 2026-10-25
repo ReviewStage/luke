@@ -303,10 +303,7 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
 test("a press on a channel shows its messages in the order posted, a thread folded under its root until a press opens it", () => {
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
-  assert.equal(
-    seen(page.querySelector(".chat-stream .luke-pane-bar-lead")),
-    "▣ teammate-invitations",
-  );
+  assert.equal(seen(page.querySelector(".chat-stream .luke-toolbar")), "▣ teammate-invitations");
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
   assert.deepEqual(stream(page), [
     "Invite emails",
@@ -735,6 +732,47 @@ test("a channel's composer offers the members a mention there tells under the ap
     last?.querySelector(".chat-words [data-mention-ref]"),
     "the sent message draws the agent as its chip",
   );
+});
+
+test("an open reply box under a message continuing its author's run keeps its words and the caret as the first reply lands in the thread above, which names the message", async () => {
+  const page = mount();
+  act(() => railRow(page, "billing-export").click());
+  const box = boxNamed(page, "Message #billing-export");
+  for (const words of ["First post", "Second post"]) {
+    typeInComposer(box, words);
+    pressInComposer(box, "Enter");
+    await settle();
+  }
+  const [first, second] = [...page.querySelectorAll<HTMLElement>(".chat-message")].slice(-2);
+  assert.equal(second?.dataset.continued, "true");
+  act(() => second?.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')?.click());
+  const reply = boxNamed(second ?? page, "Reply in thread");
+  typeInComposer(reply, "Draft words");
+  const field = composerEditor(reply);
+  act(() => field.focus());
+
+  act(() =>
+    restage((chat) => {
+      const root = chat.answer.messages.find(({ seq }) => String(seq) === first?.dataset.seq);
+      assert.ok(root, "the first post is in the chat");
+      const seq = Math.max(...chat.answer.messages.map((message) => message.seq)) + 1;
+      const other = chat.answer.messages.find(({ authorId }) => authorId !== root.authorId);
+      const answer: (typeof chat.answer.messages)[number] = {
+        ...root,
+        id: crypto.randomUUID(),
+        seq,
+        touchedSeq: seq,
+        parentId: root.id,
+        authorId: other?.authorId ?? root.authorId,
+        postedAt: root.postedAt + 1,
+      };
+      return { ...chat, answer: { ...chat.answer, messages: [...chat.answer.messages, answer] } };
+    }),
+  );
+
+  assert.equal(second?.dataset.continued, "false", "the message is named now");
+  assert.ok(document.activeElement === field, "the box was never drawn anew");
+  assert.equal(boxWords(boxNamed(second ?? page, "Reply in thread")), "Draft words");
 });
 
 test("before the workspace is known, an @ offers no member, since a member is written as their link alone", () => {
@@ -1230,7 +1268,7 @@ test("a direct message between two others reads as theirs, named by both, with n
   assert.equal(pair?.querySelectorAll(".inbox-row-mark .actor-stack .actor-mark").length, 2);
   act(() => railRow(page, "Add teammate invitations ↔ Invite emails").click());
   assert.equal(
-    page.querySelector(".chat-stream .luke-pane-bar-title")?.textContent,
+    page.querySelector(".chat-stream .luke-toolbar-title")?.textContent,
     "Add teammate invitations ↔ Invite emails",
   );
   assert.equal(page.querySelector(".chat-composer"), null);
@@ -1587,16 +1625,16 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   assert.equal(openDialog(), null);
   act(() => railRow(page, "release-train").click());
   assert.equal(
-    page.querySelector(".chat-stream .luke-pane-bar-title")?.textContent,
+    page.querySelector(".chat-stream .luke-toolbar-title")?.textContent,
     "#release-train",
   );
   assert.match(
-    page.querySelector(".chat-stream .luke-pane-bar")?.textContent ?? "",
+    page.querySelector(".chat-stream .luke-toolbar")?.textContent ?? "",
     /What ships Friday/u,
   );
 
   const actions = page.querySelector<HTMLButtonElement>(
-    '.chat-stream .luke-pane-bar button[aria-label="#release-train actions"]',
+    '.chat-stream .luke-toolbar button[aria-label="#release-train actions"]',
   );
   assert.ok(actions, "a topic's head offers its actions");
   act(() => actions.click());
@@ -1668,7 +1706,7 @@ function pickViewOption(page: HTMLElement, label: string): void {
 /** The items of the menu a channel's head ends on, as its words, the disabled marked `(off)`. */
 function channelMenu(page: HTMLElement): string[] {
   const actions = page.querySelector<HTMLButtonElement>(
-    '.chat-stream .luke-pane-bar button[aria-label$=" actions"]',
+    '.chat-stream .luke-toolbar button[aria-label$=" actions"]',
   );
   assert.ok(actions, "the channel's head ends on its menu");
   act(() => actions.click());
@@ -1767,10 +1805,7 @@ test("a For you row names a task's channel by its glyph and name, and a press on
   const link = where?.querySelector<HTMLButtonElement>("button");
   assert.equal(seen(link), "▣ teammate-invitations");
   act(() => link?.click());
-  assert.equal(
-    seen(page.querySelector(".chat-stream .luke-pane-bar-lead")),
-    "▣ teammate-invitations",
-  );
+  assert.equal(seen(page.querySelector(".chat-stream .luke-toolbar")), "▣ teammate-invitations");
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
 });
 

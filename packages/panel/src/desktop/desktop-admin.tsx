@@ -37,6 +37,7 @@ import {
   ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
+  SidebarRule,
   Stack,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -181,7 +182,7 @@ export function DesktopAdmin({
                   </li>
                 ))}
               </Stack>
-              <hr className="sidebar-rule" />
+              <SidebarRule />
               <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
                 <li>
                   <OpenInBrowserRow />

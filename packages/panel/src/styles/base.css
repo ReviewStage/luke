@@ -340,41 +340,6 @@ body,
   height: 100%;
 }
 
-/* A failure's mark at a row's or a tab's end: the alert in the danger
-   colour, a size under the glyph it follows, so it reads as a note on the
-   row rather than a second glyph. */
-.failed-mark {
-  display: inline-flex;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-danger);
-}
-
-.failed-mark > svg {
-  width: 100%;
-  height: 100%;
-}
-
-/* A draft waiting in a box (`draft-mark.tsx`): a pencil in the muted ink, at
-   the failed mark's size. */
-.draft-mark {
-  display: inline-flex;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.draft-mark > svg {
-  width: 100%;
-  height: 100%;
-}
-
 /* Session primitives ----------------------------------------------------- */
 
 /* Evidence capture screenshots a fixed moment after the renderer reports ready,

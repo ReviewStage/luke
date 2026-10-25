@@ -23,6 +23,7 @@ import {
   KeepFocus,
   OneLine,
   ReturnIcon,
+  SidebarFoot,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -175,7 +176,7 @@ export function CallCard({
     <KeepFocus
       as={KEEP_FOCUS_ELEMENT.SECTION}
       scope={inWindow ? KEEP_FOCUS.CONTROLS : KEEP_FOCUS.NONE}
-      className="call-card"
+      className="call-card flex flex-col gap-luke-4 rounded-luke-14 border border-border-strong bg-popover px-luke-12 py-luke-8 text-label text-foreground shadow-menu data-[surface=sidebar]:mb-luke-8"
       aria-label="Call"
       data-surface={surface}
       data-leaving={leaving}
@@ -189,8 +190,12 @@ export function CallCard({
           onSetVideo={video.onSetVideo}
         />
       ) : null}
-      <div className="call-card-head">
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="call-card-title">
+      <div className="call-card-head flex min-w-0 items-center gap-tight-gap">
+        <Text
+          variant={TEXT_VARIANT.CAPTION}
+          tone={TEXT_TONE.MUTED}
+          className="call-card-title m-0 min-w-0 flex-1"
+        >
           <OneLine>{card.taskName}</OneLine>
         </Text>
         {video?.status === AVATAR_STATUS.OFF ? (
@@ -199,7 +204,7 @@ export function CallCard({
         {/* The floating window is too small to hold a tooltip, so there the
             system's own hint names the task the button opens. */}
         {inWindow ? (
-          <span className="call-card-return" title={returnLabel(card.taskName)}>
+          <span className="call-card-return flex" title={returnLabel(card.taskName)}>
             {returnButton}
           </span>
         ) : (
@@ -290,9 +295,9 @@ export function ColumnFoot({
   children?: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="sidebar-foot">
+    <SidebarFoot>
       <StandingCallCardDock docked={docked} surface={CALL_CARD_SURFACE.SIDEBAR} />
       {children}
-    </div>
+    </SidebarFoot>
   );
 }

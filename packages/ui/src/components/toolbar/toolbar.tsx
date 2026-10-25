@@ -22,9 +22,19 @@
  *   `title` last as words that are no press, said to be the page the
  *   reader stands on. A place that wears its glyph is the trail's folding
  *   way back, whose words fold away as the bar's acts do.
+ * - `detail` follows the title on its last baseline: quiet words saying
+ *   what the page is beside its name (a channel's purpose), on one line
+ *   that gives way, cut short, before the title does.
  * - `tag` follows the title on its last baseline: a capsule naming the
  *   page's state (an experiment), or a switch of its view.
  * - `actions` end the bar, at the control gap.
+ *
+ * A bar whose heading is crumbs beside a way back and several actions
+ * (`wrapHeading`, an Inbox item's) answers its own width: narrower than all
+ * of them need, the heading takes a row of its own under the lead and the
+ * actions, the whole bar wide, rather than squeezing each crumb to a glyph
+ * and a letter; narrower still, the lead's labelled controls draw their
+ * glyphs alone, named still.
  *
  * A document's page draws the bar with no title of its own, since its header
  * names it in the page (`PageHeader`), and hands it `pickUp`: the header's
@@ -106,6 +116,8 @@ const TRAIL_LABEL = "Path";
 const LEAD = "luke-toolbar-lead flex min-w-0 flex-initial items-center gap-control-gap";
 const ACTIONS = "luke-toolbar-actions relative flex flex-none items-center gap-control-gap";
 const TAG = "luke-toolbar-tag flex-none";
+/** Quiet words after the title, in the body's type, on one line cut short, fading, before the title is. */
+const DETAIL = "luke-toolbar-detail min-w-0 flex-[0_1000_auto] text-body text-muted-foreground";
 /** The title, in the dialog's type with a title's tracking; its room reaches 6px left of the words, so its own hover fill and field ring, which start there, are not clipped. */
 const TITLE =
   "luke-toolbar-title m-0 -ml-luke-6 pl-luke-6 text-dialog-size font-dialog tracking-title";
@@ -136,6 +148,8 @@ export interface ToolbarProps {
   readonly trail?: readonly ToolbarPlace[] | undefined;
   /** A document's name, shown in the title's place once its header has scrolled away; read only where there is no `title`. */
   readonly pickUp?: ToolbarPickUp | undefined;
+  /** After the title, on its last baseline: quiet words saying what the page is beside its name, which give way before the title does. */
+  readonly detail?: ReactNode;
   /** After the title, on its last baseline: a capsule naming the page's state, or a switch of its view. */
   readonly tag?: ReactNode;
   /** The page's actions, ending the bar. */
@@ -152,6 +166,8 @@ export interface ToolbarProps {
   readonly measure?: boolean | undefined;
   /** Whether every labelled control of the bar draws its glyph alone, named still. */
   readonly folded?: boolean | undefined;
+  /** Whether a bar too narrow for its lead, its heading, and its actions in one row stands its heading on a row of its own under them, and narrower still folds its lead to glyphs. */
+  readonly wrapHeading?: boolean | undefined;
 }
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -224,6 +240,7 @@ export function Toolbar({
   title,
   trail,
   pickUp,
+  detail,
   tag,
   actions,
   start,
@@ -232,6 +249,7 @@ export function Toolbar({
   place,
   measure,
   folded,
+  wrapHeading,
 }: ToolbarProps): React.JSX.Element {
   return (
     <ToolbarFrame
@@ -241,6 +259,7 @@ export function Toolbar({
       place={place}
       measure={measure}
       folded={folded}
+      wrapHeading={wrapHeading}
     >
       {said(lead) ? <div className={LEAD}>{lead}</div> : null}
       <div className="luke-toolbar-heading">
@@ -253,6 +272,7 @@ export function Toolbar({
         ) : pickUp !== undefined && pickUp.name !== "" ? (
           <ToolbarPickedUp pickUp={pickUp} />
         ) : null}
+        {said(detail) ? <OneLine className={DETAIL}>{detail}</OneLine> : null}
         {said(tag) ? <span className={TAG}>{tag}</span> : null}
       </div>
       {said(actions) ? <div className={ACTIONS}>{actions}</div> : null}
