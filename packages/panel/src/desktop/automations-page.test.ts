@@ -2584,10 +2584,10 @@ test("an automation's runs stand on its page's right, newest first, a run that s
   await settle();
 
   const [started, refused] = runRows(page);
-  assert.match(started?.textContent ?? "", /^Fix the flaky testWorking/u);
+  assert.match(started?.textContent ?? "", /^Fix the flaky testJan 1, 1970Working/u);
   assert.match(
     refused?.textContent ?? "",
-    /^Scheduled runIts creator is no longer in the workspace\./u,
+    /^Scheduled runJan 1, 1970Its creator is no longer in the workspace\./u,
   );
   act(() => started?.querySelector("button")?.click());
   assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
@@ -2646,8 +2646,11 @@ test("the Runs tab lists every automation's runs, each naming its automation, na
     ["Runs1", "All", "Running1", "Failed1"],
     "the Runs tab counts what runs, and Running and Failed what each keeps",
   );
-  assert.match(listedRuns()[0] ?? "", /^Fix the flaky testNightly flaky-test sweep · Working/u);
-  assert.match(listedRuns()[1] ?? "", /^Scheduled runMorning digest · /u);
+  assert.match(
+    listedRuns()[0] ?? "",
+    /^Fix the flaky testJan 1, 1970Nightly flaky-test sweep · Working/u,
+  );
+  assert.match(listedRuns()[1] ?? "", /^Scheduled runJan 1, 1970Morning digest · /u);
   choose("Failed");
   assert.deepEqual(
     listedRuns().map((row) => row.startsWith("Scheduled run")),

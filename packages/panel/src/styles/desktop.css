@@ -647,9 +647,10 @@ body,
 }
 
 /* A New thread stands in the reading pane at the thread's own measure: To
-   and Subject each a row, its label in the caption's voice before it, the
-   subject in the body's type, and a hairline under it, as a mail's head
-   is, and the reply's box under them, growing into the room left. */
+   and Subject each a row, its label in the caption's voice before it, and
+   each value a field of the one height and inset, the agent picked as a
+   field's pop-up and the subject typed in a field, so the two read as one
+   mail's head; the reply's box under them, growing into the room left. */
 .desktop-inbox.inbox-compose {
   padding-block: var(--luke-space-16);
   padding-inline: max(var(--content-inset), var(--reading-room));
@@ -659,7 +660,6 @@ body,
   display: grid;
   min-height: var(--luke-space-48);
   align-items: center;
-  border-bottom: 1px solid var(--luke-color-border);
   column-gap: var(--luke-block-gap);
   grid-template-columns: var(--luke-space-48) minmax(0, 1fr);
 }

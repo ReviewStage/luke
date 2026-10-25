@@ -683,7 +683,8 @@ type AutomationsTabKind = typeof AUTOMATIONS_PAGE.LIST | typeof AUTOMATIONS_PAGE
 
 /**
  * The bar over both tabs that moves between them, Runs counting the runs
- * still working on either tab, and what narrows the tab standing beside it.
+ * still working on either tab, and what narrows the tab standing beside it
+ * a section's room away, so the two troughs never read as one bar.
  */
 function AutomationsTabs({
   tasks,
@@ -705,7 +706,7 @@ function AutomationsTabs({
     },
   ] as const;
   return (
-    <Inline gap={GAP.CONTROL}>
+    <Inline gap={GAP.SECTION}>
       <ChoiceBar<AutomationsTabKind>
         label="Show"
         items={tabs}
