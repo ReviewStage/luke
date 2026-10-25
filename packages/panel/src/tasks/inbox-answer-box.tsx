@@ -19,6 +19,7 @@ import {
 } from "../plan-editor/contract.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useAttachedFiles } from "../use-attached-files.js";
+import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import type { ChatComposerMentions } from "./chat-composer.js";
@@ -449,7 +450,7 @@ function AnswerCard({
   // Note that Reply stands only while the editor stands and takes a quote, and no send is out, since a press lets the selection go.
   const quotes = !sending && !dictating && module !== undefined;
   return (
-    <div className="agent-composer" {...files.drop.target}>
+    <div className={COMPOSER_ROOM_CLASS} {...files.drop.target}>
       <AnswerForm
         dropping={files.drop.dropping}
         field={field}

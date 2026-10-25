@@ -3906,127 +3906,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* Coding agents --------------------------------------------------------- */
 
-/* The block a transcript ends on once its turn was stopped or failed, or
-   once another agent continued it (`agent-tab.tsx`'s AgentEndLine): the
-   end line's row, then under it Continued in, where an archive took the
-   box. In an empty transcript the two stand as siblings in the empty
-   state's own centred column instead. */
-.agent-end {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--luke-control-gap);
-}
-
-/* The end line's row: the line, then Continue in new agent (or Continue
-   again) after its words, centred on the line's text. Note that the line is
-   one flex item, so a failure too long to share the row takes it whole and
-   the press wraps under it, never between its words; in the empty state
-   the row is centred as its column is. */
-.agent-end-row {
-  display: flex;
-  max-width: 100%;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-control-gap);
-}
-
-.conversation-empty > .agent-end-row {
-  justify-content: center;
-}
-
-/* Note that it keeps the gap the log's `space-y-3` leaves under every block
-   but its last, which the reset below takes, so a failure's press never
-   touches the pull request's row under it. */
-.conversation-log > :is(.agent-end, .agent-end-line):not(:last-child) {
-  margin-bottom: var(--luke-block-gap);
-}
-
-/* The end line: a failure's mark, its words, then what the turn cost after
-   a dot, flowing as one sentence, so a long failure wraps under its own
-   words and the mark never parts from the first of them. Note that the
-   14px mark is lowered to sit centred on the words' x-height, and that
-   only a failure is drawn in the danger ink: a stop is the developer's own
-   doing. */
-.agent-end-line {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.agent-end-line > .failed-mark {
-  margin-right: var(--luke-tight-gap);
-  vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
-}
-
-.agent-end-line[data-failed] > .agent-end-words {
-  color: var(--luke-color-danger-text);
-}
-
-.agent-end-remedy {
-  margin-left: var(--luke-control-gap);
-  vertical-align: middle;
-}
-
-/* Where an agent may be continued (`continue-agent.tsx`), on a failed
-   turn's end line's row, in a closed box's note, or in a continued box's:
-   Continue in new agent, and why it did not start where it did not. */
-.agent-continue {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-tight-gap) var(--luke-control-gap);
-}
-
-.agent-continue-note {
-  color: var(--luke-color-danger-text);
-}
-
-/* The row naming the agents that continued this one, at the transcript's
-   end where an archive took the box: an arrow, as Forked to leads on its
-   split, then Continued in and the chips, which take their baseline from
-   their names, so every word stands on one line. */
-.agent-continued {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--luke-tight-gap);
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.agent-continued > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-  align-self: center;
-}
-
-/* Continued in and its chips, in the row above or the continued box's note. */
-.agent-continued-in {
-  display: inline-flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--luke-tight-gap);
-}
-
-.agent-continued-item {
-  display: inline-flex;
-  min-width: 0;
-  align-items: baseline;
-}
-
-/* A box closed for good (`agent-composer.tsx`) wears the held look a box
-   sending does, faded, so the note and Continue under it read as the way
-   on. Note that it still takes a press, because its controls are disabled
-   one by one and its branch and changes chips still open what they name. */
-.agent-composer[data-closed] > form {
-  opacity: 0.6;
-}
-
 /* A line the agent refused for good or for now (`undelivered-mark.tsx`): its
    bubble and files faded, as words that did not go, under the failure note
    that says so. */
@@ -4045,41 +3924,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    message's line holds them under its bubble. Note that the room above is
    the row's rather than the worked line's, because the buttons are taller
    than the words and centring them would push the words down. */
-.agent-turn-foot {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  min-width: 0;
-  margin-top: var(--luke-tight-gap);
-}
-
 .agent-turn-foot > [data-worked] {
   min-width: 0;
   margin-top: 0;
-}
-
-/* The quiet line under an agent's message naming the agents forked at it
-   (`fork-action.tsx`), in the meta voice a finished turn's line speaks in,
-   its chips wrapping as words do. */
-.agent-forked-to {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  margin: var(--luke-list-gap) 0 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.agent-forked-to > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-}
-
-.agent-forked-to-item {
-  display: inline-flex;
-  align-items: center;
 }
 
 /* A forked draft's chip over its box: what it forks, the message's opening
@@ -4154,92 +4001,10 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   }
 }
 
-/* The room under the transcript for the composer, with no rule between
-   them: the card's own edge is where the transcript ends. It keeps to the
-   tab's foot where no transcript stands above it, as in a draft's tab. */
-.agent-tab-foot {
-  flex: 0 0 auto;
-  margin-top: auto;
-}
-
-/* An agent's log runs right up to the card's top edge and its words
-   dissolve over `--luke-scroll-fade` just above it (its `ScrollArea`'s end
-   fade), rather than being sliced short of the card. Its foot pads past the
-   fade, so the newest line, scrolled to or followed, stands whole above it;
-   the area's own scroll padding brings a control focused from below in
-   past the fade as well. */
-.agent-log-over-composer {
-  padding-bottom: calc(var(--luke-scroll-fade) + var(--luke-space-4));
-}
-
-/* The to-do list the agent is working through, docked over the composer
-   on the composer's own inset, so its card and the composer's line up; a
-   column or a panel that pads the composer in pads the list in alike. */
-.agent-todos-dock {
-  padding: 0 var(--luke-space-16) var(--luke-row-inset);
-}
-
-/* The agent's pull request's row (agent-published.tsx), pinned over the
-   composer under the docked to-do list on the same inset, so the row, the
-   list, and the composer's card line up. */
-.agent-published-dock {
-  padding: 0 var(--luke-space-16) var(--luke-row-inset);
-}
-
-/* The docked list's card (transcript-blocks.tsx's `TranscriptTodosDock`),
-   `@luke/ui`'s card fold as the task card is (`plan.tsx`): one line saying
-   how far the list has got, after the chevron that leads it as every
-   fold's does, and the item it is at cut to the line, which opens onto the
-   whole list under a hairline. */
-.todos-dock-summary {
-  flex-shrink: 0;
-  color: var(--luke-color-text-muted);
-}
-
-.todos-dock-focus {
-  flex: 1;
-}
-
-/* The docked list's body keeps to under a third of what is seen and scrolls
-   past it, so a long list, over a composer, leaves the transcript its room
-   in a short window. */
-[data-todos-dock] .todo-items {
-  max-height: calc(var(--luke-stage-height) * 0.3);
-  overflow-y: auto;
-}
-
-/* One write of the list, as a call's row opens onto it: set bare at the
-   row's text column, past the line's inset and icon, and selectable as a
-   call's body is; a failure is said under it. */
-.todos-body {
-  margin: var(--luke-list-gap) 0 var(--luke-tight-gap) var(--transcript-gutter);
-  user-select: text;
-}
-
-/* A list's items, each behind the glyph of where it stands, in a 16px
-   seat with a call's 8px gap after it, centred on the item's first line.
-   Pending and done wear the muted ink, in progress the full one, and a
-   done item's words are muted beside it. */
+/* A to-do list's glyphs (transcript-blocks.tsx's `TodoItems`) stand at 14px
+   in their 16px seat, as a call's line's do. */
 .todo-items {
   --state-glyph-size: 14px;
-
-  line-height: var(--luke-type-body-leading);
-}
-
-.todo-item {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--luke-icon-gap);
-}
-
-.todo-words {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  transition: color var(--luke-duration-quick) var(--luke-motion-exit);
-}
-
-.todo-item[data-todo-status="done"] > .todo-words {
-  color: var(--luke-color-text-muted);
 }
 
 /* The list opens upward, since the composer under it holds the card's foot
@@ -4297,26 +4062,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   to {
     transform: translateY(var(--disclosure-rise));
   }
-}
-
-/* The shared composer card (../ai-elements/prompt-input.tsx), `@luke/ui`'s
-   `ComposerFrame`: its field over its foot (`ComposerFoot`). */
-.prompt-input {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-}
-
-/* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
-   default type, and a note under it, on the transcript's own inset so the
-   card and the column line up. What stands here is the room around the
-   card, none above it, since the log meets the card itself. */
-.agent-composer {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-  padding: 0 var(--luke-space-16) var(--luke-list-inset);
 }
 
 /* The box's field (`composer-field.tsx`): its editor in the body type, one
@@ -4391,18 +4136,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   opacity: 0.6;
 }
 
-/* The foot's right: the model chip, the context ring, the microphone, and
-   the round Send or Stop.
-   It may narrow, so a long model name is cut short before the presses are. */
-.agent-composer-actions {
-  position: relative;
-  display: flex;
-  flex: 0 1 auto;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-}
-
 /* The composer answers its card's width, not the window's, so it holds in
    the main column and the side panel alike (`agent-composer.tsx`). The
    presses never give way, the model chip's words do first, and the ⋯
@@ -4421,36 +4154,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .luke-composer-foot-end:has(> .agent-composer-actions) {
   flex-shrink: 1;
   min-width: 0;
-}
-
-/* The +, the MCP button and the ⋯ each stand in a box of their own, which
-   the queries below hide and the ⋯ reads (`agent-composer.tsx`); the ⋯
-   stands only once the card is too narrow for every press. */
-.agent-composer-attach,
-.agent-servers-button,
-.agent-context-button,
-.dictate-button {
-  display: flex;
-}
-
-.agent-composer-actions .agent-composer-more {
-  display: none;
-}
-
-/* A call's controls in the composer's row, in Call's place beside Send
-   (`agent-call.tsx`): the mutes and Video as the row's own presses, End
-   call on its red disc. They never fold into the ⋯, because they are the
-   call, and a narrow card folds the presses around them first; the foot
-   stands them a step off Send (`ComposerFoot`'s call). */
-.agent-call-controls {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  min-inline-size: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
 }
 
 /* Too narrow for every press: the ⋯ takes in the MCP servers, the
@@ -4484,19 +4187,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   }
 }
 
-/* A dictation standing in place of the card's foot: the voice's bars
-   across it, newest at the right, the time so far, and the two ways out,
-   ✓ as round as the Send it stands in for. */
-.dictation-strip {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  height: var(--luke-control-height);
-  align-items: center;
-  gap: var(--luke-control-gap);
-  color: var(--luke-color-text-muted);
-}
-
 /* A clip still being read as a call begins shares the foot's bar with the
    call's controls (`agent-composer.tsx`, `ComposerFoot`'s strip and call):
    side by side where the card has room for the strip's words, and the
@@ -4516,87 +4206,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   margin-inline-start: auto;
 }
 
-.dictation-wave {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  height: var(--luke-space-20);
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-list-gap);
-  overflow: clip;
-}
-
-.dictation-wave-bar {
-  flex: none;
-  width: var(--luke-space-2);
-  height: 100%;
-  border-radius: var(--luke-radius-full);
-  background: currentColor;
-  transform: scaleY(0.08);
-}
-
-.dictation-clock {
-  flex: none;
-  min-width: 34px;
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.dictation-transcribing {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-}
-
-/* A quote block in the message box (`reply-to-selection.tsx`): the agent's
-   words set off by a straight rule at their leading edge, as a sent quote is
-   (`.markdown-quote`), three lines at most, with the press that takes it out
-   at its end. It stands in the editor's flow as a line of its own does. */
-.composer-quote {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--luke-control-gap);
-  margin: var(--luke-tight-gap) 0;
-  padding-left: 0.8em;
-  border-left: 3px solid var(--luke-color-border-strong);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-body-leading);
-  user-select: none;
-}
-
-.composer-quote .composer-quote-words {
-  display: -webkit-box;
-  min-width: 0;
-  flex: 1 1 auto;
-  margin: 0;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  white-space: pre-line;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
 /* Reply over words selected in an agent's message: one press on the menus'
    surface, centred over the selection, or under it where the window's top
    leaves no room. */
-.reply-to-selection {
-  position: fixed;
-  z-index: var(--luke-z-menu);
-  translate: -50% -100%;
-}
-
 [data-luke-profile="desktop"] .reply-to-selection {
   -webkit-app-region: no-drag;
-}
-
-.reply-to-selection[data-below] {
-  translate: -50% 0;
 }
 
 /* The files on a message: a row of chips (`@luke/ui`'s AttachmentChip) over

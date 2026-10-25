@@ -31,3 +31,10 @@ test("a later disabled fade replaces an earlier one, the theme's own included", 
   assert.equal(cn("disabled:opacity-50", "disabled:opacity-disabled"), "disabled:opacity-disabled");
   assert.equal(cn("disabled:opacity-disabled", "disabled:opacity-100"), "disabled:opacity-100");
 });
+
+test("a log over the composer pads past its fade in place of the log's own foot", () => {
+  assert.equal(
+    cn("pb-luke-20 px-content-inset", "pb-log-over-composer"),
+    "px-content-inset pb-log-over-composer",
+  );
+});

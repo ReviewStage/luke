@@ -105,7 +105,7 @@ test("the dock's line leads with its fold's chevron, as every fold's line does, 
 
 test("in a short window, an open list stops growing at under a third of what is seen and scrolls past it", () => {
   const stage = 260;
-  layContainersAt({}, { only: ["@luke/ui/tokens.css", "./tasks.css"] });
+  layContainersAt({}, { only: ["@luke/ui/tokens.css", "./tasks.css", "tailwind.css"] });
   document.documentElement.style.setProperty("--luke-stage-height", `${stage}px`);
   const { view } = docked(steps(1));
   act(() => (view.querySelector("summary") ?? assert.fail("the dock's line")).click());

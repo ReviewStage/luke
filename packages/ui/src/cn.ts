@@ -111,6 +111,14 @@ const FEEDBACK_DISPLAY = {
   container: ["progress"],
 } as const;
 
+/**
+ * The names the panel's task surfaces' block of the theme adds (tasks.css,
+ * moving onto utilities), by the group tailwind-merge reads each in.
+ */
+const TASK_SURFACES = {
+  spacing: ["transcript-gutter", "log-over-composer", "todos-dock", "dictation-clock"],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -206,6 +214,7 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...TASK_SURFACES.spacing,
       ],
       radius: [
         "control",

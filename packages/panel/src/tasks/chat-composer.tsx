@@ -30,6 +30,7 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { useAttachedFiles } from "../use-attached-files.js";
+import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { ATTACH_TAKES } from "./attached-files.js";
@@ -438,7 +439,7 @@ function EditorChatComposer({
   return (
     <div
       ref={card}
-      className="agent-composer chat-composer"
+      className={`${COMPOSER_ROOM_CLASS} chat-composer`}
       data-compact={String(compact === true)}
       {...files.drop.target}
     >
@@ -543,7 +544,7 @@ function PlainChatComposer({
     true,
   );
   return (
-    <div className="agent-composer chat-composer" data-compact={String(compact === true)}>
+    <div className={`${COMPOSER_ROOM_CLASS} chat-composer`} data-compact={String(compact === true)}>
       <PromptInput onSubmit={send}>
         {/* Note that the field is left out of the screen recording whole, past its words' masking. */}
         <div className="ph-no-capture">

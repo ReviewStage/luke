@@ -936,7 +936,7 @@ export function AgentServersButton({
     <div className="agent-servers" ref={root}>
       {face === undefined ? (
         // Note that the box, not the button, wears the class the composer's ⋯ finds the press by (`agent-composer.tsx`).
-        <span className="agent-servers-button">
+        <span className="agent-servers-button flex">
           <Tooltip label={SERVERS_LABEL}>
             <IconButton icon={<McpIcon />} label={SERVERS_LABEL} {...press} />
           </Tooltip>
