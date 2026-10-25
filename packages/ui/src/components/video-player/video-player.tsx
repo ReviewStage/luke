@@ -231,7 +231,7 @@ const FRAME =
 
 /** The video at its own shape, as wide as its column and no taller than a picture, or the viewer's; filling the screen full screen. */
 const VIDEO =
-  "luke-video-player-video block h-auto w-auto max-w-full cursor-pointer in-data-[luke-profile=desktop]:cursor-default group-[:fullscreen]/video-frame:size-full group-[:fullscreen]/video-frame:max-h-none group-[:fullscreen]/video-frame:max-w-none group-[:fullscreen]/video-frame:object-contain";
+  "luke-video-player-video block h-auto w-auto max-w-full cursor-press group-[:fullscreen]/video-frame:size-full group-[:fullscreen]/video-frame:max-h-none group-[:fullscreen]/video-frame:max-w-none group-[:fullscreen]/video-frame:object-contain";
 
 /** The player as its place holds it: hugging the video at most its column's width, and in the viewer no taller than the card. */
 const PLAYER = "luke-video-player relative block w-fit max-w-full";

@@ -27,6 +27,11 @@
   --color-switch-thumb: var(--luke-color-switch-thumb);
   --shadow-switch-thumb: var(--luke-shadow-switch-thumb);
   --ease-spring-fast: var(--luke-spring-fast);
+  /* The two cursors a press gives (profiles.css): `cursor-press` on every
+     control, the arrow on the desktop and the hand on the web, and
+     `cursor-link` on a real link, the hand on both. */
+  --cursor-press: var(--luke-cursor-press);
+  --cursor-link: var(--luke-cursor-link);
   /* How far a control fades while it cannot be used (`opacity-disabled`). */
   --opacity-disabled: var(--luke-disabled-opacity);
 
@@ -278,6 +283,23 @@
   --z-index-dialog: var(--luke-z-dialog);
   --z-index-tooltip: var(--luke-z-tooltip);
   --spacing-dialog-inset: var(--luke-dialog-inset);
+  /* The panel's Home and its tasks (`@luke/panel`: Home's sections and its
+     welcome, a person's page, New task and Move, a card's server line): the
+     welcome's tile and the face on it, its composer at the page's measure, a
+     row's context's bound, the room New task's title leaves its chips, a
+     card's line drawn out past its inset; and the Tasks page's Board and
+     List, a column's width, a row's height, a maker's name's measure, and the
+     List's columns as the view draws them. */
+  --spacing-welcome-tile: 56px; /* off-scale: the welcome's tile, a masthead's size */
+  --spacing-welcome-face: 34px; /* off-scale: Luke's face on the welcome's tile */
+  --spacing-welcome-composer: min(var(--luke-page-measure), 100%);
+  --spacing-row-context: 20ch; /* off-scale: a row's context, bounded in letters */
+  --spacing-new-task-title: calc(100% - 2 * var(--luke-control-height) - var(--luke-item-gap));
+  --spacing-card-line: calc(100% + 2 * var(--luke-row-inset));
+  --spacing-tasks-board-column: 320px; /* off-scale: a card's width, as Linear's board stands it */
+  --spacing-tasks-list-row: calc(var(--luke-control-height) + var(--luke-space-6));
+  --spacing-tasks-list-maker: 16ch; /* off-scale: a maker's name, cut short at a short name's measure */
+  --grid-template-columns-tasks-list: var(--tasks-list-columns);
   --spacing-dialog-action-gap: var(--luke-dialog-action-gap);
   --spacing-dialog-action: var(--luke-dialog-action-width);
   --spacing-dialog-room: var(--luke-dialog-room);

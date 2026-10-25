@@ -223,7 +223,7 @@
 
 /* A plan's task item the developer can tick from the drawn plan says so. */
 .plan-unit li.task-list-item input[type="checkbox"]:enabled {
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
 }
 
 /* A section's heading wraps short of the row at its end, so the byline and
@@ -2035,10 +2035,33 @@
    leaves a strip of one mark a chapter while hidden. */
 .chapters-view {
   --chapter-rail-width: calc(var(--luke-space-64) * 4);
+  /* The least the chapter reads at: its bar, three lines of its brief, the
+     least of its files (below), and its foot. Its strip is as wide as keeps
+     each mark clear of the edge it stands at, a window's or the panel's. */
+  --chapter-brief-least: calc(3 * var(--luke-type-body-leading) + var(--luke-list-inset));
+  --chapter-reading-least: calc(
+    4 *
+    var(--luke-pane-bar-height) +
+    var(--luke-row-inset) +
+    var(--chapter-brief-least)
+  );
+  --chapter-strip-width: var(--luke-space-20);
 }
 
+/* Note that the body never stands shorter than the chapter's least, so a
+   window too short for it lets the Pull request tab scroll (below) rather
+   than slicing the brief or pushing the foot out past the body's clip. */
 .chapters-body {
   position: relative;
+  min-height: var(--chapter-reading-least);
+}
+
+/* A window too short for the header, the tabs and the chapter's least
+   scrolls the Pull request tab as one while Chapters is shown, the header
+   leaving the top, so every part of the chapter reads whole. Any view
+   with no least of its own fills the room as before and never scrolls it. */
+.pull-request-tab:has(> .pull-request-view:not([hidden]) > .chapters-view) {
+  overflow-y: auto;
 }
 
 .chapter-rail {
@@ -2102,7 +2125,7 @@
 
 .chapters-view[data-rail-beside="false"] .chapter-strip {
   display: flex;
-  width: var(--luke-space-12);
+  width: var(--chapter-strip-width);
   flex: none;
   border-right: 1px solid var(--luke-color-border);
 }
@@ -2116,8 +2139,8 @@
 }
 
 /* The chapter: its bar, its brief, which scrolls on its own once it is taller than
-   its share, so the diff under it keeps at least half the view; the list;
-   and its foot bar. */
+   its share, so the diff under it keeps at least half the view, and fades
+   where it is cut; the list; and its foot bar. */
 .chapter-brief {
   display: flex;
   min-height: 0;
@@ -2267,7 +2290,7 @@
 @container side-panel (width < 640px) {
   .chapters-view .chapter-strip {
     display: flex;
-    width: var(--luke-space-12);
+    width: var(--chapter-strip-width);
     flex: none;
     border-right: 1px solid var(--luke-color-border);
   }
@@ -5896,7 +5919,7 @@ svg.lucide {
   border-radius: 2px;
   background: var(--comment-mark);
   color: inherit;
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
   transition: background var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
@@ -6002,23 +6025,18 @@ svg.lucide {
 
 /* Where the margin folds: a line's comments counted at its end, in the
    gutter past the column where the block's button stands, a quiet button
-   lit while its threads stand under it; the open thread floats under it. */
+   lit while its threads stand under it; the open thread floats under it.
+   The count, a glyph and its figures, is drawn tighter than a toolbar's
+   button, and a web gutter is a finger's target across (desktop.css), which
+   it fills; its press still takes the whole target on a touch screen, inside
+   the column. It ends a scrollbar's room short of the scroller's edge, so a
+   scrollbar drawn over the page, macOS's, never stands under it, and a count
+   of more figures grows in toward the words rather than out under it. */
 .comment-count {
-  position: absolute;
-  left: calc(100% + var(--luke-space-2));
-}
-
-/* The web's gutter is a finger's target across (desktop.css), which its
-   count, a glyph and its figures, fills when drawn tighter than a toolbar's
-   button; its press still takes the whole target on a touch screen, inside
-   the column. It ends where the block's button ends, a hair inside the
-   column, so a count of more figures grows in toward the words rather than
-   past the column's edge. */
-[data-luke-profile="web"] .comment-count {
   --luke-control-inset: var(--luke-space-6);
   --luke-icon-gap: var(--luke-space-4);
-  right: calc(var(--luke-space-2) - var(--comment-gutter));
-  left: auto;
+  position: absolute;
+  right: calc(var(--luke-space-8) - var(--comment-gutter));
 }
 
 .comment-float {
@@ -6073,7 +6091,7 @@ svg.lucide {
 /* A thread at rest is one press (`CardPress`) over its words and replies,
    which reaches its whole card and rings it from the keyboard. */
 .comment-card[data-open="false"] {
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
 }
 
 .comment-card[data-open="true"] {

@@ -28,7 +28,7 @@ import { clsx } from "clsx";
  *   a tone with no glyph or swatch to say it.
  * - None of shadcn's focus, `aria-invalid`, ring, transition, or `[a]:hover`
  *   utilities, since a badge takes no focus and no press, and the window
- *   draws the one focus ring (`shadcn-focus.test.ts`).
+ *   draws the one focus ring (`anti-slop/no-shadcn-focus-ring`).
  * - Its classes are joined (`clsx`), not merged (`cn`), because
  *   a badge's type, ink, and face are picked whole by its variants, with
  *   no caller's class to settle against them.

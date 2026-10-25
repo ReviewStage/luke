@@ -14,7 +14,9 @@ import { extendTailwindMerge } from "tailwind-merge";
  * know as a colour: `text-body` beside `text-foreground` would be dropped as
  * a second text colour, and `px-control-inset` would outlive a later `p-0`.
  * The disabled fade (`opacity-disabled`) is told as an opacity, which it
- * would otherwise not read as one, so a later fade would not replace it.
+ * would otherwise not read as one, so a later fade would not replace it,
+ * and the two press cursors (`cursor-press`, `cursor-link`) as cursors, so a
+ * later `cursor-default` on a control that takes no press replaces them.
  */
 
 /**
@@ -175,6 +177,25 @@ const ROWS_NAVIGATION = {
   ],
   shadow: ["bar-count-ring"],
   radius: ["inherit"],
+} as const;
+
+/**
+ * The names the panel Home and tasks block of the theme adds (the welcome, a row's context, New task's title, a
+ * card's line, the Board's column, the List's row and maker), by the group
+ * tailwind-merge reads each in.
+ */
+const PANEL_HOME_TASKS = {
+  spacing: [
+    "card-line",
+    "new-task-title",
+    "row-context",
+    "tasks-board-column",
+    "tasks-list-maker",
+    "tasks-list-row",
+    "welcome-composer",
+    "welcome-face",
+    "welcome-tile",
+  ],
 } as const;
 
 /**
@@ -458,6 +479,7 @@ const merge = extendTailwindMerge({
         ...ROWS_NAVIGATION.spacing,
         ...PANEL_SHELL.spacing,
         ...CHIPS_MEDIA_CALL.spacing,
+        ...PANEL_HOME_TASKS.spacing,
         ...PAGE_PATTERNS.spacing,
         ...TASK_SURFACES.spacing,
       ],
@@ -527,6 +549,7 @@ const merge = extendTailwindMerge({
     },
     classGroups: {
       opacity: [{ opacity: ["disabled"] }],
+      cursor: [{ cursor: ["press", "link"] }],
     },
   },
 });

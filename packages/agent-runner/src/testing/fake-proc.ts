@@ -1,5 +1,5 @@
 /**
- * fake-proc.ts -- a `/proc` of the test's own, for the runner's process table (`processes.ts`): a temporary directory of `status` files written as the kernel writes them.
+ * fake-proc.ts -- a `/proc` of the test's own, for the runner's process table (`processes.ts`): a temporary directory of `status` and `cmdline` files written as the kernel writes them.
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -15,11 +15,12 @@ const FULL_SET = "000001ffffffffff";
 /** The emptied set the runner and everything under it run with. */
 const EMPTIED = "0000000000000000";
 
-/** One process: its pid, its parent's, and whether its bounding set is emptied. */
+/** One process: its pid, its parent's, whether its bounding set is emptied, and its command line, where one is written. */
 export interface FakeProcess {
   readonly pid: number;
   readonly parent: number;
   readonly emptied: boolean;
+  readonly argv?: readonly string[];
 }
 
 function statusFile({ pid, parent, emptied }: FakeProcess): string {
@@ -45,6 +46,10 @@ export const fakeProc = (processes: readonly FakeProcess[]) =>
       for (const process of processes) {
         mkdirSync(join(root, String(process.pid)));
         writeFileSync(join(root, String(process.pid), "status"), statusFile(process));
+        if (process.argv !== undefined) {
+          // Note that the kernel ends each argument with a NUL, the last one included.
+          writeFileSync(join(root, String(process.pid), "cmdline"), `${process.argv.join("\0")}\0`);
+        }
       }
       return root;
     }),
