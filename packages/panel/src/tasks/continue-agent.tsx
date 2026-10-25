@@ -21,6 +21,7 @@ import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../compose
 import { ActionMenu } from "../desktop/action-menu.js";
 import { useAgentArchive } from "../desktop/agent-archive.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
+import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { CONTINUE_LABEL, CONTINUED_IN } from "./coding-agent-model.js";
 import { useContinueDoor } from "./fork-action.js";
@@ -140,7 +141,7 @@ export function ContinueAgent({
 
   if (!offers || continueAgent === undefined) return null;
   return (
-    <span className="agent-continue">
+    <span className="inline-flex flex-wrap items-center gap-x-control-gap gap-y-tight-gap">
       <Button
         variant={BUTTON_VARIANT.OUTLINE}
         icon={<ArrowRightIcon aria-hidden="true" />}
@@ -150,7 +151,7 @@ export function ContinueAgent({
       >
         {label}
       </Button>
-      {note === undefined ? null : <span className="agent-continue-note">{note.text}</span>}
+      {note === undefined ? null : <span className="text-danger">{note.text}</span>}
     </span>
   );
 }
@@ -212,10 +213,10 @@ function ContinuedIn({
   const names = distinctNames(earlier.map((agentId) => subjectOf(agentId).name));
   const trigger = menu.trigger(riseAboveEnd);
   return (
-    <span className="agent-continued-in" data-continued="">
+    <span className="inline-flex min-w-0 flex-wrap items-baseline gap-tight-gap" data-continued="">
       <span>{CONTINUED_IN}</span>
       {chips.map((agentId, index) => (
-        <span key={agentId} className="agent-continued-item">
+        <span key={agentId} className="inline-flex min-w-0 items-baseline">
           <AgentActorRef
             subject={subjectOf(agentId)}
             models={control.models}
@@ -251,8 +252,11 @@ function ContinuedIn({
 /** The row at a transcript's end naming the agents that continued it, led by an arrow as Forked to is by its split. */
 export function ContinuedTrail(doors: ContinuedDoors): React.JSX.Element {
   return (
-    <p className="agent-continued" data-continued-trail="">
-      <ArrowRightIcon aria-hidden="true" />
+    <p
+      className="m-0 flex flex-wrap items-baseline gap-tight-gap text-caption-inline text-muted-foreground"
+      data-continued-trail=""
+    >
+      <ArrowRightIcon className="size-control-icon flex-none self-center" aria-hidden="true" />
       <ContinuedIn {...doors} />
     </p>
   );
@@ -290,7 +294,7 @@ export function ContinuedComposerNote({
   };
   return (
     <>
-      <div className="agent-composer">
+      <div className={COMPOSER_ROOM_CLASS}>
         <ComposerFrame className="continued-composer py-row-inset pr-row-inset pl-list-inset">
           <Banner
             look={BANNER_LOOK.ROW}

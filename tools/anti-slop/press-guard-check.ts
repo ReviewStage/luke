@@ -20,7 +20,15 @@ import {
 } from "./shared/press-guard.ts";
 import { PRESS_LISTENER_GUARD_RULE } from "./shared/press-listener-guard.ts";
 import { namesRetired, RETIRED_GUARD_RULE } from "./shared/retired.ts";
+import { SHADCN_FOCUS_GUARD_RULE, SHADCN_SOURCE } from "./shared/shadcn-focus-guard.ts";
 import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
+import {
+  INTERNAL_MOCK_GUARD_RULE,
+  isWatchedTest,
+  SKIPPED_TEST_GUARD_RULE,
+  SOURCE_READ_GUARD_RULE,
+  TEST_SOURCE,
+} from "./shared/test-guard.ts";
 
 /**
  * The design system's guards have no escape hatch: oxlint honors every
@@ -39,7 +47,11 @@ import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
  * its helpers, `no-direct-view-storage`, whose baselines are the only way past
  * them, on any TypeScript file that spells
  * a retired name and holds one that would silence `retired`, whose retired
- * file's baseline is the only way past it, and on an `.oxlintrc.json` that
+ * file's baseline is the only way past it, on a vendored shadcn component
+ * holding one that would silence `no-shadcn-focus-ring`, on any test file
+ * holding one that would silence `no-internal-vi-mock`,
+ * `no-focused-or-skipped-test` or `no-source-read-in-test`, which hold rules
+ * root AGENTS.md's "Testing" says never bend, and on an `.oxlintrc.json` that
  * leaves any of them short of an error anywhere or whose `ignorePatterns`
  * hide a file one of them watches.
  */
@@ -162,6 +174,32 @@ const GUARDS = [
       existsSync(absolute) &&
       namesRetired(readFileSync(absolute, "utf8")),
     remedy: "Use what the retired file under tools/anti-slop/retired/ names instead",
+  },
+  {
+    rule: SHADCN_FOCUS_GUARD_RULE,
+    sources: TYPESCRIPT_SOURCE,
+    watches: (absolute: string) => SHADCN_SOURCE.test(path.relative(REPOSITORY_ROOT, absolute)),
+    remedy: "Drop the utility, so the window's own ring stands for the control",
+  },
+  {
+    rule: INTERNAL_MOCK_GUARD_RULE,
+    sources: TEST_SOURCE,
+    watches: isWatchedTest,
+    remedy:
+      "Use the real module, a test `Layer` on its service's tag, or `vi.spyOn` at the process boundary it crosses instead",
+  },
+  {
+    rule: SKIPPED_TEST_GUARD_RULE,
+    sources: TEST_SOURCE,
+    watches: isWatchedTest,
+    remedy: "Fix the test or delete it instead",
+  },
+  {
+    rule: SOURCE_READ_GUARD_RULE,
+    sources: TEST_SOURCE,
+    watches: isWatchedTest,
+    remedy:
+      "Hold the rule about source text in a lint rule under tools/anti-slop/, and assert behavior through the public export, instead",
   },
 ] as const;
 

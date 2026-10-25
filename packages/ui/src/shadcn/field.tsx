@@ -18,7 +18,7 @@ import { Label } from "./label.js";
  * apart, the description in the muted caption, and the error in the danger
  * ink, dropping into its line as it arrives and, while empty, standing out
  * of the flow, so it gives back the gap before it in whatever stack holds it.
- * None of shadcn's ring utilities (`shadcn-focus.test.ts`). `@luke/ui`'s
+ * None of shadcn's ring utilities (`anti-slop/no-shadcn-focus-ring`). `@luke/ui`'s
  * `FormField` (`components/form-field`) is what an app draws, and its
  * `ErrorLine` (`components/error-line`) the error alone; this is their inside.
  */

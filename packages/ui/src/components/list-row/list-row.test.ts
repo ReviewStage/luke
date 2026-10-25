@@ -284,6 +284,25 @@ test("a row's lead may stand on a line of its own between its title and its desc
   expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
+test("a row's lead may lead its description in plain words, read before the description after a middle dot", () => {
+  const container = draw(
+    createElement(List, {
+      label: "Runs",
+      children: createElement(ListRow, {
+        title: "Fix the flaky test",
+        description: "Finished",
+        lead: { icon: glyph(), label: "Nightly flaky-test sweep" },
+        leadAt: LIST_ROW_LEAD.INLINE,
+        meta: "2h",
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  const row = button(container, "Fix the flaky testNightly flaky-test sweep · Finished2h");
+  const lead = row.querySelector(".luke-list-row-lead");
+  expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
+});
+
 test("a row whose lead stands on a line of its own draws it with no description under it", () => {
   const container = draw(
     createElement(List, {

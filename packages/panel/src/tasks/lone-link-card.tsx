@@ -87,7 +87,7 @@ function OneRowCard({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="lone-link-card" data-lone-link={kind}>
+    <div className="lone-link-card my-block-gap" data-lone-link={kind}>
       <List label={label} variant={LIST_VARIANT.CARD}>
         {children}
       </List>
@@ -251,7 +251,7 @@ export function LoneLinkCard({
       const { repo, path, sha, startLine, endLine } = lone;
       const block = { type: INBOX_BLOCK.CODE, repo, path, sha, startLine, endLine };
       return (
-        <div className="lone-link-card" data-lone-link={LONE_LINK.CODE}>
+        <div className="lone-link-card my-block-gap" data-lone-link={LONE_LINK.CODE}>
           <InboxCodeCard block={block} code={doors.code} />
         </div>
       );

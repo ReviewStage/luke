@@ -14,6 +14,7 @@ import {
   OneLine,
   PROVIDER_MARK_SIZE,
   ProviderMark,
+  SETTINGS_ROW_LEAD,
   SettingsRow,
   SettingsSection,
   STATUS_TONE,
@@ -98,6 +99,8 @@ function GitHubTokenRow(): React.JSX.Element {
   return (
     <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.GITHUB_ACCESS)} className={NO_CAPTURE}>
       <SettingsRow
+        // Note that the row stands under the account's own, whose face is wider than a mark, so its words start where the account's do.
+        lead={SETTINGS_ROW_LEAD.FACE}
         leading={
           <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} size={PROVIDER_MARK_SIZE.ROW} />
         }
@@ -169,6 +172,7 @@ export function AccountSection({
     <SettingsSection>
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.SIGN_OUT)}>
         <SettingsRow
+          lead={SETTINGS_ROW_LEAD.FACE}
           // The account's face as the sidebar's foot and every list draw it: its picture, else its letter on its hue.
           leading={<ActorMark actor={accountActor(account)} size={ACTOR_SIZE.CARD} />}
           label={<OneLine hint={wholeWordsHint(account.email)}>{account.email}</OneLine>}
