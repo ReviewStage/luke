@@ -69,6 +69,7 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PhoneHead } from "../desktop/phone-head.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import {
   AgentActorRef,
   AgentCard,
@@ -440,7 +441,10 @@ function CommentFiles({
   return (
     <>
       {pictures.length === 0 ? null : (
-        <div className="transcript-pictures" data-inbox-file-pictures="">
+        <div
+          className="transcript-pictures flex items-start gap-block-gap"
+          data-inbox-file-pictures=""
+        >
           {pictures.map((file) => (
             <InboxPicture
               key={file.attachmentId}
@@ -1412,7 +1416,9 @@ export function InboxPane({
       <Fill className="desktop-inbox">
         {/* The thread is a log as an agent's transcript is: each item opens at its newest message, the box at its end, and keeps to it while the reader is there; scrolled up, the way back floats over its foot. */}
         <Conversation subject={item.id} list={board}>
-          <ConversationContent className="inbox-board agent-log-over-composer ph-no-capture flex flex-col pt-section-gap">
+          <ConversationContent
+            className={`inbox-board ${LOG_OVER_COMPOSER_CLASS} ph-no-capture flex flex-col pt-section-gap`}
+          >
             <WordsWorkspace value={workspaceId}>
               {/* The item's words are drawn as documents: its own pictures read through the Inbox, and a link alone on its line as its card. */}
               <InboxPictures itemId={item.id} control={control}>

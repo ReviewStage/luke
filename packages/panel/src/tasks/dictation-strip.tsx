@@ -67,7 +67,7 @@ export function DictateButton({
   return (
     // Note that the box is what a narrow card's stylesheet hides and its ⋯ reads, and
     // the press keeps the caret where it was in the box, which is where the words go.
-    <span className="dictate-button">
+    <span className="dictate-button flex">
       <Tooltip label={label}>
         <IconButton
           icon={<MicrophoneIcon />}
@@ -115,11 +115,14 @@ function DictationWave({ analyser }: { analyser: AnalyserNode | undefined }): Re
   }, [analyser, reduced]);
 
   return (
-    <span className="dictation-wave" aria-hidden="true">
+    <span
+      className="flex h-luke-20 min-w-0 flex-1 items-center justify-end gap-list-gap overflow-clip"
+      aria-hidden="true"
+    >
       {BAR_INDEXES.map((index) => (
         <span
           key={index}
-          className="dictation-wave-bar"
+          className="h-full w-luke-2 flex-none rounded-luke-full bg-current [transform:scaleY(0.08)]"
           ref={(element) => {
             bars.current[index] = element;
           }}
@@ -146,7 +149,10 @@ function DictationClock({ startedAt }: { startedAt: number | undefined }): React
   }, [startedAt]);
 
   return (
-    <span className="dictation-clock" role="timer">
+    <span
+      className="min-w-dictation-clock flex-none text-right text-caption tabular-nums"
+      role="timer"
+    >
       {playheadText(elapsed)}
     </span>
   );
@@ -156,9 +162,12 @@ function DictationClock({ startedAt }: { startedAt: number | undefined }): React
 export function DictationStrip({ dictation }: { dictation: DictationControl }): React.JSX.Element {
   const transcribing = dictation.phase === DICTATION_PHASE.TRANSCRIBING;
   return (
-    <div className="dictation-strip" data-phase={dictation.phase}>
+    <div
+      className="dictation-strip flex h-control min-w-0 flex-1 items-center gap-control-gap text-muted-foreground"
+      data-phase={dictation.phase}
+    >
       {transcribing ? (
-        <span className="dictation-transcribing">
+        <span className="dictation-transcribing flex min-w-0 flex-1 items-center gap-icon-gap">
           {/* Note that the ring stands at once, because the press that sent the clip has just landed and "Transcribing" is already drawn beside it. */}
           <Spinner delay={false} label={LABEL.TRANSCRIBING} />
           <span aria-hidden="true">

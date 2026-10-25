@@ -16,7 +16,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { PLACEMENT_END, type PlanEditorPlacement } from "../plan-editor/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { MarkdownEditor } from "./markdown-editor.js";
+import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
 import { documentWordsUnder, editsOnClick } from "./plan-document-editor.js";
 import {
   PullRequestWriteNote,
@@ -158,7 +158,7 @@ function DescriptionNote({
   useAnnounceShown(ANNOUNCE.ALERT, changed ? DESCRIPTION_WORDS.CHANGED : "");
   if (changed) {
     return (
-      <div className="plan-editor-note">
+      <div className={EDITOR_NOTE_CLASS}>
         <span>{DESCRIPTION_WORDS.CHANGED}</span>
         <Button onClick={onReload}>{DESCRIPTION_WORDS.RELOAD}</Button>
       </div>
@@ -330,7 +330,7 @@ export function PullRequestDescription({
     },
   );
   const read = drawn ?? (
-    <p className="pull-request-words pull-request-description-empty">
+    <p className="pull-request-words m-0 min-w-0 select-text text-body-size leading-reading text-muted-foreground">
       {DESCRIPTION_WORDS.PLACEHOLDER}
     </p>
   );
@@ -366,7 +366,7 @@ export function PullRequestDescription({
         placeholder={DESCRIPTION_WORDS.PLACEHOLDER}
         // Note that the words wear the drawn description's own classes, so nothing moves as it opens or closes.
         className="transcript-markdown pull-request-description-text"
-        roomClassName="pull-request-words pull-request-description"
+        roomClassName="pull-request-words pull-request-description min-w-0 select-text text-body-size leading-reading text-foreground"
         onDraft={(markdown) => {
           draft.current = markdown;
         }}

@@ -1,5 +1,5 @@
 import { githubUserAvatarUrl } from "@luke/features/account-picture";
-import type { AutomationTrigger } from "@luke/features/automation-wire";
+import type { AutomationFiring, AutomationTrigger } from "@luke/features/automation-wire";
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import {
@@ -97,8 +97,8 @@ export type Actor =
       readonly automationId?: string | undefined;
       readonly name: string;
       readonly state: ActorState;
-      /** What fires it, whose glyph its tile wears (`FiringGlyph`); the clock where the place naming it knows only its name. */
-      readonly trigger?: AutomationTrigger | undefined;
+      /** What fires it, or what fired the one run it stands for, whose glyph its tile wears (`FiringGlyph`); the clock where the place naming it knows only its name. */
+      readonly trigger?: AutomationTrigger | AutomationFiring | undefined;
     }
   | {
       readonly kind: typeof ACTOR_KIND.SOMEONE;

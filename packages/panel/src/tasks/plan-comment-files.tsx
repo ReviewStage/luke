@@ -64,7 +64,7 @@ export function CommentFiles({
     url: urls.get(file.attachmentId) ?? "",
   }));
   return (
-    <div className="comment-files">
+    <div className="comment-files mx-0 mt-tight-gap mb-item-gap">
       <AttachedFileChips files={chips} />
     </div>
   );

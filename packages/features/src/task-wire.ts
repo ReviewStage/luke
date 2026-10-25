@@ -79,6 +79,15 @@ export const TASK_BOUNDS = {
 /** The name a plan started without one stands under until the developer renames it. */
 export const UNTITLED_TASK_NAME = "Untitled";
 
+/** A placeholder's angle brackets, as a model answering for nothing wraps the untitled name ("<untitled>"). */
+const PLACEHOLDER_BRACKETS = /^<(.*)>$/u;
+
+/** Whether a title names nothing: the untitled name, in any case, bare or in a placeholder's angle brackets. */
+export function titlesNothing(title: string): boolean {
+  const bare = title.trim().replace(PLACEHOLDER_BRACKETS, "$1").trim();
+  return bare.toLowerCase() === UNTITLED_TASK_NAME.toLowerCase();
+}
+
 /**
  * Where a task stands: filed for later, to do, under way, or settled one way
  * or the other. A task starts to do, and moves to in progress when a coding

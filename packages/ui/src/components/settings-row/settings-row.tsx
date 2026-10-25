@@ -104,6 +104,17 @@ export const SETTINGS_ROW_INDENT = {
 
 export type SettingsRowIndent = (typeof SETTINGS_ROW_INDENT)[keyof typeof SETTINGS_ROW_INDENT];
 
+/** How wide the row's lead stands: a provider's mark at its own width, or a face's, in which a mark standing in a card beside a face's row is centred so both rows' words start together. */
+export const SETTINGS_ROW_LEAD = {
+  MARK: "mark",
+  FACE: "face",
+} as const;
+
+export type SettingsRowLead = (typeof SETTINGS_ROW_LEAD)[keyof typeof SETTINGS_ROW_LEAD];
+
+/** A face's width, in which a mark in the card beside it stands centred. */
+const FACE_LEAD = "w-avatar-card justify-center";
+
 /** What a row hands the controls it holds. */
 export interface SettingsRowControl {
   /** The label's id, for a control named by `aria-labelledby`. */
@@ -167,6 +178,7 @@ export function SettingsRow({
   adornment,
   density = SETTINGS_ROW_DENSITY.CARD,
   indent = SETTINGS_ROW_INDENT.NONE,
+  lead = SETTINGS_ROW_LEAD.MARK,
   labelsControl = false,
   landed = false,
   children,
@@ -184,6 +196,8 @@ export function SettingsRow({
   density?: SettingsRowDensity | undefined;
   /** Where the row's edge stands; at the card's where none is named. */
   indent?: SettingsRowIndent | undefined;
+  /** How wide the lead stands; a mark's where none is named, a face's for a row that stands beside rows led by faces. */
+  lead?: SettingsRowLead | undefined;
   /** Whether the row's words label its one control, a switch, wearing `controlId`: a press on them sets it, and it stays beside them. */
   labelsControl?: boolean | undefined;
   /** Whether the row just arrived, which lights it once. */
@@ -233,7 +247,11 @@ export function SettingsRow({
           }
         >
           <div className="luke-settings-row-subject flex min-w-0 items-center gap-luke-12">
-            {led ? <ItemMedia>{leading}</ItemMedia> : null}
+            {led ? (
+              <ItemMedia className={lead === SETTINGS_ROW_LEAD.FACE ? FACE_LEAD : undefined}>
+                {leading}
+              </ItemMedia>
+            ) : null}
             <ItemContent>
               {said(adornment) ? (
                 <ItemTitle>
@@ -320,7 +338,8 @@ export function SettingsRowStateLine({
       className={cn(
         "luke-settings-row-state items-center gap-luke-6",
         block ? "flex w-fit" : "inline-flex",
-        wrap && "flex-wrap whitespace-nowrap",
+        // Note that the parts of a wrapping line are spaced by the spaces written between them, kept by `pre`: a flex gap beside the space a part ends in, trimmed at its end, would leave a wider gap after a separator than before it. The state's dot keeps its own.
+        wrap && "flex-wrap gap-x-0 whitespace-pre before:me-luke-6",
         STATE_CLASS[state],
       )}
       data-state={state}

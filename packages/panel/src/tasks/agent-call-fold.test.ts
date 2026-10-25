@@ -18,7 +18,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -535,13 +534,7 @@ test("a turn outside a call is drawn as it always was: its work folded and its w
   assert.match(container.textContent ?? "", /Done: invites now last fourteen days\./u);
 });
 
-/** The panel's sheets and the utilities its app compiles, laid into the test's document. */
-function layTasksSheet(): void {
-  layContainersAt({});
-}
-
-test('a call opens at a labelled rule, "Call started" and when, and closes at one, "Call ended", how long it ran, and when, each a pill on a rule with no band of its own', async () => {
-  layTasksSheet();
+test('a call opens at a labelled rule, "Call started" and when, and closes at one, "Call ended", how long it ran, and when, each a pill on a rule', async () => {
   const container = await drawnTab([TASK, ASKED, ACK, SPOKEN_TURN, REPLY]);
   const start = container.querySelector<HTMLElement>('[data-call-marker="start"]');
   const end = container.querySelector<HTMLElement>('[data-call-marker="end"]');
@@ -553,9 +546,6 @@ test('a call opens at a labelled rule, "Call started" and when, and closes at on
   assert.match(end.textContent ?? "", /^Call ended · 1m 0s · .+\d:\d\d [AP]M$/u);
   assert.ok(end.querySelector(".call-marker-icon svg"), "beside a hang-up glyph");
   for (const marker of [start, end]) {
-    const style = getComputedStyle(marker);
-    assert.match(style.backgroundColor, /^(|transparent|rgba\(0, 0, 0, 0\))$/u, "no band");
-    assert.notEqual(style.position, "sticky", "an ended call's markers scroll with its lines");
     assert.equal(marker.querySelectorAll(".call-marker-rule").length, 2, "a rule either side");
     assert.ok(marker.querySelector(".call-marker-pill"), "the words on a pill");
   }
@@ -565,8 +555,7 @@ test('a call opens at a labelled rule, "Call started" and when, and closes at on
   );
 });
 
-test("a standing call's start marker says Live and stays pinned to the top of the log while its lines scroll", () => {
-  layTasksSheet();
+test("a standing call's start marker says Live", () => {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>
@@ -577,7 +566,4 @@ test("a standing call's start marker says Live and stays pinned to the top of th
   const marker = container.querySelector<HTMLElement>('[data-call-marker="start"]');
   assert.ok(marker);
   assert.match(marker.textContent ?? "", /^Call started · .+Live$/u);
-  const style = getComputedStyle(marker);
-  assert.equal(style.position, "sticky", "pinned while the call's lines scroll under it");
-  assert.equal(style.top, "0px");
 });

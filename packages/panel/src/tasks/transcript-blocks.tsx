@@ -152,6 +152,7 @@ import {
   ToolStateMark,
   ToolSummary,
 } from "../ai-elements/tool.js";
+import { OUTSIDE_GLYPH_CLASS } from "../picture-block.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
 import { useInboxPictureDrawer } from "./inbox-pictures.js";
@@ -558,7 +559,7 @@ function PictureElement({ node }: MarkdownNodeProps): ReactNode {
   const words = said === "" ? UNNAMED_PICTURE : said;
   return (
     <TranscriptLink href={address === "" ? undefined : address} words={words}>
-      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      <ImageIcon className={OUTSIDE_GLYPH_CLASS} aria-hidden="true" />
       {words}
     </TranscriptLink>
   );
@@ -638,7 +639,12 @@ function LoneLinkElement({
 
 /** A document's paragraph of pictures alone: the pictures side by side, sharing its width. */
 function PictureRowElement({ children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
-  return <div className={PICTURE_ROW_ELEMENT.CLASS}>{children}</div>;
+  // Side by side, sharing the column's width, so a before and an after read as a pair; each still hugs its own picture, and none grows past its own size (tasks.css).
+  return (
+    <div className={`${PICTURE_ROW_ELEMENT.CLASS} my-block-gap flex items-start gap-block-gap`}>
+      {children}
+    </div>
+  );
 }
 
 /** A mention held with the punctuation written against it, in the box no line breaks inside (`link-glue.ts`). */
@@ -705,7 +711,7 @@ export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): R
   const words = alt === "" ? UNNAMED_PICTURE : alt;
   return (
     <TranscriptLink href={src === "" ? undefined : src} words={words}>
-      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      <ImageIcon className={OUTSIDE_GLYPH_CLASS} aria-hidden="true" />
       {words}
     </TranscriptLink>
   );
@@ -1376,12 +1382,19 @@ export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children">
 function TodoItems({
   todos,
   live,
+  docked = false,
 }: {
   todos: CodingAgentTodos["todos"];
   live: boolean;
+  /** Whether it stands in the dock over the composer, where it keeps to under a third of what is seen and scrolls past it, so a long list leaves the transcript its room in a short window. */
+  docked?: boolean;
 }): ReactNode {
   return (
-    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} className="todo-items">
+    <Stack
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.TIGHT}
+      className={`todo-items leading-body${docked ? " max-h-todos-dock overflow-y-auto" : ""}`}
+    >
       {todos.map((todo, index) => (
         // Note that an item's place is its identity, so a write that moves
         // an item on is drawn as that item changing where it stands.
@@ -1411,7 +1424,7 @@ function TodoItem({
   const arrived = todo.status !== first;
   const done = todo.status === CODING_AGENT_TODO_STATUS.DONE;
   return (
-    <li className="todo-item" data-todo-status={todo.status}>
+    <li className="todo-item flex items-start gap-icon-gap" data-todo-status={todo.status}>
       {/* Keyed by where it stands, so each change mounts the glyph anew and its arrival runs. */}
       <GlyphSlot
         key={todo.status}
@@ -1428,7 +1441,11 @@ function TodoItem({
           <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
         )}
       </GlyphSlot>
-      <span className="todo-words">{todo.content}</span>
+      <span
+        className={`min-w-0 wrap-anywhere transition-[color] duration-(--luke-duration-quick) ease-motion-exit${done ? " text-muted-foreground" : ""}`}
+      >
+        {todo.content}
+      </span>
     </li>
   );
 }
@@ -1460,7 +1477,7 @@ export function TranscriptTodos({
         subject={subject}
         subjectIsCode={words.code}
       />
-      <FoldBody className="todos-body">
+      <FoldBody className="mt-list-gap mr-0 mb-tight-gap ml-transcript-gutter select-text">
         <TodoItems todos={todos} live={live} />
         {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
       </FoldBody>
@@ -1497,13 +1514,13 @@ export function TranscriptTodosDock({
         <GlyphSlot>
           <GLYPH.TODOS />
         </GlyphSlot>
-        <span className="todos-dock-summary">
+        <span className="shrink-0 text-muted-foreground">
           <RollingNumber value={done} /> of <RollingNumber value={total} /> done
         </span>
         <TodosDockFocus focus={focus} />
       </DisclosureSummary>
       <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
-        <TodoItems todos={todos} live />
+        <TodoItems todos={todos} live docked />
       </DisclosureBody>
     </Disclosure>
   );
@@ -1518,12 +1535,7 @@ function TodosDockFocus({ focus }: { focus: string | undefined }): ReactNode {
   const previewed = useDisclosurePreviewShown(focus !== undefined);
   if (focus === undefined || !previewed) return null;
   return (
-    <Text
-      as={TEXT_ELEMENT.SPAN}
-      variant={TEXT_VARIANT.INHERIT}
-      truncate
-      className="todos-dock-focus"
-    >
+    <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} truncate className="flex-1">
       {focus}
     </Text>
   );

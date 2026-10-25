@@ -224,8 +224,8 @@ export function useUnlinedAgents(agents: readonly UnlinedAgent[]): readonly Codi
   return useAtomValue(unlinedAgentsAtom(unlinedKey(agents)));
 }
 
-/** What a mark draws of the model read, or of none. */
-type ModelDrawer = (model: string | undefined) => ReactNode;
+/** What a mark draws of the model read, or of none, and whether the read has answered, which is false while it is out. */
+type ModelDrawer = (model: string | undefined, settled: boolean) => ReactNode;
 
 function TaskAgentModel({
   taskId,
@@ -236,7 +236,8 @@ function TaskAgentModel({
   agentId: string;
   children: ModelDrawer;
 }): ReactNode {
-  return children(modelOf(useAtomValue(taskAgentsAtom(taskId)), agentId));
+  const read = useAtomValue(taskAgentsAtom(taskId));
+  return children(modelOf(read, agentId), AsyncResult.isNotInitial(read));
 }
 
 function TasklessAgentModel({
@@ -250,7 +251,8 @@ function TasklessAgentModel({
   name: string;
   children: ModelDrawer;
 }): ReactNode {
-  return children(modelOf(useAtomValue(tasklessAgentsAtom(workspaceId)(agentId)(name)), agentId));
+  const read = useAtomValue(tasklessAgentsAtom(workspaceId)(agentId)(name));
+  return children(modelOf(read, agentId), AsyncResult.isNotInitial(read));
 }
 
 function AgentModelById({
@@ -260,7 +262,8 @@ function AgentModelById({
   agentId: string;
   children: ModelDrawer;
 }): ReactNode {
-  return children(modelOf(useAtomValue(agentByIdAtom(agentId)), agentId));
+  const read = useAtomValue(agentByIdAtom(agentId));
+  return children(modelOf(read, agentId), AsyncResult.isNotInitial(read));
 }
 
 /**
@@ -270,7 +273,7 @@ function AgentModelById({
  * the workspace's agents its name finds, as its card finds it, where it
  * works on none; and by its own id where no workspace or name is known.
  * It is drawn with none while the read is out and where it answered
- * nothing.
+ * nothing, and says which of the two it is.
  */
 export function ReadAgentModel({
   agentId,
