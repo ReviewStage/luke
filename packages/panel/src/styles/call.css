@@ -17,24 +17,13 @@ html.call-window #root {
   place-items: center;
 }
 
-/* On the ground of what floats over the window, as a toast is, so the card
+/* The card stands on the ground of what floats over the window, as a toast
+   does, drawn in utilities where it is written (`call-card.tsx`), so it
    reads as the same kind of thing wherever it stands. It rises in on the
    spring and leaves on the exit's beat, as a toast does. What it holds is
    the call bar itself (`@luke/ui`'s `CallBar`), so the card adds no look
    of its own to the call. */
 .call-card {
-  display: flex;
-  box-sizing: border-box;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--luke-menu-shadow);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
   animation:
     luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit),
     luke-card-rise var(--luke-duration-fast) var(--luke-spring-fast);
@@ -43,11 +32,6 @@ html.call-window #root {
 .call-card[data-leaving="true"] {
   pointer-events: none;
   animation: luke-card-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
-}
-
-/* Above the account row, edge to edge with the rows' own fills. */
-.call-card[data-surface="sidebar"] {
-  margin-bottom: var(--luke-space-8);
 }
 
 /* Where the sidebar's card would stand, as far in from the corner as the
@@ -130,26 +114,6 @@ html.call-window #root {
    the card is, and its Video off answers its own press. */
 .call-card[data-surface="window"] {
   --luke-call-video-height: 125px;
-}
-
-/* The plan's name, and the way back to it beside the name. */
-.call-card-head {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-}
-
-.call-card-title {
-  min-width: 0;
-  flex: 1;
-  margin: 0;
-}
-
-/* The way back, named in the floating window by the system's hint its
-   wrapper carries, and no taller than its button. */
-.call-card-return {
-  display: flex;
 }
 
 /* Moved under a still pointer, the buttons, and the system's hints the

@@ -107,6 +107,8 @@ interface ToastAction {
  */
 export type ToastNotice = {
   readonly words: string;
+  /** The glyph it leads with in place of its tone's, where what it says has one of its own (`Toast`'s `glyph`). */
+  readonly glyph?: () => React.JSX.Element;
   readonly detail?: string;
   readonly tone: ToastTone;
   readonly waits?: boolean;
@@ -516,6 +518,7 @@ function ToastCard({
   return (
     <Toast
       tone={notice.tone}
+      glyph={notice.glyph}
       words={notice.words}
       detail={notice.detail}
       look={look}

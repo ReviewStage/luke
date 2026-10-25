@@ -707,12 +707,13 @@
   flex: none;
 }
 
-/* "Live": a dot and the word in the live green. */
+/* "Live": a dot and the word in the working blue, since a live call is
+   something under way rather than something finished. */
 .call-marker-live {
   display: inline-flex;
   align-items: center;
   gap: var(--luke-tight-gap);
-  color: var(--luke-color-complete);
+  color: var(--luke-color-working);
   font-weight: var(--luke-weight-semibold);
 }
 
