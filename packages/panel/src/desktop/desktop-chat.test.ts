@@ -299,10 +299,7 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
 test("a press on a channel shows its messages in the order posted, a thread folded under its root until a press opens it", () => {
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
-  assert.equal(
-    seen(page.querySelector(".chat-stream .luke-pane-bar-lead")),
-    "▣ teammate-invitations",
-  );
+  assert.equal(seen(page.querySelector(".chat-stream .luke-toolbar")), "▣ teammate-invitations");
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
   assert.deepEqual(stream(page), [
     "Invite emails",
@@ -1202,7 +1199,7 @@ test("a direct message between two others reads as theirs, named by both, with n
   assert.equal(pair?.querySelectorAll(".inbox-row-mark .actor-stack .actor-mark").length, 2);
   act(() => railRow(page, "Add teammate invitations ↔ Invite emails").click());
   assert.equal(
-    page.querySelector(".chat-stream .luke-pane-bar-title")?.textContent,
+    page.querySelector(".chat-stream .luke-toolbar-title")?.textContent,
     "Add teammate invitations ↔ Invite emails",
   );
   assert.equal(page.querySelector(".chat-composer"), null);
@@ -1559,16 +1556,16 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   assert.equal(openDialog(), null);
   act(() => railRow(page, "release-train").click());
   assert.equal(
-    page.querySelector(".chat-stream .luke-pane-bar-title")?.textContent,
+    page.querySelector(".chat-stream .luke-toolbar-title")?.textContent,
     "#release-train",
   );
   assert.match(
-    page.querySelector(".chat-stream .luke-pane-bar")?.textContent ?? "",
+    page.querySelector(".chat-stream .luke-toolbar")?.textContent ?? "",
     /What ships Friday/u,
   );
 
   const actions = page.querySelector<HTMLButtonElement>(
-    '.chat-stream .luke-pane-bar button[aria-label="#release-train actions"]',
+    '.chat-stream .luke-toolbar button[aria-label="#release-train actions"]',
   );
   assert.ok(actions, "a topic's head offers its actions");
   act(() => actions.click());
@@ -1640,7 +1637,7 @@ function pickViewOption(page: HTMLElement, label: string): void {
 /** The items of the menu a channel's head ends on, as its words, the disabled marked `(off)`. */
 function channelMenu(page: HTMLElement): string[] {
   const actions = page.querySelector<HTMLButtonElement>(
-    '.chat-stream .luke-pane-bar button[aria-label$=" actions"]',
+    '.chat-stream .luke-toolbar button[aria-label$=" actions"]',
   );
   assert.ok(actions, "the channel's head ends on its menu");
   act(() => actions.click());
@@ -1740,10 +1737,7 @@ test("a For you row names a task's channel by its glyph and name, and a press on
   const link = where?.querySelector<HTMLButtonElement>("button");
   assert.equal(seen(link), "▣ teammate-invitations");
   act(() => link?.click());
-  assert.equal(
-    seen(page.querySelector(".chat-stream .luke-pane-bar-lead")),
-    "▣ teammate-invitations",
-  );
+  assert.equal(seen(page.querySelector(".chat-stream .luke-toolbar")), "▣ teammate-invitations");
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
 });
 

@@ -24,7 +24,9 @@ import { Toolbar, type ToolbarPickUp } from "../toolbar/toolbar.js";
  *
  * Under the window's toolbar (`PAGE_FRAME.TOOLBAR`) the page draws no
  * header nor bar of its own: the caller's toolbar stands still above the
- * columns, and the page is named by the toolbar's title. Content that scrolls sideways stands across the
+ * columns, and the page is named by the toolbar's title. Under a toolbar it
+ * draws itself, its columns stand across the room on the toolbar's own
+ * edges, so the bar's title and actions line up with what it heads. Content that scrolls sideways stands across the
  * whole room (`PAGE_WIDTH.FULL`) rather than at the measure. A page in a
  * narrow column under rows that stand at a column's inset stands its words
  * with theirs (`DETAIL_PAGE_INSET.READING`) rather than a page's inset in from them. A

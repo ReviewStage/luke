@@ -1,7 +1,8 @@
 /* collection-page.css -- a collection's page: a still header and filters
    over one scrolling content column, all three at one measure centred in
    the room. The measure is the page's, a plan's reading width in the window
-   and the admin's wider column on the web. The page queries its own width
+   and the admin's wider column on the web, or under the window's toolbar
+   the room's whole width at the toolbar's edges. The page queries its own width
    rather than the viewport's, so a page in a narrow pane narrows its inset
    as it would in a narrow window; a container query cannot read a custom
    property, so the width it narrows under is a literal here. Under the
@@ -48,6 +49,21 @@
     max-width: calc(var(--luke-collection-page-width) + 2 * var(--luke-collection-page-inset));
     margin-inline: auto;
     padding-inline: var(--luke-collection-page-inset);
+  }
+
+  /* Under the window's toolbar the page is a workspace's rather than a
+     document's: its filters and its content stand across the room on the
+     toolbar's own edges, where its title's words start and its actions end
+     (`toolbar.css`'s page inset, a column's inset and a row's), in any
+     room, so the bar lines up with what it heads rather than with a
+     measure centred under it. */
+  .luke-collection-page[data-frame="toolbar"] > * {
+    --luke-collection-page-inset: calc(var(--luke-space-12) + var(--luke-row-inset));
+  }
+
+  .luke-collection-page[data-frame="toolbar"]
+    :is(.luke-collection-page-filters, .luke-collection-page-content) {
+    max-width: none;
   }
 
   /* The header (`PageHeader`) opens at the page's inset. */

@@ -72,9 +72,9 @@ test("under a mouse a tab other than the chosen one narrower than 72px stands as
   assert.ok(!shown(unchosenLabel("narrow", false)));
 });
 
-/** An Inbox item's bar as wide as given, in a shell of the room given: the way back, the crumbs, and the Resolve, answering the bar and the crumbs. */
+/** An Inbox item's bar as wide as given, in a shell of the room given, drawn as `Toolbar` draws one whose heading may wrap: the way back, the crumbs, and the Resolve, answering the crumbs and the way back. */
 function itemBar(room: string, width: number) {
-  laid = layContainersAt({ "inbox-item": width }, { touch: room === "narrow" });
+  laid = layContainersAt({ "luke-toolbar": width }, { touch: room === "narrow" });
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
@@ -82,17 +82,21 @@ function itemBar(room: string, width: number) {
   const pane = shell.appendChild(document.createElement("section"));
   pane.className = "inbox-view-items";
   const bar = pane.appendChild(document.createElement("header"));
-  bar.className = "luke-toolbar";
-  const box = bar.appendChild(document.createElement("div"));
-  box.className = "inbox-item-bar";
-  box.appendChild(document.createElement("button")).textContent = "Inbox";
-  const crumbs = box.appendChild(document.createElement("div"));
-  crumbs.className = "inbox-crumbs";
-  box.appendChild(document.createElement("button")).textContent = "Resolve";
+  bar.className = "luke-toolbar inbox-item-head";
+  bar.dataset.wrapHeading = "true";
+  const lead = bar.appendChild(document.createElement("div"));
+  lead.className = "luke-toolbar-lead";
+  lead.appendChild(document.createElement("button")).textContent = "Inbox";
+  const heading = bar.appendChild(document.createElement("div"));
+  heading.className = "luke-toolbar-heading";
+  heading.appendChild(document.createElement("div")).className = "inbox-crumbs";
+  const actions = bar.appendChild(document.createElement("div"));
+  actions.className = "luke-toolbar-actions";
+  actions.appendChild(document.createElement("button")).textContent = "Resolve";
   return {
     ownLine:
-      getComputedStyle(crumbs).flexBasis === "100%" && getComputedStyle(crumbs).order === "1",
-    backFolded: getComputedStyle(box).getPropertyValue("--luke-fold").trim() === "folded",
+      getComputedStyle(heading).flexBasis === "100%" && getComputedStyle(heading).order === "1",
+    backFolded: getComputedStyle(lead).getPropertyValue("--luke-fold").trim() === "folded",
   };
 }
 

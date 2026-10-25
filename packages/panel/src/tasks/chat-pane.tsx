@@ -32,6 +32,8 @@ import {
   Text,
   TextButton,
   Time,
+  TOOLBAR_INSET,
+  Toolbar,
   useConfirmDialog,
   useMinute,
   VisuallyHidden,
@@ -1097,7 +1099,15 @@ function ForYouWhere({
   );
 }
 
-/** The head over a place, a `PaneBar`: the way back where it stands alone and a task's glyph as its mark, its name as the title, what it says beside that, and its menu. */
+/**
+ * The head over a place: the way back where it stands alone and a task's
+ * glyph as its mark, its name as the title, what it says beside that, and
+ * its menu. In the window's Chat it is the window's bar (`Toolbar`), as the
+ * Inbox item's beside its list is, level with the rail's and on the card's
+ * edges; in a task's tab it is the tab's own bar (`PaneBar`). Standing alone
+ * behind its way back, its name keeps the room and what is said beside it
+ * is left out.
+ */
 function PlaceHead({
   title,
   channel,
@@ -1117,8 +1127,31 @@ function PlaceHead({
   /** Whether a phone heads the place (`phone-head.tsx`): the way back alone at its start, the name centred, its menu at its end, and what is said beside the name left to the place's own view. */
   phone?: boolean;
 }): React.JSX.Element {
+  const inTab = useContext(HandTabActionsContext) !== undefined;
   if (phone) {
     return <PhoneHead place="chat-place" start={lead} title={title} end={actions} />;
+  }
+  if (!inTab) {
+    const glyph = channel === undefined ? undefined : <ChannelGlyph channel={channel} />;
+    return (
+      <Toolbar
+        place="chat-place"
+        start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN}
+        lead={
+          lead === undefined ? (
+            glyph
+          ) : (
+            <>
+              {lead}
+              {glyph}
+            </>
+          )
+        }
+        title={title}
+        detail={lead === undefined ? meta : undefined}
+        actions={actions}
+      />
+    );
   }
   return (
     <PaneBar
