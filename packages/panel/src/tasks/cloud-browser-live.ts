@@ -5,9 +5,10 @@
  * shell's door (`AppPlatform.openBrowserLive`): the desktop's from its host
  * under the account's bearer, the web's from its own page under the session
  * cookie. Everything past the door is here, the same on both. A socket is
- * sized with the viewport the pane draws at as soon as it opens, again each
- * time the pane resizes, and at least once a minute while it stands, which
- * is what keeps the relay from closing it as idle. A socket that drops is
+ * sized with the viewport the pane draws at as soon as it opens, and again
+ * each time the pane resizes; nothing is sent to keep it open, so a view
+ * nobody acts on is closed by the relay as idle and lets its agent's sandbox
+ * stop (`browser-live/relay.ts`). A socket that drops is
  * opened again after a wait that doubles to thirty seconds and starts over
  * once a socket has been heard on; one whose agent has not opened its
  * sandbox is asked after every five seconds; and one the relay closed as
@@ -75,9 +76,6 @@ const CLOUD_BROWSER_RECONNECT = {
   /** The wait between asks while the agent has not opened its sandbox. */
   NOT_OPENED_EVERY: Duration.seconds(5),
 } as const;
-
-/** How often the viewport is sent again while the socket stands, well inside the relay's idle bound. */
-const CLOUD_BROWSER_VIEWPORT_EVERY = Duration.minutes(1);
 
 /** Where a view stands. */
 export const CLOUD_BROWSER_PHASE = {
@@ -303,10 +301,8 @@ export function cloudBrowserLive(input: {
                 opened.close();
               }),
           );
-          // The viewport goes as the socket opens, then on the beat.
-          yield* Effect.forkScoped(
-            Effect.repeat(Effect.sync(sendViewport), Schedule.spaced(CLOUD_BROWSER_VIEWPORT_EVERY)),
-          );
+          // The viewport goes as the socket opens; the pane sends it again on each resize.
+          yield* Effect.sync(sendViewport);
           let reason: BrowserLiveCloseReason | undefined;
           let code: number | undefined;
           let live = false;

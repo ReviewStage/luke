@@ -692,10 +692,10 @@ it.effect(
         coder.commands,
         Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
       );
-      // The panel acting every four minutes, inside the idle bound, for two keep-alive intervals.
+      // The panel resizing every four minutes, inside the idle bound, for two keep-alive intervals.
       for (let acted = 0; acted < 2 * every; acted += Duration.toMillis(Duration.minutes(4))) {
         yield* TestClock.adjust(Duration.minutes(4));
-        yield* panel.push(VIEWPORT);
+        yield* panel.push({ ...VIEWPORT, width: VIEWPORT.width + acted / 60_000 });
         yield* settle;
       }
       yield* panel.leave;
@@ -888,6 +888,57 @@ it.effect("a panel that sends nothing for the idle bound closes as idle", () =>
     });
     assert.deepEqual(panel.closed, [BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.IDLE]]);
   }),
+);
+
+it.effect(
+  "the same viewport sent again every minute neither keeps the socket open nor moves the lease on, and a resize does both",
+  () =>
+    Effect.gen(function* () {
+      const resent = yield* liveBrowser();
+      const resentPanel = yield* scriptedViewer;
+      const resentStore = world(resent.browser);
+      const { fiber } = yield* started(
+        resent.peer,
+        resent.commands,
+        Effect.scoped(
+          relayBrowserTab(resentPanel.viewer, ASK, reachedTab(undefined), resentStore.deps),
+        ),
+      );
+      yield* resentPanel.push(VIEWPORT);
+      yield* settle;
+      // An older panel's keep-alive: the size it already sent, once a minute, past the idle bound.
+      for (let minute = 0; minute < 6; minute += 1) {
+        yield* TestClock.adjust(Duration.minutes(1));
+        yield* resentPanel.push(VIEWPORT);
+        yield* settle;
+      }
+      yield* resentPanel.leave;
+      yield* Fiber.join(fiber);
+      assert.deepEqual(resentPanel.closed, [
+        BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.IDLE],
+      ]);
+      assert.equal(resentStore.holds.length, 1, "only connecting held the sandbox");
+
+      const resized = yield* liveBrowser();
+      const resizedPanel = yield* scriptedViewer;
+      const resizedStore = world(resized.browser);
+      const relay = yield* started(
+        resized.peer,
+        resized.commands,
+        Effect.scoped(
+          relayBrowserTab(resizedPanel.viewer, ASK, reachedTab(undefined), resizedStore.deps),
+        ),
+      );
+      for (let minute = 0; minute < 6; minute += 1) {
+        yield* TestClock.adjust(Duration.minutes(1));
+        yield* resizedPanel.push({ ...VIEWPORT, width: VIEWPORT.width + minute });
+        yield* settle;
+      }
+      assert.deepEqual(resizedPanel.closed, [], "a resize keeps the socket open");
+      assert.equal(resizedStore.holds.length, 7, "each resize a minute on moved the lease on");
+      yield* resizedPanel.leave;
+      yield* Fiber.join(relay.fiber);
+    }),
 );
 
 it.effect(

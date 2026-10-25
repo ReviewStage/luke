@@ -350,6 +350,48 @@ test("a cloud Browser tab's pane spins while it waits for the page, draws it onc
   );
 });
 
+test("a pane's view closes while its window's page is hidden, and a new one opens once it is shown again", async () => {
+  const sockets: { closed: boolean }[] = [];
+  fakeAppPlatform({
+    openBrowserLive: () => {
+      const socket = { closed: false };
+      sockets.push(socket);
+      return {
+        send: () => undefined,
+        close: () => {
+          socket.closed = true;
+        },
+      };
+    },
+  });
+  const turn = async (visibility: DocumentVisibilityState) => {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue(visibility);
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    await settle();
+  };
+  try {
+    draw(
+      createElement(CloudBrowserPane, {
+        taskId: TASK,
+        tab: LISTED,
+        owner: LUKE_OWNER,
+        shown: true,
+        memberName: () => undefined,
+      }),
+    );
+    await settle();
+    assert.deepEqual(sockets, [{ closed: false }], "the pane opened its view");
+
+    await turn("hidden");
+    assert.deepEqual(sockets, [{ closed: true }], "a hidden window holds no socket");
+
+    await turn("visible");
+    assert.deepEqual(sockets, [{ closed: true }, { closed: false }], "shown again, a new view");
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
 test("while the member drives, a paste reaches the page as text, Control-V and ⌘V leave the paste to the window, and the wheel scrolls the page alone", async () => {
   const sent: { type: string }[] = [];
   let listener: BrowserLiveListener | undefined;

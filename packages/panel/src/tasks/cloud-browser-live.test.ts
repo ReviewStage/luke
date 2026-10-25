@@ -83,7 +83,7 @@ const settle = Effect.repeat(Effect.yieldNow, { times: 20 });
 const VIEWPORT_MESSAGE = { type: BROWSER_LIVE_CLIENT.VIEWPORT, ...VIEWPORT };
 
 it.effect(
-  "a frame is drawn once the socket opens, and the viewport is sent as it opens and again each minute",
+  "a frame is drawn once the socket opens, and the viewport is sent as it opens and never again to keep it open",
   () =>
     Effect.gen(function* () {
       const view = harness();
@@ -105,8 +105,12 @@ it.effect(
       assert.equal(view.last()?.phase, CLOUD_BROWSER_PHASE.LIVE);
       assert.equal(view.last()?.painted, true);
 
-      yield* TestClock.adjust("1 minute");
-      assert.deepEqual(socket.sent, [VIEWPORT_MESSAGE, VIEWPORT_MESSAGE]);
+      yield* TestClock.adjust("5 minutes");
+      assert.deepEqual(
+        socket.sent,
+        [VIEWPORT_MESSAGE],
+        "a view nobody acts on lets the relay idle",
+      );
       yield* Fiber.interrupt(fiber);
       assert.equal(socket.closed, true);
     }),
