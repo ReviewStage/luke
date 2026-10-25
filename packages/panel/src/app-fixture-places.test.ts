@@ -158,7 +158,10 @@ it.effect(
     Effect.gen(function* () {
       yield* drawWindow(RUN_PROFILE.AUTOMATIONS_RUNS);
 
-      assert.match(drawn(), /Check each deploy/u);
+      assert.equal(
+        document.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+        "Check each deploy",
+      );
     }),
 );
 
