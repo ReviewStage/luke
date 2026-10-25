@@ -6,7 +6,7 @@ import { CatalogSection } from "../section";
 /**
  * command-ask.tsx -- a command an agent asks to run on this Mac, put to the
  * developer over the window: a short one, a long one that scrolls
- * inside its card, and one carrying a base64 payload it shortens, each opened from its button and put away by any of its
+ * inside its card, and one carrying a base64 payload, each opened from its button and put away by any of its
  * answers, Escape, or a press on the dimmed window, fading out as it goes.
  */
 

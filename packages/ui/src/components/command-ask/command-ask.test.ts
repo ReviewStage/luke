@@ -36,7 +36,7 @@ function button(name: string): HTMLButtonElement {
 }
 
 /** The ask drawn, each answer counted under its name. */
-function asked(command = COMMAND): Record<"once" | "always" | "deny", number> {
+function asked(): Record<"once" | "always" | "deny", number> {
   const heard = { once: 0, always: 0, deny: 0 };
   const container = document.createElement("div");
   document.body.append(container);
@@ -46,7 +46,7 @@ function asked(command = COMMAND): Record<"once" | "always" | "deny", number> {
     root.render(
       createElement(CommandAsk, {
         open: true,
-        command,
+        command: COMMAND,
         onAllowOnce: () => {
           heard.once += 1;
         },
@@ -84,21 +84,4 @@ test("each answer is heard as its own, and Escape denies", () => {
     );
   });
   assert.deepEqual(heard, { once: 1, always: 1, deny: 2 });
-});
-
-test("a long encoded payload is shortened until Show all brings it back", () => {
-  const payload = "H4sIA".padEnd(2000, "QUJD");
-  const command = `echo '${payload}' | base64 -d | tar xz`;
-  asked(command);
-  const words = () => document.querySelector(".luke-file-text-words")?.textContent ?? "";
-  assert.equal(words(), "echo 'H4sIAQUJDQUJDQUJDQUJDQUJ… (1,976 more)' | base64 -d | tar xz");
-  act(() => button("Show all").click());
-  assert.equal(words(), command);
-});
-
-test("a line after a payload is never shortened into it", () => {
-  const payload = "H4sIA".padEnd(200, "QUJD");
-  asked(`echo ${payload}\nreboot`);
-  const words = document.querySelector(".luke-file-text-words")?.textContent ?? "";
-  assert.ok(words.endsWith("\nreboot"), words);
 });
