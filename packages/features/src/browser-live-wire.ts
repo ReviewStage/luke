@@ -20,9 +20,10 @@
  * holds it. Taking over and handing back go over the
  * same socket: a takeover lapses `BROWSER_TAKEOVER_HOLD_MS` past the
  * member's last input, as the tabs contract's does, and a socket that
- * closes hands the tab back. Every message the panel sends counts as
- * someone watching; a panel shown on screen sends its viewport at least
- * once a minute, and a socket nobody sends on closes as idle.
+ * closes hands the tab back. A message the panel sends counts as someone
+ * watching, but a viewport only where it changes the size: a panel on
+ * screen says it is watching once a minute, while it is shown alone, and a
+ * socket nobody watches closes as idle.
  *
  * Every message is a JSON text frame. A message the panel sends refuses a
  * key it did not name; one the service sends is read dropping any key a
@@ -94,6 +95,7 @@ export const BROWSER_LIVE_CLIENT = {
   TEXT: "text",
   NAVIGATE: "navigate",
   HISTORY: "history",
+  WATCHING: "watching",
 } as const;
 
 /** A step a tab's bar takes through its page's history. */
@@ -291,6 +293,11 @@ const browserLiveHistorySchema = EffectSchema.Struct({
   step: EffectSchema.Literals(Object.values(BROWSER_LIVE_HISTORY)),
 });
 
+/** The pane is on screen, its window's page visible: someone watching, though they send nothing else. */
+const browserLiveWatchingSchema = EffectSchema.Struct({
+  type: EffectSchema.Literal(BROWSER_LIVE_CLIENT.WATCHING),
+});
+
 /** Every message the panel sends. */
 export const browserLiveClientMessageSchema = EffectSchema.Union([
   browserLiveTakeOverSchema,
@@ -302,6 +309,7 @@ export const browserLiveClientMessageSchema = EffectSchema.Union([
   browserLiveTextSchema,
   browserLiveNavigateSchema,
   browserLiveHistorySchema,
+  browserLiveWatchingSchema,
 ]);
 
 export type BrowserLiveClientMessage = typeof browserLiveClientMessageSchema.Type;

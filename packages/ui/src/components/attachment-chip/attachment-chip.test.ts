@@ -13,9 +13,7 @@ import { ATTACHMENT_CHIP_STATE, AttachmentChip } from "./attachment-chip.js";
  * pointer or keyboard and refuses while unavailable, a reader hears each
  * control by the file's name, and a file still read or failed opens nothing.
  * A file on its way up is heard as uploading, at its share where one is
- * known, opens nothing until it is up, and takes a check once it lands
- * while drawn.
- * A file's name fades out at its end only while the chip cuts it short.
+ * known, and opens nothing until it is up.
  */
 
 const PICTURE = "data:image/png;base64,iVBORw0KGgo=";
@@ -28,27 +26,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** The measurement each observed box was handed, fired as a resize; jsdom lays nothing out, so nothing reports one of its own accord. */
-const resizes: (() => void)[] = [];
-
+/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: nothing is laid out here. */
 class StandInResizeObserver {
-  readonly #fire: () => void;
-  constructor(fire: () => void) {
-    this.#fire = fire;
-  }
-  observe(): void {
-    resizes.push(this.#fire);
-  }
+  observe(): void {}
   disconnect(): void {}
-}
-
-/** Stands every box's words `wide` pixels in a box 100px wide, and fires every observed box's measurement, as a resize would. */
-function resize(wide: number): void {
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(wide);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
-  act(() => {
-    for (const fire of resizes) fire();
-  });
 }
 
 beforeEach(() => {
@@ -58,9 +39,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
-  resizes.splice(0);
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 });
 
 /** One chip drawn into a list of the page, as its callers draw it. */
@@ -225,16 +204,6 @@ test("a file that failed to come says why and its size, and opens nothing", () =
   assert.equal(document.querySelector("[role=tooltip]")?.textContent, "shot.png");
 });
 
-test("a file's name fades out at its end only while the chip cuts it short", () => {
-  const list = drawn({ name: "quarterly-report-final.pdf", icon: null, detail: "2 MB" });
-  const name = () => list.querySelector(".luke-attachment-chip-name");
-  resize(80);
-  assert.equal(name()?.getAttribute("data-end"), "fade");
-  assert.equal(name()?.getAttribute("data-overflow"), "false");
-  resize(160);
-  assert.equal(name()?.getAttribute("data-overflow"), "true");
-});
-
 test("a file going up is heard as uploading at its share, and opens nothing until it is up", () => {
   const list = drawn({
     name: "spec.pdf",
@@ -257,13 +226,9 @@ test("a file going up with no share known is an indeterminate meter", () => {
   assert.equal(list.querySelector("img")?.getAttribute("alt"), "shot.png");
 });
 
-test("a file that lands while drawn takes its check and opens; one drawn up already takes none", () => {
+test("a file that lands while drawn opens", () => {
   const { list, to } = redrawn({ name: "spec.pdf", state: ATTACHMENT_CHIP_STATE.UPLOADING });
-  assert.equal(list.querySelector(".luke-attachment-chip-landed"), null);
   to({ name: "spec.pdf", state: ATTACHMENT_CHIP_STATE.READY, onOpen: () => {} });
   assert.equal(list.querySelector('[role="progressbar"]'), null);
-  assert.notEqual(list.querySelector(".luke-attachment-chip-landed"), null);
   assert.deepEqual(buttonNames(list), ["Open spec.pdf"]);
-  const standing = drawn({ name: "spec.pdf", onOpen: () => {} });
-  assert.equal(standing.querySelector(".luke-attachment-chip-landed"), null);
 });

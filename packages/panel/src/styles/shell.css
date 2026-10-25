@@ -149,11 +149,19 @@
   background: var(--luke-color-sidebar);
 }
 
-/* A page is the sheet, but a page whose top row holds tabs: a task, an
-   agent's page, and the Inbox, each with the side panel beside it. */
+/* Every page stands its top row on the frame, level with the traffic
+   lights, as a browser's tab strip does, and its sheet starts under the
+   row, holding the page alone: a page with tabs (a task, an agent's page,
+   and the Inbox) and a page with a toolbar of its own alike (Tasks,
+   Automations, Home, Chat), so the window has one geometry. A page with tabs sets the side
+   panel beside it as a sheet of its own a gap away, on the panel's well,
+   under its own row of tabs. The frame stays a gap round every sheet, the
+   sidebar folded or not, since the row above it is the frame already. Note
+   that each sheet is drawn beneath its column rather than as its ground,
+   because the row above it is the same column's. */
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
-  > .desktop-main:not(:has(.desktop-task)),
+  > .desktop-main:not(:has(.desktop-task))::before,
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
   > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
@@ -186,16 +194,6 @@
     0 16px 40px -20px var(--luke-color-shadow);
 }
 
-:where(:root):not([data-luke-room="narrow"])
-  .desktop-shell
-  > .desktop-main:not(:has(.desktop-task)),
-:where(:root):not([data-luke-room="narrow"])
-  .desktop-shell
-  > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
-  > :is(.settings-page, .version-page, .admin-page) {
-  margin: var(--sheet-gap) var(--sheet-gap) var(--sheet-gap) 0;
-}
-
 /* A narrow room's column is full bleed but is still the work, so it stands
    on the sheet's ground rather than showing the frame through it. */
 .desktop-shell[data-room="narrow"] > .desktop-main,
@@ -205,40 +203,7 @@
   background: var(--luke-color-ground);
 }
 
-/* Inside the sheet a top row is shorter by the gap above it and the same
-   below its middle, so its middle stays level with the traffic lights and
-   the title bar's buttons, which stand on the window rather than the sheet,
-   instead of a gap below them. Its controls are centred in it rather than
-   padded, so the shorter row still holds them. */
-:where(:root):not([data-luke-room="narrow"])
-  .desktop-shell
-  > .desktop-main:not(:has(.desktop-task)) {
-  --desktop-bar-height: calc(2 * (var(--title-bar-middle) - var(--sheet-gap)) + 1px);
-  --luke-toolbar-height: var(--desktop-bar-height);
-  --luke-toolbar-block-inset: 0px;
-}
-
-/* With the sidebar folded there is no frame beside the sheet to set it off,
-   so it fills the window, which already rounds its corners, rather than
-   standing a gap in from them as a second, nested window would. */
-:where(:root):not([data-luke-room="narrow"])
-  .desktop-shell[data-sidebar-collapsed="true"]
-  > .desktop-main:not(:has(.desktop-task)) {
-  --sheet-gap: 0px;
-  --sheet-radius: 0px;
-
-  box-shadow: none;
-}
-
-/* A page with tabs stands its top row on the frame, level with the traffic
-   lights, as a browser's tab strip does, and its sheet starts under the
-   row, holding the page alone. The side panel is a sheet of its own a gap
-   beside it, on the panel's well, under its own row of tabs. The frame
-   stays a gap round both, the sidebar folded or not, since the row above
-   them is the frame already. Note that each sheet is drawn beneath its
-   column rather than as its ground, because the row above it is the same
-   column's. */
-:where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main:has(.desktop-task) {
+:where(:root):not([data-luke-room="narrow"]) .desktop-shell > .desktop-main {
   /* The row draws no hairline on the frame, so its middle is the traffic
      lights' own. */
   --desktop-bar-height: calc(2 * var(--title-bar-middle));
@@ -247,9 +212,18 @@
   margin: 0 var(--sheet-gap) var(--sheet-gap) 0;
 }
 
+/* Settings, a version history, and Admin head their page with words in the
+   sheet rather than a row, so their page is the sheet itself, a gap in. */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
+  > :is(.settings-page, .version-page, .admin-page) {
+  margin: var(--sheet-gap) var(--sheet-gap) var(--sheet-gap) 0;
+}
+
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell[data-sidebar-collapsed="true"]
-  > .desktop-main:has(.desktop-task) {
+  > .desktop-main {
   --luke-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 
   margin-left: var(--sheet-gap);
@@ -273,6 +247,9 @@
   isolation: isolate;
 }
 
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main:not(:has(.desktop-task))::before,
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
   > .desktop-main
@@ -355,6 +332,31 @@
   .desktop-task
   .inbox-view[data-columns="both"]
   .inbox-tasks::after {
+  position: absolute;
+  top: var(--desktop-bar-height);
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--luke-color-border);
+  content: "";
+  pointer-events: none;
+}
+
+/* Chat's rail is parted from its place inside the sheet, under the row,
+   as the Inbox's list is from its item. */
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .chat-view:not([data-single="true"])
+  > .chat-rail {
+  border-right: 0;
+}
+
+:where(:root):not([data-luke-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .chat-view:not([data-single="true"])
+  > .chat-rail::after {
   position: absolute;
   top: var(--desktop-bar-height);
   right: 0;
