@@ -434,10 +434,11 @@ export function callConnectionTool(
     );
     if (Result.isFailure(read)) return Result.fail(read.failure);
     const call = read.success;
+    const listed = Result.isSuccess(call) ? call.success.tools : call.failure.listed;
+    if (listed !== undefined) yield* keepTools(name, grant.success, listed, from);
     if (Result.isFailure(call)) {
       return Result.fail(refused(sessionFailed(name, "call a tool of", call.failure)));
     }
-    yield* keepTools(name, grant.success, call.success.tools, from);
     if (!call.success.called) {
       return Result.fail(refused(`Connection "${name}" has no tool named "${tool}".`));
     }

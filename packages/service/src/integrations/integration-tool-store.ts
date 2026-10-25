@@ -13,11 +13,13 @@
  * was listed on, so one account's list never reaches another.
  *
  * A list is kept only while its row stands connected under the grant it was
- * read on, and only where that grant was completed before the read began,
- * so a list read on a grant a sign-in has since replaced is dropped rather
- * than kept over the new one; a completed sign-in clears the row's list
- * (`integration-store.ts`, `workspace-integration-store.ts`), and a
- * Disconnect deletes the row and the list with it.
+ * read on, only where that grant was completed before the read began, so a
+ * list read on a grant a sign-in has since replaced is dropped rather than
+ * kept over the new one, and only over a list whose read began no later, so
+ * two reads that finish out of order keep the newer. A completed sign-in
+ * clears the row's list (`integration-store.ts`,
+ * `workspace-integration-store.ts`), and a Disconnect deletes the row and
+ * the list with it.
  */
 
 import { Database } from "@luke/database/core/query";
@@ -26,7 +28,7 @@ import { InstantColumnSchema } from "@luke/database/models/columns";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import { integrationProviderSchema } from "@luke/features/integration-wire";
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import type { IntegrationStoreEffect } from "./integration-store.js";
@@ -119,7 +121,16 @@ const updateAccountTools = SqlSchema.void({
       db
         .update(integrationConnection)
         .set({ tools, toolsListedAt: from })
-        .where(and(ofAccountGrant(grant), lte(integrationConnection.connectedAt, from))),
+        .where(
+          and(
+            ofAccountGrant(grant),
+            lte(integrationConnection.connectedAt, from),
+            or(
+              isNull(integrationConnection.toolsListedAt),
+              lte(integrationConnection.toolsListedAt, from),
+            ),
+          ),
+        ),
     ),
 });
 
@@ -130,7 +141,16 @@ const updateWorkspaceTools = SqlSchema.void({
       db
         .update(workspaceIntegrationConnection)
         .set({ tools, toolsListedAt: from })
-        .where(and(ofWorkspaceGrant(grant), lte(workspaceIntegrationConnection.connectedAt, from))),
+        .where(
+          and(
+            ofWorkspaceGrant(grant),
+            lte(workspaceIntegrationConnection.connectedAt, from),
+            or(
+              isNull(workspaceIntegrationConnection.toolsListedAt),
+              lte(workspaceIntegrationConnection.toolsListedAt, from),
+            ),
+          ),
+        ),
     ),
 });
 
@@ -161,8 +181,9 @@ export function readStoredTools(
 
 /**
  * Keeps the tools a read begun at `from` listed on the grant, where its row
- * still stands for that grant and the grant was completed by then; nothing
- * is kept otherwise, nor for a grant that keeps none.
+ * still stands for that grant, the grant was completed by then, and no list
+ * from a later read is kept; nothing is kept otherwise, nor for a grant that
+ * keeps none.
  */
 export function storeTools(
   grant: IntegrationGrantRef,

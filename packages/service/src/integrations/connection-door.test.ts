@@ -44,6 +44,7 @@ import {
   LINEAR_AND_NOTION_CONNECT,
   linearServer,
   linearTokenOf,
+  REJECTED_TEAM,
 } from "../testing/integration-mcp-fake.js";
 import {
   callConnectionTool,
@@ -606,6 +607,40 @@ it.layer(getTestDB())("the integrations' door", (it) => {
           reads: [member.userId, member.userId],
           evicted: [member.userId],
         });
+      }),
+  );
+
+  it.effect(
+    "a call the provider refuses still keeps the tools its session listed, and is refused as before",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* memberWithLinear;
+        const services = doorServices(linearTokenOf(member.userId), hearing(), []);
+        yield* storeTools(
+          {
+            holder: INTEGRATION_GRANT_HOLDER.ACCOUNT,
+            provider: LINEAR,
+            userId: member.userId,
+            connectionName: LINEAR,
+            connectSubject: member.userId,
+          },
+          [{ name: "list_issues" }],
+          yield* DateTime.nowAsDate,
+        );
+
+        const refused = yield* callConnectionTool(member.admitted, LINEAR, "list_issues", {
+          team: REJECTED_TEAM,
+        }).pipe(Effect.provide(services));
+        const listed = yield* listConnectionTools(member.admitted, LINEAR).pipe(
+          Effect.provide(services),
+        );
+
+        assert.ok(Result.isFailure(refused));
+        assert.ok(refused.failure.error.startsWith('Failed to call a tool of "linear"'));
+        assert.deepEqual(
+          listed.map((tool) => tool.name),
+          ["list_issues", "create_issue", "fail", "draw", "attach"],
+        );
       }),
   );
 });

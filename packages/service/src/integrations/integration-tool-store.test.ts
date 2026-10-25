@@ -21,8 +21,9 @@ import {
 /**
  * The tools kept on a grant's row over the real migration on PGlite: a
  * list is read back for its own grant alone, a sign-in completed again
- * clears it on the account's row and the workspace's alike, and a list read
- * before that sign-in completed is never kept over it.
+ * clears it on the account's row and the workspace's alike, a list read
+ * before that sign-in completed is never kept over it, and neither is one
+ * read before the list it would replace.
  */
 
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
@@ -113,5 +114,24 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the tools kept on a grant", (i
         assert.equal(yield* readStoredTools(member.grant), undefined);
         assert.equal(yield* readStoredTools(workspace), undefined);
       }),
+  );
+
+  it.effect("a list whose read began before the kept one's is not kept over it", () =>
+    Effect.gen(function* () {
+      const member = yield* connectedMember;
+      const workspace = yield* connectedWorkspace(member.userId);
+      const earlier = yield* DateTime.nowAsDate;
+      yield* TestClock.adjust(Duration.seconds(1));
+      const later = yield* DateTime.nowAsDate;
+      const newer = [...TOOLS, { name: "archive_issue" }];
+
+      for (const grant of [member.grant, workspace]) {
+        yield* storeTools(grant, newer, later);
+        yield* storeTools(grant, TOOLS, earlier);
+      }
+
+      assert.deepEqual(yield* readStoredTools(member.grant), { tools: newer, listedAt: later });
+      assert.deepEqual(yield* readStoredTools(workspace), { tools: newer, listedAt: later });
+    }),
   );
 });
