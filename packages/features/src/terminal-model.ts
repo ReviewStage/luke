@@ -5,7 +5,7 @@
  * terminal prints at the end of its own scrollback, as a terminal prints
  * "[Process completed]"; a state with something to do is one slim bar over
  * the screen with one text action and its key. The scrollback stays under
- * either, dimmed while no shell is connected. The bar beside the agent's
+ * either, dimmed while no shell is connected, the line itself kept readable. The bar beside the agent's
  * name says the state in a word or two. There are no cards, icons, or pills.
  *
  * Most states are the host's, said on the shell's port
@@ -15,6 +15,8 @@
  * bar names which it was, where that is known, so a developer knows whether
  * to wait, retry, or tell whoever runs the deployment.
  */
+
+import { SHELL_EXITED_WORDS } from "./words.js";
 
 /** Where a Terminal tab's connection stands. */
 export const TERMINAL_STATE = {
@@ -190,7 +192,7 @@ export function terminalLook(state: TerminalState): TerminalLook {
       };
     case TERMINAL_STATE.EXITED:
       return {
-        words: "connected",
+        words: SHELL_EXITED_WORDS,
         bar: undefined,
         phoneBar: undefined,
         line: exitedLine(state.code),

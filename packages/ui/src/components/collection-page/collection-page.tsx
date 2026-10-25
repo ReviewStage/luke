@@ -20,7 +20,9 @@ import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.j
  *
  * Under the window's toolbar (`PAGE_FRAME.TOOLBAR`) the page draws no
  * header: the toolbar stands still above the filters, and the page is named
- * by the toolbar's title. A board that scrolls sideways stands its content
+ * by the toolbar's title. Its filters and content then stand across the
+ * room on the toolbar's own edges rather than at the measure, so the bar's
+ * title and actions line up with what it heads. A board that scrolls sideways stands its content
  * across the whole room (`PAGE_WIDTH.FULL`) rather than at the measure.
  *
  * The page heads itself with a document's header (`PageHeader`), its title

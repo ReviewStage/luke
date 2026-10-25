@@ -134,9 +134,6 @@ const SENDING = "Sending";
 /** What Send reads on an empty notice that waits on the reader's nod, which settles it without messaging the agent. */
 const GOT_IT = "Got it";
 
-/** What the box says of files read for an item its agent changed before they landed. */
-const ITEM_CHANGED = "The agent changed this item while your files were read. Attach them again.";
-
 /** What the press after an archived agent's note says. */
 const UNARCHIVE = "Unarchive";
 
@@ -399,13 +396,12 @@ function AnswerCard({
   const [cut, setCut] = useState(false);
   const draft = control.draftOf(item);
   const sending = control.sending.has(item.id);
-  // Note that the answer waits while files are read, and files read for an item its agent revised meanwhile land nowhere, as its words were let go.
+  // Note that the answer waits while files are read, and files read while a message lands on the item land in its box all the same, as its words stand.
   const files = useAttachedFiles({
     holder: {
       attachments: draft.attachments,
       update: (next) => control.onAttachments(item, next),
     },
-    place: { key: item.revision, moved: ITEM_CHANGED },
     onRefusal: setRefusal,
   });
   // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.

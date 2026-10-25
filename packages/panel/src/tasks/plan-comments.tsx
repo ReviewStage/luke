@@ -45,6 +45,7 @@ import {
   ComposerFoot,
   ComposerFrame,
   ConfirmDialog,
+  cssCustomProperties,
   type DialogQuestion,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -60,6 +61,8 @@ import {
   moreLabel,
   PaneBar,
   SCROLL_FADE,
+  SCROLL_OVERSCROLL,
+  SCROLL_SIZE,
   ScrollArea,
   Skeleton,
   SkeletonRegion,
@@ -91,6 +94,8 @@ import {
   RotateCcwIcon,
 } from "@luke/ui/icons";
 import {
+  hungTop,
+  type MarginView,
   marginTops,
   openThread,
   PENDING_THREAD,
@@ -176,7 +181,9 @@ import {
  * its quote. Where the document's column is narrower than the plan's
  * reading width, a margin, and the gap between them, the margin folds: each
  * line holding marks wears a count at its end, which opens its thread as a
- * card floating under the words.
+ * card floating under the words, or over them where the view has no room
+ * below. An open card stands no taller than the view and inside it
+ * (`keptInView`, `hungTop`), its entries scrolling above its reply field.
  *
  * A thread is started from words selected in the read view, with the
  * bubble that rises over them, or from the button a block shows at its end
@@ -212,6 +219,12 @@ const MENTION_REF = "[data-mention-ref]";
 
 /** How far apart two cards of the margin stand. */
 const CARD_GAP = 8;
+
+/** How far below a folded line's top the card opened from its count hangs, clear of the count. */
+const HUNG_DROP = 28;
+
+/** How far inside the scroller's edges an open card keeps. */
+const VIEW_EDGE = 16;
 
 /** Where a thread's card stands: in the plan's margin, floating under a folded line's count, or in the Comments tab. */
 const THREAD_PLACE = {
@@ -1282,23 +1295,32 @@ function ThreadCard({
   }
   return (
     <CommentCard place={place} open data-thread={thread.id}>
-      {first === undefined ? head : null}
-      {thread.entries.map((entry) =>
-        entry.kind === PLAN_COMMENT_ENTRY.COMMENT ? (
-          <CommentEntry
-            key={entry.id}
-            thread={thread}
-            entry={entry}
-            first={entry.id === first?.id}
-            doors={doors}
-            now={now}
-            lead={entry.id === first?.id ? head : undefined}
-          />
-        ) : // Note that who a thread was sent to is the mention in its words, so the line an ask writes is the service's to keep and none to draw.
-        entry.kind === PLAN_COMMENT_ENTRY.ASKED ? null : (
-          <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
-        ),
-      )}
+      {/* Note that the entries scroll inside a card taller than the room it stands in, so the field that answers them stays in view under them; a swipe past their end, or over a card with nothing to scroll, moves the plan. */}
+      <ScrollArea
+        size={SCROLL_SIZE.CONTENT}
+        fade={SCROLL_FADE.BOTH}
+        overscroll={SCROLL_OVERSCROLL.CHAIN}
+      >
+        <div className="comment-entries">
+          {first === undefined ? head : null}
+          {thread.entries.map((entry) =>
+            entry.kind === PLAN_COMMENT_ENTRY.COMMENT ? (
+              <CommentEntry
+                key={entry.id}
+                thread={thread}
+                entry={entry}
+                first={entry.id === first?.id}
+                doors={doors}
+                now={now}
+                lead={entry.id === first?.id ? head : undefined}
+              />
+            ) : // Note that who a thread was sent to is the mention in its words, so the line an ask writes is the service's to keep and none to draw.
+            entry.kind === PLAN_COMMENT_ENTRY.ASKED ? null : (
+              <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
+            ),
+          )}
+        </div>
+      </ScrollArea>
       {thread.status === PLAN_COMMENT_STATUS.OPEN ? (
         <ReplyField
           label={COMMENT_WORDS.REPLY}
@@ -1473,6 +1495,13 @@ function topIn(body: HTMLElement, element: Element): number {
   return element.getBoundingClientRect().top - body.getBoundingClientRect().top;
 }
 
+/** The part of the scroller in view, inside its edges, in the plan body's own box; none before either is drawn. */
+function viewIn(scroller: HTMLElement | null, body: HTMLElement | null): MarginView | undefined {
+  if (scroller === null || body === null) return undefined;
+  const at = topIn(body, scroller) + scroller.clientTop;
+  return { top: at + VIEW_EDGE, bottom: at + scroller.clientHeight - VIEW_EDGE };
+}
+
 /** The block a point is over, one of a section's own: a paragraph, a list, a heading, a quote, a table, or code. */
 function blockAt(
   target: EventTarget | null,
@@ -1560,6 +1589,10 @@ export function PlanCommentLayer({
   const setPending = useContext(PendingSetter);
   const [wide, setWide] = useState(true);
   const [tops, setTops] = useState<ReadonlyMap<string, number>>(new Map());
+  // Where each folded line's open card hangs, under its count or over it.
+  const [hung, setHung] = useState<ReadonlyMap<string, number>>(new Map());
+  // How tall an open card may stand, the scroller's height inside its edges.
+  const [cardRoom, setCardRoom] = useState<number | undefined>(undefined);
   // Where each thread's words stand, which a fold's counts stand level with.
   const [anchors, setAnchors] = useState<ReadonlyMap<string, number>>(new Map());
   const [hovered, setHovered] = useState<{ top: number; start: () => void } | undefined>(undefined);
@@ -1583,7 +1616,12 @@ export function PlanCommentLayer({
   useEffect(() => {
     const element = scroller.current;
     if (element === null) return;
-    const measure = () => setWide(element.clientWidth >= READING_WIDTH + MARGIN_ROOM + PAGE_INSETS);
+    const measure = () => {
+      setWide(element.clientWidth >= READING_WIDTH + MARGIN_ROOM + PAGE_INSETS);
+      setCardRoom(Math.max(0, element.clientHeight - 2 * VIEW_EDGE));
+      // Note that a scroller drawn shorter or taller resizes no card that already fits, so the open one is measured into the new view here.
+      setResized((count) => count + 1);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
@@ -1641,7 +1679,7 @@ export function PlanCommentLayer({
       observer.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
     };
-  }, [body, threads, pending, wide]);
+  }, [body, threads, pending, wide, active]);
   useLayoutEffect(() => {
     unmeasured.current = body.current === null;
     const placed = [
@@ -1653,12 +1691,23 @@ export function PlanCommentLayer({
         ? []
         : [{ id, top, height: cards.current.get(id)?.offsetHeight ?? 0 }];
     });
+    const view = viewIn(scroller.current, body.current);
     const next = marginTops(
       placed,
       active ?? (pending === undefined ? undefined : PENDING_THREAD),
       CARD_GAP,
+      view,
     );
     setTops((held) => (sameTops(held, next) ? held : next));
+    const nextHung = new Map(
+      placed.map((card) => [
+        card.id,
+        view === undefined
+          ? card.top + HUNG_DROP
+          : hungTop(card.top, HUNG_DROP, card.height, CARD_GAP, view),
+      ]),
+    );
+    setHung((held) => (sameTops(held, nextHung) ? held : nextHung));
     const nextAnchors = new Map(placed.map((card) => [card.id, card.top]));
     setAnchors((held) => (sameTops(held, nextAnchors) ? held : nextAnchors));
   }, [threads, pending, active, anchorTop, text, wide, resized]);
@@ -1678,6 +1727,8 @@ export function PlanCommentLayer({
     scrolled.current = revealed.ask;
     element.scrollTop +=
       room.getBoundingClientRect().top + top - element.getBoundingClientRect().top - REVEAL_ROOM;
+    // Note that the open card was kept in the view before it scrolled, so it is kept in the one it scrolled to.
+    setResized((count) => count + 1);
   });
 
   // A block under the pointer, or the one a finger last tapped, shows its button at the column's end; words selected raise the bubble over them.
@@ -1971,9 +2022,14 @@ export function PlanCommentLayer({
         </Tooltip>
       </MenuSurface>
     );
+  // Note that an open card stands no taller than the scroller it opens in, its entries scrolling inside it.
+  const layerStyle =
+    cardRoom === undefined
+      ? undefined
+      : cssCustomProperties({ "--comment-card-room": `${cardRoom}px` });
   if (wide) {
     return (
-      <div className="comment-layer">
+      <div className="comment-layer" style={layerStyle}>
         {blockButton}
         {bubbleDrawn}
         <div className="comment-margin">
@@ -2023,7 +2079,7 @@ export function PlanCommentLayer({
   const shown = open.find((thread) => thread.id === active);
   const shownTop = shown === undefined ? undefined : anchors.get(shown.id);
   return (
-    <div className="comment-layer">
+    <div className="comment-layer" style={layerStyle}>
       {blockButton}
       {bubbleDrawn}
       {[...counts].map(([top, threads]) => {
@@ -2051,24 +2107,35 @@ export function PlanCommentLayer({
       })}
       {shown === undefined || shownTop === undefined ? null : (
         // Every thread on the line stands under its count, the one pressed open, so none is hidden behind another.
-        <div className="comment-float" style={{ top: shownTop + 28 }}>
-          {(counts.get(shownTop) ?? [shown]).map((thread) => (
-            <ThreadCard
-              key={thread.id}
-              thread={thread}
-              open={thread.id === active}
-              place={THREAD_PLACE.FLOAT}
-              doors={doors}
-              onOpen={() => onActive(thread.id)}
-              onClose={close}
-            />
-          ))}
+        <div
+          className="comment-float"
+          style={{ top: hung.get(shown.id) ?? shownTop + HUNG_DROP }}
+          ref={cardRef(shown.id)}
+        >
+          {/* Note that a line holding more threads than the view has room for scrolls them all, so no card is pressed below its own reply field. */}
+          <ScrollArea size={SCROLL_SIZE.CONTENT} overscroll={SCROLL_OVERSCROLL.CHAIN}>
+            <div className="comment-float-cards">
+              {(counts.get(shownTop) ?? [shown]).map((thread) => (
+                <ThreadCard
+                  key={thread.id}
+                  thread={thread}
+                  open={thread.id === active}
+                  place={THREAD_PLACE.FLOAT}
+                  doors={doors}
+                  onOpen={() => onActive(thread.id)}
+                  onClose={close}
+                />
+              ))}
+            </div>
+          </ScrollArea>
         </div>
       )}
       {pendingCard === null ? null : (
         <div
           className="comment-float"
-          style={{ top: (anchors.get(PENDING_THREAD) ?? 0) + 28 }}
+          style={{
+            top: hung.get(PENDING_THREAD) ?? (anchors.get(PENDING_THREAD) ?? 0) + HUNG_DROP,
+          }}
           ref={cardRef(PENDING_THREAD)}
         >
           {pendingCard}

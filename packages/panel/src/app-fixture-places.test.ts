@@ -140,7 +140,7 @@ it.effect(
       assert.ok(document.querySelector(".desktop-settings"), "Settings stands");
       assert.match(drawn(), /Maya Okafor/u);
       assert.match(drawn(), /sam@example\.com/u);
-      assert.match(drawn(), /Sign-in expired\./u);
+      assert.match(drawn(), /Sign-in expired/u);
     }),
 );
 
@@ -158,7 +158,10 @@ it.effect(
     Effect.gen(function* () {
       yield* drawWindow(RUN_PROFILE.AUTOMATIONS_RUNS);
 
-      assert.match(drawn(), /Check each deploy/u);
+      assert.equal(
+        document.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+        "Check each deploy",
+      );
     }),
 );
 

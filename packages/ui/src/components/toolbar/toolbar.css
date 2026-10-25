@@ -81,11 +81,17 @@
   }
 
   /* A tag stands on the title's last baseline, as a devtool's Beta label
-     does: the last, because a title led by crumbs ends in its own name. */
-  .luke-toolbar-heading:has(> .luke-toolbar-tag) {
+     does: the last, because a title led by crumbs ends in its own name. A
+     detail stands there too, and the title beside it may be cut short once
+     the detail has given way. */
+  .luke-toolbar-heading:has(> :is(.luke-toolbar-tag, .luke-toolbar-detail)) {
     display: flex;
     align-items: last baseline;
     gap: var(--luke-space-8);
+  }
+
+  .luke-toolbar-heading:has(> .luke-toolbar-detail) > .luke-toolbar-title {
+    min-width: 0;
   }
 
   /* A phone's look: one control in each corner, one control wide, and the
@@ -163,6 +169,36 @@
      before the title or the tabs beside it do. */
   .luke-toolbar[data-measure="true"] {
     container: luke-toolbar / inline-size;
+  }
+
+  /* A bar whose heading may take a row of its own (`wrapHeading`) answers
+     its own width. Narrower than its lead, its crumbs, and its actions need
+     beside one another, the heading takes a row of its own under them, the
+     whole bar wide, each crumb cut short by its share as anywhere, and the
+     actions keep the top row's end; narrower still, the lead's labelled
+     controls draw their glyphs alone, named still. Note that it wraps only
+     by that rule, because the heading's basis is nothing until then. */
+  .luke-toolbar[data-wrap-heading="true"] {
+    container: luke-toolbar / inline-size;
+    flex-wrap: wrap;
+    row-gap: var(--luke-tight-gap);
+  }
+
+  @container luke-toolbar (width < 480px) {
+    .luke-toolbar[data-wrap-heading="true"] > .luke-toolbar-heading {
+      order: 1;
+      flex-basis: 100%;
+    }
+
+    .luke-toolbar[data-wrap-heading="true"] > .luke-toolbar-actions {
+      margin-left: auto;
+    }
+  }
+
+  @container luke-toolbar (width < 360px) {
+    .luke-toolbar[data-wrap-heading="true"] > .luke-toolbar-lead {
+      --luke-fold: folded;
+    }
   }
 
   /* Every labelled control of the bar draws its glyph alone, named still. */

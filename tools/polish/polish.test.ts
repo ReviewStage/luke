@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { flattenPng } from "./png.ts";
 import { READY_SCRIPT } from "./ready.ts";
 import { CLIENT, type Client, drawsOn, pressedOn, SCENES, STEP } from "./scenes.ts";
-import { scrollScript } from "./scroll.ts";
+import { PIN_SCROLL_FADES_SCRIPT, scrollScript } from "./scroll.ts";
 import { sizedScript } from "./viewport.ts";
 
 // jsdom lays nothing out, so a box is given the rectangle it would stand in.
@@ -58,6 +58,32 @@ describe("the scroll script", () => {
     const html = '<div data-box role="region"></div>';
 
     expect(scrolledWith(html, 900, "log", -600)).toEqual({ found: false, tops: [900] });
+  });
+});
+
+describe("the scroll fade pin", () => {
+  it("holds the depths a faded box rests at as important lengths, and leaves a box with no fade be", () => {
+    const dom = new JSDOM('<body><div id="faded"></div><div id="plain"></div></body>', {
+      runScripts: "outside-only",
+    });
+    const { document } = dom.window;
+    // jsdom runs no scroll timeline, so the box is given the depths one would have eased it to.
+    const depths: Record<string, string> = {
+      "--luke-scroll-area-fade-start": "0px",
+      "--luke-scroll-area-fade-end": "24px",
+    };
+    dom.window.getComputedStyle = ((box: Element) => ({
+      animationName:
+        box.id === "faded" ? "luke-scroll-area-fade-start, luke-scroll-area-fade-end" : "none",
+      getPropertyValue: (name: string) => depths[name] ?? "",
+    })) as unknown as typeof dom.window.getComputedStyle;
+
+    dom.window.eval(PIN_SCROLL_FADES_SCRIPT);
+
+    const faded = document.getElementById("faded")?.style;
+    expect(faded?.getPropertyValue("--luke-scroll-area-fade-end")).toBe("24px");
+    expect(faded?.getPropertyPriority("--luke-scroll-area-fade-end")).toBe("important");
+    expect(document.getElementById("plain")?.style.length).toBe(0);
   });
 });
 
