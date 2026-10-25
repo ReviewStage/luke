@@ -22,6 +22,7 @@ import { LIST_DENSITY, List, ListRow } from "../list-row/list-row.js";
 import { MENU_ITEM_MARK, MenuItem } from "../menu/menu.js";
 import { MENU_SURFACE_INSET, MenuSurface } from "../menu/menu-surface.js";
 import { SEARCH_FIELD_LOOK, SearchField } from "../search-field/search-field.js";
+import { SearchMatch } from "../search-match/search-match.js";
 import { Shortcut } from "../shortcut/shortcut.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip/hint.js";
@@ -210,13 +211,6 @@ const SUBMENU_GAP = 9;
 const MENU =
   "luke-searchable-menu relative [.luke-anchored-popover>&]:max-h-popover-room [.luke-rect-float>&]:max-h-popover-room";
 
-/**
- * Where the query's words landed in a row's name, so the row says why it
- * matched: a wash, as the settings search marks its own, with no padding,
- * which would push a cut name's fade around as the query changed.
- */
-const MATCH = "luke-searchable-menu-match rounded-luke-6 bg-match text-inherit";
-
 /** The rows pinned under the list, behind a hairline, where the scrolling cannot take them. */
 const FOOT = "luke-searchable-menu-foot block flex-none border-t border-border p-menu-inset";
 
@@ -316,10 +310,9 @@ function markedLabel(row: MenuRow, query: string): React.ReactNode {
   let from = 0;
   for (const range of ranges) {
     if (range.start > from) parts.push(row.label.slice(from, range.start));
+    // Where the query's words landed, so the row says why it matched, as the settings search marks its own.
     parts.push(
-      <mark className={MATCH} key={range.start}>
-        {row.label.slice(range.start, range.end)}
-      </mark>,
+      <SearchMatch key={range.start}>{row.label.slice(range.start, range.end)}</SearchMatch>,
     );
     from = range.end;
   }

@@ -2742,7 +2742,7 @@ function PullRequestTabBody({
                 {/* The header is a stacking context of its own, raised over the rows after it, or the merge control's panel hung from it would pass under the tabs. */}
                 <header
                   ref={fold.header}
-                  className="pull-request-header relative z-1 flex-none px-column-inset py-row-inset"
+                  className="pull-request-header relative z-1 flex-none px-(--column-inset) py-row-inset"
                   data-folded={fold.folded ? "" : undefined}
                 >
                   <div className="pull-request-title-row">

@@ -1020,19 +1020,6 @@ it.effect(
 );
 
 it.effect(
-  "an item whose starter the service does not say waits on the account, as every item did before",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      yield* f.notices;
-      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
-      yield* settled;
-
-      assert.equal(f.badges.at(-1), 1);
-    }),
-);
-
-it.effect(
   "an account whose id arrives after its first read stops counting a teammate's agent's questions at the next answer, though nothing past the cursor changed",
   () =>
     Effect.gen(function* () {

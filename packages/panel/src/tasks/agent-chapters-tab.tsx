@@ -372,7 +372,7 @@ function Generating({
   const words = ours ? CHAPTERS_WORDS.GENERATING : CHAPTERS_WORDS.ELSEWHERE;
   return (
     <Fill className="chapters-generating">
-      <p className="chapters-generating-line m-0 flex items-center justify-between gap-control-gap border-b border-border px-column-inset py-row-inset text-caption text-muted-foreground">
+      <p className="chapters-generating-line m-0 flex items-center justify-between gap-control-gap border-b border-border px-(--column-inset) py-row-inset text-caption text-muted-foreground">
         <span>
           {words}
           {live ? (
@@ -895,7 +895,7 @@ function ChaptersReading({
           />
           <div className="flex max-h-1/2 min-h-0 flex-initial flex-col border-b border-border">
             <ScrollArea size={SCROLL_SIZE.CONTENT}>
-              <div className="flex flex-col gap-control-gap px-column-inset pt-row-inset pb-list-inset">
+              <div className="flex flex-col gap-control-gap px-(--column-inset) pt-row-inset pb-list-inset">
                 <div className="px-row-inset">
                   <TranscriptWords text={chapter.summary} />
                 </div>

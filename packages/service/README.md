@@ -2054,8 +2054,7 @@ against a real dialect.
 Luke offers either of its two agents is named once there, with the roles it
 serves: the coding agent and its worker.
 What each is offered is derived from it: the coding agent's files under
-`apps/dev/tools/` are held to its set by
-`coder-tool-files.test.ts`; each role's
+`apps/dev/tools/` name its set; each role's
 stored set names every tool the role is offered. A tool's
 module takes its name from the registry, so the registry imports none and
 every module may import it. eve's own injected tools (`task_wait`,

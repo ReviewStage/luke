@@ -475,7 +475,7 @@ export function PullRequestStateMenu({
  */
 export function PullRequestWriteNote({
   writes,
-  className = "pull-request-write-note flex-none border-b border-border py-tight-gap pr-column-inset pl-content-inset",
+  className = "pull-request-write-note flex-none border-b border-border py-tight-gap pr-(--column-inset) pl-content-inset",
 }: {
   /** What the last change left to say, and the door that lets it go: a tab's changes', or Files changed's viewed marks'. */
   writes: Pick<PullRequestWrites, "note" | "dismiss">;

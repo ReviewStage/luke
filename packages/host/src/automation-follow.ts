@@ -1,12 +1,16 @@
 import {
   type AutomationRunsLiveAnswer,
   type AutomationsLiveAnswer,
+  type AutomationWorkspaceRunsLiveAnswer,
   automationRunsGraceEdge,
   automationRunsLiveRowsSchema,
   automationRunsOfLiveRows,
   automationsGraceEdge,
   automationsLiveRowsSchema,
   automationsOfLiveRows,
+  automationWorkspaceRunsGraceEdge,
+  automationWorkspaceRunsLiveRowsSchema,
+  automationWorkspaceRunsOfLiveRows,
 } from "@luke/features/automation-live";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -27,7 +31,7 @@ import {
 } from "./live-follow.js";
 
 /**
- * automation-follow.ts -- a workspace's automations, or an automation's runs, followed on the service's live read for the windows that draw them, built again whenever the rows move and whenever the clock alone moves a run's agent.
+ * automation-follow.ts -- a workspace's automations, an automation's runs, or a workspace's runs, followed on the service's live read for the windows that draw them, built again whenever the rows move and whenever the clock alone moves a run's agent.
  *
  * The live read is fetched from the service and followed (`live-follow.ts`):
  * held polls while Realtime is off, a subscription where it is on. The rows
@@ -60,6 +64,12 @@ export interface AutomationFollowDependencies {
     poll: boolean,
     after?: string,
   ) => Effect.Effect<Sealed<AutomationRunsLiveAnswer>>;
+  /** Every run of a workspace's automations the account reads, as a live read, or with `poll` their rows inline, held past `after`. */
+  readonly liveWorkspaceRuns: (
+    workspaceId: string,
+    poll: boolean,
+    after?: string,
+  ) => Effect.Effect<Sealed<AutomationWorkspaceRunsLiveAnswer>>;
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
@@ -198,6 +208,15 @@ export function followAutomations(
         rows: automationRunsLiveRowsSchema,
         build: (rows, now) => ({ runs: automationRunsOfLiveRows(rows, now) }),
         edge: automationRunsGraceEdge,
+        publish: (view) => dependencies.publish({ scope, view }),
+        failed: (failure) => dependencies.publish({ scope, view: { failure } }),
+      });
+    case AUTOMATION_FOLLOW.WORKSPACE_RUNS:
+      return followed(dependencies, {
+        live: (poll, after) => dependencies.liveWorkspaceRuns(scope.id, poll, after),
+        rows: automationWorkspaceRunsLiveRowsSchema,
+        build: (rows, now) => ({ runs: automationWorkspaceRunsOfLiveRows(rows, now) }),
+        edge: automationWorkspaceRunsGraceEdge,
         publish: (view) => dependencies.publish({ scope, view }),
         failed: (failure) => dependencies.publish({ scope, view: { failure } }),
       });
