@@ -36,6 +36,7 @@ import {
   thingName,
   thingOfMention,
   thingOfPlace,
+  thingWordHeard,
 } from "@luke/features/thing-kind";
 import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import {
@@ -155,7 +156,8 @@ import { useWordsDates } from "./words-dates.js";
  * that address (`leavesFor`); every other press opens in the window and
  * stays a button, as an underline is kept for what leaves the app. A
  * screen reader hears the chip's kind before its name (`THING_WORD`), since
- * its glyph is hidden from one, and that a gone section is gone after it.
+ * its glyph is hidden from one, unless its name already says it
+ * (`thingWordHeard`), and that a gone section is gone after it.
  *
  * Nothing the mention names rides on the chip's element but a link's
  * `href`: no other attribute carries its target, its task, its heading, or
@@ -591,7 +593,7 @@ function MentionChip({
           standing={standing}
         />
       }
-      kind={THING_WORD[thingOfMention(mention).kind]}
+      kind={thingWordHeard(thingOfMention(mention).kind, name)}
       label={name}
       state={standing?.state}
       gone={state === MENTION_STATE.GONE}
@@ -763,7 +765,7 @@ function PlaceChip({
     <InlineRef
       look={INLINE_REF_LOOK.PILL}
       glyph={glyph}
-      kind={THING_WORD[thingOfPlace(place).kind]}
+      kind={thingWordHeard(thingOfPlace(place).kind, name)}
       label={name}
       onPress={(event) => {
         // Note that the press stops here, as a mention's does, because a click into a section opens its editor.

@@ -225,16 +225,14 @@ export const THING_NAME: ThingNames = {
   [THING_KIND.DATE]: NO_LIVE_NAME,
 };
 
-/** A kind whose name already says what kind it is, "Luke", "Inbox", or "Changes by Ada", so nothing is said before it. */
-export const NAME_SAYS_KIND = undefined;
-
 /**
  * What each kind is called in words, which a screen reader hears before a
  * thing's name, since the glyph that says it to the eye is hidden from one:
  * "pull request #42 Fix the refresh". Its nouns are the glossary's
- * (`words.ts`'s `TERM`) where it has one.
+ * (`words.ts`'s `TERM`) where it has one. Read it through `thingWordHeard`,
+ * which leaves it out where the name already says it.
  */
-export const THING_WORD: { readonly [K in ThingKind]: string | typeof NAME_SAYS_KIND } = {
+export const THING_WORD: { readonly [K in ThingKind]: string } = {
   [THING_KIND.PLAN]: TERM.TASK.one,
   [THING_KIND.SECTION]: TERM.SECTION.one,
   [THING_KIND.VERSION]: "version",
@@ -243,22 +241,22 @@ export const THING_WORD: { readonly [K in ThingKind]: string | typeof NAME_SAYS_
   [THING_KIND.PAGE]: TERM.PAGE.one,
   [THING_KIND.AGENT]: TERM.AGENT.one,
   [THING_KIND.WORKER]: TERM.WORKER.one,
-  [THING_KIND.LUKE]: NAME_SAYS_KIND,
-  [THING_KIND.CHANGES]: NAME_SAYS_KIND,
+  [THING_KIND.LUKE]: "Luke",
+  [THING_KIND.CHANGES]: "changes",
   [THING_KIND.PULL_REQUEST]: TERM.PULL_REQUEST.one,
   [THING_KIND.PULL_REQUEST_THREAD]: "review thread",
   [THING_KIND.ISSUE]: "issue",
   [THING_KIND.LINK]: "link",
-  [THING_KIND.MESSAGE]: NAME_SAYS_KIND,
-  [THING_KIND.INBOX]: NAME_SAYS_KIND,
+  [THING_KIND.MESSAGE]: "message",
+  [THING_KIND.INBOX]: "Inbox",
   [THING_KIND.INBOX_ITEM]: `Inbox ${TERM.INBOX_ITEM.one}`,
-  [THING_KIND.AUTOMATIONS]: NAME_SAYS_KIND,
+  [THING_KIND.AUTOMATIONS]: "automations",
   [THING_KIND.AUTOMATION]: "automation",
   [THING_KIND.AUTOMATION_RUN]: "automation run",
   [THING_KIND.SETTINGS]: "settings",
   [THING_KIND.PERSON]: TERM.MEMBER.one,
   [THING_KIND.CHAT]: "channel",
-  [THING_KIND.ADMIN]: NAME_SAYS_KIND,
+  [THING_KIND.ADMIN]: "admin",
   [THING_KIND.FILE]: TERM.FILE.one,
   [THING_KIND.FOLDER]: "folder",
   [THING_KIND.SERVER]: TERM.INTEGRATION.one,
@@ -268,6 +266,20 @@ export const THING_WORD: { readonly [K in ThingKind]: string | typeof NAME_SAYS_
   [THING_KIND.WORKSPACE]: "workspace",
   [THING_KIND.DATE]: "date",
 };
+
+/**
+ * The word a screen reader hears before a thing's name: its kind's
+ * (`THING_WORD`), or nothing where the name already starts with it, as
+ * "Inbox", "Luke", and "Changes by Ada" do. Note that a link labelled with
+ * words of its own, `[my queue](…/inbox)`, still says its kind.
+ */
+export function thingWordHeard(kind: ThingKind, name: string): string | undefined {
+  const word = THING_WORD[kind];
+  const lead = name.slice(0, word.length);
+  const said = lead.localeCompare(word, undefined, { sensitivity: "base" }) === 0;
+  const whole = name.length === word.length || /^[\s,:]/u.test(name.slice(word.length));
+  return said && whole ? undefined : word;
+}
 
 /** A place the thing it names already is. */
 function asThing<P extends Thing>(place: P): Thing {
