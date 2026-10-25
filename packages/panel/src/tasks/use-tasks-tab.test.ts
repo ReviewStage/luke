@@ -1700,20 +1700,27 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so i
   assert.equal(tab.control().inboxShown, null);
 });
 
-test("the Inbox opened on its list, as a phone's places bar opens it, stands its list over the item last chosen, from elsewhere and from the item alike", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+test("in a narrow room the Inbox and Chat opened stand their lists over the item or channel last chosen, from elsewhere and from the item alike, where a wide room stands the item", () => {
+  for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
+    const tab = mount({ shown: true, tasks: TWO_WORKSPACES, room });
+    const narrow = room === SHELL_ROOM.NARROW;
+    act(() => tab.control().inboxView.onOpenItem({ taskId: "notes", itemId: "notes-item-0" }));
+    act(() => tab.control().boardView.onOpen());
 
-  act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().boardView.onOpen());
-  act(() => tab.control().inboxView.onOpenList());
-  assert.equal(tab.control().inboxView.open, true);
-  assert.equal(tab.control().inboxView.listed, true);
-  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
+    act(() => tab.control().inboxView.onOpen());
+    assert.equal(tab.control().inboxView.listed, narrow, room);
+    assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
 
-  act(() => tab.control().inboxView.onListed(false));
-  act(() => tab.control().inboxView.onOpenList());
-  assert.equal(tab.control().inboxView.listed, true, "from the item it goes back to the list");
+    act(() => tab.control().inboxView.onListed(false));
+    act(() => tab.control().inboxView.onOpen());
+    assert.equal(tab.control().inboxView.listed, narrow, `${room}, from the item`);
+
+    const channel = { kind: CHAT_PLACE.CHANNEL, channelId: "c0ffee00-0000-4000-8000-000000000001" };
+    act(() => tab.control().chatView.onShow(channel));
+    act(() => tab.control().chatView.onOpen());
+    assert.equal(tab.control().chatView.listed, narrow, `${room}, Chat from its channel`);
+    assert.deepEqual(tab.control().chatView.place, channel);
+  }
 });
 
 test("the Inbox opened again stands on the item last chosen in it, as a row's choice, and on none once another workspace is listed", () => {

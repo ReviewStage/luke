@@ -110,7 +110,7 @@ import {
   recentRepositories,
   renameAsked,
   renamedView,
-  repositoryFailureNote,
+  repositoryChangeFailureNote,
   repositoryPageUrl,
   STATUS_RESTORE_FAILED_NOTE,
   type StatusChange,
@@ -284,15 +284,17 @@ export type InboxChoice = (
  * it leaves the task the host has open, and the call bound to it, as they
  * stand; opening any task, or a new one, leaves it. The item chosen is kept
  * while it stands, so the item answered stays in sight, and after it is
- * left, so opening it again in the same workspace stands on the item last read.
+ * left, so opening it again in the same workspace stands on the item last read
+ * beside the list. A narrow room, a phone's, keeps the choice too but opens
+ * on the list, since there the list is the place: an item stands alone only
+ * once a row is pressed or a link asks for it (`onOpenItem`).
  */
 interface InboxViewControl {
   readonly open: boolean;
   /** The item chosen in it, none until one is, where the list's first stands in. */
   readonly chosen: InboxChoice | undefined;
+  /** Opens the Inbox, as the places bar, the sidebar, and its chord do: on its list in a narrow room, whatever stood there, and as it was left in a wide one; asked first where leaving would lose unsaved work. */
   readonly onOpen: () => void;
-  /** Opens the Inbox on its list rather than the item last read, as a phone's places bar does; asked first where leaving would lose unsaved work. */
-  readonly onOpenList: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
   /**
@@ -520,8 +522,8 @@ interface ChatViewControl {
   readonly place: ChatPlace;
   /**
    * Whether Chat stands on its rail rather than on the place shown, which
-   * only a narrow room draws apart: Chat opened does, and a place chosen or
-   * shown does not.
+   * only a narrow room draws apart: Chat opened does, in a narrow room even
+   * while a place stood, and a place chosen or shown does not.
    */
   readonly listed: boolean;
   /** Goes back from the place shown to the rail. */
@@ -2447,7 +2449,7 @@ export function useTasksTab(input: {
     });
     const on: StandIn | undefined =
       rest.kind === RESTING_PAGE.INBOX
-        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: false }
+        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: input.room === SHELL_ROOM.NARROW }
         : rest.kind === RESTING_PAGE.TASKS
           ? { kind: STAND_IN.BOARD }
           : undefined;
@@ -2662,7 +2664,7 @@ export function useTasksTab(input: {
   ): Promise<string | undefined> => {
     if (fixture !== undefined) return Promise.resolve(undefined);
     return act(ACT_KIND.TASKS_SET_REPOSITORY, { taskId, repository }).then(
-      (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
+      (answer) => ("failure" in answer ? repositoryChangeFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
     );
   };
@@ -3084,7 +3086,7 @@ export function useTasksTab(input: {
         return;
       }
       case LINK_PLACE.INBOX: {
-        // Note that a link to the Inbox opens it as its sidebar row does, on the item last chosen in the workspace it lists.
+        // Note that a link to the Inbox opens it as its sidebar row does, on the item last chosen in the workspace it lists, and in a narrow room on its list.
         const workspaceId = listLinked(workspace);
         standInFor({
           kind: STAND_IN.INBOX,
@@ -3092,7 +3094,7 @@ export function useTasksTab(input: {
             account: input.account,
             workspaceId,
           }),
-          listed: false,
+          listed: input.room === SHELL_ROOM.NARROW,
         });
         return;
       }
@@ -3521,35 +3523,23 @@ export function useTasksTab(input: {
     inboxView: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
+      // Note that a narrow room opens on the list though it keeps the item last chosen, so a wide room it turns into again stands that item beside the list.
       onOpen: guard(() => {
         setHistoryFor(undefined);
+        const listed = input.room === SHELL_ROOM.NARROW;
         const remembered = lastInboxChoice.current;
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX
-            ? held
+            ? listed
+              ? { ...held, listed }
+              : held
             : {
                 kind: STAND_IN.INBOX,
                 chosen: rememberedChoice(remembered, {
                   account: input.account,
                   workspaceId: listedWorkspaceId,
                 }),
-                listed: false,
-              },
-        );
-      }),
-      onOpenList: guard(() => {
-        setHistoryFor(undefined);
-        const remembered = lastInboxChoice.current;
-        setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX
-            ? { ...held, listed: true }
-            : {
-                kind: STAND_IN.INBOX,
-                chosen: rememberedChoice(remembered, {
-                  account: input.account,
-                  workspaceId: listedWorkspaceId,
-                }),
-                listed: true,
+                listed,
               },
         );
       }),
@@ -3585,11 +3575,15 @@ export function useTasksTab(input: {
       listed: standIn?.kind === STAND_IN.CHAT ? standIn.listed : true,
       onList: () =>
         setStandIn((held) => (held?.kind === STAND_IN.CHAT ? { ...held, listed: true } : held)),
+      // A narrow room opens on the rail even from a channel it stands on, keeping the channel for a wide room to show beside it.
       onOpen: guard(() => {
         setHistoryFor(undefined);
+        const listed = input.room === SHELL_ROOM.NARROW;
         setStandIn((held) =>
           held?.kind === STAND_IN.CHAT
-            ? held
+            ? listed
+              ? { ...held, listed }
+              : held
             : { kind: STAND_IN.CHAT, place: FOR_YOU, listed: true },
         );
       }),

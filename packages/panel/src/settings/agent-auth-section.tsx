@@ -216,8 +216,11 @@ const WORDS = {
   TOKEN_INVALID: "Anthropic rejected this token. Paste a new one.",
   TOKEN_QUOTA: "Out of usage on your Claude subscription.",
   TOKEN_UNREADABLE: "This token can no longer be read. Paste a new one.",
-  CHATGPT_SIGNED_OUT: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}. Sign in with ChatGPT to reconnect.`,
-  CHATGPT_UNREADABLE: "This sign-in can no longer be read. Sign in with ChatGPT to connect again.",
+  CHATGPT_SIGNED_OUT: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}.`,
+  CHATGPT_UNREADABLE: "This sign-in can no longer be read.",
+  CHATGPT_SIGNED_OUT_ALONE: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}. Sign in with ChatGPT to reconnect.`,
+  CHATGPT_UNREADABLE_ALONE:
+    "This sign-in can no longer be read. Sign in with ChatGPT to connect again.",
   CHATGPT_INELIGIBLE:
     "OpenAI says this ChatGPT account isn't eligible for Codex. Sign in with ChatGPT to use another.",
   REVOCATION_UNCONFIRMED:
@@ -332,8 +335,8 @@ function tokenWords(plan: SubscriptionKeySummary): string {
   }
 }
 
-/** What a ChatGPT sign-in's status says. */
-function signInWords(plan: SubscriptionKeySummary): string {
+/** What a ChatGPT sign-in's status says, naming Sign in with ChatGPT only where its button does not stand beside it (`offered`). */
+function signInWords(plan: SubscriptionKeySummary, offered: boolean): string {
   switch (plan.status) {
     case PROVIDER_KEY_STATUS.UNVERIFIED:
     case PROVIDER_KEY_STATUS.VERIFIED:
@@ -341,11 +344,11 @@ function signInWords(plan: SubscriptionKeySummary): string {
     case PROVIDER_KEY_STATUS.LIMIT_REACHED:
       return limitWords(plan);
     case PROVIDER_KEY_STATUS.UNREADABLE:
-      return WORDS.CHATGPT_UNREADABLE;
+      return offered ? WORDS.CHATGPT_UNREADABLE : WORDS.CHATGPT_UNREADABLE_ALONE;
     case PROVIDER_KEY_STATUS.INELIGIBLE:
       return WORDS.CHATGPT_INELIGIBLE;
     default:
-      return WORDS.CHATGPT_SIGNED_OUT;
+      return offered ? WORDS.CHATGPT_SIGNED_OUT : WORDS.CHATGPT_SIGNED_OUT_ALONE;
   }
 }
 
@@ -740,7 +743,7 @@ function ChatGptPanel({
         <SettingsFacts>
           {plan === undefined ? null : (
             <State ok={connected && plan.status !== PROVIDER_KEY_STATUS.LIMIT_REACHED}>
-              {signInWords(plan)}
+              {signInWords(plan, offered)}
             </State>
           )}
         </SettingsFacts>

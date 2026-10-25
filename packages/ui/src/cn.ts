@@ -20,6 +20,27 @@ import { extendTailwindMerge } from "tailwind-merge";
  */
 
 /**
+ * The names the panel places' block of the theme adds (Automations, Chat,
+ * Settings, a version history, Admin, the sign-in), by the group
+ * tailwind-merge reads each in.
+ */
+const PANEL_PLACES = {
+  tracking: ["experiment-tag"],
+  spacing: [
+    "automation-field",
+    "automation-next",
+    "automation-owner",
+    "automation-runs",
+    "automation-time",
+    "automation-webhook",
+    "chat-measure",
+    "chat-reading",
+    "em",
+    "onboarding-foot",
+  ],
+} as const;
+
+/**
  * The names the panel work column's block of the theme adds (its layout's
  * spacing roles, a transcript's opening line, the call's video room, a
  * tool's page, the find bar, the version history), by the group
@@ -166,7 +187,6 @@ const PANEL_WINDOW = {
     "actor-for-x",
     "actor-for-y",
     "actor-overlap",
-    "attention-glyph-small",
     "corner-dot",
     "list-held",
     "offline-glyph",
@@ -248,6 +268,24 @@ const PANEL_SHELL = {
     "settings-search-clearance",
   ],
   radius: ["luke-14"],
+} as const;
+
+/**
+ * The names the panel Inbox's block of the theme adds (its columns, its
+ * list's held height, its thread's gutter, a pick, its fields), by the
+ * group tailwind-merge reads each in.
+ */
+const PANEL_INBOX = {
+  spacing: [
+    "attention-glyph-small",
+    "inbox-earlier",
+    "inbox-face-half",
+    "inbox-field-short",
+    "inbox-field-words",
+    "inbox-line",
+    "list-held-least",
+    "pick-glyph-lift",
+  ],
 } as const;
 
 /**
@@ -438,6 +476,7 @@ const merge = extendTailwindMerge({
         "title",
         ...PANEL_SHELL.tracking,
         ...PANEL_WINDOW.tracking,
+        ...PANEL_PLACES.tracking,
         ...TASK_SURFACES.tracking,
       ],
       leading: [
@@ -449,6 +488,7 @@ const merge = extendTailwindMerge({
         ...PAGE_PATTERNS.leading,
       ],
       spacing: [
+        ...PANEL_PLACES.spacing,
         "luke-2",
         "luke-4",
         "luke-6",
@@ -517,6 +557,7 @@ const merge = extendTailwindMerge({
         ...PANEL_WINDOW.spacing,
         ...ROWS_NAVIGATION.spacing,
         ...PANEL_SHELL.spacing,
+        ...PANEL_INBOX.spacing,
         ...CHIPS_MEDIA_CALL.spacing,
         ...PANEL_HOME_TASKS.spacing,
         ...PAGE_PATTERNS.spacing,

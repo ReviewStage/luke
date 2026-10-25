@@ -53,7 +53,7 @@ const ADD_WORDS = {
   VIDEO_TOO_LARGE: `This video is over ${String(PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES / 1_000_000)} MB, too large to add to the plan from here.`,
   TOO_MANY: "This plan already holds as many pictures as it can.",
   TOO_MANY_VIDEOS: "This plan already holds as many videos as it can.",
-  NOT_SAVED: "The plan could not be saved just now.",
+  NOT_SAVED: "The plan could not be saved.",
   UNDONE: "Taken out of the plan",
   NOT_UNDONE: "The plan changed since, so the picture stays in it.",
 } as const;

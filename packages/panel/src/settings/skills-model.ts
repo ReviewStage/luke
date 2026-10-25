@@ -397,13 +397,12 @@ export function problemsLine(problems: readonly InstalledSkillProblem[]): string
 
 /** Why a paste is no source Luke installs from. */
 const UNSUPPORTED_WORDS = {
-  [SKILL_PASTE_UNSUPPORTED.GITLAB]: "Only GitHub sources for now.",
-  [SKILL_PASTE_UNSUPPORTED.AZURE_DEVOPS]: "Only GitHub sources for now.",
-  [SKILL_PASTE_UNSUPPORTED.OTHER_HOST]: "Only GitHub sources for now.",
-  [SKILL_PASTE_UNSUPPORTED.SSH]: "Only GitHub sources for now. Paste the repository as owner/repo.",
-  [SKILL_PASTE_UNSUPPORTED.LOCAL_PATH]:
-    "Only GitHub sources for now. Paste the skill's text instead.",
-  [SKILL_PASTE_UNSUPPORTED.DOWNLOAD_URL]: "Only GitHub sources for now.",
+  [SKILL_PASTE_UNSUPPORTED.GITLAB]: "Only GitHub sources.",
+  [SKILL_PASTE_UNSUPPORTED.AZURE_DEVOPS]: "Only GitHub sources.",
+  [SKILL_PASTE_UNSUPPORTED.OTHER_HOST]: "Only GitHub sources.",
+  [SKILL_PASTE_UNSUPPORTED.SSH]: "Only GitHub sources. Paste the repository as owner/repo.",
+  [SKILL_PASTE_UNSUPPORTED.LOCAL_PATH]: "Only GitHub sources. Paste the skill's text instead.",
+  [SKILL_PASTE_UNSUPPORTED.DOWNLOAD_URL]: "Only GitHub sources.",
   [SKILL_PASTE_UNSUPPORTED.OTHER_COMMAND]: "Only a skills add command installs a skill.",
   [SKILL_PASTE_UNSUPPORTED.NO_SOURCE]: "That command names no repository.",
   [SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE]: "A GitHub repository could not be read from that.",

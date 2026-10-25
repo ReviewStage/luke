@@ -164,6 +164,10 @@ export const CODER = {
   TITLE_TURNS: 3,
   /** How long one instance keeps what an agent published before asking GitHub again; a tab asks beside every page of a held read. */
   PUBLISHED_TTL: Duration.seconds(30),
+  /** How long what a read of GitHub wrote on an agent's row answers a tab's read on any instance in GitHub's place (`published.ts`). */
+  PUBLISHED_ROW_FRESH: Duration.seconds(60),
+  /** How long an ended agent's closed pull request on its row answers in GitHub's place, since it may reopen where no webhook says so. */
+  PUBLISHED_CLOSED_FRESH: Duration.minutes(10),
   /**
    * How long after its Start an agent with no turn row yet still reads as
    * starting. eve took the session and its first turn lands in seconds; an

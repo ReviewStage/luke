@@ -82,10 +82,11 @@ import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { useChatActor, useChatNames } from "../tasks/chat-actors.js";
 import { channelTitle } from "../tasks/chat-channel-name.js";
-import { ChatPane, type ChatTaskDoors } from "../tasks/chat-pane.js";
+import { CHAT_STREAM, ChatPane, type ChatTaskDoors } from "../tasks/chat-pane.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { VIEW_OPTIONS } from "../tasks/inbox-columns.js";
-import { InboxListSkeleton, markAllEntries } from "../tasks/inbox-list.js";
+import { INBOX_ROW_ATTENTION, INBOX_ROW_MARK } from "../tasks/inbox-item-parts.js";
+import { InboxListSkeleton, InboxRowLeading, markAllEntries } from "../tasks/inbox-list.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { keptSkills } from "../tasks/repository-skills.js";
 import type { SkillSource } from "../tasks/skill-picker.js";
@@ -158,6 +159,20 @@ import { TaskRowMark, taskCardOf } from "./task-card.js";
  * moves anything else draws none of Chat. The rail is read once per chat,
  * names, and grouping, and each place's time counts the minute itself.
  */
+
+/**
+ * The window's Chat, drawn as the Inbox's list and item are: the rail a
+ * list column on the page's ground, as wide as it was dragged, and the place
+ * chosen beside it, the Chat the container its columns answer.
+ */
+const CHAT_VIEW = "chat-view @container grid min-h-0 flex-1 grid-cols-inbox";
+
+/** The rail of places, a list column parted from the place by its edge; a place's glyph at a menu glyph's size in the muted ink, a task's status mark in its own. */
+const CHAT_RAIL =
+  "chat-rail relative flex min-h-0 min-w-0 flex-col border-r border-border [&_.inbox-row-mark>svg]:size-menu-glyph [&_.inbox-row-mark>svg:not(.luke-task-status-mark)]:text-muted-foreground";
+
+/** The rail's places, inside the `ScrollArea` that scrolls them, on the Inbox list's insets. */
+const CHAT_RAIL_BODY = "chat-rail-body px-column-inset pt-row-inset pb-column-inset";
 
 /**
  * What Chat reads of the window's tasks, and nothing else: the chat's own
@@ -704,10 +719,8 @@ function PlaceRow({
         leading={
           <>
             {/* Note that the gutter stands on every row, so the marks line up whether a row wears the dot or not. */}
-            <span className="inbox-row-gutter">
-              {unread ? <span className="inbox-row-unread" /> : null}
-            </span>
-            <span className="inbox-row-mark">{mark}</span>
+            <InboxRowLeading unread={unread} />
+            <span className={INBOX_ROW_MARK}>{mark}</span>
           </>
         }
         title={title}
@@ -716,7 +729,7 @@ function PlaceRow({
           <span className="home-row-meta">
             {unread ? <VisuallyHidden>{UNREAD_WORDS}</VisuallyHidden> : null}
             {needsYou ? (
-              <span className="inbox-row-attention">
+              <span className={INBOX_ROW_ATTENTION}>
                 <AttentionMark />
                 <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
               </span>
@@ -1082,15 +1095,15 @@ function ChatView({
         {CHAT_FAILED}
       </ErrorState>
     ) : view.available ? (
-      <div className="chat-rail-body">
+      <div className={CHAT_RAIL_BODY}>
         <InboxListSkeleton reading={READING_CHAT} list={CHAT_LIST} />
       </div>
     ) : (
       <EmptyState icon={<MessagesSquareIcon />}>{NO_CHAT}</EmptyState>
     );
     return (
-      <div className="chat-view">
-        <nav className="chat-rail" aria-label={CHAT_LIST} style={{ width: railWidth }}>
+      <div className={CHAT_VIEW}>
+        <nav className={CHAT_RAIL} aria-label={CHAT_LIST} style={{ width: railWidth }}>
           {/* Note that New channel stands but takes no press until the chat is read, since a channel opened against no chat would go nowhere. */}
           <RailBar onNew={undefined} viewOptions={undefined} narrow={room === SHELL_ROOM.NARROW} />
           {standIn}
@@ -1136,9 +1149,9 @@ function ChatView({
     />
   );
   return (
-    <div ref={rootRef} className="chat-view" data-single={String(single)}>
+    <div ref={rootRef} className={CHAT_VIEW} data-single={String(single)}>
       <nav
-        className="chat-rail"
+        className={CHAT_RAIL}
         aria-label="Chat"
         hidden={hidden.list}
         style={{ width: railWidth }}
@@ -1160,7 +1173,7 @@ function ChatView({
           )}
         />
         <ScrollArea fade={SCROLL_FADE.START}>
-          <div className="chat-rail-body" {...railKeys} ref={railBodyRef}>
+          <div className={CHAT_RAIL_BODY} {...railKeys} ref={railBodyRef}>
             <ListMotion root={railBody}>
               <List label="For you" density={LIST_DENSITY.DENSE} joinsWalk>
                 <PlaceRow
@@ -1439,7 +1452,7 @@ export function TaskChatTab({
   const mentionPlace = useMemo(() => mentionPlaceOf(tasks.workspace), [tasks.workspace]);
   if (read === undefined || channel === undefined) {
     return (
-      <section className="chat-stream task-chat" aria-label="Chat">
+      <section className={`${CHAT_STREAM} task-chat flex-1`} aria-label="Chat">
         {view.failed ? (
           <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={view.onRetry}>
             {CHAT_FAILED}

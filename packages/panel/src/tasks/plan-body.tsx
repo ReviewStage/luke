@@ -1100,7 +1100,7 @@ export function PlanPageHead({
   edited?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="task-page-head">
+    <div className="task-page-head pt-luke-32">
       <PageHeader title={name} description={description} actions={actions} />
       {edited}
     </div>

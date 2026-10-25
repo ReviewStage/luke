@@ -645,14 +645,12 @@ function PersonColumn({
       (inboxWaitsOn(item)?.userId ?? agentStarter(holder.task, item.agentId)) === userId,
   );
   const { inboxView } = tasks;
-  const openItem = ({ holder, item }: InboxListed) => {
-    inboxView.onOpen();
-    inboxView.onChoose(
+  const openItem = ({ holder, item }: InboxListed) =>
+    inboxView.onOpenItem(
       holder.kind === INBOX_HOLDER.TASK
         ? { taskId: holder.task.id, itemId: item.id }
         : { agentId: item.agentId, itemId: item.id },
     );
-  };
   // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {

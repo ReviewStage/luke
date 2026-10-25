@@ -150,7 +150,7 @@ test("a failure the voice still says stands past every toast hold, because the v
   drawn({ speakers: NOBODY, error: VOICE_FAILURE.CALL_DROPPED });
   pass(Duration.toMillis(TOAST_HOLD.FAILED) * 2);
   assert.deepEqual(standing(), [
-    "The call dropped: the connection was lost. Call again to carry on.",
+    "The call dropped. Call again to carry on.",
   ]);
 });
 
@@ -206,7 +206,7 @@ test("a failure dismissed while the voice still says it stays dismissed, and the
 
 test("a temporary unavailability stands as a notice, said politely rather than as an alert", () => {
   drawn({ speakers: NOBODY, notice: VOICE_FAILURE.VOICE_UNAVAILABLE });
-  const words = "Voice is temporarily unavailable. Try again later.";
+  const words = "Voice is temporarily unavailable.";
   assert.deepEqual(standing(), [words]);
   assert.equal(said("status"), words);
   assert.equal(said("alert"), "");

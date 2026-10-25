@@ -38,7 +38,11 @@ export function InboxStamp({
       <Undo2Icon aria-hidden="true" />
     );
   return (
-    <span className="inbox-stamp" data-inbox-stamp="" data-answer={stamp.tone}>
+    <span
+      className="inbox-stamp inline-flex max-w-full self-start"
+      data-inbox-stamp=""
+      data-answer={stamp.tone}
+    >
       {onRemove === undefined ? (
         <Badge tone={tone} icon={glyph}>
           {stamp.words}

@@ -299,19 +299,31 @@ export function repositoryOwnerPictureUrl(repository: string): string {
   return githubAccountPictureUrl(repository.slice(0, repository.indexOf("/")));
 }
 
-/** What the New task dialog says when the service answered no task. */
-const START_FAILED_NOTE = "Luke's service did not answer. Try again.";
+/** What the New task dialog says when the service answered no task, beside its Retry. */
+const START_FAILED_NOTE = "Luke's service did not answer.";
 
-/** What a call that named a repository says when the service refused it, by its reason. */
+/** What a call that named a repository says when the service refused it, by its reason, beside a Retry. */
 const REPOSITORY_FAILURE_NOTES = {
   [TASK_CALL_FAILURE.UNANSWERED]: START_FAILED_NOTE,
+  [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
+    "Luke cannot see that repository on GitHub. Choose which repositories Luke can see.",
+} as const satisfies Record<RepositoryCallFailure, string>;
+
+/** The same refusals of a change of the task's repository, said under its chip with no Retry beside them. */
+const REPOSITORY_CHANGE_FAILURE_NOTES = {
+  [TASK_CALL_FAILURE.UNANSWERED]: "Luke's service did not answer. Try again.",
   [TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
     "Luke cannot see that repository on GitHub. Choose which repositories Luke can see, then try again.",
 } as const satisfies Record<RepositoryCallFailure, string>;
 
-/** The sentence the page shows for a start or a repository change the service refused. */
+/** The sentence the page shows beside its Retry for a start or a read of repositories the service refused. */
 export function repositoryFailureNote(failure: RepositoryCallFailure): string {
   return REPOSITORY_FAILURE_NOTES[failure];
+}
+
+/** The sentence the page shows for a change of the task's repository the service refused. */
+export function repositoryChangeFailureNote(failure: RepositoryCallFailure): string {
+  return REPOSITORY_CHANGE_FAILURE_NOTES[failure];
 }
 
 /** What a start from a Linear issue says when the workspace's Linear could not be read for it. */

@@ -66,6 +66,7 @@ import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import { AnswerForm, EDITOR_LOAD_FAILED, useAnswerField } from "./inbox-answer-box.js";
+import { INBOX_VIEW_ITEMS } from "./inbox-columns.js";
 import type { MentionDoors } from "./mention-chip.js";
 import type { MentionAgentsReader, MentionableAgent } from "./mention-picker.js";
 import { keptSkills } from "./repository-skills.js";
@@ -456,7 +457,7 @@ function ComposeCard({
     (cut ? pasteCutWords(INBOX_BOUNDS.MAX_MESSAGE_CHARS) : undefined) ??
     (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
-    <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
+    <section className={INBOX_VIEW_ITEMS} aria-label={NEW_THREAD} hidden={hidden}>
       {phone ? (
         <PhoneHead
           place="new-thread"
@@ -481,6 +482,7 @@ function ComposeCard({
         <Toolbar
           // Note that a title with no way back before it starts where the other bars' titles do, not at the column's edge, which is for a control's fill.
           start={onBack === undefined ? undefined : TOOLBAR_INSET.COLUMN}
+          wrapHeading
           lead={
             onBack === undefined ? null : (
               <BackButton label={INBOX} place={INBOX_PLACE} onBack={onBack} />

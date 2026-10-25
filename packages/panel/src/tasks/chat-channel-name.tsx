@@ -34,7 +34,7 @@ export function ChannelGlyph({ channel }: { channel: ChatChannel }): React.JSX.E
   const status = useTaskStatus(channel.kind === CHANNEL_KIND.TASK ? channel.planId : undefined);
   if (channel.kind !== CHANNEL_KIND.TASK) return null;
   return (
-    <span className="chat-channel-glyph">
+    <span className="chat-channel-glyph mr-icon-gap inline-flex align-[-0.125em] [&>svg]:size-em">
       <PlanGlyph status={status} />
     </span>
   );

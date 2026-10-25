@@ -170,6 +170,39 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * reads it as it moves (`ChatReadContext`).
  */
 
+/**
+ * A place's stream: its head, its messages at the reading measure, and its
+ * box; the head's purpose (`PaneBar`'s detail) gives way before the name does.
+ */
+export const CHAT_STREAM =
+  "chat-stream flex min-h-0 min-w-0 flex-col [&>.luke-pane-bar_.luke-pane-bar-detail]:flex [&>.luke-pane-bar_.luke-pane-bar-detail]:min-w-0 [&>.luke-pane-bar_.luke-pane-bar-detail]:flex-[0_1000_auto]";
+
+/**
+ * A message or a reply, laid out as Slack's is: its author's face in a
+ * column of its own at a card's 32px, then its byline and its words, a
+ * message continuing its author's run right under the one before, the row
+ * lighting up while hovered; a post on its way, or one refused, reads
+ * quieter; one that names its author is a comment spanning the row.
+ */
+const CHAT_ROW =
+  "relative -mx-row-inset grid grid-cols-chat-message gap-x-control-gap rounded-menu-row px-row-inset py-item-gap transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit hover:bg-muted data-[continued=true]:py-luke-2 [&[data-pending]>.chat-message-body>.chat-words]:opacity-60 [&[data-unsent]>.chat-message-body>.chat-words]:opacity-60 [&>.luke-comment]:col-span-full";
+
+/** A message's body: its byline, its words, and what it carries, a hair apart. */
+const CHAT_MESSAGE_BODY = "chat-message-body flex min-w-0 flex-col gap-list-gap";
+
+/** A message's words, at the reading leading. */
+const CHAT_WORDS = "chat-words text-body-size leading-reading text-foreground";
+
+/**
+ * The presses at a byline's end, shown while their row is hovered or holds
+ * the focus, and always on a screen with no hover; a root's own presses are
+ * reached by children alone, so hovering a reply in its open thread shows
+ * that reply's and not the root's. Their Copy stands with their Reply
+ * rather than waiting on a transcript's hover of its own.
+ */
+const CHAT_BYLINE_ACTION =
+  "chat-byline-action ml-auto flex items-center gap-tight-gap opacity-0 transition-opacity duration-(--luke-duration-quick) ease-spring focus-within:opacity-100 [&>.luke-message-actions]:pointer-events-auto [&>.luke-message-actions]:opacity-100 [@media(hover:none)]:opacity-100 [@media(hover:hover)]:[:is(.chat-message,.chat-reply):hover>.chat-message-body>.chat-byline>&]:opacity-100 [@media(hover:hover)]:[:is(.chat-message,.chat-reply):hover>.luke-comment>.luke-comment-head>.luke-comment-trailing>&]:opacity-100";
+
 /** The tasks of a window that lists none. */
 const NO_TASKS: readonly TaskSummary[] = [];
 
@@ -303,7 +336,7 @@ function Block({
     case CHAT_BLOCK.MARKDOWN:
       // Note that every message is drawn as a document, as an Inbox item's words are, so a link alone on its line is its card; whoever wrote it, a selection inside may be replied to.
       return (
-        <div className="chat-words" {...{ [REPLY_SCOPE]: "" }}>
+        <div className={CHAT_WORDS} {...{ [REPLY_SCOPE]: "" }}>
           {typed ? (
             <SentWords text={block.text} asDocument />
           ) : (
@@ -554,15 +587,15 @@ function PendingRow({
   );
   return (
     <li
-      className={reply ? "chat-reply" : "chat-message"}
+      className={reply ? `chat-reply ${CHAT_ROW}` : `chat-message ${CHAT_ROW}`}
       data-pending={entry.refused === undefined ? "" : undefined}
       data-unsent={entry.refused === undefined ? undefined : ""}
     >
       <MessageComment actor={actor} at={entry.at}>
-        <div className="chat-message-body">
+        <div className={CHAT_MESSAGE_BODY}>
           <AttachedFileChips files={attachmentChips(attachments ?? [])} />
           {text === undefined ? null : (
-            <div className="chat-words">
+            <div className={CHAT_WORDS}>
               <SentWords text={text} asDocument />
             </div>
           )}
@@ -751,7 +784,10 @@ function ContinuedByline({
   action?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="chat-byline" data-continued="true">
+    <div
+      className="chat-byline absolute top-luke-2 right-luke-8 flex min-w-0 items-baseline gap-x-control-gap text-caption-inline text-muted-foreground [@media(hover:none)]:static [@media(hover:none)]:justify-end"
+      data-continued="true"
+    >
       <VisuallyHidden>{actorName(actor)}</VisuallyHidden>
       {action}
     </div>
@@ -761,7 +797,10 @@ function ContinuedByline({
 /** A message continuing its author's run leads with its time instead of a face, shown while it is hovered, as Slack's grouped messages do. */
 function ContinuedTime({ at }: { at: number }): React.JSX.Element {
   return (
-    <span className="chat-face" data-continued="true">
+    <span
+      className="chat-face flex justify-end whitespace-nowrap text-caption-inline leading-body text-muted-foreground opacity-0 [.chat-message:focus-within_&]:opacity-100 [@media(hover:hover)]:[.chat-message:hover_&]:opacity-100"
+      data-continued="true"
+    >
       <Time className="chat-time" at={at} />
     </span>
   );
@@ -783,7 +822,7 @@ function RowActions({
   const words = messageMarkdown(message);
   if (words === "" && extra === undefined) return undefined;
   return (
-    <span className="chat-byline-action">
+    <span className={CHAT_BYLINE_ACTION}>
       {words === "" ? null : <CopyMessageAction words={words} />}
       {extra}
     </span>
@@ -800,9 +839,9 @@ const Reply = memo(function Reply({
 }): React.JSX.Element {
   const actor = context.actorOf(message.authorId);
   return (
-    <li className="chat-reply" data-seq={message.seq}>
+    <li className={`chat-reply ${CHAT_ROW}`} data-seq={message.seq}>
       <MessageComment actor={actor} at={message.postedAt} action={<RowActions message={message} />}>
-        <div className="chat-message-body">
+        <div className={CHAT_MESSAGE_BODY}>
           <Body message={message} context={context} />
         </div>
       </MessageComment>
@@ -871,8 +910,8 @@ const ThreadRow = memo(function ThreadRow({
     [quoting],
   );
   const thread = quiet ? null : (
-    <div className="chat-thread" data-open={String(open)}>
-      <div className="chat-thread-toggle">
+    <div className="chat-thread mt-tight-gap" data-open={String(open)}>
+      <div className="chat-thread-toggle m-0 text-label [&_.actor-stack]:me-item-gap! [&_.actor-stack]:align-middle">
         {/* Note that the faces stand beside the press rather than in it, since each hangs its replier's card. */}
         {replies.length > 0 && !open ? (
           <ActorStack
@@ -885,7 +924,7 @@ const ThreadRow = memo(function ThreadRow({
         {toggle}
       </div>
       {open && replies.length + pendingReplies.length > 0 ? (
-        <ul className="chat-replies">
+        <ul className="chat-replies m-0 list-none p-0">
           {replies.map((reply) => (
             <Reply key={reply.id} message={reply} context={context} />
           ))}
@@ -922,21 +961,21 @@ const ThreadRow = memo(function ThreadRow({
   return (
     <li
       ref={row}
-      className="chat-message"
+      className={`chat-message ${CHAT_ROW}`}
       data-seq={message.seq}
       data-continued={String(continued)}
     >
       {continued ? (
         <>
           <ContinuedTime at={message.postedAt} />
-          <div className="chat-message-body">
+          <div className={CHAT_MESSAGE_BODY}>
             <ContinuedByline actor={actor} action={action} />
             <Body message={message} context={context} />
           </div>
         </>
       ) : (
         <MessageComment actor={actor} at={message.postedAt} where={where} action={action}>
-          <div className="chat-message-body">
+          <div className={CHAT_MESSAGE_BODY}>
             <Body message={message} context={context} />
           </div>
         </MessageComment>
@@ -1031,14 +1070,17 @@ function ChannelStream({
   }, [opened]);
   return (
     <Conversation subject={channelId} list={list}>
-      <ConversationContent className="chat-stream-body">
-        <ol className="chat-messages">
+      <ConversationContent className="chat-stream-body px-chat-reading py-luke-16">
+        <ol className="chat-messages m-0 list-none p-0">
           {threads.map((thread, index) => {
             const first = thread.message.seq === unreadFrom;
             return (
               <Fragment key={thread.message.id}>
                 {first ? (
-                  <li ref={line} className="chat-unread-line">
+                  <li
+                    ref={line}
+                    className="chat-unread-line my-control-gap flex scroll-mt-luke-16 items-center gap-control-gap text-caption-inline font-luke-semibold text-accent-ink before:flex-1 before:border-t before:border-accent-fill before:content-['']"
+                  >
                     {UNREAD_LINE}
                   </li>
                 ) : null}
@@ -1381,7 +1423,7 @@ function PlaceView({
     return (
       <section
         ref={section}
-        className="chat-stream ph-no-capture"
+        className={`${CHAT_STREAM} ph-no-capture`}
         aria-label="For you"
         hidden={hidden}
       >
@@ -1396,8 +1438,8 @@ function PlaceView({
           <EmptyState icon={<AtSignIcon />}>{NEEDS_YOU.NONE}</EmptyState>
         ) : (
           <Conversation>
-            <ConversationContent className="chat-stream-body">
-              <ol className="chat-messages">
+            <ConversationContent className="chat-stream-body px-chat-reading py-luke-16">
+              <ol className="chat-messages m-0 list-none p-0">
                 {entries.map((entry) => (
                   // Each row is of its own channel, so each reads through its own task.
                   <TaskDoorsScope key={entry.message.id} doors={doorsIn(entry.channel.id)}>
@@ -1425,7 +1467,12 @@ function PlaceView({
   const title = channelTitle(chat, names, channel);
   const doors = doorsIn(channel.id);
   return (
-    <section ref={section} className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
+    <section
+      ref={section}
+      className={`${CHAT_STREAM} ph-no-capture`}
+      aria-label={title}
+      hidden={hidden}
+    >
       {headed ? (
         <PlaceHead
           title={title}
@@ -1471,7 +1518,7 @@ function PlaceView({
         />
       ) : (
         // Note that a task's channel comes back with its task, and a DM between two others is only read, so neither offers a press.
-        <div className="chat-closed-foot">
+        <div className="chat-closed-foot mx-auto mt-block-gap mb-luke-16 w-chat-measure text-center">
           <Text tone={TEXT_TONE.MUTED}>
             {channel.archived ? ARCHIVED_CHANNEL : OTHERS_DM(dmPair(chat, names, channel))}
           </Text>

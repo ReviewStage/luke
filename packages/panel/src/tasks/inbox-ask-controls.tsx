@@ -83,6 +83,19 @@ import { SentWords } from "./skill-chip.js";
  * item's thread or a chat message.
  */
 
+/** An ask's box, in an Inbox thread or Chat's message, which gives way to its column. */
+export const INBOX_ASK_BOX = "inbox-ask min-w-0";
+
+/** An ask's kind at its head, in the label's weight. */
+export const INBOX_ASK_KIND = "inbox-ask-kind font-luke-medium text-foreground";
+
+/** Where an ask stands at its head, its glyph at the caption's glyph size before its words. */
+export const INBOX_ASK_STANDING =
+  "inbox-ask-standing inline-flex min-w-0 items-center gap-tight-gap [&>svg]:size-luke-12 [&>svg]:flex-none";
+
+/** An ask's presses on one line, wrapping where the column is narrow. */
+const INBOX_ASK_PRESSES = "inbox-ask-presses flex flex-wrap gap-control-gap";
+
 /** The words a choice's open options are named by, for a reader that does not see the question over them. */
 const CHOICE_LEGEND = "Options";
 
@@ -192,9 +205,12 @@ type FormText = (props: FormTextProps) => React.ReactNode;
  */
 function fieldFrame(field: InboxField, readOnly: boolean) {
   return readOnly
-    ? ({ className: "inbox-field", "data-inbox-answered-field": field.type } as const)
+    ? ({
+        className: "inbox-field flex min-w-0 flex-col gap-item-gap",
+        "data-inbox-answered-field": field.type,
+      } as const)
     : ({
-        className: "inbox-field",
+        className: "inbox-field flex min-w-0 flex-col gap-item-gap",
         "data-inbox-field": field.type,
         "data-inbox-field-label": field.label,
       } as const);
@@ -217,7 +233,7 @@ function AnsweredText({
     <ComposerFrame look={COMPOSER_LOOK.INPUT} className="inbox-field-composer" data-read-only="">
       {/* biome-ignore lint/a11y/useSemanticElements: the words hold mention chips, which no native field can, and speak as the read-only field they stand for. */}
       <div
-        className="inbox-field-words m-0 select-text"
+        className="inbox-field-words m-0 box-border min-h-inbox-field-words px-control-inset py-item-gap wrap-anywhere select-text"
         role="textbox"
         aria-readonly="true"
         aria-multiline="true"
@@ -300,7 +316,7 @@ function InboxFormField({
         <div {...fieldFrame(field, readOnly)}>
           <FormField label={field.label} optional={optionalField(field)}>
             {(control) => (
-              <div className="inbox-field-short">
+              <div className="inbox-field-short max-w-inbox-field-short">
                 <TextField
                   field={control}
                   type={TEXT_FIELD_TYPE.NUMBER}
@@ -527,7 +543,7 @@ function AskPress({
 /** An ask's controls, whose words select and copy, and a Reply quotes as the words around them. */
 function AskWords({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="inbox-ask-words" {...{ [REPLY_SCOPE]: "" }}>
+    <div className="inbox-ask-words contents" {...{ [REPLY_SCOPE]: "" }}>
       <ReadableControls>{children}</ReadableControls>
     </div>
   );
@@ -570,7 +586,7 @@ function OpenControls({
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return decideButtons(ask) ? (
-        <div className="inbox-ask-presses" data-inbox-options="">
+        <div className={INBOX_ASK_PRESSES} data-inbox-options="">
           {ask.options.map((option) => {
             const picked = draft.choices.includes(option.label);
             return (
@@ -617,7 +633,7 @@ function OpenControls({
               ))}
             </Stack>
           )}
-          <div className="inbox-ask-presses">
+          <div className={INBOX_ASK_PRESSES}>
             <AskPress
               label={ASK_PRESS.DONE}
               pressed={decision === INBOX_REPLY.DONE}
@@ -660,7 +676,10 @@ function OpenControls({
 /** The glyph a press given wears in its answer's tone (`ANSWER_STATUS_TONE`): a check in green going ahead, a turn back in grey holding back. */
 function ToneGlyph({ tone }: { tone: AnswerTone }): React.JSX.Element {
   return (
-    <span className="inbox-ask-pressed" data-tone={ANSWER_STATUS_TONE[tone]}>
+    <span
+      className="inbox-ask-pressed inline-flex text-tone-ink"
+      data-tone={ANSWER_STATUS_TONE[tone]}
+    >
       {tone === ANSWER_TONE.AHEAD ? (
         <CheckIcon aria-hidden="true" />
       ) : (
@@ -733,7 +752,7 @@ function LeftControls({
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return decideButtons(ask) ? (
-        <div className="inbox-ask-presses">
+        <div className={INBOX_ASK_PRESSES}>
           {ask.options.map((option, at) => (
             <AnsweredPress
               key={option.label}
@@ -763,7 +782,7 @@ function LeftControls({
               ))}
             </Stack>
           )}
-          <div className="inbox-ask-presses">
+          <div className={INBOX_ASK_PRESSES}>
             <AnsweredPress
               label={ASK_PRESS.DONE}
               tone={ANSWER_TONE.AHEAD}
@@ -816,7 +835,7 @@ export function DraftQuestion({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the card.
     <div
-      className="inbox-draft-ask"
+      className="inbox-draft-ask flex min-w-0 flex-col gap-block-gap px-list-inset pt-list-inset pb-tight-gap"
       data-inbox-draft-ask=""
       onKeyDown={(event) => onResponseKey(pane, severalFields(ask), event)}
     >
@@ -852,7 +871,10 @@ export function AnsweredCard({
   if (!hasControls(ask)) return null;
   return (
     // Note that it is no `inbox-ask` card: the controls stand in the reply itself, at its words' left edge.
-    <div className="inbox-ask-answered" data-inbox-answered="">
+    <div
+      className="inbox-ask-answered mb-tight-gap flex min-w-0 flex-col gap-block-gap"
+      data-inbox-answered=""
+    >
       <HeldControls ask={ask} title={title} draft={answeredDraft(ask, answers)} />
     </div>
   );
@@ -880,14 +902,14 @@ export function WithdrawnWords({
 }): React.JSX.Element {
   if (reason !== undefined) {
     return (
-      <span className="inbox-ask-standing">
+      <span className={INBOX_ASK_STANDING}>
         <GLYPH.DISMISSED />
         {WITHDRAWN}
       </span>
     );
   }
   return (
-    <span className="inbox-ask-standing">
+    <span className={INBOX_ASK_STANDING}>
       <GLYPH.DISMISSED />
       {closer === undefined ? (
         CLOSED_WORDS
@@ -906,7 +928,11 @@ export function WithdrawnWhy({ reason }: { reason: string | undefined }): React.
   if (reason === undefined) return null;
   return (
     // Note that its words may be quoted into a reply, as the agent's own words may.
-    <p className="inbox-ask-why" data-inbox-withdrawn-why="" {...{ [REPLY_SCOPE]: "" }}>
+    <p
+      className="inbox-ask-why m-0 text-muted-foreground wrap-anywhere"
+      data-inbox-withdrawn-why=""
+      {...{ [REPLY_SCOPE]: "" }}
+    >
       {reason}
     </p>
   );

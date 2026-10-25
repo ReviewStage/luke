@@ -34,6 +34,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
 import { PhoneHead, PlaceMore } from "../desktop/phone-head.js";
+import { PLACE_PAGE } from "../desktop/place-columns.js";
 import { DocumentScroll } from "../tasks/document-frame.js";
 import type { TaskReader } from "../tasks/edit-ref.js";
 import { PlanBody, PlanBodyColumn, PlanPageHead } from "../tasks/plan-body.js";
@@ -659,7 +660,7 @@ export function PlanTemplatePage({
   const note = <TemplateNote keep={keep} />;
   return (
     <section
-      className="settings-page"
+      className={`settings-page ${PLACE_PAGE}`}
       aria-label={TEMPLATE_TITLE}
       aria-busy={signedIn && template.read === TEMPLATE_READ.READING ? true : undefined}
       hidden={hidden}

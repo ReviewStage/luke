@@ -230,7 +230,7 @@ test("the box says at once what it was read as, and a source on another host say
     "Skill text · pr-style · Reading…",
   );
   assert.deepEqual(pastedLine(parseSkillPaste("npx skills add https://gitlab.com/acme/skills")), {
-    text: "Only GitHub sources for now.",
+    text: "Only GitHub sources.",
     tone: STATUS_TONE.ATTENTION,
   });
 });

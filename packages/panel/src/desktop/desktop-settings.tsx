@@ -77,6 +77,7 @@ import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { PhoneHead } from "./phone-head.js";
+import { PLACE_LIST, PLACE_LIST_TITLE, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
@@ -176,7 +177,11 @@ function ListHead({
       <HistoryButtons history={history} room={room} />
       {exit}
       {/* A label for the list, no heading: the page beside it is named once, by its own header's `h1`. */}
-      <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.TITLE} className="settings-pages-title">
+      <Text
+        as={TEXT_ELEMENT.DIV}
+        variant={TEXT_VARIANT.TITLE}
+        className={`settings-pages-title ${PLACE_LIST_TITLE}`}
+      >
         {SETTINGS_LIST}
       </Text>
     </>
@@ -197,7 +202,7 @@ function PageGroup({
 }): React.JSX.Element {
   const workspace = group === SETTINGS_PAGE_GROUP.WORKSPACE ? listed : undefined;
   return (
-    <section className="settings-nav-group">
+    <section className="settings-nav-group [.settings-nav-group+&]:mt-section-gap">
       <GroupHeader
         label={workspace?.name ?? settingsGroupHeadingOf(group, capabilities)}
         glyph={workspace === undefined ? undefined : <WorkspaceTile workspace={workspace} />}
@@ -375,8 +380,16 @@ export function DesktopSettings({
     );
   }
   return (
-    <div ref={screen} className="desktop-settings" data-single={String(split.single)}>
-      <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
+    <div
+      ref={screen}
+      className={`desktop-settings ${PLACE_SPLIT}`}
+      data-single={String(split.single)}
+    >
+      <nav
+        className={`settings-pages ${PLACE_LIST}`}
+        aria-label="Settings pages"
+        hidden={hidden.list}
+      >
         <ListHead room={room} history={history} onExit={onExit} />
         <SettingsSearchField
           find={!pageSearched}
@@ -441,7 +454,7 @@ export function DesktopSettings({
           onShowHistory={() => setTemplateHistory(true)}
         />
       ) : (
-        <section className="settings-page" aria-label={title} hidden={hidden.item}>
+        <section className={`settings-page ${PLACE_PAGE}`} aria-label={title} hidden={hidden.item}>
           {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
           <SettingsPage
             key={settings.view}

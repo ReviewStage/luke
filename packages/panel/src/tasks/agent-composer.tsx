@@ -566,7 +566,7 @@ export function AgentComposer({
               reason: FAILURE_REASON.RECONNECT_INTEGRATION,
               text:
                 reconnectFailed === lapsed.connection
-                  ? `${lapsed.name}'s sign-in expired, and Luke could not start reconnecting it. Try again in a moment.`
+                  ? `${lapsed.name}'s sign-in expired, and Luke could not start reconnecting it.`
                   : `${lapsed.name}'s sign-in expired.`,
               provider: lapsed.provider,
               ...(lapsed.connection === lapsed.provider

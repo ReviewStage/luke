@@ -957,7 +957,7 @@ test("a source on another host says only GitHub for now and asks the service not
   await mountDialog();
   await paste("npx skills add https://gitlab.com/acme/skills");
 
-  assert.match(document.body.textContent ?? "", /Only GitHub sources for now\./u);
+  assert.match(document.body.textContent ?? "", /Only GitHub sources\./u);
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW), []);
 });
 

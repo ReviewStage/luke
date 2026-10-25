@@ -4,12 +4,12 @@ import {
   type TaskIssueLinkView,
   type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
-import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
+import { TASK_CALL_FAILURE, type TaskIssueCallFailure } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { undoToast, useToast } from "../toast.js";
-import { linkNoteOf } from "./task-issue-links-model.js";
+import { linkNoteOf, readNoteOf } from "./task-issue-links-model.js";
 
 /**
  * use-task-issue-links.ts -- the issues one task links, as its page reads and changes them through the host.
@@ -62,11 +62,12 @@ export function relinkOf(link: TaskIssueLinkView): TaskIssueChoice | undefined {
   return { provider: TASK_ISSUE_PROVIDER.GITHUB, repository, number, relation };
 }
 
-/** A refusal the act port answered, in its own sentence (`act.ts` rethrows one as an `Error` carrying it). */
-function refusedSentence(refused: Error): string {
-  return refused.message === ""
-    ? linkNoteOf({ failure: TASK_CALL_FAILURE.UNANSWERED })
-    : refused.message;
+/** A refusal the act port answered, in its own sentence (`act.ts` rethrows one as an `Error` carrying it), or `unanswered`'s where it carried none. */
+function refusedSentence(
+  refused: Error,
+  unanswered = linkNoteOf({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+): string {
+  return refused.message === "" ? unanswered : refused.message;
 }
 
 export function useTaskIssueLinks(taskId: string): TaskIssueLinksControl {
@@ -82,19 +83,29 @@ export function useTaskIssueLinks(taskId: string): TaskIssueLinksControl {
   // Note that each link's relation changes are counted, so the answer to one
   // a newer change overtook puts nothing back over the newer one.
   const relating = useRef(new Map<string, number>());
+  const drawn = useRef(false);
+  drawn.current = read?.taskId === taskId;
 
   // The links are read for the task, and again after a link is made.
   useEffect(() => {
     let current = true;
+    // Note that a read again behind links already drawn is said under them, where no Retry stands, so it says to try again.
+    const unread = (failure: TaskIssueCallFailure) =>
+      drawn.current ? linkNoteOf({ failure }) : readNoteOf(failure);
     // Note that an answer the hook cannot read is taken as a refusal, so a window whose port answers nothing draws no box.
     act(ACT_KIND.TASK_ISSUES_READ, { taskId })
       .then((answer) => {
         if (!current) return;
         if ("issues" in answer) setRead({ taskId, links: answer.issues });
-        else setNote({ taskId, words: linkNoteOf(answer) });
+        else setNote({ taskId, words: unread(answer.failure) });
       })
       .catch((refused: Error) => {
-        if (current) setNote({ taskId, words: refusedSentence(refused) });
+        if (current) {
+          setNote({
+            taskId,
+            words: refusedSentence(refused, unread(TASK_CALL_FAILURE.UNANSWERED)),
+          });
+        }
       });
     return () => {
       current = false;

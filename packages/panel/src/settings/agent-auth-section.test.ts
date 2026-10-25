@@ -553,7 +553,7 @@ test("a ChatGPT sign-in OpenAI no longer honors says its sign-in expired, and ho
   const dialog = await open(page, "Codex");
   assert.match(
     card(dialog, "Subscription").textContent ?? "",
-    /Sign-in expired\. Sign in with ChatGPT to reconnect\./u,
+    /Sign-in expired\.(?! Sign in)/u,
   );
 });
 

@@ -27,10 +27,20 @@ const EXPERIMENTAL = "Experimental";
  * and saying so in its hint.
  */
 export function ExperimentTag({ narrow = false }: { narrow?: boolean }): React.JSX.Element {
-  if (!narrow) return <span className="experiment-tag">{EXPERIMENTAL}</span>;
+  if (!narrow)
+    return (
+      <span className="experiment-tag flex-none rounded-luke-full border border-border-strong px-item-gap text-caption font-luke-medium tracking-experiment-tag text-muted-foreground">
+        {EXPERIMENTAL}
+      </span>
+    );
   return (
     <Tooltip label={EXPERIMENTAL}>
-      <span className="experiment-tag" data-glyph="" role="img" aria-label={EXPERIMENTAL}>
+      <span
+        className="experiment-tag inline-flex flex-none self-center text-muted-foreground [&>svg]:size-control-icon"
+        data-glyph=""
+        role="img"
+        aria-label={EXPERIMENTAL}
+      >
         <FlaskConicalIcon aria-hidden="true" />
       </span>
     </Tooltip>
