@@ -566,6 +566,147 @@ const THREADS: ThreadSeed[] = [
   ),
 ];
 
+/**
+ * More of the week, so a channel shows what folds away and what is new: a
+ * second open ask from the Inbox rows task beside its first, and threads
+ * settled on earlier days.
+ */
+THREADS.push(
+  thread(
+    14,
+    seed(TASK.ROWS),
+    MOCK_CHANNEL.APP,
+    THREAD_KIND.DECISION,
+    "Which glyph for an empty Inbox?",
+    [
+      agentSaid(
+        118,
+        30 * MINUTE,
+        'An empty Inbox shows the tray today, which reads as "nothing here" rather than "you\'re done".',
+        {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "A tick", detail: "Says you're done." }, { label: "Keep the tray" }],
+          recommended: "A tick",
+          ...OPEN,
+        },
+      ),
+    ],
+    { unread: true },
+  ),
+  thread(
+    15,
+    seed(TASK.ROWS),
+    MOCK_CHANNEL.APP,
+    THREAD_KIND.SHIPPED,
+    "Shipped: the Inbox row's hover card",
+    [
+      agentSaid(
+        119,
+        2 * DAY,
+        "#4871 merged. Hovering a row shows its task, agent and latest word.",
+      ),
+    ],
+    { status: INBOX_STATUS.ANSWERED, settledAt: LANDED - 2 * DAY },
+  ),
+  thread(
+    16,
+    seed(TASK.POLISH),
+    MOCK_CHANNEL.APP,
+    THREAD_KIND.SHIPPED,
+    "Shipped: the sidebar no longer jumps when a section folds",
+    [agentSaid(120, 3 * DAY, "#4842 merged. Folding a section keeps the rows under it in place.")],
+    {
+      startedBy: CHARLES,
+      waitsOn: CHARLES,
+      status: INBOX_STATUS.ANSWERED,
+      settledAt: LANDED - 3 * DAY,
+    },
+  ),
+  thread(
+    17,
+    seed(TASK.ROWS),
+    MOCK_CHANNEL.APP,
+    THREAD_KIND.DECISION,
+    "Keep the cards' corner radius in the grid?",
+    [
+      agentSaid(
+        121,
+        2 * DAY + 3 * HOUR,
+        "The grid's cards use 10px corners; the list's rows use 8px.",
+        {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "Match the list" }, { label: "Keep 10px" }],
+          status: INBOX_ASK_STATUS.ANSWERED,
+        },
+      ),
+      memberSaid(122, DEAN, 2 * DAY + 2 * HOUR, "", {
+        ask: fixtureId("c3000003", 121),
+        reply: INBOX_REPLY.CHOSE,
+        choices: ["Match the list"],
+      }),
+    ],
+    { status: INBOX_STATUS.ANSWERED, answeredBy: DEAN, settledAt: LANDED - 2 * DAY - 2 * HOUR },
+  ),
+  thread(
+    18,
+    seed(TASK.SEARCH),
+    MOCK_CHANNEL.SERVICE,
+    THREAD_KIND.SHIPPED,
+    "Shipped: the chat_message backfill runs in batches",
+    [
+      agentSaid(
+        123,
+        2 * DAY,
+        "#4851 merged. The backfill takes 2,000 rows at a time and holds no long lock.",
+      ),
+    ],
+    {
+      startedBy: CHARLES,
+      waitsOn: CHARLES,
+      status: INBOX_STATUS.ANSWERED,
+      settledAt: LANDED - 2 * DAY,
+    },
+  ),
+  thread(
+    19,
+    seed(TASK.INDEX),
+    MOCK_CHANNEL.SERVICE,
+    THREAD_KIND.SHIPPED,
+    "Shipped: the sweep reads abandoned turns by index",
+    [agentSaid(124, 3 * DAY, "#4838 merged. The abandoned-turn scan uses the new partial index.")],
+    {
+      startedBy: CHARLES,
+      waitsOn: CHARLES,
+      status: INBOX_STATUS.ANSWERED,
+      settledAt: LANDED - 3 * DAY,
+    },
+  ),
+);
+
+/** When each reader last looked at each channel, so the stream draws its New line before what came after. */
+const LAST_LOOKED: ReadonlyMap<string, ReadonlyMap<MockChannel, number>> = new Map([
+  [
+    "user-dean",
+    new Map<MockChannel, number>([
+      [MOCK_CHANNEL.APP, LANDED - 2 * HOUR],
+      [MOCK_CHANNEL.SERVICE, LANDED - 30 * MINUTE],
+      [MOCK_CHANNEL.INFRA, LANDED - 2 * DAY],
+      [MOCK_CHANNEL.GENERAL, LANDED - DAY],
+      [MOCK_CHANNEL.CHANNELS, LANDED - 3 * HOUR],
+    ]),
+  ],
+  [
+    "user-charles",
+    new Map<MockChannel, number>([
+      [MOCK_CHANNEL.APP, LANDED - 4 * HOUR],
+      [MOCK_CHANNEL.SERVICE, LANDED - 3 * HOUR],
+      [MOCK_CHANNEL.INFRA, LANDED - DAY],
+      [MOCK_CHANNEL.GENERAL, LANDED - 3 * DAY],
+      [MOCK_CHANNEL.CHANNELS, LANDED - DAY],
+    ]),
+  ],
+]);
+
 /* ----- The service's reads ----- */
 
 function newest(items: readonly InboxItem[]): number {
@@ -738,7 +879,7 @@ export function channelsAppState(state: AppStateSnapshot): AppStateSnapshot {
   const reader = READERS.get(state.run.profile);
   if (reader === undefined) return state;
   READER = reader.userId === CHARLES.userId ? CHARLES : DEAN;
-  startChannelsMock(META, counts(), needing());
+  startChannelsMock(META, counts(), needing(), LAST_LOOKED.get(READER.userId) ?? new Map());
   return {
     ...state,
     account: accountOf(READER),

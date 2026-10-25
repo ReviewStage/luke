@@ -24,6 +24,9 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
+  ChoiceBar,
   Comment,
   ComposeIcon,
   TEXT_BUTTON_TONE,
@@ -34,7 +37,7 @@ import {
   TOOLBAR_INSET,
   Toolbar,
 } from "@luke/ui";
-import { useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
 import {
@@ -45,6 +48,7 @@ import {
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import {
   answerInStream,
+  channelLastLooked,
   type ChannelInfo,
   type ChannelPost,
   openThread,
@@ -74,6 +78,29 @@ function asksSomeone(listed: InboxListed): boolean {
   return (
     listed.item.status === INBOX_STATUS.OPEN && openAskOf(listed.item.thread ?? []) !== undefined
   );
+}
+
+/** Which of a channel's threads the stream shows: everyone's, or the reader's own. */
+const STREAM_SCOPE = { EVERYONE: "everyone", MINE: "mine" } as const;
+
+type StreamScope = (typeof STREAM_SCOPE)[keyof typeof STREAM_SCOPE];
+
+/** The scope the reader last chose, kept across channels as Slack keeps a filter. */
+let lastScope: StreamScope = STREAM_SCOPE.EVERYONE;
+
+/** Whether a thread is the reader's: of a task they own, asking them, or one they wrote on. */
+function isMine(listed: InboxListed, readerId: string | undefined): boolean {
+  const { holder, item } = listed;
+  if (readerId === undefined) return false;
+  if (holder.kind === INBOX_HOLDER.TASK && holder.task.ownerId === readerId) return true;
+  if (asksSomeone(listed) && item.waitsOn?.userId === readerId) return true;
+  return (item.thread ?? []).some((message) => message.member?.userId === readerId);
+}
+
+/** Whether a thread is finished with and from before today, which the stream folds away. */
+function finishedEarlier(listed: InboxListed, now: number): boolean {
+  const today = new Date(now).setHours(0, 0, 0, 0);
+  return listed.item.status !== INBOX_STATUS.OPEN && listed.item.postedAt < today;
 }
 
 /** One entry of the stream: a thread, or a post made in the window. */
@@ -318,10 +345,33 @@ export function ChannelStream({
 }): React.JSX.Element {
   const log = useRef<HTMLDivElement>(null);
   const posts = useChannelPosts(channel.id);
+  const [scope, setScope] = useState<StreamScope>(lastScope);
+  const [showFinished, setShowFinished] = useState(false);
+  // Note that the New line stands where the reader left off as the channel opened, and stays while they read it.
+  const looked = useMemo(() => channelLastLooked(channel.id), [channel.id]);
+  const scoped = items.filter(
+    (listed) => scope === STREAM_SCOPE.EVERYONE || isMine(listed, readerId),
+  );
+  const folded = scoped.filter((listed) => finishedEarlier(listed, now));
+  const shown = showFinished ? scoped : scoped.filter((listed) => !finishedEarlier(listed, now));
+  const mineCount = items.filter(
+    (listed) => isMine(listed, readerId) && asksSomeone(listed),
+  ).length;
   const entries: StreamEntry[] = [
-    ...items.map((listed) => ({ kind: "thread" as const, at: listed.item.postedAt, listed })),
+    ...shown.map((listed) => ({ kind: "thread" as const, at: listed.item.postedAt, listed })),
     ...posts.map((post) => ({ kind: "post" as const, at: post.at, post })),
   ].toSorted((a, b) => a.at - b.at);
+  const firstNew = entries.find(
+    (entry) =>
+      looked !== undefined &&
+      entry.at > looked &&
+      entry.kind === "thread" &&
+      entry.listed.item.thread?.[0]?.member?.userId !== readerId,
+  );
+  const choose = (next: StreamScope) => {
+    lastScope = next;
+    setScope(next);
+  };
   const open = (listed: InboxListed) => {
     onOpen(listed);
     openThread();
@@ -333,16 +383,33 @@ export function ChannelStream({
         title={`#${channel.name}`}
         end={TOOLBAR_INSET.COLUMN}
         actions={
-          onNewTask === undefined ? undefined : (
-            <Button
-              size={BUTTON_SIZE.COMPACT}
-              variant={BUTTON_VARIANT.OUTLINE}
-              icon={<ComposeIcon />}
-              onClick={onNewTask}
-            >
-              New task
-            </Button>
-          )
+          <div className="channels-actions">
+            <ChoiceBar
+              label="Show"
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+              size={CHOICE_BAR_SIZE.COMPACT}
+              items={[
+                { value: STREAM_SCOPE.EVERYONE, label: "Everyone" },
+                {
+                  value: STREAM_SCOPE.MINE,
+                  label: "Mine",
+                  count: mineCount === 0 ? undefined : String(mineCount),
+                },
+              ]}
+              value={scope}
+              onChange={choose}
+            />
+            {onNewTask === undefined ? null : (
+              <Button
+                size={BUTTON_SIZE.COMPACT}
+                variant={BUTTON_VARIANT.OUTLINE}
+                icon={<ComposeIcon />}
+                onClick={onNewTask}
+              >
+                New task
+              </Button>
+            )}
+          </div>
         }
       />
       <div className="channels-head">
@@ -355,6 +422,22 @@ export function ChannelStream({
       <Conversation subject={channel.id} list={log} className="channels-stream-log">
         <ConversationContent>
           <div className="channels-stream-body">
+            {folded.length === 0 ? null : (
+              <div className="channels-finished">
+                <TextButton onClick={() => setShowFinished(!showFinished)}>
+                  {showFinished
+                    ? "Hide finished work"
+                    : `${folded.length} finished earlier this week`}
+                </TextButton>
+              </div>
+            )}
+            {entries.length === 0 ? (
+              <div className="channels-day">
+                <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                  {`Nothing of yours in #${channel.name} right now`}
+                </Text>
+              </div>
+            ) : null}
             {entries.map((entry) => {
               const day = dayWords(entry.at, now);
               const divider =
@@ -368,6 +451,11 @@ export function ChannelStream({
               lastDay = day;
               return [
                 divider,
+                entry === firstNew ? (
+                  <div className="chat-unread-line" key="new-line">
+                    New
+                  </div>
+                ) : null,
                 entry.kind === "thread" ? (
                   <ThreadPost
                     key={entry.listed.item.id}

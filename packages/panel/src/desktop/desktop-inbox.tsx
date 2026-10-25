@@ -455,6 +455,7 @@ function InboxShown({
               >
                 {paneOnly ? null : streamChannel !== undefined ? (
                   <ChannelStream
+                    key={streamChannel.id}
                     channel={streamChannel}
                     items={listedItems(list)}
                     chosen={chosen?.item.id}

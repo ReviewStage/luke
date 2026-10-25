@@ -5759,3 +5759,15 @@ ul.actor-stack {
 .channels-composer {
   padding: 0 var(--column-inset) var(--column-inset);
 }
+
+.channels-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.channels-finished {
+  display: flex;
+  justify-content: center;
+  padding-block: var(--luke-space-4);
+}

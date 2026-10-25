@@ -156,6 +156,7 @@ let state: ChannelsMockState = { on: false, channel: MOCK_CHANNEL.FOR_YOU, threa
 let posts: readonly ChannelPost[] = [];
 let answered: ReadonlyMap<string, string> = new Map();
 let needsReader: ReadonlySet<string> = new Set();
+let lastLooked: ReadonlyMap<MockChannel, number> = new Map();
 /** What a channel's sidebar row says: how many of its threads need the reader, and whether any is unread. */
 export interface ChannelCount {
   readonly needsYou: number;
@@ -187,7 +188,9 @@ export function startChannelsMock(
   meta: ReadonlyMap<string, ChannelItemMeta>,
   counted: ReadonlyMap<MockChannel, ChannelCount>,
   needing: ReadonlySet<string>,
+  looked: ReadonlyMap<MockChannel, number>,
 ): void {
+  if (!state.on) lastLooked = looked;
   items = meta;
   counts = counted;
   needsReader = needing;
@@ -200,7 +203,14 @@ export function startChannelsMock(
 
 /** Shows a channel, or For you. */
 export function chooseChannel(channel: MockChannel): void {
+  // Note that leaving a channel is having looked at it, so its New line is gone when the reader comes back.
+  if (channel !== state.channel) lastLooked = new Map([...lastLooked, [state.channel, Date.now()]]);
   publish({ ...state, channel, threadOpen: channel === state.channel ? state.threadOpen : false });
+}
+
+/** When the reader last looked at a channel; none for one never looked at. */
+export function channelLastLooked(channel: MockChannel): number | undefined {
+  return lastLooked.get(channel);
 }
 
 /** Opens the chosen thread beside the channel's stream. */
