@@ -98,9 +98,11 @@ import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
 import { REVEALS_EXAMPLE } from "./examples/reveals";
 import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
 import { ROVING_KEYS_EXAMPLE } from "./examples/roving-keys";
+import { ROW_MARKS_EXAMPLE } from "./examples/row-marks";
 import { SAVED_TICKS_EXAMPLE } from "./examples/saved-ticks";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
+import { SEARCH_MATCHES_EXAMPLE } from "./examples/search-matches";
 import { SEARCHABLE_MENU_EXAMPLE } from "./examples/searchable-menu";
 import { SECRET_FIELDS_EXAMPLE } from "./examples/secret-fields";
 import { SELECTION_EXAMPLE } from "./examples/selection";
@@ -109,6 +111,7 @@ import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
 import { SHORTCUTS_EXAMPLE } from "./examples/shortcuts";
 import { SHOW_MORE_ROWS_EXAMPLE } from "./examples/show-more-rows";
+import { SIDEBAR_PARTS_EXAMPLE } from "./examples/sidebar-parts";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SOCIAL_SIGN_IN_EXAMPLE } from "./examples/social-sign-in";
@@ -221,6 +224,8 @@ export const EXAMPLES: readonly Example[] = [
   TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   SHOW_MORE_ROWS_EXAMPLE,
+  SIDEBAR_PARTS_EXAMPLE,
+  ROW_MARKS_EXAMPLE,
   SELECTION_EXAMPLE,
   LIST_MOTION_EXAMPLE,
   ROVING_KEYS_EXAMPLE,
@@ -251,6 +256,7 @@ export const EXAMPLES: readonly Example[] = [
   SCROLL_AREA_EXAMPLE,
   SAVED_TICKS_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
+  SEARCH_MATCHES_EXAMPLE,
   SEARCHABLE_MENU_EXAMPLE,
   SECRET_FIELDS_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,

@@ -106,7 +106,11 @@ export function MenuRow({
     <>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the right-click and the menu key are further doors to the ⋯ beside it. */}
       <div
-        className={row === undefined ? "settings-row menu-row" : "menu-row"}
+        className={
+          row === undefined
+            ? "settings-row menu-row flex min-h-settings-row-pair items-center justify-between gap-luke-12"
+            : "menu-row"
+        }
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
         {...(acting ? menu.contextMenu(door) : undefined)}
         onKeyDown={acting ? keyMenu : undefined}

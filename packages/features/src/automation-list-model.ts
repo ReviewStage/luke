@@ -163,7 +163,9 @@ export type AutomationRunStanding =
 export const AUTOMATION_NEXT = {
   /** It is turned off. */
   OFF: "off",
-  /** No instant is due: it fires on an event, or its schedule has no next run. */
+  /** It fires on an event, a webhook or an integration's, so no instant is ever due. */
+  EVENT: "event",
+  /** Its schedule has no next run. */
   UNSCHEDULED: "unscheduled",
   /** It is due at an instant. */
   AT: "at",
@@ -171,6 +173,7 @@ export const AUTOMATION_NEXT = {
 
 export type AutomationNext =
   | { readonly kind: typeof AUTOMATION_NEXT.OFF }
+  | { readonly kind: typeof AUTOMATION_NEXT.EVENT }
   | { readonly kind: typeof AUTOMATION_NEXT.UNSCHEDULED }
   | { readonly kind: typeof AUTOMATION_NEXT.AT; readonly at: number };
 
@@ -188,6 +191,28 @@ function cronNumber(field: string | undefined): number | undefined {
 /** The city of an IANA zone, its underscores spaced: "America/New_York" is "New York". */
 function zoneCity(timezone: string): string {
   return (timezone.split("/").at(-1) ?? timezone).replaceAll("_", " ");
+}
+
+/** A time of day as it is typed: hour, optional minutes, optional AM or PM ("2:00 AM", "2pm", "14:30"). */
+const TYPED_CLOCK = /^(\d{1,2})(?::(\d{2}))?\s*(?:([ap])\.?m\.?)?$/iu;
+
+/**
+ * The hour (0 to 23) and minute a typed time of day names, read as the
+ * summary says one ("2:00 AM") and as a 24-hour clock writes it ("14:30"),
+ * or nothing for words that are no time.
+ */
+export function parseAutomationClock(
+  text: string,
+): { readonly hour: number; readonly minute: number } | undefined {
+  const typed = TYPED_CLOCK.exec(text.trim());
+  if (typed === null) return undefined;
+  const [, hourDigits = "", minuteDigits = "0", half] = typed;
+  const spoken = Number(hourDigits);
+  const minute = Number(minuteDigits);
+  if (minute > 59) return undefined;
+  if (half === undefined) return spoken > 23 ? undefined : { hour: spoken, minute };
+  if (spoken < 1 || spoken > 12) return undefined;
+  return { hour: (spoken % 12) + (half.toLowerCase() === "p" ? 12 : 0), minute };
 }
 
 /** A schedule in words where the picker could have written it, and its cron otherwise. */
@@ -301,9 +326,11 @@ export function automationRunStanding(run: AutomationRunSummary | null): Automat
   }
 }
 
-/** When an automation runs next: off before any instant, since it fires at all. */
+/** When an automation runs next: off before any instant, since it fires at all, and an event's trigger has none to name. */
 export function automationNext(automation: AutomationSummary): AutomationNext {
   if (!automation.enabled) return { kind: AUTOMATION_NEXT.OFF };
+  if (automation.trigger.kind !== AUTOMATION_TRIGGER.SCHEDULE)
+    return { kind: AUTOMATION_NEXT.EVENT };
   if (automation.nextRunAt === null) return { kind: AUTOMATION_NEXT.UNSCHEDULED };
   return { kind: AUTOMATION_NEXT.AT, at: automation.nextRunAt };
 }

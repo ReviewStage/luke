@@ -10,7 +10,8 @@ import { WorkingMark } from "./working-mark.js";
 
 /**
  * working-mark.test.ts -- the loading marks are decorative, hidden from a
- * reader, and the shimmer says its words alone.
+ * reader, the working mark's still frame lights several cells, and the shimmer
+ * says its words alone.
  */
 
 declare global {
@@ -28,6 +29,15 @@ function render(element: React.ReactElement): HTMLElement {
 test("the working mark is hidden from a reader", () => {
   const mark = render(createElement(WorkingMark)).querySelector("svg.luke-working-mark");
   assert.equal(mark?.getAttribute("aria-hidden"), "true");
+});
+
+test("a still working mark lights at least three cells, not one stacked dot", () => {
+  const dots = render(createElement(WorkingMark)).querySelectorAll<SVGElement>(
+    ".luke-working-mark-dot",
+  );
+  // A capture that drops the animation leaves each dot on its resting transform.
+  const cells = new Set([...dots].map((dot) => dot.style.transform));
+  assert.ok(cells.size >= 3, `the still mark lights ${cells.size} cells`);
 });
 
 test("the thinking dots are hidden from a reader", () => {

@@ -415,6 +415,7 @@ function AutomationRow({
 }): React.JSX.Element {
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
+  const nextWords = automationNextText(automation, now);
   const item = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control.
   const hold = useCallback((press: HTMLElement | null) => {
@@ -442,14 +443,16 @@ function AutomationRow({
               {trigger}
             </OneLine>
             {stateEndMark(state, true)}
-            <Text
-              as={TEXT_ELEMENT.SPAN}
-              variant={TEXT_VARIANT.CAPTION}
-              tone={TEXT_TONE.MUTED}
-              truncate
-            >
-              {automationNextText(automation, now)}
-            </Text>
+            {nextWords === undefined ? null : (
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.CAPTION}
+                tone={TEXT_TONE.MUTED}
+                truncate
+              >
+                {nextWords}
+              </Text>
+            )}
           </span>
         }
         hint={{ Hint: RowHint, label: automation.name }}
