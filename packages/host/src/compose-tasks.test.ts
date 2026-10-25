@@ -1624,6 +1624,29 @@ it.effect(
 );
 
 it.effect(
+  "a quiet start opens nothing and answers once the followed list carries its transaction",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(BILLING, "Billing export", "# Billing", 20)]);
+      const { call, listed, realtime, settled, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      const made = task(INVITES, "Invitation expiry", "", 10);
+      service.createAnswer = { ok: true, answer: { task: made, txid: "7304" } };
+
+      const starting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry", quiet: true }),
+      );
+      yield* settled;
+
+      assert.equal(starting.pollUnsafe(), undefined, "the start waits for its transaction");
+      realtime.arrive("7304");
+      assert.deepEqual(yield* Fiber.join(starting), { planId: INVITES });
+      assert.equal(last()?.activeTaskId, undefined, "the task is not opened");
+    }),
+);
+
+it.effect(
   "a rename's transaction is waited for by nothing while the list is not followed over Realtime",
   () =>
     Effect.gen(function* () {

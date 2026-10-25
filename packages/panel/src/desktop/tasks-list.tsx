@@ -27,7 +27,12 @@ import {
   ANNOUNCE,
   AVATAR_SIZE,
   BUTTON_SIZE,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_PADDING,
   CARD_PRESS_SELECTOR,
+  CARD_SHADOW,
+  Card,
   CardPress,
   CHIP_LOOK,
   COLLECTION_STATE,
@@ -103,13 +108,14 @@ import {
 } from "@luke/ui/tasks-page-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { Schema } from "effect";
-import { type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { newTaskAction } from "../tasks/inbox-list.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -125,6 +131,8 @@ import { useAnnounceShown } from "../use-announce-shown.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
+import { groupNewTaskWords, NewTaskInButton, quickAddInto } from "./new-task-button.js";
+import { type DraftParts, type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
 import { useTaskMenuItems } from "./task-actions.js";
@@ -863,9 +871,65 @@ function TaskListRow({
   );
 }
 
+/** The chips a quick add's draft draws in the cells of the properties the List draws, by the property each says. */
+const DRAFT_CELLS = [TASK_PROPERTY.PRIORITY, TASK_PROPERTY.STATUS, TASK_PROPERTY.ASSIGNEE] as const;
+
+/** The draft's chip for a property, where it has one. */
+function draftChip(draft: DraftParts, property: TaskProperty): ReactNode {
+  if (property === TASK_PROPERTY.PRIORITY) return draft.priority;
+  if (property === TASK_PROPERTY.STATUS) return draft.status;
+  if (property === TASK_PROPERTY.ASSIGNEE) return draft.assignee;
+  return null;
+}
+
+/**
+ * A List group's quick add line: a row of the list's own cells, raised as a
+ * card off the page as a Board's draft is, so it reads as one being written, the draft's
+ * chips in the cells of its priority, status, and assignee and its bare
+ * title in the name's, so it reads as the row it is about to be; a chip
+ * whose column the List does not draw stands after the title, so each
+ * stays in reach. An add still out stands as its row, its name muted, and
+ * why one was refused in the name's cell.
+ */
+function listQuickAddLine(properties: readonly TaskProperty[]): QuickAddLine {
+  return ({ draft, pending, refused }) => (
+    <Card
+      as={CARD_ELEMENT.LI}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
+      shadow={CARD_SHADOW.SOFT}
+      className="tasks-list-row tasks-list-draft"
+      data-quick-add={draft === undefined ? undefined : ""}
+      data-pending={pending === undefined ? undefined : "true"}
+    >
+      <span className="tasks-list-cell" data-cell="name">
+        {refused === undefined ? (
+          <span className="tasks-list-press">
+            {draft?.title ?? pending}
+            {draft === undefined
+              ? null
+              : DRAFT_CELLS.filter((property) => !properties.includes(property)).map((property) => (
+                  <Fragment key={property}>{draftChip(draft, property)}</Fragment>
+                ))}
+          </span>
+        ) : (
+          <span className="tasks-list-note">{refused}</span>
+        )}
+      </span>
+      {properties.map((property) => (
+        <span key={property} className="tasks-list-cell" data-cell={property}>
+          {draft === undefined ? null : draftChip(draft, property)}
+        </span>
+      ))}
+      <span className="tasks-list-cell" data-cell="more" />
+    </Card>
+  );
+}
+
 /**
  * One group: its head, a press that folds and opens it, its glyph, name,
- * and count; and its rows, or a line saying it holds none. The group is a
+ * and count, and the + that adds a task in it in place (`quick-add.tsx`);
+ * and its rows, or a line saying it holds none. The group is a
  * drop zone where a row may be let go in it, and its rows are dragged
  * within it, where it keeps an order, and out of it.
  */
@@ -877,6 +941,8 @@ function TasksListGroup({
   drops,
   draggable,
   onShowOlder,
+  tasks,
+  properties,
   row,
 }: {
   group: TasksGroup;
@@ -888,6 +954,9 @@ function TasksListGroup({
   draggable: boolean;
   /** Shows every settled task, as the group's "+ N older" line asks. */
   onShowOlder: () => void;
+  tasks: TasksControl;
+  /** The properties the rows draw, which a quick add's line stands its cells on. */
+  properties: readonly TaskProperty[];
   /** Draws a task's row. */
   row: (task: TaskSummary) => ReactNode;
 }): React.JSX.Element {
@@ -899,8 +968,16 @@ function TasksListGroup({
   });
   const zone = zoneOf(group.head);
   const titled = group.head.kind !== TASKS_GROUP.ALL;
+  const into = quickAddInto(group.head);
+  const quick = useQuickAdd(tasks, into ?? {});
+  const adding = quick.shown;
+  // A folded group opens as its + asks, so the draft stands in sight.
+  const add = () => {
+    if (folded) onToggle();
+    quick.open();
+  };
   const rows =
-    drawn.length === 0 ? (
+    drawn.length === 0 && !adding ? (
       group.older === undefined ? (
         <Text
           variant={TEXT_VARIANT.CAPTION}
@@ -920,6 +997,7 @@ function TasksListGroup({
         data-row-drop-rows={ordered(group.head) ? "" : undefined}
         onPointerDown={draggable ? drag : undefined}
       >
+        <QuickAddLines quick={quick} line={listQuickAddLine(properties)} />
         {drawn.map(({ value }) => row(value))}
       </Stack>
     );
@@ -947,6 +1025,11 @@ function TasksListGroup({
           surface={GROUP_SURFACE.WIDE}
           head={GROUP_HEAD.STICKS}
           rows={GROUP_ROWS.SUBGRID}
+          actions={
+            into === undefined || !tasks.signedIn ? undefined : (
+              <NewTaskInButton label={groupNewTaskWords(group.head, head.name)} onPress={add} />
+            )
+          }
         >
           {body}
         </GroupHeader>
@@ -1168,7 +1251,14 @@ export function TasksList({
       filters={frame.chips}
       state={listState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
-      empty={<EmptyState icon={<ListTodoIcon />}>{noneYetWords(TERM.TASK)}</EmptyState>}
+      empty={
+        <EmptyState
+          icon={<ListTodoIcon />}
+          action={newTaskAction(tasks.signedIn ? tasks.onNewTask : undefined)}
+        >
+          {noneYetWords(TERM.TASK)}
+        </EmptyState>
+      }
       error={
         <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}
@@ -1202,44 +1292,51 @@ export function TasksList({
             <LeavingTasksGroups
               key={display.grouping}
               groups={groups}
-              group={(group) => (
-                <TasksListGroup
-                  key={groupKey(group.head)}
-                  group={group}
-                  head={groupHead(group.head, tasks, repositories, people)}
-                  folded={folds.folded(group.head)}
-                  onToggle={() => folds.toggle(group.head)}
-                  drops={drops}
-                  draggable={!narrow}
-                  onShowOlder={() =>
-                    frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })
-                  }
-                  row={(task) => (
-                    <TaskListRow
-                      key={task.id}
-                      tasks={tasks}
-                      task={task}
-                      workspaceName={workspaceName}
-                      repositoryName={
-                        task.repository === null
-                          ? NO_REPOSITORY
-                          : repositoryLabel(task.repository, repositories)
-                      }
-                      waiting={waitingOn.get(task.id) ?? 0}
-                      now={now}
-                      properties={properties}
-                      assigneeHeld={
-                        !narrow &&
-                        group.head.kind === TASKS_GROUP.ASSIGNEE &&
-                        group.head.assigneeId === (task.assignee?.userId ?? null)
-                      }
-                      chosen={several !== undefined && selected.has(task.id) ? several : undefined}
-                      onOpen={() => tasks.onSelect(task.id)}
-                      onStanding={(standing) => setStanding(task, standing)}
-                    />
-                  )}
-                />
-              )}
+              group={(group) => {
+                const named = groupHead(group.head, tasks, repositories, people);
+                return (
+                  <TasksListGroup
+                    key={groupKey(group.head)}
+                    group={group}
+                    head={named}
+                    folded={folds.folded(group.head)}
+                    onToggle={() => folds.toggle(group.head)}
+                    drops={drops}
+                    draggable={!narrow}
+                    onShowOlder={() =>
+                      frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })
+                    }
+                    tasks={tasks}
+                    properties={properties}
+                    row={(task) => (
+                      <TaskListRow
+                        key={task.id}
+                        tasks={tasks}
+                        task={task}
+                        workspaceName={workspaceName}
+                        repositoryName={
+                          task.repository === null
+                            ? NO_REPOSITORY
+                            : repositoryLabel(task.repository, repositories)
+                        }
+                        waiting={waitingOn.get(task.id) ?? 0}
+                        now={now}
+                        properties={properties}
+                        assigneeHeld={
+                          !narrow &&
+                          group.head.kind === TASKS_GROUP.ASSIGNEE &&
+                          group.head.assigneeId === (task.assignee?.userId ?? null)
+                        }
+                        chosen={
+                          several !== undefined && selected.has(task.id) ? several : undefined
+                        }
+                        onOpen={() => tasks.onSelect(task.id)}
+                        onStanding={(standing) => setStanding(task, standing)}
+                      />
+                    )}
+                  />
+                );
+              }}
             />
           </div>
         </ListMotion>

@@ -44,7 +44,6 @@ import {
   opensMenu,
   PanePin,
   PinIcon,
-  PlusIcon,
   ProviderMark,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
@@ -162,6 +161,7 @@ import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
+import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
@@ -970,14 +970,10 @@ function RepositorySection({
               />
             )}
             {repository === null ? null : (
-              <Tooltip label={`New task in ${label}`}>
-                <IconButton
-                  icon={<PlusIcon />}
-                  label={`New task in ${label}`}
-                  size={BUTTON_SIZE.COMPACT}
-                  onClick={() => onNewTaskIn(repository)}
-                />
-              </Tooltip>
+              <NewTaskInButton
+                label={`New task in ${label}`}
+                onPress={() => onNewTaskIn(repository)}
+              />
             )}
           </>
         }

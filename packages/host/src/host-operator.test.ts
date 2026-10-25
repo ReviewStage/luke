@@ -135,7 +135,7 @@ it.effect("a save names the kind of credential it carries, and an API key's name
   }),
 );
 
-it.effect("a task filed for later carries its status and priority to the host", () =>
+it.effect("a task filed for later carries its status, priority, and assignee to the host", () =>
   Effect.gen(function* () {
     const { client, requests } = recordingClient();
     const operator = operatorOver(client);
@@ -145,6 +145,7 @@ it.effect("a task filed for later carries its status and priority to the host", 
       planning: false,
       status: TASK_STATUS.BACKLOG,
       priority: TASK_PRIORITY.HIGH,
+      assigneeId: "user-ada",
     });
 
     assert.deepEqual(
@@ -157,6 +158,7 @@ it.effect("a task filed for later carries its status and priority to the host", 
             planning: false,
             status: TASK_STATUS.BACKLOG,
             priority: TASK_PRIORITY.HIGH,
+            assigneeId: "user-ada",
           },
         ],
       ],
