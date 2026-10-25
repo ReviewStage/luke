@@ -759,7 +759,9 @@ interface Asked {
  * stands over its own rows and no other's.
  */
 function layOutRows(): void {
-  const slots = () => [...document.querySelectorAll(".sidebar-tasks > li, .sidebar-section-slot")];
+  const slots = () => [
+    ...document.querySelectorAll(".sidebar-tasks > li, .sidebar-section-slot, .luke-drop-slot"),
+  ];
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const all = slots();
     const own = all.indexOf(this);
@@ -812,8 +814,8 @@ async function mountDraggable(
 const pointer = (type: string, y: number) =>
   new PointerEvent(type, { bubbles: true, button: 0, clientY: y, pointerId: 1 });
 
-/** Drags the row named `name` from its middle to `y` down the column and lets it go there. */
-function drag(sidebar: HTMLElement, name: string, y: number): void {
+/** Presses the row named `name` at its middle and carries it a little way toward `y`, past where a press is a drag. */
+function lift(sidebar: HTMLElement, name: string, y: number): void {
   // Note that a row's name is its title's first words, before what only a screen reader hears of it.
   const label = [...sidebar.querySelectorAll<HTMLElement>(".luke-list-row-title")].find(
     (each) => each.firstChild?.textContent === name,
@@ -823,9 +825,26 @@ function drag(sidebar: HTMLElement, name: string, y: number): void {
   act(() => {
     label?.dispatchEvent(pointer("pointerdown", top));
     window.dispatchEvent(pointer("pointermove", top + (y > top ? 10 : -10)));
+  });
+}
+
+/** Carries the row lifted to `y` down the column and lets it go there. */
+function letGo(y: number): void {
+  act(() => {
     window.dispatchEvent(pointer("pointermove", y));
     window.dispatchEvent(pointer("pointerup", y));
   });
+}
+
+/** Drags the row named `name` from its middle to `y` down the column and lets it go there. */
+function drag(sidebar: HTMLElement, name: string, y: number): void {
+  lift(sidebar, name, y);
+  letGo(y);
+}
+
+/** The sidebar's Pinned, where it stands. */
+function pinnedGroup(sidebar: HTMLElement): HTMLElement | null {
+  return sidebar.querySelector<HTMLElement>('nav[aria-label="Pinned"]');
 }
 
 /** A moment after every stamp the fixtures carry, at which a drag's writes are taken. */
@@ -903,14 +922,73 @@ test("a pinned task dragged into a section is unpinned and lands where it was le
   assert.deepEqual(sectionTaskIds(after, LAUNCH), [INVITES.id, PINNED.id]);
 });
 
-test("Pinned stands while nothing is pinned and takes the first pin", async () => {
+test("with nothing pinned Pinned stands nowhere, and a row lifted into a drag draws it, empty, to take the first pin", async () => {
   const asked = noneAsked();
+  // Down the column: Invite expiry under Launch, Retry audit under Tasks; once a row is lifted, Pinned's slot above them.
   const sidebar = await mountDraggable([INVITES, RETRIES], SECTIONS, asked);
-  assert.ok(sidebar.querySelector('nav[aria-label="Pinned"] .sidebar-section-slot'));
+  assert.equal(pinnedGroup(sidebar), null, "no Pinned while nothing is pinned");
 
-  drag(sidebar, "Retry audit", 4);
+  lift(sidebar, "Retry audit", 0);
+
+  const zone = pinnedGroup(sidebar) ?? assert.fail("Pinned stands while a row is carried");
+  assert.ok(zone.querySelector(".luke-drop-slot"), "a slot to let it go in");
+  assert.equal(zone.querySelector("[aria-expanded]"), null, "nothing to fold");
+  assert.equal(zone.textContent, "Pinned", "no count, and no words beyond its name");
+
+  letGo(4);
 
   assert.deepEqual(asked.marks, [[RETRIES.id, TASK_MARK.PIN]]);
+});
+
+test("a drag put back with nothing pinned takes the empty Pinned away again", async () => {
+  const asked = noneAsked();
+  const sidebar = await mountDraggable([INVITES, RETRIES], SECTIONS, asked);
+
+  lift(sidebar, "Retry audit", 0);
+  assert.ok(pinnedGroup(sidebar), "Pinned stands while a row is carried");
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await settle();
+
+  assert.equal(pinnedGroup(sidebar), null);
+  assert.deepEqual(asked.marks, []);
+});
+
+test("Pinned stands once a pin exists, folding and counting it, and once the last is unpinned slides out before it goes", async () => {
+  const motions = playListMotions();
+  onTestFinished(motions.remove);
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const draw = async (summaries: readonly TaskSummary[]) => {
+    const tasks = tasksControl({
+      tasks: [...summaries],
+      workspaces: [WORKSPACE],
+      workspace: WORKSPACE,
+      taskSections: SECTIONS,
+    });
+    act(() =>
+      root.render(onRegistry(registry, createElement(DesktopSidebar, sidebarProps(tasks)))),
+    );
+    await settle();
+  };
+  await draw([PINNED, INVITES, RETRIES]);
+
+  const fold = pinnedGroup(container)?.querySelector("button[aria-expanded]");
+  assert.equal(fold?.getAttribute("aria-expanded"), "true", "it folds");
+  act(() => fold?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  assert.match(pinnedGroup(container)?.textContent ?? "", /1 pin/u, "folded, it counts its pin");
+
+  await draw([task(PINNED.id, PINNED.name), INVITES, RETRIES]);
+
+  const leaving = pinnedGroup(container);
+  assert.equal(leaving?.hasAttribute("data-leaving"), true, "it is drawn on while it goes");
+  const out = motions.played.find((each) => each.element === leaving);
+  assert.equal(out?.keyframes.at(-1)?.opacity, 0, "it fades out");
+  act(() => out?.finish());
+  assert.equal(pinnedGroup(container), null);
 });
 
 test("a pin dragged below the next one reorders the pins", async () => {
@@ -1460,7 +1538,7 @@ test("an agent's Move to section checks the section it stands in and offers Remo
 
 test("an agent dragged from Tasks into a section lands where it was let go, among the section's tasks", async () => {
   const asked = noneAsked();
-  // Down the column: Pinned's word, Invite expiry under Launch, then Retry audit and Sweep flaky tests under Tasks.
+  // Down the column once a row is lifted: Pinned's slot, Invite expiry under Launch, then Retry audit and Sweep flaky tests under Tasks.
   const sidebar = await mountDraggable([INVITES, RETRIES], SECTIONS, asked, WITH_SWEEP);
 
   drag(sidebar, "Sweep flaky tests", 2 * ROW_HEIGHT - 4);
@@ -1481,7 +1559,7 @@ test("an agent dragged from Tasks into a section lands where it was let go, amon
 
 test("an agent dragged from a section onto Tasks leaves every section", async () => {
   const asked = noneAsked();
-  // Down the column: Pinned's word, Sweep flaky tests and Invite expiry under Launch, Retry audit under Tasks.
+  // Down the column once a row is lifted: Pinned's slot, Sweep flaky tests and Invite expiry under Launch, Retry audit under Tasks.
   const sidebar = await mountDraggable([INVITES, RETRIES], SWEEP_IN_LAUNCH, asked, WITH_SWEEP);
 
   drag(sidebar, "Sweep flaky tests", 4 * ROW_HEIGHT - 4);

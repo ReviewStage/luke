@@ -51,6 +51,7 @@
 @import "./components/searchable-menu/searchable-menu.css";
 @import "./components/detail-page/detail-page.css";
 @import "./components/disclosure/disclosure.css";
+@import "./components/drop-slot/drop-slot.css";
 @import "./components/group-header/group-header.css";
 @import "./components/empty-state/empty-state.css";
 @import "./components/error-state/error-state.css";
