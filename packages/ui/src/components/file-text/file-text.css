@@ -1,6 +1,7 @@
 /* file-text.css -- a file's words as written: mono, wrapped line for line, on
    the code's ground in a control's corner; a peek clipped to its head and
-   faded at its foot, the whole scrolling inside a reading height. */
+   faded at its foot, the whole scrolling inside a reading height, a brief one
+   inside a peek's. */
 
 @layer components {
   .luke-file-text {
@@ -33,6 +34,12 @@
 
   .luke-file-text[data-extent="whole"] {
     max-height: calc(var(--luke-file-text-whole) + var(--luke-space-16));
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .luke-file-text[data-extent="brief"] {
+    max-height: calc(var(--luke-file-text-peek) + var(--luke-space-16));
     overflow: auto;
     overscroll-behavior: contain;
   }

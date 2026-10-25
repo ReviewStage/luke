@@ -8,14 +8,16 @@
  * and fades out over its last, its words still selectable but nothing to
  * scroll; the whole (`FILE_TEXT_EXTENT.WHOLE`) stands up to a reading
  * height and scrolls inside itself past it, taking the keyboard so a reader
- * scrolls it from the keys too. Long lines wrap rather than run sideways.
+ * scrolls it from the keys too, and a brief one (`FILE_TEXT_EXTENT.BRIEF`)
+ * does the same within a peek's height, for a card the text must not fill. Long lines wrap rather than run sideways.
  * It is a region named for a reader by `label`, the file it shows.
  */
 
-/** How much of the file stands: its head, faded, or the whole of it in a scroller. */
+/** How much of the file stands: its head, faded, or the whole of it in a scroller of a reading height or a peek's. */
 export const FILE_TEXT_EXTENT = {
   PEEK: "peek",
   WHOLE: "whole",
+  BRIEF: "brief",
 } as const;
 
 export type FileTextExtent = (typeof FILE_TEXT_EXTENT)[keyof typeof FILE_TEXT_EXTENT];
@@ -31,14 +33,14 @@ export function FileText({
   label: string;
   extent?: FileTextExtent;
 }): React.JSX.Element {
-  const whole = extent === FILE_TEXT_EXTENT.WHOLE;
+  const scrolls = extent !== FILE_TEXT_EXTENT.PEEK;
   return (
     <section
       className="luke-file-text"
       data-extent={extent}
       aria-label={label}
-      // Note that only the whole scrolls, so only it takes a place in the Tab order.
-      tabIndex={whole ? 0 : undefined}
+      // Note that only a peek does not scroll, so every other extent takes a place in the Tab order.
+      tabIndex={scrolls ? 0 : undefined}
     >
       <pre className="luke-file-text-words">{text}</pre>
     </section>

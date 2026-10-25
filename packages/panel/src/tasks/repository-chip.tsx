@@ -371,7 +371,11 @@ export function RepositoryChip(props: {
     ) : undefined;
 
   return (
-    <div className="repository-chip" data-place={props.place} ref={chip}>
+    <div
+      className="repository-chip relative min-w-0 data-[place=toolbar]:flex data-[place=toolbar]:empty:hidden"
+      data-place={props.place}
+      ref={chip}
+    >
       {triggerDrawn ? (
         <Tooltip
           label={open ? undefined : (props.value ?? undefined)}

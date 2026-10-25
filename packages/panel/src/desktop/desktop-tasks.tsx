@@ -1153,7 +1153,11 @@ function PlanDocument({
     },
   };
   const documentBody = (
-    <Fill as={FILL_ELEMENT.SECTION} className="desktop-document" aria-label={task.name}>
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="desktop-document @container/plan-document [&[hidden]]:hidden"
+      aria-label={task.name}
+    >
       <PlanBody
         task={task}
         live={tasks.live}
