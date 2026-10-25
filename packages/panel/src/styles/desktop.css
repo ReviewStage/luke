@@ -5829,3 +5829,8 @@ ul.actor-stack {
   gap: var(--luke-space-2);
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
+
+/* A decision under a post is drawn with its thread's own controls, as wide as its words. */
+.channels-post-ask {
+  max-width: 560px;
+}

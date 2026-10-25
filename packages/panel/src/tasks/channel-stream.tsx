@@ -68,7 +68,9 @@ import {
   useStreamAnswer,
 } from "./channels-mock.js";
 import { agentActor } from "./coding-agent-model.js";
-import { INBOX_HOLDER, type InboxListed, openAskOf } from "./inbox-model.js";
+import { AskControls } from "./inbox-ask-controls.js";
+import type { FormTextDoors } from "./inbox-form-text.js";
+import { EMPTY_INBOX_DRAFT, INBOX_HOLDER, type InboxListed, openAskOf } from "./inbox-model.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -221,21 +223,6 @@ function StreamViewOptions({
   );
 }
 
-/**
- * How a decision's buttons say which option its agent recommends, compared by
- * `?rec=` in a development tab: a star after its label, as the Inbox's rows
- * star it, or a line after the buttons naming it. Every button is drawn
- * alike either way, so none reads as already chosen.
- */
-const RECOMMENDED = { STAR: "star", CAPTION: "caption" } as const;
-
-type RecommendedLook = (typeof RECOMMENDED)[keyof typeof RECOMMENDED];
-
-const RECOMMENDED_LOOK: RecommendedLook =
-  new URLSearchParams(globalThis.location?.search ?? "").get("rec") === RECOMMENDED.CAPTION
-    ? RECOMMENDED.CAPTION
-    : RECOMMENDED.STAR;
-
 /** One entry of the stream: a thread, or a post made in the window. */
 type StreamEntry =
   | { readonly kind: "thread"; readonly at: number; readonly listed: InboxListed }
@@ -286,41 +273,32 @@ function AskButtons({ listed, onOpen }: { listed: InboxListed; onOpen: () => voi
       answers: { ask: message.id, reply: INBOX_REPLY.CHOSE, choices: [label] },
     });
   };
-  const options =
-    ask.type === INBOX_ASK.DECIDE
-      ? ask.options.map((option) => ({
-          label: option.label,
-          recommended: option.label === ask.recommended,
-          onPress: () => choose(option.label),
-        }))
-      : [
-          {
-            label: ask.type === INBOX_ASK.DO ? "Open the steps" : "Answer",
-            recommended: true,
-            onPress: onOpen,
-          },
-        ];
-  const recommended =
-    ask.type === INBOX_ASK.DECIDE ? options.find((option) => option.recommended)?.label : undefined;
+  // Note that a decision is answered with the very controls its thread offers, and a pick sends at once, as a Slack app's button does.
+  if (ask.type === INBOX_ASK.DECIDE) {
+    return (
+      <div className="channels-post-ask">
+        <AskControls
+          ask={ask}
+          title={listed.item.title}
+          doors={{
+            draft: EMPTY_INBOX_DRAFT,
+            disabled: false,
+            // SAFETY: a decision draws no form field, the one control that reads the text doors.
+            text: {} as FormTextDoors,
+            onDraft: (next) => {
+              const label = next.choices[0];
+              if (label !== undefined) choose(label);
+            },
+          }}
+        />
+      </div>
+    );
+  }
   return (
     <div className="channels-post-asks">
-      {options.map((option) => (
-        <Button
-          key={option.label}
-          size={BUTTON_SIZE.COMPACT}
-          variant={BUTTON_VARIANT.OUTLINE}
-          onClick={option.onPress}
-        >
-          {option.recommended && RECOMMENDED_LOOK === RECOMMENDED.STAR
-            ? `${option.label} ★`
-            : option.label}
-        </Button>
-      ))}
-      {RECOMMENDED_LOOK === RECOMMENDED.CAPTION && recommended !== undefined ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {`Recommended: ${recommended}`}
-        </Text>
-      ) : null}
+      <Button size={BUTTON_SIZE.COMPACT} variant={BUTTON_VARIANT.OUTLINE} onClick={onOpen}>
+        {ask.type === INBOX_ASK.DO ? "Open the steps" : "Answer"}
+      </Button>
     </div>
   );
 }
@@ -342,7 +320,8 @@ function RepliesLine({
     ).values(),
   ];
   const { item } = listed;
-  const waiting = asksSomeone(listed) ? item.waitsOn : undefined;
+  const picked = useStreamAnswer(item.id);
+  const waiting = asksSomeone(listed) && picked === undefined ? item.waitsOn : undefined;
   const waitingOn =
     waiting === undefined ? undefined : waiting.userId === readerId ? "you" : waiting.name;
   return (
@@ -402,6 +381,7 @@ function ThreadPost({
 }) {
   const { item } = listed;
   const actor = useThreadAuthor(listed);
+  const picked = useStreamAnswer(item.id);
   const first = item.thread?.[0];
   const open = () => onOpen(listed);
   return (
@@ -409,7 +389,7 @@ function ThreadPost({
       className="channels-post"
       data-chosen={String(chosen)}
       data-settled={String(item.status !== INBOX_STATUS.OPEN)}
-      data-needs={String(needsReader(listed, readerId))}
+      data-needs={String(needsReader(listed, readerId) && picked === undefined)}
     >
       <Comment
         author={commentAuthor(actor)}
