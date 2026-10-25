@@ -259,9 +259,7 @@
     "./voice/socket": "./src/voice/socket.js"
   },
   "scripts": {
-    "test:vitest:1": "vitest run --shard=1/3",
-    "test:vitest:2": "vitest run --shard=2/3",
-    "test:vitest:3": "vitest run --shard=3/3",
+    "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
