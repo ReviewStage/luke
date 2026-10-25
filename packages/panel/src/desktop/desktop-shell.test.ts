@@ -39,6 +39,7 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
+import { loadTasksFixture } from "../tasks/tasks-fixture-loader.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -1525,6 +1526,8 @@ test("a fixture run staged on Chat offers it with no account to turn its experim
   const view = { ...tasksControl().chatView, available: true, chat };
   const run = { ...stateWith({}, {}).run, fixtureMode: true };
   handState({}, { run: { ...run, profile: RUN_PROFILE.CHAT } });
+  // The window is drawn once the synthetic tasks have landed (`App`).
+  await loadTasksFixture();
   const staged = mount(false, false, { chatView: view });
   await settle();
   assert.ok(chatRow(staged), "the chat profile's run offers Chat");
