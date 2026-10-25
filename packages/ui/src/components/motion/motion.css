@@ -20,13 +20,13 @@
 
 @keyframes luke-card-grow {
   from {
-    transform: scale(0.97);
+    transform: scale(0.96);
   }
 }
 
 /* The way back of `luke-card-grow`, for a card leaving where it opened. */
 @keyframes luke-card-shrink {
   to {
-    transform: scale(0.97);
+    transform: scale(0.96);
   }
 }

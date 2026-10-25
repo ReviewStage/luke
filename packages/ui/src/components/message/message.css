@@ -55,7 +55,7 @@
     opacity: 0;
     pointer-events: none;
     flex: none;
-    transition: opacity var(--luke-duration-quick) var(--luke-spring);
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* An action whose hover card stands keeps the bar up while the pointer

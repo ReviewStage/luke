@@ -343,7 +343,7 @@ function faceAttributes({
 
 /** The × ending a removable chip: a round press inside its capsule, lighting under the pointer. */
 const REMOVE =
-  "luke-chip-remove m-0 grid size-chip-remove flex-none place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground cursor-[inherit] [&:hover]:bg-secondary [&:hover]:text-foreground [&>svg]:size-chip-remove-glyph";
+  "luke-chip-remove m-0 grid size-chip-remove flex-none place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground cursor-[inherit] transition-[background-color,color] duration-(--luke-duration-hover) ease-plain [&:hover]:bg-secondary [&:hover]:text-foreground [&>svg]:size-chip-remove-glyph";
 
 /** A removable chip: its face, then a × named for what it lifts. */
 function RemovableChip({
