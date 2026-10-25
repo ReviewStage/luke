@@ -1,8 +1,11 @@
 import { JSDOM } from "jsdom";
+import { PNG } from "pngjs";
 import { describe, expect, it } from "vitest";
+import { flattenPng } from "./png.ts";
 import { READY_SCRIPT } from "./ready.ts";
 import { CLIENT, type Client, drawsOn, pressedOn, SCENES, STEP } from "./scenes.ts";
 import { scrollScript } from "./scroll.ts";
+import { sizedScript } from "./viewport.ts";
 
 // jsdom lays nothing out, so a box is given the rectangle it would stand in.
 const ON_SCREEN = { width: 20, height: 20, top: 10, left: 10, bottom: 30, right: 30 };
@@ -58,17 +61,49 @@ describe("the scroll script", () => {
   });
 });
 
+describe("the sized script", () => {
+  /** Whether the script for the least window at 125% calls a page laid out at `width` by `height` CSS px sized. */
+  function sizedAt(width: number, height: number): boolean {
+    const dom = new JSDOM("<body></body>", { runScripts: "outside-only" });
+    Object.assign(dom.window, { innerWidth: width, innerHeight: height });
+    return dom.window.eval(
+      sizedScript({ width: 760, height: 520, zoom: 1.25, phone: false }),
+    ) as boolean;
+  }
+
+  it("waits while the zoomed window's page still lays out at the window's earlier size, and at its pixels unzoomed", () => {
+    expect(sizedAt(1280, 840)).toBe(false);
+    expect(sizedAt(760, 520)).toBe(false);
+  });
+
+  it("is sized once the page lays out at 608×416 CSS px", () => {
+    expect(sizedAt(608, 416)).toBe(true);
+  });
+});
+
+describe("flattening a picture", () => {
+  it("writes every pixel opaque, mixed with the ground by its alpha", () => {
+    const picture = new PNG({ width: 3, height: 1 });
+    // Clear, half-clear white, and opaque red.
+    picture.data.set([10, 20, 30, 0, 255, 255, 255, 128, 200, 0, 0, 255]);
+    const flat = PNG.sync.read(
+      flattenPng(PNG.sync.write(picture), { red: 32, green: 32, blue: 32 }),
+    );
+
+    // (255·128 + 32·127) / 255 = 143.9 for the half-clear white.
+    expect([...flat.data]).toEqual([32, 32, 32, 255, 144, 144, 144, 255, 200, 0, 0, 255]);
+  });
+});
+
 describe("the scene list", () => {
   it("leaves the desktop-only scenes out of the web client's", () => {
     const web = SCENES.filter((scene) => drawsOn(scene, CLIENT.WEB)).map((scene) => scene.id);
     const desktopOnly = SCENES.filter((scene) => !drawsOn(scene, CLIENT.WEB)).map(
       (scene) => scene.id,
     );
-    expect(desktopOnly).toEqual(
-      expect.arrayContaining(["voice-speaking", "voice-muted", "voice-duplex", "call-panel"]),
-    );
+    expect(desktopOnly).toEqual(expect.arrayContaining(["voice-muted", "call-panel"]));
     expect(web).toContain("palette");
-    expect(web).not.toContain("voice-speaking");
+    expect(web).not.toContain("voice-muted");
   });
 
   it("opens ⌘K with the chord each client answers: Meta on the desktop, a Mac's alone, and Ctrl or Meta on the web as its system has it", () => {

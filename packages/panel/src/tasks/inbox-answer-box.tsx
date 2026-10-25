@@ -3,7 +3,13 @@ import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/cod
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
 import { pasteCutWords } from "@luke/features/words";
 import type { ShortcutChord } from "@luke/settings/shortcuts";
-import { ComposerFoot, type ComposerNote, STATUS_TONE, TEXT_AREA_SUBMIT } from "@luke/ui";
+import {
+  ComposerBody,
+  ComposerFoot,
+  type ComposerNote,
+  STATUS_TONE,
+  TEXT_AREA_SUBMIT,
+} from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -264,8 +270,8 @@ interface AnswerFormProps {
 
 /**
  * A box's card: the question's controls as its body, the note line on its
- * own over the foot, and the foot (`ComposerFoot`), which holds the files the
- * box has, the + at its left, the counter, the microphone and Send at its
+ * own over the foot with the files the box has over it (`ComposerBody`), and
+ * the foot (`ComposerFoot`), which holds the + at its left, the counter, the microphone and Send at its
  * right, a dictation's strip in their place, and what the box says under
  * them; Send reading Got it where the box nods.
  */
@@ -304,28 +310,29 @@ export function AnswerForm({
       onSubmit={onSubmit}
     >
       {controls}
-      {/* The note line stands on its own over the foot, as the agent's box's field does. */}
-      <ComposerField
-        module={module}
-        editor={editor}
-        room={room}
-        draft={note}
-        setDraft={onNote}
-        placeholder={placeholder}
-        label={placeholder}
-        input={dictating ? COMPOSER_INPUT.READ_ONLY : COMPOSER_INPUT.EDITABLE}
-        maxLength={maxLength}
-        takesFocus={false}
-        {...pickers.field}
-        onEnter={onEnter}
-        // Note that the note's Enter is a new line wherever the form's own is, since a partly filled form is already sendable.
-        submitKey={sendChord === undefined ? undefined : TEXT_AREA_SUBMIT.MOD_ENTER}
-        onPasteFiles={onPasteFiles ?? takesNoFiles}
-        onPasteCut={onPasteCut}
-        quote={quote}
-      />
+      {/* The note line stands on its own over the foot, as the agent's box's field does, its files over it. */}
+      <ComposerBody files={chips}>
+        <ComposerField
+          module={module}
+          editor={editor}
+          room={room}
+          draft={note}
+          setDraft={onNote}
+          placeholder={placeholder}
+          label={placeholder}
+          input={dictating ? COMPOSER_INPUT.READ_ONLY : COMPOSER_INPUT.EDITABLE}
+          maxLength={maxLength}
+          takesFocus={false}
+          {...pickers.field}
+          onEnter={onEnter}
+          // Note that the note's Enter is a new line wherever the form's own is, since a partly filled form is already sendable.
+          submitKey={sendChord === undefined ? undefined : TEXT_AREA_SUBMIT.MOD_ENTER}
+          onPasteFiles={onPasteFiles ?? takesNoFiles}
+          onPasteCut={onPasteCut}
+          quote={quote}
+        />
+      </ComposerBody>
       <ComposerFoot
-        files={chips}
         tools={tools}
         counter={{ length: note.length, limit: maxLength }}
         actions={<DictateButton dictation={dictation} disabled={module === undefined} />}

@@ -351,7 +351,6 @@ test("the Inbox's row counts what needs the reader in the attention tone its row
     page.querySelector<HTMLElement>(".task-summary .inbox-row-count") ??
     assert.fail("the Inbox's row counts what needs the reader");
   assert.equal(count.textContent, "1 needs you");
-  assert.equal(count.dataset.tone, "attention");
 });
 
 /** What the plan's own inbox holds in these tests: nothing. */

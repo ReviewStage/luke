@@ -40,6 +40,7 @@
 @import "./components/card-press/card-press.css";
 @import "./components/composer-frame/composer-frame.css";
 @import "./components/composer-frame/composer-foot.css";
+@import "./components/composer-frame/composer-body.css";
 @import "./components/facts/facts.css";
 @import "./components/file-text/file-text.css";
 @import "./chart/chart.css";
@@ -49,6 +50,7 @@
 @import "./components/combobox/combobox.css";
 @import "./components/detail-page/detail-page.css";
 @import "./components/disclosure/disclosure.css";
+@import "./components/drop-slot/drop-slot.css";
 @import "./components/group-header/group-header.css";
 @import "./components/empty-state/empty-state.css";
 @import "./components/error-state/error-state.css";
