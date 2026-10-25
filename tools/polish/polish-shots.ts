@@ -50,7 +50,7 @@ import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -486,21 +486,46 @@ async function deathsOf(app: ElectronApplication): Promise<readonly string[]> {
   return deaths as string[];
 }
 
+/** Whether `child` has exited, or does within the exit timeout. */
+async function exitsInTime(child: ChildProcess): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return true;
+  return once(child, "exit", { signal: AbortSignal.timeout(EXIT_TIMEOUT_MS) }).then(
+    () => true,
+    () => child.exitCode !== null || child.signalCode !== null,
+  );
+}
+
 /**
  * Ends the app at once, past its quit guard: a staged call asks "Quit Luke?"
  * before a quit, which no one is there to answer, so Playwright's own close,
- * a quit, would wait on it for ever. One that does not exit in time is killed.
+ * a quit, would wait on it for ever. One that does not exit in time is
+ * killed. Answers whether the process is gone.
  */
-async function endApp(app: ElectronApplication): Promise<void> {
+async function endApp(app: ElectronApplication): Promise<boolean> {
   const child = app.process();
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  const exited = once(child, "exit", { signal: AbortSignal.timeout(EXIT_TIMEOUT_MS) });
+  const exited = exitsInTime(child);
   await app
     .evaluate(({ app: electronApp }: never) => {
       (electronApp as { exit(code: number): void }).exit(0);
     }, undefined)
     .catch(() => undefined);
-  await exited.catch(() => child.kill("SIGKILL"));
+  if (await exited) return true;
+  const killed = exitsInTime(child);
+  child.kill("SIGKILL");
+  return killed;
+}
+
+/**
+ * Where a development instance keeps its state: Electron's appData folder,
+ * under the name `resolveAppName` gives it (`packages/host/src/app-identity.ts`),
+ * spelled here because this plain script imports no workspace package.
+ */
+function stateRootOf(instance: string): string {
+  const appData =
+    process.platform === "darwin"
+      ? path.join(homedir(), "Library", "Application Support")
+      : process.env.XDG_CONFIG_HOME || path.join(homedir(), ".config");
+  return path.join(appData, `Luke Dev ${instance}`);
 }
 
 /** Sizes `window` to `frame` and zooms its page, then waits for the page to lay out at it, sizing it once more where it never did; answers what the page stood at where it still did not. */
@@ -547,28 +572,30 @@ async function shootDesktop(
   const frame = FRAMES[shot.target][shot.size];
   const callWindow = shot.scene.window === WINDOW.CALL;
   const linux = process.platform === "linux";
-  const app = await playwright._electron.launch({
-    executablePath: launch.electron,
-    args: [
-      DESKTOP_ROOT,
-      // Note that Linux runs as an unprivileged user under xvfb, with no GPU and no setuid sandbox helper.
-      ...(linux ? ["--no-sandbox", "--disable-gpu"] : []),
-      "--fixture",
-      "smoke",
-      "--profile",
-      shot.scene.profile,
-    ],
-    // A fresh instance each launch, since the last one's state folder was left as an exit leaves it.
-    env: { ...process.env, LUKE_INSTANCE: `polish-${launch.worker}-${randomUUID().slice(0, 8)}` },
-    timeout: READY_TIMEOUT_MS,
-  });
-  const stateRoot = await app
-    .evaluate(
-      ({ app: electronApp }: never) =>
-        (electronApp as { getPath(name: string): string }).getPath("userData"),
-      undefined,
-    )
-    .catch(() => undefined);
+  // A fresh instance each launch, since the last one's state folder was left as an exit leaves it.
+  const instance = `polish-${launch.worker}-${randomUUID().slice(0, 8)}`;
+  const stateRoot = stateRootOf(instance);
+  const forget = () => rmSync(stateRoot, { recursive: true, force: true });
+  const app = await playwright._electron
+    .launch({
+      executablePath: launch.electron,
+      args: [
+        DESKTOP_ROOT,
+        // Note that Linux runs as an unprivileged user under xvfb, with no GPU and no setuid sandbox helper.
+        ...(linux ? ["--no-sandbox", "--disable-gpu"] : []),
+        "--fixture",
+        "smoke",
+        "--profile",
+        shot.scene.profile,
+      ],
+      env: { ...process.env, LUKE_INSTANCE: instance },
+      timeout: READY_TIMEOUT_MS,
+    })
+    // Note that Playwright kills a launch it gave up on, so the folder that launch may have made goes with it.
+    .catch((error: unknown) => {
+      forget();
+      throw error;
+    });
   try {
     await watchDeaths(app);
     const page = await desktopPage(app, shot.scene);
@@ -615,10 +642,9 @@ async function shootDesktop(
     writeFileSync(file, flattenPng(Buffer.from(png, "base64"), ground));
   } finally {
     problems.push(...(await deathsOf(app)));
-    await endApp(app);
-    // Only a polish instance's own folder, as the app named it, is deleted.
-    if (typeof stateRoot === "string" && path.basename(stateRoot).includes(" polish-"))
-      rmSync(stateRoot, { recursive: true, force: true });
+    // The folder is deleted only once the process that held it is gone.
+    if (await endApp(app)) forget();
+    else problems.push(`the app would not exit, so ${stateRoot} is left behind`);
   }
 }
 
