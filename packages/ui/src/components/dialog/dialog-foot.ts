@@ -14,8 +14,13 @@ import { createContext, type RefObject, useContext } from "react";
  * goes, and whether it is at work or was refused.
  */
 
-/** The foot's layout, whatever it holds: a tool at its start, the answers at its end. */
-export const DIALOG_FOOT = "flex min-w-0 shrink-0 items-center gap-dialog-action-gap mt-3";
+/**
+ * The foot's layout, whatever it holds: a tool at its start, the answers at its end.
+ * Note that the empty slot a question may claim is `hidden`, which `flex` would
+ * otherwise override, leaving its gap and margin standing under the card's words.
+ */
+export const DIALOG_FOOT =
+  "flex min-w-0 shrink-0 items-center gap-dialog-action-gap mt-3 [&[hidden]]:hidden";
 
 /** The answers at the foot's end, at a common width. */
 export const DIALOG_ANSWERS =

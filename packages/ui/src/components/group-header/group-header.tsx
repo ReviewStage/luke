@@ -167,10 +167,10 @@ const PART = {
 /** The heading's share of the head, which a search's name hands it instead where the head offers one (`folding-search.css`). */
 const HEADING_SHARE = "flex-auto";
 
-/** A head that folds is pressed as a row is, so it wears a row's hover; and a desktop row answers a press the way a Mac's list does, without the web's pointing hand. */
+/** A head that folds is pressed as a row is, so it wears a row's hover; and it gives the one press cursor, the Mac's arrow on the desktop as a Mac's list does, the hand on the web. */
 const PRESSED_AS_ROW = {
   HEAD: "[&:hover]:bg-muted",
-  LEAD: "cursor-pointer in-data-[luke-profile=desktop]:cursor-default",
+  LEAD: "cursor-press",
 } as const;
 
 /**

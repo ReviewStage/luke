@@ -266,6 +266,18 @@ function InboxShell(): React.JSX.Element {
   );
 }
 
+/** Stands the window's toasts where the test stages them, portalled out of the shell. */
+function standToasts(): void {
+  const toasts = document.body.appendChild(document.createElement("section"));
+  toasts.className = "luke-toast-stack";
+  toasts.dataset.staged = "toasts";
+}
+
+/** The length named, as the shell last wrote it on the document's root. */
+function written(length: string): string {
+  return document.documentElement.style.getPropertyValue(length);
+}
+
 test("a draft reply scrolled up under the toasts raises them at the frame after the scroll", () => {
   const frames: FrameRequestCallback[] = [];
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((heard) => frames.push(heard));
@@ -276,14 +288,11 @@ test("a draft reply scrolled up under the toasts raises them at the frame after 
     ["toasts", { left: 844, right: 1184, top: 734, bottom: 784 }],
   ]);
   stage(boxes);
-  const toasts = document.body.appendChild(document.createElement("section"));
-  toasts.className = "luke-toast-stack";
-  toasts.dataset.staged = "toasts";
+  standToasts();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() => root?.render(createElement(InboxShell)));
-  const dock = () => document.documentElement.style.getPropertyValue("--luke-toast-dock");
-  assert.equal(dock(), "0px", "the reply below the window docks nothing");
+  assert.equal(written("--luke-toast-dock"), "0px", "the reply below the window docks nothing");
 
   boxes.set("reply", { left: 600, right: 1200, top: 680, bottom: 780 });
   act(() => {
@@ -291,5 +300,97 @@ test("a draft reply scrolled up under the toasts raises them at the frame after 
     for (const heard of frames.splice(0)) heard(0);
   });
 
-  assert.equal(dock(), "120px", "the reply scrolled up under the corner docks");
+  assert.equal(
+    written("--luke-toast-dock"),
+    "120px",
+    "the reply scrolled up under the corner docks",
+  );
 });
+
+/** A phone's Inbox list, the places bar at the screen's foot under it. */
+function PhoneListShell(): React.JSX.Element {
+  const shell = useRef<HTMLDivElement>(null);
+  useColumnDock(shell, false, true, "inbox");
+  return createElement(
+    "div",
+    { ref: shell, className: "desktop-shell", "data-staged": "window" },
+    createElement("nav", { className: "inbox-tasks", "data-staged": "list" }),
+    createElement("nav", { className: "mobile-bar", "data-staged": "bar" }),
+  );
+}
+
+test("on a phone the toasts stand above the places bar, and their room is what they take over it", () => {
+  stage(
+    new Map([
+      ["window", { left: 0, right: 400, top: 0, bottom: 800 }],
+      ["list", { left: 0, right: 400, top: 0, bottom: 740 }],
+      ["bar", { left: 0, right: 400, top: 740, bottom: 800 }],
+      ["toasts", { left: 52, right: 392, top: 672, bottom: 732 }],
+    ]),
+  );
+  standToasts();
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(PhoneListShell)));
+  assert.equal(written("--luke-toast-dock"), "60px");
+  assert.equal(written("--luke-toast-room"), "68px");
+});
+
+/** Where the window lays out a phone's call card and its video tile, which a rise or a lift moves only on screen, by `data-staged` name. */
+const LAID_OUT: ReadonlyMap<string, { top: number; height: number; width: number }> = new Map([
+  ["card", { top: 175, height: 225, width: 248 }],
+  ["tile", { top: 0, height: 125, width: 222 }],
+]);
+
+/** A phone's side panel filling the window, a pull request's tab bar at its head, and the call card floating over it with its video up. */
+function PhoneCardShell(): React.JSX.Element {
+  const shell = useRef<HTMLDivElement>(null);
+  useColumnDock(shell, true, true, "panel");
+  return createElement(
+    "div",
+    { ref: shell, className: "desktop-shell" },
+    createElement(
+      "aside",
+      { className: "side-panel", "data-staged": "panel" },
+      createElement("header", { className: "luke-pane-bar", "data-staged": "tabs" }),
+    ),
+    createElement(
+      "section",
+      { className: "call-card", "data-surface": "floating", "data-staged": "card" },
+      createElement("div", { className: "luke-call-video-tile", "data-staged": "tile" }),
+    ),
+  );
+}
+
+test.each([
+  { room: "a tab bar the full card would reach over", tabsFoot: 222, height: "70px" },
+  { room: "no room under the tab bar at all", tabsFoot: 380, height: "30px" },
+])(
+  "on a phone, with $room, the card's video gives up what it must, down to a control's height",
+  ({ tabsFoot, height }) => {
+    stage(
+      new Map([
+        ["panel", { left: 0, right: 608, top: 49, bottom: 416 }],
+        ["tabs", { left: 0, right: 608, top: 181, bottom: tabsFoot }],
+        ["card", { left: 16, right: 264, top: 175, bottom: 400 }],
+      ]),
+    );
+    for (const [side, read] of [
+      ["offsetTop", "top"],
+      ["offsetHeight", "height"],
+      ["offsetWidth", "width"],
+    ] as const)
+      vi.spyOn(HTMLElement.prototype, side, "get").mockImplementation(function (this: HTMLElement) {
+        return LAID_OUT.get(this.dataset.staged ?? "")?.[read] ?? 0;
+      });
+    const tokens = document.documentElement.style;
+    tokens.setProperty("--luke-space-8", "8px");
+    tokens.setProperty("--luke-space-16", "16px");
+    tokens.setProperty("--luke-control-height", "30px");
+    const container = document.body.appendChild(document.createElement("div"));
+    root = createRoot(container);
+    act(() => root?.render(createElement(PhoneCardShell)));
+    const card = document.querySelector<HTMLElement>(".call-card");
+    assert.equal(card?.style.getPropertyValue("--luke-call-video-height"), height);
+  },
+);

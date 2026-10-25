@@ -22,7 +22,7 @@ import type {
   AdminAccountWorkspace,
 } from "@luke/features/admin-answer-wire";
 import { AGENT_STATUS_WORDS } from "@luke/features/automation-list-model";
-import { CODING_AGENT_STATUS, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
 import { FAST_ACCESS, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { formatInstant } from "@luke/features/time-format";
@@ -43,6 +43,7 @@ import {
   TEXT_TONE,
   Text,
 } from "@luke/ui";
+import { AGENT_STATUS_TONE } from "../../tasks/coding-agent-model.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import {
@@ -67,15 +68,6 @@ const SKELETON_ROWS = { AGENTS: 5, WORKSPACES: 2, CREDENTIALS: 2, FAILURES: 3 } 
 const SKELETON_DEFAULTS_WIDTH = "320px";
 
 const SKELETON_EXPERIMENTS_WIDTH = "192px";
-
-/** A coding agent's status words, by the tone the panel's own pills would draw them in. */
-const AGENT_STATUS_TONE = {
-  [CODING_AGENT_STATUS.STARTING]: STATUS_TONE.WORKING,
-  [CODING_AGENT_STATUS.RUNNING]: STATUS_TONE.WORKING,
-  [CODING_AGENT_STATUS.COMPLETED]: STATUS_TONE.COMPLETE,
-  [CODING_AGENT_STATUS.FAILED]: STATUS_TONE.DANGER,
-  [CODING_AGENT_STATUS.CANCELLED]: STATUS_TONE.NEUTRAL,
-} as const satisfies Record<AdminAccountAgent["status"], StatusTone>;
 
 /** What each kind of failure is called on the timeline. */
 const FAILURE_SUBJECT = {

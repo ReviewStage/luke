@@ -389,6 +389,17 @@ if [[ -n "$node_reaching_effect" ]]; then
     exit 1
 fi
 
+# The rules about the repository's state a lint rule cannot see: the agents'
+# pins against what is installed, the coding agent's tool files against its
+# registry and what eve can build of each, the probes' committed fixtures
+# against their own leak guards, the lint rules' baselines against the files
+# they name, the catalog against `@luke/ui`'s components, the panel's launch
+# bundle, and the site's page heads and Tailwind entries. Each was a test that
+# read the repository, which root AGENTS.md's "Testing" leaves to a check
+# (`tools/anti-slop/repository-guard.ts`); several load the module whose
+# constants they compare, so they run under the tsx loader.
+(cd "$LUKE_REPO_ROOT" && node --import tsx tools/anti-slop/repository-guard.ts)
+
 # This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
 # a test fixture shaped like a provider's live credential is what GitHub's
 # secret scanning raises an alert on, which history keeps open once pushed. So

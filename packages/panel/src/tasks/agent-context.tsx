@@ -188,7 +188,7 @@ export function AgentContextRing({
 
   return (
     <div className="agent-context" ref={root}>
-      <span className="agent-context-button" data-level={contextLevel(context)}>
+      <span className="agent-context-button flex" data-level={contextLevel(context)}>
         <Tooltip label={contextHint(context)}>
           <IconButton
             ref={trigger}

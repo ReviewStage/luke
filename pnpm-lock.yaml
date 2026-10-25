@@ -1112,6 +1112,9 @@ importers:
       '@vercel/connect':
         specifier: 2.4.1
         version: 2.4.1(@modelcontextprotocol/sdk@1.32.1)(ai@7.0.135)(better-auth@1.7.7)(eve@0.74.0)
+      '@vercel/functions':
+        specifier: 3.10.1
+        version: 3.10.1(ws@8.21.3)
       '@vercel/oidc':
         specifier: 4.0.0
         version: 4.0.0
@@ -11697,6 +11700,12 @@ snapshots:
       eve: 0.74.0(patch_hash=9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e)(@opentelemetry/api@1.9.1)(ai@7.0.135)
 
   '@vercel/detect-agent@1.2.5': {}
+
+  '@vercel/functions@3.10.1(ws@8.21.3)':
+    dependencies:
+      '@vercel/oidc': 4.0.1
+    optionalDependencies:
+      ws: 8.21.3
 
   '@vercel/functions@3.10.1(ws@8.22.0)':
     dependencies:

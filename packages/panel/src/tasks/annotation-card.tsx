@@ -74,11 +74,22 @@ export interface AnnotationState {
   readonly tone: AnnotationTone;
 }
 
+/**
+ * The card's frame, as wide as its words up to a reading measure, in the
+ * body's type; its columns are the custom properties its sheet sets
+ * (`.annotation-card`, tasks.css), which the head and every comment read.
+ */
+const CARD_CLASS = "annotation-card min-w-0 max-w-annotation font-sans text-body text-foreground";
+
+/** A comment: its face in the faces' column and its words in the words', under the head's face and name. */
+const COMMENT_CLASS =
+  "annotation-comment grid min-w-0 grid-cols-annotation-comment gap-x-annotation-gap gap-y-tight-gap";
+
 /** A state's badge: its word after its tone's dot, or, narrow, the dot alone, whose word is its hint and stays its name. */
 function StateChip({ state }: { state: AnnotationState }): React.JSX.Element {
   return (
     <Tooltip label={state.word}>
-      <span className="annotation-card-state">
+      <span className="annotation-card-state flex flex-none">
         <Badge
           tone={state.tone}
           dot={state.tone === ANNOTATION_TONE.NEUTRAL}
@@ -96,8 +107,8 @@ function FoldedCount({ count }: { count: number }): React.JSX.Element | null {
   const { open } = useDisclosureState();
   if (open) return null;
   return (
-    <span className="annotation-card-count">
-      <MessageSquareIcon aria-hidden="true" />
+    <span className="annotation-card-count inline-flex flex-none items-center gap-tight-gap text-muted-foreground">
+      <MessageSquareIcon className="size-luke-12" aria-hidden="true" />
       {count}
       <VisuallyHidden under={VISUALLY_HIDDEN_UNDER.TIGHT}>
         {" "}
@@ -167,27 +178,35 @@ export function AnnotationCard({
       corner={CARD_CORNER.CONTROL}
       padding={CARD_PADDING.FLUSH}
       ref={landing?.ref}
-      className={className === undefined ? "annotation-card" : `annotation-card ${className}`}
+      className={className === undefined ? CARD_CLASS : `${CARD_CLASS} ${className}`}
       aria-label={label}
       {...landedMark(landing?.ringed === true)}
       onAnimationEnd={landing?.onAnimationEnd}
     >
-      {where === undefined ? null : <div className="annotation-card-where">{where}</div>}
+      {where === undefined ? null : (
+        <div className="annotation-card-where flex min-w-0 border-b border-border text-caption text-muted-foreground">
+          {where}
+        </div>
+      )}
       <DisclosureFrame
         actions={
-          menu === undefined ? undefined : <span className="annotation-card-end">{menu}</span>
+          menu === undefined ? undefined : <span className="ms-auto flex flex-none">{menu}</span>
         }
       >
         <Fold className="annotation-card-fold" open={open} onOpenChange={onOpenChange}>
           <DisclosureSummary look={DISCLOSURE_SUMMARY.TRANSCRIPT}>
-            <span className="annotation-card-turn">
+            <span className="annotation-card-turn flex size-annotation-turn flex-none items-center justify-center">
               <DisclosureChevron />
             </span>
-            <span className="annotation-card-face">{face}</span>
-            <span className="annotation-card-name">{name}</span>
+            <span className="annotation-card-face flex size-annotation-face flex-none items-center justify-center">
+              {face}
+            </span>
+            <span className="flex min-w-0 flex-initial overflow-hidden font-luke-semibold">
+              {name}
+            </span>
             {time === undefined ? null : (
               <VisuallyHidden under={VISUALLY_HIDDEN_UNDER.TIGHT}>
-                <span className="annotation-card-time">{time}</span>
+                <span className="annotation-card-time flex-none text-muted-foreground">{time}</span>
               </VisuallyHidden>
             )}
             {states.map((state) => (
@@ -197,7 +216,9 @@ export function AnnotationCard({
           </DisclosureSummary>
           <FoldBody className="annotation-card-body">
             {lead}
-            <div className="annotation-card-content">{children}</div>
+            <div className="annotation-card-content pt-luke-2 pr-list-inset pb-list-inset pl-annotation-face-x">
+              {children}
+            </div>
             {footer}
           </FoldBody>
         </Fold>
@@ -242,14 +263,14 @@ export function AnnotationComment({
   /** Its words, and what stands under them. */
   children: ReactNode;
 }): React.JSX.Element {
-  const words = <div className="annotation-comment-words">{children}</div>;
+  const words = (
+    <div className="annotation-comment-words col-2 flex min-w-0 flex-col gap-item-gap wrap-anywhere">
+      {children}
+    </div>
+  );
   if (reply === undefined) {
     return (
-      <li
-        className={
-          className === undefined ? "annotation-comment" : `annotation-comment ${className}`
-        }
-      >
+      <li className={className === undefined ? COMMENT_CLASS : `${COMMENT_CLASS} ${className}`}>
         {words}
       </li>
     );

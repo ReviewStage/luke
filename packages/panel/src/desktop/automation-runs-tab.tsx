@@ -3,7 +3,7 @@ import {
   automationRunStanding,
 } from "@luke/features/automation-list-model";
 import type { AutomationWorkspaceRun } from "@luke/features/automation-wire";
-import { EmptyState, LIST_DENSITY, LIST_VARIANT, List, ListMotion } from "@luke/ui";
+import { EmptyState, LIST_VARIANT, List, ListMotion } from "@luke/ui";
 import { ClockIcon } from "@luke/ui/icons";
 import { useRef } from "react";
 import { CREATOR, RunRow } from "./automation-runs-panel.js";
@@ -82,7 +82,7 @@ export function WorkspaceRuns({
   return (
     <div ref={body}>
       <ListMotion root={body}>
-        <List label="Runs" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.COMPACT} moves>
+        <List label="Runs" variant={LIST_VARIANT.CARD} moves>
           {kept.map((run) => (
             <RunRow
               key={run.id}

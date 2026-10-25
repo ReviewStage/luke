@@ -460,7 +460,7 @@ test("the workspace's skills stand before the account's own, each with its sourc
     text,
     /release-notes describedacme\/agent-skills @ 3f9c2e1 · by Dean\. Follows your workspace\.Workspace/u,
   );
-  assert.match(text, /pr-style describedpastedOnly you/u);
+  assert.match(text, /pr-style describedPastedOnly you/u);
   assert.match(text, /\.agents\/skills.*only agents started afterwards/u);
 });
 
@@ -546,7 +546,7 @@ test("the account's own skill offers Share with workspace, which asks in plain w
   const [, shared, personal] = [...document.querySelectorAll("section")];
   assert.match(
     shared?.textContent ?? "",
-    /pr-style describedpasted · by you\. Follows your workspace\.Workspace/u,
+    /pr-style describedPasted · by you\. Follows your workspace\.Workspace/u,
   );
   assert.match(personal?.textContent ?? "", /No skills installed yet\./u);
 });
@@ -563,7 +563,7 @@ test("a share the workspace already has the name for is refused in the question,
     dialog("alertdialog").textContent ?? "",
     /Stage already has a skill named pr-style\. Remove one of them first\./u,
   );
-  assert.match(rowOf("pr-style").textContent ?? "", /pastedOnly you/u);
+  assert.match(rowOf("pr-style").textContent ?? "", /PastedOnly you/u);
 });
 
 test("Share is never offered in a personal workspace", async () => {

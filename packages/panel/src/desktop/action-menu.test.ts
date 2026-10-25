@@ -195,7 +195,7 @@ test("a Settings row's ⋯ opens its acts in groups ruled apart, and Escape, Tab
   assert.equal(menu?.getAttribute("aria-label"), "GitHub actions", "the menu keeps its name");
   assert.equal(ellipsis.getAttribute("aria-expanded"), "true");
   assert.deepEqual(
-    [...(menu?.children ?? [])].map((child) =>
+    [...(menu?.querySelector('[role="menuitem"]')?.parentElement?.children ?? [])].map((child) =>
       child.tagName === "HR" ? "rule" : (child.textContent ?? ""),
     ),
     ["Copy key", "rule", "Disconnect"],

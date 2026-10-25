@@ -2634,8 +2634,8 @@ test("the Runs tab lists every automation's runs, each naming its automation, na
 
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.RUNS });
   assert.equal(listedRuns().length, 2);
-  assert.match(listedRuns()[0] ?? "", /^Fix the flaky testNightly flaky-test sweepWorking/u);
-  assert.match(listedRuns()[1] ?? "", /^Scheduled runMorning digest/u);
+  assert.match(listedRuns()[0] ?? "", /^Fix the flaky testNightly flaky-test sweep · Working/u);
+  assert.match(listedRuns()[1] ?? "", /^Scheduled runMorning digest · /u);
   choose("Failed");
   assert.deepEqual(
     listedRuns().map((row) => row.startsWith("Scheduled run")),

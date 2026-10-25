@@ -11,7 +11,7 @@ import { cn } from "../cn.js";
  * flex, and sized by its rows rather than `field-sizing-content`, which a
  * growing note asks for itself (`components/text-field`). None of shadcn's
  * outline or ring utilities, for the window's own ring
- * (`shadcn-focus.test.ts`), and no `dark:` grounds. `TEXTAREA_WELL` is the
+ * (`anti-slop/no-shadcn-focus-ring`), and no `dark:` grounds. `TEXTAREA_WELL` is the
  * field's well, exported so a text area bare in a card that is its well
  * replaces it whole.
  */
@@ -22,7 +22,7 @@ export const TEXTAREA_WELL =
 
 /** What every text area shares: its box, its type, its placeholder, and its invalid and disabled states. */
 const TEXTAREA_FIELD =
-  "m-0 box-border block h-auto w-full min-w-0 font-body text-body font-text text-foreground transition-[border-color,background-color] duration-(--luke-duration-hover) ease-plain placeholder:text-muted-foreground aria-invalid:animate-field-shake aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-disabled";
+  "m-0 box-border block h-auto w-full min-w-0 font-body text-body font-text text-foreground transition-[border-color,background-color] duration-(--luke-duration-hover) ease-plain placeholder:text-muted-foreground aria-invalid:animate-field-shake aria-invalid:border-destructive disabled:cursor-default disabled:opacity-disabled";
 
 export function ShadcnTextarea({ className, ...props }: React.ComponentProps<"textarea">) {
   return (

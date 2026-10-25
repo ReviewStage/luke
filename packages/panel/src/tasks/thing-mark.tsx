@@ -89,11 +89,17 @@ function PlanMark({ taskId }: { taskId: string }): React.JSX.Element {
   return <PlanGlyph status={useTaskStatus(taskId)} />;
 }
 
-/** The harness an agent runs in, read off its model; the mark of no known harness where no model is known. */
-function harnessMark(model: string | undefined): React.JSX.Element {
+/**
+ * The harness an agent runs in, read off its model. Where no model is known
+ * the box is held empty while the read is out, so the harness's mark lands in
+ * it without moving a thing, and is let go once the read has answered with
+ * none: a chip of an agent the window cannot read is its name alone, with no
+ * blank where a mark would stand (`InlineRef` hides a glyph that drew nothing).
+ */
+function harnessMark(model: string | undefined, settled = false): ReactNode {
+  if (model === undefined && settled) return null;
   return <AgentMark provider={model === undefined ? undefined : providerOf(model)} />;
 }
-
 /**
  * The mark of an agent the place holds no tile of: the harness the window
  * last read it running on, and where the window holds no model of it, an
@@ -108,7 +114,7 @@ function KnownAgentMark({
   agentId: string;
   taskId: string | undefined;
   at: ThingMarkAt;
-}): React.JSX.Element {
+}): ReactNode {
   const workspaceId = useWordsWorkspaceId(at.where);
   const held = useAppSlice(APP_STATE_HELD);
   const model = at.known.agentModels.get(agentId);
