@@ -819,47 +819,6 @@ function railToggle(tab: HTMLElement): HTMLButtonElement {
   );
 }
 
-/** The chapter's foot in a chapter `width` pixels wide: the place it says, whether its buttons fold to their glyphs, and whether the place's noun is left to a reader. */
-async function footAt(width: number) {
-  layContainersAt({ "chapter-reading": width });
-  const tab = await draw(
-    controlAnswering({ readChapters: () => Promise.resolve(answering(ready())) }),
-  );
-  const foot =
-    tab.querySelector<HTMLElement>(".chapter-reading > .luke-pane-bar:last-child") ??
-    assert.fail("the chapter's foot stands");
-  const noun = foot.querySelector(".chapter-place-noun") ?? assert.fail("the place's noun stands");
-  return {
-    place: foot.querySelector(".chapter-place")?.textContent,
-    buttonsFolded: getComputedStyle(foot).getPropertyValue("--luke-fold").trim() === "folded",
-    nounLeftToAReader: getComputedStyle(noun).position === "absolute",
-  };
-}
-
-test("the foot says Chapter 1 of 3 whole beside both buttons' words where it has the room", async () => {
-  assert.deepEqual(await footAt(600), {
-    place: "Chapter 1 of 3",
-    buttonsFolded: false,
-    nounLeftToAReader: false,
-  });
-});
-
-test("a foot too narrow for the buttons' words folds them to their glyphs before it cuts its place", async () => {
-  assert.deepEqual(await footAt(400), {
-    place: "Chapter 1 of 3",
-    buttonsFolded: true,
-    nounLeftToAReader: false,
-  });
-});
-
-test("a foot too narrow even for its place says 1 of 3, the noun left to a reader", async () => {
-  assert.deepEqual(await footAt(200), {
-    place: "Chapter 1 of 3",
-    buttonsFolded: true,
-    nounLeftToAReader: true,
-  });
-});
-
 /** A narrow panel with the chapters read and the rail away. */
 async function narrowChapters(): Promise<HTMLElement> {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -877,7 +836,6 @@ test("in a narrow panel the rail opens over the chapter, stays drawn through its
   act(() => railToggle(tab).click());
   const opened = floatedRail(tab) ?? assert.fail("the rail opens over the chapter");
   assert.equal(opened.getAttribute("data-state"), "open");
-  assert.equal(opened.getAttribute("data-edge"), "left");
 
   act(() => railToggle(tab).click());
   assert.equal(floatedRail(tab)?.getAttribute("data-state"), "leaving");

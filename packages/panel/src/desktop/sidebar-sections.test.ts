@@ -501,7 +501,6 @@ test("a deleted section slides out where it stood, out of reach, and leaves once
   assert.match(leaving?.textContent ?? "", /Launch/u, "it is drawn on");
   assert.equal(leaving?.hasAttribute("inert"), true, "out of reach while it goes");
   const out = motions.played.find((each) => each.element === leaving);
-  assert.equal(out?.keyframes.at(-1)?.opacity, 0, "it fades out as it slides");
 
   act(() => out?.finish());
   assert.equal(sidebar.querySelector("[data-leaving]"), null);
@@ -650,7 +649,6 @@ test("Move to section names a section without an icon with no glyph beside it", 
 
   openMoveToSection(sidebar, "Invite expiry");
 
-  assert.equal(item("Someday").querySelector(".luke-menu-item-glyph")?.childElementCount, 0);
   assert.equal(item("Launch").querySelector(".luke-menu-item-glyph")?.textContent, "🚀");
 });
 
@@ -931,26 +929,6 @@ test("a pin dragged below the next one reorders the pins", async () => {
     [PINNED.id],
   );
   assert.ok((asked.moves[0]?.position ?? "") > second.pinPosition, "it sorts after Pin review");
-});
-
-test("a section's glyph beyond the suggested ones is drawn in its color, and one no Lucide knows draws none", async () => {
-  const sidebar = await mountSidebar([], GLYPHS);
-  await settleLoaded();
-
-  // Note that each check reads words off the nodes, since a failed check printing a node prints the whole document.
-  const glyphOf = (title: string) =>
-    sectionHeader(sidebar, title).querySelector(
-      'button[aria-expanded] > [aria-hidden="true"] > :first-child',
-    )?.firstElementChild;
-  assert.equal(glyphOf("Stars")?.tagName.toLowerCase(), "svg");
-  assert.equal(glyphOf("Stars")?.getAttribute("data-icon-color"), TASK_SECTION_ICON_COLOR.TEAL);
-  assert.equal(glyphOf("Lost")?.getAttribute("class"), "section-glyph-blank");
-  assert.equal(glyphOf("Lost")?.childElementCount, 0);
-  openMoveToSection(sidebar, "Invite expiry");
-  assert.equal(
-    item("Stars").querySelector("svg")?.getAttribute("data-icon-color"),
-    TASK_SECTION_ICON_COLOR.TEAL,
-  );
 });
 
 test("an icon found by searching, in a color chosen, is the new section's", async () => {

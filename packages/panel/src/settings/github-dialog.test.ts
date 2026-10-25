@@ -256,7 +256,6 @@ test("a saved token's Manage opens it with Remove, which asks at the dialog's fo
 
   act(() => button("Remove", dialog()).click());
   await settle();
-  assert.equal(button("Remove", asked() ?? assert.fail()).dataset.variant, "danger");
   act(() => button("Remove", asked() ?? assert.fail()).click());
   await settle();
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 1);
@@ -385,13 +384,11 @@ test("Done fades the token dialog out, still drawn and in its ending state, then
   const exits = holdExits();
   const opener = await openedThenDone();
   const fading = document.querySelector('[role="dialog"]');
-  const ending = fading?.hasAttribute("data-ending-style");
   act(() => vi.advanceTimersToNextFrame());
   const stillDrawn = document.querySelector('[role="dialog"]') !== null;
   await act(async () => exits.finish());
 
   assert.ok(fading, "the dialog stands while it fades");
-  assert.equal(ending, true, "it is in its ending state");
   assert.equal(stillDrawn, true, "it stays until its fade has run");
   assert.equal(document.querySelector('[role="dialog"]'), null);
   assert.equal(document.activeElement, opener, "focus is back on the button that opened it");

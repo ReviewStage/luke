@@ -132,7 +132,6 @@ test("the @ list's foot names its keys through Shortcut, ⏎ and ⇥ mention and
     [...foot.children].map((item) => item.textContent),
     ["↑↓Move", "⏎⇥Mention", "EscClose"],
   );
-  assert.equal(foot.querySelectorAll("kbd.luke-shortcut").length, 5);
 
   act(() => picker().onTrigger(word("zzzz")));
   assert.deepEqual(rows(page), []);

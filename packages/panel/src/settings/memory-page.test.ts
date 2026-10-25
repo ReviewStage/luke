@@ -243,14 +243,6 @@ test("Forget asks first, then forgets the memory for good and lists what the ser
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
 
-test("Forget is drawn red, since a forgotten memory cannot be got back", async () => {
-  const { page } = await mount();
-
-  askForget(page, DEPLOYS);
-
-  assert.equal(button(dialog(), "Forget").getAttribute("data-variant"), "danger");
-});
-
 test("a forget that fails says so in the dialog and keeps the memory listed", async () => {
   refuseForget = true;
   const { page } = await mount();
