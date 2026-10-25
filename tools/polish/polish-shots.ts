@@ -34,9 +34,11 @@
  * Note that it drives the app as `pnpm start` runs it, not the signed bundle
  * `pnpm package:dir` makes, because that bundle's Node inspector fuse is
  * burnt off (`electron-builder-config.mjs`) and Playwright attaches through
- * the inspector. Each worker runs as a named instance (`LUKE_INSTANCE`), so
- * it holds a lock and a state folder of its own and never replaces the Luke
- * a developer has open. The motion tokens are zeroed as a capture run
+ * the inspector. Each launch runs as a named instance of its own
+ * (`LUKE_INSTANCE`), so it holds a lock and a state folder no other launch
+ * shares and never replaces the Luke a developer has open; the folder is
+ * deleted once that launch has exited, which it is made to do past its quit
+ * guard and so leaves its state unclosed. The motion tokens are zeroed as a capture run
  * zeroes them, so a picture lands on the steady state. It is not a test:
  * nothing is compared, no golden is kept, no CI job runs it, and nothing it
  * writes is committed. Playwright is not a dependency of the workspace: it
@@ -44,6 +46,7 @@
  */
 
 import { type ChildProcess, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -555,9 +558,17 @@ async function shootDesktop(
       "--profile",
       shot.scene.profile,
     ],
-    env: { ...process.env, LUKE_INSTANCE: `polish-${launch.worker}` },
+    // A fresh instance each launch, since the last one's state folder was left as an exit leaves it.
+    env: { ...process.env, LUKE_INSTANCE: `polish-${launch.worker}-${randomUUID().slice(0, 8)}` },
     timeout: READY_TIMEOUT_MS,
   });
+  const stateRoot = await app
+    .evaluate(
+      ({ app: electronApp }: never) =>
+        (electronApp as { getPath(name: string): string }).getPath("userData"),
+      undefined,
+    )
+    .catch(() => undefined);
   try {
     await watchDeaths(app);
     const page = await desktopPage(app, shot.scene);
@@ -605,6 +616,9 @@ async function shootDesktop(
   } finally {
     problems.push(...(await deathsOf(app)));
     await endApp(app);
+    // Only a polish instance's own folder, as the app named it, is deleted.
+    if (typeof stateRoot === "string" && path.basename(stateRoot).includes(" polish-"))
+      rmSync(stateRoot, { recursive: true, force: true });
   }
 }
 
