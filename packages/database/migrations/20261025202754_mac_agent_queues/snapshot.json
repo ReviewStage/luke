@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "1a75fa4a-c77c-4944-a088-c5f89565b87f",
+  "id": "2252d109-b4ec-4fe8-98ce-95fab6a390ee",
   "prevIds": ["5bd4a7b6-687a-40ab-935c-b02f549ecd7e"],
   "ddl": [
     {
@@ -6625,22 +6625,13 @@
       "table": "mac_agent_line"
     },
     {
-      "type": "bigint",
+      "type": "integer",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
-      "identity": {
-        "type": "always",
-        "name": "mac_agent_line_seq_seq",
-        "increment": "1",
-        "startWith": "1",
-        "minValue": "1",
-        "maxValue": "9223372036854775807",
-        "cache": 1,
-        "cycle": false
-      },
+      "identity": null,
       "name": "seq",
       "entityType": "columns",
       "schema": "public",
@@ -13258,6 +13249,34 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "integration_installation"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "seq",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "mac_agent_line_agent_seq",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "mac_agent_line"
     },
     {
       "nameExplicit": true,
