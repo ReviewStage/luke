@@ -17,12 +17,12 @@ export const ROOT_TASKS = ["lint", "discarded-effect"];
 export const WORKSPACE_TASKS = ["typecheck"];
 
 /**
- * The tests, one task per workspace holding a `vitest.config.ts`, except that
- * @luke/service's and @luke/panel's suites, the largest, are cut into three shards so CI can run
- * them on three runners. `scripts/repository-checks.sh` refuses a
- * workspace whose tests are under none of these names.
+ * The tests, one task per workspace holding a `vitest.config.ts`. CI cuts the
+ * largest suites into vitest shards on runners of their own
+ * (`.github/workflows/ci.yml`), and `scripts/repository-checks.sh` refuses a
+ * workspace whose tests are under no task of this name.
  */
-export const TEST_TASKS = ["test:vitest", "test:vitest:1", "test:vitest:2", "test:vitest:3"];
+export const TEST_TASK = "test:vitest";
 
 /**
  * The command line and environment that start turbo with `args`. Note that
