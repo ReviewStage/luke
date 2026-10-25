@@ -11,11 +11,16 @@
  */
 
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { INBOX_ASK, INBOX_MESSAGE_AUTHOR, INBOX_STATUS } from "@luke/features/inbox-wire";
+import {
+  INBOX_ASK,
+  INBOX_MESSAGE_AUTHOR,
+  INBOX_REPLY,
+  INBOX_STATUS,
+} from "@luke/features/inbox-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import {
   AVATAR_SIZE,
   Avatar,
-  Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -29,6 +34,7 @@ import {
   Toolbar,
 } from "@luke/ui";
 import { useRef } from "react";
+import { useAct } from "../act.js";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
 import {
   Conversation,
@@ -38,14 +44,12 @@ import {
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import {
   addChannelPost,
-  badgedKind,
+  answerInStream,
   type ChannelInfo,
   type ChannelPost,
-  channelItem,
-  kindTone,
   openThread,
-  THREAD_KIND_WORDS,
   useChannelPosts,
+  useStreamAnswer,
 } from "./channels-mock.js";
 import { ChatComposer } from "./chat-composer.js";
 import { agentActor } from "./coding-agent-model.js";
@@ -89,18 +93,49 @@ function useThreadAuthor(listed: InboxListed) {
   );
 }
 
-/** What an open ask offers under its post: a decision's options, or the one press that opens it. */
+/**
+ * What an open ask offers under its post: a decision's options, each of
+ * which answers it there, as a Slack app's buttons do, or, for steps or an
+ * answer in words, the one press that opens the thread. Once picked, the
+ * post says what the reader chose.
+ */
 function AskButtons({ listed, onOpen }: { listed: InboxListed; onOpen: () => void }) {
+  const { act } = useAct();
+  const picked = useStreamAnswer(listed.item.id);
   const asking = openAskOf(listed.item.thread ?? []);
+  if (picked !== undefined) {
+    return (
+      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+        {`You chose ${picked}`}
+      </Text>
+    );
+  }
   if (asking === undefined || listed.item.status !== INBOX_STATUS.OPEN) return null;
-  const { ask } = asking;
+  const { ask, message } = asking;
+  const choose = (label: string) => {
+    answerInStream(listed.item.id, label);
+    void act(ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, {
+      itemId: listed.item.id,
+      text: "",
+      attachments: [],
+      clientKey: `stream-${listed.item.id}-${Date.now()}`,
+      answers: { ask: message.id, reply: INBOX_REPLY.CHOSE, choices: [label] },
+    });
+  };
   const options =
     ask.type === INBOX_ASK.DECIDE
       ? ask.options.map((option) => ({
           label: option.label,
           recommended: option.label === ask.recommended,
+          onPress: () => choose(option.label),
         }))
-      : [{ label: ask.type === INBOX_ASK.DO ? "Open the steps" : "Answer", recommended: true }];
+      : [
+          {
+            label: ask.type === INBOX_ASK.DO ? "Open the steps" : "Answer",
+            recommended: true,
+            onPress: onOpen,
+          },
+        ];
   return (
     <div className="channels-post-asks">
       {options.map((option) => (
@@ -108,7 +143,7 @@ function AskButtons({ listed, onOpen }: { listed: InboxListed; onOpen: () => voi
           key={option.label}
           size={BUTTON_SIZE.COMPACT}
           variant={option.recommended ? BUTTON_VARIANT.PRIMARY : BUTTON_VARIANT.OUTLINE}
-          onClick={onOpen}
+          onClick={option.onPress}
         >
           {option.label}
         </Button>
@@ -197,7 +232,6 @@ function ThreadPost({
 }) {
   const { item } = listed;
   const actor = useThreadAuthor(listed);
-  const meta = channelItem(item.id);
   const first = item.thread?.[0];
   const open = () => onOpen(listed);
   return (
@@ -211,13 +245,6 @@ function ThreadPost({
         nameRef={<ActorRef actor={actor} nameOnly />}
         at={item.postedAt}
         now={now}
-        trailing={
-          meta !== undefined && badgedKind(meta.kind) ? (
-            <Badge tone={kindTone(meta.kind, item.status === INBOX_STATUS.OPEN)}>
-              {THREAD_KIND_WORDS[meta.kind]}
-            </Badge>
-          ) : undefined
-        }
       >
         <div className="channels-post-body">
           <Text variant={TEXT_VARIANT.LABEL}>{item.title}</Text>

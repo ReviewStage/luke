@@ -1040,7 +1040,6 @@ function ChannelsSubjectLine({ item }: { item: InboxItem }): React.JSX.Element |
   ].filter((part) => part !== undefined);
   return (
     <div className="channels-subject-line">
-      <Badge tone={kindTone(meta.kind, open)}>{THREAD_KIND_WORDS[meta.kind]}</Badge>
       <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {words.join(" · ")}
       </Text>

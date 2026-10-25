@@ -169,6 +169,7 @@ import {
   chooseChannel,
   MOCK_CHANNEL,
   type MockChannel,
+  useChannelCounts,
   useChannelsMock,
 } from "../tasks/channels-mock.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
@@ -1408,6 +1409,7 @@ function SidebarChannels({
   current: MockChannel | undefined;
   onOpen: (channel: MockChannel) => void;
 }): React.JSX.Element {
+  useChannelCounts();
   const row = (channel: ChannelInfo) => {
     const counted = channelCount(channel.id);
     return (
@@ -2155,7 +2157,7 @@ function SidebarColumn({
         >
           Search
         </NavItem>
-        {listsInbox ? null : (
+        {listsInbox || mock.on ? null : (
           <SidebarInboxRow
             waiting={waiting.inbox}
             current={inInbox && (!mock.on || mock.channel === MOCK_CHANNEL.FOR_YOU)}
@@ -2242,7 +2244,10 @@ function SidebarColumn({
                 />
               ) : null}
               {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin, for a mouse: a finger, which drags no row, draws it only once it holds one. */}
-              {tasks.signedIn && (pinnedSection.length > 0 || (sectionsShown && !coarse)) ? (
+              {/* PROTOTYPE ONLY (STAG-547): the chat-first sidebar lists the channels alone; the tasks are the Tasks page's. */}
+              {!mock.on &&
+              tasks.signedIn &&
+              (pinnedSection.length > 0 || (sectionsShown && !coarse)) ? (
                 <PinnedSection
                   rows={pinnedSection}
                   folds={folds}
@@ -2252,7 +2257,7 @@ function SidebarColumn({
                   onDropOut={sectionsShown ? dropPinned : undefined}
                 />
               ) : null}
-              {listsInbox && inboxListing !== undefined ? (
+              {mock.on ? null : listsInbox && inboxListing !== undefined ? (
                 <SidebarInbox
                   tasks={tasks}
                   listing={inboxListing}

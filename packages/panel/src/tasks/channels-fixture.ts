@@ -601,6 +601,11 @@ function needsDean(each: InboxItem): boolean {
   );
 }
 
+/** The threads that ask the reader something. */
+const NEEDING: ReadonlySet<string> = new Set(
+  THREADS.filter(({ item }) => needsDean(item)).map(({ item }) => item.id),
+);
+
 const HOLDINGS: readonly AppInboxTaskHolding[] = [...INBOXES]
   .filter(([, items]) => items.length > 0)
   .map(([taskId, items]) => ({
@@ -718,7 +723,7 @@ export function channelsReader(profile: string): string | undefined {
 /** Main's document under the channels profile, which also turns the mockup on. */
 export function channelsAppState(state: AppStateSnapshot): AppStateSnapshot {
   if (state.run.profile !== PROFILE) return state;
-  startChannelsMock(META, COUNTS);
+  startChannelsMock(META, COUNTS, NEEDING);
   return {
     ...state,
     account: ACCOUNT,

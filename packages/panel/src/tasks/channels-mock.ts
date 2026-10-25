@@ -154,6 +154,8 @@ export interface ChannelPost {
 
 let state: ChannelsMockState = { on: false, channel: MOCK_CHANNEL.FOR_YOU, threadOpen: false };
 let posts: readonly ChannelPost[] = [];
+let answered: ReadonlyMap<string, string> = new Map();
+let needsReader: ReadonlySet<string> = new Set();
 /** What a channel's sidebar row says: how many of its threads need the reader, and whether any is unread. */
 export interface ChannelCount {
   readonly needsYou: number;
@@ -184,10 +186,16 @@ function subscribe(listener: () => void): () => void {
 export function startChannelsMock(
   meta: ReadonlyMap<string, ChannelItemMeta>,
   counted: ReadonlyMap<MockChannel, ChannelCount>,
+  needing: ReadonlySet<string>,
 ): void {
   items = meta;
   counts = counted;
-  publish({ ...state, on: true });
+  needsReader = needing;
+  publish({
+    ...state,
+    on: true,
+    channel: state.channel === MOCK_CHANNEL.FOR_YOU ? MOCK_CHANNEL.APP : state.channel,
+  });
 }
 
 /** Shows a channel, or For you. */
@@ -211,6 +219,17 @@ export function addChannelPost(channel: MockChannel, text: string): void {
   const at = Date.now();
   posts = [...posts, { id: `post-${posts.length}-${at}`, channel, text, at }];
   for (const listener of listeners) listener();
+}
+
+/** Records the reader's pick on a thread's ask, made from its post, so the stream shows it at once. */
+export function answerInStream(itemId: string, label: string): void {
+  answered = new Map([...answered, [itemId, label]]);
+  for (const listener of listeners) listener();
+}
+
+/** The pick the reader made on a thread from its post, where they made one. */
+export function useStreamAnswer(itemId: string): string | undefined {
+  return useSyncExternalStore(subscribe, () => answered).get(itemId);
 }
 
 /** The reader's posts in a channel. */
@@ -239,9 +258,18 @@ export function channelItemIds(channel: MockChannel): ReadonlySet<string> {
   return new Set([...items].filter(([, meta]) => meta.channel === channel).map(([id]) => id));
 }
 
-/** A channel's sidebar count. */
+/** A channel's sidebar count, less the threads the reader has answered from their posts. */
 export function channelCount(channel: MockChannel): ChannelCount {
-  return counts.get(channel) ?? { needsYou: 0, unread: false };
+  const counted = counts.get(channel) ?? { needsYou: 0, unread: false };
+  const settled = [...answered.keys()].filter(
+    (id) => needsReader.has(id) && items.get(id)?.channel === channel,
+  ).length;
+  return { ...counted, needsYou: Math.max(0, counted.needsYou - settled) };
+}
+
+/** Redraws a reader of the sidebar's counts as the reader answers from a post. */
+export function useChannelCounts(): void {
+  useSyncExternalStore(subscribe, () => answered);
 }
 
 /** Whether an item is a channel's thread addressed to nobody, whose notice is read rather than nodded to. */
