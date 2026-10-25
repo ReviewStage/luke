@@ -94,6 +94,7 @@ import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { newTaskAction } from "../tasks/inbox-list.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import { TaskIssueTagChip } from "../tasks/task-issue-links.js";
 import {
@@ -696,7 +697,14 @@ export function TasksBoard({
       filters={filters}
       state={boardState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
-      empty={<EmptyState icon={<SquareKanbanIcon />}>{noneYetWords(TERM.TASK)}</EmptyState>}
+      empty={
+        <EmptyState
+          icon={<SquareKanbanIcon />}
+          action={newTaskAction(tasks.signedIn ? tasks.onNewTask : undefined)}
+        >
+          {noneYetWords(TERM.TASK)}
+        </EmptyState>
+      }
       error={
         <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}

@@ -110,6 +110,7 @@ import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { newTaskAction } from "../tasks/inbox-list.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -1173,7 +1174,14 @@ export function TasksList({
       filters={frame.chips}
       state={listState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
-      empty={<EmptyState icon={<ListTodoIcon />}>{noneYetWords(TERM.TASK)}</EmptyState>}
+      empty={
+        <EmptyState
+          icon={<ListTodoIcon />}
+          action={newTaskAction(tasks.signedIn ? tasks.onNewTask : undefined)}
+        >
+          {noneYetWords(TERM.TASK)}
+        </EmptyState>
+      }
       error={
         <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}

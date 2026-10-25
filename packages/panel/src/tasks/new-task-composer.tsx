@@ -13,7 +13,7 @@ import {
   TASK_ISSUE_RELATION,
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
-import { TASK_BOUNDS, type TaskStanding } from "@luke/features/task-wire";
+import { TASK_BOUNDS, TASK_STATUS, type TaskStanding } from "@luke/features/task-wire";
 import { TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
@@ -81,7 +81,11 @@ import type { NewTaskAgent, NewTaskStanding, NewTaskStart, TasksControl } from "
  * was about, either only where the workspace's GitHub reaches it. Opened
  * from a Tasks page group's +, a pill after it names where the task will
  * stand, its group's status, priority, or assignee, and its × lets that go,
- * so the task starts where any task starts.
+ * so the task starts where any task starts. Note that an agent's start moves
+ * its task to In progress and assigns its starter where no one is
+ * (`coder-host/start.ts`), so a bare task alone keeps another status or No
+ * assignee, and the card says so under the box while Return would start an
+ * agent over them.
  *
  * The words are a coding agent's prompt. Start stands once there are
  * words, files, or an issue, and a repository, without which it is held and
@@ -185,10 +189,22 @@ const BARE_WORDS: ComposerWords = {
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
-/** Why Start is held without a repository. */
+/** Why Start is held without a repository, and what an agent's start does to where its task was to stand. */
 const COMPOSER_WORDS = {
   NEEDS_REPOSITORY: "Choose a repository",
+  MOVES: "Starting an agent moves the task to In progress",
+  ASSIGNS: "Starting an agent assigns the task to you",
+  MOVES_AND_ASSIGNS: "Starting an agent moves the task to In progress and assigns it to you",
 } as const;
+
+/** What the card says of where its task was to stand, where an agent's start would move it elsewhere: to In progress, to its starter, or both; nothing where it would stand. */
+function overriddenWords(standing: TaskStanding | undefined): string | undefined {
+  const moves = standing?.status !== undefined && standing.status !== TASK_STATUS.IN_PROGRESS;
+  const assigns = standing?.assigneeId === null;
+  if (moves && assigns) return COMPOSER_WORDS.MOVES_AND_ASSIGNS;
+  if (moves) return COMPOSER_WORDS.MOVES;
+  return assigns ? COMPOSER_WORDS.ASSIGNS : undefined;
+}
 
 /** What one Agent-mode press asked beside its key: the task's name, repository, workspace, where it stands, and issues, and the agent's words, files, and model. */
 interface AgentAsk {
@@ -513,6 +529,7 @@ export function NewTaskComposer({
   const bare = () => begin(issueName ?? "");
   // Note that a linked issue keeps the round button its own name, because its press then starts an agent on the issue.
   const startsBare = !forAutomation && !filled && !onIssue;
+  const overridden = startsBare || blocked ? undefined : overriddenWords(standing?.asked);
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (!shortcutMatches(BARE_CHORD, event)) return false;
@@ -647,6 +664,11 @@ export function NewTaskComposer({
           {COMPOSER_WORDS.NEEDS_REPOSITORY}
         </Text>
       ) : null}
+      {overridden === undefined ? null : (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {overridden}
+        </Text>
+      )}
     </div>
   );
   // Note that the card stands under the providers with or without a repository, so one chosen or let go keeps the card mounted.
