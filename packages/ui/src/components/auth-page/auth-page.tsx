@@ -18,6 +18,13 @@ import { BUTTON_VARIANT, ButtonLink } from "../button/button.js";
  * the card is and how it stands. The error stands in an alert region from the
  * first render, empty until it says something, because a reader announces a
  * region filling more surely than one arriving.
+ *
+ * It is drawn in Tailwind utilities over the theme, with no shadcn/ui base:
+ * the card is no `Card`, whose corners, shadow, and insets are a page's
+ * card's rather than this dialog-cornered surface standing over the window.
+ * Its sheet (`auth-page.css`) keeps the card's inset, which a narrow page's
+ * container query narrows, the sizes it sets on the glyphs other components
+ * draw inside it, and the desktop window's drag.
  */
 
 /** The one way on a page offers: its words, where it goes, and what its press does first. */
@@ -58,25 +65,37 @@ export function AuthPage({
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
   return (
-    <main className="luke-auth-page">
-      <section className="luke-auth-card" aria-labelledby={titleId}>
+    <main className="luke-auth-page @container grid place-items-center min-h-dvh p-page-inset box-border">
+      <section
+        className="luke-auth-card flex flex-col items-center w-full max-w-auth-card box-border border border-border rounded-dialog bg-surface shadow-auth-card text-foreground font-ui text-body text-center wrap-anywhere"
+        aria-labelledby={titleId}
+      >
         {said(mark) ? (
-          <div className="luke-auth-mark" aria-hidden="true">
+          <div className="luke-auth-mark inline-flex max-w-full" aria-hidden="true">
             {mark}
           </div>
         ) : null}
-        <h1 className="luke-auth-title" id={titleId}>
+        <h1
+          className="luke-auth-title mt-luke-16 first:mt-0 mb-0 mx-0 text-title font-title tracking-title text-balance"
+          id={titleId}
+        >
           {title}
         </h1>
-        {said(description) ? <p className="luke-auth-description">{description}</p> : null}
-        {Children.toArray(children).some(said) ? (
-          <div className="luke-auth-body">{children}</div>
+        {said(description) ? (
+          <p className="luke-auth-description m-0 mt-luke-8 text-muted-foreground text-label">
+            {description}
+          </p>
         ) : null}
-        <p className="luke-auth-error" role="alert">
+        {Children.toArray(children).some(said) ? (
+          <div className="luke-auth-body flex flex-col self-stretch gap-luke-12 mt-luke-32 text-start">
+            {children}
+          </div>
+        ) : null}
+        <p className="luke-auth-error m-0 mt-luke-16 empty:mt-0 text-danger" role="alert">
           {said(error) ? error : null}
         </p>
         {action === undefined ? null : (
-          <div className="luke-auth-action">
+          <div className="luke-auth-action flex justify-center mt-luke-24">
             <ButtonLink
               href={action.href}
               variant={BUTTON_VARIANT.OUTLINE}
@@ -86,7 +105,11 @@ export function AuthPage({
             </ButtonLink>
           </div>
         )}
-        {said(footnote) ? <p className="luke-auth-footnote">{footnote}</p> : null}
+        {said(footnote) ? (
+          <p className="luke-auth-footnote m-0 mt-luke-16 text-muted-foreground text-caption">
+            {footnote}
+          </p>
+        ) : null}
       </section>
     </main>
   );

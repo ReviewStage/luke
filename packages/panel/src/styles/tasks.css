@@ -223,7 +223,7 @@
 
 /* A plan's task item the developer can tick from the drawn plan says so. */
 .plan-unit li.task-list-item input[type="checkbox"]:enabled {
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
 }
 
 /* A section's heading wraps short of the row at its end, so the byline and
@@ -1931,9 +1931,61 @@
 }
 
 /* The Chapters view (agent-chapters-tab.tsx): the chapters' rail docked at
-   its left, as Files changed's tree docks at its right, slides in past the
-   view's left edge and out over the chapter (`usePaneSlide`), and leaves a
-   strip of one mark a chapter while hidden. Note that the rail hidden beside the chapter is hidden only where it can
+   its left, as Files changed's tree docks at its right, and the chapter
+   chosen beside it, its head over its own Files changed list and its foot
+   under it. The rail is as wide as the tree stands by default, slides in
+   past the view's left edge and out over the chapter (`usePaneSlide`), so
+   the body clips what stands past it, with `clip` rather than `hidden`, and
+   leaves a strip of one mark a chapter while hidden. */
+.chapters-view {
+  --chapter-rail-width: calc(var(--luke-space-64) * 4);
+  /* The least the chapter reads at: its bar, three lines of its brief, the
+     least of its files (below), and its foot. Its strip is as wide as keeps
+     each mark clear of the edge it stands at, a window's or the panel's. */
+  --chapter-brief-least: calc(3 * var(--luke-type-body-leading) + var(--luke-list-inset));
+  --chapter-reading-least: calc(
+    4 *
+    var(--luke-pane-bar-height) +
+    var(--luke-row-inset) +
+    var(--chapter-brief-least)
+  );
+  --chapter-strip-width: var(--luke-space-20);
+}
+
+/* Note that the body never stands shorter than the chapter's least, so a
+   window too short for it lets the Pull request tab scroll (below) rather
+   than slicing the brief or pushing the foot out past the body's clip. */
+.chapters-body {
+  position: relative;
+  min-height: var(--chapter-reading-least);
+}
+
+/* A window too short for the header, the tabs and the chapter's least
+   scrolls the Pull request tab as one while Chapters is shown, the header
+   leaving the top, so every part of the chapter reads whole. Any view
+   with no least of its own fills the room as before and never scrolls it. */
+.pull-request-tab:has(> .pull-request-view:not([hidden]) > .chapters-view) {
+  overflow-y: auto;
+}
+
+.chapter-rail {
+  display: flex;
+  width: min(var(--chapter-rail-width), 40%);
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  border-right: 1px solid var(--luke-color-border);
+}
+
+.chapter-rail[data-leaving] {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  left: 0;
+  background: var(--luke-color-well);
+}
+
+/* Note that the rail hidden beside the chapter is hidden only where it can
    stand beside it, so a panel narrowed since still floats it when asked. */
 @container side-panel (width >= 640px) {
   .chapters-view[data-rail-beside="false"] .chapter-rail:not([data-leaving]) {
@@ -1941,8 +1993,20 @@
   }
 }
 
-/* The rail's toggle, beside the chapter or over it, one shown at a time by
-   the panel's width (below), which the view reads to know where it opens. */
+/* While the rail is hidden, a strip stands in its place (`MarkStrip`), one
+   mark for each chapter in its risk's colour, as Files changed's strip
+   stands for its tree; this box says when it is drawn and its edge. */
+.chapter-strip {
+  display: none;
+}
+
+.chapters-view[data-rail-beside="false"] .chapter-strip {
+  display: flex;
+  width: var(--chapter-strip-width);
+  flex: none;
+  border-right: 1px solid var(--luke-color-border);
+}
+
 .chapter-rail-toggle {
   display: flex;
 }
@@ -2030,7 +2094,7 @@
 @container side-panel (width < 640px) {
   .chapters-view .chapter-strip {
     display: flex;
-    width: var(--luke-space-12);
+    width: var(--chapter-strip-width);
     flex: none;
     border-right: 1px solid var(--luke-color-border);
   }
@@ -3856,9 +3920,15 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    fade), rather than being sliced short of the card. Its foot pads past the
    fade, so the newest line, scrolled to or followed, stands whole above it;
    the area's own scroll padding brings a control focused from below in
-   past the fade as well. */
+   past the fade as well. While toasts stand, it pads past what they take
+   of the window's foot over the dock (`--luke-toast-room`, which the shell
+   measures) instead where that is more, so the newest line, and an Inbox
+   thread's draft reply flowing under it, stand a step clear of them. */
 .agent-log-over-composer {
-  padding-bottom: calc(var(--luke-scroll-fade) + var(--luke-space-4));
+  padding-bottom: max(
+    calc(var(--luke-scroll-fade) + var(--luke-space-4)),
+    calc(var(--luke-toast-room, 0px) + var(--luke-space-8))
+  );
 }
 
 /* The to-do list the agent is working through, docked over the composer
@@ -5569,7 +5639,7 @@ svg.lucide {
   border-radius: 2px;
   background: var(--comment-mark);
   color: inherit;
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
   transition: background var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
@@ -5746,7 +5816,7 @@ svg.lucide {
 /* A thread at rest is one press (`CardPress`) over its words and replies,
    which reaches its whole card and rings it from the keyboard. */
 .comment-card[data-open="false"] {
-  cursor: pointer;
+  cursor: var(--luke-cursor-press);
 }
 
 .comment-card[data-open="true"] {

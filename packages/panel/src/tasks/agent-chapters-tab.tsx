@@ -49,6 +49,8 @@ import {
   OVER_PANE_WIDTH,
   OverPane,
   PaneBar,
+  SCROLL_FADE,
+  SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
   Skeleton,
@@ -255,7 +257,7 @@ const SKELETON_LINES = ["40%", "92%", "86%", "60%"] as const;
 /** The chapters' body: the rail, its strip, and the chapter being read, side by side, clipped at its edges as the rail slides. */
 function ChaptersBody({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <Fill flow={FILL_FLOW.ROW} clip className="chapters-body relative">
+    <Fill flow={FILL_FLOW.ROW} clip className="chapters-body">
       {children}
     </Fill>
   );
@@ -290,7 +292,7 @@ function ChapterRailFrame({
   return (
     <nav
       ref={pane}
-      className="chapter-rail flex w-chapter-rail min-w-0 flex-none flex-col border-r border-border data-leaving:absolute data-leaving:inset-y-0 data-leaving:left-0 data-leaving:z-1 data-leaving:bg-well"
+      className="chapter-rail"
       aria-label={CHAPTERS_WORDS.RAIL}
       data-leaving={leaving ? "" : undefined}
       inert={leaving}
@@ -372,7 +374,7 @@ function Generating({
   const words = ours ? CHAPTERS_WORDS.GENERATING : CHAPTERS_WORDS.ELSEWHERE;
   return (
     <Fill className="chapters-generating">
-      <p className="chapters-generating-line m-0 flex items-center justify-between gap-control-gap border-b border-border px-(--column-inset) py-row-inset text-caption text-muted-foreground">
+      <p className="chapters-generating-line m-0 flex items-center justify-between gap-control-gap border-b border-border px-column-inset py-row-inset text-caption text-muted-foreground">
         <span>
           {words}
           {live ? (
@@ -574,10 +576,7 @@ function ChapterStrip({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <div
-      ref={box}
-      className="chapter-strip hidden w-luke-12 flex-none border-r border-border group-data-[rail-beside=false]/chapters:flex"
-    >
+    <div ref={box} className="chapter-strip">
       <MarkStrip
         marks={rows.map((row, index) => ({
           tone: row.chapter.risk ? RISK_TONES[row.chapter.risk] : undefined,
@@ -803,7 +802,7 @@ function ChaptersReading({
     // The view hears its chapter keys from whatever in it has the focus, past the list's own.
     <Fill
       ref={setRoot}
-      className="chapters-view group/chapters"
+      className="chapters-view"
       data-rail-beside={String(slide.drawn)}
       data-rail-over={over ? "open" : "closed"}
       onKeyDown={onKeyDown}
@@ -894,8 +893,13 @@ function ChaptersReading({
             }}
           />
           <div className="flex max-h-1/2 min-h-0 flex-initial flex-col border-b border-border">
-            <ScrollArea size={SCROLL_SIZE.CONTENT}>
-              <div className="flex flex-col gap-control-gap px-(--column-inset) pt-row-inset pb-list-inset">
+            {/* Note that a brief cut short by its share fades at the cut, never slicing a line through its letters, and a swipe past its end scrolls the Pull request tab, which a short window scrolls to the foot. */}
+            <ScrollArea
+              size={SCROLL_SIZE.CONTENT}
+              fade={SCROLL_FADE.BOTH}
+              overscroll={SCROLL_OVERSCROLL.CHAIN}
+            >
+              <div className="flex flex-col gap-control-gap px-column-inset pt-row-inset pb-list-inset">
                 <div className="px-row-inset">
                   <TranscriptWords text={chapter.summary} />
                 </div>
@@ -956,6 +960,7 @@ function ChaptersReading({
               reads={changes}
               files={chapterFiles}
               fileReveal={reveal}
+              overscroll={SCROLL_OVERSCROLL.CHAIN}
             />
           )}
           <PaneBar

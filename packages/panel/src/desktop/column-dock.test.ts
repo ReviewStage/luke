@@ -266,6 +266,18 @@ function InboxShell(): React.JSX.Element {
   );
 }
 
+/** Stands the window's toasts where the test stages them, portalled out of the shell. */
+function standToasts(): void {
+  const toasts = document.body.appendChild(document.createElement("section"));
+  toasts.className = "luke-toast-stack";
+  toasts.dataset.staged = "toasts";
+}
+
+/** The length named, as the shell last wrote it on the document's root. */
+function written(length: string): string {
+  return document.documentElement.style.getPropertyValue(length);
+}
+
 test("a draft reply scrolled up under the toasts raises them at the frame after the scroll", () => {
   const frames: FrameRequestCallback[] = [];
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((heard) => frames.push(heard));
@@ -276,14 +288,11 @@ test("a draft reply scrolled up under the toasts raises them at the frame after 
     ["toasts", { left: 844, right: 1184, top: 734, bottom: 784 }],
   ]);
   stage(boxes);
-  const toasts = document.body.appendChild(document.createElement("section"));
-  toasts.className = "luke-toast-stack";
-  toasts.dataset.staged = "toasts";
+  standToasts();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() => root?.render(createElement(InboxShell)));
-  const dock = () => document.documentElement.style.getPropertyValue("--luke-toast-dock");
-  assert.equal(dock(), "0px", "the reply below the window docks nothing");
+  assert.equal(written("--luke-toast-dock"), "0px", "the reply below the window docks nothing");
 
   boxes.set("reply", { left: 600, right: 1200, top: 680, bottom: 780 });
   act(() => {
@@ -291,5 +300,34 @@ test("a draft reply scrolled up under the toasts raises them at the frame after 
     for (const heard of frames.splice(0)) heard(0);
   });
 
-  assert.equal(dock(), "120px", "the reply scrolled up under the corner docks");
+  assert.equal(written("--luke-toast-dock"), "120px", "the reply scrolled up under the corner docks");
+});
+
+/** A phone's Inbox list, the places bar at the screen's foot under it. */
+function PhoneListShell(): React.JSX.Element {
+  const shell = useRef<HTMLDivElement>(null);
+  useColumnDock(shell, false, true, "inbox");
+  return createElement(
+    "div",
+    { ref: shell, className: "desktop-shell", "data-staged": "window" },
+    createElement("nav", { className: "inbox-tasks", "data-staged": "list" }),
+    createElement("nav", { className: "mobile-bar", "data-staged": "bar" }),
+  );
+}
+
+test("on a phone the toasts stand above the places bar, and their room is what they take over it", () => {
+  stage(
+    new Map([
+      ["window", { left: 0, right: 400, top: 0, bottom: 800 }],
+      ["list", { left: 0, right: 400, top: 0, bottom: 740 }],
+      ["bar", { left: 0, right: 400, top: 740, bottom: 800 }],
+      ["toasts", { left: 52, right: 392, top: 672, bottom: 732 }],
+    ]),
+  );
+  standToasts();
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(PhoneListShell)));
+  assert.equal(written("--luke-toast-dock"), "60px");
+  assert.equal(written("--luke-toast-room"), "68px");
 });

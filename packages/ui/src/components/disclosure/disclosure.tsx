@@ -378,7 +378,7 @@ export type DisclosureSummaryLook = (typeof DISCLOSURE_SUMMARY)[keyof typeof DIS
  * `hover:`, which only a fine pointer reaches.
  */
 const SUMMARY_ROW =
-  "flex min-h-control cursor-pointer list-none items-center gap-icon-gap rounded-control ps-luke-4 pe-luke-4 font-sans text-caption text-muted-foreground transition-[background-color,color] duration-(--luke-duration-hover) ease-plain select-none in-data-[luke-profile=desktop]:cursor-default [&::-webkit-details-marker]:hidden [&:hover]:bg-fill-strong [&:hover]:text-foreground [&>:not(svg,.luke-disclosure-turn)]:min-w-0 [&>:not(svg,.luke-disclosure-turn)]:[overflow-wrap:anywhere] [&>svg]:size-control-icon [&>svg]:flex-none";
+  "flex min-h-control cursor-press list-none items-center gap-icon-gap rounded-control ps-luke-4 pe-luke-4 font-sans text-caption text-muted-foreground transition-[background-color,color] duration-(--luke-duration-hover) ease-plain select-none [&::-webkit-details-marker]:hidden [&:hover]:bg-fill-strong [&:hover]:text-foreground [&>:not(svg,.luke-disclosure-turn)]:min-w-0 [&>:not(svg,.luke-disclosure-turn)]:[overflow-wrap:anywhere] [&>svg]:size-control-icon [&>svg]:flex-none";
 
 /** Each look's classes over the quiet row's, a transcript's in place of them. */
 const SUMMARY_LOOK = {

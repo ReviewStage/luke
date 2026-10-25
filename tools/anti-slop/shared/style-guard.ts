@@ -20,6 +20,7 @@ export const STYLE_RULE = {
   EASING: "literal-easing",
   PICKER_WIDTH: "literal-picker-width",
   SPACING: "literal-spacing",
+  CURSOR: "pointer-cursor",
   CRUMB_WIDTH: "crumb-width",
 } as const;
 export type StyleRule = (typeof STYLE_RULE)[keyof typeof STYLE_RULE];
@@ -62,6 +63,11 @@ export const STYLE_RULES: Readonly<
     refuses:
       "a pixel or rem literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in the panel's stylesheets: the spacing role or scale step is read (0, `1px` and `auto` pass)",
     backlog: true,
+  },
+  [STYLE_RULE.CURSOR]: {
+    refuses:
+      "the pointing hand spelled out (`cursor: pointer`, `cursor-pointer`) or a cursor chosen per profile: a control reads `cursor-press` (`--luke-cursor-press`), a real link `cursor-link` (`--luke-cursor-link`)",
+    backlog: false,
   },
   [STYLE_RULE.CRUMB_WIDTH]: {
     refuses:
@@ -451,6 +457,23 @@ function holdsForeignInk(block: CssBlock, property: string): boolean {
   return FOREIGN_INK_PREFIXES.some((prefix) => property.startsWith(prefix));
 }
 
+/** The pointing hand as a cursor's own value, not a word inside a custom property's name. */
+const POINTER_CURSOR = /(?<![\w-])pointer(?![\w-])/u;
+
+/** A selector or a Tailwind variant that picks a profile, as a cursor of its own per app would. */
+const PROFILE_PICK = /luke-profile/u;
+
+/**
+ * Whether a declaration chooses its own cursor where the one rule goes: the
+ * hand spelled out, or any cursor set under a profile's selector, which is
+ * the rule copied rather than read (profiles.css's `--luke-cursor-press`).
+ */
+function ownCursor(declaration: CssDeclaration, block: CssBlock): boolean {
+  if (declaration.property !== "cursor") return false;
+  if (POINTER_CURSOR.test(bareValue(declaration.value))) return true;
+  return block.preludes.some((prelude) => PROFILE_PICK.test(prelude));
+}
+
 /** A path's landmark, whose list items are its crumbs (`@luke/ui`'s `Breadcrumbs`). */
 const PATH_CLASS = /\.luke-breadcrumbs\b/u;
 
@@ -511,6 +534,7 @@ function cssRuleOf(declaration: CssDeclaration, block: CssBlock): StyleRule | un
   const { property, value } = declaration;
   const bare = bareValue(value);
   if (isTokenBlock(block)) return undefined;
+  if (ownCursor(declaration, block)) return STYLE_RULE.CURSOR;
   if (property === "text-overflow" && /\bellipsis\b/u.test(bare)) return STYLE_RULE.ELLIPSIS;
   if (RADIUS_PROPERTY.test(property) && holdsLiteralNumber(value)) return STYLE_RULE.RADIUS;
   if (literalType(property, value)) return STYLE_RULE.TYPE;
@@ -587,6 +611,8 @@ function themeHas(names: ThemeNames, namespace: string, name: string): boolean {
 function classRuleOf(token: string, names: ThemeNames): StyleRule | undefined {
   const utility = utilityOf(token);
   if (utility === "truncate" || utility === "text-ellipsis") return STYLE_RULE.ELLIPSIS;
+  if (/^cursor-(?:pointer|\[pointer\])$/u.test(utility)) return STYLE_RULE.CURSOR;
+  if (utility.startsWith("cursor-") && PROFILE_PICK.test(token)) return STYLE_RULE.CURSOR;
   const text = /^text-(.+)$/u.exec(utility)?.[1];
   if (text !== undefined && !themeHas(names, "text", text)) {
     if (TYPE_SCALE.test(text) || LENGTH_ARBITRARY.test(text)) return STYLE_RULE.TYPE;

@@ -8,7 +8,6 @@
   "packages/panel/src/styles/tasks.css": 6,
   "packages/ui/src/components/choice-list/choice-list.tsx": 4,
   "packages/ui/src/components/prose/prose.css": 2,
-  "packages/ui/src/components/settings-row/settings-row.css": 1,
   "packages/ui/src/components/swatch/swatch.css": 1,
   "packages/ui/src/components/tabs/tabs.tsx": 1,
   "packages/ui/src/components/text-button/text-button.tsx": 1,
