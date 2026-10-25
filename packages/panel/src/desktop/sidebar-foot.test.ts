@@ -135,10 +135,16 @@ function accountMenu(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="menu"][aria-label="Account"]');
 }
 
+/** The account menu's own lines as they stand down its scrolling column: its heading, items, and rules. */
+function accountMenuColumn(): Element[] {
+  const first = accountMenu()?.querySelector('[role^="menuitem"]');
+  return [...(first?.parentElement?.children ?? [])];
+}
+
 /** The open account menu as it reads down: its heading, each item's label and chord, and a dash for each rule; not the unseen focus guards a submenu standing beside it leaves among them. */
 function accountMenuLines(): string[] {
-  const menu = accountMenu() ?? assert.fail("the account's menu stands");
-  const lines = [...menu.children].filter((line) =>
+  accountMenu() ?? assert.fail("the account's menu stands");
+  const lines = accountMenuColumn().filter((line) =>
     line.matches('hr, [role^="menuitem"], [role="none"]'),
   );
   return lines.map((line) => {
@@ -167,7 +173,7 @@ function placeAt(
 
 /** The open account menu's own item by its label, not a submenu's. */
 function accountItem(label: string): HTMLButtonElement {
-  const item = [...(accountMenu()?.children ?? [])].find(
+  const item = accountMenuColumn().find(
     (line): line is HTMLButtonElement =>
       line instanceof HTMLButtonElement &&
       line.querySelector(".luke-menu-item-label")?.textContent === label,

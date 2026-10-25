@@ -450,9 +450,15 @@
   --spacing-menu-least: 196px;
   --spacing-menu-most: 280px;
   --spacing-menu-chevron: 14px;
-  /* A menu as tall as can be seen, a margin short of either edge, so a long
-     one scrolls above a phone's keyboard (`tokens/viewport.css`). */
-  --spacing-menu-max: calc(var(--luke-stage-height) - 2 * var(--luke-space-8));
+  /* A menu no taller than the room Base UI's positioner finds for it
+     (`--available-height`, set on the positioner it stands in), and never
+     taller than can be seen, a margin short of either edge, so a long one
+     scrolls inside the window and above a phone's keyboard
+     (`tokens/viewport.css`). */
+  --spacing-menu-max: min(
+    var(--available-height, var(--luke-stage-height)),
+    calc(var(--luke-stage-height) - 2 * var(--luke-space-8))
+  );
   /* A list's cap, an app's placement hook (README's "Placement hooks"). */
   --spacing-combobox-list: var(--luke-combobox-list-max, 280px);
   /* off-scale: the column a list's leads stand in, wide enough for a task's long key */
