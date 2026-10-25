@@ -213,3 +213,17 @@ test("a thread whose words were deleted here stays carried while it is open, tho
   assert.equal(anchored(), WORDS);
   assert.deepEqual(last().anchors?.carried, [THREAD]);
 });
+
+test("a thread closed after its words were deleted, whose words undo brings back, is carried again once it reopens, so its anchor comes back with them", () => {
+  const { editor, handle, spanOf, select, anchored, last } = mounted();
+  select(spanOf(WORDS));
+  editor.commands.deleteSelection();
+  handle.replaceAnchors(TEXT, [], []);
+  editor.commands.undo();
+
+  handle.replaceAnchors(TEXT, [], [THREAD]);
+  editor.view.dispatch(editor.state.tr.insertText("Note: ", spanOf("The email").from));
+
+  assert.equal(anchored(), WORDS);
+  assert.deepEqual(last().anchors?.carried, [THREAD]);
+});

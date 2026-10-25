@@ -89,7 +89,8 @@ function editorWords(doc: PmNode): EditorWords {
  * be found is left to the service to carry. A thread it carries that is
  * still open stays carried, its mark having followed its words since it was
  * laid, even with no anchor of the service's: one whose words were deleted
- * here, which undo may bring back.
+ * here, which undo may bring back. So is an open thread whose mark stands,
+ * which undo brought back while it was closed.
  */
 export function anchorsLaidIn(
   editor: Editor,
@@ -103,15 +104,19 @@ export function anchorsLaidIn(
   const { doc } = editor.state;
   const tr = editor.state.tr.setMeta("addToHistory", false);
   // Note that a mark undo brought back for a thread no longer open goes too, so no closed thread stays marked.
+  const marked = new Set<string>();
   doc.descendants((node, pos) => {
     if (!node.isInline) return true;
     for (const mark of node.marks) {
-      if (mark.type !== type || open.has(String(mark.attrs.thread ?? ""))) continue;
-      tr.removeMark(pos, pos + node.nodeSize, mark);
+      if (mark.type !== type) continue;
+      const thread = String(mark.attrs.thread ?? "");
+      if (open.has(thread)) marked.add(thread);
+      else tr.removeMark(pos, pos + node.nodeSize, mark);
     }
     return false;
   });
-  const kept = carried.filter((thread) => open.has(thread));
+  // Note that an open thread whose mark stands is carried, though the editor let it go: one closed and reopened after undo brought its deleted words back, whose anchor the service no longer holds.
+  const kept = [...new Set([...carried.filter((thread) => open.has(thread)), ...marked])];
   const fresh = anchors.filter((anchor) => !kept.includes(anchor.thread));
   const words = fresh.length === 0 ? undefined : editorWords(doc);
   const toEditor = words === undefined ? undefined : textChange(markdown, words.text);
