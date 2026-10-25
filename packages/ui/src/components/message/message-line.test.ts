@@ -31,7 +31,7 @@ const ACTIONS = createElement(MessageActions, null, "Copy");
 test("a sent message's line reads its actions, then who sent it, then when, so the time ends at the right", () => {
   const line = drawn({ sender: "Ada", at: AT, actions: ACTIONS });
   assert.deepEqual(
-    [...(line?.children ?? [])].map((part) => part.className),
+    [...(line?.children ?? [])].map((part) => part.classList[0]),
     ["luke-message-actions", "luke-message-line-sender", "luke-message-line-time"],
   );
   assert.equal(line?.querySelector(".luke-message-line-sender")?.textContent, "Ada");
@@ -41,7 +41,7 @@ test("a sent message's line reads its actions, then who sent it, then when, so t
 test("a received message's line reads who sent it, then when, then its actions", () => {
   const line = drawn({ sender: "Ada", at: AT, actions: ACTIONS, align: MESSAGE_LINE_ALIGN.START });
   assert.deepEqual(
-    [...(line?.children ?? [])].map((part) => part.className),
+    [...(line?.children ?? [])].map((part) => part.classList[0]),
     ["luke-message-line-sender", "luke-message-line-time", "luke-message-actions"],
   );
 });

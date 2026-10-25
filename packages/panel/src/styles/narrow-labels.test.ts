@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MessageActions, MessageLine, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { act, createElement, type ReactElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { layContainersAt, shown } from "../testing/container-width.js";
 
@@ -20,9 +23,17 @@ import { layContainersAt, shown } from "../testing/container-width.js";
  * the web's width alike, where a narrow pane is as tight as a phone.
  */
 
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 let laid: HTMLStyleElement | undefined;
+const roots: Root[] = [];
 
 afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
   delete document.documentElement.dataset.lukeRoom;
   laid?.remove();
   laid = undefined;
@@ -136,24 +147,35 @@ test("on the desktop's width Start folds to its glyph in a bar that narrow, as i
   assert.equal(startFold("wide"), "bare");
 });
 
-/** A sent message's byline in a shell of the room given: its actions, who sent it, and when. */
-function byline(room: string) {
+/** `element` drawn in a shell of the room given, laid for a finger in a narrow one. */
+function inShell(room: string, element: ReactElement): HTMLElement {
   laid = layContainersAt({}, { touch: room === "narrow" });
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
   document.documentElement.dataset.lukeRoom = room;
-  const meta = shell.appendChild(document.createElement("div"));
-  meta.className = "luke-message-line";
-  const part = (className: string) => {
-    const element = meta.appendChild(document.createElement("div"));
-    element.className = className;
-    return getComputedStyle(element);
-  };
+  const root = createRoot(shell);
+  roots.push(root);
+  act(() => root.render(element));
+  return shell;
+}
+
+/** A sent message's byline in a shell of the room given, as `MessageLine` draws it: its actions, who sent it, and when. */
+function byline(room: string) {
+  const shell = inShell(
+    room,
+    createElement(MessageLine, {
+      sender: "Ada",
+      at: Date.UTC(2026, 9, 7, 16, 42),
+      actions: createElement(MessageActions, null, "Copy"),
+    }),
+  );
+  const part = (selector: string) =>
+    getComputedStyle(shell.querySelector(selector) ?? assert.fail(selector));
   return {
-    actions: part("luke-message-actions"),
-    sender: part("luke-message-line-sender"),
-    sentAt: part("luke-message-line-time"),
+    actions: part(".luke-message-actions"),
+    sender: part(".luke-message-line-sender"),
+    sentAt: part(".luke-message-line-time"),
   };
 }
 
@@ -166,18 +188,25 @@ for (const room of ["narrow", "wide"]) {
   });
 
   test(`in a ${room} room a sender named in plain words, one the window cannot place, ends in an ellipsis rather than running past its byline`, () => {
-    laid = layContainersAt({}, { touch: room === "narrow" });
-    const shell = document.body.appendChild(document.createElement("div"));
-    shell.className = "desktop-shell";
-    shell.dataset.room = room;
-    document.documentElement.dataset.lukeRoom = room;
-    const words = shell
-      .appendChild(document.createElement("div"))
-      .appendChild(document.createElement("span"))
-      .appendChild(document.createElement("span"));
-    words.className = "luke-text message-sender-words";
-    words.dataset.truncate = "";
-    words.textContent = "a-sender-name-too-long-to-stand-beside-anything-in-its-column";
+    const shell = inShell(
+      room,
+      createElement(
+        "div",
+        null,
+        createElement(
+          "span",
+          null,
+          createElement(Text, {
+            as: TEXT_ELEMENT.SPAN,
+            variant: TEXT_VARIANT.INHERIT,
+            truncate: true,
+            className: "message-sender-words",
+            children: "a-sender-name-too-long-to-stand-beside-anything-in-its-column",
+          }),
+        ),
+      ),
+    );
+    const words = shell.querySelector(".message-sender-words") ?? assert.fail("the sender's words");
     const style = getComputedStyle(words);
     assert.deepEqual(
       [style.overflow, style.textOverflow, style.whiteSpace, style.minWidth],

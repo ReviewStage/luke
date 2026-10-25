@@ -70,16 +70,20 @@ function drawn(piece: Piece, selector: string): HTMLElement {
   return element;
 }
 
+/** How opaque `element` is drawn, from 0 to 1, whether its rule spells the number or a percentage, as a utility does (`opacity-0` is `0%`). */
+function opacityOf(element: Element): number {
+  const opacity = getComputedStyle(element).opacity;
+  return opacity.endsWith("%") ? Number.parseFloat(opacity) / 100 : Number.parseFloat(opacity);
+}
+
 /** Whether `element` is drawn to be seen and pressed: opaque, and it or what it holds to press taking the pointer. */
 function standing(element: Element, press: Element = element): boolean {
-  return (
-    getComputedStyle(element).opacity === "1" && getComputedStyle(press).pointerEvents !== "none"
-  );
+  return opacityOf(element) === 1 && getComputedStyle(press).pointerEvents !== "none";
 }
 
 /** Whether `element` is drawn faded out. */
 function faded(element: Element): boolean {
-  return getComputedStyle(element).opacity === "0";
+  return opacityOf(element) === 0;
 }
 
 /** Whether a row's metadata is drawn to be read. */

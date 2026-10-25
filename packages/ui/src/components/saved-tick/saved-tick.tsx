@@ -18,7 +18,10 @@ import { ANNOUNCE, announce, type Retire } from "../announcer/announcer.js";
  * but not its stand, so the words are still there to read.
  *
  * It takes no class or style: where it stands, the line after what it
- * confirms, is its caller's.
+ * confirms, is its caller's. It is drawn in the Tailwind theme's
+ * utilities, a caption's words in the muted ink after the check in the
+ * complete ink, its region taking no room until the tick arrives; its
+ * motions are `saved-tick.css`'s.
  */
 
 /** What the tick says. */
@@ -74,10 +77,14 @@ export function SavedTick({ saves }: { saves: number }): React.JSX.Element {
   }, [standing, seen]);
 
   return (
-    <span className="luke-saved-tick-region">
+    <span className="luke-saved-tick-region inline-flex min-w-0">
       {standing ? (
         // Note that each write lands a tick of its own, so one landing while another stands starts its motion over.
-        <span key={saves} ref={tick} className="luke-saved-tick">
+        <span
+          key={saves}
+          ref={tick}
+          className="luke-saved-tick inline-flex items-center gap-luke-4 font-ui text-caption font-caption whitespace-nowrap text-muted-foreground [&>svg]:size-caption-line [&>svg]:flex-none [&>svg]:text-complete"
+        >
           <CheckIcon />
           {SAVED}
         </span>

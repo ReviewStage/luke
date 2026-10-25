@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "vitest";
+import { TEXT_ROLE_CLASS, type TextRole } from "../components/text/text-role.js";
 
 /**
  * roles.test.ts -- a type role has one size, one leading, and one weight,
@@ -93,37 +94,34 @@ test("a page's title, the top bar's, a dialog's, and a section's heading share o
 });
 
 test("each Text role reads its own size, leading, and weight from the profile", () => {
-  const roles = new Map(
-    rulesOf("components/text/text.css").map((rule) => [rule.selector, rule.declarations]),
+  const theme = new Map(
+    [
+      ...readFileSync(new URL("tailwind/theme.css", UI), "utf8").matchAll(
+        /(--[\w-]+):\s*([^;]+);/g,
+      ),
+    ].map(([, name = "", value = ""]) => [name, value.trim()]),
   );
   for (const role of TYPE_ROLES.filter((name) => name !== "reading" && name !== "tag")) {
-    const rule = roles.get(`.luke-text[data-variant="${role}"]`);
-    assert.ok(rule, `Text has no ${role} role`);
-    for (const [property, part] of [
-      ["font-size", "size"],
-      ["line-height", "leading"],
-      ["font-weight", "weight"],
-    ] as const) {
-      assert.equal(rule.get(property), `var(--luke-type-${role}-${part})`, `${role}'s ${property}`);
-    }
-  }
-});
-
-test("TextLink sets each role in the weight Text does", () => {
-  const weightsOf = (path: string, selector: (role: string) => string) =>
-    new Map(
-      TYPE_ROLES.filter((role) => role !== "reading" && role !== "tag").map((role) => [
-        role,
-        declared(path, selector(role), "font-weight"),
-      ]),
+    const utilities = TEXT_ROLE_CLASS[role as TextRole].split(" ");
+    const size = utilities.find((utility) => utility.startsWith("text-"))?.slice("text-".length);
+    const weight = utilities.find((utility) => utility.startsWith("font-"))?.slice("font-".length);
+    assert.ok(size && weight, `Text's ${role} role names no size or no weight`);
+    assert.equal(
+      theme.get(`--text-${size}`),
+      `var(--luke-type-${role}-size)`,
+      `${role}'s font-size`,
     );
-  assert.deepEqual(
-    weightsOf(
-      "components/text-link/text-link.css",
-      (role) => `.luke-text-link[data-variant="${role}"]`,
-    ),
-    weightsOf("components/text/text.css", (role) => `.luke-text[data-variant="${role}"]`),
-  );
+    assert.equal(
+      theme.get(`--text-${size}--line-height`),
+      `var(--luke-type-${role}-leading)`,
+      `${role}'s line-height`,
+    );
+    assert.equal(
+      theme.get(`--font-weight-${weight}`),
+      `var(--luke-type-${role}-weight)`,
+      `${role}'s font-weight`,
+    );
+  }
 });
 
 test("no component sets a weight, a tracking, or a pixel size of its own, only its role's", () => {

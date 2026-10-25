@@ -5,20 +5,25 @@ import { ICON_SIZE } from "./icon-size.js";
 
 /**
  * icon-size.test.ts -- every seat an icon is drawn at has a size in the
- * stylesheet: the slot's rule for it names a token, and the token is a whole
+ * slot's classes: the slot's class for it names a token, and the token is a whole
  * number of pixels, the four growing from caption to empty state. A seat with
  * no rule would draw at whatever size its container happened to hand down.
  */
 
 const SCALE = readFileSync(new URL("../tokens/scale.css", import.meta.url), "utf8");
 const SLOT = readFileSync(
-  new URL("../components/glyph-slot/glyph-slot.css", import.meta.url),
+  new URL("../components/glyph-slot/glyph-slot.tsx", import.meta.url),
   "utf8",
 );
 
+/** The seat's constant name in `ICON_SIZE`, which the slot's table is keyed by. */
+const SEAT_NAME = Object.fromEntries(
+  Object.entries(ICON_SIZE).map(([name, seat]) => [seat, name]),
+) as Record<string, string>;
+
 function seatPixels(seat: string): number {
   const rule = new RegExp(
-    `\\.luke-glyph-slot\\[data-size="${seat}"\\] \\{\\s*--luke-glyph-size: var\\((--luke-icon-\\d+)\\);`,
+    `\\[ICON_SIZE\\.${SEAT_NAME[seat]}\\]: "\\[--luke-glyph-size:var\\((--luke-icon-\\d+)\\)\\]`,
     "u",
   ).exec(SLOT);
   assert.ok(rule?.[1], `the slot sizes the ${seat} seat`);

@@ -111,6 +111,21 @@ const FEEDBACK_DISPLAY = {
   container: ["progress"],
 } as const;
 
+/**
+ * The names the content and text components' block of the theme adds (text,
+ * text link, inline ref, code card, shortcut, glyph slot, saved tick,
+ * working mark, thinking dots), by the group tailwind-merge reads each in.
+ */
+const CONTENT_TEXT = {
+  text: ["toolbar-title", "shortcut"],
+  "font-weight": ["toolbar-title"],
+  leading: ["reading"],
+  spacing: ["glyph", "working-mark", "caption-line", "thinking-dot", "inline-ref-mark"],
+  radius: ["text-link"],
+  shadow: ["inline-ref-wash"],
+  container: ["inline-ref-pill", "inline-ref-pill-stated"],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -128,6 +143,7 @@ const merge = extendTailwindMerge({
         "group",
         "tag",
         ...FEEDBACK_DISPLAY.text,
+        ...CONTENT_TEXT.text,
       ],
       "font-weight": [
         "text",
@@ -139,9 +155,10 @@ const merge = extendTailwindMerge({
         "emphasis",
         "title",
         ...FEEDBACK_DISPLAY["font-weight"],
+        ...CONTENT_TEXT["font-weight"],
       ],
       tracking: ["title"],
-      leading: ["body", ...FEEDBACK_DISPLAY.leading],
+      leading: ["body", ...FEEDBACK_DISPLAY.leading, ...CONTENT_TEXT.leading],
       spacing: [
         "luke-2",
         "luke-4",
@@ -206,6 +223,7 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...CONTENT_TEXT.spacing,
       ],
       radius: [
         "control",
@@ -223,6 +241,7 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-box",
         ...FEEDBACK_DISPLAY.radius,
+        ...CONTENT_TEXT.radius,
       ],
       shadow: [
         "dialog",
@@ -231,6 +250,7 @@ const merge = extendTailwindMerge({
         "tooltip",
         "switch-thumb",
         ...FEEDBACK_DISPLAY.shadow,
+        ...CONTENT_TEXT.shadow,
       ],
       font: ["ui"],
       container: [
@@ -244,6 +264,7 @@ const merge = extendTailwindMerge({
         "tooltip",
         "tooltip-card",
         ...FEEDBACK_DISPLAY.container,
+        ...CONTENT_TEXT.container,
       ],
       animate: [
         "dialog-scrim",
