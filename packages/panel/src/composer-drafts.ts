@@ -202,14 +202,52 @@ const issueDraftPlaceSchema = Schema.Struct({
   issueId: Schema.String,
 });
 
-/** A place as storage may hold it: one of today's, or New task's on an issue (`issueDraftPlaceSchema`). */
-const storedPlaceSchema = Schema.Union([issueDraftPlaceSchema, draftPlaceSchema]);
+/**
+ * An inbox card's or a chat ask's place as a build from before its picks
+ * kept their revision stored it: the revision in the place, and an inbox
+ * card's thread apart from its answer. Note that such an entry is read as
+ * today's place with the revision moved onto its draft, so its picks still
+ * stand on the ask they were made on, and goes once its account writes again.
+ */
+const revisedPlaceSchema = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.INBOX),
+    planId: Schema.NullOr(Schema.String),
+    agentId: Schema.String,
+    itemId: Schema.String,
+    revision: Schema.Number,
+    thread: Schema.optionalKey(Schema.Literal(true)),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.CHAT_ASK),
+    messageId: Schema.String,
+    revision: Schema.Number,
+  }),
+]);
+
+/** A place as storage may hold it: one of today's, New task's on an issue (`issueDraftPlaceSchema`), or one with its revision (`revisedPlaceSchema`). */
+const storedPlaceSchema = Schema.Union([
+  issueDraftPlaceSchema,
+  revisedPlaceSchema,
+  draftPlaceSchema,
+]);
 
 type StoredPlace = typeof storedPlaceSchema.Type;
 
-/** Whether a place storage holds is one a box opens today. */
-function isDraftPlace(place: StoredPlace): place is DraftPlace {
-  return !("issueId" in place);
+/** The place a box opens today that a stored place names, with the revision a place from before held for its picks; none for a place no box opens now. */
+function placeOf(
+  stored: StoredPlace,
+): { readonly place: DraftPlace; readonly revision?: number } | undefined {
+  if ("issueId" in stored) return undefined;
+  if (!("revision" in stored)) return { place: stored };
+  if (stored.kind === DRAFT_PLACE.CHAT_ASK) {
+    return {
+      place: { kind: stored.kind, messageId: stored.messageId },
+      revision: stored.revision,
+    };
+  }
+  const { kind, planId, agentId, itemId, revision } = stored;
+  return { place: { kind, planId, agentId, itemId }, revision };
 }
 
 /** The drafts as storage keeps them: each place's words, a card's picks where it holds some, and the account that wrote them, the latest written last. */
@@ -310,29 +348,34 @@ function readStored(): readonly StoredDraft[] {
 
 /** The owner's kept drafts; storage keeps no files, and no draft of files alone, or of a place no box opens now. */
 function readDrafts(owner: Owner): readonly KeptDraft[] {
-  return readStored()
+  const read = readStored()
     .filter((kept) => kept.accountId === owner)
-    .flatMap(
-      ({ place, text, choices = [], values = [], steps, press, title, to, dropped, revision }) =>
-        isDraftPlace(place)
-          ? [
-              {
-                place,
-                text,
-                attachments: [],
-                choices,
-                values,
-                ...(steps === undefined ? undefined : { steps }),
-                ...(press === undefined ? undefined : { press }),
-                ...(title === undefined ? undefined : { title }),
-                ...(to === undefined ? undefined : { to }),
-                ...(dropped === undefined ? undefined : { dropped }),
-                ...(revision === undefined ? undefined : { revision }),
-              },
-            ]
-          : [],
-    )
+    .flatMap(({ place: storedPlace, text, choices = [], values = [], ...rest }) => {
+      const read = placeOf(storedPlace);
+      if (read === undefined) return [];
+      const { steps, press, title, to, dropped } = rest;
+      const revision = rest.revision ?? read.revision;
+      return [
+        {
+          place: read.place,
+          text,
+          attachments: [],
+          choices,
+          values,
+          ...(steps === undefined ? undefined : { steps }),
+          ...(press === undefined ? undefined : { press }),
+          ...(title === undefined ? undefined : { title }),
+          ...(to === undefined ? undefined : { to }),
+          ...(dropped === undefined ? undefined : { dropped }),
+          ...(revision === undefined ? undefined : { revision }),
+        },
+      ];
+    })
     .filter(stored);
+  // Note that an inbox card's answer and its thread, kept apart before, are one place now, so the one written later stands.
+  return read.filter(
+    (kept, at) => !read.slice(at + 1).some((later) => Equal.equals(later.place, kept.place)),
+  );
 }
 
 /** Whether a kept draft is the one storage holds for an entry: the owner's, at its place, holding the same. */
