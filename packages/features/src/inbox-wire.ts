@@ -804,12 +804,20 @@ export const inboxItemSchema = EffectSchema.Struct({
    */
   startedBy: EffectSchema.optionalKey(memberRefSchema),
   /**
-   * The member the item waits on: its task's assignee, or, where the task
-   * has nobody assigned or the agent works on no task, the member who
-   * started the agent (`startedBy`). Absent from a service before it, which
-   * the desktop reads as waiting on `startedBy`.
+   * The member the item waits on: the member its agent addressed it to, or,
+   * where it names none, its task's assignee, or, where the task has nobody
+   * assigned or the agent works on no task, the member who started the agent
+   * (`startedBy`). Absent from a service before it, which the desktop reads
+   * as waiting on `startedBy`.
    */
   waitsOn: EffectSchema.optionalKey(memberRefSchema),
+  /**
+   * Whether the agent addressed the item to a member, who is then the one it
+   * waits on (`waitsOn`): a notice addressed to nobody asks nobody for Got it
+   * under Channels. Absent from a service before it, which the desktop reads
+   * as addressed to nobody.
+   */
+  addressed: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
    * The member who answered, on an answered item, any member of the task's
    * workspace; absent for an answer nobody can be named for, and from a

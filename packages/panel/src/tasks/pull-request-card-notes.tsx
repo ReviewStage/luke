@@ -115,7 +115,7 @@ export function OpenedNote({
         <ActorRef actor={actor} />
         {words === undefined ? null : (
           // Note that the time is one piece, so where a long login leaves it no room it moves under the name whole, rather than cutting the name.
-          <span className="card-when">
+          <span className="card-when whitespace-pre">
             {`${SEPARATOR}${words.after}`}
             {ago}
           </span>
@@ -136,16 +136,16 @@ function CountsNote({
   if (comments === undefined && commits === undefined) return null;
   return (
     <HoverCardNote>
-      <span className="card-counts">
+      <span className="card-counts flex gap-control-gap tabular-nums">
         {comments === undefined ? null : (
-          <span className="card-count">
+          <span className="card-count inline-flex items-center gap-tight-gap [&>svg]:size-luke-12 [&>svg]:flex-none">
             <MessageSquareIcon aria-hidden="true" />
             {comments}
             <VisuallyHidden>{comments === 1 ? " comment" : " comments"}</VisuallyHidden>
           </span>
         )}
         {commits === undefined ? null : (
-          <span className="card-count">
+          <span className="card-count inline-flex items-center gap-tight-gap [&>svg]:size-luke-12 [&>svg]:flex-none">
             <GitCommitHorizontalIcon aria-hidden="true" />
             {commits}
             <VisuallyHidden>{commits === 1 ? " commit" : " commits"}</VisuallyHidden>

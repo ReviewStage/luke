@@ -287,8 +287,6 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
   // Its workspace is only the one listed, since the place reads every workspace's accounts.
   if (tasks.adminView.open) {
     const root = { kind: LINK_PLACE.ADMIN } as const;
-    // A narrow room's list stands alone over the view it hides, so the list is the step, at the place's own link.
-    if (at.narrow === true && tasks.adminView.listed) return [at_(root, LINK_THING.ADMIN)];
     const fields = adminLinkFields(tasks.adminView.view);
     if (Object.keys(fields).length === 0) return [at_(root, LINK_THING.ADMIN)];
     return [at_({ ...root, ...fields }, LINK_THING.ADMIN_PAGE), within(root, LINK_THING.ADMIN)];

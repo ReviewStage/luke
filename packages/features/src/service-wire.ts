@@ -166,6 +166,8 @@ export const HOSTED_API_ERROR = {
   SKILL_NAME_TAKEN: "skill-name-taken",
   /** A skill's files were refused: past a skill's bounds, a `SKILL.md` that breaks the convention, or a credential-shaped literal. Nothing was installed. */
   SKILL_FILES_REFUSED: "skill-files-refused",
+  /** Another open channel of the workspace goes by that name. Nothing was written. */
+  CHANNEL_NAME_TAKEN: "channel-name-taken",
   /** A Start on This Mac was refused, for the reason it names (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
 } as const;

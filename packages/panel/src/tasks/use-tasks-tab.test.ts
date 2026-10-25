@@ -1337,7 +1337,7 @@ test("a Luke link to a person opens their page in the workspace its slug names, 
   assert.equal(tab.control().personView.workspaceId, PERSONAL.id);
 });
 
-test("a Luke link to the Admin place opens it on its list, and one to a view opens that view alone, in the place of the Inbox, listing no other workspace", () => {
+test("a Luke link to the Admin place opens it on its Overview, and one to a view opens that view, in the place of the Inbox, listing no other workspace", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   const listed = tab.control().workspace?.id;
   act(() => tab.control().inboxView.onOpen());
@@ -1346,7 +1346,6 @@ test("a Luke link to the Admin place opens it on its list, and one to a view ope
   assert.equal(tab.control().inboxView.open, false);
   assert.equal(tab.control().adminView.open, true);
   assert.deepEqual(tab.control().adminView.view, { kind: "dashboard" });
-  assert.equal(tab.control().adminView.listed, true);
 
   act(() =>
     tab.control().onOpenLink({
@@ -1355,7 +1354,6 @@ test("a Luke link to the Admin place opens it on its list, and one to a view ope
     }),
   );
   assert.deepEqual(tab.control().adminView.view, { kind: "account", id: "user-charles" });
-  assert.equal(tab.control().adminView.listed, false);
 
   act(() =>
     tab.control().onOpenLink({

@@ -148,7 +148,10 @@ it.effect("the Admin profile opens Admin's Overview for the account, an admin", 
   Effect.gen(function* () {
     yield* drawWindow(RUN_PROFILE.ADMIN);
 
-    assert.ok(document.querySelector('nav[aria-label="Admin sections"] .luke-nav-item'));
+    const chosen = document.querySelector(
+      '[role="radiogroup"][aria-label="Admin sections"] [aria-checked="true"]',
+    );
+    assert.equal(chosen?.textContent, "Overview");
   }),
 );
 

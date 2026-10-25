@@ -127,7 +127,10 @@ export interface MacAgentLayout {
 
 /** The agent's folder and what stands in it, under the Mac's home folder given. */
 export function macAgentLayout(home: string, agentId: string): MacAgentLayout {
-  const folder = [home.replace(/\/+$/u, ""), MAC_AGENT_FOLDER.ROOT, agentId].join("/");
+  let end = home.length;
+  // Note that the trailing slashes are counted off by hand, because a regular expression anchored at the end runs in quadratic time on a home of many slashes.
+  while (end > 1 && home[end - 1] === "/") end -= 1;
+  const folder = [home.slice(0, end), MAC_AGENT_FOLDER.ROOT, agentId].join("/");
   return {
     folder,
     checkoutPath: [folder, MAC_AGENT_FOLDER.REPOSITORY].join("/"),

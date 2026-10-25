@@ -30,6 +30,19 @@ import {
   automationViewSchema,
 } from "@luke/features/automation-view";
 import {
+  CHANNEL_CALL_FAILURE,
+  type ChannelArchiveParams,
+  type ChannelCreateParams,
+  type ChannelLookParams,
+  type ChannelRenameParams,
+  type ChannelsListParams,
+  type ChannelsView,
+  type ChannelThreadsParams,
+  type ChannelThreadsView,
+  channelsViewSchema,
+  channelThreadsViewSchema,
+} from "@luke/features/channel-view";
+import {
   type BrowserLiveClosedEvent,
   type BrowserLiveMessageEvent,
   browserLiveClosedEventSchema,
@@ -742,6 +755,18 @@ export interface HostOperator {
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
   /** The calls into one agent, each with its lines and its record; or why there is no answer. */
   codingAgentCalls(params: CodingAgentPageParams): Effect.Effect<CodingAgentCallsAnswerView>;
+  /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
+  channelsList(params: ChannelsListParams): Effect.Effect<ChannelsView>;
+  /** A channel made; the workspace's channels as they then stand, or why it was not made. */
+  channelsCreate(params: ChannelCreateParams): Effect.Effect<ChannelsView>;
+  /** A channel renamed; the workspace's channels as they then stand, or why it was not renamed. */
+  channelsRename(params: ChannelRenameParams): Effect.Effect<ChannelsView>;
+  /** A channel archived; the workspace's channels as they then stand, or why it stands. */
+  channelsArchive(params: ChannelArchiveParams): Effect.Effect<ChannelsView>;
+  /** The reader's look at a channel stamped; the workspace's channels as they then stand. */
+  channelsLook(params: ChannelLookParams): Effect.Effect<ChannelsView>;
+  /** A channel's latest threads the reader may read, oldest first; or why there are none. */
+  channelsThreads(params: ChannelThreadsParams): Effect.Effect<ChannelThreadsView>;
   /** The account's automations, or one task's or one workspace's; or why there are none. */
   automationList(params: AutomationListParams): Effect.Effect<AutomationListView>;
   /** An automation made; the automation as the service kept it, or why it was not made. */
@@ -1086,6 +1111,9 @@ const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED 
 
 /** An automation call that reached no answer, as every automation method answers one. */
 const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
+
+/** A channel call that reached no answer, as every channel method answers one. */
+const CHANNEL_UNANSWERED = { failure: CHANNEL_CALL_FAILURE.UNANSWERED } as const;
 
 /** A task call that reached no answer, as every task method answers one. */
 const TASK_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
@@ -1995,6 +2023,36 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_CALLS, { agentId: params.agentId }),
         answerOf(codingAgentCallsAnswerViewSchema, CODING_AGENT_UNANSWERED),
+      ),
+    channelsList: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHANNELS_LIST, params),
+        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
+      ),
+    channelsCreate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHANNELS_CREATE, params),
+        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
+      ),
+    channelsRename: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHANNELS_RENAME, params),
+        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
+      ),
+    channelsArchive: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHANNELS_ARCHIVE, params),
+        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
+      ),
+    channelsLook: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHANNELS_LOOK, params),
+        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
+      ),
+    channelsThreads: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHANNELS_THREADS, params),
+        answerOf(channelThreadsViewSchema, CHANNEL_UNANSWERED),
       ),
     automationList: (params) =>
       Effect.map(

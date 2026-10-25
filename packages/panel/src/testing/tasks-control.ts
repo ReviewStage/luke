@@ -362,9 +362,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     adminView: {
       open: false,
       view: { kind: "dashboard" },
-      listed: false,
       onOpen: ignore,
-      onList: ignore,
       onClose: ignore,
     },
     boardView: { open: false, onOpen: ignore, onClose: ignore },

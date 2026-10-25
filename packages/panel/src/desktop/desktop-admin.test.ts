@@ -17,25 +17,22 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { AdminView } from "../admin/routing.js";
 import { runAppCommand } from "../app-commands.js";
-import type { NavigationHistory } from "../navigation-history.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { menuItems, pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
-import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopAdmin } from "./desktop-admin.js";
 
 /**
- * desktop-admin.test.ts -- the app's Admin place takes the window as
- * Settings does: its sections are listed where the sidebar stood, under its
- * name and the way back, the one standing marked, and a narrow room shows
- * the list or the view one at a time. Each view reads through the window's
- * host (`admin.read`) rather than a browser client, opens an account on a
- * press rather than an address, is blocked from the screen recording whole,
- * and stands a refusal of the service's gate as the app's own failure
- * rather than a sign-in card.
+ * desktop-admin.test.ts -- the app's Admin place stands in the task's place
+ * as Automations does: its toolbar is the place's, titled Admin, with Open in
+ * browser among its acts, and its sections are a bar under it, the one
+ * standing chosen; it draws no way back of its own, and Escape leaves it.
+ * Each view reads through the window's host (`admin.read`) rather than a
+ * browser client, opens an account on a press rather than an address, is
+ * blocked from the screen recording whole, and stands a refusal of the
+ * service's gate as the app's own failure rather than a sign-in card.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
@@ -95,30 +92,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** How wide the place is laid out, which jsdom, laying out nothing, leaves to the test. */
-let placeWidth = 0;
-
-/** Lays the place out as wide as `placeWidth` says, every other box it holds left unmeasured. */
-function layPlaceAt(width: number): void {
-  placeWidth = width;
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return DOMRect.fromRect({ width: this.classList.contains("desktop-admin") ? placeWidth : 0 });
-  });
-}
-
-/** The place on `view`, in `room`, over `history` where one is named, every view it was asked to open and every exit written down. */
+/** The place on `view`, in `room`, every view it was asked to open and every exit written down. */
 async function open(
   view: AdminView,
-  options: { room?: ShellRoom; listed?: boolean; history?: NavigationHistory } = {},
-): Promise<{ page: HTMLElement; opened: AdminView[]; exits: number[]; listings: number[] }> {
+  options: { room?: ShellRoom } = {},
+): Promise<{ page: HTMLElement; opened: AdminView[]; exits: number[] }> {
   const opened: AdminView[] = [];
   const exits: number[] = [];
-  const listings: number[] = [];
-  const props = sidebarProps(tasksControl());
-  const { sidebar } = props;
-  const history = options.history ?? props.history;
   const page = document.body.appendChild(document.createElement("div"));
   root = createRoot(page);
   act(() =>
@@ -126,13 +106,10 @@ async function open(
       onRegistry(
         AtomRegistry.make(),
         createElement(DesktopAdmin, {
-          sidebar,
           room: options.room ?? SHELL_ROOM.WIDE,
-          history,
           view,
-          listed: options.listed ?? false,
+          shown: true,
           onOpen: (next) => opened.push(next),
-          onList: () => listings.push(1),
           onExit: () => exits.push(1),
         }),
       ),
@@ -141,158 +118,98 @@ async function open(
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  return { page, opened, exits, listings };
+  return { page, opened, exits };
 }
 
-/** The list's rows by their names. */
-function rows(page: HTMLElement): HTMLElement[] {
-  const list = page.querySelector('nav[aria-label="Admin sections"]') ?? assert.fail("the list");
-  return [...list.querySelectorAll<HTMLElement>(".luke-nav-item")];
+/** The bar of sections, each option by its name and whether it is the one chosen. */
+function sections(page: HTMLElement): { name: string; chosen: boolean }[] {
+  const bar =
+    page.querySelector('[role="radiogroup"][aria-label="Admin sections"]') ??
+    assert.fail("the bar of sections");
+  return [...bar.querySelectorAll<HTMLElement>('[role="radio"]')].map((option) => ({
+    name: option.textContent ?? "",
+    chosen: option.getAttribute("aria-checked") === "true",
+  }));
 }
 
-function row(page: HTMLElement, name: string): HTMLElement {
+/** The section option named `name`. */
+function section(page: HTMLElement, name: string): HTMLElement {
   return (
-    rows(page).find((each) => each.querySelector(".luke-nav-item-name")?.textContent === name) ??
-    assert.fail(`the ${name} row`)
+    [...page.querySelectorAll<HTMLElement>('[role="radio"]')].find(
+      (option) => option.textContent === name,
+    ) ?? assert.fail(`the ${name} section`)
   );
 }
 
-test("the sections are listed where the sidebar stood, under the place's name and the way back, the one standing marked", async () => {
+test("a section stands under the place's own toolbar, titled Admin, with Open in browser among its acts and its sections a bar under it, the one standing chosen", async () => {
   const { page } = await open({ kind: "users" });
 
-  const names = rows(page).map((each) => each.querySelector(".luke-nav-item-name")?.textContent);
-  assert.deepEqual(names, [
-    "Back",
-    "Overview",
-    "Cost",
-    "Reliability",
-    "Workspaces",
-    "Users",
-    "Open in browser",
+  assert.equal(page.querySelector("header.luke-toolbar h1")?.textContent, "Admin");
+  assert.ok(page.querySelector('a[aria-label="Open in browser"][href="https://luke.test/admin"]'));
+  assert.deepEqual(sections(page), [
+    { name: "Overview", chosen: false },
+    { name: "Cost", chosen: false },
+    { name: "Reliability", chosen: false },
+    { name: "Workspaces", chosen: false },
+    { name: "Users", chosen: true },
   ]);
-  assert.equal(page.querySelector(".admin-sections-title")?.textContent, "Admin");
-  assert.equal(row(page, "Users").getAttribute("aria-current"), "page");
-  assert.equal(row(page, "Overview").getAttribute("aria-current"), null);
 });
 
-test("a section's row opens it, and Back leaves the place", async () => {
+test("a section chosen in the bar opens it, Escape leaves the place, and no way back stands", async () => {
   const { page, opened, exits } = await open({ kind: "users" });
 
-  act(() => row(page, "Cost").click());
-  act(() => row(page, "Back").click());
+  act(() => section(page, "Cost").click());
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_ADMIN));
+  });
 
   assert.deepEqual(opened, [{ kind: "cost" }]);
   assert.equal(exits.length, 1);
-});
-
-test("a narrow room shows the list or the view, one at a time, and the view's head leads back to the list", async () => {
-  const listed = await open({ kind: "users" }, { room: SHELL_ROOM.NARROW, listed: true });
-  assert.equal(listed.page.querySelector<HTMLElement>(".admin-sections")?.hidden, false);
-  assert.equal(listed.page.querySelector<HTMLElement>(".admin-page")?.hidden, true);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  const alone = await open({ kind: "users" }, { room: SHELL_ROOM.NARROW, listed: false });
-  assert.equal(alone.page.querySelector<HTMLElement>(".admin-sections")?.hidden, true);
-  const back = alone.page.querySelector<HTMLButtonElement>(".admin-page header button");
-  assert.ok(back, "the view's head offers the way back to the list");
-  act(() => back.click());
-  assert.equal(alone.listings.length, 1);
-});
-
-test("a wide room's place under the split's line by its own width shows the view alone under a way back to the list, and both once it is wide", async () => {
-  layPlaceAt(700);
-  const alone = await open({ kind: "users" }, { room: SHELL_ROOM.WIDE, listed: false });
-  assert.equal(alone.page.querySelector<HTMLElement>(".admin-sections")?.hidden, true);
-  assert.equal(alone.page.querySelector<HTMLElement>(".admin-page")?.hidden, false);
-  const back = alone.page.querySelector<HTMLButtonElement>(".admin-page header button");
-  assert.ok(back, "the view's head offers the way back to the list");
-  act(() => back.click());
-  assert.equal(alone.listings.length, 1);
-
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  placeWidth = 1200;
-  const split = await open({ kind: "users" }, { room: SHELL_ROOM.WIDE, listed: false });
-  assert.equal(split.page.querySelector<HTMLElement>(".admin-sections")?.hidden, false);
-  assert.equal(split.page.querySelector<HTMLElement>(".admin-page")?.hidden, false);
-});
-
-test("on a phone the list is headed by its way out alone, named for the step Back goes to, and the place's name centred, with no Back and Forward, and the way out steps back as Back did", async () => {
-  const { history } = sidebarProps(tasksControl());
-  const { page, exits } = await open(
-    { kind: "users" },
-    {
-      room: SHELL_ROOM.NARROW,
-      listed: true,
-      history: {
-        ...history,
-        canGoBack: true,
-        steps: {
-          back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } }],
-          forward: [],
-        },
-      },
-    },
-  );
-
-  assert.deepEqual(readPhoneHead(page, "admin-sections"), {
-    start: ["Back"],
-    title: "Admin",
-    end: [],
-  });
   const names = [...page.querySelectorAll("button")].map((each) => each.getAttribute("aria-label"));
-  assert.ok(!names.includes("Back") && !names.includes("Forward"), "no history buttons stand");
-  assert.deepEqual(
-    rows(page).map((each) => each.querySelector(".luke-nav-item-name")?.textContent),
-    ["Overview", "Cost", "Reliability", "Workspaces", "Users", "Open in browser"],
-  );
-  pressInPhoneHead(page, "admin-sections", "Back");
-  assert.equal(exits.length, 1);
+  assert.ok(!names.includes("Back"), "no way back stands");
 });
 
-test("on a phone a view is headed by the way back to the list, its title and range centred, and its View options alone at the end, which still opens its menu", async () => {
-  const { page, listings } = await open({ kind: "users" }, { room: SHELL_ROOM.NARROW });
+test("on a phone a section is headed by Open in browser, the place's name and range centred, and its View options at the end, the sections a bar under it", async () => {
+  let browsed = 0;
+  fakeAppPlatform({ adminDashboard: () => ({ open: () => (browsed += 1) }) });
+  const { page } = await open({ kind: "users" }, { room: SHELL_ROOM.NARROW });
 
   assert.deepEqual(readPhoneHead(page, "admin"), {
-    start: ["Admin"],
-    title: "Users",
+    start: ["Open in browser"],
+    title: "Admin",
     end: ["View options"],
   });
   assert.match(page.querySelector(".admin-head")?.textContent ?? "", /Last 30 days/u);
+  assert.equal(sections(page).find((each) => each.chosen)?.name, "Users");
   pressInPhoneHead(page, "admin", "View options");
   assert.deepEqual(
     menuItems().map((item) => item.label),
     ["Time range", "Include admins"],
   );
-  pressInPhoneHead(page, "admin", "Admin");
-  assert.equal(listings.length, 1);
+  pressInPhoneHead(page, "admin", "Open in browser");
+  assert.equal(browsed, 1);
 });
 
-test("on a phone an account's page has one way back, to the section it stands under, in place of the list's and the crumb's two", async () => {
+test("on a phone an account's page has one way back, to the section it stands under, in place of the crumb", async () => {
   // An account whose read is not answered stands its page and head over the failure.
   answer = { refused: ADMIN_UNANSWERED };
-  const { page, opened, listings } = await open(
-    { kind: "account", id: ADA.id },
-    { room: SHELL_ROOM.NARROW },
-  );
+  const { page, opened } = await open({ kind: "account", id: ADA.id }, { room: SHELL_ROOM.NARROW });
 
   const head = readPhoneHead(page, "admin");
   assert.deepEqual(head.start, ["Users"]);
   assert.ok(head.end.length <= 1, "one control at most in the end corner");
   assert.equal(page.querySelector('.admin-head nav[aria-label="Path"]'), null, "no crumb");
   pressInPhoneHead(page, "admin", "Users");
-  assert.deepEqual([opened, listings], [[{ kind: "users" }], []]);
+  assert.deepEqual(opened, [{ kind: "users" }]);
 });
 
-test("a wide room keeps the list's Back row and title and a view's crumb, with no phone's header", async () => {
+test("a wide room heads an account's page by its crumb back to its section, with no bar of sections and no phone's header", async () => {
   answer = { refused: ADMIN_UNANSWERED };
   const { page } = await open({ kind: "account", id: ADA.id });
 
   assert.equal(page.querySelector('header[data-look="phone"]'), null);
-  assert.equal(page.querySelector(".admin-sections-title")?.textContent, "Admin");
   assert.ok(page.querySelector('nav[aria-label="Path"]'), "the view's crumb leads back");
+  assert.equal(page.querySelector('[aria-label="Admin sections"]'), null);
 });
 
 test("the Users view reads its roster through the window's host and draws its accounts", async () => {
@@ -304,13 +221,6 @@ test("the Users view reads its roster through the window's host and draws its ac
   assert.ok(read !== undefined);
   assert.equal((read.payload as { procedure: string }).procedure, ADMIN_READ.USERS);
   assert.match(page.textContent ?? "", /Ada Lovelace/u);
-});
-
-test("a view's toolbar is the app's own, headed by its section's name, in the title bar's row with no drag strip over it", async () => {
-  const { page } = await open({ kind: "users" });
-
-  assert.equal(page.querySelector(".admin-page header.luke-toolbar h1")?.textContent, "Users");
-  assert.equal(page.querySelector(".admin-page .desktop-drag-strip"), null);
 });
 
 test("an account opens on a press, as a step of the place, and is no link to an address", async () => {
@@ -354,7 +264,7 @@ test("⌘F finds in the view standing, its bar under the view's toolbar, and cou
     assert.ok(runAppCommand(APP_COMMAND.FIND), "⌘F is offered on the Admin place");
   });
   const field = page.querySelector<HTMLInputElement>(
-    '.admin-page .page-find > .find-bar input[aria-label="Find"]',
+    '.page-find > .find-bar input[aria-label="Find"]',
   );
   assert.ok(field, "the find bar stands in the view's column");
   act(() => {
@@ -369,13 +279,4 @@ test("⌘F finds in the view standing, its bar under the view's toolbar, and cou
     page.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')?.textContent,
     "1 of 1",
   );
-});
-
-test("on a narrow stage with the section list standing, ⌘F is offered nothing, since the view it would find in is hidden", async () => {
-  await open({ kind: "users" }, { room: SHELL_ROOM.NARROW, listed: true });
-
-  act(() => {
-    assert.equal(runAppCommand(APP_COMMAND.FIND), false);
-  });
-  assert.equal(document.querySelector('[role="search"][aria-label="Find"]'), null);
 });

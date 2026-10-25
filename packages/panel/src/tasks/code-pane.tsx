@@ -2,6 +2,7 @@ import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { callHeading, WORKED_SEPARATOR } from "@luke/features/time-format";
 import { CodeCard, FILL_ELEMENT, Fill, IconButton, SCROLL_FADE_INSET, Tooltip } from "@luke/ui";
+import { askScroll } from "@luke/ui/scroll-asked";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,
@@ -59,11 +60,14 @@ const noAgentLabel = (): undefined => undefined;
  * Scrolls `lines` alone until `target` stands in its middle. Note that this
  * is not `scrollIntoView`, because that scrolls every box around the line as
  * well, and the panel often arrives sliding in from past the window's edge,
- * so the window's own layout would be scrolled sideways after it.
+ * so the window's own layout would be scrolled sideways after it. The
+ * scroll is asked for (`askScroll`), so a log it centres a line in leaves
+ * its newest line for it.
  */
 export function centreWithin(lines: HTMLElement, target: HTMLElement): void {
   const box = lines.getBoundingClientRect();
   const line = target.getBoundingClientRect();
+  askScroll(lines);
   lines.scrollTop += line.top + line.height / 2 - (box.top + box.height / 2);
 }
 

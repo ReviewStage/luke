@@ -1,8 +1,10 @@
+import { readingWords } from "@luke/features/words";
 import {
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
   BackButton,
+  COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
   DetailPage,
@@ -12,7 +14,6 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  TOOLBAR_INSET,
   Toolbar,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
@@ -64,30 +65,35 @@ export interface AdminWayBack {
 }
 
 /**
- * What leads every admin toolbar under it, before the page's heading: the
- * app's way back to the section list where a narrow room stands a view
- * alone (`desktop-admin.tsx`), as a version's toolbar leads with its way
- * back to the versions, which makes the toolbar a phone's header. None
- * elsewhere, the web page's included.
+ * What the app hands every admin page standing in its work column
+ * (`desktop-admin.tsx`), as Automations heads its tabs: the place's name, which
+ * titles a section's toolbar where the web page titles it by the section; the
+ * bar of sections under that toolbar; the place's own acts before a view's
+ * controls; and whether a phone's header stands for the toolbar. None on the
+ * web page, whose own sidebar lists the sections.
  */
-const AdminToolbarLeadContext = createContext<React.ReactNode>(undefined);
-
-/** Hands what leads the toolbar to every admin page under it. */
-export const AdminToolbarLead = AdminToolbarLeadContext.Provider;
-
-/** What leads the toolbar here, for a view that draws in its place. */
-export function useAdminToolbarLead(): React.ReactNode {
-  return useContext(AdminToolbarLeadContext);
+export interface AdminPlaceFrame {
+  readonly title: string;
+  readonly sections: React.ReactNode;
+  readonly acts: React.ReactNode;
+  readonly phone: boolean;
 }
+
+const AdminPlaceFrameContext = createContext<AdminPlaceFrame | undefined>(undefined);
+
+/** Hands the app's frame to every admin page under it. */
+export const AdminPlaceFrameProvider = AdminPlaceFrameContext.Provider;
 
 /**
  * The page's toolbar: the page's title, or, under a section, the way back to
  * it and then the page's name; the note on what it covers after it; and the
- * view's controls at its end. It stands still over the page's scroll, and a
- * folded sidebar's toggle stands over its start. Where the app stands a view
- * alone on a phone, it is a phone's header (`phone-head.tsx`): one way back,
- * to the section a page stands under or else to the list, the title and what
- * it covers centred, and the view's one control, its View options.
+ * view's controls at its end. Where the app frames a section, the toolbar is
+ * the place's (its name, its acts before the view's controls), the section
+ * named by the bar under it. It stands still over the page's scroll, and a
+ * folded sidebar's toggle stands over its start. On a phone it is a phone's
+ * header (`phone-head.tsx`): a page under a section led by its way back to
+ * the section, a section by the place's acts, the title and what it covers
+ * centred, and the view's one control, its View options.
  */
 function AdminToolbar({
   title,
@@ -101,22 +107,22 @@ function AdminToolbar({
   back: AdminWayBack | undefined;
   controls: React.ReactNode;
 }): React.JSX.Element {
-  const lead = useContext(AdminToolbarLeadContext);
+  const frame = useContext(AdminPlaceFrameContext);
   const section = back === undefined ? undefined : adminPlace(back.tab);
+  const placed = frame !== undefined && section === undefined ? frame : undefined;
   const tag =
     note === undefined ? undefined : (
       <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {note}
       </Text>
     );
-  // Note that a phone has room for one way back, so a page under a section goes back to the section, the list one step further.
-  if (lead !== undefined) {
+  if (frame?.phone === true) {
     return (
       <PhoneHead
         place="admin"
         start={
           back === undefined || section === undefined ? (
-            lead
+            frame.acts
           ) : (
             <BackButton
               label={section.label}
@@ -125,7 +131,7 @@ function AdminToolbar({
             />
           )
         }
-        title={title}
+        title={placed?.title ?? title}
         tag={tag}
         end={controls ?? null}
       />
@@ -133,18 +139,31 @@ function AdminToolbar({
   }
   return (
     <Toolbar
-      lead={lead}
-      start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN}
-      title={title}
+      title={placed?.title ?? title}
       trail={
         back === undefined || section === undefined
           ? undefined
           : [{ label: section.label, icon: section.icon, onPress: back.onBack }]
       }
       tag={tag}
-      actions={controls}
+      actions={
+        placed === undefined ? (
+          controls
+        ) : (
+          <>
+            {placed.acts}
+            {controls}
+          </>
+        )
+      }
     />
   );
+}
+
+/** The app's frame where it frames this page, a section rather than a page under one; none on the web page. */
+function usePlacedFrame(back: AdminWayBack | undefined): AdminPlaceFrame | undefined {
+  const frame = useContext(AdminPlaceFrameContext);
+  return back === undefined ? frame : undefined;
 }
 
 /**
@@ -170,15 +189,27 @@ export function AdminPage({
   controls: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
+  const placed = usePlacedFrame(back);
+  const toolbar = <AdminToolbar title={title} note={note} back={back} controls={controls} />;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <DetailPage
-        frame={PAGE_FRAME.TOOLBAR}
-        label={title}
-        toolbar={<AdminToolbar title={title} note={note} back={back} controls={controls} />}
-      >
-        {children}
-      </DetailPage>
+      {placed === undefined ? (
+        <DetailPage frame={PAGE_FRAME.TOOLBAR} label={title} toolbar={toolbar}>
+          {children}
+        </DetailPage>
+      ) : (
+        // Note that the app's section stands on the collection page, as Automations' tabs do, because the bar of sections stands still under the toolbar there.
+        <CollectionPage
+          frame={PAGE_FRAME.TOOLBAR}
+          label={placed.title}
+          toolbar={toolbar}
+          filters={placed.sections}
+          state={COLLECTION_STATE.READY}
+          loadingLabel={readingWords(title)}
+        >
+          {children}
+        </CollectionPage>
+      )}
     </div>
   );
 }
@@ -214,13 +245,23 @@ export function AdminCollectionPage({
   error?: React.ReactNode;
   children?: React.ReactNode;
 }): React.JSX.Element {
+  const placed = usePlacedFrame(undefined);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <CollectionPage
         frame={PAGE_FRAME.TOOLBAR}
-        label={title}
+        label={placed?.title ?? title}
         toolbar={<AdminToolbar title={title} note={note} back={undefined} controls={controls} />}
-        filters={filters}
+        filters={
+          placed === undefined ? (
+            filters
+          ) : (
+            <>
+              {placed.sections}
+              {filters}
+            </>
+          )
+        }
         state={state}
         loadingLabel={loadingLabel}
         skeleton={skeleton}

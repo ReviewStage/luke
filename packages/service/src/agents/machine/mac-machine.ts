@@ -33,7 +33,10 @@
  * Whether a runner runs is read off the agent's newest launch line, which
  * stands for the record a sandbox keeps in its tags: it runs while that
  * line is unsettled and no stop line was queued after it, so a Stop is
- * honoured the moment it is queued, whenever the Mac gets to it.
+ * honoured the moment it is queued, whenever the Mac gets to it. A record
+ * that no longer tells of a runner still running, as a retire's, queues a
+ * stop line after it for the same reason, so a message sent next relaunches
+ * rather than landing behind a line the runner ends on.
  *
  * `readFile` and `runRepositoryCommand` queue a request under an id they
  * mint, wait for its answer at most `MAC_MACHINE.ANSWER_WAIT`, and withdraw
@@ -103,6 +106,7 @@ import {
   type MachinePlace,
   type MachineRunning,
   type OpenedPlace,
+  RUNNER_RECORD,
   type RunnerHandle,
   type RunnerLaunch,
 } from "./agent-machine.js";
@@ -348,8 +352,16 @@ function macMachineOver(
         return [found];
       }),
 
-    // The record is the agent's launch and stop lines themselves, which `findPlaces` reads.
-    recordRunner: () => Effect.void,
+    // The record is the agent's launch and stop lines themselves, which `findPlaces` reads: a
+    // runner the record no longer tells of is stopped, and one it tells of was recorded by its launch.
+    recordRunner: (place, record) =>
+      Effect.gen(function* () {
+        if (record.kind === RUNNER_RECORD.RUNNING) return;
+        const pin = yield* pinOfPlace(macPlace(place.session, place.agentId));
+        const launch = yield* stored(latestMacAgentLaunch(pin.userId, pin.agentId));
+        if (Option.isNone(launch) || launch.value.settled || launch.value.stopped) return;
+        yield* queued(pin, { kind: MAC_AGENT_LINE_KIND.STOP, payload: {} });
+      }),
 
     setCredential: () => Effect.void,
 

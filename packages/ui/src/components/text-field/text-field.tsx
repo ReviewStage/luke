@@ -59,8 +59,6 @@ export const TEXT_FIELD_SIZE = {
   TITLE: "title",
   /** A step under a control in the caption's type, on the well's ground, among a bar's controls, as a Browser tab's address. */
   COMPACT: "compact",
-  /** Words written in place in the body's type, without a well, as a mail's subject among the lines of its head. */
-  INLINE: "inline",
 } as const;
 
 export type TextFieldSize = (typeof TEXT_FIELD_SIZE)[keyof typeof TEXT_FIELD_SIZE];
@@ -126,8 +124,6 @@ const TEXT_FIELD_SIZE_CLASS = {
   /** A step under a control, on the well's ground, its edge lighting while it holds the caret; 16px words under a finger. */
   [TEXT_FIELD_SIZE.COMPACT]:
     "h-control-compact rounded-control-compact border-border bg-well px-luke-6 text-caption leading-body text-ellipsis focus:border-muted-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
-  /** Words written in place in the body's type: no well, no edge, and no ring. */
-  [TEXT_FIELD_SIZE.INLINE]: "h-auto p-0 border-0 bg-transparent focus:bg-transparent outline-none",
 } as const satisfies Record<TextFieldSize, string | undefined>;
 
 /**

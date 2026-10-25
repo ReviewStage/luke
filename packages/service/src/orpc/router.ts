@@ -48,6 +48,10 @@ import {
   automationsProcedures,
 } from "../automations/automations-procedures.js";
 import {
+  type ChannelsProcedureSeams,
+  channelsProcedures,
+} from "../channels/channels-procedures.js";
+import {
   type PullRequestChaptersProcedureSeams,
   pullRequestChaptersProcedures,
 } from "../chapters/pull-request-chapters-procedures.js";
@@ -106,6 +110,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   AgentPullRequestProcedureSeams &
   AgentsProcedureSeams &
   AutomationsProcedureSeams &
+  ChannelsProcedureSeams &
   DictationProcedureSeams &
   EventsProcedureSeams &
   GitHubProcedureSeams &
@@ -142,6 +147,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     agentPullRequests: agentPullRequestProcedures(published),
     agents: agentsProcedures(published),
     automations: automationsProcedures(seams),
+    channels: channelsProcedures(seams),
     dictation: dictationProcedures(seams),
     events: eventsProcedures(seams),
     github: githubProcedures(seams),

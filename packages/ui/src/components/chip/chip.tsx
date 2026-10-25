@@ -230,7 +230,7 @@ const LOOK_CORNER = {
 /** A look's side room inside its box. */
 const LOOK_INSET = {
   [CHIP_LOOK.TOOLBAR]: "px-chip-inset",
-  [CHIP_LOOK.FIELD]: "ps-chip-inset-wide pe-chip-inset",
+  [CHIP_LOOK.FIELD]: "ps-control-inset pe-chip-inset",
   [CHIP_LOOK.PILL]: "ps-chip-inset pe-chip-inset-wide",
   [CHIP_LOOK.FILTER]: "px-chip-inset-wide",
 } as const satisfies Record<ChipLook, string>;

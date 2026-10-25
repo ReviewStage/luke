@@ -28,6 +28,7 @@ import {
   ErrorState,
   Fill,
   GAP,
+  IconButton,
   LAYOUT_ELEMENT,
   MoreButton,
   moreLabel,
@@ -53,6 +54,7 @@ import {
   memberActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
+import { GLYPH } from "@luke/ui/icons";
 import { isWireString } from "@luke/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -915,6 +917,12 @@ function ThreadMessage({
 /** No groups over the item's own. */
 const NO_LEAD: readonly MenuAction[][] = [];
 
+/** The channel a thread is read from beside its stream: its name, the path's first crumb, and the press that closes the thread back to it. */
+export interface InboxPaneChannel {
+  readonly name: string;
+  readonly onClose: () => void;
+}
+
 /** What a phone's item offers in its ⋯ over the item's own actions, past the bar's buttons it stands for. */
 export interface InboxPanePhone {
   /** Opens the side panel beside the item, which the title bar's toggle opens elsewhere; none while it is open or where there is none. */
@@ -1210,10 +1218,13 @@ function Crumbs({
   doors,
   title,
   titleShown,
+  channel,
 }: {
   holder: InboxHolder;
   by: ItemAgent;
   doors: InboxPaneDoors;
+  /** The channel the thread is read from, which leads the path; none in the Inbox. */
+  channel: InboxPaneChannel | undefined;
   /** The item's title, as its heading reads it. */
   title: string;
   /** Whether the heading has scrolled away, so the path names the item. */
@@ -1237,6 +1248,14 @@ function Crumbs({
         }
       : undefined;
   const crumbs: Crumb[] = [
+    channel === undefined
+      ? undefined
+      : {
+          label: `#${channel.name}`,
+          glyph: <GLYPH.CHANNEL />,
+          hint: `#${channel.name}`,
+          onPress: channel.onClose,
+        },
     task ?? automation,
     {
       label: name,
@@ -1281,6 +1300,7 @@ export function InboxPane({
   next,
   mentions,
   phone,
+  channel,
 }: {
   /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
@@ -1306,6 +1326,8 @@ export function InboxPane({
    * actions; none elsewhere, where the bar draws its crumbs and buttons.
    */
   phone?: InboxPanePhone | undefined;
+  /** The channel the thread is read from beside its stream, which leads the path and which × closes it back to; none in the Inbox. */
+  channel?: InboxPaneChannel | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
@@ -1382,7 +1404,13 @@ export function InboxPane({
       {phone !== undefined && onBack !== undefined ? (
         <PhoneHead
           place="inbox-item"
-          start={<BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />}
+          start={
+            channel === undefined ? (
+              <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
+            ) : (
+              <BackButton label={`#${channel.name}`} place={`#${channel.name}`} onBack={onBack} />
+            )
+          }
           title={cardTitle(item.title)}
           end={
             <InboxItemMenu
@@ -1416,6 +1444,7 @@ export function InboxPane({
               doors={doors}
               title={cardTitle(item.title)}
               titleShown={headingAway}
+              channel={channel}
             />
           }
           actions={
@@ -1433,6 +1462,15 @@ export function InboxPane({
                 onMark={doors.onMark}
                 onClose={doors.onClose}
               />
+              {channel === undefined ? null : (
+                <Tooltip label="Close thread">
+                  <IconButton
+                    icon={<GLYPH.CLOSE />}
+                    label="Close thread"
+                    onClick={channel.onClose}
+                  />
+                </Tooltip>
+              )}
             </>
           }
         />

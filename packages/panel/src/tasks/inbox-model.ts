@@ -441,6 +441,18 @@ export function awaitsNod(item: InboxItem): boolean {
   return item.status === INBOX_STATUS.OPEN && openAskOf(item.thread ?? []) === undefined;
 }
 
+/**
+ * Whether the item offers the reader Got it: a notice waiting on a nod
+ * (`awaitsNod`), and, while Channels is on, one its agent addressed to the
+ * reader (`addressed`, `waitsOn`), since a notice addressed to nobody is
+ * only read and one addressed to a teammate is theirs to settle.
+ */
+export function asksNod(item: InboxItem, readerId: string | undefined, channels: boolean): boolean {
+  if (!awaitsNod(item)) return false;
+  if (!channels) return true;
+  return item.addressed === true && readerId !== undefined && item.waitsOn?.userId === readerId;
+}
+
 /** The most characters an option may spell and still stand as one of two small buttons. */
 const BUTTON_OPTION_CHARS = 24;
 
@@ -1470,15 +1482,17 @@ export function readersItem(item: InboxItem, readerId: string | undefined): bool
 
 /**
  * Whether an open item of an agent with no task, as main lists it, waits on
- * the reader: its agent started by them, or by nobody the service names, or
- * listed before the reader's own id is known, as `readersItem` reads an item.
- * Main lists every member's, as the Inbox lists them, and counts only these.
+ * the reader: addressed to them, or else its agent started by them, or by
+ * nobody the service names, or listed before the reader's own id is known,
+ * as `readersItem` reads an item. Main lists every member's, as the Inbox
+ * lists them, and counts only these.
  */
 export function waitsOnReader(
-  entry: Pick<AppInboxTasklessItem, "startedBy">,
+  entry: Pick<AppInboxTasklessItem, "startedBy" | "waitsOn">,
   readerId: string | undefined,
 ): boolean {
-  return entry.startedBy === undefined || readerId === undefined || entry.startedBy === readerId;
+  const waitsOn = entry.waitsOn ?? entry.startedBy;
+  return waitsOn === undefined || readerId === undefined || waitsOn === readerId;
 }
 
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
@@ -1487,16 +1501,24 @@ function needsReader(item: InboxItem, readerId: string | undefined): boolean {
 }
 
 /**
- * Whether opening the item acknowledges it, as Got it did: a notice waiting
- * on a nod (`awaitsNod`), the reader's own (`needsReader`) by an id already
+ * Whether opening the item acknowledges it, as Got it did: a notice that
+ * offers Got it (`asksNod`), so under Channels one addressed to the reader,
+ * the reader's own (`needsReader`) by an id already
  * known, since an acknowledgement settles it for every member, and one
  * whose agent does not wait to hear back (`needsReply`), since a notice
  * that asks to be heard back would reach its agent on a mere open. A box
  * holding no words or files for it offers no Got it.
  */
-export function acknowledgedOnOpen(item: InboxItem, readerId: string | undefined): boolean {
+export function acknowledgedOnOpen(
+  item: InboxItem,
+  readerId: string | undefined,
+  channels: boolean,
+): boolean {
   return (
-    readerId !== undefined && needsReader(item, readerId) && awaitsNod(item) && !item.needsReply
+    readerId !== undefined &&
+    needsReader(item, readerId) &&
+    asksNod(item, readerId, channels) &&
+    !item.needsReply
   );
 }
 

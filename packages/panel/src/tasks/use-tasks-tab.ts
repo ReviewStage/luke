@@ -403,24 +403,15 @@ type StandIn =
       readonly listed: boolean;
     }
   | { readonly kind: typeof STAND_IN.BOARD }
-  | {
-      readonly kind: typeof STAND_IN.ADMIN;
-      readonly view: AdminView;
-      /** Whether the section list stands rather than the view, which only a narrow room draws apart. */
-      readonly listed: boolean;
-    };
+  | { readonly kind: typeof STAND_IN.ADMIN; readonly view: AdminView };
 
 /** The window's Admin place: whether it takes the window, the view it stands on, and the presses that open and leave it. */
 interface AdminViewControl {
   readonly open: boolean;
   /** The view standing, or the Overview while the place does not stand. */
   readonly view: AdminView;
-  /** Whether the section list stands rather than the view, which only a narrow room draws apart. */
-  readonly listed: boolean;
-  /** Opens the place on `view`; where none is named, on the Overview with its section list standing. */
+  /** Opens the place on `view`; where none is named, on the Overview. */
   readonly onOpen: (view?: AdminView) => void;
-  /** Stands the section list, the view kept, as a narrow room's way back from a view does. */
-  readonly onList: () => void;
   readonly onClose: () => void;
 }
 
@@ -472,7 +463,7 @@ const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
 /** What a fixture run's profile stands in the task's place at launch: Admin's Overview, or an Automations page; none for a place that is no stand-in. */
 function launchedStandIn(place: FixturePlace | undefined): StandIn | undefined {
   if (place === undefined) return undefined;
-  if ("admin" in place) return { kind: STAND_IN.ADMIN, view: ADMIN_OVERVIEW, listed: false };
+  if ("admin" in place) return { kind: STAND_IN.ADMIN, view: ADMIN_OVERVIEW };
   if ("automations" in place) return { kind: STAND_IN.AUTOMATIONS, place: place.automations };
   return undefined;
 }
@@ -3173,16 +3164,10 @@ export function useTasksTab(input: {
         });
         return;
       // Note that an Admin link's workspace is only the one it was copied in, since the place reads every
-      // workspace's accounts, so it lists nothing; one naming the place alone opens on its list, as Settings' does.
-      case LINK_PLACE.ADMIN: {
-        const view = adminViewOfLink(place);
-        standInFor({
-          kind: STAND_IN.ADMIN,
-          view: view ?? ADMIN_OVERVIEW,
-          listed: view === undefined,
-        });
+      // workspace's accounts, so it lists nothing; one naming the place alone opens on its Overview.
+      case LINK_PLACE.ADMIN:
+        standInFor({ kind: STAND_IN.ADMIN, view: adminViewOfLink(place) ?? ADMIN_OVERVIEW });
         return;
-      }
       // Note that a link to Chat opens it as its sidebar row does, and one to a channel on that channel, in the workspace
       // the link names, which is the chat's own at once, so listing it first does not put Chat back on For you.
       case LINK_PLACE.CHAT:
@@ -3691,17 +3676,10 @@ export function useTasksTab(input: {
     adminView: {
       open: standIn?.kind === STAND_IN.ADMIN,
       view: standIn?.kind === STAND_IN.ADMIN ? standIn.view : ADMIN_OVERVIEW,
-      listed: standIn?.kind === STAND_IN.ADMIN && standIn.listed,
       onOpen: guard((view?: AdminView) => {
         setHistoryFor(undefined);
-        setStandIn({
-          kind: STAND_IN.ADMIN,
-          view: view ?? ADMIN_OVERVIEW,
-          listed: view === undefined,
-        });
+        setStandIn({ kind: STAND_IN.ADMIN, view: view ?? ADMIN_OVERVIEW });
       }),
-      onList: () =>
-        setStandIn((held) => (held?.kind === STAND_IN.ADMIN ? { ...held, listed: true } : held)),
       onClose: guard(() => setStandIn(undefined)),
     },
     // The Automations page stands over the task's place as the Admin place does, each giving way to the others.

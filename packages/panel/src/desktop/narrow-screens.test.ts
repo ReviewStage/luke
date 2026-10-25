@@ -8,6 +8,7 @@ import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views"
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
+import { PROFILE } from "@luke/ui";
 import { CHAT_PLACE, type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -16,7 +17,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
@@ -35,6 +36,7 @@ import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -52,7 +54,9 @@ import { useSidebarCollapse } from "./sidebar-collapse.js";
  * an item opens on it with the same way back. The focus goes with each swap:
  * to the item's way back, and back to the row chosen. The desktop's width
  * keeps both columns side by side, with no way back drawn, and the focus where
- * it was. Synthetic plan and chat, no account of anyone's.
+ * it was. A Settings page standing alone on a phone is named by its bar and
+ * opens a section's gap under the way back, over the places bar. Synthetic
+ * plan and chat, no account of anyone's.
  */
 
 const ignore = () => undefined;
@@ -371,6 +375,35 @@ test("Settings on a narrow stage opens on its page list, a page chosen stands al
     "the desktop's width stands the list beside the page again",
   );
   assert.equal(buttonSaying(the(page, SETTINGS_COLUMNS.page), "Settings"), undefined);
+});
+
+test("a Settings page standing alone on a phone is named by its bar, opens a section's gap under the way back, and keeps the places bar with no place current", async () => {
+  // Note that the stage wears the web's profile, whose tokens the gap is read in.
+  document.documentElement.dataset.lukeProfile = PROFILE.WEB;
+  onTestFinished(() => {
+    delete document.documentElement.dataset.lukeProfile;
+  });
+  const page = await mount(PHONE, createElement(SettingsWindow, { link: undefined }));
+  press(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  const item = the(page, SETTINGS_COLUMNS.page);
+  const bar = the(item, 'header[data-look="phone"]');
+  assert.equal(bar.querySelector("h1")?.textContent, "Appearance", "the bar names the page");
+  assert.equal(item.querySelectorAll("h1").length, 1, "the page draws no second heading");
+
+  const column = the(item, ".luke-settings-page-column");
+  assert.equal(
+    wayBackGap(bar, column),
+    pixelsOf(column, "var(--luke-section-gap)"),
+    "the page's first line stands a section's gap under the way back",
+  );
+
+  const places = the(page, 'nav[aria-label="Places"]');
+  assert.deepEqual([...places.querySelectorAll("button")].map(controlName), [
+    "Inbox",
+    "Tasks",
+    "More",
+  ]);
+  assert.equal(places.querySelector('[aria-current="page"]'), null, "no place is current");
 });
 
 test("Settings on a stage wide enough for panes, but under the split's line by its own width, shows its list, then a page chosen alone under a way back, and splits again once wide", async () => {

@@ -28,6 +28,8 @@ import {
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
+import { AdminCollectionPage, AdminPlaceFrameProvider } from "../admin/chrome/page-header.js";
+import type { AdminView } from "../admin/routing.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
@@ -43,6 +45,7 @@ import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
+import { useChannelPlace } from "../tasks/use-channels.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useAgentLook, useTaskLooks } from "../tasks/use-task-looks.js";
 import {
@@ -56,6 +59,7 @@ import {
   useCapability,
   useExperiment,
 } from "../use-app-state.js";
+import { ADMIN_TITLE, adminFrame } from "./admin-frame.js";
 import {
   AutomationListSkeleton,
   AutomationsActsSkeleton,
@@ -126,72 +130,33 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
 }
 
 /**
- * What stands while the Admin place's chunk loads (`pages-on-demand.ts`): its
- * list's column and the view's frame over quiet blocks, and its own way out.
- * A narrow room heads the column it shows as the place will, a phone's
- * header (`phone-head.tsx`) led by the way out of the list or back to it.
+ * What stands while the Admin place's chunk loads, or while the account's
+ * access is read: the place's toolbar and its bar of sections, as it will
+ * stand, over rows of blocks, and its own way out, so Escape pressed in that
+ * frame closes Admin as the place would.
  */
 function AdminLoading({
+  room,
+  view,
+  onOpen,
   onExit,
-  place,
-  onList,
-  hidden,
 }: {
+  room: ShellRoom;
+  view: AdminView;
+  onOpen: (view: AdminView) => void;
   onExit: () => void;
-  /** Where the way out leads, as its hint names it. */
-  place: string;
-  onList: () => void;
-  hidden: HiddenColumns;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ADMIN, onExit);
-  const narrow = hidden.list || hidden.item;
   return (
-    <div className={`desktop-admin ${PLACE_SPLIT}`}>
-      <nav
-        className={`admin-sections ${PLACE_LIST}`}
-        aria-label="Admin sections"
-        hidden={hidden.list}
-      >
-        {narrow ? (
-          <PhoneHead
-            place="admin-sections"
-            start={
-              <BackButton
-                label="Back"
-                place={place}
-                command={APP_COMMAND.EXIT_ADMIN}
-                onBack={onExit}
-              />
-            }
-            title="Admin"
-            end={null}
-          />
-        ) : (
-          <div className="desktop-drag-strip" />
-        )}
-      </nav>
-      <section className={`admin-page ${PLACE_PAGE}`} aria-label="Admin" hidden={hidden.item}>
-        {narrow ? null : <div className="desktop-drag-strip" />}
-        <CollectionPage
-          frame={PAGE_FRAME.TOOLBAR}
-          label="Admin"
-          toolbar={
-            narrow ? (
-              <PhoneHead
-                place="admin"
-                start={<BackButton label="Admin" place="admin" onBack={onList} />}
-                title="Overview"
-                end={null}
-              />
-            ) : (
-              <Toolbar title="Overview" />
-            )
-          }
-          state={COLLECTION_STATE.LOADING}
-          loadingLabel="Reading the dashboard…"
-        />
-      </section>
-    </div>
+    <AdminPlaceFrameProvider value={adminFrame(room, view, onOpen)}>
+      <AdminCollectionPage
+        title={ADMIN_TITLE}
+        controls={null}
+        filters={undefined}
+        state={COLLECTION_STATE.LOADING}
+        loadingLabel={readingWords("the dashboard")}
+      />
+    </AdminPlaceFrameProvider>
   );
 }
 
@@ -207,7 +172,7 @@ function PersonLoading({
   return <PersonPageSkeleton name={name} />;
 }
 
-/** Where Settings' and Admin's ways out lead where no step stands behind them, as a hint names it. */
+/** Where Settings' way out leads where no step stands behind it, as a hint names it. */
 const TASKS_EXIT_PLACE = "tasks";
 
 /** Where a version history's way out leads where no step stands behind it, as a hint names it. */
@@ -771,7 +736,10 @@ export function DesktopShell({
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
       : undefined;
-  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
+  // Note that Channels stands in the inbox-first sidebar's place, its sidebar listing channels and its page a channel's stream.
+  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const channelPlace = useChannelPlace();
+  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST) && !channelsOn;
   // With the inbox-first sidebar on, the Inbox is read once here, the sidebar listing it and the Inbox's page showing its chosen item; off, it reads nothing.
   // Note that a narrow room's drawer is too skinny for the list, so there the Inbox's page lists its items itself, the list and then the item each across the screen.
   const sidebarListsInbox = inboxFirst && tasks.signedIn && room !== SHELL_ROOM.NARROW;
@@ -851,8 +819,10 @@ export function DesktopShell({
   // Settings takes the whole window, its pages listed where the tasks were.
   if (tab === PANEL_TAB.SETTINGS) {
     const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.TASKS);
+    // A phone keeps its places bar under Settings, each press leaving Settings for the place pressed (`mobile-bar.tsx`).
+    const settingsBar = room === SHELL_ROOM.NARROW && tasks.signedIn;
     return (
-      <div className="desktop-shell" data-room={room}>
+      <div className="desktop-shell" data-room={room} data-mobile-bar={String(settingsBar)}>
         <Suspense
           fallback={
             <SettingsLoading
@@ -872,6 +842,16 @@ export function DesktopShell({
             onExit={exitSettings}
           />
         </Suspense>
+        {settingsBar ? (
+          <MobileBar
+            tasks={tasks}
+            chatOn={chatOn}
+            channelsOn={channelsOn}
+            sidebar={sidebar}
+            onPressMore={keepOverlay}
+            leave={() => onTabChange(PANEL_TAB.TASKS)}
+          />
+        ) : null}
       </div>
     );
   }
@@ -910,48 +890,14 @@ export function DesktopShell({
       </div>
     );
   }
-  // The Admin place takes the whole window as Settings does, its sections listed where the tasks were.
-  if (tasks.adminView.open && (adminAccess || adminPending)) {
-    const exitAdmin = history.canGoBack ? history.onBack : tasks.adminView.onClose;
-    const loading = (
-      <AdminLoading
-        onExit={exitAdmin}
-        place={backPlaceOf(history, TASKS_EXIT_PLACE)}
-        onList={tasks.adminView.onList}
-        hidden={hiddenColumns(room, tasks.adminView.listed)}
-      />
-    );
-    // While the account's access is read, the place stands as it does while its chunk loads.
-    if (!adminAccess) {
-      return (
-        <div className="desktop-shell" data-room={room}>
-          {loading}
-        </div>
-      );
-    }
-    return (
-      <div className="desktop-shell" data-room={room}>
-        <Suspense fallback={loading}>
-          <ADMIN_PLACE.Route
-            sidebar={sidebar}
-            room={room}
-            history={history}
-            view={tasks.adminView.view}
-            listed={tasks.adminView.listed}
-            onOpen={tasks.adminView.onOpen}
-            onList={tasks.adminView.onList}
-            onExit={exitAdmin}
-          />
-        </Suspense>
-      </div>
-    );
-  }
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
   const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
   const boardOpen = tasks.boardView.open;
+  // The Admin place is an admin's alone; while the account's access is still read it stands as it does while its chunk loads.
+  const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
   // A phone's task is headed by a row of its own, whose ⋯ stands for the panel's toggle (`task-pane-switcher.tsx`).
   const panelToggle =
     (planToggle && room !== SHELL_ROOM.NARROW) ||
@@ -962,8 +908,21 @@ export function DesktopShell({
   // keyboard reaches what the drawer covers, and a press there only puts it
   // away. Its toggle stays, the way to close it.
   const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
+  const adminLoading = (
+    <AdminLoading
+      room={room}
+      view={tasks.adminView.view}
+      onOpen={tasks.adminView.onOpen}
+      onExit={tasks.adminView.onClose}
+    />
+  );
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
-  const barShown = mobileBarShown(room, tasks, chatOn);
+  const barShown = mobileBarShown(
+    room,
+    tasks,
+    chatOn,
+    channelsOn ? { threadId: channelPlace.threadId } : undefined,
+  );
   return (
     <div
       ref={shell}
@@ -1040,6 +999,20 @@ export function DesktopShell({
               <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
                 <TASKS_ROUTE.Route tasks={tasks} room={room} />
               </Suspense>
+            ) : adminOpen ? (
+              <Suspense fallback={adminLoading}>
+                {adminAccess ? (
+                  <ADMIN_PLACE.Route
+                    room={room}
+                    view={tasks.adminView.view}
+                    shown={tasks.shown}
+                    onOpen={tasks.adminView.onOpen}
+                    onExit={tasks.adminView.onClose}
+                  />
+                ) : (
+                  adminLoading
+                )}
+              </Suspense>
             ) : automationsOpen ? (
               <PageFind
                 page={FIND_PAGE.AUTOMATIONS}
@@ -1061,7 +1034,13 @@ export function DesktopShell({
         </MentionedAgents>
       </main>
       {barShown ? (
-        <MobileBar tasks={tasks} chatOn={chatOn} sidebar={sidebar} onPressMore={keepOverlay} />
+        <MobileBar
+          tasks={tasks}
+          chatOn={chatOn}
+          channelsOn={channelsOn}
+          sidebar={sidebar}
+          onPressMore={keepOverlay}
+        />
       ) : null}
       {/* Folded, the sidebar's card floats in the corner it would have stood over. */}
       <StandingCallCardDock docked={sidebar.collapsed} surface={CALL_CARD_SURFACE.FLOATING} />

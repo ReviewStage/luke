@@ -32,7 +32,7 @@ import {
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
-import { messages } from "@luke/database/schemas/storage";
+import { messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_FAILURE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
@@ -44,6 +44,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { eq } from "drizzle-orm";
 import {
   Clock,
   DateTime,
@@ -100,6 +101,7 @@ import {
   type RunnerSessionsOptions,
   retireWarmRunner,
   runnerEnded,
+  runnerIdled,
 } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { codingAgentFailureOf } from "./status.js";
@@ -1970,6 +1972,103 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(linesOf(first).at(-1), { type: INPUT_LINE.RETIRE });
         assert.ok(!first.stdin.includes("Now the emails."));
         assert.ok(second.stdin.includes("Now the emails."));
+      }),
+  );
+
+  it.effect(
+    "a message sent as a turn ends is never dropped: handed before its IDLE's retire, the warm runner keeps it and stays told of, and sent once a later IDLE retired it, it relaunches",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const db = yield* Database;
+        const userId = `user-${randomUUID()}`;
+        yield* db
+          .insert(user)
+          .values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(userId, {
+          taskId: task.id,
+          idempotencyKey: "start-key",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+          repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        });
+        const agent = Option.getOrThrow(started).agent;
+        yield* savePlan(userId);
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const target = { userId, conversationId: agent.conversationId };
+        const startedAt = yield* Clock.currentTimeMillis;
+        const at = (millis: number) => new Date(startedAt + millis);
+        // The developer's next line was written, as the store writes it before it hands the line to
+        // the runner, a moment before the batch holding the first turn's IDLE landed and settled it.
+        yield* db.insert(turns).values({
+          ...target,
+          origin: TURN_ORIGIN.TYPED,
+          status: TURN_STATUS.SETTLED,
+          queuedAt: at(0),
+          settledAt: at(2_000),
+        });
+        const lineId = randomUUID();
+        yield* db.insert(messages).values({
+          id: lineId,
+          ...target,
+          seq: 1,
+          clientId: "next-line",
+          role: MESSAGE_ROLE.USER,
+          parts: [{ type: "text", text: "Now the emails." }],
+          createdAt: at(1_000),
+          placedAt: at(1_000),
+        });
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+
+        const heldBack = yield* runnerIdled({
+          target,
+          sessionId: opened.sessionId,
+          sequence: 3,
+        }).pipe(Effect.provide(api.layer));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(heldBack, false);
+        const [runner] = api.commands;
+        assert.ok(runner !== undefined);
+        assert.ok(runner.stdin.includes("Now the emails."));
+        assert.ok(
+          (linesOf(runner) as InputLine[]).every((line) => line.type !== INPUT_LINE.RETIRE),
+        );
+        assert.equal(api.sandboxes[0]?.tags[RUNNER_TAG.COMMAND], runner.id);
+
+        // The runner took the line into a second turn, whose IDLE retires it.
+        const [second] = yield* db
+          .insert(turns)
+          .values({
+            ...target,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.SETTLED,
+            queuedAt: at(2_500),
+            settledAt: at(3_000),
+          })
+          .returning({ id: turns.id });
+        yield* db.update(messages).set({ turnId: second?.id }).where(eq(messages.id, lineId));
+        const retired = yield* runnerIdled({
+          target,
+          sessionId: opened.sessionId,
+          sequence: 7,
+        }).pipe(Effect.provide(api.layer));
+        sequence.next = 9;
+        const after = yield* sessions.send(opened.sessionId, message(agent, "And the tests."));
+
+        assert.equal(retired, true);
+        assert.equal(after.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.deepEqual(linesOf(runner).at(-1), { type: INPUT_LINE.RETIRE });
+        assert.ok(!runner.stdin.includes("And the tests."));
+        assert.ok(api.commands[1]?.stdin.includes("And the tests."));
       }),
   );
 

@@ -4,7 +4,8 @@
  * The server is the MCP SDK's own, over its web-standard transport with no
  * session, so a client of Luke's speaks to it as it speaks to a provider.
  * Its tools answer fixed results: a JSON text, structured content, a
- * picture, and an error of the tool's own. Vercel Connect is a fake that
+ * picture, and an error of the tool's own; `list_issues` refuses one team
+ * with a JSON-RPC error instead. Vercel Connect is a fake that
  * issues each account a token naming it, for Linear and Notion; every
  * other provider is one this deployment never set up.
  */
@@ -16,7 +17,9 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import {
   CallToolRequestSchema,
   type CallToolResult,
+  ErrorCode,
   ListToolsRequestSchema,
+  McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Effect, Redacted } from "effect";
 import type { ConnectorService } from "../integrations/integration-connect.js";
@@ -74,14 +77,21 @@ const LINEAR_TOOLS = [
   { name: "attach", description: "Attaches files.", inputSchema: { type: "object" } },
 ];
 
+/** The team `list_issues` refuses with a JSON-RPC error, after the session listed its tools. */
+export const REJECTED_TEAM = "REJECT";
+
 /** What Linear's fake server heard: each call's tool and arguments, and the bearers it was sent. */
 export interface Heard {
   readonly calls: { readonly name: string; readonly arguments: unknown }[];
   readonly bearers: string[];
 }
 
-/** Linear's MCP server for the member: the SDK's own, admitting their bearer alone; anything else answers 401. */
-export function linearServer(bearer: string, heard: Heard) {
+/** Linear's MCP server for the member: the SDK's own, admitting their bearer alone, and listing `tools`; anything else answers 401. */
+export function linearServer(
+  bearer: string,
+  heard: Heard,
+  tools: readonly object[] = LINEAR_TOOLS,
+) {
   return fakeHttpClientLayer(async (url, init) => {
     if (url !== INTEGRATION[LINEAR].MCP_URL) {
       return new Response("not found", { status: 404 });
@@ -98,11 +108,15 @@ export function linearServer(bearer: string, heard: Heard) {
       { name: "linear-fake", version: "1.0.0" },
       { capabilities: { tools: {} } },
     );
-    server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: LINEAR_TOOLS }));
+    server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [...tools] }));
     server.setRequestHandler(CallToolRequestSchema, (request): CallToolResult => {
       heard.calls.push({ name: request.params.name, arguments: request.params.arguments });
       switch (request.params.name) {
         case "list_issues":
+          // A team the server refuses outright, as a JSON-RPC error rather than the tool's own.
+          if (request.params.arguments?.team === REJECTED_TEAM) {
+            throw new McpError(ErrorCode.InvalidParams, "Unknown team.");
+          }
           return {
             content: [{ type: "text", text: JSON.stringify({ issues: [{ id: "LIN-1" }] }) }],
           };

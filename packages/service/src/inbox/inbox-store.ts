@@ -24,12 +24,14 @@ import {
   agentNoTeammatesOperator,
   agentReachableBy,
   agentSeenBy,
+  isWorkspaceMember,
   taskReachableBy,
   workspaceReachableBy,
 } from "@luke/database/models/workspace-store";
 import { attachment } from "@luke/database/schemas/attachment";
 import { organization, user } from "@luke/database/schemas/auth";
 import { automation } from "@luke/database/schemas/automation";
+import { channel } from "@luke/database/schemas/channel";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
@@ -188,6 +190,10 @@ export const INBOX_POST_REFUSAL = {
   NO_AGENT: "no-agent",
   /** The post names no title and opens a thread under a key with no item, which needs one. */
   NO_TITLE: "no-title",
+  /** The post names a channel that is no open channel of the agent's workspace. */
+  NO_CHANNEL: "no-channel",
+  /** The post addresses its ask to an account that is no member of the agent's workspace. */
+  NO_ADDRESSEE: "no-addressee",
 } as const;
 
 export type InboxPostRefusal = (typeof INBOX_POST_REFUSAL)[keyof typeof INBOX_POST_REFUSAL];
@@ -349,13 +355,17 @@ function unreadFor(readerId: string): SQL<boolean> {
 }
 
 /**
- * The member an item waits on: its task's assignee, or the member who
- * started its agent where the task has nobody assigned or the agent works on
- * no task. A scalar read rather than a join, because `returning` projects it
- * too and joins nothing, and every name is qualified, because it is nested in
- * reads that join the task themselves.
+ * The member an item waits on: the member its agent addressed it to, or,
+ * where it names none, its task's assignee, or the member who started its
+ * agent where the task has nobody assigned or the agent works on no task. A
+ * scalar read rather than a join, because `returning` projects it too and
+ * joins nothing, and every name is qualified, because it is nested in reads
+ * that join the task themselves.
  */
-const WAITS_ON = sql<string>`coalesce((select ${qualified(task, task.assigneeId)} from ${task} where ${qualified(task, task.id)} = ${qualified(inboxItem, inboxItem.taskId)}), ${qualified(inboxItem, inboxItem.userId)})`;
+const WAITS_ON = sql<string>`coalesce(${qualified(inboxItem, inboxItem.addresseeId)}, (select ${qualified(task, task.assigneeId)} from ${task} where ${qualified(task, task.id)} = ${qualified(inboxItem, inboxItem.taskId)}), ${qualified(inboxItem, inboxItem.userId)})`;
+
+/** Whether the item's agent addressed it to a member, who `WAITS_ON` then names; qualified as `WAITS_ON` is. */
+const ADDRESSED = sql<boolean>`(${qualified(inboxItem, inboxItem.addresseeId)} is not null)`;
 
 /** The name of the member an item waits on (`WAITS_ON`), as their account holds it; none once the account is gone. */
 const WAITS_ON_NAME = sql<
@@ -395,6 +405,7 @@ const INBOX_ITEM_COLUMNS = {
   >`(select "name" from ${user} where ${user.id} = ${inboxItem.userId})`,
   waitsOn: WAITS_ON,
   waitsOnName: WAITS_ON_NAME,
+  addressed: ADDRESSED,
   answerKey: inboxItem.answerKey,
   answeredBy: inboxItem.answeredBy,
   // A scalar read rather than a join, because `returning` projects these too and joins nothing.
@@ -462,6 +473,7 @@ const InboxRowSchema = Schema.Struct({
   startedByName: Schema.NullOr(Schema.String),
   waitsOn: Schema.String,
   waitsOnName: Schema.NullOr(Schema.String),
+  addressed: Schema.Boolean,
   answerKey: Schema.NullOr(Schema.String),
   answeredBy: Schema.NullOr(Schema.String),
   answeredByName: Schema.NullOr(Schema.String),
@@ -497,6 +509,7 @@ function storedItem(row: InboxRow): StoredInboxItem {
       ...(row.waitsOnName === null
         ? undefined
         : { waitsOn: { userId: row.waitsOn, name: row.waitsOnName } }),
+      addressed: row.addressed,
       ...(row.answeredBy === null || row.answeredByName === null
         ? undefined
         : { answeredBy: { userId: row.answeredBy, name: row.answeredByName } }),
@@ -623,6 +636,9 @@ const PostWriteSchema = Schema.Struct({
   needsReply: Schema.Boolean,
   status: Schema.Literals(Object.values(INBOX_STATUS)),
   settledAt: Schema.NullOr(Schema.Date),
+  /** The channel the thread goes to; null leaves a standing thread where it is and puts a new one in the workspace's #general. */
+  channelId: Schema.NullOr(Schema.String),
+  addresseeId: Schema.NullOr(Schema.String),
   now: Schema.Date,
 });
 
@@ -846,8 +862,9 @@ const findAttachment = SqlSchema.findOneOption({
 /**
  * The item written under the agent's key for its post: a new row at
  * revision one, or the standing one written again, its revision moved on,
- * its answer cleared, and no ask held open until the post's own message is
- * written; its id.
+ * its answer cleared, no ask held open until the post's own message is
+ * written, addressed to the member the post names or to nobody, and moved
+ * to the channel the post names, if any; its id.
  */
 const upsertItem = SqlSchema.findOne({
   Request: PostWriteSchema,
@@ -865,6 +882,9 @@ const upsertItem = SqlSchema.findOne({
       settledAt: write.settledAt,
       updatedAt: write.now,
       openAskMessageId: null,
+      addresseeId: write.addresseeId,
+      // Note that a channel left out takes the database's default, the workspace's #general (`inbox_item_general_channel`), on a new row, and leaves a standing one where it is.
+      ...(write.channelId === null ? undefined : { channelId: write.channelId }),
     };
     return Database.use((db) =>
       db
@@ -1092,13 +1112,17 @@ function toDoCount(userId: string): SQL<number> {
  * starter's side then reaches the items by the reader's own index
  * (`inbox_item_user_status_updated`) and the assignee's by the task's,
  * where a `coalesce` would read every settled item of their workspaces on
- * each look.
+ * each look; an item addressed to someone waits on them alone.
  */
 function accountUnreadSettled(userId: string) {
+  const derived = or(
+    and(eq(inboxItem.userId, userId), isNull(task.assigneeId)),
+    eq(task.assigneeId, userId),
+  );
   return and(
     isNotNull(inboxItem.taskId),
     taskReachableBy(userId),
-    or(and(eq(inboxItem.userId, userId), isNull(task.assigneeId)), eq(task.assigneeId, userId)),
+    or(eq(inboxItem.addresseeId, userId), and(isNull(inboxItem.addresseeId), derived)),
     ne(inboxItem.status, INBOX_STATUS.OPEN),
     unreadFor(userId),
   );
@@ -1121,6 +1145,7 @@ const WaitingRowSchema = Schema.Struct({
   postedAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
+  asking: Schema.Boolean,
 });
 
 const findWaitingItems = SqlSchema.findAll({
@@ -1146,6 +1171,7 @@ const findWaitingItems = SqlSchema.findAll({
           postedAt: inboxItem.postedAt,
           updatedAt: inboxItem.updatedAt,
           unread: unreadFor(userId),
+          asking: ASKING,
         })
         .from(inboxItem)
         .innerJoin(task, eq(task.id, inboxItem.taskId))
@@ -1162,6 +1188,7 @@ const TasklessRowSchema = Schema.Struct({
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   startedBy: Schema.String,
+  waitsOn: Schema.String,
   automationId: Schema.NullOr(Schema.String),
   automationName: Schema.NullOr(Schema.String),
   repository: Schema.String,
@@ -1172,6 +1199,7 @@ const TasklessRowSchema = Schema.Struct({
   postedAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
+  asking: Schema.Boolean,
 });
 
 const findTasklessWaitingItems = SqlSchema.findAll({
@@ -1189,6 +1217,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
+          waitsOn: WAITS_ON,
           automationId: automation.id,
           automationName: automation.name,
           repository: codingAgent.repository,
@@ -1199,6 +1228,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           postedAt: inboxItem.postedAt,
           updatedAt: inboxItem.updatedAt,
           unread: unreadFor(userId),
+          asking: ASKING,
         })
         .from(inboxItem)
         .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
@@ -1336,6 +1366,7 @@ export function accountInboxLiveStatements(
           title: inboxItem.title,
           revision: inboxItem.revision,
           unread: unreadFor(userId),
+          asking: ASKING,
         },
         { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
       ),
@@ -1356,6 +1387,7 @@ export function accountInboxLiveStatements(
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
+          waitsOn: WAITS_ON,
           automationId: automation.id,
           automationName: automation.name,
           repository: codingAgent.repository,
@@ -1363,6 +1395,7 @@ export function accountInboxLiveStatements(
           title: inboxItem.title,
           revision: inboxItem.revision,
           unread: unreadFor(userId),
+          asking: ASKING,
         },
         { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
       ),
@@ -1497,6 +1530,7 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
             startedByName: INBOX_ITEM_COLUMNS.startedByName,
             waitsOn: WAITS_ON,
             waitsOnName: WAITS_ON_NAME,
+            addressed: ADDRESSED,
             answeredBy: inboxItem.answeredBy,
             answeredByName: INBOX_ITEM_COLUMNS.answeredByName,
             closedReason: inboxItem.closedReason,
@@ -1969,6 +2003,8 @@ interface PostWrite {
   readonly body: (addressOf: PictureAddress) => string;
   readonly ask: InboxAsk | undefined;
   readonly pictures: readonly PostPicture[];
+  readonly channelId: string | null;
+  readonly addresseeId: string | null;
 }
 
 /** The agent's workspace as its locked row names it: its id, which the item's rows are written under, and the step its links name it by. */
@@ -2042,6 +2078,8 @@ function keepPost(
       organizationId,
       key: post.key,
       ...postColumns(post.view, post.ask),
+      channelId: post.channelId,
+      addresseeId: post.addresseeId,
       now,
     }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
     const ask = post.ask === undefined ? null : { ...post.ask, status: INBOX_ASK_STATUS.OPEN };
@@ -2122,7 +2160,86 @@ interface InboxThreadPost {
   readonly body: string;
   readonly ask?: InboxAsk | undefined;
   readonly needsReply?: boolean | undefined;
+  /** The open channel of the agent's workspace the thread goes to (`channel-store.ts`'s `resolveChannel`); absent leaves a standing thread where it is and puts a new one in #general. */
+  readonly channelId?: string | undefined;
+  /** The member of the agent's workspace the post is addressed to, whom it waits on (`WAITS_ON`); absent addresses it to nobody. */
+  readonly addresseeId?: string | undefined;
 }
+
+/** The open channel of the workspace by its id: what a post naming a channel must name. */
+const findWorkspaceChannel = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, channelId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ organizationId, channelId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: channel.id })
+        .from(channel)
+        .where(
+          and(
+            eq(channel.id, channelId),
+            eq(channel.organizationId, organizationId),
+            isNull(channel.archivedAt),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Where the post goes and whom it waits on, read under the lock on its
+ * agent: the channel it names, refused where that is no open channel of the
+ * agent's workspace, so one archived since the agent chose it takes nothing;
+ * and the member it is addressed to, refused where they are no member of
+ * that workspace.
+ */
+function placeOf(
+  workspace: LockedWorkspace,
+  post: InboxThreadPost,
+): InboxStoreEffect<
+  Result.Result<
+    { readonly channelId: string | null; readonly addresseeId: string | null },
+    InboxPostRefusal
+  >
+> {
+  return Effect.gen(function* () {
+    const { organizationId } = workspace;
+    if (post.channelId !== undefined) {
+      const found = yield* findWorkspaceChannel({ organizationId, channelId: post.channelId });
+      if (Option.isNone(found)) return Result.fail(INBOX_POST_REFUSAL.NO_CHANNEL);
+    }
+    if (post.addresseeId !== undefined) {
+      const member = yield* isWorkspaceMember(post.addresseeId, organizationId);
+      if (!member) return Result.fail(INBOX_POST_REFUSAL.NO_ADDRESSEE);
+    }
+    return Result.succeed({
+      channelId: post.channelId ?? null,
+      addresseeId: post.addresseeId ?? null,
+    });
+  });
+}
+
+/**
+ * The thread a follow-up names a place for moved to the channel it names,
+ * and its open ask addressed to the member it names; what it names nothing
+ * for left where it stands, since a follow-up replaces no ask.
+ */
+const replaceItem = SqlSchema.void({
+  Request: Schema.Struct({
+    itemId: Schema.String,
+    channelId: Schema.NullOr(Schema.String),
+    addresseeId: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ itemId, channelId, addresseeId }) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({
+          ...(channelId === null ? undefined : { channelId }),
+          ...(addresseeId === null ? undefined : { addresseeId }),
+        })
+        .where(eq(inboxItem.id, itemId)),
+    ),
+});
 
 /**
  * The agent's words that ask nothing written as its message on the thread
@@ -2160,12 +2277,18 @@ function followUp(
  * asks than the bound, and a notice where it would hold more open notices
  * than the same bound. A post that asks nothing on a thread whose ask
  * still stands open is a message on it, as the agent's reply is, which
- * moves nothing of the item but its last change; on any other thread, or
+ * moves nothing of the item but its last change, and the channel and the
+ * addressee it names, if any; on any other thread, or
  * under a key with no item, it is written as `keepPost` writes one, the
  * item a notice waiting on the developer's nod again. A post naming no title
  * keeps the standing item's, read under the same lock; refused where no
- * item stands under the key, which a first post opens and must name. Refused
- * where the agent is no longer the account's.
+ * item stands under the key, which a first post opens and must name. A post
+ * written as `keepPost` writes one goes to the channel it names, or stays
+ * where its thread stands, a new one in #general, and waits on the member
+ * it is addressed to, or on whoever `WAITS_ON` derives where it names
+ * none; refused where the channel is no open one of the agent's workspace
+ * or the member is not in it. Refused where the agent is no longer the
+ * account's.
  */
 export function postInboxThread(
   agent: InboxAgent,
@@ -2178,10 +2301,16 @@ export function postInboxThread(
         const locked = yield* lockAgent(agent);
         if (Option.isNone(locked)) return Result.fail(INBOX_POST_REFUSAL.NO_AGENT);
         const standing = yield* findAgentItem({ ...agent, key: post.key });
+        const placed = yield* placeOf(locked.value, post);
+        if (Result.isFailure(placed)) return Result.fail(placed.failure);
         if (post.ask === undefined && Option.isSome(standing) && standing.value.asking) {
-          return Result.succeed(
-            yield* followUp(agent, locked.value, standing.value.id, post, pictures),
-          );
+          const itemId = standing.value.id;
+          const { channelId, addresseeId } = placed.success;
+          // Note that a follow-up naming no place writes nothing here, because an update with nothing to set is no statement.
+          if (channelId !== null || addresseeId !== null) {
+            yield* replaceItem({ itemId, channelId, addresseeId });
+          }
+          return Result.succeed(yield* followUp(agent, locked.value, itemId, post, pictures));
         }
         const title = post.title ?? Option.getOrUndefined(standing)?.title;
         if (title === undefined) return Result.fail(INBOX_POST_REFUSAL.NO_TITLE);
@@ -2192,7 +2321,14 @@ export function postInboxThread(
         const view = { title, needsReply: post.needsReply ?? true };
         const body = (addressOf: PictureAddress) =>
           withPictureAddresses(post.body, idOf, addressOf);
-        const write = { key: post.key, view, body, ask: post.ask, pictures: kept };
+        const write = {
+          key: post.key,
+          view,
+          body,
+          ask: post.ask,
+          pictures: kept,
+          ...placed.success,
+        };
         return Result.succeed(yield* keepPost(agent, locked.value, write, now));
       }),
     ),
@@ -2304,6 +2440,74 @@ function scopeStamps(scope: InboxScope): InboxStoreEffect<readonly InboxStamp[]>
     ),
     ([open, settled]) =>
       [...open, ...settled].map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
+  );
+}
+
+/** One thread as a channel's read carries it: the item's row, and the channel it lives in. */
+const ChannelThreadRowSchema = Schema.Struct({
+  ...InboxRowSchema.fields,
+  channelId: Schema.String,
+});
+
+/** The latest posted threads of the channel the reader may read, as many as a read carries. */
+const findChannelThreads = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, channelId: Schema.String }),
+  Result: ChannelThreadRowSchema,
+  execute: ({ userId, channelId }) =>
+    Database.use((db) =>
+      db
+        .select({ ...inboxColumns(userId), channelId: inboxItem.channelId })
+        .from(inboxItem)
+        .where(and(eq(inboxItem.channelId, channelId), itemReachableBy(userId)))
+        .orderBy(desc(inboxItem.postedAt), desc(inboxItem.id))
+        .limit(INBOX_BOUNDS.MAX_ITEMS_READ),
+    ),
+});
+
+/** How many threads of each channel of the workspace hold an ask open that waits on the reader (`WAITS_ON`), among those they may read. */
+const findChannelWaiting = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: Schema.Struct({ channelId: Schema.String, waiting: Schema.Number }),
+  execute: ({ userId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .select({ channelId: inboxItem.channelId, waiting: sql<number>`count(*)::int` })
+        .from(inboxItem)
+        .where(
+          and(
+            eq(inboxItem.organizationId, organizationId),
+            ASKING,
+            sql`${WAITS_ON} = ${userId}`,
+            itemReachableBy(userId),
+          ),
+        )
+        .groupBy(inboxItem.channelId),
+    ),
+});
+
+/**
+ * The channel's threads the reader may read, the latest posted
+ * `MAX_ITEMS_READ` of them oldest first, as a channel's stream draws them,
+ * each as the inbox carries it with the channel it lives in; none for a
+ * channel of a workspace the account is not in.
+ */
+export function channelThreads(
+  userId: string,
+  channelId: string,
+): InboxStoreEffect<readonly (InboxItem & { readonly channelId: string })[]> {
+  return Effect.map(findChannelThreads({ userId, channelId }), (rows) =>
+    rows.map((row) => ({ ...storedItem(row).item, channelId: row.channelId })).toReversed(),
+  );
+}
+
+/** How many threads of each channel of the workspace hold an ask open that waits on the reader, by channel; a channel where none waits is left out, and every one for a workspace the account is not in. */
+export function channelWaitingCounts(
+  userId: string,
+  organizationId: string,
+): InboxStoreEffect<ReadonlyMap<string, number>> {
+  return Effect.map(
+    findChannelWaiting({ userId, organizationId }),
+    (rows) => new Map(rows.map((row) => [row.channelId, row.waiting])),
   );
 }
 

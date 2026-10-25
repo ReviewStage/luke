@@ -8,6 +8,7 @@ import { RETENTION_BASIS, type RetentionBasis } from "@luke/features/admin-overv
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
 import { formatDate } from "@luke/features/time-format";
+import { readFailedWords } from "@luke/features/words";
 import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
 import { useState } from "react";
@@ -36,7 +37,7 @@ import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
 import { type AdminReadHandle, useAdminRead } from "../use-admin-read.js";
 
-const METRICS_ERROR = "The metrics endpoint did not answer.";
+const METRICS_ERROR = readFailedWords("the overview");
 
 /** What the page is called, in the sidebar and over the page alike. */
 const OVERVIEW_TITLE = "Overview";

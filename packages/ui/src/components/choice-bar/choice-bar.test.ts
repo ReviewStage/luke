@@ -26,8 +26,9 @@ import {
  * option is not chosen; a count's glyph says its state in words; the
  * app's `data-` attributes reach the bar; and a bar folding together folds
  * every option once their names no longer fit, and unfolds once they would,
- * and folds as a name grows past its width with nothing resized; and an
- * option that says more hangs the app's hint saying it.
+ * and folds as a name grows past its width with nothing resized; a row cut
+ * short of its options brings the chosen one into view; and an option that
+ * says more hangs the app's hint saying it.
  */
 
 declare global {
@@ -397,6 +398,37 @@ test("a bar folding together folds every option once their names no longer fit i
     );
   } finally {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  }
+});
+
+test("a row cut short of its options scrolls the least that brings the chosen one into view, as it stands and as another is chosen", () => {
+  // Note that jsdom lays nothing out and scrolls nothing, so each option's 100px, the bar's 150px and its scroll are the test's.
+  const WIDE = 100;
+  let scrolled = 0;
+  const optionsOf = (element: HTMLElement) => [
+    ...(element.parentElement?.querySelectorAll(".luke-choice-bar-option") ?? []),
+  ];
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => 150);
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => 3 * WIDE);
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(() => WIDE);
+  vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return optionsOf(this).indexOf(this) * WIDE;
+  });
+  vi.spyOn(Element.prototype, "scrollLeft", "get").mockImplementation(() => scrolled);
+  vi.spyOn(Element.prototype, "scrollLeft", "set").mockImplementation((to: number) => {
+    scrolled = to;
+  });
+  try {
+    const page = render(createElement(Held, { items: OPEN_ITEMS, start: VIEW.FILES }));
+    assert.equal(scrolled, 150, "the last option, chosen, ends the row's room");
+    act(() => option(page, "Checks").click());
+    assert.equal(scrolled, 100, "one partly cut at the start is brought to it");
+    act(() => option(page, "Files").click());
+    assert.equal(scrolled, 150, "and one cut at the end, to the end");
+  } finally {
     vi.restoreAllMocks();
   }
 });

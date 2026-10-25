@@ -205,11 +205,19 @@ export const CODER = {
    * How long a native agent's runner stays warm once its turn is over, for
    * the next message to reach it as a line on its stdin rather than through
    * a resumed sandbox and a relaunched CLI; past it, the sweep retires the
-   * runner (`retireWarmRunner`) and its END stops the sandbox. An idle
-   * sandbox bills its memory alone, 4 GB at Vercel's rate, so ten warm
-   * minutes cost about a cent and a half a turn.
+   * runner (`retireWarmRunner`) and its END stops the sandbox. Zero, so the
+   * events route retires a runner as its IDLE lands (`runnerIdled`), under
+   * the runner lease, and its END stops the sandbox within seconds: ten warm
+   * minutes kept a 4 vCPU, 8 GB sandbox up for up to 62 sandbox-hours a day
+   * over Oct 23–24, about $5–10 a day, for the 636 of 1,536 finished turns a
+   * follow-up reached within three minutes. Those now resume from the stop's
+   * snapshot. Note that the runner is still launched warm and retired rather
+   * than launched to end on its own, because a runner ending by itself stops
+   * reading its stdin while its END is still posted, and a message written
+   * then would be taken as delivered and never run. A window is one line
+   * here: raise it, and the sweep retires runners past it again.
    */
-  RUNNER_WARM: Duration.minutes(10),
+  RUNNER_WARM: Duration.zero,
   /**
    * How long renewing a running runner's credential may take once its
    * message is written. The send answers only after it, inside the store's

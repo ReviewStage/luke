@@ -1,6 +1,6 @@
 {
   "name": "@luke/codex-probe",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "private": true,
   "type": "module",
   "description": "The P16 probe: Codex app-server on a ChatGPT plan inside a Luke sandbox, signed in through OpenAI's open-source flow",

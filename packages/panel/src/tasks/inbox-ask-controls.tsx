@@ -542,6 +542,8 @@ export function AskControls(props: {
   /** The item's title, which stands as the one step of a to-do that names none; none where nothing names that step. */
   title: string | undefined;
   doors: AskDoors;
+  /** Whether a decision's options wear the number keys that pick them, as the thread's box does; a channel's stream, whose keys pick nothing, leaves them off. */
+  numbered?: boolean;
 }): React.JSX.Element {
   return (
     <AskWords>
@@ -555,10 +557,12 @@ function OpenControls({
   ask,
   title,
   doors,
+  numbered = true,
 }: {
   ask: InboxAsk;
   title: string | undefined;
   doors: AskDoors;
+  numbered?: boolean;
 }): React.JSX.Element | null {
   const { draft, disabled, onDraft } = doors;
   switch (ask.type) {
@@ -584,7 +588,7 @@ function OpenControls({
             choice={ask}
             draft={draft}
             disabled={disabled}
-            numbered
+            numbered={numbered}
             onDraft={onDraft}
           />
         </div>

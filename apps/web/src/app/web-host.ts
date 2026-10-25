@@ -86,6 +86,7 @@ import { version as appVersion } from "../../package.json";
 import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
 import { FILES_KEY, localStorageFileSystem, tabStorage } from "./local-storage-file-system";
 import { type PageLeave, tabLeave } from "./page-leave";
+import { answerFailedChunk, PRELOAD_ERROR, staleBuildTab } from "./stale-build";
 import { addressHere } from "./web-address";
 import { developmentFixtureProfile } from "./web-fixture";
 import { onTabShownChanged, webNoticeDoors } from "./web-notices";
@@ -292,6 +293,7 @@ function portDependencies(
     agentInbox: { host },
     agents: { host, notices },
     automations: { host },
+    channels: { host },
     chapters: { host },
     installedSkills: { host },
     integrations: { host },
@@ -460,8 +462,9 @@ const composedWeb = (
  * seams, an agent's terminals its one platform concern, then the composers
  * started in the launch's order, then the operator's first bootstrap read
  * into the document, so the panel's first read finds the account already
- * settled. The scope this is built in is the tab's; closing it is the
- * host's drain.
+ * settled. Beside it, a chunk that fails to load once a deploy took it away
+ * moves the tab onto the build now live (`stale-build.ts`). The scope this
+ * is built in is the tab's; closing it is the host's drain.
  */
 export function composeWeb(
   options: WebHostOptions,
@@ -496,7 +499,18 @@ export function composeWeb(
       ).pipe(Layer.provideMerge(hostStandingLayer)),
     ),
   );
-  return launched.pipe(
+  // A tab left open across a deploy moves onto the build now live once a chunk of its own fails to load.
+  const staleBuild = Layer.effectDiscard(
+    Effect.forkScoped(
+      Effect.suspend(() => {
+        const stale = staleBuildTab(tab);
+        return Stream.runForEach(Stream.fromEventListener(window, PRELOAD_ERROR), () =>
+          answerFailedChunk(stale),
+        );
+      }),
+    ),
+  );
+  return Layer.merge(launched, staleBuild).pipe(
     Layer.provideMerge(composedWeb(fork, tab, linkPlatform, fixture)),
     Layer.provideMerge(assembly),
     Layer.provide(httpClient),

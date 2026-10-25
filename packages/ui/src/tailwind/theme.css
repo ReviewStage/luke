@@ -48,6 +48,29 @@
   --text-caption--line-height: var(--luke-type-caption-leading);
   --spacing-control: var(--luke-control-height);
   --spacing-control-inset: var(--luke-control-inset);
+
+  /* The panel's side panel and the plan's summary beside the document
+     (`@luke/panel`): the summary's width and its rail's, both said once on
+     the task's column (`desktop.css`'s `.desktop-task-main`); the card's
+     inset, the rail's less its 1px border; the panel's widest, which leaves
+     the document its reserve; the empty panel's column, 300px at most; a
+     note's share of the toolbar; and the card's arrival and leaving. */
+  --spacing-summary: var(--summary-width);
+  --spacing-summary-rail: var(--summary-rail-width);
+  --spacing-summary-card-inset: calc(var(--luke-space-12) - 1px);
+  --spacing-side-panel: max(
+    280px,
+    calc(100% - var(--document-reserve))
+  ); /* off-scale: the panel's least width */
+  --spacing-side-panel-no-tabs: max(
+    var(--luke-space-16),
+    calc((100% - 300px) / 2 + var(--luke-space-16))
+  ); /* off-scale: the empty panel's 300px column */
+  --spacing-half-container: 50cqi;
+  --animate-card-grow-in:
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-card-grow var(--luke-duration-fast) var(--luke-spring-fast) both;
+  --animate-card-leave: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   --spacing-control-icon: var(--luke-control-icon);
   --spacing-icon-gap: var(--luke-icon-gap);
   --spacing-menu-row: var(--luke-menu-row-height);
@@ -104,6 +127,8 @@
      and the attention mark's glyph a size under a row's. */
   --grid-template-columns-inbox: auto minmax(0, 1fr);
   --grid-template-columns-single: minmax(0, 1fr);
+  /* A channel's stream and the thread opened beside it, the thread the narrower. */
+  --grid-template-columns-channel-thread: minmax(0, 1fr) minmax(0, 44%);
   --spacing-list-held-least: var(--luke-list-held-height, 0);
   --spacing-inbox-face-half: calc(var(--luke-space-20) / 2);
   --spacing-inbox-line: calc(var(--luke-space-20) / 2 - 1px);
@@ -557,6 +582,8 @@
 
   /* Banner, ScrollArea, and Pagination. */
   --color-attention: var(--luke-color-attention);
+  /* A post that needs the reader, in a channel's stream: the attention ink's tint and nothing else. */
+  --color-attention-tint: var(--luke-color-attention-tint);
   --color-body-foreground: var(--luke-color-text-body);
   /* A strip's tint and hairline, mixed from the ink of the tone the banner
      wears (`tokens/status-tone.css`). */
@@ -963,6 +990,18 @@
     var(--luke-collection-page-inset)
   );
   --spacing-detail-page-inset: var(--luke-detail-page-inset);
+  /* A document's title under a bar that leads with a way back (a page
+     standing alone in a small window, a phone's head): a section's gap under
+     the way back itself. Note that the bar centres its controls in a row
+     taller than they are (`toolbar.css`), so what the row leaves under them
+     is taken from the gap, or it would stack on it into an empty band
+     between the way back and the title. It is read where the page stands,
+     which the bar's row is set on. */
+  --spacing-title-under-bar: calc(
+    var(--luke-section-gap) -
+    (var(--luke-toolbar-height) - var(--luke-control-height)) /
+    2
+  );
   /* A detail column's end, clear of what a phone's call card takes of the
      window's foot (`--luke-card-room`, which the shell says). A toast is an
      overlay and takes nothing. */
@@ -1091,6 +1130,7 @@
      (`.annotation-card`). */
   --spacing-comment-editor: calc(3lh + 2 * var(--luke-space-6));
   --spacing-branch-chip: 22rem; /* off-scale: a branch's name before it is cut */
+  --spacing-branch-base: min(22rem, 50%); /* off-scale: the base's, at most half its row */
   --spacing-label-dot: 10px; /* off-scale: a label's swatch */
   --color-label-dot: var(--label-dot, transparent);
   --spacing-line-comment: 720px; /* off-scale: a line comment's reading measure */

@@ -271,6 +271,23 @@ const PANEL_SHELL = {
 } as const;
 
 /**
+ * The names the panel side panel's block of the theme adds (the plan's
+ * summary, the side panel's widths, a note's share of the toolbar, the
+ * summary card's motion), by the group tailwind-merge reads each in.
+ */
+const PANEL_SIDE = {
+  spacing: [
+    "half-container",
+    "side-panel",
+    "side-panel-no-tabs",
+    "summary",
+    "summary-card-inset",
+    "summary-rail",
+  ],
+  animate: ["card-grow-in", "card-leave"],
+} as const;
+
+/**
  * The names the panel Inbox's block of the theme adds (its columns, its
  * list's held height, its thread's gutter, a pick, its fields), by the
  * group tailwind-merge reads each in.
@@ -354,6 +371,7 @@ const TASK_SURFACES = {
     "review-badge",
     "comment-editor",
     "branch-chip",
+    "branch-base",
     "label-dot",
     "line-comment",
     "boxed-inset",
@@ -555,6 +573,7 @@ const merge = extendTailwindMerge({
         ...PANEL_WINDOW.spacing,
         ...ROWS_NAVIGATION.spacing,
         ...PANEL_SHELL.spacing,
+        ...PANEL_SIDE.spacing,
         ...PANEL_INBOX.spacing,
         ...CHIPS_MEDIA_CALL.spacing,
         ...PANEL_HOME_TASKS.spacing,
@@ -623,6 +642,7 @@ const merge = extendTailwindMerge({
         "menu-in",
         "tooltip-in",
         "tooltip-leave",
+        ...PANEL_SIDE.animate,
         ...PANEL_WINDOW.animate,
         ...PANEL_WORK_COLUMN.animate,
       ],

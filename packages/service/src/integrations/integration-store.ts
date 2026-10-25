@@ -278,6 +278,9 @@ const updateConnected = SqlSchema.findAll({
           // A label the account already carries, the developer's own among them, is kept over the grant's; an empty one, which a grant that named nothing left, is not.
           label: sql`coalesce(nullif(${integrationConnection.label}, ''), ${label})`,
           connectedAt: at,
+          // The tools kept for the grant this sign-in replaces are not this one's.
+          tools: null,
+          toolsListedAt: null,
           updatedAt: at,
         })
         .where(and(ofAccount(account), eq(integrationConnection.state, state)))

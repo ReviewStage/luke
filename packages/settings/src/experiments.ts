@@ -24,6 +24,8 @@ export const EXPERIMENT = {
   OPERATOR: "operator",
   /** Coding agents that run on the developer's own Mac, in a worktree, with their own tools, rather than in a cloud sandbox. */
   LOCAL_AGENTS: "local-agents",
+  /** Channels: a workspace's threads read as Slack-style streams by topic, the sidebar listing channels in place of the Inbox and the tasks. */
+  CHANNELS: "channels",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -47,6 +49,15 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.CHANNELS,
+    name: "Channels",
+    detail:
+      "Read your workspace's threads by topic, each channel a stream your agents post to, " +
+      "with the sidebar listing channels in place of your inbox and your tasks.",
+    owner: "Dean",
+    since: "2026-10-25",
+  },
   {
     key: EXPERIMENT.MEMORY,
     name: "Memory",

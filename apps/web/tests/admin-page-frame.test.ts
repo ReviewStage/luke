@@ -42,7 +42,7 @@ const VIEW_OPTIONS = "View options";
 /** The range every windowed screen here reads, said after its title. */
 const RANGE = "Last 7 days";
 
-const NO_ANSWER = "The metrics endpoint did not answer.";
+const NO_ANSWER = "The overview could not be read.";
 
 /** Every prop a screen asks of its shell that this file does not watch. */
 const SHELL = {

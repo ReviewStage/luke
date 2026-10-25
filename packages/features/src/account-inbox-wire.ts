@@ -87,6 +87,8 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
   updatedAt: countedNumber,
   /** Whether the item is unread for the reader, as a task's read says it (`inbox-wire.ts`); absent from a service before it, which the desktop reads as read. */
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /** Whether the item holds an ask open, rather than being a notice; absent from a service before it, which the desktop reads as asking. */
+  asking: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type AccountInboxEntry = typeof accountInboxEntrySchema.Type;
@@ -124,6 +126,8 @@ export const accountTasklessEntrySchema = EffectSchema.Struct({
   agentModel: EffectSchema.String,
   /** The account that started the agent, as an item of a task's agent says it, and on the same terms. */
   startedBy: EffectSchema.optionalKey(EffectSchema.String),
+  /** The account the item waits on: the member its agent addressed it to, else its starter. Absent from a service before it, which the desktop reads as waiting on `startedBy`. */
+  waitsOn: EffectSchema.optionalKey(EffectSchema.String),
   automationId: EffectSchema.NullOr(wireUuidSchema),
   automationName: EffectSchema.NullOr(EffectSchema.String),
   repository: EffectSchema.String,
@@ -135,6 +139,8 @@ export const accountTasklessEntrySchema = EffectSchema.Struct({
   updatedAt: countedNumber,
   /** Whether the item is unread for the reader, as a task's item says it. */
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /** Whether the item holds an ask open, as a task's item says it, and on the same terms. */
+  asking: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type AccountTasklessEntry = typeof accountTasklessEntrySchema.Type;

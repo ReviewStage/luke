@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
 import { pasteCutWords } from "@luke/features/words";
+import { EXPERIMENT } from "@luke/settings";
 import { ComposerBody, ComposerFoot, type ComposerNote, STATUS_TONE } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -17,6 +18,7 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { useExperiment } from "../use-app-state.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import { AttachFilesButton } from "./attach-files-button.js";
@@ -27,7 +29,7 @@ import { type ComposerPickers, useComposerPickers } from "./composer-pickers.js"
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import {
   acknowledgedOnOpen,
-  awaitsNod,
+  asksNod,
   type InboxDraft,
   inboxNoteReading,
   inboxThreadSend,
@@ -390,8 +392,10 @@ function AnswerCard({
     onRefusal: setRefusal,
   });
   // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.
-  const nodded = acknowledgedOnOpen(item, readerId) && !control.failed;
-  const nod = awaitsNod(item) && emptyBox(draft) && !nodded;
+  const channels = useExperiment(EXPERIMENT.CHANNELS);
+  const nodded = acknowledgedOnOpen(item, readerId, channels) && !control.failed;
+  // Note that under Channels a notice addressed to nobody offers no Got it, since it is only read.
+  const nod = asksNod(item, readerId, channels) && emptyBox(draft) && !nodded;
   const held = sending || files.reading;
   // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
   const sendable = nod || inboxThreadSend(thread, draft) !== undefined;

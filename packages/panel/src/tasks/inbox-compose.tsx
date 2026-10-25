@@ -36,7 +36,6 @@ import {
   matchingRows,
   POPOVER_ALIGN,
   Spinner,
-  TEXT_FIELD_SIZE,
   TextField,
   TOOLBAR_INSET,
   Toolbar,
@@ -534,7 +533,7 @@ function ComposeCard({
             />
           </div>
           <div className="inbox-compose-row">
-            {/* Note that the subject may be left empty, which its label says to a reader as a FormField's does, and its placeholder shows where the field stands. */}
+            {/* Note that the subject may be left empty, which its label says to a reader as a FormField's does, and its placeholder says so where it is seen. */}
             <label
               className="inbox-compose-label"
               id={`${subjectId}label`}
@@ -550,7 +549,6 @@ function ComposeCard({
                 "aria-describedby": undefined,
                 "aria-invalid": undefined,
               }}
-              size={TEXT_FIELD_SIZE.INLINE}
               placeholder={FIELD_WORDS.OPTIONAL}
               value={draft.title ?? ""}
               maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}

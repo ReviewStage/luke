@@ -25,7 +25,10 @@ import { ScrollArea as ShadcnScrollArea } from "../../shadcn/scroll-area.js";
  *   eases in over the first stretch of scrolling, so an area at rest at its
  *   start, or one with nothing to scroll, is left whole. Where a band stands
  *   stuck at the area's start (`fadeInset`), a checkpoint's, the start fade
- *   begins beneath it, so the band stands whole; and
+ *   begins beneath it, so the band stands whole; where a control floats
+ *   over its end (`endInset`), a log's way back to its newest line, the end
+ *   fade ends above the foot the control stands in, so what scrolls is gone
+ *   before it reaches the control; and
  * - its gutter (`gutter`): where the system draws a scroll bar that takes
  *   room, a stable gutter keeps that room while nothing scrolls yet, so what
  *   the area holds does not shift sideways the moment it first overflows.
@@ -88,6 +91,19 @@ export const SCROLL_FADE_INSET = {
 export type ScrollFadeInset = (typeof SCROLL_FADE_INSET)[keyof typeof SCROLL_FADE_INSET];
 
 /**
+ * Where an up-and-down area's end fade ends: at its edge, or above a foot
+ * as tall as a control with a step of room either side of it, which a
+ * control floating over the end stands in (`--luke-scroll-foot`), so it
+ * stands over nothing that scrolls. What the keys move to clears it.
+ */
+export const SCROLL_END_INSET = {
+  NONE: "none",
+  CONTROL: "control",
+} as const;
+
+export type ScrollEndInset = (typeof SCROLL_END_INSET)[keyof typeof SCROLL_END_INSET];
+
+/**
  * What a swipe that reaches the area's end does: stops there, or carries on
  * into whatever scrolls around the area, as it does past a box that does
  * not scroll.
@@ -116,6 +132,8 @@ export type ScrollAreaProps = {
   fade?: ScrollFade | undefined;
   /** Where the start fade begins; at the edge where none is named. */
   fadeInset?: ScrollFadeInset | undefined;
+  /** Where the end fade ends; at the edge where none is named. */
+  endInset?: ScrollEndInset | undefined;
   /** Whether the scroll bar's room is kept while nothing scrolls; only once it does where none is named. */
   gutter?: ScrollGutter | undefined;
   /** What a swipe past its end does; stops there where none is named. */
@@ -157,25 +175,30 @@ const GUTTER_CLASS = {
 } as const satisfies Record<ScrollGutter, string>;
 
 /**
- * The area's own class and marks for a list that is its own scroller, whose
- * element a list engine owns (`ComboboxList`, cmdk's list), so it fades its
- * cut edges as `fade` says, as an area does, scrolling up and down alone.
- * Its size, overscroll, and padding stay the list's.
+ * The area's own class and marks for a box that is its own scroller, whose
+ * element another owns (`ComboboxList`, cmdk's list, a `ChoiceBar`'s row),
+ * so it fades its cut edges as `fade` says, as an area does, scrolling along
+ * `axis` alone, up and down where none is named. Its size, overscroll, and
+ * padding stay its own.
  */
-export function scrollFadeMarks(fade: ScrollFade): {
+export function scrollFadeMarks(
+  fade: ScrollFade,
+  axis: ScrollAxis = SCROLL_AXIS.VERTICAL,
+): {
   className: string;
   "data-axis": ScrollAxis;
   "data-fade": ScrollFade;
 } {
-  return { className: "luke-scroll-area", "data-axis": SCROLL_AXIS.VERTICAL, "data-fade": fade };
+  return { className: "luke-scroll-area", "data-axis": axis, "data-fade": fade };
 }
 
-/** A box scrolling `axis`, filling its parent's room as `size` says, its edges fading as `fade` and `fadeInset` say, a swipe past its end stopping or handed on as `overscroll` says. */
+/** A box scrolling `axis`, filling its parent's room as `size` says, its edges fading as `fade`, `fadeInset` and `endInset` say, a swipe past its end stopping or handed on as `overscroll` says. */
 export function ScrollArea({
   axis = SCROLL_AXIS.VERTICAL,
   size = SCROLL_SIZE.FILL,
   fade = SCROLL_FADE.NONE,
   fadeInset = SCROLL_FADE_INSET.NONE,
+  endInset = SCROLL_END_INSET.NONE,
   gutter = SCROLL_GUTTER.AUTO,
   overscroll = SCROLL_OVERSCROLL.CONTAIN,
   children,
@@ -189,6 +212,7 @@ export function ScrollArea({
       data-size={size}
       data-fade={fade}
       data-fade-inset={fadeInset}
+      data-end-inset={endInset}
       data-gutter={gutter}
       data-overscroll={overscroll}
     >

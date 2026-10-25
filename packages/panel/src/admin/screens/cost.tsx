@@ -10,6 +10,7 @@ import {
 } from "@luke/features/admin-cost-wire";
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import { formatCompact, formatCount, formatUsd } from "@luke/features/number-format";
+import { readFailedWords } from "@luke/features/words";
 import {
   Badge,
   DATA_TABLE_COLUMN_KIND,
@@ -35,7 +36,7 @@ import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
 import { useAdminRead } from "../use-admin-read.js";
 
-const COST_ERROR = "The cost endpoint did not answer.";
+const COST_ERROR = readFailedWords("cost");
 
 /** What every figure on the screen is, said once at the top of the page. */
 const COST_DESCRIPTION =

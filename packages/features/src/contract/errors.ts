@@ -125,5 +125,6 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: {},
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: { data: installedSkillRefusedData },
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: { data: installedSkillRefusedData },
+  [HOSTED_API_ERROR.CHANNEL_NAME_TAKEN]: {},
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: { data: localAgentRefusedData },
 } as const satisfies Record<HostedApiError, ErrorMapItem>;

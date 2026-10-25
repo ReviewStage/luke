@@ -12,6 +12,7 @@ import {
 import { PLAN_COMMENT_SCOPE } from "@luke/features/plan-comment-wire";
 import { Duration, Effect, Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { readKept, writeKept } from "./kept-storage.js";
 import { rendererRuntime } from "./renderer-runtime.js";
@@ -719,6 +720,9 @@ const draftsAtom = Atom.writable(
 /** How each store of held lines moves an address's to its id. */
 const ADOPTERS: ((ctx: Atom.WriteContext<null>, address: string, accountId: string) => void)[] = [];
 
+/** Every store of held lines, by each account's, so the window can say whether it holds any. */
+const HELD_STORES: Atom.Atom<ReadonlyMap<Owner, readonly unknown[]>>[] = [];
+
 /**
  * Lines a window holds for the account signed in to it beside its drafts,
  * in this window alone, as a send refused and kept with its Retry, its
@@ -729,6 +733,7 @@ const ADOPTERS: ((ctx: Atom.WriteContext<null>, address: string, accountId: stri
  */
 export function heldLines<Line>(): Atom.Writable<readonly Line[]> {
   const all = Atom.keepAlive(Atom.make<ReadonlyMap<Owner, readonly Line[]>>(new Map()));
+  HELD_STORES.push(all);
   ADOPTERS.push((ctx, address, accountId) => {
     const lines = ctx.get(all);
     const theirs = lines.get(address);
@@ -743,6 +748,20 @@ export function heldLines<Line>(): Atom.Writable<readonly Line[]> {
       (ctx, next: readonly Line[]) =>
         ctx.set(all, new Map(ctx.get(all)).set(ctx.get(ownerAtom), next)),
     ),
+  );
+}
+
+/**
+ * Whether the window holds what a reload of it would lose, since storage
+ * keeps none of it: the files attached to a draft of the account signed in,
+ * or a line held unsent with its Retry, any account's. A browser tab asks
+ * before it reloads onto a newer build while it does (`apps/web`'s
+ * `stale-build.ts`); words alone are written to storage as the page goes.
+ */
+export function holdsUnkept(registry: AtomRegistry.AtomRegistry): boolean {
+  if (registry.get(draftsAtom).some((kept) => kept.attachments.length > 0)) return true;
+  return HELD_STORES.some((all) =>
+    [...registry.get(all).values()].some((lines) => lines.length > 0),
   );
 }
 

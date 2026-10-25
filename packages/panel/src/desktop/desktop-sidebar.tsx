@@ -146,7 +146,9 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
+import { shownChannel } from "../tasks/channels-model.js";
 import { useChatOn } from "../tasks/chat-gate.js";
+import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
 import type { InboxListing } from "../tasks/use-inbox-listing.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
@@ -166,6 +168,7 @@ import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
+import { SidebarChannels } from "./sidebar-channels.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
@@ -1534,17 +1537,24 @@ function SidebarAutomationsRow({
 /**
  * The Admin row, after Automations' and drawn as it is, for an admin alone:
  * a non-admin is drawn nothing, not a row held back. A press opens the
- * window's Admin place (`desktop-admin.tsx`), which takes the whole window
- * as Settings does, its sections listed where this sidebar stood. Note that
- * the row is a convenience: the service's own gate decides every read the
- * place makes.
+ * window's Admin place (`desktop-admin.tsx`) in the task's place, as
+ * Automations' row does, and the row is the place shown while it stands.
+ * Note that the row is a convenience: the service's own gate decides every
+ * read the place makes.
  */
-function SidebarAdminRow({ onOpen }: { onOpen: () => void }): React.JSX.Element | null {
+function SidebarAdminRow({
+  current,
+  onOpen,
+}: {
+  current: boolean;
+  onOpen: () => void;
+}): React.JSX.Element | null {
   const admin = useAdminAccess();
   if (!admin) return null;
   return (
     <NavItem
       icon={<ShieldUserIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
       // The pointer on the row is the way to the place, so its chunk, charts and all, is read now rather than at the press.
       onPointerEnter={ADMIN_PLACE.prefetch}
       onClick={onOpen}
@@ -1768,11 +1778,12 @@ function SidebarColumn({
   // The column's rows, Luke's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by.
   const roving = useRovingKeys<HTMLDivElement>();
   const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
-  // The window's Inbox, an agent's page, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
+  // The window's Inbox, an agent's page, the Automations page, Chat, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
   const inChat = onTasks && tasks.chatView.open;
   const inBoard = onTasks && tasks.boardView.open;
+  const inAdmin = onTasks && tasks.adminView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   // The workspace's runs, followed while the sidebar stands, as the Runs tab follows them, for the row to count the ones still at work.
@@ -1793,10 +1804,22 @@ function SidebarColumn({
     inAutomations ||
     inChat ||
     inBoard ||
+    inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
   // Chat is an experiment: its row stands only while the account has it on.
   const chatOn = useChatOn();
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
+  // With Channels on, the channels stand where the Inbox's row, the pins, and the task list stood, and a channel shows in the Inbox's place.
+  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const channels = useChannels(
+    channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined,
+    tasks.shown,
+  );
+  const channelPlace = useChannelPlace();
+  const shownChannelId =
+    channelsOn && inInbox
+      ? shownChannel(channels.channels ?? [], channelPlace.channelId)?.id
+      : undefined;
   // With the inbox-first sidebar on, the Inbox's items stand where the task list stood, under the pins, and the tasks are a page of their own.
   const listsInbox = inboxFirst && tasks.signedIn && inboxListing !== undefined;
   const waiting = usePlacesWaiting(tasks);
@@ -1824,6 +1847,15 @@ function SidebarColumn({
   const openInbox = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.inboxView.onOpen();
+  };
+  const openChannel = (channelId: string) => {
+    channelPlace.onChoose(channelId);
+    openInbox();
+    // Note that a phone's Inbox opens on its list of channels, so a channel chosen in the drawer asks for its stream instead, never a thread left open in it.
+    if (room === SHELL_ROOM.NARROW) {
+      channelPlace.onCloseThread();
+      tasks.inboxView.onListed(false);
+    }
   };
   const openBoard = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
@@ -2114,7 +2146,7 @@ function SidebarColumn({
         >
           Search
         </NavItem>
-        {listsInbox ? null : (
+        {listsInbox || channelsOn ? null : (
           <SidebarInboxRow
             waiting={waiting.inbox}
             current={inInbox}
@@ -2134,7 +2166,7 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openAutomations)}
         />
-        <SidebarAdminRow onOpen={chosen(openAdmin)} />
+        <SidebarAdminRow current={inAdmin} onOpen={chosen(openAdmin)} />
       </SidebarPlaces>
       <SidebarRule />
     </>
@@ -2192,7 +2224,9 @@ function SidebarColumn({
               {/* Pinned stands once something is pinned, or, while the account keeps sections, as the place a carried row drops in, and leaves after its exit once neither holds. */}
               <LeavingGroups
                 groups={
-                  tasks.signedIn && (pinnedSection.length > 0 || (sectionsShown && carrying))
+                  tasks.signedIn &&
+                  !channelsOn &&
+                  (pinnedSection.length > 0 || (sectionsShown && carrying))
                     ? PINNED_LISTED
                     : NOTHING_LISTED
                 }
@@ -2210,7 +2244,17 @@ function SidebarColumn({
                   />
                 )}
               />
-              {listsInbox && inboxListing !== undefined ? (
+              {channelsOn ? (
+                tasks.signedIn ? (
+                  <SidebarChannels
+                    workspaceId={tasks.workspace?.id}
+                    channels={channels}
+                    currentId={shownChannelId}
+                    shown={tasks.shown && overlay.inSight}
+                    onOpen={chosen(openChannel)}
+                  />
+                ) : null
+              ) : listsInbox && inboxListing !== undefined ? (
                 <SidebarInbox
                   tasks={tasks}
                   listing={inboxListing}

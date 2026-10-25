@@ -1,11 +1,12 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { and, asc, eq, isNotNull, isNull, ne, notExists, type SQL, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import { Effect, Option, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database } from "../core/query.js";
+import { Database, queryBuilder } from "../core/query.js";
 import { channel, channelLook, GENERAL_CHANNEL } from "../schemas/channel.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
-import { workspaceReachableBy } from "./workspace-store.js";
+import { isWorkspaceMember, workspaceReachableBy } from "./workspace-store.js";
 
 /**
  * channel-store.ts -- a workspace's channels and when each member last looked at each.
@@ -13,9 +14,41 @@ import { workspaceReachableBy } from "./workspace-store.js";
  * Every read and every look is keyed by the account asking and touches a
  * row only where the account is a member of the channel's workspace, so no
  * account reads another workspace's channels or stamps a look on one.
- * `ensureGeneralChannel` is the one write keyed by the workspace alone,
- * for the service to call once it has settled who asks.
+ * Any member creates, renames, and archives a workspace's channels, but
+ * never its #general, which stays named and open for every thread that
+ * names no channel. `ensureGeneralChannel` is the one write keyed by the
+ * workspace alone, for the service to call once it has settled who asks.
  */
+
+/** Why a channel was not created, renamed, or archived. Nothing was written. */
+export const CHANNEL_WRITE_REFUSAL = {
+  /** No open channel or workspace the account is a member of goes by that id. */
+  NOT_FOUND: "not-found",
+  /** Another open channel of the workspace goes by that name. */
+  NAME_TAKEN: "name-taken",
+  /** The channel is the workspace's #general, which is never renamed or archived. */
+  GENERAL: "general",
+} as const;
+
+export type ChannelWriteRefusal =
+  (typeof CHANNEL_WRITE_REFUSAL)[keyof typeof CHANNEL_WRITE_REFUSAL];
+
+/** Why a channel's name found no channel to post to. */
+export const CHANNEL_NAME_REFUSAL = {
+  /** No channel of the workspace, open or archived, goes by that name. */
+  UNKNOWN: "unknown",
+  /** Only an archived channel of the workspace goes by that name. */
+  ARCHIVED: "archived",
+} as const;
+
+export type ChannelNameRefusal = (typeof CHANNEL_NAME_REFUSAL)[keyof typeof CHANNEL_NAME_REFUSAL];
+
+/** What a new channel is: its name, a lowercase slug, what it is for, and whether it is one project's. */
+export interface ChannelDraft {
+  readonly name: string;
+  readonly purpose: string;
+  readonly project: boolean;
+}
 
 /** One open channel of a workspace, as its row holds it. */
 export interface ChannelRow {
@@ -48,6 +81,21 @@ const ChannelRowSchema = Schema.Struct({
 const PlaceSchema = Schema.Struct({ userId: Schema.String, organizationId: Schema.String });
 
 const IdSchema = Schema.Struct({ id: Schema.String });
+
+/** What a channel row holds that its list carries. */
+const CHANNEL_COLUMNS = {
+  id: channel.id,
+  name: channel.name,
+  purpose: channel.purpose,
+  project: channel.project,
+  createdBy: channel.createdBy,
+  createdAt: channel.createdAt,
+};
+
+/** A row as its list carries it, its instant in epoch milliseconds. */
+function channelRow(row: typeof ChannelRowSchema.Type): ChannelRow {
+  return { ...row, createdAt: row.createdAt.getTime() };
+}
 
 /** The workspace's open channel of that name: the lookup the open-name unique index serves. */
 function openNamed(organizationId: string, name: string) {
@@ -99,14 +147,7 @@ const findChannels = SqlSchema.findAll({
   execute: (place) =>
     Database.use((db) =>
       db
-        .select({
-          id: channel.id,
-          name: channel.name,
-          purpose: channel.purpose,
-          project: channel.project,
-          createdBy: channel.createdBy,
-          createdAt: channel.createdAt,
-        })
+        .select(CHANNEL_COLUMNS)
         .from(channel)
         .where(
           and(
@@ -169,6 +210,157 @@ const findLooks = SqlSchema.findAll({
     ),
 });
 
+/** Another open channel of the workspace, read beside the one a statement writes, under its own name. */
+const other = alias(channel, "other");
+
+/** The condition that no open channel of the written one's workspace but itself goes by the name. */
+function nameFree(name: string): SQL {
+  return notExists(
+    queryBuilder
+      .select({ one: other.id })
+      .from(other)
+      .where(
+        and(
+          eq(other.organizationId, channel.organizationId),
+          eq(other.name, name),
+          isNull(other.archivedAt),
+          ne(other.id, channel.id),
+        ),
+      ),
+  );
+}
+
+/** The channel minted, where no open one of its workspace goes by its name; nothing where one does. */
+const insertChannel = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    userId: Schema.String,
+    name: Schema.String,
+    purpose: Schema.String,
+    project: Schema.Boolean,
+    now: Schema.Date,
+  }),
+  Result: ChannelRowSchema,
+  execute: ({ organizationId, userId, name, purpose, project, now }) =>
+    Database.use((db) =>
+      db
+        .insert(channel)
+        .values({ organizationId, name, purpose, project, createdBy: userId, createdAt: now })
+        .onConflictDoNothing({
+          target: [channel.organizationId, channel.name],
+          where: sql`${channel.archivedAt} is null`,
+        })
+        .returning(CHANNEL_COLUMNS),
+    ),
+});
+
+/** The workspace's open channel by its id, where the account is a member of that workspace. */
+const findOpenChannel = SqlSchema.findOneOption({
+  Request: Schema.Struct({ ...PlaceSchema.fields, channelId: Schema.String }),
+  Result: ChannelRowSchema,
+  execute: ({ userId, organizationId, channelId }) =>
+    Database.use((db) =>
+      db
+        .select(CHANNEL_COLUMNS)
+        .from(channel)
+        .where(
+          and(
+            eq(channel.id, channelId),
+            eq(channel.organizationId, organizationId),
+            isNull(channel.archivedAt),
+            workspaceReachableBy(userId, channel.organizationId),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The open channel renamed, where no other open channel of its workspace
+ * goes by the name; nothing where one does. Note that a rename racing
+ * another to one name is refused by the open-name unique index instead, and
+ * fails as the store does.
+ */
+const updateName = SqlSchema.findOneOption({
+  Request: Schema.Struct({ channelId: Schema.String, name: Schema.String }),
+  Result: ChannelRowSchema,
+  execute: ({ channelId, name }) =>
+    Database.use((db) =>
+      db
+        .update(channel)
+        .set({ name })
+        .where(and(eq(channel.id, channelId), isNull(channel.archivedAt), nameFree(name)))
+        .returning(CHANNEL_COLUMNS),
+    ),
+});
+
+/** The open channel archived, which frees its name; nothing where it was archived first. */
+const updateArchived = SqlSchema.findOneOption({
+  Request: Schema.Struct({ channelId: Schema.String, now: Schema.Date }),
+  Result: IdSchema,
+  execute: ({ channelId, now }) =>
+    Database.use((db) =>
+      db
+        .update(channel)
+        .set({ archivedAt: now })
+        .where(and(eq(channel.id, channelId), isNull(channel.archivedAt)))
+        .returning({ id: channel.id }),
+    ),
+});
+
+/** The workspace of the channel, open or archived, where the account is a member of it. */
+const findChannelWorkspace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, channelId: Schema.String }),
+  Result: Schema.Struct({ organizationId: Schema.String }),
+  execute: ({ userId, channelId }) =>
+    Database.use((db) =>
+      db
+        .select({ organizationId: channel.organizationId })
+        .from(channel)
+        .where(
+          and(eq(channel.id, channelId), workspaceReachableBy(userId, channel.organizationId)),
+        ),
+    ),
+});
+
+/** Whether an archived channel of the workspace goes by the name, where the account is a member of it. */
+const findArchivedNamed = SqlSchema.findOneOption({
+  Request: Schema.Struct({ ...PlaceSchema.fields, name: Schema.String }),
+  Result: IdSchema,
+  execute: ({ userId, organizationId, name }) =>
+    Database.use((db) =>
+      db
+        .select({ id: channel.id })
+        .from(channel)
+        .where(
+          and(
+            eq(channel.organizationId, organizationId),
+            eq(channel.name, name),
+            isNotNull(channel.archivedAt),
+            workspaceReachableBy(userId, channel.organizationId),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
+/** The workspace's open channel of that name, where the account is a member of it. */
+const findOpenNamed = SqlSchema.findOneOption({
+  Request: Schema.Struct({ ...PlaceSchema.fields, name: Schema.String }),
+  Result: ChannelRowSchema,
+  execute: ({ userId, organizationId, name }) =>
+    Database.use((db) =>
+      db
+        .select(CHANNEL_COLUMNS)
+        .from(channel)
+        .where(
+          and(
+            openNamed(organizationId, name),
+            workspaceReachableBy(userId, channel.organizationId),
+          ),
+        ),
+    ),
+});
+
 /**
  * The workspace's #general, minted where it has none yet; its id. Calling
  * it again, or from two writers at once, answers the same channel: the
@@ -193,9 +385,36 @@ export function listChannels(
   userId: string,
   organizationId: string,
 ): TaskStoreEffect<readonly ChannelRow[]> {
-  return Effect.map(findChannels({ userId, organizationId }), (rows) =>
-    rows.map((row) => ({ ...row, createdAt: row.createdAt.getTime() })),
+  return Effect.map(findChannels({ userId, organizationId }), (rows) => rows.map(channelRow));
+}
+
+/** The workspace a channel, open or archived, belongs to; nothing where the account is not a member of it, or no channel goes by the id. */
+export function channelWorkspaceOf(
+  userId: string,
+  channelId: string,
+): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findChannelWorkspace({ userId, channelId }),
+    Option.map((row) => row.organizationId),
   );
+}
+
+/**
+ * The workspace's open channels by name, its #general minted first where
+ * it has none yet, so a member or an agent choosing where a thread goes
+ * always finds one; none where the account is not a member of it.
+ */
+export function openChannels(
+  userId: string,
+  organizationId: string,
+  now: Date,
+): TaskStoreEffect<readonly ChannelRow[]> {
+  return Effect.gen(function* () {
+    const member = yield* isWorkspaceMember(userId, organizationId);
+    if (!member) return [];
+    yield* ensureGeneralChannel(organizationId, now);
+    return yield* listChannels(userId, organizationId);
+  });
 }
 
 /** Stamps the member's look at the channel at the instant given; nothing where they are not a member of its workspace, or a later look stands. */
@@ -215,4 +434,85 @@ export function listChannelLooks(
   return Effect.map(findLooks({ userId, organizationId }), (rows) =>
     rows.map((row) => ({ channelId: row.channelId, lookedAt: row.lookedAt.getTime() })),
   );
+}
+
+/**
+ * A channel the member makes in their workspace, made by them at the
+ * instant given; refused where they are not a member of it, or an open
+ * channel of it already goes by the name. The workspace's #general is
+ * minted first, so a channel never takes its name before it stands.
+ */
+export function createChannel(
+  userId: string,
+  organizationId: string,
+  draft: ChannelDraft,
+  now: Date,
+): TaskStoreEffect<Result.Result<ChannelRow, ChannelWriteRefusal>> {
+  return Effect.gen(function* () {
+    const member = yield* isWorkspaceMember(userId, organizationId);
+    if (!member) return Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND);
+    yield* ensureGeneralChannel(organizationId, now);
+    const made = yield* insertChannel({ organizationId, userId, ...draft, now });
+    if (Option.isNone(made)) return Result.fail(CHANNEL_WRITE_REFUSAL.NAME_TAKEN);
+    return Result.succeed(channelRow(made.value));
+  });
+}
+
+/** The open channel of the member's workspace renamed; refused where it is none of that workspace's open channels or they are not a member of it, it is #general, or another open channel goes by the name. */
+export function renameChannel(
+  userId: string,
+  organizationId: string,
+  channelId: string,
+  name: string,
+): TaskStoreEffect<Result.Result<ChannelRow, ChannelWriteRefusal>> {
+  return Effect.gen(function* () {
+    const standing = yield* findOpenChannel({ userId, organizationId, channelId });
+    if (Option.isNone(standing)) return Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND);
+    if (standing.value.name === GENERAL_CHANNEL.NAME) {
+      return Result.fail(CHANNEL_WRITE_REFUSAL.GENERAL);
+    }
+    const renamed = yield* updateName({ channelId, name });
+    if (Option.isNone(renamed)) return Result.fail(CHANNEL_WRITE_REFUSAL.NAME_TAKEN);
+    return Result.succeed(channelRow(renamed.value));
+  });
+}
+
+/**
+ * The open channel of the member's workspace archived at the instant
+ * given, which frees its name and leaves its threads where they are;
+ * refused where it is none of that workspace's open channels or they are
+ * not a member of it, or it is #general.
+ */
+export function archiveChannel(
+  userId: string,
+  organizationId: string,
+  channelId: string,
+  now: Date,
+): TaskStoreEffect<Result.Result<void, ChannelWriteRefusal>> {
+  return Effect.gen(function* () {
+    const standing = yield* findOpenChannel({ userId, organizationId, channelId });
+    if (Option.isNone(standing)) return Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND);
+    if (standing.value.name === GENERAL_CHANNEL.NAME) {
+      return Result.fail(CHANNEL_WRITE_REFUSAL.GENERAL);
+    }
+    const archived = yield* updateArchived({ channelId, now });
+    if (Option.isNone(archived)) return Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND);
+    return Result.void;
+  });
+}
+
+/** The workspace's open channel the name names, as an agent names one to post to; refused where only an archived one goes by it, or none, or the account is not a member of the workspace. */
+export function resolveChannel(
+  userId: string,
+  organizationId: string,
+  name: string,
+): TaskStoreEffect<Result.Result<ChannelRow, ChannelNameRefusal>> {
+  return Effect.gen(function* () {
+    const open = yield* findOpenNamed({ userId, organizationId, name });
+    if (Option.isSome(open)) return Result.succeed(channelRow(open.value));
+    const archived = yield* findArchivedNamed({ userId, organizationId, name });
+    return Result.fail(
+      Option.isSome(archived) ? CHANNEL_NAME_REFUSAL.ARCHIVED : CHANNEL_NAME_REFUSAL.UNKNOWN,
+    );
+  });
 }

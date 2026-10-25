@@ -1070,7 +1070,7 @@ test("on a phone the page list is headed by its way out alone, named for the ste
   assert.equal(exits, 1);
 });
 
-test("on a phone a page is headed by the way back to the list and its reset in the ⋯, its title its own heading's, which leaves the title's line", async () => {
+test("on a phone a page is headed by the way back to the list, its title, and its reset in the ⋯, which leaves the page's head", async () => {
   const resets: unknown[] = [];
   fakeActPort({
     [ACT_KIND.SETTINGS_RESET]: (payload) => {
@@ -1098,7 +1098,7 @@ test("on a phone a page is headed by the way back to the list and its reset in t
 
   assert.deepEqual(readPhoneHead(page, "settings-page"), {
     start: ["Settings"],
-    title: undefined,
+    title: "Appearance",
     end: ["Appearance actions"],
   });
   const section = page.querySelector('section[aria-label="Appearance"]');
@@ -1111,7 +1111,7 @@ test("on a phone a page is headed by the way back to the list and its reset in t
     ![...(section?.querySelectorAll("button") ?? [])].some(
       (each) => each.textContent === "Reset to defaults",
     ),
-    "the title's line holds no reset",
+    "the page's head holds no reset",
   );
   pressInPhoneHead(page, "settings-page", "Appearance actions");
   assert.deepEqual(menuItems(), [{ label: "Reset to defaults", disabled: false }]);
