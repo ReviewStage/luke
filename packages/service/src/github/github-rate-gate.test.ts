@@ -177,6 +177,30 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
       }),
   );
 
+  it.effect("requests under one identity reach GitHub one at a time", () =>
+    Effect.gen(function* () {
+      const arrivals: Array<readonly [string, number]> = [];
+      const answered = Promise.withResolvers<void>();
+      const first = Promise.withResolvers<void>();
+      const seen = yield* Effect.gen(function* () {
+        const both = yield* Effect.forkChild(
+          Effect.all([pullRequestAsked, pullRequestAsked], { concurrency: "unbounded" }),
+        );
+        yield* Effect.promise(() => first.promise);
+        // Note that the second request is given every chance to reach GitHub while the first is out.
+        for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
+        const whileFirstOut = arrivals.length;
+        answered.resolve();
+        yield* Fiber.join(both);
+        return [whileFirstOut, arrivals.length];
+      }).pipe(
+        Effect.provide(timedGitHub(arrivals, () => first.resolve(), answered.promise)),
+        holdingNothing,
+      );
+      assert.deepEqual(seen, [1, 2]);
+    }),
+  );
+
   it.effect("writes under one identity start a second apart, and reads are not spaced", () =>
     Effect.gen(function* () {
       const arrivals: Array<readonly [string, number]> = [];
@@ -211,26 +235,25 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
     }),
   );
 
-  it.effect("writes that queued behind busy places still start a second apart", () =>
+  it.effect("writes that queued behind a busy lane still start a second apart", () =>
     Effect.gen(function* () {
       const arrivals: Array<readonly [string, number]> = [];
       const start = yield* Clock.currentTimeMillis;
       const readsAnswered = Promise.withResolvers<void>();
-      const placesTaken = Promise.withResolvers<void>();
+      const laneTaken = Promise.withResolvers<void>();
       const firstWrite = Promise.withResolvers<void>();
       const arrived = () => {
         const methods = arrivals.map(([method]) => method);
-        if (methods.filter((method) => method === "GET").length === 6) placesTaken.resolve();
+        if (methods.includes("GET")) laneTaken.resolve();
         if (methods.includes("POST")) firstWrite.resolve();
       };
       yield* Effect.gen(function* () {
         const comment = sentAs(HttpClientRequest.post(COMMENTS));
-        const reads = Array.from({ length: 6 }, () => pullRequestAsked);
         const all = yield* Effect.forkChild(
-          Effect.all([...reads, comment, comment], { concurrency: "unbounded" }),
+          Effect.all([pullRequestAsked, comment, comment], { concurrency: "unbounded" }),
         );
-        // Note that the six reads hold every place GitHub's answers keep them in, so both writes wait past their second.
-        yield* Effect.promise(() => placesTaken.promise);
+        // Note that the read holds the identity's lane until GitHub answers it, so both writes wait past their second.
+        yield* Effect.promise(() => laneTaken.promise);
         yield* TestClock.adjust("2 seconds");
         readsAnswered.resolve();
         yield* Effect.promise(() => firstWrite.promise);
@@ -247,7 +270,7 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
     }),
   );
 
-  it.effect("writes waiting their turn hold no place a read could be sent in", () =>
+  it.effect("writes waiting their turn hold no lane a read could be sent in", () =>
     Effect.gen(function* () {
       const arrivals: Array<readonly [string, number]> = [];
       const start = yield* Clock.currentTimeMillis;
@@ -311,63 +334,6 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
         }).pipe(Effect.provide(scriptedGitHub([])), holdingNothing);
         assert.equal(answered.at(-1), 429);
       }),
-  );
-
-  it.effect("an answer sent before the refusal and landing after it lifts no hold", () =>
-    Effect.gen(function* () {
-      const late = Promise.withResolvers<Response>();
-      const arrived = Promise.withResolvers<void>();
-      const lateAnswer = () => {
-        arrived.resolve();
-        return late.promise;
-      };
-      const statuses = yield* Effect.gen(function* () {
-        const early = yield* Effect.forkChild(asked);
-        // Note that the refusal is asked only once the early request is at GitHub.
-        yield* Effect.promise(() => arrived.promise);
-        const refused = yield* asked;
-        late.resolve(Response.json({}));
-        const landed = yield* Fiber.join(early);
-        const after = yield* asked;
-        return [landed, refused, after];
-      }).pipe(Effect.provide(scriptedGitHub([lateAnswer, secondary])), holdingNothing);
-      assert.deepEqual(statuses, [200, 403, 429]);
-    }),
-  );
-
-  it.effect("a refusal whose message lands late keeps the longer hold another set meanwhile", () =>
-    Effect.gen(function* () {
-      const message = Promise.withResolvers<void>();
-      const arrived = Promise.withResolvers<void>();
-      // A secondary limit naming no wait, whose message GitHub is slow to send.
-      const slowSecondary = () => {
-        arrived.resolve();
-        const body = new ReadableStream<Uint8Array>({
-          start: async (controller) => {
-            await message.promise;
-            controller.enqueue(new TextEncoder().encode('{"message":"secondary rate limit"}'));
-            controller.close();
-          },
-        });
-        return new Response(body, { status: 403 });
-      };
-      const anHour = () =>
-        Response.json(
-          { message: "slow down" },
-          { status: 429, headers: { "retry-after": "3600" } },
-        );
-      const statuses = yield* Effect.gen(function* () {
-        const slow = yield* Effect.forkChild(asked);
-        yield* Effect.promise(() => arrived.promise);
-        const held = yield* asked;
-        message.resolve();
-        const slowStatus = yield* Fiber.join(slow);
-        yield* TestClock.adjust("2 minutes");
-        const after = yield* asked;
-        return [slowStatus, held, after];
-      }).pipe(Effect.provide(scriptedGitHub([slowSecondary, anHour])), holdingNothing);
-      assert.deepEqual(statuses, [403, 429, 429]);
-    }),
   );
 
   it.effect("a 403 that names no rate limit holds nothing, and its message is the caller's", () =>

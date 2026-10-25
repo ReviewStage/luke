@@ -1,5 +1,5 @@
 /**
- * github-rate-gate.ts -- every request the deployment sends GitHub's API, sent a few at a time, spaced where it writes, and held back on every instance while GitHub says it is rate limited.
+ * github-rate-gate.ts -- every request the deployment sends GitHub's API, sent one at a time per identity, spaced where it writes, and held back on every instance while GitHub says it is rate limited.
  *
  * GitHub's own guidance is the design
  * (https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api,
@@ -15,7 +15,7 @@
  * So the instance's `HttpClient` is wrapped: a request that writes waits its
  * identity's turn, one write at a time, until `GATE.MUTATIVE_SPACING` after
  * the last one under that identity started; a request to the API then waits
- * for one of `GATE.CONCURRENCY` places; and a refusal that names a rate
+ * its identity's lane, one request out at a time, as GitHub asks; and a refusal that names a rate
  * limit holds every later request under the same bearer's identity until
  * GitHub said it may ask again. A request asked while held is not sent; it
  * is answered here as GitHub would answer it, a 429 with the `retry-after`
@@ -35,7 +35,10 @@
  * once per `GATE.SHARED_READ_FOR`, so it may still send a request in the
  * seconds after another instance was refused; and a database that does not
  * answer holds nothing, because GitHub is never kept waiting on it. The
- * places and the spacing are the instance's alone.
+ * lanes and the spacing are the instance's alone, so each instance sends one
+ * request at a time per identity: every installation shares the App's lane,
+ * which is the throughput GitHub's guidance trades for staying under its
+ * secondary limit.
  */
 
 import { createHash } from "node:crypto";
@@ -53,8 +56,6 @@ import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 const GATE = {
-  /** How many requests to the API one instance has out at once. */
-  CONCURRENCY: 6,
   /** The wait GitHub asks for a rate limit that names none, and the first step of the backoff. */
   MINIMUM_HOLD: Duration.minutes(1),
   /** The longest a repeated refusal is backed off. */
@@ -98,8 +99,8 @@ interface SharedRead {
   readonly hold: Hold | undefined;
 }
 
-/** One identity's turn to write, and how many writes are in it or waiting on it. */
-interface Writer {
+/** One identity's lane, a turn one request holds at a time, and how many requests are in it or waiting on it. */
+interface Lane {
   readonly turn: Semaphore.Semaphore;
   readonly waiting: number;
 }
@@ -161,6 +162,20 @@ const refusalOf = Effect.fnUntraced(function* (
   return RATE_LIMIT_WORDS.test(message) ? { limited: true, stated: undefined } : NOT_LIMITED;
 });
 
+/**
+ * Whether an answer is GitHub refusing for a rate limit, for a caller that
+ * would otherwise read a 403 as a refusal of the request itself, such as a
+ * permission the App was not given.
+ */
+export function rateLimited(
+  response: HttpClientResponse.HttpClientResponse,
+): Effect.Effect<boolean, never, never> {
+  return Effect.map(
+    Effect.flatMap(Clock.currentTimeMillis, (now) => refusalOf(response, now)),
+    (refusal) => refusal.limited,
+  );
+}
+
 /** The backoff the refusal numbered `strikes` in a row waits at least, before what GitHub named. */
 function backoffFor(strikes: number): Duration.Duration {
   return Duration.min(Duration.times(GATE.MINIMUM_HOLD, 2 ** (strikes - 1)), GATE.MAXIMUM_HOLD);
@@ -219,7 +234,7 @@ function heldAnswer(
 /**
  * The instance's client with the gate around every request to GitHub's API;
  * any other request passes as it was. Built once per instance, as the
- * runtime's layers are, so the places, the spacing, and the reads of the
+ * runtime's layers are, so the lanes, the spacing, and the reads of the
  * shared holds are the instance's; the holds themselves are every
  * instance's, through the database the layer is built over.
  */
@@ -232,11 +247,11 @@ export const githubRateGate: Layer.Layer<
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     const database = yield* Effect.context<DatabaseServices>();
-    const places = yield* Semaphore.make(GATE.CONCURRENCY);
     const holds = new Map<string, Hold>();
     const shared = new Map<string, SharedRead>();
     const nextWrite = new Map<string, number>();
-    const writers = new Map<string, Writer>();
+    const writers = new Map<string, Lane>();
+    const senders = new Map<string, Lane>();
 
     const remembered = (identity: string, now: number, hold: Hold | undefined) =>
       Effect.sync(() => {
@@ -280,33 +295,44 @@ export const githubRateGate: Layer.Layer<
     });
 
     /**
-     * The write runs in the identity's turn: one write under an identity at
-     * a time, each waiting first until `GATE.MUTATIVE_SPACING` after the
-     * last one started, so the wait holds no place a read could be sent in.
-     * A turn no write waits on is let go, so a member token that wrote once
-     * keeps none.
+     * The effect run in the identity's lane of `lanes`, one at a time, in the
+     * order asked. A lane no request waits on is let go, so a member token
+     * that asked once keeps none.
      */
-    const inTurn = <A, E, R>(identity: string, write: Effect.Effect<A, E, R>) =>
+    const inLane = <A, E, R>(
+      lanes: Map<string, Lane>,
+      identity: string,
+      run: Effect.Effect<A, E, R>,
+    ) =>
       Effect.suspend(() => {
-        const writer = writers.get(identity) ?? { turn: Semaphore.makeUnsafe(1), waiting: 0 };
-        writers.set(identity, { ...writer, waiting: writer.waiting + 1 });
-        const waited = Effect.flatMap(Clock.currentTimeMillis, (now) => {
-          const next = nextWrite.get(identity) ?? now;
-          return next > now ? Effect.sleep(Duration.millis(next - now)) : Effect.void;
-        });
-        return writer.turn
-          .withPermits(1)(Effect.andThen(waited, write))
+        const lane = lanes.get(identity) ?? { turn: Semaphore.makeUnsafe(1), waiting: 0 };
+        lanes.set(identity, { ...lane, waiting: lane.waiting + 1 });
+        return lane.turn
+          .withPermits(1)(run)
           .pipe(
             Effect.ensuring(
               Effect.sync(() => {
-                const standing = writers.get(identity);
+                const standing = lanes.get(identity);
                 if (standing === undefined) return;
-                if (standing.waiting <= 1) writers.delete(identity);
-                else writers.set(identity, { ...standing, waiting: standing.waiting - 1 });
+                if (standing.waiting <= 1) lanes.delete(identity);
+                else lanes.set(identity, { ...standing, waiting: standing.waiting - 1 });
               }),
             ),
           );
       });
+
+    /**
+     * The write runs in the identity's turn: one write under an identity at
+     * a time, each waiting first until `GATE.MUTATIVE_SPACING` after the
+     * last one started, so the wait holds no lane a read could be sent in.
+     */
+    const inTurn = <A, E, R>(identity: string, write: Effect.Effect<A, E, R>) => {
+      const waited = Effect.flatMap(Clock.currentTimeMillis, (now) => {
+        const next = nextWrite.get(identity) ?? now;
+        return next > now ? Effect.sleep(Duration.millis(next - now)) : Effect.void;
+      });
+      return inLane(writers, identity, Effect.andThen(waited, write));
+    };
 
     /** Books the start of a write under the identity at `now`, which the next write waits a second past. */
     const started = (identity: string, now: number) => {
@@ -398,12 +424,14 @@ export const githubRateGate: Layer.Layer<
     return HttpClient.transform(client, (sent, request) => {
       if (!toGitHubApi(request)) return sent;
       const identity = identityOf(request);
-      // Note that the hold is read once a place is had, because a request
+      // Note that the hold is read once the lane is had, because a request
       // that queued behind the refusal must not be sent after it; this
       // instance's own hold is read first, and the shared one only where
       // that holds nothing.
       const writes = MUTATIVE_METHODS.has(request.method);
-      const gated = places.withPermits(1)(
+      const gated = inLane(
+        senders,
+        identity,
         Effect.gen(function* () {
           const now = yield* Clock.currentTimeMillis;
           const local = holds.get(identity);
@@ -411,7 +439,7 @@ export const githubRateGate: Layer.Layer<
             local !== undefined && now < local.until ? local : yield* sharedHold(identity, now);
           if (held !== undefined && now < held.until) return heldAnswer(request, held.until - now);
           // Note that a write books its start only now, as it is sent, so a
-          // write that waited for its place still starts a second after the
+          // write that waited for its lane still starts a second after the
           // last; one held, or given up on before this, books nothing.
           if (writes) started(identity, yield* Clock.currentTimeMillis);
           const response = yield* sent;
@@ -419,7 +447,7 @@ export const githubRateGate: Layer.Layer<
           return response;
         }),
       );
-      // Note that a write waits its turn before it takes a place, and reads the hold after, so the wait holds no place and misses no hold set meanwhile.
+      // Note that a write waits its turn before it takes the lane, and reads the hold after, so the wait holds no lane and misses no hold set meanwhile.
       return writes ? inTurn(identity, gated) : gated;
     });
   }),

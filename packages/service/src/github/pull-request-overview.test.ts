@@ -661,6 +661,27 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
       }),
   );
 
+  it.effect(
+    "checks GitHub refused for a rate limit are a read GitHub did not answer, not none",
+    () =>
+      Effect.gen(function* () {
+        const refused = yield* Effect.flip(
+          pullRequestChecks(TOKEN, REPOSITORY, NUMBER).pipe(
+            answering(
+              repository({
+                pull: pull(),
+                checkRuns: Response.json(
+                  { message: "You have exceeded a secondary rate limit." },
+                  { status: 403 },
+                ),
+              }),
+            ),
+          ),
+        );
+        assert.deepEqual([refused._tag, refused.status], ["GitHubUnavailable", 403]);
+      }),
+  );
+
   it.effect("the newest hundred entries are kept, oldest first, and the earlier ones counted", () =>
     Effect.gen(function* () {
       const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
