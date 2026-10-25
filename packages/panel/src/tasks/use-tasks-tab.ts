@@ -403,24 +403,15 @@ type StandIn =
       readonly listed: boolean;
     }
   | { readonly kind: typeof STAND_IN.BOARD }
-  | {
-      readonly kind: typeof STAND_IN.ADMIN;
-      readonly view: AdminView;
-      /** Whether the section list stands rather than the view, which only a narrow room draws apart. */
-      readonly listed: boolean;
-    };
+  | { readonly kind: typeof STAND_IN.ADMIN; readonly view: AdminView };
 
 /** The window's Admin place: whether it takes the window, the view it stands on, and the presses that open and leave it. */
 interface AdminViewControl {
   readonly open: boolean;
   /** The view standing, or the Overview while the place does not stand. */
   readonly view: AdminView;
-  /** Whether the section list stands rather than the view, which only a narrow room draws apart. */
-  readonly listed: boolean;
-  /** Opens the place on `view`; where none is named, on the Overview with its section list standing. */
+  /** Opens the place on `view`; where none is named, on the Overview. */
   readonly onOpen: (view?: AdminView) => void;
-  /** Stands the section list, the view kept, as a narrow room's way back from a view does. */
-  readonly onList: () => void;
   readonly onClose: () => void;
 }
 
@@ -472,7 +463,7 @@ const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
 /** What a fixture run's profile stands in the task's place at launch: Admin's Overview, or an Automations page; none for a place that is no stand-in. */
 function launchedStandIn(place: FixturePlace | undefined): StandIn | undefined {
   if (place === undefined) return undefined;
-  if ("admin" in place) return { kind: STAND_IN.ADMIN, view: ADMIN_OVERVIEW, listed: false };
+  if ("admin" in place) return { kind: STAND_IN.ADMIN, view: ADMIN_OVERVIEW };
   if ("automations" in place) return { kind: STAND_IN.AUTOMATIONS, place: place.automations };
   return undefined;
 }
@@ -580,6 +571,19 @@ function agentRequest(handed: NewTaskAgent) {
     ...(handed.attachments.length === 0 ? undefined : { attachments: handed.attachments }),
     ...(handed.choice === undefined ? undefined : choiceRequest(handed.choice)),
   };
+}
+
+/** Where a group's quick add puts the task it adds: the group's status, priority, or assignee, or its repository. */
+export interface QuickAddInto {
+  readonly standing?: TaskStanding;
+  readonly repository?: string;
+}
+
+/** What a quick add asks of where its task stands: a status, a priority, or an assignee, as given; no one assigned is where a task starts, so it is asked nothing. */
+function startingStanding(standing: TaskStanding | undefined) {
+  if (standing === undefined) return undefined;
+  const { assigneeId, ...rest } = standing;
+  return assigneeId === undefined || assigneeId === null ? rest : { ...rest, assigneeId };
 }
 
 /** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), or the card a start refused after it closed opens again on. */
@@ -832,6 +836,12 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
+  /**
+   * Adds a task named `name` to a Tasks page group with no agent, in the
+   * listed workspace, and opens nothing: what a group's quick add asks.
+   * Answers why it was not added, or nothing once the list carries it.
+   */
+  onQuickAdd: (name: string, into: QuickAddInto) => Promise<Failure | undefined>;
   /** New task's card for the agent that makes an automation: what the Automations page's Create with an agent asks. */
   onNewAutomationAgent: () => void;
   /** The New task dialog: whether it stands, what its press chose, and the two presses it makes. */
@@ -2732,7 +2742,7 @@ export function useTasksTab(input: {
       ? region.task.repository
       : null);
 
-  // A fixture's task has no history, as it is read from nowhere.
+  // A fixture's task reads its staged history through the same acts (`tasks-fixture.ts`).
   const historySource = useMemo(
     (): PlanHistorySource => ({
       readPage: (taskId, before) =>
@@ -2750,8 +2760,7 @@ export function useTasksTab(input: {
   );
   const history = usePlanHistory({
     source: historySource,
-    taskId:
-      fixture === undefined && region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined,
+    taskId: region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined,
     editedAt: region.kind === DOCUMENT_REGION.READY ? region.task.lastEdit?.at : undefined,
     name: region.kind === DOCUMENT_REGION.READY ? region.task.name : undefined,
     shown: shown && historyOpen,
@@ -2874,6 +2883,24 @@ export function useTasksTab(input: {
 
   // Note that New task's start is a steady door, so the dialog handed it holds while nothing it draws moves.
   const steadyStartTask = useSteadyDoor(startTask);
+
+  // A group's quick add starts a task with no agent and no call, quietly, so
+  // the window stays on the Tasks page and the task lands in its group.
+  const quickAdd: TasksControl["onQuickAdd"] = (name, into) =>
+    act(ACT_KIND.TASKS_START, {
+      name,
+      ...(into.repository === undefined ? undefined : { repository: into.repository }),
+      ...(listedWorkspace === undefined ? undefined : { workspaceId: listedWorkspace.id }),
+      ...startingStanding(into.standing),
+      planning: false,
+      quiet: true,
+    }).then(
+      (answer): Failure | undefined =>
+        "failure" in answer
+          ? { reason: FAILURE_REASON.OTHER, text: startFailureNote(answer.failure) }
+          : undefined,
+      (refused: Error): Failure => ({ reason: FAILURE_REASON.OTHER, text: refused.message }),
+    );
 
   // The dialog matches its name against the Linear issues of the workspace
   // it starts in, and searches them, where that workspace has Linear connected.
@@ -3137,16 +3164,10 @@ export function useTasksTab(input: {
         });
         return;
       // Note that an Admin link's workspace is only the one it was copied in, since the place reads every
-      // workspace's accounts, so it lists nothing; one naming the place alone opens on its list, as Settings' does.
-      case LINK_PLACE.ADMIN: {
-        const view = adminViewOfLink(place);
-        standInFor({
-          kind: STAND_IN.ADMIN,
-          view: view ?? ADMIN_OVERVIEW,
-          listed: view === undefined,
-        });
+      // workspace's accounts, so it lists nothing; one naming the place alone opens on its Overview.
+      case LINK_PLACE.ADMIN:
+        standInFor({ kind: STAND_IN.ADMIN, view: adminViewOfLink(place) ?? ADMIN_OVERVIEW });
         return;
-      }
       // Note that a link to Chat opens it as its sidebar row does, and one to a channel on that channel, in the workspace
       // the link names, which is the chat's own at once, so listing it first does not put Chat back on For you.
       case LINK_PLACE.CHAT:
@@ -3655,17 +3676,10 @@ export function useTasksTab(input: {
     adminView: {
       open: standIn?.kind === STAND_IN.ADMIN,
       view: standIn?.kind === STAND_IN.ADMIN ? standIn.view : ADMIN_OVERVIEW,
-      listed: standIn?.kind === STAND_IN.ADMIN && standIn.listed,
       onOpen: guard((view?: AdminView) => {
         setHistoryFor(undefined);
-        setStandIn({
-          kind: STAND_IN.ADMIN,
-          view: view ?? ADMIN_OVERVIEW,
-          listed: view === undefined,
-        });
+        setStandIn({ kind: STAND_IN.ADMIN, view: view ?? ADMIN_OVERVIEW });
       }),
-      onList: () =>
-        setStandIn((held) => (held?.kind === STAND_IN.ADMIN ? { ...held, listed: true } : held)),
       onClose: guard(() => setStandIn(undefined)),
     },
     // The Automations page stands over the task's place as the Admin place does, each giving way to the others.
@@ -3760,6 +3774,7 @@ export function useTasksTab(input: {
     },
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
+    onQuickAdd: quickAdd,
     onNewAutomationAgent: () => newTaskWith({ purpose: NEW_TASK_PURPOSE.AUTOMATION }),
     newTask: {
       open: newTaskAsk !== undefined,

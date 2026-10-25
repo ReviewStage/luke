@@ -40,6 +40,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
+import type { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
@@ -55,6 +56,8 @@ import {
   PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { vercelMachineLayer } from "../machine/vercel-machine.js";
+import { deploymentOidcToken } from "../vercel-sandbox-api.js";
 import { type CodexSessionsOptions, codexSessions } from "./codex-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import { RUNNER_ENDED, runnerEnded } from "./runner-sessions.js";
@@ -127,17 +130,27 @@ const NO_KEYS: HostedEnvironmentValues = {
   providerKeyEncryptionKeys: Redacted.make(KEK),
 };
 
-/** Everything but the store: Vercel and OpenAI behind one client, the image and the bundle. */
+/** The agent's machine over the fake Vercel the client given answers as, its checkout run on this test's own runner. */
+function machineOver<E, R>(http: Layer.Layer<HttpClient.HttpClient, E, R>) {
+  return vercelMachineLayer({
+    readToken: deploymentOidcToken,
+    run: (effect) => Effect.runPromise(effect),
+  }).pipe(Layer.provide(http));
+}
+
+/** Everything but the store: Vercel and OpenAI behind one client, the agent's machine, the image and the bundle. */
 function services(
   api: ReturnType<typeof runnerSandboxApi>,
   openai: ReturnType<typeof openAi> = openAi(),
 ) {
+  const http = fakeHttpClientLayer((url, init) =>
+    new URL(url).hostname === new URL(CHATGPT_OAUTH.TOKEN_URL).hostname
+      ? openai.respond(url, init)
+      : api.respond(url, init),
+  );
   return Layer.mergeAll(
-    fakeHttpClientLayer((url, init) =>
-      new URL(url).hostname === new URL(CHATGPT_OAUTH.TOKEN_URL).hostname
-        ? openai.respond(url, init)
-        : api.respond(url, init),
-    ),
+    http,
+    machineOver(http),
     GITHUB_APP_WITH_TOKENS,
     Layer.succeed(HostedEnvironment, NO_KEYS),
     Layer.succeed(AgentSandboxImage, {
@@ -208,7 +221,6 @@ function sessionsFor(userId: string, sequence: { next: number } = { next: 0 }) {
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
     tokenUrl: TOKEN_URL,
-    run: (effect) => Effect.runPromise(effect),
   };
   return codexSessions(options);
 }

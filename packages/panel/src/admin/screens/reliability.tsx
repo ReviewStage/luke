@@ -18,6 +18,7 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { formatDate } from "@luke/features/time-format";
+import { readFailedWords } from "@luke/features/words";
 import {
   Badge,
   Card,
@@ -71,7 +72,7 @@ import { useAdminRead } from "../use-admin-read.js";
  * alone; no failure's detail reaches it.
  */
 
-const RELIABILITY_ERROR = "The reliability endpoint did not answer.";
+const RELIABILITY_ERROR = readFailedWords("reliability");
 
 /** How many providers the health list's skeleton stands a row for, about the list a deployment draws. */
 const HEALTH_SKELETON_ROWS = 12;

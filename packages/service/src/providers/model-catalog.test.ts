@@ -7,7 +7,8 @@ import {
   type RecordedRequest,
   recordingHttpClient,
 } from "@luke/wire/testing";
-import { Effect, Layer, Result } from "effect";
+import { Duration, Effect, Layer, Result } from "effect";
+import { TestClock } from "effect/testing";
 import { ModelCatalog, modelCatalogLayer, validateModelChoice } from "./model-catalog.js";
 
 /**
@@ -103,5 +104,25 @@ it.effect("the default choice is one the catalog as published accepts", () =>
       validateModelChoice(offered, CODING_AGENT_DEFAULT_CHOICE),
       Result.succeed(CODING_AGENT_DEFAULT_CHOICE),
     );
+  }),
+);
+
+it.effect("a refetch that fails past the hour answers the catalog read before it", () =>
+  Effect.gen(function* () {
+    let up = true;
+    const { layer } = gateway(() =>
+      up ? jsonResponse(CATALOG) : new Response(null, { status: 503 }),
+    );
+    const [before, after] = yield* Effect.gen(function* () {
+      const first = yield* readCatalog;
+      up = false;
+      yield* TestClock.adjust(Duration.hours(2));
+      return [first, yield* readCatalog] as const;
+    }).pipe(Effect.provide(layer));
+    assert.deepEqual(
+      after.map((model) => model.id),
+      before.map((model) => model.id),
+    );
+    assert.ok(after.some((model) => model.id === "anthropic/claude-opus-5.5"));
   }),
 );

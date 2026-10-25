@@ -480,6 +480,13 @@ export const SCENES: readonly Scene[] = [
   { id: "settings-memory", place: PLACE.SETTINGS, title: "Memory", profile: "settings-memory" },
   // Admin.
   { id: "admin", place: PLACE.ADMIN, title: "Overview", profile: "admin" },
+  {
+    id: "admin-users",
+    place: PLACE.ADMIN,
+    title: "Users",
+    profile: "admin",
+    steps: [{ kind: STEP.CLICK, role: "radio", name: "Users" }],
+  },
   // Automations.
   { id: "automations", place: PLACE.AUTOMATIONS, title: "The list", profile: "automations" },
   {

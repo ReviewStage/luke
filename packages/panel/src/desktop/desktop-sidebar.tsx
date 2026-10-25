@@ -44,7 +44,6 @@ import {
   opensMenu,
   PanePin,
   PinIcon,
-  PlusIcon,
   ProviderMark,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
@@ -162,6 +161,7 @@ import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
+import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
@@ -947,7 +947,7 @@ function RepositorySection({
         count={foldedCount(folded, group.rows.length, TASK_NOUN)}
         mark={
           repository !== null && context.tasks.pinnedRepositories.includes(repository) ? (
-            <span className="sidebar-repository-pinned">
+            <span className="sidebar-repository-pinned inline-flex flex-none text-muted-foreground [&_svg]:size-luke-12">
               <PinIcon />
               <VisuallyHidden>(pinned)</VisuallyHidden>
             </span>
@@ -970,14 +970,10 @@ function RepositorySection({
               />
             )}
             {repository === null ? null : (
-              <Tooltip label={`New task in ${label}`}>
-                <IconButton
-                  icon={<PlusIcon />}
-                  label={`New task in ${label}`}
-                  size={BUTTON_SIZE.COMPACT}
-                  onClick={() => onNewTaskIn(repository)}
-                />
-              </Tooltip>
+              <NewTaskInButton
+                label={`New task in ${label}`}
+                onPress={() => onNewTaskIn(repository)}
+              />
             )}
           </>
         }
@@ -1538,17 +1534,24 @@ function SidebarAutomationsRow({
 /**
  * The Admin row, after Automations' and drawn as it is, for an admin alone:
  * a non-admin is drawn nothing, not a row held back. A press opens the
- * window's Admin place (`desktop-admin.tsx`), which takes the whole window
- * as Settings does, its sections listed where this sidebar stood. Note that
- * the row is a convenience: the service's own gate decides every read the
- * place makes.
+ * window's Admin place (`desktop-admin.tsx`) in the task's place, as
+ * Automations' row does, and the row is the place shown while it stands.
+ * Note that the row is a convenience: the service's own gate decides every
+ * read the place makes.
  */
-function SidebarAdminRow({ onOpen }: { onOpen: () => void }): React.JSX.Element | null {
+function SidebarAdminRow({
+  current,
+  onOpen,
+}: {
+  current: boolean;
+  onOpen: () => void;
+}): React.JSX.Element | null {
   const admin = useAdminAccess();
   if (!admin) return null;
   return (
     <NavItem
       icon={<ShieldUserIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
       // The pointer on the row is the way to the place, so its chunk, charts and all, is read now rather than at the press.
       onPointerEnter={ADMIN_PLACE.prefetch}
       onClick={onOpen}
@@ -1651,7 +1654,7 @@ interface DesktopSidebarProps {
   onSignOut: () => Promise<void>;
   /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
   onPressWithin: () => void;
-  /** The room the panel's stage gives; narrow, the sidebar is a phone's drawer, whose page rows scroll away with its tasks. Wide where left out. */
+  /** The room the panel's stage gives; narrow, the sidebar is a phone's drawer. Wide where left out. */
   room?: ShellRoom | undefined;
   /** The window's Inbox as the shell read it, which the sidebar lists in its task list's place while the account has the inbox-first sidebar on; none while it is off. */
   inboxListing?: InboxListing | undefined;
@@ -1764,7 +1767,6 @@ function SidebarColumn({
   inboxListing,
 }: DesktopSidebarProps): React.JSX.Element {
   const onTasks = tab === PANEL_TAB.TASKS;
-  const narrow = room === SHELL_ROOM.NARROW;
   // Whether a row of the column is lifted into a drag, while which an empty Pinned stands to take it.
   const [carrying, setCarrying] = useState(false);
   const overlay = useFloatingSidebar(sidebar);
@@ -1773,11 +1775,12 @@ function SidebarColumn({
   // The column's rows, Luke's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by.
   const roving = useRovingKeys<HTMLDivElement>();
   const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
-  // The window's Inbox, an agent's page, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
+  // The window's Inbox, an agent's page, the Automations page, Chat, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
   const inChat = onTasks && tasks.chatView.open;
   const inBoard = onTasks && tasks.boardView.open;
+  const inAdmin = onTasks && tasks.adminView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   // The workspace's runs, followed while the sidebar stands, as the Runs tab follows them, for the row to count the ones still at work.
@@ -1798,6 +1801,7 @@ function SidebarColumn({
     inAutomations ||
     inChat ||
     inBoard ||
+    inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
   // Chat is an experiment: its row stands only while the account has it on.
   const chatOn = useChatOn();
@@ -2099,14 +2103,7 @@ function SidebarColumn({
   useAppCommand(APP_COMMAND.PREVIOUS_TASK, listed && at > 0 ? () => step(-1) : undefined);
   useAppCommand(APP_COMMAND.NEXT_TASK, listed && at < drawn.length - 1 ? () => step(1) : undefined);
 
-  // The pages' rows, then the rule under them. Beside the work they stand
-  // put over the tasks' scroller; in a phone's drawer they scroll away with
-  // the tasks, so the tasks are not left a strip under them. Note that they
-  // are drawn again where the room flips, since they move between parents:
-  // no CSS gives them one place without the desktop's sidebar or the
-  // drawer's scroller changing, and only a browser window dragged across
-  // the line flips the room, a phone standing narrow either way up
-  // (`shell-room.ts`). They hold nothing that a fresh draw loses.
+  // The pages' rows, then the rule under them, heading the tasks' scroller.
   const places = (
     <>
       <SidebarPlaces>
@@ -2146,7 +2143,7 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openAutomations)}
         />
-        <SidebarAdminRow onOpen={chosen(openAdmin)} />
+        <SidebarAdminRow current={inAdmin} onOpen={chosen(openAdmin)} />
       </SidebarPlaces>
       <SidebarRule />
     </>
@@ -2171,16 +2168,19 @@ function SidebarColumn({
         <LukeIdentity />
       )}
 
-      {narrow ? null : places}
-
-      {/* One scroller for both sections, so the pinned tasks scroll away
-          with the rest rather than holding half the column; in a phone's
-          drawer the pages' rows ride it too. */}
-      <Fill className="sidebar-section">
+      {/* One scroller for the pages' rows and both sections, so neither the
+          rows nor the pinned tasks hold the column above the rest: on an
+          iPad's or a short window's column they left the tasks a strip. */}
+      <Fill className="sidebar-section -m-ring-reach">
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <ListMotion root={body}>
-            <div {...roving} ref={bodyRef} className="sidebar-section-body" {...motionRows()}>
-              {narrow ? places : null}
+            <div
+              {...roving}
+              ref={bodyRef}
+              className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach [&_.sidebar-group+.sidebar-group]:mt-section-gap"
+              {...motionRows()}
+            >
+              {places}
               {operator === undefined ? null : (
                 <nav className="sidebar-group" aria-label="Luke">
                   <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks">

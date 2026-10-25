@@ -199,6 +199,9 @@ const updateConnected = SqlSchema.findAll({
           state: null,
           stateIssuedAt: null,
           connectedAt: at,
+          // The tools kept for the grant this sign-in replaces are not this one's.
+          tools: null,
+          toolsListedAt: null,
           updatedAt: at,
         })
         .where(and(ofWorkspace(key), eq(workspaceIntegrationConnection.state, state)))

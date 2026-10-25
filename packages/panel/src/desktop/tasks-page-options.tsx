@@ -3,6 +3,7 @@ import {
   CHIP_LOOK,
   Chip,
   ChipName,
+  CornerDot,
   IconButton,
   LIST_MOTION_WAY,
   ListMotion,
@@ -513,7 +514,7 @@ export function TasksFilterButton({
   return (
     <>
       {asked === undefined ? (
-        <span className="tasks-page-option" data-filtered={filtered ? "true" : undefined}>
+        <CornerDot shown={filtered}>
           <Tooltip label={FILTER}>
             <IconButton
               icon={<ListFilterIcon />}
@@ -522,7 +523,7 @@ export function TasksFilterButton({
               {...menu.trigger()}
             />
           </Tooltip>
-        </span>
+        </CornerDot>
       ) : null}
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -595,10 +596,15 @@ function FilterLine({
   const listed = useMemo(() => filterLineEntries(tasks, filter, reader), [tasks, filter, reader]);
   const drawn = useLeaving(listed, (entry) => entry.key);
   return (
-    <div ref={line} className="tasks-filter-line" hidden={drawn.length === 0} {...motionRows()}>
+    <div
+      ref={line}
+      className="tasks-filter-line flex min-w-0 flex-wrap items-center gap-control-gap [&[hidden]]:hidden"
+      hidden={drawn.length === 0}
+      {...motionRows()}
+    >
       {drawn.map(({ key, value, leaving }) =>
         value.key === FILTER_LINE.CLEAR ? (
-          <span key={key} className="tasks-filter-clear" {...motionKey(key)}>
+          <span key={key} className="tasks-filter-clear inline-flex" {...motionKey(key)}>
             <TextButton onClick={leaving ? stays : () => onFilter({})}>Clear</TextButton>
           </span>
         ) : (
@@ -795,7 +801,7 @@ export function TasksViewOptions({
   return (
     <>
       {asked === undefined ? (
-        <span className="tasks-page-option">
+        <span className="tasks-page-option relative inline-flex">
           <Tooltip label={VIEW_OPTIONS}>
             <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
           </Tooltip>

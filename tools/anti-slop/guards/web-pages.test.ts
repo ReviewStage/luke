@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   framedPageProblems,
   headProblems,
+  textSizeProblems,
   themeImportProblems,
   unfurlProblems,
 } from "./web-pages.ts";
@@ -60,5 +61,18 @@ describe("the site's pages", () => {
       themeImportProblems("app.css", `${entry}/* @import "@luke/ui/tailwind/theme.css"; */`),
     ).toHaveLength(1);
     expect(themeImportProblems("page.css", ".page { margin: 0; }")).toEqual([]);
+  });
+
+  it("name a root that leaves a phone's browser free to inflate its text", () => {
+    const both = "-webkit-text-size-adjust: 100%; text-size-adjust: 100%;";
+    expect(textSizeProblems("base.css", `:root { color: red; ${both} }`)).toEqual([]);
+    expect(textSizeProblems("base.css", ":root { -webkit-text-size-adjust: 100%; }")).toEqual([
+      "base.css: its :root does not set -webkit-text-size-adjust and text-size-adjust to 100%",
+    ]);
+    expect(textSizeProblems("base.css", `:root { color: red; } .card { ${both} }`)).toHaveLength(1);
+    expect(textSizeProblems("base.css", `:root { /* ${both} */ }`)).toHaveLength(1);
+    expect(
+      textSizeProblems("base.css", `:root { ${both} -webkit-text-size-adjust: auto; }`),
+    ).toHaveLength(1);
   });
 });

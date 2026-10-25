@@ -41,6 +41,7 @@ import {
   GAP,
   GLYPH_INK,
   GlyphSlot,
+  GROUP_ACTIONS,
   GROUP_SURFACE,
   GroupHeader,
   INSET,
@@ -93,6 +94,7 @@ import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { newTaskAction } from "../tasks/inbox-list.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import { TaskIssueTagChip } from "../tasks/task-issue-links.js";
 import {
@@ -108,6 +110,13 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
+import {
+  groupNewTaskWords,
+  groupStanding,
+  NewTaskInButton,
+  quickAddInto,
+} from "./new-task-button.js";
+import { type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { groupCount } from "./sidebar-fold.js";
 import { useTaskMenuItems } from "./task-actions.js";
 import {
@@ -151,7 +160,9 @@ import { useRowDrag } from "./use-row-drag.js";
  * its parts hang their own instead (`task-part-cards.tsx`). A card dragged onto another column
  * is sent that column's status or priority, or assigned to its person, No
  * assignee's assigning it to no one, as the task page's chips send them,
- * and moves there at once; a change the service did not keep goes back
+ * and moves there at once; the + at a column's head opens a bare title at
+ * the column's top, and Return adds a task there with that same status,
+ * priority, or assignee and no agent, opening nothing (`quick-add.tsx`); a change the service did not keep goes back
  * where it stood and says so, whether dragged or picked. Which columns stand, what each holds, its order, and what a card
  * draws are the Tasks page's filter and the Board's own display
  * (`tasks-page-model.ts`): Backlog, Todo, In progress, and Done at first,
@@ -199,6 +210,39 @@ const FIRST_SHOWN: string = TASK_STATUS.TODO;
 
 /** What the tabs choosing a narrow board's column are called, to a screen reader. */
 const COLUMN_TABS = "Columns";
+
+/**
+ * The board: a column for each status, side by side at one fixed width
+ * whatever the page's width, filling the page's height. Note that it reaches
+ * into the page's end inset and pads it back, because a scroller leaves its
+ * content's end padding at the room's edge, so the last column would
+ * otherwise scroll flush against the page's side.
+ */
+const BOARD =
+  "tasks-board relative -me-collection-page-inset flex min-h-0 min-w-min flex-[1_1_0] gap-block-gap pe-collection-page-inset leading-[normal] [--carried-ground:var(--luke-color-surface)]";
+
+/** A card, raised off its column's well, a draft's as a task's. */
+const BOARD_CARD =
+  "tasks-board-card flex flex-col gap-item-gap pt-row-inset pr-row-inset pb-item-gap pl-list-inset";
+
+/** The status's mark before the name, on the name's first line; the name wraps beside it. */
+const BOARD_CARD_TITLE =
+  "tasks-board-card-title flex min-w-0 items-start gap-luke-4 [&>:last-child]:min-w-0 [&>:last-child]:flex-auto";
+
+/** A card's name, whole under its line in the label's weight, wrapping to three lines at most. */
+const BOARD_NAME =
+  "tasks-board-name line-clamp-3 text-label font-luke-medium text-foreground wrap-anywhere";
+
+/** What did not land, under a card. */
+const BOARD_CARD_NOTE = "tasks-board-card-note text-caption text-danger";
+
+/** A card's foot, standing over its press, which lets the pointer through between its pills. */
+const BOARD_CARD_FOOT =
+  "tasks-board-card-foot pointer-events-none relative z-1 flex min-w-0 items-end gap-tight-gap";
+
+/** A card's pills, wrapping onto as many lines as they take. */
+const BOARD_CARD_PILLS =
+  "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 *:pointer-events-auto";
 
 /**
  * The issues a card's task links, oldest first, a tag each among its pills
@@ -311,7 +355,7 @@ function TaskBoardCard({
       shadow={CARD_SHADOW.SOFT}
       hover={CARD_HOVER.LIFT}
       lit={menu.open}
-      className="tasks-board-card flex flex-col gap-item-gap pt-row-inset pr-row-inset pb-item-gap pl-list-inset"
+      className={BOARD_CARD}
       data-task-id={task.id}
       {...motionKey(task.id)}
       {...menu.props}
@@ -348,7 +392,7 @@ function TaskBoardCard({
           ) : null}
         </span>
       </span>
-      <span className="tasks-board-card-title flex min-w-0 items-start gap-luke-4 [&>:last-child]:min-w-0 [&>:last-child]:flex-auto">
+      <span className={BOARD_CARD_TITLE}>
         {drawn(TASK_PROPERTY.STATUS) ? (
           <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
         ) : null}
@@ -375,10 +419,7 @@ function TaskBoardCard({
               onOpen();
             }}
           >
-            <span
-              id={nameId}
-              className="tasks-board-name line-clamp-3 text-label font-luke-medium text-foreground wrap-anywhere"
-            >
+            <span id={nameId} className={BOARD_NAME}>
               {task.name}
             </span>
             {/* Note that the key stands drawn on the first line, outside the press, so the press says it to a screen reader, and find skips it, which finds it drawn. */}
@@ -388,11 +429,9 @@ function TaskBoardCard({
           </CardPress>
         )}
       </span>
-      {rename.refused ? (
-        <span className="tasks-board-card-note text-caption text-danger">{RENAME_FAILED_NOTE}</span>
-      ) : null}
-      <div className="tasks-board-card-foot pointer-events-none relative z-1 flex min-w-0 items-end gap-tight-gap">
-        <div className="tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 *:pointer-events-auto">
+      {rename.refused ? <span className={BOARD_CARD_NOTE}>{RENAME_FAILED_NOTE}</span> : null}
+      <div className={BOARD_CARD_FOOT}>
+        <div className={BOARD_CARD_PILLS}>
           {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
           {drawn(TASK_PROPERTY.PRIORITY) ? (
             <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
@@ -417,6 +456,41 @@ function TaskBoardCard({
     </Card>
   );
 }
+
+/**
+ * A column's quick add line (`quick-add.tsx`): the draft as the card it is
+ * about to be, raised off the well as every card is, its status's chip before
+ * its bare title and its priority's and assignee's in its foot, each changing
+ * the draft; an add still out as its card, its name muted, until it draws;
+ * and why one was refused, under the draft.
+ */
+const boardQuickAddLine: QuickAddLine = ({ draft, pending, refused }) =>
+  refused === undefined ? (
+    <Card
+      as={CARD_ELEMENT.LI}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
+      shadow={CARD_SHADOW.SOFT}
+      className={`${BOARD_CARD} tasks-board-draft`}
+      data-quick-add={draft === undefined ? undefined : ""}
+      data-pending={pending === undefined ? undefined : "true"}
+    >
+      <span className={BOARD_CARD_TITLE}>
+        {draft?.status}
+        <span className={BOARD_NAME}>{draft?.title ?? pending}</span>
+      </span>
+      {draft === undefined ? null : (
+        <div className={BOARD_CARD_FOOT}>
+          <div className={BOARD_CARD_PILLS}>
+            {draft.priority}
+            {draft.assignee}
+          </div>
+        </div>
+      )}
+    </Card>
+  ) : (
+    <li className={`tasks-board-draft-note ${BOARD_CARD_NOTE}`}>{refused}</li>
+  );
 
 /** What heads a column: its value's mark and its name. */
 interface ColumnHead {
@@ -461,14 +535,6 @@ function columnHead(head: TasksGroupHead, people: ColumnPeople): ColumnHead {
       : { mark: people.mark(head.assigneeId), words: people.words(head.assigneeId) };
   }
   return { mark: null, words: "" };
-}
-
-/** What a card dropped on a column is sent: the column's status or priority, or its assignee, null for No assignee's. */
-function columnStanding(head: TasksGroupHead): TaskStanding | undefined {
-  if (head.kind === TASKS_GROUP.STATUS) return { status: head.status };
-  if (head.kind === TASKS_GROUP.PRIORITY) return { priority: head.priority };
-  if (head.kind === TASKS_GROUP.ASSIGNEE) return { assigneeId: head.assigneeId };
-  return undefined;
 }
 
 /** The value a column stands for, which names it among the Board's columns: a status, a priority, or an assignee's account id, as its grouping is. */
@@ -526,7 +592,7 @@ function TaskBoardColumnView({
     onDropOut: (from, zone) => {
       const task = column.tasks[from];
       const onto = columns.find((each) => columnValue(each.head) === zone);
-      const standing = onto === undefined ? undefined : columnStanding(onto.head);
+      const standing = onto === undefined ? undefined : groupStanding(onto.head);
       if (task === undefined || standing === undefined || standsAt(task, standing)) return;
       onStanding(task, standing);
     },
@@ -541,6 +607,10 @@ function TaskBoardColumnView({
       ? properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE)
       : properties;
   const cards = useLeaving(column.tasks, taskIdOf);
+  const into = quickAddInto(column.head);
+  const quick = useQuickAdd(tasks, into ?? {});
+  // Note that the quick add's lines stand where the cards do, so a column with none draws them in their list rather than its empty line.
+  const adding = quick.shown;
   // A column's cards are one Tab stop that ↑↓ walk; ←→ cross to the next column's (`useRovingColumns`).
   const roving = useRovingKeys<HTMLDivElement>();
   return (
@@ -561,8 +631,14 @@ function TaskBoardColumnView({
         glyph={mark}
         count={column.tasks.length === 0 ? undefined : groupCount(column.tasks.length)}
         surface={GROUP_SURFACE.WIDE}
+        actions={
+          into === undefined || !tasks.signedIn ? undefined : (
+            <NewTaskInButton label={groupNewTaskWords(column.head, words)} onPress={quick.open} />
+          )
+        }
+        actionsShown={GROUP_ACTIONS.AT_REST}
       />
-      {cards.length === 0 ? (
+      {cards.length === 0 && !adding ? (
         column.older === undefined ? (
           <Text
             variant={TEXT_VARIANT.CAPTION}
@@ -593,6 +669,7 @@ function TaskBoardColumnView({
               moves
               onPointerDown={narrow ? undefined : drag}
             >
+              <QuickAddLines quick={quick} line={boardQuickAddLine} />
               {cards.map(({ value: task }) => (
                 <TaskBoardCard
                   key={task.id}
@@ -710,7 +787,14 @@ export function TasksBoard({
       filters={filters}
       state={boardState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
-      empty={<EmptyState icon={<SquareKanbanIcon />}>{noneYetWords(TERM.TASK)}</EmptyState>}
+      empty={
+        <EmptyState
+          icon={<SquareKanbanIcon />}
+          action={newTaskAction(tasks.signedIn ? tasks.onNewTask : undefined)}
+        >
+          {noneYetWords(TERM.TASK)}
+        </EmptyState>
+      }
       error={
         <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}
@@ -722,12 +806,7 @@ export function TasksBoard({
         <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
       ) : null}
       <ListMotion root={board}>
-        <div
-          ref={board}
-          className="tasks-board relative flex min-h-0 min-w-min flex-[1_1_0] gap-block-gap leading-[normal] [--carried-ground:var(--luke-color-surface)]"
-          data-row-drop-scope=""
-          {...crossing}
-        >
+        <div ref={board} className={BOARD} data-row-drop-scope="" {...crossing}>
           {columns.length === 0 ? (
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {NONE_STANDING}

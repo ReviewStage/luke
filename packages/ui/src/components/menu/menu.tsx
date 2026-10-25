@@ -30,7 +30,7 @@ import { ROVING_STOP, rovingItem, useRovingKeys } from "../roving-keys/roving-ke
 import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area.js";
 import { SwitchMark } from "../switch/switch.js";
 import { hintedControlOf, Tooltip } from "../tooltip/hint.js";
-import { type MenuLine, menuCut } from "./menu-cut.js";
+import { MENU_LINE, type MenuLine, menuCut } from "./menu-cut.js";
 import { MenuGlyph } from "./menu-surface.js";
 import { useTouchHold } from "./touch-hold.js";
 
@@ -95,8 +95,6 @@ type MenuGrow = (typeof MENU_GROW)[keyof typeof MENU_GROW];
 
 /** The gap a menu keeps from the window's edges, in CSS pixels. */
 const MENU_MARGIN = 8;
-/** How short of the window's margin a menu standing over its opener may end before it stands against the margin instead: about a control and its gap, so none is left peeking past it. */
-const MENU_SLIVER = 40;
 /** The menu's own padding around its items, `--luke-menu-inset`, which a submenu rises by so its first item is level with its opener. */
 const MENU_INSET = 4;
 /** How a setting in a menu says whether it is on: a check at its end while it is, or a switch. */
@@ -131,7 +129,17 @@ export interface MenuPlacement {
   y: number;
   align: MenuAlign;
   grow?: MenuGrow;
+  /** The box of the button it drops from, where one did: a menu with no room on its side of the button grows from the button's other side, or stands beside it, rather than over it. */
+  button?: ButtonBox;
 }
+
+/**
+ * The props of a bar a menu never stands over, spread on it: a phone's
+ * places bar at the window's foot. A menu is held inside what can be seen
+ * less such a bar on screen, so one too tall for the room left scrolls
+ * above the bar rather than running down over it.
+ */
+export const MENU_KEEPS_CLEAR = { "data-menu-keeps-clear": "" } as const;
 
 export interface MenuAction {
   label: string;
@@ -216,28 +224,63 @@ function layerOf(opener: HTMLElement): MenuLayer {
   return opener.closest('[aria-modal="true"]') === null ? MENU_LAYER.WINDOW : MENU_LAYER.DIALOG;
 }
 
+/** The edges of the button a menu drops from. */
+interface ButtonBox {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/** A button's box as a placement keeps it. */
+function spanOf(bounds: DOMRect): ButtonBox {
+  return { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom };
+}
+
 /** Where a menu dropped from a button hangs: under it, its right edge on the button's. */
 export function dropBelow(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
-  return { x: bounds.right, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.END };
+  return {
+    x: bounds.right,
+    y: bounds.bottom + MENU_DROP,
+    align: MENU_ALIGN.END,
+    button: spanOf(bounds),
+  };
 }
 
 /** Where a menu dropped from a row as wide as its column hangs: under it, its left edge on the row's. */
 export function dropBelowStart(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
-  return { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START };
+  return {
+    x: bounds.left,
+    y: bounds.bottom + MENU_DROP,
+    align: MENU_ALIGN.START,
+    button: spanOf(bounds),
+  };
 }
 
 /** Where a menu raised from a button at the window's foot hangs: over it, its left edge on the button's. */
 export function riseAbove(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
-  return { x: bounds.left, y: bounds.top - MENU_DROP, align: MENU_ALIGN.START, grow: MENU_GROW.UP };
+  return {
+    x: bounds.left,
+    y: bounds.top - MENU_DROP,
+    align: MENU_ALIGN.START,
+    grow: MENU_GROW.UP,
+    button: spanOf(bounds),
+  };
 }
 
 /** Where a menu raised from a button at a row's right end hangs: over it, its right edge on the button's. */
 export function riseAboveEnd(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
-  return { x: bounds.right, y: bounds.top - MENU_DROP, align: MENU_ALIGN.END, grow: MENU_GROW.UP };
+  return {
+    x: bounds.right,
+    y: bounds.top - MENU_DROP,
+    align: MENU_ALIGN.END,
+    grow: MENU_GROW.UP,
+    button: spanOf(bounds),
+  };
 }
 
 /**
@@ -415,40 +458,67 @@ function pointAt(x: number, y: number): { getBoundingClientRect: () => DOMRect }
   return { getBoundingClientRect: () => ({ ...box, toJSON: () => box }) };
 }
 
+/** The room a menu has from `y` to the edge of `seen` it grows toward, less the margin. */
+function roomOf(y: number, grow: MenuGrow | undefined, seen: SeenRect): number {
+  return grow === MENU_GROW.UP ? y - seen.y - MENU_MARGIN : seen.y + seen.height - MENU_MARGIN - y;
+}
+
 /**
- * How far across a menu `height` tall hangs from `placement` in `seen`. A
- * menu with no room for it on its side of its opener is moved along until
- * it fits (`HELD_INSIDE`), over its opener and whatever stands beside it;
- * there, an end a sliver short of the window's margin would leave a control
- * beside the opener peeking past it, as a bar's ⋯ past a row's menu, so it
- * stands against the margin instead and covers it. Anywhere else it hangs
- * where it was placed.
+ * Where a menu `width` by `height` hangs from `placement` in `seen`. A menu
+ * with no room for it on its side of its opener is moved along until it
+ * fits (`HELD_INSIDE`), over its opener. Dropped from a button, it keeps
+ * clear of the button instead, as a system menu does: it grows from the
+ * button's other side where that has the room, or else stands beside the
+ * button, its end the drop's gap short of the button's near edge. Where
+ * neither has room, or there is no button, it hangs where it was placed.
  */
-function flushAcross(
+function settledOf(
   placement: MenuPlacement,
-  height: number,
-  seen: ReturnType<typeof seenRect>,
-): number {
-  const room =
+  size: { width: number; height: number },
+  seen: SeenRect,
+): MenuPlacement {
+  const { button } = placement;
+  if (size.height <= roomOf(placement.y, placement.grow, seen) || button === undefined) {
+    return placement;
+  }
+  const flipped =
     placement.grow === MENU_GROW.UP
-      ? placement.y - seen.y - MENU_MARGIN
-      : seen.y + seen.height - MENU_MARGIN - placement.y;
-  if (height <= room) return placement.x;
-  const edge =
-    placement.align === MENU_ALIGN.END ? seen.x + seen.width - MENU_MARGIN : seen.x + MENU_MARGIN;
-  const short = Math.abs(edge - placement.x);
-  return short > 0 && short < MENU_SLIVER ? edge : placement.x;
+      ? { y: button.bottom + MENU_DROP, grow: MENU_GROW.DOWN }
+      : { y: button.top - MENU_DROP, grow: MENU_GROW.UP };
+  if (size.height <= roomOf(flipped.y, flipped.grow, seen)) return { ...placement, ...flipped };
+  if (placement.align === MENU_ALIGN.END) {
+    const end = button.left - MENU_DROP;
+    return end - size.width >= seen.x + MENU_MARGIN ? { ...placement, x: end } : placement;
+  }
+  const start = button.right + MENU_DROP;
+  return start + size.width <= seen.x + seen.width - MENU_MARGIN
+    ? { ...placement, x: start }
+    : placement;
 }
 
 /** What can be seen of the window, as the rectangle a menu is held inside. */
-function seenRect() {
+interface SeenRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * What can be seen of the window, less a bar at its foot a menu keeps clear
+ * of (`MENU_KEEPS_CLEAR`) where one stands on screen, as the rectangle a
+ * menu is held inside.
+ */
+function seenRect(): SeenRect {
   const seen = visibleViewport();
-  return {
-    x: seen.left,
-    y: seen.top,
-    width: seen.right - seen.left,
-    height: seen.bottom - seen.top,
-  };
+  let bottom = seen.bottom;
+  for (const bar of document.querySelectorAll("[data-menu-keeps-clear]")) {
+    const box = bar.getBoundingClientRect();
+    if (box.height === 0 || bar.closest("[inert]") !== null) continue;
+    // Note that only a bar standing in the lower half of what is seen trims it, from its top down.
+    if (box.top > (seen.top + seen.bottom) / 2 && box.top < bottom) bottom = box.top;
+  }
+  return { x: seen.left, y: seen.top, width: seen.right - seen.left, height: bottom - seen.top };
 }
 
 /** The items of one menu, its own and not a submenu's within it, that the keys move between now. */
@@ -718,9 +788,12 @@ function SteeredItem({
   );
 }
 
-/** Whether a line of a menu's column is a rule between its groups, which holds no words. */
-function isRule(line: Element): boolean {
-  return line.tagName === "HR" || line.getAttribute("role") === "separator";
+/** What a line of a menu's column is: a rule between its groups, an item, or a note, as its heading or footer. */
+function kindOf(line: Element): MenuLine["kind"] {
+  if (line.tagName === "HR" || line.getAttribute("role") === "separator") return MENU_LINE.RULE;
+  return line.getAttribute("role")?.startsWith("menuitem") === true
+    ? MENU_LINE.ITEM
+    : MENU_LINE.NOTE;
 }
 
 /** The lines of a menu's column, from its top; a line of no height, as a submenu's unseen focus guard, is none. */
@@ -729,7 +802,7 @@ function linesOf(column: Element): MenuLine[] {
   return [...column.children].flatMap((line) => {
     const box = line.getBoundingClientRect();
     if (box.height === 0) return [];
-    return [{ top: box.top - top, bottom: box.bottom - top, words: !isRule(line) }];
+    return [{ top: box.top - top, bottom: box.bottom - top, kind: kindOf(line) }];
   });
 }
 
@@ -838,7 +911,7 @@ function Submenu({
   /** The layer its menu stands in, which it stands in too. */
   layer: MenuLayer;
   /** What can be seen of the window as its menu was hung, which it is held inside too. */
-  seen: ReturnType<typeof seenRect>;
+  seen: SeenRect;
   leaving: boolean;
   /** The submenu's element, which the menu counts as its own when it hears a press. */
   surface: React.RefObject<HTMLDivElement | null>;
@@ -1008,17 +1081,17 @@ export function Menu({
   // rectangle new on every render would have Base UI place the menu again
   // on every render, and every placing renders it again.
   const seen = useMemo(() => seenRect(), [placement]);
-  // Where the menu hangs across, once it is drawn and measured: against the window's margin where it must stand over its opener a sliver short of it (`flushAcross`).
-  const [across, setAcross] = useState<{ placement: MenuPlacement; x: number } | undefined>();
-  const x = across?.placement === placement ? across.x : placement.x;
-  const anchor = useMemo(() => pointAt(x, placement.y), [x, placement]);
+  // Where the menu hangs, once it is drawn and measured: clear of the button it dropped from where it must otherwise stand over it (`settledOf`).
+  const [settled, setSettled] = useState<
+    { placement: MenuPlacement; hung: MenuPlacement } | undefined
+  >();
+  const hung = settled?.placement === placement ? settled.hung : placement;
+  const anchor = useMemo(() => pointAt(hung.x, hung.y), [hung]);
   useLayoutEffect(() => {
-    if (popup === null || across?.placement === placement) return;
-    setAcross({
-      placement,
-      x: flushAcross(placement, popup.getBoundingClientRect().height, seen),
-    });
-  }, [popup, placement, across, seen]);
+    if (popup === null || settled?.placement === placement) return;
+    const { width, height } = popup.getBoundingClientRect();
+    setSettled({ placement, hung: settledOf(placement, { width, height }, seen) });
+  }, [popup, placement, settled, seen]);
   const layer = layerOf(opener);
 
   // Focus lands on the first item, or the checked one where it opens on
@@ -1102,7 +1175,7 @@ export function Menu({
         aria-label={label}
         layer={layer}
         anchor={anchor}
-        side={placement.grow === MENU_GROW.UP ? "top" : "bottom"}
+        side={hung.grow === MENU_GROW.UP ? "top" : "bottom"}
         align={placement.align === MENU_ALIGN.END ? "end" : "start"}
         sideOffset={0}
         collisionBoundary={seen}

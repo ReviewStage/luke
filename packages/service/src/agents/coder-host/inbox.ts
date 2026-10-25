@@ -217,6 +217,8 @@ export const INBOX_REFUSAL = {
     "Not posted: a select field's recommended names one of its options, and no other field recommends one.",
   UNREADABLE_WITHDRAW: "Not withdrawn: name the thread's key and why you withdraw its ask.",
   NO_OPEN_ASK: "Not withdrawn: you have no thread under that key with an open ask.",
+  NO_CHANNEL: "Not posted: that channel is archived, or not one of your workspace's.",
+  NO_ADDRESSEE: "Not posted: the member you addressed is not in your workspace.",
   NO_AGENT: "Not done: this conversation is no coding agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
 } as const;
@@ -461,6 +463,10 @@ function storeRefusal(refusal: InboxPostRefusal): string {
       return INBOX_REFUSAL.NO_TITLE;
     case INBOX_POST_REFUSAL.NO_AGENT:
       return INBOX_REFUSAL.NO_AGENT;
+    case INBOX_POST_REFUSAL.NO_CHANNEL:
+      return INBOX_REFUSAL.NO_CHANNEL;
+    case INBOX_POST_REFUSAL.NO_ADDRESSEE:
+      return INBOX_REFUSAL.NO_ADDRESSEE;
   }
 }
 

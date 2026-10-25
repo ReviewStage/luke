@@ -16,7 +16,7 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
- * sidebar-drawer-narrow.test.ts -- a phone's drawer gives its tasks the column: the pages' rows scroll away with them; beside the work the rows stand put over the tasks; and an empty Pinned stands nowhere, under a finger or a mouse, whatever the room.
+ * sidebar-drawer-narrow.test.ts -- the column gives its tasks the room: the pages' rows scroll away with them, in a phone's drawer and beside the work alike; and an empty Pinned stands nowhere, under a finger or a mouse, whatever the room.
  */
 
 const WORKSPACE: Workspace = {
@@ -120,10 +120,10 @@ test("a narrow window worked by a mouse draws no empty Pinned either", async () 
   assert.equal(pinnedStands(sidebar), false);
 });
 
-test("beside the work the pages' rows stand put over the tasks' scroller, and an empty Pinned stands nowhere", async () => {
+test("beside the work the pages' rows scroll with the tasks too, and an empty Pinned stands nowhere", async () => {
   const sidebar = await mountIn(SHELL_ROOM.WIDE);
 
-  assert.deepEqual(scrolled(sidebar), { home: false, tasks: true });
+  assert.deepEqual(scrolled(sidebar), { home: true, tasks: true });
   assert.equal(pinnedStands(sidebar), false, "no Pinned");
   assert.doesNotMatch(sidebar.textContent ?? "", /Pinned/u);
 });

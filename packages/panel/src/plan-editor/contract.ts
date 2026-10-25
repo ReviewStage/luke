@@ -19,7 +19,7 @@ import type {
   WritingInsert,
   WritingMark,
 } from "@luke/settings/shortcuts";
-import type { ComboboxFieldProps, TextAreaSubmit } from "@luke/ui";
+import type { ComboboxFieldProps } from "@luke/ui";
 
 /** A box in the window, in the coordinates `getBoundingClientRect` speaks. */
 export interface EditorBox {
@@ -106,7 +106,7 @@ export type PlanEditorPlacement =
 /** The caret at the end of the text, as a press on the room under its last line puts it. */
 export const PLACEMENT_END = { end: true } as const;
 
-/** How the text was finished: ⌘↩, which a box sends or saves on, or Esc, which it lets go on; a plan finishes either way. */
+/** How the text was finished: its send, Enter in a message box and ⌘↩ in a document, which a box sends or saves on, or Esc, which it lets go on; a plan finishes either way. */
 export const FINISH = {
   SUBMIT: "submit",
   ESCAPE: "escape",
@@ -169,8 +169,15 @@ export interface PlanEditorProps {
   readonly className: string;
   /** The text as it would be saved now, after each change, and where the comment threads' words stand in it, where the editor carries any. */
   readonly onDraft: (markdown: string, anchors?: EditorAnchors) => void;
-  /** Esc or ⌘↩, with the section the caret stood in, counted as `planSections` counts them, and which of the two it was. */
+  /** Esc or the send, with the section the caret stood in, counted as `planSections` counts them, and which of the two it was. */
   readonly onFinish: (section: number, how: Finish) => void;
+  /**
+   * Whether the text is a message box's, which sends on Enter as every box
+   * does (`enterSends`), Shift+Enter laying in what Enter lays in in a
+   * document; a document's text, a plan's or a description's, where Enter
+   * writes, finishes on ⌘↩.
+   */
+  readonly sendsOnEnter?: boolean | undefined;
   /** ↑ from the first line of the text, which goes to the title above it; none where nothing stands above the text, where ↑ is the editor's own. */
   readonly onLeaveUp?: (() => void) | undefined;
   /** What the text's mentions are drawn and picked with; none where the text takes no mentions, as a template does not. */
@@ -493,8 +500,6 @@ export interface ComposerEditorProps {
   readonly onKey: (event: KeyboardEvent) => boolean;
   /** Enter with no Shift, while no input method is composing; on a coarse pointer, where Enter is a new line, only with ⌘ or Ctrl. */
   readonly onEnter: () => void;
-  /** The key that sends, as it stands now: Enter where the box leaves it out, ⌘ or Ctrl with Enter where Enter must break the line. */
-  readonly submitKey?: (() => TextAreaSubmit) | undefined;
   /** Files pasted; answers whether the owner took them, which keeps them out of the words. */
   readonly onPasteFiles: (files: readonly File[]) => boolean;
   /** A paste that ran past the bound and was cut to the room left, or laid in nowhere for want of it; the owner says so, since the words it sees are not the words pasted. */

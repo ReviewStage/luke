@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
+import { channel } from "./channel.js";
 import { codingAgent } from "./coding-agent.js";
 import { inboxMessage } from "./inbox-message.js";
 import { task } from "./task.js";
@@ -35,8 +36,9 @@ import { task } from "./task.js";
  * the member. The task is the agent's, kept on the row so a task's inbox is
  * read by one index, and the account's open items are read by another. A
  * message on the item's thread moves when it last changed and never when it
- * was settled. The row goes with its account, its task, and its agent
- * alike.
+ * was settled. The thread lives in one channel of its workspace
+ * (`channel.ts`), and its open ask may be addressed to one member. The row
+ * goes with its account, its task, and its agent alike.
  */
 export const inboxItem = pgTable(
   "inbox_item",
@@ -54,6 +56,22 @@ export const inboxItem = pgTable(
     agentId: uuid("agent_id")
       .notNull()
       .references(() => codingAgent.id, { onDelete: "cascade" }),
+    /**
+     * The channel of the item's workspace the thread lives in. An insert
+     * that names none takes the workspace's #general, which the trigger
+     * `inbox_item_general_channel` writes and mints where it is missing, so
+     * the insert here leaves it to the database rather than binding a value.
+     */
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => channel.id)
+      .$defaultFn(() => sql`default`),
+    /**
+     * The member the thread's open ask is addressed to; null where it names
+     * none, which reads as waiting on whoever the store derives, and once
+     * their account is gone.
+     */
+    addresseeId: text("addressee_id").references(() => user.id, { onDelete: "set null" }),
     /** The agent's own name for the item, the same each time it means the same item. */
     key: text("key").notNull(),
     /** Moved on by every change of the agent's, which an answer names so it answers the item it was shown. */
@@ -115,6 +133,8 @@ export const inboxItem = pgTable(
     uniqueIndex("inbox_item_agent_key").on(table.agentId, table.key),
     // A task's inbox is read the latest changed first.
     index("inbox_item_task_updated").on(table.taskId, table.updatedAt),
+    // A channel's threads are read in the order they were posted.
+    index("inbox_item_channel_posted").on(table.channelId, table.postedAt),
     // A workspace's items of agents with no task are read the latest changed first.
     index("inbox_item_org_updated").on(table.organizationId, table.updatedAt),
     // The open items of agents with no task, which every account's read of what waits names

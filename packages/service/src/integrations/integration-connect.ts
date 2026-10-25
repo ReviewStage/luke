@@ -8,13 +8,18 @@
  * grants. Luke never stores a token. Three things are ever asked of a
  * provider's connector, each through `@vercel/connect` as its docs and
  * README describe it: a browser sign-in for the account to begin, the
- * account's token now, and the grant revoked. Note that Luke asks Connect
- * nothing its docs do not describe, so how a sign-in ended is learned only
- * from whether the account now holds a grant. Each answers either what was
- * asked or one of three fixed words, never Connect's own message: an
- * error's message is Connect's or the provider's words, which nothing here
- * can vouch for holding no credential, so what a failure keeps is its word
- * and, where it carries them, Connect's machine code and status.
+ * account's token now, and the grant revoked. A token is asked for at the
+ * moment it is used and served from the SDK's in-process cache until just
+ * before it expires; one a provider refuses is dropped from that cache
+ * (`evict`) under the same connector and parameters the read named, so the
+ * next read asks Connect again rather than every read forcing a refresh.
+ * Note that Luke asks Connect nothing its docs do not describe, so how a
+ * sign-in ended is learned only from whether the account now holds a
+ * grant. Each answers either what was asked or one of three fixed words,
+ * never Connect's own message: an error's message is Connect's or the
+ * provider's words, which nothing here can vouch for holding no credential,
+ * so what a failure keeps is its word and, where it carries them, Connect's
+ * machine code and status.
  *
  * Asking Connect for any subject's token needs the deployment's own Vercel
  * OIDC token, which the SDK reads from the request or the environment
@@ -37,6 +42,7 @@ import {
   ConnectError,
   ConnectorInstallationRequiredError,
   type ConnectTokenResponse,
+  deleteTokenCacheEntry,
   getTokenResponse,
   NoValidTokenError,
   revokeToken,
@@ -122,6 +128,8 @@ export interface ConnectorService {
   ) => Effect.Effect<IntegrationToken, IntegrationConnectFailure>;
   /** Revokes the grant of the account under `subject` at Connect, which revokes it at the provider where the provider allows it. */
   readonly revoke: (subject: string) => Effect.Effect<void, IntegrationConnectFailure>;
+  /** Drops the token of the account under `subject` from the SDK's in-process cache, as Connect's docs say to once a provider rejects it; asks Connect nothing. */
+  readonly evict: (subject: string) => Effect.Effect<void>;
 }
 
 /** Every provider's connector, configured or not. */
@@ -193,6 +201,7 @@ const UNCONFIGURED_CONNECTOR: ConnectorService = {
   authorize: () => Effect.fail(NOT_CONFIGURED),
   token: () => Effect.fail(NOT_CONFIGURED),
   revoke: () => Effect.fail(NOT_CONFIGURED),
+  evict: () => Effect.void,
 };
 
 /** The calls of Vercel Connect's SDK a connector makes, which a test hands a fake Connect for. */
@@ -200,9 +209,15 @@ export interface ConnectSdk {
   readonly startAuthorization: typeof startAuthorization;
   readonly getTokenResponse: typeof getTokenResponse;
   readonly revokeToken: typeof revokeToken;
+  readonly deleteTokenCacheEntry: typeof deleteTokenCacheEntry;
 }
 
-const VERCEL_CONNECT_SDK: ConnectSdk = { startAuthorization, getTokenResponse, revokeToken };
+const VERCEL_CONNECT_SDK: ConnectSdk = {
+  startAuthorization,
+  getTokenResponse,
+  revokeToken,
+  deleteTokenCacheEntry,
+};
 
 /** The longest account name a grant's fields are read as a label for. */
 const ACCOUNT_NAME_MAX = 64;
@@ -305,6 +320,8 @@ export function vercelConnector(
         try: () => sdk.revokeToken(connector, subjectOf(subject)),
         catch: failureOf,
       }),
+    // Note that the parameters are the ones `token` reads with, because the cache's key is made of them.
+    evict: (subject) => Effect.sync(() => sdk.deleteTokenCacheEntry(connector, subjectOf(subject))),
   };
 }
 

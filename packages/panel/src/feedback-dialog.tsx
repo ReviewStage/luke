@@ -4,8 +4,8 @@
  * The window asks the way every desktop app's "Send feedback" asks: it dims,
  * a card holds one field and the few things that go with it, and Cancel and
  * Send sit at its foot. The field takes focus, Tab stays inside the card, and
- * focus goes back to whatever opened it. Command-Enter sends from anywhere in
- * the card.
+ * focus goes back to whatever opened it. Enter in the field sends, as every
+ * box's does (`enter-sends.ts`), and Shift+Enter adds a line.
  *
  * Each kind keeps its own draft, so a note is always sent as the kind it was
  * written as. One rule keeps it: only a delivered send discards it; Cancel,
@@ -38,7 +38,6 @@ import {
 import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENTS, type Experiment } from "@luke/settings";
-import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
   ALIGN,
   AttachmentChip,
@@ -54,7 +53,6 @@ import {
   ImageIcon,
   Inline,
   LAYOUT_ELEMENT,
-  Shortcut,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -65,7 +63,7 @@ import {
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
-import { modEnterSends } from "./enter-sends.js";
+import { enterKeyHint, enterSubmitKey } from "./enter-sends.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
 import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
 
@@ -101,9 +99,6 @@ const SEND_REFUSAL = "Could not send that. Try again.";
 
 /** How many lines the empty note stands tall before it grows with its words. */
 const MESSAGE_ROWS = 5;
-
-/** The chord that sends from anywhere in the dialog, as Send draws and announces it. */
-const SEND_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
 
 /** The note as it stands between openings: its words, its screenshots, and whether it is signed. */
 interface FeedbackDraft {
@@ -335,13 +330,6 @@ export function FeedbackDialog({
     onClose();
   };
 
-  // Command or Ctrl with Return sends from anywhere in the card.
-  const sendKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!modEnterSends(event)) return;
-    event.preventDefault();
-    void send();
-  };
-
   // Note that the card is drawn as it last stood while it fades out, because
   // what it was opened with, and the draft a send has emptied, are let go
   // the moment it closes.
@@ -364,7 +352,6 @@ export function FeedbackDialog({
       holding={hasWords(draft)}
       initialFocus={field}
       onDismiss={close}
-      onKeyDown={sendKey}
       dropping={fileDrop.dropping}
       dropTarget={fileDrop.target}
       actionsStart={
@@ -387,19 +374,17 @@ export function FeedbackDialog({
           </Button>
           <Button
             variant={BUTTON_VARIANT.PRIMARY}
-            aria-keyshortcuts={shortcutAria(SEND_CHORD)}
             disabled={!hasWords(draft)}
             busy={busy}
             busyLabel="Sending"
             onClick={() => void send()}
           >
             Send
-            <Shortcut chord={SEND_CHORD} className="button-chord" />
           </Button>
         </>
       }
     >
-      <div className="feedback-dialog ph-no-capture">
+      <div className="feedback-dialog ph-no-capture flex min-h-0 flex-col gap-block-gap">
         <FormField
           label={FEEDBACK_COPY[shown.kind].field}
           description={
@@ -422,6 +407,9 @@ export function FeedbackDialog({
               disabled={busy}
               rows={MESSAGE_ROWS}
               grow
+              enterKeyHint={enterKeyHint()}
+              submitKey={enterSubmitKey()}
+              onSubmit={() => void send()}
               onChange={(message) => changeDraft({ message })}
               onPaste={(event) => {
                 // A screenshot on the clipboard is an attachment, not text
@@ -461,7 +449,7 @@ export function FeedbackDialog({
           </Inline>
         ) : null}
         {signature ? (
-          <div className="feedback-dialog-signature">
+          <div className="feedback-dialog-signature flex min-w-0 items-center gap-control-gap">
             <Checkbox
               checked={shown.draft.signed}
               disabled={busy}
@@ -475,7 +463,7 @@ export function FeedbackDialog({
               variant={TEXT_VARIANT.INHERIT}
               truncate
               id={signatureId}
-              className="feedback-dialog-identity"
+              className="feedback-dialog-identity ml-auto text-caption text-muted-foreground"
             >
               {shown.draft.signed
                 ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`

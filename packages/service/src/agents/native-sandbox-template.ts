@@ -324,7 +324,7 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
     // and one Vercel took of a sandbox it stopped mid-build never is. Of readers racing here,
     // Vercel snapshots for the first and refuses the rest, which read on and find it ready.
     yield* api.updateTags(build.name, { ...tags, [TEMPLATE_TAG.BUILT]: String(now) });
-    const taken = yield* Effect.result(api.snapshot(session));
+    const taken = yield* Effect.result(api.snapshot(session, Duration.infinity));
     if (Result.isFailure(taken)) return PREPARING;
     yield* Effect.logInfo(`the native agents' image ${build.key} is ready`);
     return { state: TEMPLATE_STATE.READY, snapshotId: taken.success } as const;

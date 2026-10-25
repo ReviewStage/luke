@@ -2,6 +2,7 @@
   "apps/web/src/analytics.ts": "The session counted once, so a reload does not count it again: a counter's memory, no view choice.",
   "apps/web/src/app/first-frame-hint.tsx": "Whether the last visit was signed in, so the first frame draws the right shell: a cache of the account's state.",
   "apps/web/src/app/local-storage-file-system.ts": "The host's own files in a browser tab: data the host keeps, no view choice.",
+  "apps/web/src/app/stale-build.ts": "The build a tab last reloaded away from, kept for its session so a reload onto a new build never loops: a guard's memory, no view choice.",
   "apps/web/src/connect-return.ts": "The connect flow's handoff on its return: credential handling, kept for the tab's life.",
   "packages/panel/src/composer-drafts.ts": "The words a person had typed and not sent: a draft, never a view choice.",
   "packages/panel/src/desktop/failed-runs.ts": "Which automation failure was last seen on this Mac: a read mark, not a view choice.",

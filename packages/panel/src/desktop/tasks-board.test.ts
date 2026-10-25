@@ -467,6 +467,38 @@ test("a Todo card dragged onto In progress is sent in progress, and one let go i
   assert.deepEqual(opened, [], "a drag opens no task");
 });
 
+test("a column's + opens a draft there whose chips change it, and Return adds it with no agent and opens the next draft", async () => {
+  const added: [string, unknown][] = [];
+  const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, DEFAULT_BOARD_DISPLAY, {
+    onQuickAdd: (name, into) => {
+      added.push([name, into]);
+      return Promise.resolve(undefined);
+    },
+  });
+  const draft = () => board.querySelector<HTMLInputElement>("[data-quick-add] input");
+  act(() =>
+    board.querySelector<HTMLButtonElement>('button[aria-label="New task in Backlog"]')?.click(),
+  );
+  act(() =>
+    board
+      .querySelector<HTMLButtonElement>('[data-quick-add] button[aria-label^="Priority:"]')
+      ?.click(),
+  );
+  pick("High");
+  const field = draft() ?? assert.fail("the draft stands after its chip picked");
+  field.value = "Export invoices as CSV";
+  act(() => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await act(async () => undefined);
+
+  assert.deepEqual(added, [
+    [
+      "Export invoices as CSV",
+      { standing: { status: TASK_STATUS.BACKLOG, priority: TASK_PRIORITY.HIGH } },
+    ],
+  ]);
+  assert.equal(draft()?.value, "", "the next draft stands, empty");
+});
+
 test("by priority, a card dragged onto Urgent's column is sent urgent", async () => {
   const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, {
     ...DEFAULT_BOARD_DISPLAY,

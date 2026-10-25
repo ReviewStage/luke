@@ -91,6 +91,23 @@ const SUGGESTED_ICONS = {
 /** The suggested glyphs, looked up by any name a section may wear. */
 const SUGGESTED_BY_NAME = new Map<string, LucideIcon>(Object.entries(SUGGESTED_ICONS));
 
+/** The ink each color of the palette draws a glyph in, from the file tree's palette, which already answers light and dark. */
+const COLOR_INK = {
+  [TASK_SECTION_ICON_COLOR.RED]: "text-file-icon-red",
+  [TASK_SECTION_ICON_COLOR.ORANGE]: "text-file-icon-orange",
+  [TASK_SECTION_ICON_COLOR.YELLOW]: "text-file-icon-yellow",
+  [TASK_SECTION_ICON_COLOR.GREEN]: "text-file-icon-green",
+  [TASK_SECTION_ICON_COLOR.TEAL]: "text-file-icon-teal",
+  [TASK_SECTION_ICON_COLOR.BLUE]: "text-file-icon-blue",
+  [TASK_SECTION_ICON_COLOR.PURPLE]: "text-file-icon-purple",
+  [TASK_SECTION_ICON_COLOR.PINK]: "text-file-icon-pink",
+} as const satisfies Record<TaskSectionIconColor, string>;
+
+/** The ink a glyph is drawn in: its color's, or the text's own where it has none. */
+function inkOf(color: TaskSectionIconColor | undefined): string | undefined {
+  return color === undefined ? undefined : COLOR_INK[color];
+}
+
 /** What each color of the palette is called. */
 const COLOR_LABEL = {
   [TASK_SECTION_ICON_COLOR.RED]: "Red",
@@ -189,14 +206,16 @@ function LoadedGlyph({
 }): React.JSX.Element {
   const loaded = useAtomValue(lucideAtom);
   const Glyph = AsyncResult.isSuccess(loaded) ? lucideGlyph(loaded.value, glyph) : undefined;
-  if (Glyph === undefined) return <span className="section-glyph-blank" aria-hidden="true" />;
-  return <Glyph data-icon-color={color} />;
+  if (Glyph === undefined)
+    return <span className="section-glyph-blank block size-control-icon" aria-hidden="true" />;
+  return <Glyph data-icon-color={color} className={inkOf(color)} />;
 }
 
 /** A glyph in its color: one of the suggested at once, any other once Lucide has loaded. */
 function drawnGlyph(glyph: string, color: TaskSectionIconColor | undefined): React.JSX.Element {
   const Suggested = SUGGESTED_BY_NAME.get(glyph);
-  if (Suggested !== undefined) return <Suggested data-icon-color={color} />;
+  if (Suggested !== undefined)
+    return <Suggested data-icon-color={color} className={inkOf(color)} />;
   return <LoadedGlyph glyph={glyph} color={color} />;
 }
 
@@ -205,7 +224,10 @@ export function sectionGlyph(icon: TaskSectionIcon | undefined): React.JSX.Eleme
   if (icon === undefined) return undefined;
   if (icon.kind === TASK_SECTION_ICON_KIND.EMOJI) {
     return (
-      <span className="sidebar-section-emoji" aria-hidden="true">
+      <span
+        className="sidebar-section-emoji grid size-control-icon place-items-center text-caption-inline leading-none"
+        aria-hidden="true"
+      >
         {icon.emoji}
       </span>
     );
@@ -288,7 +310,7 @@ const GlyphPanel = memo(function GlyphPanel({
   }
   const stop = found.find((choice) => chosenGlyph(icon, choice.glyph)) ?? found[0];
   return (
-    <div className="section-icon-grid">
+    <div className="section-icon-grid grid grid-cols-section-icons gap-tight-gap">
       {found.map((choice) => {
         const Glyph = lucideGlyph(icons, choice.glyph);
         return (
@@ -297,7 +319,11 @@ const GlyphPanel = memo(function GlyphPanel({
             label={choice.label}
             pressed={chosenGlyph(icon, choice.glyph)}
             stop={choice === stop}
-            face={Glyph === undefined ? null : <Glyph data-icon-color={color} />}
+            face={
+              Glyph === undefined ? null : (
+                <Glyph data-icon-color={color} className={inkOf(color)} />
+              )
+            }
             onPress={() => onIcon(glyphIcon(choice.glyph, color))}
           />
         );
@@ -325,22 +351,26 @@ const EmojiPanel = memo(function EmojiPanel({
   return (
     <>
       {found.map((group) => (
-        <section key={group.name} className="section-emoji-group" aria-label={group.name}>
+        <section
+          key={group.name}
+          className="section-emoji-group [.section-emoji-group+&]:mt-control-gap"
+          aria-label={group.name}
+        >
           <Text
             as={TEXT_ELEMENT.H3}
             variant={TEXT_VARIANT.GROUP}
-            className="section-emoji-group-name"
+            className="section-emoji-group-name m-0 mb-tight-gap"
           >
             {group.name}
           </Text>
-          <div className="section-icon-grid">
+          <div className="section-icon-grid grid grid-cols-section-icons gap-tight-gap">
             {group.emojis.map((one) => (
               <GridChoice
                 key={one.emoji}
                 label={one.name}
                 pressed={chosenEmoji(icon, one.emoji)}
                 stop={one === stop}
-                face={<span className="section-emoji-face">{one.emoji}</span>}
+                face={<span className="section-emoji-face text-foreground">{one.emoji}</span>}
                 onPress={() => onIcon({ kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: one.emoji })}
               />
             ))}
@@ -369,7 +399,7 @@ function ColorChoices({
     />
   );
   return (
-    <fieldset className="section-icon-colors">
+    <fieldset className="section-icon-colors m-0 flex min-w-0 flex-wrap gap-item-gap border-0 p-0">
       <VisuallyHidden as="legend">Icon color</VisuallyHidden>
       {swatch("No color", undefined)}
       {Object.values(TASK_SECTION_ICON_COLOR).map((value) => swatch(COLOR_LABEL[value], value))}
@@ -467,9 +497,14 @@ export function SectionIconPicker({
     grid.current?.querySelector<HTMLButtonElement>('button:not([tabindex="-1"])')?.focus();
   };
   return (
-    <fieldset className="section-icon-picker" disabled={disabled}>
-      <legend className="section-icon-legend">Icon</legend>
-      <div className="section-icon-bar">
+    <fieldset
+      className="section-icon-picker m-0 mt-block-gap flex min-w-0 flex-col gap-control-gap border-0 p-0"
+      disabled={disabled}
+    >
+      <legend className="section-icon-legend mb-tight-gap p-0 text-muted-foreground text-caption-inline font-luke-medium">
+        Icon
+      </legend>
+      <div className="section-icon-bar flex items-center justify-between gap-control-gap">
         <ChoiceBar<IconTab>
           label="Icon kind"
           items={[
@@ -492,7 +527,7 @@ export function SectionIconPicker({
         </Tooltip>
       </div>
       <div
-        className="section-icon-panel"
+        className="section-icon-panel flex min-w-0 flex-col gap-control-gap"
         role="tabpanel"
         id={panelId}
         aria-labelledby={tabIds[tab]}
@@ -510,7 +545,7 @@ export function SectionIconPicker({
         </search>
         {tab === ICON_TAB.ICONS ? <ColorChoices color={color} onColor={recolor} /> : null}
         <fieldset
-          className="section-icon-choices"
+          className="section-icon-choices m-0 min-w-0 border-0 p-0"
           onKeyDown={stepGrid}
           onPointerOver={(event) => setResting(restingLabel(event))}
           onPointerLeave={() => setResting(undefined)}
@@ -520,7 +555,7 @@ export function SectionIconPicker({
           }}
         >
           <VisuallyHidden as="legend">{tab === ICON_TAB.ICONS ? "Icons" : "Emoji"}</VisuallyHidden>
-          <div className="section-icon-scroll">
+          <div className="section-icon-scroll flex h-section-icon-scroll flex-col">
             <ScrollArea ref={grid}>
               {tab === ICON_TAB.ICONS ? (
                 <GlyphPanel query={query} icon={icon} color={color} onIcon={choose} />
@@ -534,7 +569,7 @@ export function SectionIconPicker({
           as={TEXT_ELEMENT.P}
           variant={TEXT_VARIANT.INHERIT}
           truncate
-          className="section-icon-resting"
+          className="section-icon-resting m-0 min-h-luke-16 text-muted-foreground text-caption-inline"
           aria-hidden="true"
         >
           {resting ??

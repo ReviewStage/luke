@@ -559,7 +559,7 @@ function MemberRow({
           leading: <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />,
           label: (
             // The person card's own wrapper, so You stands off the name as it does on the card.
-            <span className="actor-card-name">
+            <span className="actor-card-name inline-flex items-center gap-item-gap">
               {member.name}
               {userId === readerId ? <YouBadge /> : null}
             </span>

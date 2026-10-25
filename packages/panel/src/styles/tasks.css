@@ -2205,16 +2205,36 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   margin-right: 0;
 }
 
-/* A video plays on the veil, centred, as large as the card leaves it under
-   its header at its own shape (`@luke/ui`'s VideoPlayer). */
-.attachment-viewer-body > .luke-video-player {
-  max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24) - 50px);
+/* A picture or a video fits the room under the viewer's header edge to
+   edge at its own shape, the room a container one track its own size, and
+   grows past its own pixels to fill it at most twice over (`@luke/ui`'s
+   ZoomImage and VideoPlayer say their pixels once they are read). */
+.attachment-viewer-body:has(> :is(.luke-zoom-image, .luke-video-player)) {
+  container-type: size;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
 }
 
-/* The picture, `@luke/ui`'s ZoomImage, stands no taller fitted than the
-   card leaves it under its header. */
 .attachment-viewer-body > .luke-zoom-image {
-  max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24) - 50px);
+  width: min(
+    100cqw,
+    100cqh *
+    var(--luke-zoom-natural-width) /
+    var(--luke-zoom-natural-height),
+    var(--luke-zoom-natural-width) *
+    2px
+  );
+  max-height: 100%;
+}
+
+.attachment-viewer-body > .luke-video-player {
+  width: min(
+    100cqw,
+    100cqh *
+    var(--luke-video-natural-width) /
+    var(--luke-video-natural-height),
+    var(--luke-video-natural-width) *
+    2px
+  );
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its

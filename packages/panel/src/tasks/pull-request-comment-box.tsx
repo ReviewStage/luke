@@ -46,7 +46,7 @@ export function usePullRequestComment(agentId: string, onWritten: () => void): P
   return { writes, body, setBody };
 }
 
-/** The box: its heading, the words written as they are drawn, GitHub's answer where it did not take the last one, and Comment, which ⌘↩ presses too. */
+/** The box: its heading, the words written as they are drawn, GitHub's answer where it did not take the last one, and Comment, which Enter in the words presses too. */
 export function PullRequestCommentBox({
   comment,
 }: {
