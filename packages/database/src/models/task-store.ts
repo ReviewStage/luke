@@ -56,6 +56,7 @@ import { taskSectionEntry } from "../schemas/task-section.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { readPlanTemplate } from "./account-store.js";
 import { agentAutomationNameSql } from "./agent-name.js";
+import { ensureGeneralChannel } from "./channel-store.js";
 import { moveTaskChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
@@ -1252,7 +1253,9 @@ const followingAutomations = SqlSchema.void({
  * The task's agents and inbox moved along with it to another workspace, its
  * chat after them (`chat-store.ts`'s `moveTaskChat`), so
  * no row of the task's stays tied to the workspace it left, whose deletion
- * would otherwise take them with it.
+ * would otherwise take them with it. Note that the inbox's threads go to the
+ * new workspace's #general, because a channel is one workspace's and the one
+ * a thread stood in has no counterpart there.
  */
 /**
  * Every member's entries for the plan taken out of their sections, as it
@@ -1269,12 +1272,14 @@ const leaveSections = SqlSchema.void({
 const followingAgentsAndInbox = Effect.fnUntraced(function* (
   taskId: string,
   organizationId: string,
+  now: Date,
 ) {
   yield* Database.use((db) =>
     db.update(codingAgent).set({ organizationId }).where(eq(codingAgent.taskId, taskId)),
   );
+  const channelId = yield* ensureGeneralChannel(organizationId, now);
   yield* Database.use((db) =>
-    db.update(inboxItem).set({ organizationId }).where(eq(inboxItem.taskId, taskId)),
+    db.update(inboxItem).set({ organizationId, channelId }).where(eq(inboxItem.taskId, taskId)),
   );
   yield* Database.use((db) =>
     db.update(attachment).set({ organizationId }).where(eq(attachment.taskId, taskId)),
@@ -1419,7 +1424,7 @@ export function updateTaskCommitted<E = never, R = never>(
           });
         }
         if (changes.organizationId !== undefined) {
-          yield* followingAgentsAndInbox(taskId, row.organizationId);
+          yield* followingAgentsAndInbox(taskId, row.organizationId, now);
           yield* moveTaskChat(taskId, row.organizationId);
           if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
         }
