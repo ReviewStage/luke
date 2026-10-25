@@ -120,7 +120,7 @@ const updateAccountTools = SqlSchema.void({
     Database.use((db) =>
       db
         .update(integrationConnection)
-        .set({ tools, toolsListedAt: from })
+        .set({ tools: keptOf(tools), toolsListedAt: from })
         .where(
           and(
             ofAccountGrant(grant),
@@ -140,7 +140,7 @@ const updateWorkspaceTools = SqlSchema.void({
     Database.use((db) =>
       db
         .update(workspaceIntegrationConnection)
-        .set({ tools, toolsListedAt: from })
+        .set({ tools: keptOf(tools), toolsListedAt: from })
         .where(
           and(
             ofWorkspaceGrant(grant),
@@ -153,6 +153,17 @@ const updateWorkspaceTools = SqlSchema.void({
         ),
     ),
 });
+
+/**
+ * What a row keeps of a list: the list, or none for an empty one. Note that
+ * an empty list is kept as none, because a provider that answers no tools
+ * for a moment would otherwise hide every tool for a week, while a list
+ * kept from before would go on naming tools the provider no longer lists;
+ * none is listed live at the next listing.
+ */
+function keptOf(tools: readonly McpToolSchema[]): readonly McpToolSchema[] | null {
+  return tools.length === 0 ? null : tools;
+}
 
 /** A row's kept list, where it holds one that still reads as tools. */
 const storedOf = Option.match({
@@ -180,10 +191,10 @@ export function readStoredTools(
 }
 
 /**
- * Keeps the tools a read begun at `from` listed on the grant, where its row
- * still stands for that grant, the grant was completed by then, and no list
- * from a later read is kept; nothing is kept otherwise, nor for a grant that
- * keeps none.
+ * Keeps the tools a read begun at `from` listed on the grant, or none where
+ * it listed none, where its row still stands for that grant, the grant was
+ * completed by then, and no list from a later read is kept; nothing is
+ * written otherwise, nor for a grant that keeps none.
  */
 export function storeTools(
   grant: IntegrationGrantRef,

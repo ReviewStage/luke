@@ -645,27 +645,39 @@ it.layer(getTestDB())("the integrations' door", (it) => {
   );
 
   it.effect(
-    "a provider that lists no tools for a moment is listed live again at the next listing, never kept empty",
+    "a provider that lists no tools is listed live again at the next listing, and a list kept from before is not listed",
     () =>
       Effect.gen(function* () {
         const member = yield* memberWithLinear;
+        yield* storeTools(
+          {
+            holder: INTEGRATION_GRANT_HOLDER.ACCOUNT,
+            provider: LINEAR,
+            userId: member.userId,
+            connectionName: LINEAR,
+            connectSubject: member.userId,
+          },
+          [{ name: "list_issues" }],
+          yield* DateTime.nowAsDate,
+        );
         const asked: ConnectAsked = { reads: [], evicted: [] };
         const token = linearTokenOf(member.userId);
-        const list = listConnectionTools(member.admitted, LINEAR).pipe(
-          Effect.provide(
-            Layer.mergeAll(
-              NO_GITHUB,
-              cachingConnect(token, token, asked),
-              linearServer(token, hearing(), []),
-            ),
-          ),
+        const services = Layer.mergeAll(
+          NO_GITHUB,
+          cachingConnect(token, token, asked),
+          linearServer(token, hearing(), []),
         );
+        const list = listConnectionTools(member.admitted, LINEAR).pipe(Effect.provide(services));
 
+        const called = yield* callConnectionTool(member.admitted, LINEAR, "list_issues", {}).pipe(
+          Effect.provide(services),
+        );
         const first = yield* list;
         const again = yield* list;
 
+        assert.ok(Result.isFailure(called));
         assert.deepEqual([first, again], [[], []]);
-        assert.equal(asked.reads.length, 2);
+        assert.equal(asked.reads.length, 3);
       }),
   );
 });

@@ -298,20 +298,13 @@ function onGrantToken<A>(
   });
 }
 
-/**
- * Keeps the tools a read begun at `from` listed on the grant; a store that
- * cannot be written costs the next listing a live read, never this
- * request. Note that an empty list is never kept, because a provider that
- * answers none for a moment would otherwise hide every tool for a week,
- * with no call to mend it.
- */
+/** Keeps the tools a read begun at `from` listed on the grant (`storeTools`); a store that cannot be written costs the next listing a live read, never this request. */
 function keepTools(
   name: string,
   grant: IntegrationGrantRef,
   tools: readonly McpToolSchema[],
   from: Date,
 ): Effect.Effect<void, never, ConnectionDoorServices> {
-  if (tools.length === 0) return Effect.void;
   return storeTools(grant, tools, from).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning(`integration server ${name}'s tools were not kept: ${causeKind(cause)}`),
