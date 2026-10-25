@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { DIALOG_SIZE, Dialog } from "@luke/ui";
+import {
+  COMPOSER_ELEMENT,
+  ComposerFoot,
+  ComposerFrame,
+  DIALOG_SIZE,
+  Dialog,
+  IconButton,
+} from "@luke/ui";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, type ReactElement, type ReactNode } from "react";
+import { act, createElement, Fragment, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -307,21 +314,46 @@ test("a page that says no room of its own is answered by its dimmed window's wid
 
 /** The Inbox's answer box as the box lays it (`inbox-answer-box.tsx`): its note line, and under it its foot (`ComposerFoot`) of +, microphone, and Send. */
 function inboxBox(): Record<"foot" | "attach" | "line" | "actions" | "mic" | "send", HTMLElement> {
-  const part = (parent: Element, tag: string, className: string) => {
-    const element = parent.appendChild(document.createElement(tag));
-    element.className = className;
-    return element;
+  const card = document.body.appendChild(document.createElement("div"));
+  card.className = "agent-composer";
+  const root = createRoot(card);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(ComposerFrame, {
+        as: COMPOSER_ELEMENT.FORM,
+        className: "prompt-input inbox-answer",
+        children: createElement(
+          Fragment,
+          null,
+          createElement(
+            "div",
+            { className: "agent-composer-field" },
+            createElement("div", { className: "agent-composer-input" }),
+          ),
+          createElement(ComposerFoot, {
+            send: { label: "Reply", empty: false },
+            tools: createElement(IconButton, {
+              label: "Attach files",
+              icon: null,
+              onClick: ignore,
+            }),
+            actions: createElement(IconButton, { label: "Dictate", icon: null, onClick: ignore }),
+          }),
+        ),
+      }),
+    ),
+  );
+  const found = (selector: string) =>
+    card.querySelector<HTMLElement>(selector) ?? assert.fail(`${selector} stands`);
+  return {
+    foot: found(".luke-composer-foot-bar"),
+    attach: found('button[aria-label="Attach files"]'),
+    line: found(".agent-composer-field"),
+    actions: found(".luke-composer-foot-end"),
+    mic: found('button[aria-label="Dictate"]'),
+    send: found('button[aria-label="Reply"]'),
   };
-  const card = part(document.body, "div", "agent-composer");
-  const form = part(card, "form", "luke-composer-frame prompt-input inbox-answer");
-  const line = part(form, "div", "agent-composer-field");
-  part(line, "div", "agent-composer-input");
-  const foot = part(part(form, "div", "luke-composer-foot"), "div", "luke-composer-foot-bar");
-  const attach = part(part(foot, "div", "luke-composer-foot-tools"), "button", "");
-  const actions = part(foot, "div", "luke-composer-foot-end");
-  const mic = part(actions, "button", "dictate-button");
-  const send = part(actions, "button", "");
-  return { foot, attach, line, actions, mic, send };
 }
 
 test("in a 360px window, the Inbox box keeps its +, its microphone, and Send in one row under its note line, the presses never giving way", () => {

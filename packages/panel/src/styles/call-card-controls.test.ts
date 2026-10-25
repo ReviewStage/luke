@@ -15,7 +15,7 @@ import { layContainersAt } from "../testing/container-width.js";
  * own step, so the microphone stands under Video on and End call under the
  * way back. jsdom lays nothing out, so the sheets are laid for a bar that
  * narrow (`testing/container-width.ts`) and the card is built in the markup
- * `call-card.tsx` and `CallBar` draw. End call is the one control filled
+ * `call-card.tsx` draws around `@luke/ui`'s own `CallBar`. End call is the one control filled
  * red, since hanging up cannot be undone.
  */
 
@@ -26,8 +26,10 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let laid: HTMLStyleElement | undefined;
+const unmounts: (() => void)[] = [];
 
 afterEach(() => {
+  for (const unmount of unmounts.splice(0)) unmount();
   laid?.remove();
   laid = undefined;
   document.body.replaceChildren();
@@ -41,15 +43,26 @@ function windowCard() {
   card.dataset.surface = "window";
   const head = card.appendChild(document.createElement("div"));
   head.className = "call-card-head";
-  const bar = card
-    .appendChild(document.createElement("div"))
-    .appendChild(document.createElement("footer"));
-  bar.className = "luke-call-bar";
-  const controls = bar.appendChild(document.createElement("div"));
-  controls.className = "luke-call-controls";
-  const mutes = controls.appendChild(document.createElement("div"));
-  mutes.className = "luke-call-mutes";
-  return { head, controls, mutes };
+  const holder = card.appendChild(document.createElement("div"));
+  const root = createRoot(holder);
+  act(() =>
+    root.render(
+      createElement(CallBar, {
+        status: undefined,
+        microphone: { muted: false, onPress: () => undefined },
+        speaker: { muted: false, onPress: () => undefined },
+        onEnd: () => undefined,
+      }),
+    ),
+  );
+  unmounts.push(() => act(() => root.unmount()));
+  const controls = holder.querySelector<HTMLElement>(".luke-call-controls");
+  const mutes = holder.querySelector<HTMLElement>(".luke-call-mutes");
+  return {
+    head,
+    controls: controls ?? assert.fail("the bar's controls stand"),
+    mutes: mutes ?? assert.fail("its mutes stand"),
+  };
 }
 
 test("in the floating window the call's buttons stand the head's step apart, never touching", () => {

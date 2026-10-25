@@ -98,7 +98,7 @@ const TILE =
  */
 const FIT_CLASS: Record<CallVideoFit, string> = {
   [CALL_VIDEO_FIT.PICTURE]: "size-full rounded-call-tile",
-  [CALL_VIDEO_FIT.CARD]: "h-call-tile w-full aspect-video rounded-luke-8",
+  [CALL_VIDEO_FIT.CARD]: "h-call-tile w-full aspect-[16_/_9] rounded-luke-8",
 };
 
 /** The avatar's picture whole, never cut, at the tile's height where the tile is wider than the picture; filling a frame at its own aspect. */
@@ -112,7 +112,7 @@ const FRAME =
  * blur's soft edge falls outside the corner.
  */
 const FILL =
-  "luke-call-video-fill pointer-events-none absolute inset-0 -z-1 size-full scale-120 object-cover [filter:blur(24px)_brightness(0.6)] group-data-[fit=picture]/call-video:hidden";
+  "luke-call-video-fill pointer-events-none absolute inset-0 z-[-1] size-full scale-120 object-cover [filter:blur(24px)_brightness(0.6)] group-data-[fit=picture]/call-video:hidden";
 
 /**
  * Luke's face where there is no video to draw, making room for what the

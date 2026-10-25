@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CALL_VIDEO_FIT, type CallVideoFit } from "@luke/ui";
-import { afterEach, test } from "vitest";
+import { CALL_VIDEO_FIT, type CallVideoFit, CallVideoTile } from "@luke/ui";
+import { AVATAR_STATUS } from "@luke/voice/avatar";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
@@ -14,30 +17,61 @@ import { layContainersAt } from "../testing/container-width.js";
  * it leaves. A box drawn at a
  * ratio takes its content's height as its least height unless told
  * otherwise, which grew the tile square around the video, so that least
- * height is zero. jsdom lays nothing out, so the sheets are laid
- * (`testing/container-width.ts`) and the tile is built in the markup
- * `@luke/ui`'s `CallVideoTile` draws, at the fit each surface hands it.
+ * height is zero. jsdom lays nothing out, so the sheets and the app's
+ * utilities are laid (`testing/container-width.ts`) and `@luke/ui`'s
+ * `CallVideoTile` is drawn with live video, at the fit each surface hands it.
  */
 
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+/** The browser's stream, which jsdom has none of: it holds the tracks it was made from. */
+class StandInMediaStream {
+  constructor(readonly tracks: readonly MediaStreamTrack[]) {}
+}
+
+// SAFETY: the tile only hands a track to a stream, never reads one, so a track's identity is all it needs.
+const VIDEO = { kind: "video", id: "avatar-video" } as MediaStreamTrack;
+
 let laid: HTMLStyleElement | undefined;
+const roots: Root[] = [];
+
+beforeEach(() => {
+  vi.stubGlobal("MediaStream", StandInMediaStream);
+});
 
 afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
   laid?.remove();
   laid = undefined;
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
 });
 
-/** The tile with live video at `fit`, inside the parent given, answering the tile and its frame. */
+/** The tile with live video at `fit`, inside the parent given, answering the tile, its picture, and the blurred fill. */
 function liveTile(parent: HTMLElement, fit: CallVideoFit) {
-  const tile = parent.appendChild(document.createElement("section"));
-  tile.className = "luke-call-video-tile";
-  tile.dataset.status = "live";
-  tile.dataset.fit = fit;
-  const frame = tile.appendChild(document.createElement("video"));
-  frame.className = "luke-call-video-frame";
-  const fill = tile.appendChild(document.createElement("video"));
-  fill.className = "luke-call-video-fill";
-  return { tile, frame, fill };
+  const root = createRoot(parent);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(CallVideoTile, {
+        video: VIDEO,
+        status: AVATAR_STATUS.LIVE,
+        fit,
+        onSetVideo: () => undefined,
+      }),
+    ),
+  );
+  const tile = parent.querySelector<HTMLElement>("section") ?? assert.fail("the tile stands");
+  const [frame, fill] = [...tile.querySelectorAll("video")];
+  return {
+    tile,
+    frame: frame ?? assert.fail("its picture"),
+    fill: fill ?? assert.fail("its fill"),
+  };
 }
 
 /** A call card in the sidebar, holding a live tile. */
