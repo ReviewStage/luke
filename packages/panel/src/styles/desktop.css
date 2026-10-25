@@ -5113,7 +5113,10 @@ ul.actor-stack {
    never scrolls down and each column scrolls its own cards; its columns
    stand one fixed width whatever the page's width or how many there are,
    so a card reads the same on any screen, and past the page's width the
-   board scrolls sideways. */
+   board scrolls sideways. Note that the board reaches into the page's end
+   inset and pads it back, because a scroller leaves its content's end
+   padding at the room's edge, so the last column would otherwise scroll
+   flush against the page's side. */
 .tasks-board {
   --carried-ground: var(--luke-color-surface);
   position: relative;
@@ -5122,6 +5125,8 @@ ul.actor-stack {
   min-height: 0;
   flex: 1 1 0;
   gap: var(--luke-block-gap);
+  margin-inline-end: calc(-1 * var(--luke-collection-page-inset));
+  padding-inline-end: var(--luke-collection-page-inset);
   line-height: normal;
 }
 
