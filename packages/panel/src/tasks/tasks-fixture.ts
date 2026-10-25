@@ -288,21 +288,23 @@ function historyActAnswer(
   kind: PortActKind,
   payload: PortActPayload<PortActKind>,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
-  // SAFETY: each history act's payload names the task it reads, which is all that is read here before its kind is known.
-  const { taskId } = payload as { readonly taskId?: string };
-  if (taskId !== FIXTURE_TASK_ID) return undefined;
   if (kind === ACT_KIND.TASKS_REVISIONS) {
     const page = payload as PortActPayload<typeof ACT_KIND.TASKS_REVISIONS>;
+    if (page.taskId !== FIXTURE_TASK_ID) return undefined;
     return { answer: historyPage(page.before) as PortActResult<PortActKind> };
   }
   if (kind === ACT_KIND.TASKS_HISTORY_FOLLOW) {
+    const follow = payload as PortActPayload<typeof ACT_KIND.TASKS_HISTORY_FOLLOW>;
+    if (follow.taskId !== FIXTURE_TASK_ID) return undefined;
     return { answer: historyPushedOnce() as PortActResult<PortActKind> };
   }
   if (kind !== ACT_KIND.TASKS_REVISION) return undefined;
-  const { seq } = payload as PortActPayload<typeof ACT_KIND.TASKS_REVISION>;
+  const { taskId, seq } = payload as PortActPayload<typeof ACT_KIND.TASKS_REVISION>;
+  if (taskId !== FIXTURE_TASK_ID) return undefined;
   const at = FIXTURE_HISTORY.findIndex(({ line }) => line.seq === seq);
-  if (at === -1)
+  if (at === -1) {
     return { answer: { failure: TASK_CALL_FAILURE.UNANSWERED } as PortActResult<PortActKind> };
+  }
   const revision = {
     seq,
     document: FIXTURE_HISTORY[at]?.document ?? draftOf(0),
