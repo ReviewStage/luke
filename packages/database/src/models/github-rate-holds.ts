@@ -9,7 +9,10 @@
  * holds is the caller's to say, as a wait per strike, the last standing for
  * every strike past it, so the backoff is stated once, in the gate. The
  * first answer GitHub sends once the hold is over lets the row go, and only
- * then: a hold another instance moved on meanwhile stands. Every statement
+ * then: a hold another instance moved on meanwhile stands. A hold lifted
+ * longer ago than the caller remembers counts no strike, so a refusal days
+ * after the last starts the backoff afresh even where no answer came
+ * between them. Every statement
  * is keyed by the identity alone, which is the App, nobody, or a token's
  * digest, never a token or an account.
  */
@@ -50,12 +53,14 @@ const upsertHold = SqlSchema.findOne({
     identity: Schema.String,
     now: Schema.Date,
     waits: Schema.NonEmptyArray(Schema.Int),
+    forgottenBefore: Schema.Date,
   }),
   Result: HoldRowSchema,
-  execute: ({ identity, now, waits }) => {
+  execute: ({ identity, now, waits, forgottenBefore }) => {
     const at = sql`${now.toISOString()}::timestamptz`;
-    // The strike this refusal counts as: the standing one while its hold stands, else the next.
-    const strikes = sql`(case when ${githubRateHold.heldUntil} > ${at} then ${githubRateHold.strikes} else ${githubRateHold.strikes} + 1 end)`;
+    const forgotten = sql`${forgottenBefore.toISOString()}::timestamptz`;
+    // The strike this refusal counts as: the standing one while its hold stands, the first again where it lifted long ago, else the next.
+    const strikes = sql`(case when ${githubRateHold.heldUntil} > ${at} then ${githubRateHold.strikes} when ${githubRateHold.heldUntil} < ${forgotten} then 1 else ${githubRateHold.strikes} + 1 end)`;
     const table = sql`(array[${sql.join(
       waits.map((wait) => sql`${wait}`),
       sql`, `,
@@ -102,15 +107,18 @@ export function readGitHubRateHold(identity: string): HoldEffect<GitHubRateHold 
  * Holds the identity for a refusal at `now`, answering the hold as it now
  * stands. `waits` names the milliseconds each strike in a row holds for,
  * the first strike first, the last for every strike past it; the hold
- * written is never shorter than the one standing.
+ * written is never shorter than the one standing. A hold that lifted before
+ * `forgottenBefore` counts no strike, so the refusal is the first strike
+ * again, as it is where an answer since let the row go.
  */
 export function holdGitHubIdentity(
   identity: string,
   now: Date,
   waits: readonly [number, ...number[]],
+  forgottenBefore: Date,
 ): HoldEffect<GitHubRateHold> {
   // Note that an upsert always answers the one row it wrote, so no row is a defect rather than a failure a caller reads.
-  return upsertHold({ identity, now, waits }).pipe(
+  return upsertHold({ identity, now, waits, forgottenBefore }).pipe(
     Effect.catchTag("NoSuchElementError", (error) => Effect.die(error)),
   );
 }

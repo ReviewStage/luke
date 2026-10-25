@@ -12,12 +12,11 @@
  * minute has, waiting exponentially longer as the refusals repeat, because
  * an integration that keeps asking while limited may be banned.
  *
- * So the instance's `HttpClient` is wrapped: a request that writes first
- * waits until `GATE.MUTATIVE_SPACING` after the last one under the same
- * identity started, a request to the API then waits for one of
- * `GATE.CONCURRENCY` places, and a refusal that names a rate limit holds
- * every later request under the same bearer's identity until GitHub said it
- * may ask again. A request asked while held is not sent; it is answered here
+ * So the instance's `HttpClient` is wrapped: a request to the API waits for
+ * one of `GATE.CONCURRENCY` places, a request that writes then waits until
+ * `GATE.MUTATIVE_SPACING` after the last one under the same identity
+ * started, and a refusal that names a rate limit holds every later request
+ * under the same bearer's identity until GitHub said it may ask again. A request asked while held is not sent; it is answered here
  * as GitHub would answer it, a 429 with the `retry-after` left, marked
  * `GATE.HELD_MARK`, so every caller reads the refusal it already handles.
  * Any answer under 400 once the hold is over lifts the identity's backoff. A
@@ -272,6 +271,12 @@ export const githubRateGate: Layer.Layer<
       return hold;
     });
 
+    /** The hold standing on the identity at `now`, the instance's own or the shared one as last read, without reading again. */
+    const standingHold = (identity: string, now: number): Hold | undefined =>
+      [holds.get(identity), shared.get(identity)?.hold].find(
+        (hold) => hold !== undefined && now < hold.until,
+      );
+
     /** Waits until a request that writes may start under the identity, its start booked before it waits. */
     const spaced = (identity: string) =>
       Effect.flatMap(Clock.currentTimeMillis, (now) => {
@@ -302,8 +307,10 @@ export const githubRateGate: Layer.Layer<
       refusal: Refusal,
       now: number,
     ) {
+      // Note that a hold lifted more than `GATE.MAXIMUM_HOLD` ago counts no strike, as the instance's own holds are let go then.
+      const forgottenBefore = new Date(now - Duration.toMillis(GATE.MAXIMUM_HOLD));
       const stored = yield* unblocking(
-        holdGitHubIdentity(identity, new Date(now), waitsFor(refusal)),
+        holdGitHubIdentity(identity, new Date(now), waitsFor(refusal), forgottenBefore),
         identity,
         "github: shared rate hold unwritten; holding this instance alone",
       );
@@ -365,20 +372,28 @@ export const githubRateGate: Layer.Layer<
       // that queued behind the refusal must not be sent after it; this
       // instance's own hold is read first, and the shared one only where
       // that holds nothing.
-      const gated = places.withPermits(1)(
+      return places.withPermits(1)(
         Effect.gen(function* () {
           const now = yield* Clock.currentTimeMillis;
           const local = holds.get(identity);
           const held =
             local !== undefined && now < local.until ? local : yield* sharedHold(identity, now);
           if (held !== undefined && now < held.until) return heldAnswer(request, held.until - now);
+          // Note that a write books its start only here, with its place had
+          // and the hold read, so two writes that queued together still
+          // start a second apart; a hold set while it waited is read again
+          // from what the instance knows, with nothing awaited before the send.
+          if (MUTATIVE_METHODS.has(request.method)) {
+            yield* spaced(identity);
+            const started = yield* Clock.currentTimeMillis;
+            const since = standingHold(identity, started);
+            if (since !== undefined) return heldAnswer(request, since.until - started);
+          }
           const response = yield* sent;
           yield* noted(identity, response);
           return response;
         }),
       );
-      // Note that a write waits out its spacing before it takes a place, so a turn to wait holds none.
-      return MUTATIVE_METHODS.has(request.method) ? Effect.andThen(spaced(identity), gated) : gated;
     });
   }),
 );

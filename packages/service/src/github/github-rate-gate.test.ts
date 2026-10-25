@@ -36,16 +36,27 @@ function scriptedGitHub(answers: Answer[]) {
   );
 }
 
-/** A GitHub that answers 200 and notes the method and the instant on the test's clock each request reached it at. */
-function timedGitHub(arrivals: Array<readonly [string, number]>, arrived: () => void) {
+/**
+ * A GitHub that answers 200 and notes the method and the instant on the
+ * test's clock each request reached it at; a read is answered only once
+ * `readsAnswered` settles, where one is given.
+ */
+function timedGitHub(
+  arrivals: Array<readonly [string, number]>,
+  arrived: () => void,
+  readsAnswered?: Promise<void>,
+) {
   return githubRateGate.pipe(
     Layer.provide(
       Layer.succeed(
         HttpClient.HttpClient,
         HttpClient.make((request) =>
-          Effect.map(Clock.currentTimeMillis, (now) => {
-            arrivals.push([request.method, now]);
+          Effect.gen(function* () {
+            arrivals.push([request.method, yield* Clock.currentTimeMillis]);
             arrived();
+            if (request.method === "GET" && readsAnswered !== undefined) {
+              yield* Effect.promise(() => readsAnswered);
+            }
             return HttpClientResponse.fromWeb(request, Response.json({}));
           }),
         ),
@@ -178,6 +189,42 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
           ["POST", 0],
           ["POST", 1000],
         ],
+      );
+    }),
+  );
+
+  it.effect("writes that queued behind busy places still start a second apart", () =>
+    Effect.gen(function* () {
+      const arrivals: Array<readonly [string, number]> = [];
+      const start = yield* Clock.currentTimeMillis;
+      const readsAnswered = Promise.withResolvers<void>();
+      const placesTaken = Promise.withResolvers<void>();
+      const firstWrite = Promise.withResolvers<void>();
+      const arrived = () => {
+        const methods = arrivals.map(([method]) => method);
+        if (methods.filter((method) => method === "GET").length === 6) placesTaken.resolve();
+        if (methods.includes("POST")) firstWrite.resolve();
+      };
+      yield* Effect.gen(function* () {
+        const comment = sentAs(HttpClientRequest.post(COMMENTS));
+        const reads = Array.from({ length: 6 }, () => pullRequestAsked);
+        const all = yield* Effect.forkChild(
+          Effect.all([...reads, comment, comment], { concurrency: "unbounded" }),
+        );
+        // Note that the six reads hold every place GitHub's answers keep them in, so both writes wait past their second.
+        yield* Effect.promise(() => placesTaken.promise);
+        yield* TestClock.adjust("2 seconds");
+        readsAnswered.resolve();
+        yield* Effect.promise(() => firstWrite.promise);
+        yield* TestClock.adjust("1 second");
+        yield* Fiber.join(all);
+      }).pipe(
+        Effect.provide(timedGitHub(arrivals, arrived, readsAnswered.promise)),
+        holdingNothing,
+      );
+      assert.deepEqual(
+        arrivals.filter(([method]) => method === "POST").map(([, at]) => at - start),
+        [2000, 3000],
       );
     }),
   );
