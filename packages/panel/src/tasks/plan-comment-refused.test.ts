@@ -12,9 +12,10 @@ import {
 } from "@luke/features/plan-comment-wire";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { useDraftsOwner } from "../composer-drafts.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer } from "../testing/app-bridge.js";
 import { attachmentChipName } from "../testing/attachment-chip.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -73,12 +74,26 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** The Comments tab over the one open thread, whose reply the service answers with `landing`. */
+/** A signed-in identity: its id, where it was stored with one, and its address. */
+interface Identity {
+  readonly id?: string;
+  readonly email: string;
+}
+
+const DEAN = { id: "u-dean", email: "dean@example.com" } as const;
+
+/** The account signed in to the window, as the panel's root hands it what the window keeps for it. */
+function SignedIn({ account }: { account: Identity }): null {
+  useDraftsOwner(account);
+  return null;
+}
+
+/** The Comments tab over the one open thread, whose reply the service answers with `landing`, as `account` reads it. */
 function drawn(
   landing: () => Promise<boolean>,
   asked: PlanCommentActionRequest[] = [],
   registry: AtomRegistry.AtomRegistry = AtomRegistry.make(),
-  me = "u-dean",
+  account: Identity = DEAN,
 ): HTMLElement {
   const control: PlanCommentsControl = {
     planId: "plan-1",
@@ -97,21 +112,33 @@ function drawn(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const tab = createElement(PlanCommentsTab, {
-    doors: { agents: undefined, me },
-    onShowDocument: () => undefined,
-  });
-  const tree = createElement(
-    PlanCommentsProvider,
-    { value: control },
-    createElement(CommentFocusScope, { reveal: undefined, children: tab }),
-  );
-  act(() => root.render(onRegistry(registry, tree)));
+  const draw = (reader: Identity) => {
+    const tab = createElement(PlanCommentsTab, {
+      doors: { agents: undefined, me: reader.id },
+      onShowDocument: () => undefined,
+    });
+    const tree = createElement(
+      Fragment,
+      null,
+      createElement(SignedIn, { account: reader }),
+      createElement(
+        PlanCommentsProvider,
+        { value: control },
+        createElement(CommentFocusScope, { reveal: undefined, children: tab }),
+      ),
+    );
+    act(() => root.render(onRegistry(registry, tree)));
+  };
+  draw(account);
+  redrawAs = draw;
   return (
     container.querySelector<HTMLElement>(`.comment-card[data-thread="${THREAD_ID}"]`) ??
     assert.fail("no card")
   );
 }
+
+/** Draws the last tab drawn again in place, as `account` reads it. */
+let redrawAs: (account: Identity) => void = () => assert.fail("nothing drawn");
 
 /** Types `words` into the plain field, as a keyboard's input lands. */
 function typeInto(field: HTMLTextAreaElement, words: string): void {
@@ -177,12 +204,12 @@ test("a refused reply's files go back before the files pasted while it was out",
 });
 
 /** Draws the thread, sends `refused`, types `newer` while it is out, and has the service refuse it; later sends land. */
-async function refusedBesideNewer(refused: string, newer: string) {
+async function refusedBesideNewer(refused: string, newer: string, account: Identity = DEAN) {
   const answer = Promise.withResolvers<boolean>();
   const asked: PlanCommentActionRequest[] = [];
   const registry = AtomRegistry.make();
   const landing = () => (asked.length === 1 ? answer.promise : Promise.resolve(true));
-  const card = drawn(landing, asked, registry);
+  const card = drawn(landing, asked, registry, account);
   const field = card.querySelector("textarea") ?? assert.fail("no textarea");
   typeInto(field, refused);
   act(() => {
@@ -190,7 +217,12 @@ async function refusedBesideNewer(refused: string, newer: string) {
   });
   typeInto(field, newer);
   await act(async () => answer.resolve(false));
-  return { card, field, asked, redraw: (me?: string) => drawn(landing, asked, registry, me) };
+  return {
+    card,
+    field,
+    asked,
+    redraw: (account?: Identity) => drawn(landing, asked, registry, account),
+  };
 }
 
 /** The key each comment was sent under, in order. */
@@ -210,7 +242,7 @@ test("a refused reply too long to go back beside the newer words stands apart as
 
   // Note that the field goes with its thread, as a press away closes it, and comes back as it opens again.
   for (const root of roots.splice(0)) act(() => root.unmount());
-  const other = drawnFirst.redraw("u-charles");
+  const other = drawnFirst.redraw({ id: "u-charles", email: "charles@example.com" });
   assert.equal(
     other.querySelector("[data-unsent]") === null,
     true,
@@ -260,4 +292,33 @@ test("words written again after a not-sent reply is discarded go under a new key
   const [first, again] = keys(asked);
   assert.ok(first !== undefined && again !== undefined);
   assert.notEqual(again, first);
+});
+
+test("a reply refused while only the reader's address was known stands with its picture and its Retry once their identity learns its id", async () => {
+  const answer = Promise.withResolvers<boolean>();
+  const asked: PlanCommentActionRequest[] = [];
+  const landing = () => (asked.length === 1 ? answer.promise : Promise.resolve(true));
+  const card = drawn(landing, asked, AtomRegistry.make(), { email: DEAN.email });
+  const field = card.querySelector("textarea") ?? assert.fail("no textarea");
+  await pastePicture(field, "invite.png");
+  typeInto(field, TOO_LONG.REFUSED);
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  typeInto(field, TOO_LONG.NEWER);
+  await act(async () => answer.resolve(false));
+  assert.ok(card.querySelector("[data-unsent]"), "the refused reply is marked not sent");
+
+  redrawAs(DEAN);
+  const line = card.querySelector("[data-unsent]") ?? assert.fail("no line marked as not sent");
+  assert.ok(line.textContent?.includes("Not for v1."));
+  assert.deepEqual(
+    [...line.querySelectorAll('[aria-label="Attached files"] > li')].map(attachmentChipName),
+    ["invite.png"],
+  );
+  const retry = [...line.querySelectorAll("button")].find((each) => each.textContent === "Retry");
+  assert.ok(retry, "the line offers Retry");
+  await act(async () => retry.click());
+  const [first, again] = keys(asked);
+  assert.equal(again, first, "Retry sends under the refused send's key");
 });

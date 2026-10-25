@@ -410,18 +410,23 @@ function withDraft(
   return holds(draft) ? [...others, { ...draft, place }] : others;
 }
 
-/** A change to the drafts: one place's draft moved on from what it holds, the drafts a predicate names let go, what the window changed written to storage, or storage read again. */
+/** A change to the drafts: one place's draft moved on from what it holds, the drafts a predicate names let go, what the window changed written to storage, storage read again, the files an account held under its address taken on as its id's, or what the window holds let go of for storage's alone. */
 type DraftChange =
   | { readonly place: DraftPlace; readonly next: (was: Draft) => Draft }
   | { readonly drop: (place: DraftPlace) => boolean }
   | { readonly store: true }
-  | { readonly reread: true };
+  | { readonly reread: true }
+  | { readonly adopt: Owner }
+  | { readonly forget: true };
 
 /** Writes to storage what the window changed and has not written yet. */
 const STORE: DraftChange = { store: true };
 
 /** Reads storage again, and writes beside it what the window changed and has not written yet where no other window wrote over it since. */
 const REREAD: DraftChange = { reread: true };
+
+/** Lets go of the files and the changes not written the window holds for an account, and reads storage again. */
+const FORGET: DraftChange = { forget: true };
 
 /** A place the window set and has not written, and its draft as storage held it before, none where it held none. */
 interface UnstoredPlace {
@@ -502,7 +507,45 @@ function withUnstored(
 }
 
 /** A change to one place, or a drop, as `DraftChange` names them. */
-type DraftEdit = Exclude<DraftChange, { readonly store: true } | { readonly reread: true }>;
+type DraftEdit = Extract<
+  DraftChange,
+  { readonly place: DraftPlace } | { readonly drop: (place: DraftPlace) => boolean }
+>;
+
+/**
+ * Whether the files an address held at a place go with what storage now
+ * holds there as its id's: where its words stood and won the place, or
+ * where they were files alone and no words of the id's stand there. Note
+ * that words the id wrote there later win the place (`adoptDrafts`), and the
+ * files attached to other words never go with them.
+ */
+function filesGoWith(owner: Owner, theirs: KeptDraft, standing: KeptDraft | undefined): boolean {
+  if (!stored(theirs)) return standing === undefined;
+  // Note that the two are compared as storage keeps them, since a box may hold a field unset that storage leaves out.
+  return standing !== undefined && sameStored(owner, theirs, standing);
+}
+
+/** The drafts the window holds with the files of `theirs` laid over them at each place their files go with what storage holds as the owner's (`filesGoWith`), a draft of files alone where none stands there. */
+function withFilesOf(
+  owner: Owner,
+  held: readonly KeptDraft[],
+  theirs: readonly KeptDraft[],
+): readonly KeptDraft[] {
+  const standing = readDrafts(owner);
+  return theirs
+    .filter((kept) => kept.attachments.length > 0)
+    .filter((kept) =>
+      filesGoWith(
+        owner,
+        kept,
+        standing.find((each) => Equal.equals(each.place, kept.place)),
+      ),
+    )
+    .reduce<readonly KeptDraft[]>((drafts, { place, attachments }) => {
+      const was = drafts.find((kept) => Equal.equals(kept.place, place)) ?? EMPTY_DRAFT;
+      return withDraft(drafts, place, { ...was, attachments });
+    }, held);
+}
 
 /** The drafts the window holds once `edit` lands on them. */
 function edited(held: readonly KeptDraft[], edit: DraftEdit): readonly KeptDraft[] {
@@ -578,6 +621,17 @@ const draftsOf = Atom.family((owner: Owner) => {
           ctx.set(storeLaterOf(owner), undefined);
           return;
         }
+        // Note that the files an address held are this window's alone, so they are carried here rather than read from storage, and the address keeps none.
+        if ("adopt" in change) {
+          ctx.setSelf(withFilesOf(owner, held, ctx.get(draftsOf(change.adopt))));
+          ctx.set(draftsOf(change.adopt), FORGET);
+          return;
+        }
+        if ("forget" in change) {
+          ctx.set(unstoredOf(owner), NOTHING_UNSTORED);
+          ctx.setSelf(readDrafts(owner));
+          return;
+        }
         // A store with nothing unwritten reads nothing, so a pause ending after a flush costs nothing.
         if ("store" in change && nothingUnstored(unstored)) return;
         const standing = readBeside(owner, held);
@@ -601,6 +655,51 @@ const ownerAtom = Atom.keepAlive(Atom.make<Owner>(null));
 const draftsAtom = Atom.writable(
   (get) => get(draftsOf(get(ownerAtom))),
   (ctx, change: DraftChange) => ctx.set(draftsOf(ctx.get(ownerAtom)), change),
+);
+
+/** How each store of held lines moves an address's to its id. */
+const ADOPTERS: ((ctx: Atom.WriteContext<null>, address: string, accountId: string) => void)[] = [];
+
+/**
+ * Lines a window holds for the account signed in to it beside its drafts,
+ * in this window alone, as a send refused and kept with its Retry, its
+ * words and pictures, is: one list per account, read and written as the
+ * one signed in now. They follow the account from its address to its id as
+ * its drafts do (`adoptAtom`), so a line written while only the address was
+ * known is the id's once the identity learns it.
+ */
+export function heldLines<Line>(): Atom.Writable<readonly Line[]> {
+  const all = Atom.keepAlive(Atom.make<ReadonlyMap<Owner, readonly Line[]>>(new Map()));
+  ADOPTERS.push((ctx, address, accountId) => {
+    const lines = ctx.get(all);
+    const theirs = lines.get(address);
+    if (theirs === undefined) return;
+    const moved = new Map(lines).set(accountId, [...(lines.get(accountId) ?? []), ...theirs]);
+    moved.delete(address);
+    ctx.set(all, moved);
+  });
+  return Atom.keepAlive(
+    Atom.writable(
+      (get) => get(all).get(get(ownerAtom)) ?? [],
+      (ctx, next: readonly Line[]) =>
+        ctx.set(all, new Map(ctx.get(all)).set(ctx.get(ownerAtom), next)),
+    ),
+  );
+}
+
+/**
+ * Hands what the window holds for an account's address to its id, the
+ * drafts' files and every store of held lines alike, once its identity
+ * learns the id; nothing where the window was not signed in as the address,
+ * since only that window holds anything of it.
+ */
+const adoptAtom = Atom.writable(
+  () => null,
+  (ctx, { address, accountId }: { readonly address: string; readonly accountId: string }) => {
+    if (ctx.get(ownerAtom) !== address) return;
+    ctx.set(draftsOf(accountId), { adopt: address });
+    for (const adopt of ADOPTERS) adopt(ctx, address, accountId);
+  },
 );
 
 /**
@@ -638,17 +737,22 @@ export function useDraftsOwner(
 ): void {
   const own = useAtomSet(ownerAtom);
   const change = useAtomSet(draftsAtom);
+  const adopt = useAtomSet(adoptAtom);
   const id = account?.id;
   const email = account?.email;
   useLayoutEffect(() => {
     // What the account signed in until now typed is written as its own before another's are read.
     change(STORE);
-    if (id !== undefined && email !== undefined) adoptDrafts(email, id);
+    if (id !== undefined && email !== undefined) {
+      adoptDrafts(email, id);
+      // Note that what this window holds and storage does not, files and lines not sent, moves too.
+      adopt({ address: email, accountId: id });
+    }
     own(id ?? email ?? null);
     // Note that the account's drafts are read again, because a window that held them before may
     // hold them as they stood then, before a move from its address added to them.
     change(REREAD);
-  }, [own, change, id, email]);
+  }, [own, change, adopt, id, email]);
   // Another panel's window writing the drafts is read at once, so a box never types over its words.
   useEffect(() => {
     const heard = (event: StorageEvent) => {

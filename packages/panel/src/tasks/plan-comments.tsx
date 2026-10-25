@@ -101,7 +101,6 @@ import { visibleViewport } from "@luke/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Equal, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
 import {
   createContext,
   type ReactNode,
@@ -122,6 +121,7 @@ import {
   DRAFT_PLACE,
   type DraftPlace,
   EMPTY_DRAFT,
+  heldLines,
   type PlanCommentPlace,
   useDraft,
   useDraftWriter,
@@ -836,7 +836,6 @@ function PlainCommentText({
 function ReplyField({
   label,
   place,
-  writer,
   sending,
   onSend,
   onCancel,
@@ -847,8 +846,6 @@ function ReplyField({
   label: string;
   /** Where the words are kept unsent, so Esc, a press away, or the thread closing finds them as the field opens again. */
   place: PlanCommentPlace;
-  /** Who writes them, the reader, whose sends marked as not sent are theirs alone. */
-  writer: string | undefined;
   sending: boolean;
   /** Sends the words and the files under a key that stays the same while they do, so a send tried again after a lost answer is taken once. */
   onSend: (
@@ -886,13 +883,13 @@ function ReplyField({
   // A refused send the field could not take back beside what was typed or added since, kept apart, marked as not sent, with Retry under its key.
   const unsent = useAtomValue(
     unsentAtom,
-    (all) => all.find((each) => each.writer === writer && Equal.equals(each.place, place))?.send,
+    (all) => all.find((each) => Equal.equals(each.place, place))?.send,
   );
   const keepUnsent = useAtomSet(unsentAtom);
   const setUnsent = (send: CommentSend | undefined) =>
     keepUnsent((all) => [
-      ...all.filter((each) => each.writer !== writer || !Equal.equals(each.place, place)),
-      ...(send === undefined ? [] : [{ writer, place, send }]),
+      ...all.filter((each) => !Equal.equals(each.place, place)),
+      ...(send === undefined ? [] : [{ place, send }]),
     ]);
   // The words the field holds this moment, for a send's answer that lands after the render it was made in.
   const wordsNow = useRef(words);
@@ -1039,21 +1036,15 @@ interface CommentSend {
 }
 
 /**
- * Each window's sends marked as not sent, by who wrote them and the place
- * they were written in, kept past their field, so a thread closed and
- * opened again finds its line where it was left, and another account
- * signed in to the window reads none. Note that each window's registry
- * holds its own.
+ * Each window's sends marked as not sent, by the place they were written
+ * in, kept past their field for the account that wrote them as its drafts
+ * are (`heldLines`), so a thread closed and opened again finds its line
+ * where it was left, another account signed in to the window reads none,
+ * and one written while only the account's address was known stands still
+ * once its identity learns its id. Note that each window's registry holds
+ * its own.
  */
-const unsentAtom = Atom.keepAlive(
-  Atom.make<
-    readonly {
-      readonly writer: string | undefined;
-      readonly place: PlanCommentPlace;
-      readonly send: CommentSend;
-    }[]
-  >([]),
-);
+const unsentAtom = heldLines<{ readonly place: PlanCommentPlace; readonly send: CommentSend }>();
 
 /** Whether one comment carries these words and files: its words' bound, and a message's count of files and their bytes together. */
 function carried(send: Pick<CommentSend, "words" | "attachments">): boolean {
@@ -1312,7 +1303,6 @@ function ThreadCard({
             planId: doors.control.planId,
             on: { threadId: thread.id },
           }}
-          writer={doors.me}
           sending={sending}
           autoFocus={pressed}
           failure={note}
@@ -1364,7 +1354,6 @@ function PendingCard({
           planId: doors.control.planId,
           on: { quote: pending.quote, scope: pending.scope },
         }}
-        writer={doors.me}
         sending={sending}
         autoFocus
         failure={note}
