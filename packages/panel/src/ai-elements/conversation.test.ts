@@ -214,6 +214,30 @@ test.each([
   assert.deepEqual(layout.writes, [], "the reader's place stands");
 });
 
+test.each([
+  {
+    how: "a press elsewhere, on a rail's row",
+    input: (_box: HTMLElement) => {
+      const row = document.body.appendChild(document.createElement("div"));
+      row.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    },
+  },
+  {
+    how: "a press on the log released over another window",
+    input: (box: HTMLElement) => {
+      box.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      window.dispatchEvent(new Event("blur"));
+    },
+  },
+])("a layout's scroll up after $how keeps the log on its newest line", ({ input }) => {
+  const { box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  act(() => input(box));
+  layout.writes.splice(0);
+  lateScroll(box, 0, 2000);
+  assert.deepEqual(layout.writes, [0, 300], "the log is taken back to its end");
+});
+
 test("a log on its newest line stays on it when rows hidden and shown again in one frame leave its scroll at its first line", () => {
   const { box, layout } = mount(["one", "two"]);
   scroll(box, 200);

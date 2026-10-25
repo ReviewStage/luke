@@ -69,6 +69,18 @@ const READER_EVENTS = ["wheel", "touchmove", "pointerdown", "keydown"] as const;
 /** The events that end a reader's press, so a scroll bar dragged long after its press is still theirs while it is held. */
 const RELEASE_EVENTS = ["pointerup", "pointercancel"] as const;
 
+/**
+ * Whether the reader's input landed on the log: inside its box, its scroll
+ * bar among it, or, for a key, on no focused element at all, where the
+ * keys scroll the box last pressed. Note that input elsewhere, a rail's row
+ * pressed or a composer typed in, says nothing about the log's scroll.
+ */
+function inputOn(box: HTMLElement | null, event: Event): boolean {
+  if (box === null || !(event.target instanceof Node)) return false;
+  if (box.contains(event.target)) return true;
+  return event.type === "keydown" && event.target === document.body;
+}
+
 /** Whether a list scrolled this far is at its newest line, so a new line should keep it there. */
 function followsNewest(list: {
   scrollTop: number;
@@ -137,11 +149,20 @@ export function Conversation({
   }, []);
   useEffect(() => {
     const heard = (event: Event) => {
+      if (!inputOn(list.current, event)) return;
       readerAt.current = event.timeStamp;
       if (event.type === "pointerdown") pressing.current = true;
     };
     const released = () => {
       pressing.current = false;
+    };
+    // Note that a press released over another window never reaches this one, so the window losing focus, or the page being hidden, ends it too.
+    const left = (event: Event) => {
+      // An element's blur reaches the window too; the window's own has no node for its target.
+      if (!(event.target instanceof Node)) released();
+    };
+    const hidden = () => {
+      if (document.visibilityState === "hidden") released();
     };
     for (const name of READER_EVENTS) {
       window.addEventListener(name, heard, { capture: true, passive: true });
@@ -149,13 +170,17 @@ export function Conversation({
     for (const name of RELEASE_EVENTS) {
       window.addEventListener(name, released, { capture: true, passive: true });
     }
+    window.addEventListener("blur", left);
+    document.addEventListener("visibilitychange", hidden);
     return () => {
       for (const name of READER_EVENTS) window.removeEventListener(name, heard, { capture: true });
       for (const name of RELEASE_EVENTS) {
         window.removeEventListener(name, released, { capture: true });
       }
+      window.removeEventListener("blur", left);
+      document.removeEventListener("visibilitychange", hidden);
     };
-  }, []);
+  }, [list]);
   // What the last render left observed: the scroll box, and how many lines
   // stood in it ending in which, so a render that changed none of them
   // touches no layout.
