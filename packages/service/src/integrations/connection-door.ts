@@ -15,14 +15,28 @@
  * took as mentions. Every request reads them afresh, so a switch turned off
  * after the launch lists no tools and refuses a call from the next request.
  * Each request reads the connection's grant afresh for the member acting in
- * the conversation (`integrationAccessToken`), so a Disconnect takes effect
- * at the next call, and opens one MCP session to the provider's own server
- * (`mcp-tools.ts`). Luke's account settings are where an integration is
- * connected, so nothing here starts a sign-in: a connection the member has
- * not connected, or whose grant expired, lists no tools, and a call of it is
+ * the conversation from the store (`integrationGrant`), so a Disconnect
+ * takes effect at the next request.
+ *
+ * A token is asked of Vercel Connect only when it is used, as Connect's docs
+ * say: the harness lists every server's tools at each launch, for tools the
+ * agent may never call, so a server's list is answered from the one kept on
+ * its grant (`integration-tool-store.ts`), and only a grant that keeps none,
+ * or one listed more than `TOOLS_KEPT` ago, is listed live on its token and
+ * kept. A call reads the token and opens one MCP session to the provider's
+ * own server (`mcp-tools.ts`), which lists the tools before calling one, so
+ * every call keeps its grant's list current at no further ask. A token the
+ * provider refuses is dropped from Connect's in-process cache and read once
+ * more (`evictGrantToken`), never forced fresh on every read. A grant
+ * revoked at the provider that Luke has not yet seen lists its kept tools,
+ * and its first call answers why.
+ *
+ * Luke's account settings are where an integration is connected, so
+ * nothing here starts a sign-in: a connection the member has not
+ * connected, or whose grant expired, lists no tools, and a call of it is
  * refused with `requiresSignIn` and the sentence that says how to connect it.
  *
- * Every upstream read is bounded: the grant's read, and the provider's
+ * Every upstream read is bounded: the token's read, and the provider's
  * session (`mcp-tools.ts`'s own bounds), so a slow provider costs its own
  * server its tools and never holds the agent's start; a list that fails
  * lists no tools and logs one line naming the connection and the failure's
@@ -44,7 +58,7 @@ import { readNativeProjection } from "@luke/database/models/native-projection-st
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { isRecord, type WireRecord } from "@luke/wire";
-import { Duration, Effect, Option, Result } from "effect";
+import { DateTime, Duration, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { CONNECTION_POLICY } from "../agents/agent-runtime/role.js";
 import { turnServers } from "../agents/agent-runtime/servers.js";
@@ -54,10 +68,14 @@ import { ACTION_RESULT_STATUS } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
 import type { IntegrationConnect, WorkspaceLinearConnect } from "./integration-connect.js";
 import {
+  evictGrantToken,
+  grantAccessToken,
   type IntegrationAdmission,
-  integrationAccessToken,
+  type IntegrationGrantRef,
+  integrationGrant,
   integrationUnavailable,
 } from "./integration-token.js";
+import { readStoredTools, storeTools } from "./integration-tool-store.js";
 import { INTEGRATION } from "./integrations.js";
 import {
   callMcpTool,
@@ -76,11 +94,19 @@ export type ConnectionDoorServices =
   | HttpClient.HttpClient;
 
 /**
- * How long reading a connection's grant may take, past which the
- * connection is taken as unreachable: the grant is read from Vercel Connect,
+ * How long reading a connection's token may take, past which the
+ * connection is taken as unreachable: the token is read from Vercel Connect,
  * an upstream of its own.
  */
 const GRANT_TIMEOUT = Duration.seconds(10);
+
+/**
+ * How long a grant's kept list answers its server's listing before it is
+ * listed live again: long enough that a launch almost never asks Connect for
+ * a token, short enough that a tool a provider adds reaches an agent that
+ * never calls that integration within the week.
+ */
+const TOOLS_KEPT = Duration.days(7);
 
 /**
  * How long listing one connection's tools may take whole, its grant's read
@@ -174,25 +200,44 @@ function asksSignIn(provider: IntegrationProvider, sentence: string): boolean {
   );
 }
 
-/** The connection's bearer for the member acting in the conversation, or why there is none, read within its bound. */
-function connectionToken(
+/** A refusal of the connection for a grant or token read's sentence, saying the member must connect it where the sentence asks that. */
+function refusedFor(connection: HandedConnection, sentence: string): ConnectionRefusal {
+  return refused(sentence, {
+    connection: connection.connectionName,
+    ...(asksSignIn(connection.provider, sentence) ? { requiresSignIn: true as const } : {}),
+  });
+}
+
+/** The grant the connection's token is read on for the member acting in the conversation, or why there is none, read from the store alone. */
+function connectionGrant(
   admitted: AdmittedConversation,
   connection: HandedConnection,
-): Effect.Effect<Result.Result<string, ConnectionRefusal>, never, ConnectionDoorServices> {
+): Effect.Effect<
+  Result.Result<IntegrationGrantRef, ConnectionRefusal>,
+  never,
+  ConnectionDoorServices
+> {
   const { provider, connectionName, instanceKey } = connection;
-  return integrationAccessToken(
-    { provider, connectionName, connectSubject: instanceKey },
-    admissionOf(admitted),
-  ).pipe(
+  return Effect.map(
+    integrationGrant(
+      { provider, connectionName, connectSubject: instanceKey },
+      admissionOf(admitted),
+    ),
+    Result.mapError((sentence) => refusedFor(connection, sentence)),
+  );
+}
+
+/** The bearer on the grant, or why there is none, read within its bound. */
+function grantToken(
+  connection: HandedConnection,
+  grant: IntegrationGrantRef,
+): Effect.Effect<Result.Result<string, ConnectionRefusal>, never, ConnectionDoorServices> {
+  const { connectionName } = connection;
+  return grantAccessToken(grant).pipe(
     Effect.map((answer) =>
       Result.isSuccess(answer)
         ? Result.succeed(answer.success.token)
-        : Result.fail(
-            refused(answer.failure, {
-              connection: connectionName,
-              ...(asksSignIn(provider, answer.failure) ? { requiresSignIn: true as const } : {}),
-            }),
-          ),
+        : Result.fail(refusedFor(connection, answer.failure)),
     ),
     Effect.timeoutOrElse({
       duration: GRANT_TIMEOUT,
@@ -205,6 +250,52 @@ function connectionToken(
           ),
         ),
     }),
+  );
+}
+
+/**
+ * One session's work with the provider on the grant's token: where the
+ * provider refuses the token, it is dropped from Connect's cache and the
+ * work runs once more on the token read next, as Connect's docs say, and a
+ * second refusal is the answer. Answers why no token could be read, or the
+ * work's own answer.
+ */
+function onGrantToken<A>(
+  connection: HandedConnection,
+  grant: IntegrationGrantRef,
+  work: (token: string) => Effect.Effect<A, McpToolsFailure, ConnectionDoorServices>,
+): Effect.Effect<
+  Result.Result<Result.Result<A, McpToolsFailure>, ConnectionRefusal>,
+  never,
+  ConnectionDoorServices
+> {
+  const attempt = Effect.gen(function* () {
+    const token = yield* grantToken(connection, grant);
+    if (Result.isFailure(token)) return Result.fail(token.failure);
+    return Result.succeed(yield* Effect.result(work(token.success)));
+  });
+  return Effect.flatMap(attempt, (first) => {
+    const refusedByProvider =
+      Result.isSuccess(first) &&
+      Result.isFailure(first.success) &&
+      first.success.failure.reason === MCP_TOOLS_FAILURE.REFUSED;
+    return refusedByProvider
+      ? Effect.andThen(evictGrantToken(grant), attempt)
+      : Effect.succeed(first);
+  });
+}
+
+/** Keeps the tools a read begun at `from` listed on the grant; a store that cannot be written costs the next listing a live read, never this request. */
+function keepTools(
+  name: string,
+  grant: IntegrationGrantRef,
+  tools: readonly McpToolSchema[],
+  from: Date,
+): Effect.Effect<void, never, ConnectionDoorServices> {
+  return storeTools(grant, tools, from).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning(`integration server ${name}'s tools were not kept: ${causeKind(cause)}`),
+    ),
   );
 }
 
@@ -255,9 +346,12 @@ export function nativeAgentConnections(
 
 /**
  * The tools one connection's provider lists for the member, as it listed
- * them, within `LIST_TIMEOUT`. A connection the agent is not handed lists
- * none, and so does one whose grant or list failed, with one log line
- * naming the connection and why in words that carry no credential.
+ * them, within `LIST_TIMEOUT`: the list kept on the connection's grant
+ * while it is younger than `TOOLS_KEPT`, so listing asks Connect for no
+ * token, and otherwise the provider's own list on the grant's token, kept
+ * for the next listing. A connection the agent is not handed lists none,
+ * and so does one whose grant or list failed, with one log line naming the
+ * connection and why in words that carry no credential.
  */
 export function listConnectionTools(
   admitted: AdmittedConversation,
@@ -266,15 +360,32 @@ export function listConnectionTools(
   const listed = Effect.gen(function* () {
     const connection = yield* handedConnection(admitted, name);
     if (Option.isNone(connection)) return [];
-    const token = yield* connectionToken(admitted, connection.value);
-    if (Result.isFailure(token)) {
-      yield* Effect.logWarning(`integration server ${name} lists no tools: ${token.failure.error}`);
+    const grant = yield* connectionGrant(admitted, connection.value);
+    if (Result.isFailure(grant)) {
+      yield* Effect.logWarning(`integration server ${name} lists no tools: ${grant.failure.error}`);
       return [];
     }
-    const tools = yield* Effect.result(
-      listMcpToolSchemas(INTEGRATION[connection.value.provider].MCP_URL, token.success),
+    const from = yield* DateTime.nowAsDate;
+    const kept = yield* readStoredTools(grant.success);
+    if (
+      kept !== undefined &&
+      from.getTime() - kept.listedAt.getTime() < Duration.toMillis(TOOLS_KEPT)
+    ) {
+      return kept.tools;
+    }
+    const url = INTEGRATION[connection.value.provider].MCP_URL;
+    const read = yield* onGrantToken(connection.value, grant.success, (token) =>
+      listMcpToolSchemas(url, token),
     );
-    if (Result.isSuccess(tools)) return tools.success;
+    if (Result.isFailure(read)) {
+      yield* Effect.logWarning(`integration server ${name} lists no tools: ${read.failure.error}`);
+      return [];
+    }
+    const tools = read.success;
+    if (Result.isSuccess(tools)) {
+      yield* keepTools(name, grant.success, tools.success, from);
+      return tools.success;
+    }
     yield* Effect.logWarning(
       `integration server ${name} lists no tools: ${sessionFailed(name, "load tools for", tools.failure)}`,
     );
@@ -300,7 +411,8 @@ export function listConnectionTools(
  * grant: the provider's MCP result as it sent it, its own error among them.
  * A connection the agent is not handed, one the member has not connected,
  * a tool the server lists none of, and a session that failed are each
- * refused.
+ * refused. The tools the session listed are kept on the grant, so the next
+ * launch's listing shows what the provider lists now.
  */
 export function callConnectionTool(
   admitted: AdmittedConversation,
@@ -313,14 +425,19 @@ export function callConnectionTool(
     if (Option.isNone(connection)) {
       return Result.fail(refused(`Connection "${name}" is not available to this agent.`));
     }
-    const token = yield* connectionToken(admitted, connection.value);
-    if (Result.isFailure(token)) return Result.fail(token.failure);
-    const call = yield* Effect.result(
-      callMcpTool(INTEGRATION[connection.value.provider].MCP_URL, token.success, tool, input),
+    const grant = yield* connectionGrant(admitted, connection.value);
+    if (Result.isFailure(grant)) return Result.fail(grant.failure);
+    const from = yield* DateTime.nowAsDate;
+    const url = INTEGRATION[connection.value.provider].MCP_URL;
+    const read = yield* onGrantToken(connection.value, grant.success, (token) =>
+      callMcpTool(url, token, tool, input),
     );
+    if (Result.isFailure(read)) return Result.fail(read.failure);
+    const call = read.success;
     if (Result.isFailure(call)) {
       return Result.fail(refused(sessionFailed(name, "call a tool of", call.failure)));
     }
+    yield* keepTools(name, grant.success, call.success.tools, from);
     if (!call.success.called) {
       return Result.fail(refused(`Connection "${name}" has no tool named "${tool}".`));
     }

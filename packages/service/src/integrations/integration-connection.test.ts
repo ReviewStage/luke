@@ -108,6 +108,7 @@ function fakeConnect(grants: Map<string, FakeGrant>): ConnectorService {
         return { token: Redacted.make(tokenOf(userId)), expiresAt: NOW + 3_600_000 };
       }),
     revoke: () => Effect.void,
+    evict: () => Effect.void,
   };
 }
 
@@ -502,6 +503,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
           getTokenResponse: () =>
             Promise.reject(new ConnectError(`upstream said Bearer ${secret}`, { status: 502 })),
           revokeToken: () => Promise.reject(new Error(secret)),
+          deleteTokenCacheEntry: () => undefined,
         });
         const logged: string[] = [];
         const capture = Logger.make((options) => {
