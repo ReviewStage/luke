@@ -359,7 +359,7 @@ test("a File tab whose file is refused draws Luke's lines as a card does, his no
     ),
   );
   assert.match(
-    container.querySelector(".file-tab-notice")?.textContent ?? "",
+    container.querySelector(".luke-tab-notice")?.textContent ?? "",
     /no file at this path/u,
   );
   assert.deepEqual(drawnLines(container), [12, 13, 14, 15]);

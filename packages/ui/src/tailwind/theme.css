@@ -577,6 +577,39 @@
      line of what holds it, as a card's aside does. */
   --radius-choice-box: var(--luke-space-4);
   --text-caption-inline: var(--luke-type-caption-size);
+
+  /* The panel's task surfaces (`@luke/panel`'s tasks.css, moving onto
+     utilities): the gaps a line's parts and a page's sections stand apart
+     by, and the weights words are set in where no type role names them. */
+  --spacing-item-gap: var(--luke-item-gap);
+  --spacing-page-section-gap: var(--luke-page-section-gap);
+  --font-weight-luke-medium: var(--luke-weight-medium);
+  --font-weight-luke-semibold: var(--luke-weight-semibold);
+  /* The code and diff views (File, Changes, page, and Browser tabs): a
+     column's inset; the tree beside a tab, as wide as it was last dragged
+     (`--file-tree-width`) and giving way only where the tab would fall below
+     the least a diff reads at; a crumb's tree, at a narrow popover's width
+     and never taller than its side of the crumb leaves it; the room after a
+     page's version steps, a control's gap less its own edge; a changed
+     image's side, two to a row where they fit; a snippet's height before it
+     is drawn, from its rows; a file's status letter's tint of its own ink;
+     and Luke's own colour, which his name is said in. */
+  --spacing-column-inset: var(--column-inset);
+  --spacing-file-tree: min(
+    var(--file-tree-width, 264px),
+    100% -
+    200px
+  ); /* off-scale: a tree's first width, and the 200px a diff reads at (`TAB_RESERVE`) */
+  --spacing-crumb-tree: min(
+    calc(var(--luke-stage-height) - var(--luke-space-16)),
+    var(--luke-popover-room, 100vh)
+  );
+  --spacing-popover-narrow: var(--luke-popover-width-narrow);
+  --spacing-page-versions-end: calc(var(--luke-control-gap) - var(--luke-space-2));
+  --spacing-image-diff-side: 200px; /* off-scale: a side's least before two stop fitting to a row */
+  --spacing-snippet-pending: calc(var(--snippet-rows) * var(--snippet-row));
+  --color-status-letter: color-mix(in srgb, currentcolor 14%, transparent);
+  --color-voice-luke: var(--voice-luke);
 }
 
 /* The conditions a control answers beside its states: a finger's pointer,

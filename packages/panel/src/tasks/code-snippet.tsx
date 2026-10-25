@@ -181,7 +181,7 @@ export function CodeSnippet({
     return (
       <div
         ref={place}
-        className="code-snippet-pending"
+        className="h-snippet-pending"
         style={cssCustomProperties({
           "--snippet-rows": code.lines.length,
           "--snippet-row": `${Number(look.fontSize) * Number(LINE_HEIGHT_RATIO[look.lineHeight])}px`,
@@ -211,7 +211,7 @@ export function CodeSnippet({
       excerpt
       notes={placed}
       pooled
-      className="diff-view code-snippet"
+      className="diff-view code-snippet select-text"
     />
   );
 }

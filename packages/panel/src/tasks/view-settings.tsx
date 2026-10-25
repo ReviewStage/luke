@@ -499,7 +499,7 @@ export function ViewSettingsButton({ scope }: { scope: ViewSettingsScope }): Rea
     trigger.current?.focus();
   };
   return (
-    <div className="view-settings" ref={root}>
+    <div className="view-settings relative flex" ref={root}>
       <Tooltip label={VIEW_SETTINGS_LABEL}>
         <IconButton
           ref={trigger}

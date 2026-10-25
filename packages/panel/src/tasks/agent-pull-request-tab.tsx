@@ -1160,7 +1160,7 @@ function ThreadCard({
               look={look}
               selected={preview.selected}
               excerpt
-              className="diff-view pull-request-thread-lines"
+              className="diff-view pull-request-thread-lines select-text"
             />
           )
         }

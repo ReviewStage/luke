@@ -94,7 +94,7 @@ function NoteMenu({ place }: { place: LinkPlace | undefined }): React.JSX.Elemen
   ];
   if (actions.length === 0) return null;
   return (
-    <span className="file-note-menu">
+    <span className="flex">
       <MoreButton thing={NOTE_WORDS.THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -168,7 +168,7 @@ function FileNoteCard({
             <WingFace fill inherit />
           </GlyphSlot>
         }
-        name={<span className="file-note-author">{author}</span>}
+        name={<span className="text-voice-luke">{author}</span>}
         time={<Time className="annotation-card-time" at={note.shownAt} now={now} />}
         menu={<NoteMenu place={place} />}
       >
@@ -176,7 +176,7 @@ function FileNoteCard({
           <AnnotationComment>
             <MarkdownMessage
               words={note.note}
-              className="file-note-words"
+              className="file-note-words wrap-anywhere"
               link={link}
               openLink={openLink}
             />

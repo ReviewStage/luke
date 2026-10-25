@@ -483,7 +483,7 @@ export function PierreDiffList({
   return (
     <Fill
       ref={holdBox}
-      className="diff-view diff-list"
+      className="diff-view diff-list relative bg-ground select-text"
       data-diff-layout={look.layout}
       aria-busy={filesDrawn ? undefined : true}
       onPointerOver={(event) => hang(event.nativeEvent)}

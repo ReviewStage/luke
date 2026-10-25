@@ -14,6 +14,7 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SpinnerRegion,
+  TabNotice,
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -163,7 +164,7 @@ function FileTextView({
         key: note.callId,
         line,
         content: (
-          <div className="whole-file-note">
+          <div className="whole-file-note whitespace-normal py-item-gap pr-list-inset pl-0">
             <FileNoteAnnotation
               note={note}
               notes={drawn}
@@ -332,7 +333,7 @@ export function FileTab({
     // The tab only hears the key its lines answer while its focus is in them; the lines and the cards are the controls.
     <Fill
       as={FILL_ELEMENT.SECTION}
-      className="file-tab ph-no-capture"
+      className="file-tab ph-no-capture bg-card-code"
       aria-label={file.path}
       onKeyDown={onKeyDown}
     >
@@ -349,15 +350,17 @@ export function FileTab({
         />
       ) : (
         <>
-          <div className="file-tab-notice">
+          <TabNotice>
             <ReadNotice
               read={read}
               commit={file.commit}
               onRetry={readWhole}
               place={ERROR_STATE_PLACEMENT.INLINE}
             />
-          </div>
-          <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>
+          </TabNotice>
+          <p className="m-0 px-list-inset pt-row-inset pb-tight-gap text-caption-inline text-muted-foreground">
+            {SNIPPET_LABEL}
+          </p>
           {/* The lines and their notes scroll up and down in the room the notice leaves; unwrapped lines scroll sideways in Pierre's own way. */}
           <ScrollArea fade={SCROLL_FADE.START}>
             <CodeSnippet code={snippet} notes={notes} />
