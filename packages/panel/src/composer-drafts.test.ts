@@ -496,6 +496,33 @@ test("where an account kept a draft for one place under its id and a later one u
   assert.equal(app.box(), "Expire invites after a week");
 });
 
+test("the files attached to a draft while only the account's address was known stay with it once its identity learns its id", async () => {
+  const place = { kind: DRAFT_PLACE.CHAT, channelId: "channel-1" } as const;
+  const picture = { name: "login.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+  let held: DraftControl | undefined;
+  function Box({ account }: { account: Identity }): null {
+    useDraftsOwner(account);
+    held = useDraft(place);
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const show = (account: Identity) =>
+    act(async () => root.render(onRegistry(registry, createElement(Box, { account }))));
+  await show({ email: DEAN.email });
+  const box = () => held ?? assert.fail("the box is drawn");
+  act(() => box().update((was) => ({ ...was, text: "Like this", attachments: [picture] })));
+
+  await show(DEAN);
+  assert.equal(box().draft.text, "Like this");
+  assert.deepEqual(
+    box().draft.attachments.map((each) => each.name),
+    ["login.png"],
+    "the picture is kept in this window alone, and moves with the words",
+  );
+});
+
 /** The window's motion as a Mac with none reduced answers it. */
 function answerMotion(): void {
   Object.defineProperty(window, "matchMedia", {
