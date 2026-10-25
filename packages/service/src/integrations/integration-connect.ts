@@ -5,10 +5,16 @@
  * and refreshes it; Luke names each account by the subject its row keeps
  * (`integration-store.ts`): its own user id for the first account at a
  * provider, a minted id for another, so two accounts at one provider are two
- * grants. Luke never stores a token. Three things are ever asked of a
- * provider's connector, each through `@vercel/connect` as its docs and
- * README describe it: a browser sign-in for the account to begin, the
- * account's token now, and the grant revoked. Note that Luke asks Connect
+ * grants. Luke never writes a token down: Postgres, a log line, a trace,
+ * and a counted event never hold one. What it keeps is each token Connect
+ * issues, sealed under a key only the deployment holds, in Vercel's Runtime
+ * Cache until a minute before it expires and at most an hour, so another
+ * function instance reuses it rather than asking Connect again
+ * (`connect-token-cache.ts`); a sign-in begun and a revoke each drop it at
+ * once. Three things are ever asked of a provider's connector, each
+ * through `@vercel/connect` as its docs and README describe it: a browser
+ * sign-in for the account to begin, the account's token now, and the grant
+ * revoked. Note that Luke asks Connect
  * nothing its docs do not describe, so how a sign-in ended is learned only
  * from whether the account now holds a grant. Each answers either what was
  * asked or one of three fixed words, never Connect's own message: an
@@ -46,6 +52,11 @@ import {
 import { Config, Context, Data, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { readAccountPerson } from "../accounts/account-person.js";
 import { text } from "../core.js";
+import {
+  ConnectTokenCache,
+  type ConnectTokenCacheService,
+  NO_CONNECT_TOKEN_CACHE,
+} from "./connect-token-cache.js";
 import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
 import { credentialFreeLine } from "./mcp-tools.js";
 
@@ -115,7 +126,7 @@ export interface ConnectorService {
     callbackUrl: string,
     options?: { readonly prompt?: string },
   ) => Effect.Effect<IntegrationAuthorization, IntegrationConnectFailure>;
-  /** The token of the account under `subject` now; `fresh` asks Connect itself rather than the SDK's in-process cache. */
+  /** The token of the account under `subject` now; `fresh` asks Connect itself rather than the shared cache or the SDK's in-process one. */
   readonly token: (
     subject: string,
     options: { readonly fresh: boolean },
@@ -261,50 +272,79 @@ function grantAccountName(response: ConnectTokenResponse): string | undefined {
   return undefined;
 }
 
-/** One connector, asking Vercel Connect itself, or the SDK a test hands it. */
+/**
+ * One connector, asking Vercel Connect itself, or the SDK a test hands it,
+ * through the token cache every instance shares. A token read takes the
+ * cached token where one stands, and keeps what Connect issues otherwise; a
+ * fresh read skips the cache and keeps what it gets, which is how a settled
+ * sign-in replaces the token of the grant it ended. Note that a sign-in begun,
+ * a revoke, and a Connect that holds no grant each drop the cached token,
+ * because every one of them means the grant it stood for is ending.
+ */
 export function vercelConnector(
   connector: string,
   sdk: ConnectSdk = VERCEL_CONNECT_SDK,
+  cache: ConnectTokenCacheService = NO_CONNECT_TOKEN_CACHE,
 ): ConnectorService {
+  const asked = (subject: string, fresh: boolean) =>
+    Effect.tryPromise({
+      try: () => sdk.getTokenResponse(connector, subjectOf(subject), { forceRefresh: fresh }),
+      catch: failureOf,
+    }).pipe(
+      Effect.map((response): IntegrationToken => {
+        const accountName = grantAccountName(response);
+        return {
+          token: Redacted.make(response.token),
+          expiresAt: response.expiresAt,
+          ...(accountName !== undefined ? { accountName } : undefined),
+        };
+      }),
+      Effect.tap((issued) => cache.write(connector, subject, issued)),
+      Effect.tapError((failure) =>
+        failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED
+          ? cache.forget(connector, subject)
+          : Effect.void,
+      ),
+    );
   return {
     configured: true,
     multipleAccounts: false,
     authorize: (subject, callbackUrl, options) =>
-      Effect.tryPromise({
-        try: () =>
-          sdk.startAuthorization(connector, subjectOf(subject), {
-            callbackUrl,
-            ...(options?.prompt !== undefined ? { prompt: options.prompt } : undefined),
-          }),
-        catch: failureOf,
-      }).pipe(
-        Effect.flatMap(({ url }) =>
-          isBrowserAddress(url)
-            ? Effect.succeed({ url })
-            : Effect.fail(
-                new IntegrationConnectFailure({ reason: INTEGRATION_CONNECT_FAILURE.UNAVAILABLE }),
-              ),
+      Effect.andThen(
+        cache.forget(connector, subject),
+        Effect.tryPromise({
+          try: () =>
+            sdk.startAuthorization(connector, subjectOf(subject), {
+              callbackUrl,
+              ...(options?.prompt !== undefined ? { prompt: options.prompt } : undefined),
+            }),
+          catch: failureOf,
+        }).pipe(
+          Effect.flatMap(({ url }) =>
+            isBrowserAddress(url)
+              ? Effect.succeed({ url })
+              : Effect.fail(
+                  new IntegrationConnectFailure({
+                    reason: INTEGRATION_CONNECT_FAILURE.UNAVAILABLE,
+                  }),
+                ),
+          ),
         ),
       ),
     token: (subject, { fresh }) =>
-      Effect.tryPromise({
-        try: () => sdk.getTokenResponse(connector, subjectOf(subject), { forceRefresh: fresh }),
-        catch: failureOf,
-      }).pipe(
-        Effect.map((response): IntegrationToken => {
-          const accountName = grantAccountName(response);
-          return {
-            token: Redacted.make(response.token),
-            expiresAt: response.expiresAt,
-            ...(accountName !== undefined ? { accountName } : undefined),
-          };
-        }),
-      ),
+      fresh
+        ? asked(subject, true)
+        : Effect.flatMap(cache.read(connector, subject), (cached) =>
+            Option.match(cached, {
+              onSome: (token) => Effect.succeed(token),
+              onNone: () => asked(subject, false),
+            }),
+          ),
     revoke: (subject) =>
       Effect.tryPromise({
         try: () => sdk.revokeToken(connector, subjectOf(subject)),
         catch: failureOf,
-      }),
+      }).pipe(Effect.ensuring(cache.forget(connector, subject))),
   };
 }
 
@@ -445,7 +485,7 @@ const SINGLE_ACCOUNT_WORDS: ReadonlySet<string> = new Set(["off", "false", "0"])
  * it offers more than one account, which a provider with a multiple-accounts
  * variable does unless that variable holds it to one.
  */
-function connectorFromEnvironment(provider: IntegrationProvider) {
+function connectorFromEnvironment(provider: IntegrationProvider, cache: ConnectTokenCacheService) {
   const {
     CONNECTOR_VARIABLE,
     ALLOWED_ACCOUNTS_VARIABLE,
@@ -471,7 +511,7 @@ function connectorFromEnvironment(provider: IntegrationProvider) {
         MULTIPLE_ACCOUNTS_VARIABLE !== undefined &&
         !Option.exists(multipleRead, (word) => SINGLE_ACCOUNT_WORDS.has(word.trim().toLowerCase()));
       const configured: ConnectorService = {
-        ...vercelConnector(connector),
+        ...vercelConnector(connector, VERCEL_CONNECT_SDK, cache),
         multipleAccounts,
         ...(ADD_ACCOUNT_PROMPT !== undefined
           ? { addAccountPrompt: ADD_ACCOUNT_PROMPT }
@@ -485,19 +525,24 @@ function connectorFromEnvironment(provider: IntegrationProvider) {
   );
 }
 
-/** Every provider's connector as this deployment's environment configures it. */
+/** Every provider's connector as this deployment's environment configures it, each reading through the shared token cache. */
 export const integrationConnectFromEnvironment: Layer.Layer<
   IntegrationConnect,
-  Config.ConfigError
+  Config.ConfigError,
+  ConnectTokenCache
 > = Layer.effect(
   IntegrationConnect,
-  Effect.map(
-    Effect.forEach(INTEGRATION_PROVIDER_LIST, (provider) =>
-      Effect.map(connectorFromEnvironment(provider), (connector) => [provider, connector] as const),
-    ),
+  Effect.gen(function* () {
+    const cache = yield* ConnectTokenCache;
+    const entries = yield* Effect.forEach(INTEGRATION_PROVIDER_LIST, (provider) =>
+      Effect.map(
+        connectorFromEnvironment(provider, cache),
+        (connector) => [provider, connector] as const,
+      ),
+    );
     // SAFETY: the entries are one per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
-    (entries) => Object.fromEntries(entries) as IntegrationConnectService,
-  ),
+    return Object.fromEntries(entries) as IntegrationConnectService;
+  }),
 );
 
 /**
@@ -507,11 +552,19 @@ export const integrationConnectFromEnvironment: Layer.Layer<
  */
 export const workspaceLinearConnectFromEnvironment: Layer.Layer<
   WorkspaceLinearConnect,
-  Config.ConfigError
+  Config.ConfigError,
+  ConnectTokenCache
 > = Layer.effect(
   WorkspaceLinearConnect,
-  Effect.map(Config.option(Config.String(WORKSPACE_LINEAR_CONNECTOR_VARIABLE)), (read) => {
-    const connector = text(Option.getOrUndefined(read));
-    return connector === undefined ? UNCONFIGURED_CONNECTOR : vercelConnector(connector);
+  Effect.gen(function* () {
+    const cache = yield* ConnectTokenCache;
+    const connector = text(
+      Option.getOrUndefined(
+        yield* Config.option(Config.String(WORKSPACE_LINEAR_CONNECTOR_VARIABLE)),
+      ),
+    );
+    return connector === undefined
+      ? UNCONFIGURED_CONNECTOR
+      : vercelConnector(connector, VERCEL_CONNECT_SDK, cache);
   }),
 );

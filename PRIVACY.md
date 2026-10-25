@@ -896,10 +896,15 @@ the task, or within a minute or so of the call ending for a call still open.
 **Linear, if you connect it.** Connecting Linear in Settings › Integrations
 signs you in to Linear in your browser through Vercel Connect, which stores
 Linear's token for your account, encrypted, and renews it. Our service never
-writes the token down: it gets it from Vercel Connect when an agent uses
-Linear, or when a coding agent's MCP menu lists Linear's tools, holds it in
-memory for a short while, and sends it only to Linear's MCP server, never to
-your Mac, a model, or a sandbox. We keep only your connection's state
+writes the token to our database, a log, a trace, or analytics: it gets it
+from Vercel Connect when an agent uses Linear, or when a coding agent's MCP
+menu lists Linear's tools, and sends it only to Linear's MCP server, never to
+your Mac, a model, or a sandbox. So that our servers do not ask Vercel Connect
+again for every call, the token is kept in our servers' memory until shortly
+before it expires, and in Vercel's Runtime Cache, a temporary cache our
+servers in one region share, encrypted under a key only our deployment holds,
+until a minute before it expires and for at most an hour; disconnecting, or starting to connect again, removes it
+from that cache at once. We keep only your connection's state
 (waiting for sign-in, connected, or expired), when it last changed and last
 finished signing in, and, while a sign-in is under way, when it began and a
 one-time value that matches its return. Where you connect more than one

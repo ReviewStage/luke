@@ -287,6 +287,7 @@
     "@orpc/server": "catalog:",
     "@sentry/effect": "11.7.0",
     "@vercel/connect": "2.4.1",
+    "@vercel/functions": "3.10.1",
     "@vercel/oidc": "4.0.0",
     "ai": "catalog:",
     "better-auth": "1.7.7",

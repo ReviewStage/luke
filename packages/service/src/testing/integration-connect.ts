@@ -18,6 +18,7 @@ import {
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
 import { type Config, ConfigProvider, Effect, Layer, Redacted } from "effect";
+import { ConnectTokenCache, NO_CONNECT_TOKEN_CACHE } from "../integrations/connect-token-cache.js";
 import {
   type ConnectorService,
   INTEGRATION_CONNECT_FAILURE,
@@ -138,7 +139,11 @@ export function integrationConnectOver(
     ),
   ).pipe(
     Layer.provide(
-      Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromEnvRecord(variables)),
+      Layer.merge(
+        Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromEnvRecord(variables)),
+        // The granting Connect above answers every token read itself, so nothing is cached.
+        Layer.succeed(ConnectTokenCache, NO_CONNECT_TOKEN_CACHE),
+      ),
     ),
   );
 }

@@ -15,6 +15,7 @@ import { hostedEnvironment } from "./environment.js";
 import { productAnalyticsFromEnvironment } from "./events/server-events.js";
 import { githubAppFromEnvironment } from "./github/github-app.js";
 import { pullRequestLinksLayer } from "./github/pull-request-links.js";
+import { connectTokenCacheFromEnvironment } from "./integrations/connect-token-cache.js";
 import {
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
@@ -62,7 +63,10 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * `IntegrationConnect` is the one place each integration's connector UID and
  * allowlist are read, for the account routes that connect and disconnect an account and
  * the agents that read its tokens alike; `WorkspaceLinearConnect` is the one
- * place the workspace Linear connector's UID is.
+ * place the workspace Linear connector's UID is. Both read tokens through
+ * `ConnectTokenCache`, one per instance over the project's Runtime Cache and
+ * sealed under the provider-key ring `HostedEnvironment` reads, so a token
+ * one instance asked Connect for is one another instance reuses.
  *
  * `LiveSealing` is the one place Neon Realtime's switch, address and secret
  * are read, so a live read is sealed under the same secret on every route
@@ -92,8 +96,9 @@ export const webServices = Layer.mergeAll(
   hostedEnvironment,
   githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)),
   sentryAppFromEnvironment,
-  integrationConnectFromEnvironment,
-  workspaceLinearConnectFromEnvironment,
+  Layer.merge(integrationConnectFromEnvironment, workspaceLinearConnectFromEnvironment).pipe(
+    Layer.provide(connectTokenCacheFromEnvironment.pipe(Layer.provide(hostedEnvironment))),
+  ),
   webLogger,
   liveSealingFromEnvironment,
   bearerCallersLayer,

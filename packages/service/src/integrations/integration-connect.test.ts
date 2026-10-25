@@ -6,8 +6,14 @@ import {
   type ConnectTokenResponse,
   UserAuthorizationRequiredError,
 } from "@vercel/connect";
-import { Effect, Redacted, Result } from "effect";
+import { Duration, Effect, Layer, Redacted, Result } from "effect";
+import { TestClock } from "effect/testing";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import {
+  ConnectTokenCache,
+  type ConnectTokenStore,
+  connectTokenCacheOver,
+} from "./connect-token-cache.js";
 import {
   type ConnectorService,
   type ConnectSdk,
@@ -148,4 +154,141 @@ it.effect(
       assert.equal(yield* answering({ metadata: { workspace_name: "Bearer 0000" } }), undefined);
       assert.equal(yield* answering({}), undefined);
     }),
+);
+
+/** The deployment's provider-key ring, as the shared token cache derives its keys from it. */
+const KEY_RING = Redacted.make(`1:${Buffer.alloc(32, 7).toString("base64")}`);
+
+/** One region's Runtime Cache as every instance reads it: a map of what was written, and nothing else. */
+function sharedStore() {
+  const entries = new Map<string, string>();
+  const store: ConnectTokenStore = {
+    get: (key) => Promise.resolve(entries.get(key) ?? null),
+    set: (key, value) => {
+      entries.set(key, value);
+      return Promise.resolve();
+    },
+    delete: (key) => {
+      entries.delete(key);
+      return Promise.resolve();
+    },
+    expireTag: () => Promise.resolve(),
+  };
+  return {
+    entries,
+    layer: Layer.succeed(ConnectTokenCache, connectTokenCacheOver(KEY_RING, store)),
+  };
+}
+
+/** A Runtime Cache that refuses every call, as one that cannot be reached does. */
+const UNREACHABLE_STORE: ConnectTokenStore = {
+  get: () => Promise.reject(new Error("the cache is down")),
+  set: () => Promise.reject(new Error("the cache is down")),
+  delete: () => Promise.reject(new Error("the cache is down")),
+  expireTag: () => Promise.reject(new Error("the cache is down")),
+};
+
+/**
+ * One function instance's Connect: it holds the grants `grants` names,
+ * issues each a token good for ten minutes from the test clock's start, and
+ * counts every token it is asked for, as each ask is one Connect bills.
+ */
+function instanceConnect(grants: Map<string, string>) {
+  const asked = { tokens: 0 };
+  const sdk: ConnectSdk = {
+    startAuthorization: () =>
+      Promise.resolve({ url: SIGN_IN_URL, verifier: "v", request: "req_1", expiresAt: 0 }),
+    getTokenResponse: (_connector, { subject }) => {
+      asked.tokens += 1;
+      const token = subject.type === "user" ? grants.get(subject.id) : undefined;
+      return token === undefined
+        ? Promise.reject(
+            new UserAuthorizationRequiredError("no grant", { code: "user_authorization_required" }),
+          )
+        : Promise.resolve({
+            token,
+            expiresAt: Duration.toMillis(Duration.minutes(10)),
+            connector: { id: "c_1", uid: "oauth/notion", type: "oauth" },
+          });
+    },
+    revokeToken: (_connector, { subject }) => {
+      if (subject.type === "user") grants.delete(subject.id);
+      return Promise.resolve();
+    },
+  };
+  return { asked, sdk };
+}
+
+it.effect(
+  "a token one instance asked Connect for, another reuses until a minute before it expires, and the cache holds it sealed",
+  () => {
+    const { entries, layer } = sharedStore();
+    return Effect.gen(function* () {
+      const cache = yield* ConnectTokenCache;
+      const grants = new Map([["user-1", "token-acme"]]);
+      const first = instanceConnect(grants);
+      const second = instanceConnect(grants);
+      const tokenOn = (sdk: ConnectSdk) =>
+        Effect.map(
+          vercelConnector("oauth/notion", sdk, cache).token("user-1", { fresh: false }),
+          (issued) => Redacted.value(issued.token),
+        );
+
+      assert.equal(yield* tokenOn(first.sdk), "token-acme");
+      assert.equal(yield* tokenOn(second.sdk), "token-acme");
+      assert.deepEqual([first.asked.tokens, second.asked.tokens], [1, 0]);
+      for (const [key, value] of entries) {
+        for (const plain of ["token-acme", "user-1", "oauth/notion"]) {
+          assert.ok(!key.includes(plain) && !value.includes(plain));
+        }
+      }
+
+      yield* TestClock.adjust(Duration.seconds(9 * 60 + 1));
+      assert.equal(yield* tokenOn(second.sdk), "token-acme");
+      assert.equal(second.asked.tokens, 1);
+    }).pipe(Effect.provide(layer));
+  },
+);
+
+it.effect("a new sign-in and a revoke each drop the account's cached token at once", () => {
+  const { layer } = sharedStore();
+  return Effect.gen(function* () {
+    const cache = yield* ConnectTokenCache;
+    const grants = new Map([["user-1", "token-acme"]]);
+    const first = instanceConnect(grants);
+    const second = instanceConnect(grants);
+    const connector = vercelConnector("oauth/notion", first.sdk, cache);
+    const readOnSecond = Effect.result(
+      vercelConnector("oauth/notion", second.sdk, cache).token("user-1", { fresh: false }),
+    );
+
+    yield* connector.token("user-1", { fresh: false });
+    yield* connector.authorize("user-1", "https://luke.test/callback");
+    yield* readOnSecond;
+    assert.equal(second.asked.tokens, 1);
+
+    yield* connector.revoke("user-1");
+    const revoked = yield* readOnSecond;
+    assert.ok(Result.isFailure(revoked));
+    assert.equal(revoked.failure.reason, INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED);
+    assert.equal(second.asked.tokens, 2);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a cache that cannot be reached falls back to asking Connect, never to an error", () =>
+  Effect.gen(function* () {
+    const cache = yield* ConnectTokenCache;
+    const { asked, sdk } = instanceConnect(new Map([["user-1", "token-acme"]]));
+    const connector = vercelConnector("oauth/notion", sdk, cache);
+
+    const issued = yield* connector.token("user-1", { fresh: false });
+    yield* connector.revoke("user-1");
+
+    assert.equal(Redacted.value(issued.token), "token-acme");
+    assert.equal(asked.tokens, 1);
+  }).pipe(
+    Effect.provide(
+      Layer.succeed(ConnectTokenCache, connectTokenCacheOver(KEY_RING, UNREACHABLE_STORE)),
+    ),
+  ),
 );
