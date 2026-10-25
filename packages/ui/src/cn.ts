@@ -14,7 +14,9 @@ import { extendTailwindMerge } from "tailwind-merge";
  * know as a colour: `text-body` beside `text-foreground` would be dropped as
  * a second text colour, and `px-control-inset` would outlive a later `p-0`.
  * The disabled fade (`opacity-disabled`) is told as an opacity, which it
- * would otherwise not read as one, so a later fade would not replace it.
+ * would otherwise not read as one, so a later fade would not replace it,
+ * and the two press cursors (`cursor-press`, `cursor-link`) as cursors, so a
+ * later `cursor-default` on a control that takes no press replaces them.
  */
 
 /**
@@ -199,6 +201,25 @@ const ROWS_NAVIGATION = {
 } as const;
 
 /**
+ * The names the panel Home and tasks block of the theme adds (the welcome, a row's context, New task's title, a
+ * card's line, the Board's column, the List's row and maker), by the group
+ * tailwind-merge reads each in.
+ */
+const PANEL_HOME_TASKS = {
+  spacing: [
+    "card-line",
+    "new-task-title",
+    "row-context",
+    "tasks-board-column",
+    "tasks-list-maker",
+    "tasks-list-row",
+    "welcome-composer",
+    "welcome-face",
+    "welcome-tile",
+  ],
+} as const;
+
+/**
  * The names the panel shell's block of the theme adds (the sidebar, a row's
  * end mark, a search's match, the call card, the settings rows), by the
  * group tailwind-merge reads each in.
@@ -253,6 +274,67 @@ const CHIPS_MEDIA_CALL = {
   radius: ["attachment-chip-face", "call-tile"],
   shadow: ["attachment-chip-disc", "composer", "provider-gate"],
   aspect: ["picture"],
+} as const;
+
+/**
+ * The names the panel's task surfaces' block of the theme adds (tasks.css,
+ * moving onto utilities), by the group tailwind-merge reads each in.
+ */
+const TASK_SURFACES = {
+  text: ["section-inline", "picture-caption"],
+  tracking: ["busy"],
+  spacing: [
+    "plan-byline-room",
+    "plan-unit-row",
+    "plan-changed-note",
+    "content-inset",
+    "bubble",
+    "transcript-gutter",
+    "tool-chip",
+    "conversation-empty",
+    "conversation-empty-wide",
+    "conversation-older",
+    "file-tree",
+    "crumb-tree",
+    "popover-narrow",
+    "page-versions-end",
+    "image-diff-side",
+    "snippet-pending",
+    "pull-request-page",
+    "chapter-rail",
+    "review-badge",
+    "comment-editor",
+    "branch-chip",
+    "label-dot",
+    "line-comment",
+    "boxed-inset",
+    "check-glyph",
+    "deployment-open",
+    "annotation",
+    "annotation-turn",
+    "annotation-face",
+    "annotation-face-x",
+    "annotation-gap",
+    "annotation-more",
+    "log-over-composer",
+    "todos-dock",
+    "dictation-clock",
+    "viewer-text",
+    "viewer-other",
+    "viewer-stage",
+    "viewer-stage-height",
+    "shells-pane",
+    "servers-list",
+    "issue-chip",
+    "picture-most",
+    "picture-stand-in",
+    "picture-describe",
+    "picture-glyph",
+    "comment-margin",
+    "comment-card",
+    "comment-indent",
+  ],
+  shadow: ["floating-edge"],
 } as const;
 
 /**
@@ -324,6 +406,7 @@ const merge = extendTailwindMerge({
         ...ROWS_NAVIGATION.text,
         ...CHIPS_MEDIA_CALL.text,
         ...PAGE_PATTERNS.text,
+        ...TASK_SURFACES.text,
       ],
       "font-weight": [
         "text",
@@ -339,7 +422,12 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT["font-weight"],
         ...PAGE_PATTERNS["font-weight"],
       ],
-      tracking: ["title", ...PANEL_SHELL.tracking, ...PANEL_PLACES.tracking],
+      tracking: [
+        "title",
+        ...PANEL_SHELL.tracking,
+        ...PANEL_PLACES.tracking,
+        ...TASK_SURFACES.tracking,
+      ],
       leading: [
         "body",
         ...FEEDBACK_DISPLAY.leading,
@@ -418,7 +506,9 @@ const merge = extendTailwindMerge({
         ...ROWS_NAVIGATION.spacing,
         ...PANEL_SHELL.spacing,
         ...CHIPS_MEDIA_CALL.spacing,
+        ...PANEL_HOME_TASKS.spacing,
         ...PAGE_PATTERNS.spacing,
+        ...TASK_SURFACES.spacing,
       ],
       radius: [
         "control",
@@ -455,6 +545,7 @@ const merge = extendTailwindMerge({
         ...ROWS_NAVIGATION.shadow,
         ...CHIPS_MEDIA_CALL.shadow,
         ...PAGE_PATTERNS.shadow,
+        ...TASK_SURFACES.shadow,
       ],
       font: ["ui"],
       aspect: [...CHIPS_MEDIA_CALL.aspect],
@@ -485,6 +576,7 @@ const merge = extendTailwindMerge({
     },
     classGroups: {
       opacity: [{ opacity: ["disabled"] }],
+      cursor: [{ cursor: ["press", "link"] }],
     },
   },
 });

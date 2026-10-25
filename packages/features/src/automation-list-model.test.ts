@@ -6,6 +6,7 @@ import {
   automationGroups,
   automationNext,
   automationRunLine,
+  automationRunPlace,
   automationRunStanding,
   automationRunTitle,
   automationTriggerText,
@@ -236,6 +237,7 @@ test("a run is titled by its agent where the agent has a title, else by what fir
 
   assert.equal(automationRunTitle(run({ agent })), "Fix the flaky test");
   assert.equal(automationRunTitle(run({ agent: { ...agent, title: null } })), "Run now");
+  assert.equal(automationRunTitle(run({ agent: { ...agent, title: "<untitled>" } })), "Run now");
   assert.equal(
     automationRunTitle(run({ firing: { kind: "schedule", dueAt: 1 } })),
     "Scheduled run",
@@ -255,6 +257,42 @@ test("a run is titled by its agent where the agent has a title, else by what fir
     automationRunTitle(run({ agent: null, firing: { ...sentry, subject: { id: "4001" } } })),
     "Sentry event",
   );
+  const github = {
+    kind: AUTOMATION_TRIGGER.GITHUB,
+    event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+    repository: "acme/app",
+    number: 42,
+  } as const;
+  assert.equal(
+    automationRunTitle(run({ agent: null, firing: { ...github, title: "Fix the refresh" } })),
+    "Fix the refresh",
+  );
+  assert.equal(automationRunTitle(run({ agent: null, firing: github })), "GitHub event");
+});
+
+test("an agent's run is placed among the runs that started an agent, each agent once, counted from the oldest", () => {
+  const started = (id: string, agentId: string) =>
+    run({ id, agent: { id: agentId, title: null, status: CODING_AGENT_STATUS.COMPLETED } });
+  // Newest first, as the runs are read: a skipped run, and an agent handed two runs.
+  const runs = [
+    started("r5", "agent-c"),
+    run({ id: "r4", status: AUTOMATION_RUN_STATUS.SKIPPED }),
+    started("r3", "agent-b"),
+    started("r2", "agent-a"),
+    started("r1", "agent-b"),
+  ];
+
+  const middle = automationRunPlace(runs, "agent-b");
+  assert.deepEqual(middle && { run: middle.run.id, at: middle.at, count: middle.count }, {
+    run: "r3",
+    at: 2,
+    count: 3,
+  });
+  assert.equal(middle?.newer, "agent-c");
+  assert.equal(middle?.older, "agent-a");
+  assert.equal(automationRunPlace(runs, "agent-c")?.newer, undefined);
+  assert.equal(automationRunPlace(runs, "agent-a")?.older, undefined);
+  assert.equal(automationRunPlace(runs, "agent-z"), undefined);
 });
 
 test("a run's line says why it did not start, else where its agent stands, or that it waits", () => {

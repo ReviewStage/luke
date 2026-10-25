@@ -18,9 +18,16 @@ export const CODER = {
   /**
    * How long a Vercel Sandbox session lives past its last sign of use: the
    * timeout it opens with, and how far ahead of now each keep-alive puts its
-   * end (`sandbox-lifetime.ts`). A turn's end stops the sandbox at once, so
-   * this is only the backstop for one nothing stopped, which bills its
-   * memory until then: at the default size, 4 GB for an hour, where the
+   * end (`sandbox-lifetime.ts`). An idle sandbox is stopped by what knows it
+   * idle rather than by this: an eve turn's end stops it at once, and so
+   * does a pause from `SLEEP_STOPS_AT` on; a native runner keeps its sandbox
+   * alive by its heartbeat for as long as it runs, and its end stops it,
+   * which comes `RUNNER_WARM` after the agent's turn is over, or two minutes
+   * into a wait on wakeups alone (`@luke/agent-runner`'s `RUNNER_RELEASE`,
+   * whose process table tells the harness's own processes from the
+   * agent's). A shorter timeout would stop none of those sooner, so this is
+   * only the backstop for one nothing stopped, which bills its memory until
+   * then: at the default size, 4 GB for an hour, where the
    * platform's 24-hour maximum billed 96 GB-hours. An hour, because a live
    * turn shows use far more often than that: an eve step starts at least
    * every few minutes
@@ -59,9 +66,16 @@ export const CODER = {
    * The repositories whose agents' sandboxes open larger than
    * `SANDBOX_VCPUS`, by `owner/name` lowercased, as `sandboxVcpus` reads
    * them; a repository asks for more by a row here. Luke's own is four,
-   * because oxlint with JS plugins reserves its arena as one mapping of about
-   * 6 GiB, which the kernel's default overcommit refuses where memory is the
-   * two-vCPU 4 GB, so its lint panicked there at any thread count.
+   * because its typecheck needs about 5 GB of real memory. Measured on a
+   * fresh checkout: `pnpm typecheck` takes 83 seconds at four vCPUs and peaks
+   * near 5.2 GB, and at two vCPUs (4 GB) it is killed out of memory at a
+   * workspace concurrency of 4 or 2; at 1 it passes in 194 seconds with 216
+   * MiB free, before the agent's own runner is counted. The service's tests
+   * take 1,527 seconds there against 415. Note that oxlint is not the limit:
+   * with JS plugins it reserves about 6 GiB per thread, which the kernel's
+   * default overcommit refuses at 4 GB, but it uses under one, and
+   * `vm.overcommit_memory=1`, set on every boot, since a resumed sandbox
+   * boots with the default, lets it lint there in 36 seconds.
    */
   SANDBOX_VCPUS_BY_REPOSITORY: new Map([["reviewstage/luke", 4]]) as ReadonlyMap<string, number>,
   /**
@@ -73,9 +87,11 @@ export const CODER = {
    * as a snapshot is kept and an agent left idle longer is rarely picked up
    * again. The cost: an agent resumed after 7 idle days finds no snapshot and
    * starts from a fresh clone of its repository, so its uncommitted and
-   * unpushed work is gone. An eve agent's sandbox opens anew where its
-   * snapshot is gone, and a native agent's resume does the same
-   * (`runner-sessions.ts`).
+   * unpushed work is gone. An eve agent's sandbox opens anew through its
+   * root's selector, checkout and all, where its sandbox or its snapshot is
+   * gone (`patches/eve@0.74.0.patch`, held by
+   * `agent-runtime/sandbox-resume.test.ts`), and a native agent's resume does
+   * the same (`runner-sessions.ts`).
    */
   SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(7), deleteEvicted: true },
   /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour. */

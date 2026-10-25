@@ -4,6 +4,7 @@ import {
   convertToExcalidrawElements,
   Excalidraw,
   exportToBlob,
+  getCommonBounds,
   ROUNDNESS,
   restoreElements,
   THEME,
@@ -18,6 +19,7 @@ import type {
   AppState,
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
+  NormalizedZoomValue,
 } from "@excalidraw/excalidraw/types";
 import {
   BOARD_ELEMENT_TYPE,
@@ -35,6 +37,7 @@ import {
   type WhiteboardModule,
   type WhiteboardProps,
 } from "./contract.js";
+import { type Fitted, FOLLOW, fitView, followFit, type Rect } from "./fit-view.js";
 import { openingView } from "./opening-view.js";
 
 /**
@@ -69,7 +72,8 @@ import { openingView } from "./opening-view.js";
  * theme is a filter over the scene, so a drawing saved under either is the
  * same drawing.
  *
- * Worked by a finger, it opens in the hand (`opening-view.ts`).
+ * Worked by a finger, it opens in the hand (`opening-view.ts`). Its view
+ * fits the drawing to the room the toolbars leave (`fit-view.ts`).
  */
 
 /** Excalidraw's theme for the window's appearance as it stands, the one its stylesheet is drawn in. */
@@ -296,6 +300,53 @@ function newerDrawing(board: Board, applied: number) {
   return board.drawing !== undefined && board.drawing.number > applied ? board.drawing : undefined;
 }
 
+/** The toolbars Excalidraw floats over the canvas: its tool islands, top and bottom, and the side tools. */
+const TOOLBARS = ".App-top-bar .Island, .App-bottom-bar .Island, .mobile-misc-tools-container";
+
+/** How far the first view keeps the drawing from a toolbar and from the canvas's edge, as far as Excalidraw's own toolbars stand from it. */
+const FIT_GAP = 16;
+
+/** An element's box in the canvas's own pixels, `canvas` being the canvas's. */
+function rectWithin(element: Element, canvas: DOMRect): Rect {
+  const { left, top, right, bottom } = element.getBoundingClientRect();
+  return {
+    left: left - canvas.left,
+    top: top - canvas.top,
+    right: right - canvas.left,
+    bottom: bottom - canvas.top,
+  };
+}
+
+/** The view `state` stands at, and the canvas size it stands on. */
+function standing(state: AppState): Fitted {
+  return {
+    view: { zoom: state.zoom.value, scrollX: state.scrollX, scrollY: state.scrollY },
+    width: state.width,
+    height: state.height,
+  };
+}
+
+/** Puts the whole drawing in view, as large as the room the toolbars leave will hold it (`fit-view.ts`), and answers the view so fitted. */
+function fitToDrawing(api: ExcalidrawImperativeAPI, host: HTMLElement): Fitted | undefined {
+  const elements = api.getSceneElements();
+  if (elements.length === 0) return undefined;
+  const canvas = host.getBoundingClientRect();
+  const bars = [...host.querySelectorAll(TOOLBARS)].map((bar) => rectWithin(bar, canvas));
+  const view = fitView(canvas, bars, getCommonBounds(elements), FIT_GAP);
+  api.updateScene({
+    // SAFETY: the zoom is a number Excalidraw's own limits already bound (`fit-view.ts`), which its brand only records.
+    appState: {
+      scrollX: view.scrollX,
+      scrollY: view.scrollY,
+      zoom: { value: view.zoom as NormalizedZoomValue },
+    },
+    captureUpdate: CaptureUpdateAction.NEVER,
+  });
+  // Note that the view is the one asked for, because the canvas's state may not hold it until its next render.
+  const { width, height } = api.getAppState();
+  return { view, width, height };
+}
+
 /** The hand-drawn font Excalidraw measures and draws text in, as the document loads it. */
 const DRAWING_FONT = `${DRAWING_DEFAULT.FONT_SIZE}px Excalifont`;
 
@@ -333,7 +384,10 @@ function Canvas({ viewOnly, onApi, onChange, initialData }: CanvasProps): React.
  * drawing of Luke's goes in only after that, and after the hand-drawn font
  * has loaded, because the converter measures every label as it makes it and
  * would clip one measured in the fallback font. A view-only board is
- * Excalidraw's view mode, and reports no scene even so.
+ * Excalidraw's view mode, and reports no scene even so. The view it fitted
+ * follows the canvas's size until the developer moves it (`fit-view.ts`),
+ * read off the change the canvas reports once it has laid out at that size,
+ * so the toolbars are measured where they then stand.
  */
 function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle {
   const root = createRoot(host);
@@ -342,6 +396,7 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
   let held = "";
   let applied = props.board.appliedDrawing;
   let latest = props.board;
+  let fitted: Fitted | undefined;
 
   function show(board: Board): void {
     latest = board;
@@ -350,7 +405,15 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
     applied = drawing.number;
     const elements = withDrawing(api.getSceneElementsIncludingDeleted(), drawing.elements);
     api.updateScene({ elements, captureUpdate: CaptureUpdateAction.NEVER });
-    api.scrollToContent(undefined, { fitToContent: true, animate: false });
+    fitted = fitToDrawing(api, host);
+  }
+
+  /** Fits the view again where the canvas changed size under a view no one moved, and lets it go where someone did. */
+  function follow(appState: AppState): void {
+    if (api === undefined || fitted === undefined) return;
+    const next = followFit(fitted, standing(appState));
+    if (next === FOLLOW.RELEASE) fitted = undefined;
+    if (next === FOLLOW.REFIT) fitted = fitToDrawing(api, host);
   }
 
   function changed(elements: readonly OrderedExcalidrawElement[], appState: AppState): void {
@@ -359,13 +422,14 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
     if (!loaded) {
       loaded = true;
       held = signature;
-      api?.scrollToContent(undefined, { fitToContent: true, animate: false });
+      if (api !== undefined) fitted = fitToDrawing(api, host);
       document.fonts.load(DRAWING_FONT).then(
         () => show(latest),
         () => show(latest),
       );
       return;
     }
+    follow(appState);
     if (signature === held || props.viewOnly) return;
     held = signature;
     props.onScene(elements, applied);

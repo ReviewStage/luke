@@ -35,5 +35,5 @@ export function AgentTabFrame({
 
 /** The tab's foot, under its transcript: what docks over the composer, and the composer. */
 export function AgentTabFoot({ children }: { children: ReactNode }): React.JSX.Element {
-  return <footer className="agent-tab-foot">{children}</footer>;
+  return <footer className="agent-tab-foot mt-auto flex-none">{children}</footer>;
 }

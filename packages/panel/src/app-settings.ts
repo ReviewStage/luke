@@ -10,18 +10,15 @@
 import { ACT_KIND } from "@luke/host/acts";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { fixtureUpdate } from "@luke/settings/update-row";
-import {
-  type MicrophoneControl,
-  NOTIFICATIONS_GRANTOR,
-  type NotificationsControl,
-  type UpdateControl,
+import type {
+  MicrophoneControl,
+  NotificationsControl,
+  UpdateControl,
 } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { useMemo } from "react";
 import { useAct } from "./act.js";
-import { appPlatform } from "./app-platform.js";
-import { testNotifications } from "./settings/notifications-press.js";
 import type { SettingsPanelProps } from "./settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "./settings/workspace-page.js";
 import { APP_SETTINGS_VIEW, APP_SLICE, useAppSlice } from "./use-app-state.js";
@@ -95,10 +92,8 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
     };
     const notifications: NotificationsControl = {
       status: notificationsStatus,
-      grantor: appPlatform().notificationsGrantor?.() ?? NOTIFICATIONS_GRANTOR.MACOS,
       packaged: run.packaged,
       onOpenSettings: () => press(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
-      onTest: testNotifications,
     };
     return {
       account,

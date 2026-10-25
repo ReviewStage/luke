@@ -213,7 +213,7 @@ const OPTION = cn(
   "luke-choice-bar-option relative inline-flex items-center justify-center m-0 [border:0] [background:none]",
   "outline-offset-[var(--luke-focus-ring-inset)] text-muted-foreground font-ui font-label whitespace-nowrap",
   "[transition:background-color_var(--luke-duration-hover)_ease,color_var(--luke-duration-hover)_ease]",
-  "cursor-pointer [[data-luke-profile=desktop]_&]:cursor-default disabled:cursor-default disabled:opacity-disabled",
+  "cursor-press disabled:cursor-default disabled:opacity-disabled",
   "[&:hover:not(:disabled)]:text-foreground aria-selected:text-foreground aria-checked:text-foreground",
 );
 

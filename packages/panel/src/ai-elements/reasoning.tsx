@@ -31,11 +31,18 @@ import { Fold, FoldBody, type FoldProps } from "./fold.js";
 /** What the folded line says. */
 const REASONING_LINE = "Thought";
 
+/** The thinking under its open line: set in past the brain to the line's words (`--transcript-gutter`, tasks.css), in the muted ink. */
+export const REASONING_BODY_CLASS =
+  "mt-tight-gap mr-0 mb-0 ml-transcript-gutter text-muted-foreground";
+
+/** The thinking's words, keeping their own breaks and wrapping anywhere. */
+export const REASONING_WORDS_CLASS = "m-0 whitespace-pre-wrap wrap-anywhere";
+
 export type ReasoningProps = Omit<FoldProps, "className">;
 
 export function Reasoning({ children, ...props }: ReasoningProps): ReactNode {
   return (
-    <Fold className="reasoning" {...props}>
+    <Fold className="reasoning text-caption-inline" {...props}>
       {children}
     </Fold>
   );
@@ -54,13 +61,8 @@ export function ReasoningTrigger({ preview = "" }: ReasoningTriggerProps): React
       <GlyphSlot ink={GLYPH_INK.INHERIT}>
         <BrainIcon />
       </GlyphSlot>
-      <Text
-        as={TEXT_ELEMENT.SPAN}
-        variant={TEXT_VARIANT.INHERIT}
-        truncate
-        className="reasoning-preview"
-      >
-        <span className="reasoning-label">{REASONING_LINE}</span>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} truncate className="flex-1">
+        <span className="text-foreground">{REASONING_LINE}</span>
         {previewed && preview !== "" ? ` ${preview}` : null}
       </Text>
     </LineSummary>
@@ -70,8 +72,8 @@ export function ReasoningTrigger({ preview = "" }: ReasoningTriggerProps): React
 /** The thinking itself, drawn quieter than the reply it led to, only once opened, as plain words set in under the line's, as a call's body is. */
 export function ReasoningContent({ text }: { text: string }): ReactNode {
   return (
-    <FoldBody className="reasoning-body">
-      <p className="reasoning-words">{text}</p>
+    <FoldBody className={REASONING_BODY_CLASS}>
+      <p className={REASONING_WORDS_CLASS}>{text}</p>
     </FoldBody>
   );
 }

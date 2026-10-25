@@ -35,7 +35,11 @@ import { Toolbar, type ToolbarPickUp } from "../toolbar/toolbar.js";
  * collection's page, so its words line up with the title's.
  *
  * The page heads itself with a document's header (`PageHeader`), its title
- * the page's one `h1`. Where the window's bar stands above the page and what
+ * the page's one `h1`, a page's inset under the window's bar. In a narrow
+ * room, where the bar is a phone's head on the page's own ground rather
+ * than the window's row above its sheet, the header opens a section's gap
+ * under it instead, so the bar's row and the inset never stack into an
+ * empty band between the way back and the title. Where the window's bar stands above the page and what
  * stands beside it (an editor with a panel beside it) rather than inside
  * its column, the page draws no bar of its own and hands the caller the name
  * its header reads (`onPickUp`), for the caller's bar to pick up. The
@@ -66,7 +70,7 @@ export type DetailPageInset = (typeof DETAIL_PAGE_INSET)[keyof typeof DETAIL_PAG
 const COLUMN_CLASS =
   "box-border min-w-0 min-h-0 overscroll-contain scrollbar-gutter-stable outline-offset-[var(--luke-focus-ring-inset)]";
 
-/** A column's content, ending on the page's inset or clear of the standing toasts, whichever is more, a long word broken rather than run past the column. */
+/** A column's content, ending on the page's inset or clear of a phone's call card, whichever is more, a long word broken rather than run past the column. */
 const CONTENT_CLASS = "pb-detail-page-end wrap-anywhere";
 
 /** What stands beside the main content: facts about the thing, its people, its history. */
@@ -128,7 +132,7 @@ export function DetailPage({
           {underToolbar ? null : (
             <div
               ref={header}
-              className="luke-detail-page-header pt-detail-page-inset pb-section-gap"
+              className="luke-detail-page-header pt-detail-page-inset pb-section-gap room-narrow:pt-section-gap"
             >
               <PageHeader
                 title={heading.title}

@@ -7,42 +7,19 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { ToastHost } from "../toast.js";
-import { type FailedRunPlace, useFailedRunsMark, useFailedRunToasts } from "./failed-runs.js";
-
-/** A run failed to start as main hands it to the window's toast. */
-interface RunFailed {
-  readonly automationId: string;
-  readonly runId: string;
-  readonly workspaceId: string;
-  readonly words: string;
-  readonly detail: string;
-}
+import { useFailedRunsMark } from "./failed-runs.js";
 
 const SWEEP = "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04";
 const DIGEST = "6b1d5e3f-9a2c-4d4b-8f8e-3c7a2b9d0e15";
-const RUN_ID = "4b5c6d7e-8f90-4a1b-8c2d-3e4f5a6b7c8d";
 
-let failedListener: ((run: RunFailed) => void) | undefined;
-let viewed: FailedRunPlace[] = [];
 let marked: boolean[] = [];
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
-  viewed = [];
   marked = [];
   localStorage.clear();
-  fakeAppBridge({
-    onRunFailed: (listener: (run: RunFailed) => void) => {
-      failedListener = listener;
-      return () => {
-        failedListener = undefined;
-      };
-    },
-  });
 });
 
 afterEach(() => {
@@ -70,7 +47,7 @@ function failedRun(
   };
 }
 
-/** The window's toasts and its Automations mark, wired as the app and the sidebar wire them. */
+/** The window's Automations mark, wired as the sidebar wires it. */
 function Harness({
   runs,
   opened,
@@ -78,9 +55,8 @@ function Harness({
   runs: readonly AccountFailedRun[];
   opened: string | undefined;
 }): React.JSX.Element {
-  useFailedRunToasts((place) => viewed.push(place));
   marked.push(useFailedRunsMark(runs, "workspace-acme", opened, false));
-  return createElement(Fragment, null, createElement(ToastHost));
+  return createElement(Fragment);
 }
 
 /** The harness mounted, and a way to draw it again with the runs and the automation open moved on. */
@@ -98,30 +74,6 @@ function mount(runs: readonly AccountFailedRun[], opened?: string) {
   draw(runs, opened);
   return draw;
 }
-
-test("a failed run's toast is under its automation's name, and its View opens the run in its own workspace", () => {
-  mount([]);
-
-  act(() =>
-    failedListener?.({
-      automationId: SWEEP,
-      runId: RUN_ID,
-      workspaceId: "workspace-other",
-      words: "A run could not start. Luke can no longer reach its repository on GitHub.",
-      detail: "Flaky test sweep",
-    }),
-  );
-  const toast = document.querySelector<HTMLElement>(".luke-toast");
-  assert.ok(toast);
-  assert.equal(toast.querySelector(".luke-toast-detail")?.textContent, "Flaky test sweep");
-  const view = [...toast.querySelectorAll("button")].find(
-    (button) => button.textContent === "Open",
-  );
-  act(() => view?.click());
-  assert.deepEqual(viewed, [
-    { automationId: SWEEP, runId: RUN_ID, workspaceId: "workspace-other" },
-  ]);
-});
 
 test("the Automations mark stands until each failing automation is opened, stays off across a relaunch, and comes back when it fails again", () => {
   const first = [failedRun(SWEEP, 1_000), failedRun(DIGEST, 2_000)];

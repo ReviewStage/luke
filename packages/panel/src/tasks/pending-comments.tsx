@@ -22,6 +22,7 @@ import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
+import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 import { useNamer } from "./pull-request-people.js";
 import { noop, useThreadWriting } from "./pull-request-thread-actions.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
@@ -193,7 +194,7 @@ export function PendingComment({
   const out = writes.pending;
   const name = useNamer();
   const body = (
-    <div className="pull-request-pending-comment">
+    <div className="flex min-w-0 flex-col gap-item-gap">
       {editing && writing !== undefined ? (
         <ReplyForm
           words={EDIT_WORDS}
@@ -221,7 +222,7 @@ export function PendingComment({
         words
       )}
       {writing === undefined || editing ? null : (
-        <div className="pull-request-thread-actions-row">
+        <div className={`pull-request-thread-actions-row items-center ${ACTS_AT_END_CLASS}`}>
           <Button
             size={BUTTON_SIZE.COMPACT}
             variant={BUTTON_VARIANT.OUTLINE}

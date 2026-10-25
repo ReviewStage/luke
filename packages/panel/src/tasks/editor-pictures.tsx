@@ -27,7 +27,13 @@ import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { encodeImage } from "../feedback-images.js";
-import { PictureBlock } from "../picture-block.js";
+import {
+  PICTURE_BLOCK_CLASS,
+  PICTURE_FRAME_CLASS,
+  PICTURE_IMAGE_CLASS,
+  PICTURE_PENDING_CLASS,
+  PictureBlock,
+} from "../picture-block.js";
 import type {
   PictureNode,
   PictureNodeDoors,
@@ -157,26 +163,32 @@ function UploadingPicture({
 }): React.JSX.Element {
   const url = upload?.url;
   return (
-    <span className="picture-block ph-no-capture" data-upload={upload?.kind ?? UPLOAD.FAILED}>
+    <span className={PICTURE_BLOCK_CLASS} data-upload={upload?.kind ?? UPLOAD.FAILED}>
       <Card
         as={CARD_ELEMENT.SPAN}
         corner={CARD_CORNER.CONTROL}
         padding={CARD_PADDING.FLUSH}
-        className="picture-frame"
+        className={PICTURE_FRAME_CLASS}
       >
         {url === undefined || isVideoDataUrl(url) ? (
-          <span className="picture-pending" />
+          <span className={PICTURE_PENDING_CLASS} />
         ) : (
-          <img className="picture-image" src={url} alt={alt} draggable={false} />
+          // The Mac's own bytes at half strength while the upload waits.
+          <img
+            className={`${PICTURE_IMAGE_CLASS} opacity-50`}
+            src={url}
+            alt={alt}
+            draggable={false}
+          />
         )}
       </Card>
       {upload?.kind === UPLOAD.SENDING ? (
-        <span className="picture-status">
+        <span className="picture-status mt-item-gap flex items-center gap-item-gap text-caption text-muted-foreground">
           <Spinner delay label={UPLOAD_WORDS.SENDING} />
           <span>{UPLOAD_WORDS.SENDING}</span>
         </span>
       ) : (
-        <span className="picture-failure">
+        <span className="mt-item-gap block">
           <ErrorState
             onRetry={upload?.kind === UPLOAD.FAILED ? onRetry : undefined}
             onRemove={onRemove}
@@ -207,7 +219,7 @@ function DescribeField({
     onClose();
   };
   return (
-    <span className="picture-describe">
+    <span className="mx-0 mt-item-gap mb-block-gap grid w-picture-describe">
       <FormField label={describing.label}>
         {(field) => (
           <TextField
@@ -276,7 +288,7 @@ function PictureTools({
     <MenuSurface
       as={MENU_SURFACE_ELEMENT.SPAN}
       flow={MENU_SURFACE_FLOW.TOOLBAR}
-      className="picture-tools"
+      className="picture-tools absolute top-0 left-0 z-1 -translate-y-[calc(100%+var(--luke-space-8))] data-[above=false]:top-luke-8 data-[above=false]:left-luke-8 data-[above=false]:translate-none data-[worded=false]:[--luke-fold:folded]"
       role="toolbar"
       aria-label="Picture"
       data-worded={String(worded)}
@@ -339,7 +351,10 @@ function KeptPicture({
     },
   ];
   return (
-    <span className="editor-picture-drawn" data-selected={String(selected)}>
+    <span
+      className="editor-picture-drawn relative mt-block-gap block w-fit max-w-full"
+      data-selected={String(selected)}
+    >
       <PictureBlock
         state={named === undefined ? { kind: PICTURE_STATE.MISSING } : state}
         alt={picture.alt}

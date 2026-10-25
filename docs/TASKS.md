@@ -515,10 +515,10 @@ subagent's tab stays in the side panel.
   agent still works, so while a call into the agent stands the tab reads it
   through again for each line heard, and once more as the call ends.
 - **When it ends.** Main keeps a ledger of where each agent stands
-  (`packages/host/src/agent-notices.ts`) and announces an agent that moves from writing
-  to completed or failed once, with a macOS notification titled with the
-  task's name and nothing of the transcript, unless the window is focused on
-  that agent's tab. The agent's tab reads in semibold until it is shown.
+  (`packages/host/src/agent-notices.ts`) and marks an agent that moves from writing
+  to completed or failed once, unless the window is focused on that agent's
+  tab, with no toast and no notification. The agent's tab reads in semibold
+  until it is shown.
 - **Privacy.** Every word is the agent's, the developer's, or the plan's, so
   the tab carries `ph-no-capture`; the call's video draws inside it.
 - **The web.** A browser has no voice, so its agent tabs draw their

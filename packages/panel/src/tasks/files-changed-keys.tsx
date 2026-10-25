@@ -70,7 +70,7 @@ export function FilesChangedKeysSheet({
       }
     >
       <ScrollArea size={SCROLL_SIZE.CONTENT}>
-        <div className="files-changed-keys">
+        <div className="flex flex-col gap-page-section-gap">
           {FILES_CHANGED_SHORTCUT_GROUPS.map((group) => (
             <SettingsSection key={group.title} title={group.title}>
               {group.keys.map((key) => (

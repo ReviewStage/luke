@@ -400,13 +400,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The Notifications page's test, drawn wherever the page is.
-    {
-      id: SETTINGS_SEARCH_ROW.TEST_NOTIFICATION,
-      label: "Test notification",
-      page: SETTINGS_VIEW.NOTIFICATIONS,
-      haystack: ["Test notification", "notifications send alert banner permission allow"],
-    },
     // The window's own chords, fixed rather than chosen, listed below them; a gated feature's only while its experiment is on.
     ...shownShortcutGroups(input.settings.experiments, input.capabilities).flatMap((group) => [
       ...group.commands.map((command) => ({

@@ -14,11 +14,10 @@
  *
  * The panel's acts reach the host's own procedures on the act port in this
  * process; the few a platform answers itself (a copy, a download, focus, the
- * contact mail, feedback, Settings' test notification, and an agent's
- * Terminal tab) are the tab's, and every other platform kind is refused in
- * its own words, so the table stays total. A
- * notice is the panel's toast while the tab is shown and the browser's
- * notification while it is hidden (`web-notices.ts`). The composition is a
+ * contact mail, feedback, and an agent's Terminal tab) are the tab's, and
+ * every other platform kind is refused in its own words, so the table stays
+ * total. What waits is counted on the tab's badge (`web-notices.ts`), and the
+ * tab posts no notification. The composition is a
  * `Layer`, built by the tab's one runtime edge (`web-root.tsx`), whose close
  * is the host's drain; `fork` is that runtime's, handed in so no count runs
  * anywhere else.
@@ -79,9 +78,8 @@ import {
 import { effectServiceLayer } from "@luke/host/service-layer";
 import { highlightSnippet } from "@luke/host/task-code";
 import type { AppPlatform } from "@luke/panel/app-platform";
-import { HOST_CAPABILITY, SETTING_SIDE_EFFECT } from "@luke/settings";
+import { SETTING_SIDE_EFFECT } from "@luke/settings";
 import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice/live-socket";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { Cause, ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { version as appVersion } from "../../package.json";
@@ -90,13 +88,7 @@ import { FILES_KEY, localStorageFileSystem, tabStorage } from "./local-storage-f
 import { type PageLeave, tabLeave } from "./page-leave";
 import { addressHere } from "./web-address";
 import { developmentFixtureProfile } from "./web-fixture";
-import {
-  notificationsOffered,
-  notificationsStatusNow,
-  onTabShownChanged,
-  type WebNoticeDoors,
-  webNoticeDoors,
-} from "./web-notices";
+import { onTabShownChanged, webNoticeDoors } from "./web-notices";
 import { copyPng, downloadText, openTab, webPlatform } from "./web-platform";
 import { openTerminalSocketFromPage } from "./web-terminal-socket";
 
@@ -201,51 +193,10 @@ function seamLayers(storage: Storage, fixture: RunProfile | undefined) {
   );
 }
 
-/**
- * Where an agent's end, an inbox item, a failed run, or a chat message is
- * said: the panel's own toast, through the bridge's events once the bridge
- * stands, or the browser's notification while the tab is hidden, and the
- * badge. What the browser answers is written for Settings, and a browser
- * that refuses to build a notification takes the tab's offer of them away,
- * so Settings offers no Notifications page it cannot keep. The badge comes
- * down with the host's scope.
- */
-const noticeDoors = (
-  state: AppStateStore,
-  said: () => Effect.Success<ReturnType<typeof createInProcessBridge>>["events"] | undefined,
-) =>
-  Effect.acquireRelease(
-    Effect.sync(() =>
-      webNoticeDoors({
-        toasts: {
-          toast: ({ place, words, detail, failed }) =>
-            said()?.onAgentEnded({ ...place, words, detail, failed }),
-          toastInbox: (item) => said()?.onInboxItemOpened(item),
-          toastFailedRun: ({ place, words, detail }) =>
-            said()?.onRunFailed({ ...place, words, detail }),
-          toastChat: (message) => said()?.onChatMessageWaiting(message),
-        },
-        onAnswered: (status) => {
-          if (state.snapshot().notifications.status !== status) {
-            state.update({ notifications: { status } });
-          }
-        },
-        onWithdrawn: () => {
-          const { run } = state.snapshot();
-          state.update({
-            run: {
-              ...run,
-              capabilities: run.capabilities.filter(
-                (capability) => capability !== HOST_CAPABILITY.NOTIFICATIONS,
-              ),
-            },
-            notifications: { status: NOTIFICATIONS_STATUS.OFF },
-          });
-        },
-      }),
-    ),
-    (doors) => Effect.sync(() => doors.close()),
-  );
+/** The badge, which comes down with the host's scope. */
+const noticeDoors = Effect.acquireRelease(Effect.sync(webNoticeDoors), (doors) =>
+  Effect.sync(() => doors.close()),
+);
 
 /**
  * How the host in this tab hands a shell's port to the panel beside it: a
@@ -276,8 +227,7 @@ interface PlatformHost {
 
 /**
  * The platform procedures the tab answers itself: a copy of words or a
- * picture, a download, focus, the contact mail, Settings' test notification,
- * feedback, and an agent's Terminal tab, its shells' ports posted to the
+ * picture, a download, focus, the contact mail, feedback, and an agent's Terminal tab, its shells' ports posted to the
  * page. Every other platform kind is refused in its own words, since a page
  * cannot carry it yet: the updater, the microphone, the system's
  * notification settings, the Mac's own terminal, the voice, the call
@@ -285,7 +235,6 @@ interface PlatformHost {
  */
 function platformProcedures(
   http: HttpClient.HttpClient,
-  doors: WebNoticeDoors,
   { operator, fork }: PlatformHost,
 ): PlatformActProcedures<WebSender> {
   const port = actPortFor<WebSender>();
@@ -310,9 +259,6 @@ function platformProcedures(
     ),
     [KIND.WINDOW_FOCUS_PANEL]: port[KIND.WINDOW_FOCUS_PANEL].handler(() => window.focus()),
     [KIND.CONTACT_EMAIL]: port[KIND.CONTACT_EMAIL].handler(() => location.assign(CONTACT_MAILTO)),
-    // Note that this asks for permission only where the press's own ask
-    // (`askNotificationsPermission`) has not, and joins it where it still waits.
-    [KIND.NOTIFICATIONS_TEST]: port[KIND.NOTIFICATIONS_TEST].handler(() => doors.postTest()),
     [KIND.FEEDBACK_SEND]: port[KIND.FEEDBACK_SEND].effect(function* ({ input }) {
       return yield* Effect.provideService(
         feedback.deliver(input.submission),
@@ -439,18 +385,10 @@ const composedWeb = (
             platform: RUN_PLATFORM.WEB,
           },
           false,
-          // The tab's own offer beside the host's concerns: notifications, where the browser posts them.
-          hostCapabilities(
-            assembly.concerns,
-            notificationsOffered() ? [HOST_CAPABILITY.NOTIFICATIONS] : [],
-          ),
+          hostCapabilities(assembly.concerns, []),
         ),
         services,
       );
-      // What the site's permission already says, read without asking.
-      if (notificationsOffered()) {
-        state.update({ notifications: { status: notificationsStatusNow() } });
-      }
       // An address the host opens goes to a connect's waiting tab, or opens as a link.
       const tabs = connectTabs(tabBrowser(openTab, tab.leave));
       yield* Effect.acquireRelease(Effect.sync(tabs.listen), (stop) => Effect.sync(stop));
@@ -471,22 +409,12 @@ const composedWeb = (
       // A session that changes under the tab leaves it with a full page load (Neon's "When the session changes"), dropping the previous account's live reads.
       yield* linkSessionReload({ state, reload: () => location.reload() });
 
-      // The notices' toasts reach the panel through the bridge, which is built
-      // after the notices, so they find it late.
-      let events: Effect.Success<ReturnType<typeof createInProcessBridge>>["events"] | undefined;
-      const doors = yield* noticeDoors(state, () => events);
+      const doors = yield* noticeDoors;
       const notices = yield* linkClientNotices({
         state,
         host: operator.host,
-        presenter: {
-          open: (place) => events?.onShowAgent(place),
-          openInbox: (taskId) => events?.onShowInbox({ taskId }),
-          openTasklessItem: (item) => events?.onShowInboxItem(item),
-          openFailedRun: (place) => events?.onShowFailedRun(place),
-          openChat: (workspaceId) => events?.onShowChat({ workspaceId }),
-          // No command runs in a tab, so no ask is ever announced here.
-          openMacCommandAsk: () => window.focus(),
-        },
+        // No command runs in a tab, so no ask is ever announced here.
+        presenter: { openMacCommandAsk: () => window.focus() },
         onPanelFocusChanged: onTabShownChanged,
         report,
       }).pipe(Effect.provideService(AgentNoticeDoors, doors));
@@ -505,10 +433,9 @@ const composedWeb = (
         reports: { notifyReady: () => undefined, recordSurfaceEvent: count },
         report,
       });
-      events = made.events;
       const actPort = yield* servedActPort(
         portDependencies(operator, notices, crypto.randomUUID(), tabs),
-        platformProcedures(http, doors, { operator, fork }),
+        platformProcedures(http, { operator, fork }),
         services,
       );
       return {

@@ -17,7 +17,7 @@ import { type AppCommand, isAppCommand } from "@luke/settings/shortcuts";
 import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
 import { type AvatarViewSignal, avatarViewSignalFromWire } from "@luke/voice/avatar-view";
 import { isVoiceCommand, type VoiceCommand } from "@luke/voice/voice-view";
-import { EXCESS_KEYS, isRecord, isWireBoolean, isWireString } from "@luke/wire";
+import { EXCESS_KEYS, isRecord, isWireString } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { wireResult as result, type WireGuard, type WireGuardValue } from "@luke/wire/wire-guard";
 import { eventIterator, type } from "@orpc/contract";
@@ -32,19 +32,11 @@ export const PUSH = {
   VOICE_LIVE_SESSION_CHANGED: "app:voice-live-session-changed",
   TASKS_TALK: "app:task-talk-forwarded",
   SHOW_AGENT: "app:show-agent",
-  SHOW_INBOX: "app:show-inbox",
-  SHOW_INBOX_ITEM: "app:show-inbox-item",
-  SHOW_FAILED_RUN: "app:show-failed-run",
-  SHOW_CHAT: "app:show-chat",
   CALL_WINDOW_MOVED: "app:call-window-moved",
   AVATAR_SESSION: "app:avatar-session",
   AVATAR_FEED: "app:avatar-feed",
   AVATAR_VIEW_SIGNAL: "app:avatar-view-signal",
   SHOW_LINK: "app:show-link",
-  AGENT_ENDED: "app:agent-ended",
-  INBOX_ITEM_OPENED: "app:inbox-item-opened",
-  RUN_FAILED: "app:run-failed",
-  CHAT_MESSAGE_WAITING: "app:chat-message-waiting",
   VOICE_COMMAND: "app:voice-command-forwarded",
 } as const;
 
@@ -90,56 +82,16 @@ export const PUSH_GUARD = {
       isWireString(value.agentId),
   ),
   /**
-   * A coding agent's notification clicked: the panel is to open the task on
-   * that agent's tab, or the agent's own page for an agent with no task. An
-   * event rather than a slice of the document, because a click is an ask the
-   * window answers once, not a state it bootstraps from.
+   * The call card's way back to its agent pressed: the panel is to open the
+   * task on that agent's tab, or the agent's own page for an agent with no
+   * task. An event rather than a slice of the document, because a press is an
+   * ask the window answers once, not a state it bootstraps from.
    */
   [PUSH.SHOW_AGENT]: result<{ taskId: string | null; agentId: string }>(
     (value) =>
       isRecord(value) &&
       (value.taskId === null || isWireString(value.taskId)) &&
       isWireString(value.agentId),
-  ),
-  /**
-   * An inbox notification clicked: the panel is to open the task on its
-   * Inbox tab. An event, as an agent's notification's click is, because it
-   * is an ask the window answers once.
-   */
-  [PUSH.SHOW_INBOX]: result<{ taskId: string }>(
-    (value) => isRecord(value) && isWireString(value.taskId),
-  ),
-  /**
-   * A notification of an item of an agent with no task clicked: the panel is
-   * to open the window's Inbox with that item chosen, where it is answered.
-   * An event, as an inbox notification's click is.
-   */
-  [PUSH.SHOW_INBOX_ITEM]: result<{ agentId: string; itemId: string; workspaceId?: string }>(
-    (value) =>
-      isRecord(value) &&
-      isWireString(value.agentId) &&
-      isWireString(value.itemId) &&
-      (value.workspaceId === undefined || isWireString(value.workspaceId)),
-  ),
-  /**
-   * A failed run's notification clicked: the panel is to open the run, in
-   * its automation's workspace. An event, as an agent's notification's click
-   * is, because it is an ask the window answers once.
-   */
-  [PUSH.SHOW_FAILED_RUN]: result<{ automationId: string; runId: string; workspaceId: string }>(
-    (value) =>
-      isRecord(value) &&
-      isWireString(value.automationId) &&
-      isWireString(value.runId) &&
-      isWireString(value.workspaceId),
-  ),
-  /**
-   * A chat notification clicked: the panel is to open the Chat of the
-   * workspace its message waits in. An event, as an inbox notification's
-   * click is, because it is an ask the window answers once.
-   */
-  [PUSH.SHOW_CHAT]: result<{ workspaceId: string }>(
-    (value) => isRecord(value) && isWireString(value.workspaceId),
   ),
   /**
    * The floating call window moved under a pointer that did not: a drag of
@@ -180,89 +132,6 @@ export const PUSH_GUARD = {
     (value) => isRecord(value) && isWireString(value.workspace) && isLinkPlace(value.place),
   ),
   /**
-   * A coding agent's turn ended while the window was focused: the panel says
-   * so in its toast, whose View opens the plan on that agent's tab, or the
-   * agent's own page for one with no plan. An event, as a click is, because
-   * it is said once and never bootstrapped from.
-   */
-  [PUSH.AGENT_ENDED]: result<{
-    taskId: string | null;
-    agentId: string;
-    words: string;
-    detail: string;
-    failed: boolean;
-  }>(
-    (value) =>
-      isRecord(value) &&
-      (value.taskId === null || isWireString(value.taskId)) &&
-      isWireString(value.agentId) &&
-      isWireString(value.words) &&
-      isWireString(value.detail) &&
-      isWireBoolean(value.failed),
-  ),
-  /**
-   * The inbox items one read found opened while the window was focused away
-   * from their task's Inbox tab: the panel says them in one toast, whose
-   * View opens a task's tab. An event, as an agent's end is, because it is
-   * said once and never bootstrapped from.
-   */
-  [PUSH.INBOX_ITEM_OPENED]: result<{
-    items: readonly { taskId: string; itemId: string; words: string; detail: string }[];
-  }>(
-    (value) =>
-      isRecord(value) &&
-      Array.isArray(value.items) &&
-      value.items.length > 0 &&
-      value.items.every(
-        (item) =>
-          isRecord(item) &&
-          isWireString(item.taskId) &&
-          isWireString(item.itemId) &&
-          isWireString(item.words) &&
-          isWireString(item.detail),
-      ),
-  ),
-  /**
-   * A run of one of the account's automations failed to start while the
-   * window was focused: the panel says so in its toast, in the failed tone,
-   * whose View opens the run. An event, as an agent's end is.
-   */
-  [PUSH.RUN_FAILED]: result<{
-    automationId: string;
-    runId: string;
-    workspaceId: string;
-    words: string;
-    detail: string;
-  }>(
-    (value) =>
-      isRecord(value) &&
-      isWireString(value.automationId) &&
-      isWireString(value.runId) &&
-      isWireString(value.workspaceId) &&
-      isWireString(value.words) &&
-      isWireString(value.detail),
-  ),
-  /**
-   * A chat message came to wait while the window was focused away from its
-   * Chat: the panel says so in its toast, whose View opens Chat. An event,
-   * as an opened inbox item is.
-   */
-  [PUSH.CHAT_MESSAGE_WAITING]: result<{
-    messageId: string;
-    workspaceId: string;
-    taskId: string | null;
-    words: string;
-    detail: string;
-  }>(
-    (value) =>
-      isRecord(value) &&
-      isWireString(value.messageId) &&
-      isWireString(value.workspaceId) &&
-      (value.taskId === null || isWireString(value.taskId)) &&
-      isWireString(value.words) &&
-      isWireString(value.detail),
-  ),
-  /**
    * A panel's validated command, forwarded by the main process to the voice
    * window alone, carrying the command and nothing else.
    */
@@ -286,19 +155,11 @@ export const PUSH_METHOD = {
   onVoiceLiveSessionChanged: PUSH.VOICE_LIVE_SESSION_CHANGED,
   onTasksTalk: PUSH.TASKS_TALK,
   onShowAgent: PUSH.SHOW_AGENT,
-  onShowInbox: PUSH.SHOW_INBOX,
-  onShowInboxItem: PUSH.SHOW_INBOX_ITEM,
-  onShowFailedRun: PUSH.SHOW_FAILED_RUN,
-  onShowChat: PUSH.SHOW_CHAT,
   onCallWindowMoved: PUSH.CALL_WINDOW_MOVED,
   onAvatarSession: PUSH.AVATAR_SESSION,
   onAvatarFeed: PUSH.AVATAR_FEED,
   onAvatarViewSignal: PUSH.AVATAR_VIEW_SIGNAL,
   onShowLink: PUSH.SHOW_LINK,
-  onAgentEnded: PUSH.AGENT_ENDED,
-  onInboxItemOpened: PUSH.INBOX_ITEM_OPENED,
-  onRunFailed: PUSH.RUN_FAILED,
-  onChatMessageWaiting: PUSH.CHAT_MESSAGE_WAITING,
   onVoiceCommand: PUSH.VOICE_COMMAND,
 } as const;
 

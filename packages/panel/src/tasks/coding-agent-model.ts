@@ -72,6 +72,7 @@ import {
 } from "@luke/features/turn-rows";
 import { andList, readFailedWords } from "@luke/features/words";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
+import { STATUS_TONE, type StatusTone } from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -579,9 +580,8 @@ const UNARCHIVED_WORDS = {
 /** What a refused archive says of an agent still starting, or with a message awaiting its turn, which has no turn to stop yet. */
 export const ARCHIVE_NOT_READY = "The agent is still starting its turn. Try again in a moment.";
 
-/** What an agent's delete says once it landed, and what it says refused. */
+/** What an agent's delete says refused; one that landed says nothing, since the agent leaving its list says it. */
 export const DELETE_WORDS = {
-  done: "Agent deleted",
   refused: "The agent could not be deleted. Try again.",
 } as const;
 
@@ -2388,6 +2388,15 @@ export function agentLines(
 ): readonly CodingAgentMessage[] {
   return [...messages, ...sent.map(sentLineMessage)];
 }
+
+/** The tone a coding agent's status is named in on a badge: at work, done, failed, or stopped. */
+export const AGENT_STATUS_TONE = {
+  [CODING_AGENT_STATUS.STARTING]: STATUS_TONE.WORKING,
+  [CODING_AGENT_STATUS.RUNNING]: STATUS_TONE.WORKING,
+  [CODING_AGENT_STATUS.COMPLETED]: STATUS_TONE.COMPLETE,
+  [CODING_AGENT_STATUS.FAILED]: STATUS_TONE.DANGER,
+  [CODING_AGENT_STATUS.CANCELLED]: STATUS_TONE.NEUTRAL,
+} as const satisfies Record<CodingAgentStatus, StatusTone>;
 
 /** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row; the one map every place that says a state reads. */
 export const PULL_REQUEST_STATE_LABEL = {
