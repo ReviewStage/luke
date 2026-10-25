@@ -57,7 +57,6 @@ import {
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
-import { isNativeRuntime } from "./native-runtime.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
 import { codingAgentStatusOf } from "./status.js";
 
@@ -97,8 +96,9 @@ import { codingAgentStatusOf } from "./status.js";
  * exactly this message (`coder-host/channel.ts`). An archived agent takes
  * no message, and is refused as one that names nothing, since every list
  * leaves it out until it is brought back; it is read again under the
- * conversation's dispatch lock just before the send, the lock its archive
- * waits out, so a send that waited on the archive is refused. A
+ * conversation's dispatch claim just before the send, which is taken under
+ * the row lock its archive takes, so a send claimed after the archive is
+ * refused, and an archive after the claim finds the line awaiting. A
  * session eve answers it no longer runs has ended for good, and nothing
  * will end the turn it was running, so that turn, as read before eve was
  * asked, is settled failed for its session's end
@@ -413,14 +413,15 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
       refused = failedCallRefusal(opened);
       return false;
     }
-    // Note that the fresh session claims the record here, still under the conversation's dispatch lock, rather
+    // Note that the fresh session claims the record here, still under the conversation's dispatch claim, rather
     // than only as its own start runs, because a message sent in between would read the ended session,
     // open a second fresh one, and the newer claim would refuse the first, words and all.
     yield* claimedFor(target, opened.sessionId);
     return true;
   });
-  // Note that the archive is read again here, under the conversation's dispatch lock, because a plan's
-  // archive waits that lock out to archive the agent, so the two never cross.
+  // Note that the archive is read again here, under the conversation's dispatch claim, because a plan's
+  // archive takes the conversation's row lock the claim was taken under, and reads the line the claim
+  // wrote as work under way, so the two never cross.
   const handOver = Effect.flatMap(refusalNow(userId, agent), (refusal) => {
     if (refusal === undefined) return send;
     refused = refusal;
@@ -437,20 +438,10 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
     line.sender.kind === MESSAGE_SENDER.AGENT || reviewers
       ? []
       : mentionedServers(line.serverWords ?? line.text, task?.repository ?? null);
-  // Note that a native agent's servers are written just after its harness takes the words rather than
-  // just before, still in this transaction, because a harness this function relays to (`native-relay.ts`)
-  // writes the agent's row on its own connection as it launches, and would wait on this transaction's lock
-  // on it until the hand-over gave up. Its runner's first events wait out the conversation's dispatch lock,
-  // which this transaction holds, all the same, so the turn they are for still finds them.
-  const native = isNativeRuntime(runtime);
-  const handing = native
-    ? Effect.flatMap(handOver, (taken) =>
-        taken
-          ? dispatchMentioningServers(userId, agent.id, servers, Effect.succeed(true))
-          : Effect.succeed(false),
-      )
-    : dispatchMentioningServers(userId, agent.id, servers, handOver);
-  const dispatch = handing.pipe(
+  // Note that a native agent's are written before its harness hears the words too, so the turn its runner
+  // opens on them takes them: the hand-over runs in no transaction, so the agent's row a launch writes
+  // through `native-relay.ts` on its own connection is held by nothing meanwhile.
+  const dispatch = dispatchMentioningServers(userId, agent.id, servers, handOver).pipe(
     Effect.catchCause((cause) =>
       Effect.as(
         Effect.logWarning(

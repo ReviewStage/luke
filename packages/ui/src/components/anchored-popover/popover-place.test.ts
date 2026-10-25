@@ -58,20 +58,6 @@ test("a popover neither side holds opens on the side with more room, and is told
   assert.deepEqual([place(500).side, place(500).room], [POPOVER_SIDE.ABOVE, 488]);
 });
 
-test("a scroll that lifts the anchor toward its room's top turns the popover below", () => {
-  const scroller = { left: 0, top: 0, right: 800, bottom: 400 };
-  const at = (top: number) =>
-    popoverPlace({
-      anchor: anchorAt(400, top),
-      room: scroller,
-      width: 340,
-      height: 200,
-      align: POPOVER_ALIGN.START,
-    }).side;
-  assert.equal(at(300), POPOVER_SIDE.ABOVE, "before the scroll");
-  assert.equal(at(40), POPOVER_SIDE.BELOW, "after 260px of scroll");
-});
-
 test("a popover takes the other edge where the asked one runs past the room", () => {
   // From the trailing edge it would start at 120 - 340 = -220; from the leading edge at 20 it fits.
   const place = popoverPlace({

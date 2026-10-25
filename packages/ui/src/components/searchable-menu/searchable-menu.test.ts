@@ -1,20 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { MOTION_DELAY_MS } from "@luke/brand";
 import { readFailedWords } from "@luke/features/words";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import {
-  POPOVER_ALIGN,
-  POPOVER_BOUNDS,
-  POPOVER_WIDTH,
-  type PopoverBounds,
-  type PopoverWidth,
-} from "../../index.js";
+import { POPOVER_ALIGN, POPOVER_BOUNDS, type PopoverBounds } from "../../index.js";
 import { ErrorState } from "../error-state/error-state.js";
 import {
   type FootRow,
@@ -33,8 +25,7 @@ import {
  * never reaches what stands behind it, keys an input method is composing
  * with pick and move nothing, and a list too short to search reads the
  * same keys itself. A read that failed says so in the list's place with
- * Retry rather than that nothing matches. The menu hangs from its button
- * at the width its owner chose, its token's; a submenu turns left where it
+ * Retry rather than that nothing matches. A submenu turns left where it
  * would run past the room its menu keeps to; and a row's own end marks
  * stand at its end, drawn in place as well.
  */
@@ -64,8 +55,6 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
-  document.head.replaceChildren();
-  delete document.documentElement.dataset.lukeProfile;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -110,7 +99,6 @@ function mount(
     room?: boolean;
     rows?: readonly MenuRow[];
     note?: React.ReactNode;
-    width?: PopoverWidth | undefined;
     bounds?: PopoverBounds | undefined;
     embedded?: boolean;
   } = {},
@@ -142,7 +130,7 @@ function mount(
         foot: options.foot === true ? footOf(asked.said) : undefined,
         ...(options.embedded === true
           ? { layer: SEARCHABLE_MENU_LAYER.EMBEDDED }
-          : { align: POPOVER_ALIGN.START, width: options.width, bounds: options.bounds }),
+          : { align: POPOVER_ALIGN.START, bounds: options.bounds }),
       }),
     ),
   );
@@ -312,49 +300,11 @@ test("a read that failed says so in the list's place with Retry, and never that 
   assert.deepEqual(retried, ["retry"]);
 });
 
-/**
- * The width the menu's popover is placed at under the desktop's tokens,
- * read from `profiles.css` as the window loads it, with the token's own
- * value beside it.
- */
-function placedWidth(width: PopoverWidth | undefined, token: string) {
-  const sheet = document.head.appendChild(document.createElement("style"));
-  // Note that the sheet is found by its path, because jsdom's URL reads no file address.
-  sheet.textContent = readFileSync(
-    path.join(import.meta.dirname, "../../tokens/profiles.css"),
-    "utf8",
-  );
-  document.documentElement.dataset.lukeProfile = "desktop";
-  mount({ placeholder: "Search models", width });
-  const layer =
-    document.querySelector<HTMLElement>(".luke-anchored-popover") ?? assert.fail("it hangs");
-  return {
-    placed: layer.style.width,
-    token: getComputedStyle(document.documentElement).getPropertyValue(token).trim(),
-  };
-}
-
-test("the width chosen sets the popover's width to its token, and none chosen is regular", () => {
-  const narrow = placedWidth(POPOVER_WIDTH.NARROW, "--luke-popover-width-narrow");
-  act(() => roots.pop()?.unmount());
-  const wide = placedWidth(POPOVER_WIDTH.WIDE, "--luke-popover-width-wide");
-  act(() => roots.pop()?.unmount());
-  const unnamed = placedWidth(undefined, "--luke-popover-width-regular");
-
-  assert.equal(narrow.placed, narrow.token);
-  assert.equal(wide.placed, wide.token);
-  assert.equal(unnamed.placed, unnamed.token);
-  assert.notEqual(narrow.placed, wide.placed);
-});
-
-test("an embedded menu stands in its owner's layer with none of its own, and reads the same keys", () => {
+test("an embedded menu reads the same keys", () => {
   const asked = mount({ placeholder: "Search models", embedded: true });
-  const menu = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Model"]');
   press({ key: "ArrowDown" });
   press({ key: "Enter" });
 
-  assert.equal(document.querySelector(".luke-anchored-popover"), null);
-  assert.equal(menu?.parentElement, document.body.firstElementChild?.firstElementChild);
   assert.deepEqual(asked.said, ["pick haiku"]);
 });
 

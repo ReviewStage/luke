@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
-import { asc, eq } from "drizzle-orm";
-import { Effect, Option, Result } from "effect";
+import { and, asc, eq } from "drizzle-orm";
+import { Duration, Effect, Fiber, Option, Result } from "effect";
+import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
@@ -164,6 +165,47 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
       }),
   );
 
+  it.effect(
+    "waits for a hand-over under way to end however long its runtime takes, cutting nothing meanwhile, and cuts once it has",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation;
+        const db = yield* Database;
+        const { first, secondLine } = yield* threeLines(target);
+        const before = yield* standing(target);
+        // A hand-over's claim taken now, which its holder clears once its runtime answers.
+        yield* db
+          .update(conversations)
+          .set({ dispatchClaim: randomUUID(), dispatchClaimedAt: new Date(0) })
+          .where(eq(conversations.id, target.conversationId));
+
+        const cutting = yield* Effect.forkChild(rewindConversation(target, secondLine));
+        // The clock moves a step at a time, a round trip apart, so the wait passes on a real Postgres too.
+        const passing = (until: () => boolean) =>
+          Effect.gen(function* () {
+            while (!until()) {
+              yield* TestClock.adjust(Duration.millis(100));
+              yield* standing(target);
+            }
+          });
+        let steps = 0;
+        // Twenty seconds on, longer than a send waits for a claim, the cut is still waiting.
+        yield* passing(() => cutting.pollUnsafe() !== undefined || ++steps > 200);
+        const pendingMeanwhile = cutting.pollUnsafe() === undefined;
+        const meanwhile = yield* standing(target);
+        yield* db
+          .update(conversations)
+          .set({ dispatchClaim: null, dispatchClaimedAt: null })
+          .where(eq(conversations.id, target.conversationId));
+        yield* passing(() => cutting.pollUnsafe() !== undefined);
+
+        assert.ok(pendingMeanwhile);
+        assert.deepEqual(meanwhile, before);
+        assert.ok(Result.isSuccess(yield* Fiber.join(cutting)));
+        assert.deepEqual((yield* standing(target)).turns, [first]);
+      }),
+  );
+
   it.effect("keeps the line's id for the next launch until it is handed over", () =>
     Effect.gen(function* () {
       const target = yield* openConversation;
@@ -201,7 +243,12 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
       const [awaiting] = yield* (yield* Database)
         .select({ id: messages.id })
         .from(messages)
-        .where(eq(messages.clientId, "client-5"));
+        .where(
+          and(
+            eq(messages.conversationId, target.conversationId),
+            eq(messages.clientId, "client-5"),
+          ),
+        );
 
       const rewound = yield* rewindConversation(target, awaiting?.id ?? "");
       const after = yield* standing(target);

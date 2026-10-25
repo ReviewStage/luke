@@ -20,9 +20,10 @@ export const CODER = {
    * timeout it opens with, and how far ahead of now each keep-alive puts its
    * end (`sandbox-lifetime.ts`). A turn's end stops the sandbox at once, so
    * this is only the backstop for one nothing stopped, which bills its
-   * memory until then: 8 GB for an hour, where the platform's 24-hour
-   * maximum billed 192 GB-hours. An hour, because a live turn shows use far
-   * more often than that: an eve step starts at least every few minutes
+   * memory until then: at the default size, 4 GB for an hour, where the
+   * platform's 24-hour maximum billed 96 GB-hours. An hour, because a live
+   * turn shows use far more often than that: an eve step starts at least
+   * every few minutes
    * (`SLEEP_MAX` and the credential's renewal already lean on it), a native
    * runner posts its events as its harness emits them, and a terminal or a
    * watched browser closes after five idle minutes. Each of them keeps it
@@ -45,12 +46,24 @@ export const CODER = {
    */
   SANDBOX_KEEP_ALIVE_EVERY: Duration.minutes(10),
   /**
-   * The sandbox's vCPUs, each with 2 GB of memory. Four, because oxlint with
-   * JS plugins reserves its arena as one mapping of about 6 GiB, which the
-   * kernel's default overcommit refuses where memory is the two-vCPU 4 GB, so
-   * the repository's lint panicked there at any thread count.
+   * The sandbox's vCPUs, each with 2 GB of memory, where its repository asks
+   * for no more (`SANDBOX_VCPUS_BY_REPOSITORY`); also the size the image's
+   * template and a repository snapshot are built at, since Vercel opens a
+   * snapshot at whatever size the create asks. Two, because provisioned
+   * memory and active CPU are most of the sandboxes' bill and both scale
+   * with vCPUs, so a repository whose own checks need more asks for it
+   * rather than every sandbox paying for it.
    */
-  SANDBOX_VCPUS: 4,
+  SANDBOX_VCPUS: 2,
+  /**
+   * The repositories whose agents' sandboxes open larger than
+   * `SANDBOX_VCPUS`, by `owner/name` lowercased, as `sandboxVcpus` reads
+   * them; a repository asks for more by a row here. Luke's own is four,
+   * because oxlint with JS plugins reserves its arena as one mapping of about
+   * 6 GiB, which the kernel's default overcommit refuses where memory is the
+   * two-vCPU 4 GB, so its lint panicked there at any thread count.
+   */
+  SANDBOX_VCPUS_BY_REPOSITORY: new Map([["reviewstage/luke", 4]]) as ReadonlyMap<string, number>,
   /**
    * The snapshots Vercel keeps of the agent's sandbox: the newest alone, which
    * is all a resume reads, so snapshot storage stays flat however many turns
@@ -173,8 +186,8 @@ export const CODER = {
    * the next message to reach it as a line on its stdin rather than through
    * a resumed sandbox and a relaunched CLI; past it, the sweep retires the
    * runner (`retireWarmRunner`) and its END stops the sandbox. An idle
-   * sandbox bills its memory alone, 8 GB at Vercel's rate, so ten warm
-   * minutes cost about three cents a turn.
+   * sandbox bills its memory alone, 4 GB at Vercel's rate, so ten warm
+   * minutes cost about a cent and a half a turn.
    */
   RUNNER_WARM: Duration.minutes(10),
   /**
@@ -236,3 +249,9 @@ export const CODER_REFUSAL = {
 } as const;
 
 export type CoderRefusal = (typeof CODER_REFUSAL)[keyof typeof CODER_REFUSAL];
+
+/** The vCPUs an agent's sandbox opens with: what its repository asks for, or `SANDBOX_VCPUS` for one that asks for nothing and for an agent with no repository. */
+export function sandboxVcpus(repository: string | null): number {
+  if (repository === null) return CODER.SANDBOX_VCPUS;
+  return CODER.SANDBOX_VCPUS_BY_REPOSITORY.get(repository.toLowerCase()) ?? CODER.SANDBOX_VCPUS;
+}

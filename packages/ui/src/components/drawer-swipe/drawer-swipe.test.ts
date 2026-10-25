@@ -4,13 +4,11 @@ import assert from "node:assert/strict";
 import { act, createElement, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { DrawerScrim } from "./drawer-scrim.js";
 import { useDrawerSwipe } from "./use-drawer-swipe.js";
 
 /**
  * drawer-swipe.test.ts -- a finger swiping in from the stage's left edge
- * opens the drawer, the drawer and the dimmed window under it following the
- * finger's share open as it goes; one let go short of half way puts it back,
+ * opens the drawer; one let go short of half way puts it back,
  * unless it was flicked and not held still after; a finger at the screen's
  * very edge, one off the stage, one going up or down first, a mouse, and a stage where the swipe is off open nothing; an
  * open drawer swiped left shuts, and one the system took away stays open;
@@ -44,7 +42,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A stage with a drawer at its left edge, a row under the finger, and the scrim, the drawer opening and shutting as the swipe asks. */
+/** A stage with a drawer at its left edge and a row under the finger, the drawer opening and shutting as the swipe asks. */
 function Harness({ enabled, opened }: { enabled: boolean; opened: boolean }): React.JSX.Element {
   const stage = useRef<HTMLDivElement>(null);
   const drawer = useRef<HTMLElement>(null);
@@ -59,9 +57,8 @@ function Harness({ enabled, opened }: { enabled: boolean; opened: boolean }): Re
   });
   return createElement(
     "div",
-    { ref: stage, "data-stage": "" },
+    { ref: stage },
     createElement("aside", { ref: drawer, "data-drawer": "", "data-open": String(open) }),
-    createElement(DrawerScrim, { open }),
     createElement("div", { "data-row": "" }),
   );
 }
@@ -77,9 +74,7 @@ function render(enabled = true, opened = false) {
     return found;
   };
   return {
-    stage: find("[data-stage]"),
     drawer: find("[data-drawer]"),
-    scrim: find(".luke-drawer-scrim"),
     row: find("[data-row]"),
   };
 }
@@ -138,19 +133,8 @@ function swipe(
   });
 }
 
-test("a finger swiping in from the left edge drags the drawer and the dimmed window at its share open", () => {
-  const { stage, row } = render();
-  act(() => {
-    row.dispatchEvent(finger("pointerdown", 30, 400, 1));
-    row.dispatchEvent(finger("pointermove", 90, 402, 200));
-    row.dispatchEvent(finger("pointermove", 180, 404, 400));
-  });
-  assert.equal(stage.hasAttribute("data-luke-drawer-drag"), true);
-  assert.equal(stage.style.getPropertyValue("--luke-drawer-progress"), "0.5");
-});
-
-test("let go past half way, the drawer opens and the drag's mark comes off once it is drawn open", () => {
-  const { stage, drawer, row, scrim } = render();
+test("let go past half way, the drawer opens", () => {
+  const { drawer, row } = render();
   swipe(
     row,
     [30, 400],
@@ -163,13 +147,10 @@ test("let go past half way, the drawer opens and the drag's mark comes off once 
     200,
   );
   assert.equal(drawer.dataset.open, "true");
-  assert.equal(scrim.dataset.open, "true");
-  assert.equal(stage.hasAttribute("data-luke-drawer-drag"), false);
-  assert.equal(stage.style.getPropertyValue("--luke-drawer-progress"), "");
 });
 
 test("let go slowly short of half way, the drawer goes back", () => {
-  const { stage, drawer, row } = render();
+  const { drawer, row } = render();
   swipe(
     row,
     [30, 400],
@@ -181,7 +162,6 @@ test("let go slowly short of half way, the drawer goes back", () => {
     200,
   );
   assert.equal(drawer.dataset.open, "false");
-  assert.equal(stage.hasAttribute("data-luke-drawer-drag"), false);
 });
 
 test("a short quick flick opens the drawer", () => {
@@ -223,7 +203,7 @@ test("a finger going down off the stage opens nothing, however near the edge", (
 });
 
 test("a finger at the screen's very edge is left to the browser's own back swipe", () => {
-  const { stage, drawer, row } = render();
+  const { drawer, row } = render();
   swipe(
     row,
     [8, 400],
@@ -233,11 +213,10 @@ test("a finger at the screen's very edge is left to the browser's own back swipe
     ],
   );
   assert.equal(drawer.dataset.open, "false");
-  assert.equal(stage.hasAttribute("data-luke-drawer-drag"), false);
 });
 
 test("a finger going up or down first is the page's scroll and never the drawer's", () => {
-  const { stage, drawer, row } = render();
+  const { drawer, row } = render();
   const scrolls: boolean[] = [];
   row.addEventListener("touchmove", (event) => scrolls.push(!event.defaultPrevented));
   swipe(
@@ -250,7 +229,6 @@ test("a finger going up or down first is the page's scroll and never the drawer'
     ],
   );
   assert.equal(drawer.dataset.open, "false");
-  assert.equal(stage.hasAttribute("data-luke-drawer-drag"), false);
   assert.deepEqual(scrolls, [true, true, true]);
 });
 
@@ -277,7 +255,6 @@ test("an open drawer swiped left shuts, and one the system took away stays open"
   const kept = render(true, true);
   swipe(kept.drawer, [250, 400], [[40, 400]], "pointercancel");
   assert.equal(kept.drawer.dataset.open, "true");
-  assert.equal(kept.stage.hasAttribute("data-luke-drawer-drag"), false);
 });
 
 test("a claimed swipe's moves and touches reach nothing under the finger", () => {
