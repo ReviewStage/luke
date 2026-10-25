@@ -1,4 +1,5 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
+import { useChannelsMock } from "../tasks/channels-mock.js";
 import type { Task } from "@luke/features/task-wire";
 import { readingWords } from "@luke/features/words";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -954,6 +955,8 @@ export function DesktopShell({
   // away. Its toggle stays, the way to close it.
   const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
+  // PROTOTYPE ONLY (STAG-547): the bar is read again as a mockup channel's thread opens and closes.
+  useChannelsMock();
   const barShown = mobileBarShown(room, tasks, chatOn);
   return (
     <div

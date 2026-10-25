@@ -24,10 +24,8 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
-  CHOICE_BAR_LOOK,
-  CHOICE_BAR_SIZE,
-  ChoiceBar,
   Comment,
+  IconButton,
   TEXT_BUTTON_TONE,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -35,10 +33,13 @@ import {
   TextButton,
   TOOLBAR_INSET,
   Toolbar,
+  Tooltip,
+  useMenu,
 } from "@luke/ui";
-import { ArrowUpIcon } from "lucide-react";
+import { ArrowUpIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
 import {
   Conversation,
@@ -162,6 +163,51 @@ function useNeedsAbove(
     box.scrollTo({ top: box.scrollTop + offset - 12, behavior: "smooth" });
   };
   return { count, onJump };
+}
+
+/** What each of a channel's views is called, in its menu and after the channel's name where it is not Mine. */
+const SCOPE_WORDS = {
+  [STREAM_SCOPE.MINE]: "Mine",
+  [STREAM_SCOPE.EVERYONE]: "Everyone",
+  [STREAM_SCOPE.NEEDS]: "Needs me",
+} as const satisfies Record<StreamScope, string>;
+
+/** The channel's View options, as the Inbox's own: a button whose menu chooses Mine, Everyone, or Needs me, the last counting what waits on the reader. */
+function StreamViewOptions({
+  scope,
+  needsCount,
+  onChoose,
+}: {
+  scope: StreamScope;
+  needsCount: number;
+  onChoose: (scope: StreamScope) => void;
+}): React.JSX.Element {
+  const menu = useMenu(true);
+  const entries: MenuEntry[] = [STREAM_SCOPE.MINE, STREAM_SCOPE.EVERYONE, STREAM_SCOPE.NEEDS].map(
+    (value) => ({
+      label:
+        value === STREAM_SCOPE.NEEDS && needsCount > 0
+          ? `${SCOPE_WORDS[value]} · ${needsCount}`
+          : SCOPE_WORDS[value],
+      checked: scope === value,
+      onSelect: () => onChoose(value),
+    }),
+  );
+  return (
+    <>
+      <Tooltip label="View options">
+        <IconButton icon={<SlidersHorizontalIcon />} label="View options" {...menu.trigger()} />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label="View options"
+          menu={menu.drawn}
+          groups={[entries]}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
 }
 
 /** One entry of the stream: a thread, or a post made in the window. */
@@ -443,28 +489,13 @@ export function ChannelStream({
       data-ground={STREAM_GROUND}
     >
       <Toolbar
-        title={`#${channel.name}`}
-        end={TOOLBAR_INSET.COLUMN}
-        actions={
-          <div className="channels-actions">
-            <ChoiceBar
-              label="Show"
-              look={CHOICE_BAR_LOOK.SEGMENTED}
-              size={CHOICE_BAR_SIZE.COMPACT}
-              items={[
-                { value: STREAM_SCOPE.EVERYONE, label: "Everyone" },
-                { value: STREAM_SCOPE.MINE, label: "Mine" },
-                {
-                  value: STREAM_SCOPE.NEEDS,
-                  label: "Needs me",
-                  count: needsCount === 0 ? undefined : String(needsCount),
-                },
-              ]}
-              value={scope}
-              onChange={choose}
-            />
-          </div>
+        title={
+          scope === STREAM_SCOPE.MINE
+            ? `#${channel.name}`
+            : `#${channel.name} · ${SCOPE_WORDS[scope]}`
         }
+        end={TOOLBAR_INSET.COLUMN}
+        actions={<StreamViewOptions scope={scope} needsCount={needsCount} onChoose={choose} />}
       />
       <div className="channels-head">
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} truncate>
@@ -473,18 +504,6 @@ export function ChannelStream({
             : `${channel.purpose} · In flight: ${channel.inFlight}`}
         </Text>
       </div>
-      {above.count === 0 ? null : (
-        <div className="channels-jump">
-          <Button
-            size={BUTTON_SIZE.COMPACT}
-            variant={BUTTON_VARIANT.OUTLINE}
-            icon={<ArrowUpIcon />}
-            onClick={above.onJump}
-          >
-            {above.count === 1 ? "1 older ask needs you" : `${above.count} older asks need you`}
-          </Button>
-        </div>
-      )}
       <Conversation subject={channel.id} list={log} className="channels-stream-log">
         <ConversationContent>
           <div className="channels-stream-body">
@@ -532,6 +551,18 @@ export function ChannelStream({
           </div>
         </ConversationContent>
         <ConversationScrollButton />
+        {above.count === 0 ? null : (
+          <div className="channels-jump">
+            <Button
+              size={BUTTON_SIZE.COMPACT}
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<ArrowUpIcon />}
+              onClick={above.onJump}
+            >
+              {above.count === 1 ? "1 older ask needs you" : `${above.count} older asks need you`}
+            </Button>
+          </div>
+        )}
       </Conversation>
     </section>
   );

@@ -25,6 +25,7 @@ import { ChannelStream } from "../tasks/channel-stream.js";
 import {
   channelInfo,
   channelItemIds,
+  closeThread,
   MOCK_CHANNEL,
   useChannelsMock,
 } from "../tasks/channels-mock.js";
@@ -603,7 +604,14 @@ function InboxShown({
                             control={live}
                             agents={named}
                             hidden={columns.shown === INBOX_COLUMNS.LIST}
-                            onBack={columns.onBack}
+                            onBack={
+                              streamChannel !== undefined && columns.onBack !== undefined
+                                ? () => {
+                                    closeThread();
+                                    columns.onBack?.();
+                                  }
+                                : columns.onBack
+                            }
                             pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
                             next={next}
                             mentions={mentions}

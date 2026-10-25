@@ -1,6 +1,8 @@
 import { BarItem, EllipsisIcon } from "@luke/ui";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
+import { GLYPH } from "@luke/ui/icons";
 import { InboxIcon, ListTodoIcon, MessagesSquareIcon } from "lucide-react";
+import { channelStreamStanding, useChannelsMock } from "../tasks/channels-mock.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
@@ -29,7 +31,8 @@ export function mobileBarShown(room: ShellRoom, tasks: TasksControl, chatOn: boo
   if (room !== SHELL_ROOM.NARROW || !tasks.signedIn) return false;
   const { inboxView, chatView, boardView, automationsView, agentView, personView } = tasks;
   if (chatView.open && chatOn) return chatView.listed;
-  if (inboxView.open) return inboxView.listed || inboxView.chosen === undefined;
+  if (inboxView.open)
+    return inboxView.listed || inboxView.chosen === undefined || channelStreamStanding();
   if (agentView.agentId !== undefined || personView.userId !== undefined) return false;
   if (boardView.open) return true;
   // Note that an automation's editor and its runs keep the whole screen, as an item does; only the list stands over the bar.
@@ -57,17 +60,31 @@ export function MobileBar({
   const inTasks = !inChat && !inInbox && boardView.open;
   const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   const waiting = usePlacesWaiting(tasks);
+  const mock = useChannelsMock();
   return (
     <nav className="mobile-bar" aria-label="Places">
-      <BarItem
-        icon={<InboxIcon />}
-        current={inInbox}
-        count={{ value: waiting.inbox, noun: needsYouNoun(waiting.inbox) }}
-        inert={drawerOpen}
-        onPress={inboxView.onOpenList}
-      >
-        Inbox
-      </BarItem>
+      {/* PROTOTYPE ONLY (STAG-547): in the Channels mockup the first place is Channels, which opens the last channel read and, pressed again there, the drawer that lists them all. */}
+      {mock.on ? (
+        <BarItem
+          icon={<GLYPH.CHANNEL />}
+          current={inInbox && !drawerOpen}
+          count={{ value: waiting.inbox, noun: needsYouNoun(waiting.inbox) }}
+          {...(inInbox ? { onPointerDown: onPressMore } : {})}
+          onPress={inInbox ? sidebar.onToggle : inboxView.onOpenList}
+        >
+          Channels
+        </BarItem>
+      ) : (
+        <BarItem
+          icon={<InboxIcon />}
+          current={inInbox}
+          count={{ value: waiting.inbox, noun: needsYouNoun(waiting.inbox) }}
+          inert={drawerOpen}
+          onPress={inboxView.onOpenList}
+        >
+          Inbox
+        </BarItem>
+      )}
       <BarItem
         icon={<ListTodoIcon />}
         current={inTasks}

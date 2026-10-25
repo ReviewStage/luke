@@ -5711,6 +5711,7 @@ ul.actor-stack {
 }
 
 .channels-stream-log {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -5798,7 +5799,25 @@ ul.actor-stack {
 .channels-jump {
   position: absolute;
   z-index: 1;
-  top: calc(var(--luke-toolbar-height, 48px) + var(--luke-space-48));
+  top: var(--luke-space-8);
   left: 50%;
   transform: translateX(-50%);
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-surface);
+  box-shadow: 0 1px 4px var(--luke-color-shadow-soft);
+}
+
+/* On a phone the thread takes the stream's place, as the Inbox's item takes its list's, and its way back gives the stream again. */
+:where(:root)[data-luke-room="narrow"] .inbox-view[data-channels-stream]:has(> .inbox-view-items) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:where(:root)[data-luke-room="narrow"]
+  .inbox-view[data-channels-stream]:has(> .inbox-view-items)
+  > .channels-stream {
+  display: none;
+}
+
+:where(:root)[data-luke-room="narrow"] .inbox-view[data-channels-stream] > .inbox-view-items {
+  border-left: 0;
 }

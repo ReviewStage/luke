@@ -287,3 +287,8 @@ export function channelUnaddressed(itemId: string): boolean {
   const meta = items.get(itemId);
   return meta !== undefined && meta.addressed !== true;
 }
+
+/** Whether a channel's stream stands with no thread open over it, read outside a render, as the phone's bar asks. */
+export function channelStreamStanding(): boolean {
+  return state.on && state.channel !== MOCK_CHANNEL.FOR_YOU && !state.threadOpen;
+}
