@@ -36,7 +36,8 @@ import {
   TOOLBAR_INSET,
   Toolbar,
 } from "@luke/ui";
-import { useMemo, useRef, useState } from "react";
+import { ArrowUpIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
 import {
@@ -80,7 +81,7 @@ function asksSomeone(listed: InboxListed): boolean {
 }
 
 /** Which of a channel's threads the stream shows: everyone's, or the reader's own. */
-const STREAM_SCOPE = { EVERYONE: "everyone", MINE: "mine" } as const;
+const STREAM_SCOPE = { EVERYONE: "everyone", MINE: "mine", NEEDS: "needs" } as const;
 
 type StreamScope = (typeof STREAM_SCOPE)[keyof typeof STREAM_SCOPE];
 
@@ -111,17 +112,56 @@ const GROUND = {
 
 type Ground = (typeof GROUND)[keyof typeof GROUND];
 
-/** The ground shown: the one the address names, else the neutral fill. */
+/** The ground shown: the one the address names, else the attention tint. */
 const STREAM_GROUND: Ground = (() => {
   const named = new URLSearchParams(globalThis.location?.search ?? "").get("ground");
   return (Object.values(GROUND) as readonly string[]).includes(named ?? "")
     ? (named as Ground)
-    : GROUND.NEUTRAL;
+    : GROUND.TINT;
 })();
 
 /** Whether a thread asks the reader something still open. */
 function needsReader(listed: InboxListed, readerId: string | undefined): boolean {
   return asksSomeone(listed) && listed.item.waitsOn?.userId === readerId;
+}
+
+/**
+ * How many posts that need the reader stand scrolled up out of sight above
+ * the stream's view, and the press that brings the nearest of them into it,
+ * read again as the stream scrolls and whenever `drawn` names a new set of
+ * posts. Note that the stream scrolls its own box, never the window, so the
+ * jump sets the box's own offset rather than calling `scrollIntoView`.
+ */
+function useNeedsAbove(
+  log: React.RefObject<HTMLDivElement | null>,
+  drawn: string,
+): { readonly count: number; readonly onJump: () => void } {
+  const [count, setCount] = useState(0);
+  const nearest = useRef<HTMLElement | undefined>(undefined);
+  useEffect(() => {
+    const box = log.current;
+    if (box === null) return;
+    const measure = () => {
+      const top = box.getBoundingClientRect().top;
+      const hidden = [
+        ...box.querySelectorAll<HTMLElement>('.channels-post[data-needs="true"]'),
+      ].filter((post) => post.getBoundingClientRect().bottom < top + 8);
+      nearest.current = hidden.at(-1);
+      setCount(hidden.length);
+    };
+    // Note that the log scrolls itself to its newest post as it opens, which fires a scroll, so that first scroll measures it settled.
+    measure();
+    box.addEventListener("scroll", measure, { passive: true });
+    return () => box.removeEventListener("scroll", measure);
+  }, [log, drawn]);
+  const onJump = () => {
+    const box = log.current;
+    const post = nearest.current;
+    if (box === null || post === undefined) return;
+    const offset = post.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    box.scrollTo({ top: box.scrollTop + offset - 12, behavior: "smooth" });
+  };
+  return { count, onJump };
 }
 
 /** One entry of the stream: a thread, or a post made in the window. */
@@ -366,13 +406,16 @@ export function ChannelStream({
   const [scope, setScope] = useState<StreamScope>(lastScope);
   // Note that the New line stands where the reader left off as the channel opened, and stays while they read it.
   const looked = useMemo(() => channelLastLooked(channel.id), [channel.id]);
-  const scoped = items.filter(
-    (listed) => scope === STREAM_SCOPE.EVERYONE || isMine(listed, readerId),
+  const scoped = items.filter((listed) =>
+    scope === STREAM_SCOPE.EVERYONE
+      ? true
+      : scope === STREAM_SCOPE.MINE
+        ? isMine(listed, readerId)
+        : needsReader(listed, readerId),
   );
   const shown = scoped;
-  const mineCount = items.filter(
-    (listed) => isMine(listed, readerId) && asksSomeone(listed),
-  ).length;
+  const needsCount = items.filter((listed) => needsReader(listed, readerId)).length;
+  const above = useNeedsAbove(log, `${channel.id}:${scope}:${shown.length}`);
   const entries: StreamEntry[] = [
     ...shown.map((listed) => ({ kind: "thread" as const, at: listed.item.postedAt, listed })),
     ...posts.map((post) => ({ kind: "post" as const, at: post.at, post })),
@@ -410,10 +453,11 @@ export function ChannelStream({
               size={CHOICE_BAR_SIZE.COMPACT}
               items={[
                 { value: STREAM_SCOPE.EVERYONE, label: "Everyone" },
+                { value: STREAM_SCOPE.MINE, label: "Mine" },
                 {
-                  value: STREAM_SCOPE.MINE,
-                  label: "Mine",
-                  count: mineCount === 0 ? undefined : String(mineCount),
+                  value: STREAM_SCOPE.NEEDS,
+                  label: "Needs me",
+                  count: needsCount === 0 ? undefined : String(needsCount),
                 },
               ]}
               value={scope}
@@ -429,13 +473,27 @@ export function ChannelStream({
             : `${channel.purpose} · In flight: ${channel.inFlight}`}
         </Text>
       </div>
+      {above.count === 0 ? null : (
+        <div className="channels-jump">
+          <Button
+            size={BUTTON_SIZE.COMPACT}
+            variant={BUTTON_VARIANT.OUTLINE}
+            icon={<ArrowUpIcon />}
+            onClick={above.onJump}
+          >
+            {above.count === 1 ? "1 older ask needs you" : `${above.count} older asks need you`}
+          </Button>
+        </div>
+      )}
       <Conversation subject={channel.id} list={log} className="channels-stream-log">
         <ConversationContent>
           <div className="channels-stream-body">
             {entries.length === 0 ? (
               <div className="channels-day">
                 <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                  {`Nothing of yours in #${channel.name} right now`}
+                  {scope === STREAM_SCOPE.NEEDS
+                    ? `Nothing in #${channel.name} needs you`
+                    : `Nothing of yours in #${channel.name} right now`}
                 </Text>
               </div>
             ) : null}

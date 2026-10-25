@@ -5703,6 +5703,7 @@ ul.actor-stack {
 }
 
 .channels-stream {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -5791,4 +5792,13 @@ ul.actor-stack {
 
 .channels-stream[data-ground="dim"] .channels-post[data-needs="false"] {
   opacity: 0.55;
+}
+
+/* The way up to an older post that needs the reader floats over the top of the stream while one is scrolled out of sight. */
+.channels-jump {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--luke-toolbar-height, 48px) + var(--luke-space-48));
+  left: 50%;
+  transform: translateX(-50%);
 }

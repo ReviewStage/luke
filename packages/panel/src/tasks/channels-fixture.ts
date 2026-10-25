@@ -683,6 +683,30 @@ THREADS.push(
   ),
 );
 
+/** An ask from three days ago, still waiting on Dean, which a stream opened at its newest post leaves scrolled out of sight. */
+THREADS.push(
+  thread(
+    20,
+    seed(TASK.ROWS),
+    MOCK_CHANNEL.APP,
+    THREAD_KIND.DECISION,
+    "Rename the Inbox's To do scope?",
+    [
+      agentSaid(
+        125,
+        3 * DAY,
+        "The Inbox's first scope is called To do in code and For you on screen. One name would save a mapping in every view.",
+        {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "For you everywhere" }, { label: "To do everywhere" }],
+          recommended: "For you everywhere",
+          ...OPEN,
+        },
+      ),
+    ],
+  ),
+);
+
 /** When each reader last looked at each channel, so the stream draws its New line before what came after. */
 const LAST_LOOKED: ReadonlyMap<string, ReadonlyMap<MockChannel, number>> = new Map([
   [
