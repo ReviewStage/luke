@@ -17,7 +17,9 @@
  * said it may ask again. A request asked while held is not sent; it is
  * answered here as GitHub would answer it, a 429 with the `retry-after` left,
  * marked `GATE.HELD_MARK`, so every caller reads the refusal it already
- * handles. Any answer under 400 lifts the identity's backoff.
+ * handles. Any answer under 400 once the hold is over lifts the identity's
+ * backoff. A 403 whose message is read here is still the caller's to read,
+ * since the response keeps its body once read.
  *
  * Note that every installation token and the App's own JWT share one
  * identity, because an installation's tokens are minted per repository and
@@ -122,14 +124,17 @@ const refusalOf = Effect.fnUntraced(function* (
 /**
  * How long a refusal holds its identity: the wait GitHub named, or a minute
  * where it named none, the first time; each refusal after that in a row
- * waits at least twice as long as the one before, never past
- * `GATE.MAXIMUM_HOLD`.
+ * waits at least twice as long as the one before. The backoff stops growing
+ * at `GATE.MAXIMUM_HOLD`, but a wait GitHub named is kept whole, since a
+ * primary limit's reset may be most of an hour away.
  */
 function holdFor(refusal: Refusal, strikes: number): Duration.Duration {
-  const backoff = Duration.times(GATE.MINIMUM_HOLD, 2 ** (strikes - 1));
+  const backoff = Duration.min(
+    Duration.times(GATE.MINIMUM_HOLD, 2 ** (strikes - 1)),
+    GATE.MAXIMUM_HOLD,
+  );
   const floor = strikes === 1 ? Duration.zero : backoff;
-  const wanted = Duration.max(refusal.stated ?? GATE.MINIMUM_HOLD, floor);
-  return Duration.min(wanted, GATE.MAXIMUM_HOLD);
+  return Duration.max(refusal.stated ?? GATE.MINIMUM_HOLD, floor);
 }
 
 /** The answer a held request gets in place of being sent: GitHub's own 429, with the seconds left. */
@@ -168,19 +173,26 @@ export const githubRateGate: Layer.Layer<HttpClient.HttpClient, never, HttpClien
         response: HttpClientResponse.HttpClientResponse,
       ) {
         const now = yield* Clock.currentTimeMillis;
+        const standing = holds.get(identity);
+        const holding = standing !== undefined && now < standing.until;
+        // Note that an answer sent before the refusal and landing after it
+        // lifts nothing, because the hold GitHub asked for still stands.
         if (response.status < FIRST_REFUSAL_STATUS) {
-          holds.delete(identity);
+          if (!holding) holds.delete(identity);
           return;
         }
         const refusal = yield* refusalOf(response, now);
         if (!refusal.limited) return;
-        const strikes = (holds.get(identity)?.strikes ?? 0) + 1;
-        const hold = holdFor(refusal, strikes);
+        // Note that refusals of requests already out as the hold began are
+        // one strike, not one each, so a burst does not jump the backoff.
+        const strikes = (standing?.strikes ?? 0) + (holding ? 0 : 1);
+        const hold = holdFor(refusal, Math.max(1, strikes));
+        const until = Math.max(standing?.until ?? 0, now + Duration.toMillis(hold));
         // Note that a hold long lifted is let go here, so a member token refused once and never again is not kept.
         for (const [kept, standing] of holds) {
           if (standing.until + Duration.toMillis(GATE.MAXIMUM_HOLD) < now) holds.delete(kept);
         }
-        holds.set(identity, { until: now + Duration.toMillis(hold), strikes });
+        holds.set(identity, { until, strikes: Math.max(1, strikes) });
         // The identity's kind and GitHub's own counters alone: nothing of the bearer or the request.
         yield* Effect.logWarning("github: rate limited; holding requests", {
           identity:
@@ -190,7 +202,7 @@ export const githubRateGate: Layer.Layer<HttpClient.HttpClient, never, HttpClien
           reset: header(response, "x-ratelimit-reset"),
           retryAfter: header(response, "retry-after"),
           resource: header(response, "x-ratelimit-resource"),
-          heldForSeconds: Duration.toSeconds(hold),
+          heldForSeconds: Math.ceil((until - now) / 1000),
           strikes,
         });
       });
