@@ -191,7 +191,14 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
                   unavailable: macUnavailable,
                 }
           }
-          onChoose={setPicked}
+          onChoose={(next) => {
+            setPicked(next);
+            // A model a Mac cannot run lets go of the Mac picked, so a later Claude pick starts in the cloud.
+            const nextProvider = models?.find((each) => each.id === next.model)?.provider;
+            if (nextProvider !== undefined && nextProvider !== MODEL_PROVIDER.ANTHROPIC) {
+              setRunOn(undefined);
+            }
+          }}
           onClose={close}
           onLeave={(left) => {
             // Focus moving within the menu, or to the chevron whose own press toggles it, keeps it open.
