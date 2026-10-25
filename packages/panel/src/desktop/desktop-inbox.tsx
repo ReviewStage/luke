@@ -1,9 +1,9 @@
+import type { ChannelThread } from "@luke/features/channel-wire";
 import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
 import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { backToWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import type { ChannelThread } from "@luke/features/channel-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
   EmptyState,
@@ -58,14 +58,14 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { choiceOf, type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
-import { useExperiment } from "../use-app-state.js";
 import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { useExperiment } from "../use-app-state.js";
 import { useAgentCallDoors } from "./agent-actions.js";
 import { AgentPane } from "./main-tabs.js";
 import { NewTaskButton } from "./new-task-button.js";

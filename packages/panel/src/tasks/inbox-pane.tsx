@@ -1458,7 +1458,11 @@ export function InboxPane({
               />
               {channel === undefined ? null : (
                 <Tooltip label="Close thread">
-                  <IconButton icon={<GLYPH.CLOSE />} label="Close thread" onClick={channel.onClose} />
+                  <IconButton
+                    icon={<GLYPH.CLOSE />}
+                    label="Close thread"
+                    onClick={channel.onClose}
+                  />
                 </Tooltip>
               )}
             </>

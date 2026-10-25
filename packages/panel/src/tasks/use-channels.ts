@@ -1,4 +1,8 @@
-import { CHANNEL_CALL_FAILURE, type ChannelCallFailure, type ChannelsView } from "@luke/features/channel-view";
+import {
+  CHANNEL_CALL_FAILURE,
+  type ChannelCallFailure,
+  type ChannelsView,
+} from "@luke/features/channel-view";
 import type { Channel, ChannelThread } from "@luke/features/channel-wire";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -99,7 +103,11 @@ export interface ChannelsControl {
   /** Reads the channels again. */
   readonly onRefresh: () => void;
   /** Makes a channel; what refused it, or none where it was made. */
-  readonly onCreate: (name: string, purpose: string, project: boolean) => Promise<string | undefined>;
+  readonly onCreate: (
+    name: string,
+    purpose: string,
+    project: boolean,
+  ) => Promise<string | undefined>;
   /** Renames a channel; what refused it, or none where it was renamed. */
   readonly onRename: (channelId: string, name: string) => Promise<string | undefined>;
   /** Archives a channel; what refused it, or none where it was archived. */

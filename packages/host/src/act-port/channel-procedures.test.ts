@@ -89,7 +89,10 @@ const ACTS: readonly {
     host: "archive",
     payload: { workspaceId: WORKSPACE_ID, channelId: CHANNEL_ID },
     call: (client) =>
-      client[CHANNEL_ACT_KIND.CHANNELS_ARCHIVE]({ workspaceId: WORKSPACE_ID, channelId: CHANNEL_ID }),
+      client[CHANNEL_ACT_KIND.CHANNELS_ARCHIVE]({
+        workspaceId: WORKSPACE_ID,
+        channelId: CHANNEL_ID,
+      }),
   },
   {
     kind: CHANNEL_ACT_KIND.CHANNELS_LOOK,

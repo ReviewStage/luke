@@ -34,7 +34,7 @@ import {
   Tooltip,
   useMenu,
 } from "@luke/ui";
-import { ArrowUpIcon, SlidersHorizontalIcon } from "lucide-react";
+import { ArrowUpIcon, SlidersHorizontalIcon } from "@luke/ui/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
@@ -107,7 +107,8 @@ const STREAM =
   "channel-stream relative flex min-h-0 min-w-0 flex-col data-[beside]:border-r data-[beside]:border-border";
 
 /** The posts' run, on the column's inset. */
-const STREAM_BODY = "channel-stream-body flex flex-col gap-luke-4 px-column-inset pt-luke-8 pb-luke-16";
+const STREAM_BODY =
+  "channel-stream-body flex flex-col gap-luke-4 px-column-inset pt-luke-8 pb-luke-16";
 
 /** One post: its own ground, the hover's fill, the chosen thread's, or the attention tint where it needs the reader. */
 const POST =
@@ -121,6 +122,9 @@ const POST_LINE = "channel-post-line relative z-1 flex flex-wrap items-center ga
 
 /** The way up to an older post that needs the reader, floating over the stream's head. */
 const JUMP = "channel-jump absolute top-luke-8 left-1/2 z-1 -translate-x-1/2";
+
+/** What the line before the first thread posted since the reader last looked says. */
+const NEW_LINE = "New";
 
 /** No thread is read yet. */
 const NO_THREADS: readonly ChannelThread[] = [];
@@ -192,14 +196,23 @@ function StreamViewOptions({
         <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={VIEW_OPTIONS} menu={menu.drawn} groups={[entries]} onClose={menu.close} />
+        <ActionMenu
+          label={VIEW_OPTIONS}
+          menu={menu.drawn}
+          groups={[entries]}
+          onClose={menu.close}
+        />
       )}
     </>
   );
 }
 
 /** A message's writer, a member as the directory draws them, or the thread's agent as its task lists it. */
-function useWriter(message: InboxMessage | undefined, item: InboxItem, listed: InboxListed | undefined) {
+function useWriter(
+  message: InboxMessage | undefined,
+  item: InboxItem,
+  listed: InboxListed | undefined,
+) {
   const member = usePerson(message?.member);
   if (message?.author !== INBOX_MESSAGE_AUTHOR.AGENT) return member;
   const agent =
@@ -259,7 +272,13 @@ function PostAsk({
             draft: EMPTY_INBOX_DRAFT,
             disabled: false,
             // Note that a decision draws no form field, the one control that reads these.
-            text: { self: item.agentId, agent: undefined, skills: undefined, keywords: [], onEnter: () => undefined },
+            text: {
+              self: item.agentId,
+              agent: undefined,
+              skills: undefined,
+              keywords: [],
+              onEnter: () => undefined,
+            },
             onDraft: (next) => {
               const label = next.choices[0];
               if (label !== undefined) onPick(item, label);
@@ -307,7 +326,12 @@ function ThreadPost({
       data-chosen={chosen ? "" : undefined}
       data-needs={threadNeedsReader(item, readerId) ? "" : undefined}
     >
-      <Comment author={commentAuthor(actor)} nameRef={<ActorRef actor={actor} nameOnly />} at={item.postedAt} now={now}>
+      <Comment
+        author={commentAuthor(actor)}
+        nameRef={<ActorRef actor={actor} nameOnly />}
+        at={item.postedAt}
+        now={now}
+      >
         <div className={POST_BODY}>
           <CardPress reach={CARD_PRESS_REACH.CARD} label={`Open ${item.title}`} onPress={onOpen}>
             <Text variant={TEXT_VARIANT.LABEL}>{item.title}</Text>
@@ -411,17 +435,19 @@ export function ChannelStream({
     );
   };
   return (
-    <section className={STREAM} aria-label={`#${channel.name}`} data-beside={beside ? "" : undefined}>
+    <section
+      className={STREAM}
+      aria-label={`#${channel.name}`}
+      data-beside={beside ? "" : undefined}
+    >
       <Toolbar
         title={channelTitle(channel.name, view)}
+        detail={channel.purpose}
         end={TOOLBAR_INSET.COLUMN}
-        actions={<StreamViewOptions view={view} needsCount={needsCount} shown={shown} onView={onView} />}
+        actions={
+          <StreamViewOptions view={view} needsCount={needsCount} shown={shown} onView={onView} />
+        }
       />
-      <div className="channel-purpose px-column-inset pb-row-inset">
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} truncate>
-          {channel.purpose}
-        </Text>
-      </div>
       {read.threads === undefined && read.failure !== undefined ? (
         <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRefresh}>
           {`Could not read #${channel.name}.`}
@@ -430,37 +456,32 @@ export function ChannelStream({
         <Conversation subject={`${channel.id}:${view}`} list={log}>
           <ConversationContent className={STREAM_BODY}>
             {read.threads !== undefined && rows.length === 0 ? (
-              <NoteLine look={NOTE_LINE_LOOK.CENTRED}>{emptyStreamWords(channel.name, view)}</NoteLine>
+              <NoteLine look={NOTE_LINE_LOOK.CENTRED}>
+                {emptyStreamWords(channel.name, view)}
+              </NoteLine>
             ) : null}
-            {rows.map((row) => {
-              switch (row.kind) {
-                case STREAM_ROW.DAY:
-                  return (
-                    <StreamDivider key={`day-${row.key}`} kind={STREAM_DIVIDER.DAY}>
-                      {row.words}
-                    </StreamDivider>
-                  );
-                case STREAM_ROW.NEW:
-                  return (
-                    <StreamDivider key="new" kind={STREAM_DIVIDER.NEW}>
-                      New
-                    </StreamDivider>
-                  );
-                case STREAM_ROW.THREAD:
-                  return (
-                    <ThreadPost
-                      key={row.thread.id}
-                      item={row.thread}
-                      listed={listedOf(row.thread.id)}
-                      chosen={beside && row.thread.id === chosenId}
-                      readerId={readerId}
-                      now={now}
-                      onPick={pick}
-                      onOpen={() => onOpen(row.thread)}
-                    />
-                  );
-              }
-            })}
+            {rows.map((row) =>
+              row.kind === STREAM_ROW.THREAD ? (
+                <ThreadPost
+                  key={row.thread.id}
+                  item={row.thread}
+                  listed={listedOf(row.thread.id)}
+                  chosen={beside && row.thread.id === chosenId}
+                  readerId={readerId}
+                  now={now}
+                  onPick={pick}
+                  onOpen={() => onOpen(row.thread)}
+                />
+              ) : row.kind === STREAM_ROW.DAY ? (
+                <StreamDivider key={`day-${row.key}`} kind={STREAM_DIVIDER.DAY}>
+                  {row.words}
+                </StreamDivider>
+              ) : (
+                <StreamDivider key="new" kind={STREAM_DIVIDER.NEW}>
+                  {NEW_LINE}
+                </StreamDivider>
+              ),
+            )}
           </ConversationContent>
           <ConversationScrollButton />
           {above.count === 0 ? null : (

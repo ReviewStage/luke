@@ -39,12 +39,14 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function channelProcedures(dependencies: ChannelProceduresDependencies) {
   const { host } = dependencies;
   return {
-    [CHANNEL_ACT_KIND.CHANNELS_LIST]: actPort[CHANNEL_ACT_KIND.CHANNELS_LIST].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.channelsList(input);
-      },
-    ),
+    [CHANNEL_ACT_KIND.CHANNELS_LIST]: actPort[CHANNEL_ACT_KIND.CHANNELS_LIST].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.channelsList(input);
+    }),
     [CHANNEL_ACT_KIND.CHANNELS_CREATE]: actPort[CHANNEL_ACT_KIND.CHANNELS_CREATE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -63,12 +65,14 @@ export function channelProcedures(dependencies: ChannelProceduresDependencies) {
         return yield* host.channelsArchive(input);
       },
     ),
-    [CHANNEL_ACT_KIND.CHANNELS_LOOK]: actPort[CHANNEL_ACT_KIND.CHANNELS_LOOK].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.channelsLook(input);
-      },
-    ),
+    [CHANNEL_ACT_KIND.CHANNELS_LOOK]: actPort[CHANNEL_ACT_KIND.CHANNELS_LOOK].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.channelsLook(input);
+    }),
     [CHANNEL_ACT_KIND.CHANNELS_THREADS]: actPort[CHANNEL_ACT_KIND.CHANNELS_THREADS].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

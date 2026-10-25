@@ -28,7 +28,7 @@ import type { RunMode } from "./run-mode.js";
  */
 
 /** The service's side of the channels, as this concern asks it. */
-export type ChannelsClient = Pick<
+type ChannelsClient = Pick<
   HostedChannelClient,
   "list" | "create" | "rename" | "archive" | "look" | "threads"
 >;
@@ -52,7 +52,10 @@ export function composeChannels(
 }
 
 /** The composer's one table, built from its seams; nothing here starts anything. */
-function composed(dependencies: ChannelsDependencies, http: HttpClient.HttpClient): ChannelsComposer {
+function composed(
+  dependencies: ChannelsDependencies,
+  http: HttpClient.HttpClient,
+): ChannelsComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
@@ -65,7 +68,11 @@ function composed(dependencies: ChannelsDependencies, http: HttpClient.HttpClien
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.CHANNELS_LIST]: (params) =>
       Effect.gen(function* () {
-        const read = yield* readParams(channelsListParamsSchema, params, "a list names a workspace");
+        const read = yield* readParams(
+          channelsListParamsSchema,
+          params,
+          "a list names a workspace",
+        );
         return carried<ChannelsView>(yield* asked(client.list(read)));
       }),
     [GATEWAY_METHOD.CHANNELS_CREATE]: (params) =>
@@ -106,7 +113,11 @@ function composed(dependencies: ChannelsDependencies, http: HttpClient.HttpClien
       }),
     [GATEWAY_METHOD.CHANNELS_THREADS]: (params) =>
       Effect.gen(function* () {
-        const read = yield* readParams(channelThreadsParamsSchema, params, "a read names a channel");
+        const read = yield* readParams(
+          channelThreadsParamsSchema,
+          params,
+          "a read names a channel",
+        );
         return carried<ChannelThreadsView>(yield* asked(client.threads(read)));
       }),
   };

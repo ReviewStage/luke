@@ -12,6 +12,7 @@
 
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
+import type { Channel, ChannelThread } from "@luke/features/channel-wire";
 import type { CodingAgentInboxChanged } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
@@ -36,7 +37,6 @@ import {
 } from "@luke/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
-import type { Channel, ChannelThread } from "@luke/features/channel-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { threadNeedsReader } from "./channels-model.js";
 
@@ -458,19 +458,13 @@ const THREADS: ThreadSeed[] = [
       ),
     ],
   ),
-  thread(
-    6,
-    seed(TASK.SCHEMA),
-    CHANNEL.APP,
-    "Inbox threads now carry a channel",
-    [
-      agentSaid(
-        107,
-        90 * MINUTE,
-        "Anything in the panel that builds an `InboxItem` by hand, fixtures and tests included, needs `channelId` once #5331 lands. Rows and the pane read it; nothing else changes.",
-      ),
-    ],
-  ),
+  thread(6, seed(TASK.SCHEMA), CHANNEL.APP, "Inbox threads now carry a channel", [
+    agentSaid(
+      107,
+      90 * MINUTE,
+      "Anything in the panel that builds an `InboxItem` by hand, fixtures and tests included, needs `channelId` once #5331 lands. Rows and the pane read it; nothing else changes.",
+    ),
+  ]),
   thread(
     7,
     seed(TASK.SEARCH),
@@ -512,25 +506,19 @@ const THREADS: ThreadSeed[] = [
     ],
     { startedBy: DEAN, waitsOn: DEAN },
   ),
-  thread(
-    9,
-    seed(TASK.SENTRY),
-    CHANNEL.INFRA,
-    "CI can't reach Neon from forks",
-    [
-      agentSaid(
-        112,
-        DAY,
-        "A fork's pull request gets no Neon secret, so the Postgres job fails on it. Either it skips on forks, or the workflow moves to `pull_request_target`, which needs a repository setting.",
-        {
-          type: INBOX_ASK.DECIDE,
-          options: [{ label: "Skip it on forks" }, { label: "Move to pull_request_target" }],
-          recommended: "Skip it on forks",
-          ...OPEN,
-        },
-      ),
-    ],
-  ),
+  thread(9, seed(TASK.SENTRY), CHANNEL.INFRA, "CI can't reach Neon from forks", [
+    agentSaid(
+      112,
+      DAY,
+      "A fork's pull request gets no Neon secret, so the Postgres job fails on it. Either it skips on forks, or the workflow moves to `pull_request_target`, which needs a repository setting.",
+      {
+        type: INBOX_ASK.DECIDE,
+        options: [{ label: "Skip it on forks" }, { label: "Move to pull_request_target" }],
+        recommended: "Skip it on forks",
+        ...OPEN,
+      },
+    ),
+  ]),
   thread(
     10,
     seed(TASK.ROWS),
@@ -721,25 +709,19 @@ THREADS.push(
 
 /** An ask from three days ago, still waiting on Dean, which a stream opened at its newest post leaves scrolled out of sight. */
 THREADS.push(
-  thread(
-    20,
-    seed(TASK.ROWS),
-    CHANNEL.APP,
-    "Rename the Inbox's To do scope?",
-    [
-      agentSaid(
-        125,
-        3 * DAY,
-        "The Inbox's first scope is called To do in code and For you on screen. One name would save a mapping in every view.",
-        {
-          type: INBOX_ASK.DECIDE,
-          options: [{ label: "For you everywhere" }, { label: "To do everywhere" }],
-          recommended: "For you everywhere",
-          ...OPEN,
-        },
-      ),
-    ],
-  ),
+  thread(20, seed(TASK.ROWS), CHANNEL.APP, "Rename the Inbox's To do scope?", [
+    agentSaid(
+      125,
+      3 * DAY,
+      "The Inbox's first scope is called To do in code and For you on screen. One name would save a mapping in every view.",
+      {
+        type: INBOX_ASK.DECIDE,
+        options: [{ label: "For you everywhere" }, { label: "To do everywhere" }],
+        recommended: "For you everywhere",
+        ...OPEN,
+      },
+    ),
+  ]),
 );
 
 /** When each reader last looked at each channel, so the stream draws its New line before what came after. */
@@ -794,9 +776,8 @@ function channelsRead(): readonly Channel[] {
     return {
       ...rest,
       ...(createdBy === undefined ? {} : { createdBy: createdBy.userId }),
-      waiting: THREADS.filter(
-        (each) => each.channelId === channel.id && needsReader(each.item),
-      ).length,
+      waiting: THREADS.filter((each) => each.channelId === channel.id && needsReader(each.item))
+        .length,
       ...(at === undefined ? {} : { lookedAt: at }),
     };
   });

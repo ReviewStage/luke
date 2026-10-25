@@ -18,7 +18,7 @@ import { inboxWaitsOn, openAskOf } from "./inbox-model.js";
  */
 
 /** The channel every thread that names none goes to, which is never renamed or archived; the service mints it under this name (`GENERAL_CHANNEL`). */
-export const GENERAL_CHANNEL_NAME = "general";
+const GENERAL_CHANNEL_NAME = "general";
 
 /** Which of a channel's threads the stream shows. */
 export const CHANNEL_VIEW = {
@@ -30,7 +30,7 @@ export const CHANNEL_VIEW = {
 export type ChannelView = (typeof CHANNEL_VIEW)[keyof typeof CHANNEL_VIEW];
 
 /** Each view as its menu and the channel's title name it, in the menu's order. */
-export const CHANNEL_VIEW_WORDS = {
+const CHANNEL_VIEW_WORDS = {
   [CHANNEL_VIEW.MINE]: "Mine",
   [CHANNEL_VIEW.EVERYONE]: "Everyone",
   [CHANNEL_VIEW.NEEDS_ME]: "Needs me",
@@ -99,7 +99,7 @@ export function threadNeedsReader(item: InboxItem, readerId: string | undefined)
  * theirs (`ownTask`) or an agent they started, asking them, or one they
  * wrote in.
  */
-export function threadIsMine(
+function threadIsMine(
   item: InboxItem,
   readerId: string | undefined,
   ownTask: boolean,
@@ -166,7 +166,11 @@ export function emptyStreamWords(name: string, view: ChannelView): string {
  */
 export function streamRows(
   threads: readonly ChannelThread[],
-  seams: { readonly lookedAt: number | undefined; readonly readerId: string | undefined; readonly now: number },
+  seams: {
+    readonly lookedAt: number | undefined;
+    readonly readerId: string | undefined;
+    readonly now: number;
+  },
 ): readonly StreamRow[] {
   const { lookedAt, readerId, now } = seams;
   const sorted = threads.toSorted((a, b) => a.postedAt - b.postedAt);

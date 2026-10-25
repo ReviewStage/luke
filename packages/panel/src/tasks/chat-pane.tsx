@@ -1080,7 +1080,11 @@ function ChannelStream({
             return (
               <Fragment key={thread.message.id}>
                 {first ? (
-                  <StreamDivider kind={STREAM_DIVIDER.NEW} as={STREAM_DIVIDER_ELEMENT.LI} ref={line}>
+                  <StreamDivider
+                    kind={STREAM_DIVIDER.NEW}
+                    as={STREAM_DIVIDER_ELEMENT.LI}
+                    ref={line}
+                  >
                     {UNREAD_LINE}
                   </StreamDivider>
                 ) : null}

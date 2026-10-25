@@ -231,7 +231,13 @@ export function SidebarChannels({
       {section("Projects", projects, true, "New project channel")}
       <Dialog
         open={form.open}
-        title={renaming ? "Rename channel" : making?.project === true ? "New project channel" : "New channel"}
+        title={
+          renaming
+            ? "Rename channel"
+            : making?.project === true
+              ? "New project channel"
+              : "New channel"
+        }
         describedBy={bodyId}
         busy={form.settling}
         refused={form.refusal !== undefined}

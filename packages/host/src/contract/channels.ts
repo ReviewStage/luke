@@ -29,14 +29,10 @@ export const channelActsContract = {
   [CHANNEL_ACT_KIND.CHANNELS_RENAME]: actProcedure("Could not rename the channel on this system.")
     .input(exactInput(channelRenameParamsSchema))
     .output(EffectSchema.flip(channelsViewSchema)),
-  [CHANNEL_ACT_KIND.CHANNELS_ARCHIVE]: actProcedure(
-    "Could not archive the channel on this system.",
-  )
+  [CHANNEL_ACT_KIND.CHANNELS_ARCHIVE]: actProcedure("Could not archive the channel on this system.")
     .input(exactInput(channelArchiveParamsSchema))
     .output(EffectSchema.flip(channelsViewSchema)),
-  [CHANNEL_ACT_KIND.CHANNELS_LOOK]: actProcedure(
-    "Could not mark the channel seen on this system.",
-  )
+  [CHANNEL_ACT_KIND.CHANNELS_LOOK]: actProcedure("Could not mark the channel seen on this system.")
     .input(exactInput(channelLookParamsSchema))
     .output(EffectSchema.flip(channelsViewSchema)),
   [CHANNEL_ACT_KIND.CHANNELS_THREADS]: actProcedure(
