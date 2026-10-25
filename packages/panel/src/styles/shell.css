@@ -1,17 +1,26 @@
 /* shell.css -- the app's shell and its sidebar: the two columns, the sidebar's
    ground, insets, and width, its slide away and back, its float over the
    work and its drawer in a narrow room, the title bar's row and the toggle
-   that stands in it, Luke's head over the column, the places under it, and
-   the foot under them; and the work column beside it, with the height of
-   the toolbar that heads a page there (`@luke/ui`'s `Toolbar`, which draws
+   that stands in it; and the work column beside it, with the height of the
+   toolbar that heads a page there (`@luke/ui`'s `Toolbar`, which draws
    itself) and the room it leaves the title bar's buttons.
+
+   What stands in the sidebar, Luke's head over the column, the places under
+   it, and the foot under them, is `@luke/ui`'s (`components/sidebar/`),
+   drawn in utilities, and a phone's places bar is drawn in utilities where
+   it is written (`mobile-bar.tsx`). What stays here is what utilities say
+   badly: the sheet laid on the window's frame and the custom properties it
+   is measured by, the selectors that read the room and the shell's state
+   (`:has()`), the drag regions, the frame's translucency, and the panes'
+   slide.
 
    The panel lays it just before desktop.css (index.css), which restages
    these elements for each of the window's own screens. Anything else that
    draws the app's sidebar, the web's admin dashboard among it, imports this
-   sheet alone, so the two read as the same product from one set of rules
-   rather than a copy of them. Every value is a `@luke/ui` role or token, or
-   a name below built from them (docs/DESIGN.md).
+   sheet alone and draws the same `@luke/ui` parts, so the two read as the
+   same product from one set of rules rather than a copy of them. Every
+   value is a `@luke/ui` role or token, or a name below built from them
+   (docs/DESIGN.md).
 
    The panel's sheets read the narrow room off one attribute, the document's
    root's `data-luke-room` (`stage-room.ts`), which a dialog or a toast
@@ -514,13 +523,6 @@
   grid-template-rows: minmax(0, 1fr) auto;
 }
 
-.mobile-bar {
-  display: flex;
-  border-top: 1px solid var(--luke-color-border);
-  background: var(--luke-color-ground);
-  padding: var(--luke-space-2) var(--luke-space-4);
-}
-
 .desktop-shell:has(
     :is(
         textarea,
@@ -579,82 +581,6 @@
   flex-direction: column;
   padding: 0 var(--column-inset) var(--column-inset);
   background: var(--luke-color-sidebar);
-}
-
-.sidebar-identity {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-2) var(--row-inset) var(--luke-section-gap);
-}
-
-.sidebar-identity-face {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-fill-strong);
-}
-
-.sidebar-identity-face .luke-face {
-  width: 24px;
-  height: 24px;
-}
-
-.sidebar-identity-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.sidebar-identity-name {
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: -0.01em;
-}
-
-/* Where the head stands, under Luke's name, on a surface that is his but not
-   the app itself (the admin dashboard's "Admin"): muted, at a caption's
-   size, as the workspace head's shared line is. */
-.sidebar-identity-qualifier {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* The sidebar's places, New task and Search over the pages: each a
-   NavItem a list's gap from the next, as the task rows under them are, and
-   a hairline under them parts them from the list. */
-.sidebar-places {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-  margin-bottom: var(--luke-list-gap);
-}
-
-.sidebar-rule {
-  height: 1px;
-  flex: 0 0 auto;
-  margin: var(--luke-space-8) var(--row-inset);
-  border: 0;
-  background: var(--luke-color-border);
-}
-
-.sidebar-foot {
-  display: flex;
-  flex-direction: column;
-  padding-top: var(--luke-space-8);
-}
-
-/* The foot's one row: the account at its start, taking what room is left;
-   a release on its way in, while there is one; and Settings' gear last. */
-.sidebar-account-row {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-  container: sidebar-foot / inline-size;
 }
 
 /* Work column ------------------------------------------------------------- */

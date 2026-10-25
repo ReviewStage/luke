@@ -466,7 +466,7 @@ function RowToolsPanel({
       <div className="integration-tools-split">
         <ScrollArea ref={list}>
           {/* biome-ignore lint/a11y/noStaticElementInteractions: the focus is the rows' own, which the box only hears bubble. */}
-          <div className="integration-tools-list" onFocus={onRowFocus}>
+          <div className="integration-tools-list p-luke-4" onFocus={onRowFocus}>
             <IntegrationToolList
               server={name}
               tools={shown}

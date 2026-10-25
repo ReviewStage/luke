@@ -1,4 +1,4 @@
-import { WingFace } from "@luke/ui";
+import { SidebarIdentity, WingFace } from "@luke/ui";
 import { useRef } from "react";
 import { useFaceHover, useFaceMotion } from "../luke-face-mood.js";
 import { useMotionHeld } from "../use-motion-held.js";
@@ -21,16 +21,11 @@ export function LukeIdentity({ qualifier }: { qualifier?: string | undefined }):
   const faceElement = useRef<HTMLSpanElement>(null);
   const face = useFaceMotion(QUIET, useMotionHeld(), useFaceHover(faceElement));
   return (
-    <div className="sidebar-identity">
-      <span className="sidebar-identity-face" ref={faceElement}>
-        <WingFace key={face.play} motion={face.motion} repeat={face.repeat} />
-      </span>
-      <span className="sidebar-identity-copy">
-        <span className="sidebar-identity-name">Luke</span>
-        {qualifier === undefined ? null : (
-          <span className="sidebar-identity-qualifier">{qualifier}</span>
-        )}
-      </span>
-    </div>
+    <SidebarIdentity
+      name="Luke"
+      qualifier={qualifier}
+      faceRef={faceElement}
+      face={<WingFace key={face.play} motion={face.motion} repeat={face.repeat} fill />}
+    />
   );
 }

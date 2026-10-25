@@ -39,6 +39,7 @@ export function ToolbarFrame({
   place,
   measure = false,
   folded = false,
+  wrapHeading = false,
   children,
 }: {
   start?: ToolbarInset | undefined;
@@ -47,6 +48,7 @@ export function ToolbarFrame({
   place?: string | undefined;
   measure?: boolean | undefined;
   folded?: boolean | undefined;
+  wrapHeading?: boolean | undefined;
   children?: ReactNode;
 }): React.JSX.Element {
   return (
@@ -57,6 +59,7 @@ export function ToolbarFrame({
       data-look={look}
       data-measure={measure ? "true" : undefined}
       data-folded={folded ? "true" : undefined}
+      data-wrap-heading={wrapHeading ? "true" : undefined}
     >
       {children}
     </header>
