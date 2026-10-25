@@ -40,6 +40,7 @@
 @import "./components/card-press/card-press.css";
 @import "./components/composer-frame/composer-frame.css";
 @import "./components/composer-frame/composer-foot.css";
+@import "./components/composer-frame/composer-body.css";
 @import "./components/facts/facts.css";
 @import "./components/file-text/file-text.css";
 @import "./chart/chart.css";
