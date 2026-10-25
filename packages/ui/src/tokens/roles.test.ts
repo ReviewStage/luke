@@ -189,27 +189,35 @@ test("a page's sections stand 32px apart in both profiles, and Settings reads th
   for (const profile of ["desktop", "web"] as const) {
     assert.equal(profileValue(profile, "--luke-page-section-gap"), "var(--luke-space-32)");
   }
-  for (const [path, selector] of [
-    ["components/settings-page/settings-page.css", ".luke-settings-page-sections"],
-    ["components/settings-section/settings-section.css", ".luke-settings-skeleton"],
-  ] as const) {
-    assert.equal(declared(path, selector, "gap"), "var(--luke-page-section-gap)", path);
-  }
+  // The page's column of sections is drawn in the theme's utility, which the theme maps onto the role.
+  const page = readFileSync(new URL("components/settings-page/settings-page.tsx", UI), "utf8");
+  const sections = /className="(luke-settings-page-sections\b[^"]*)"/.exec(page)?.[1] ?? "";
+  assert.ok(sections.split(/\s+/).includes("gap-page-section-gap"), sections);
+  const theme = readFileSync(new URL("tailwind/theme.css", UI), "utf8");
+  assert.deepEqual(
+    [...theme.matchAll(/--spacing-page-section-gap\s*:\s*([^;]+);/g)].map(([, value]) => value),
+    ["var(--luke-page-section-gap)"],
+  );
+  assert.equal(
+    declared("components/settings-section/settings-section.css", ".luke-settings-skeleton", "gap"),
+    "var(--luke-page-section-gap)",
+  );
 });
 
 test("a Stack's gaps and insets are the profile's roles, never steps of the scale", () => {
-  const rules = rulesOf("components/layout/layout.css").filter((rule) =>
-    /^\[data-(gap|inset)=/.test(rule.selector),
+  const source = readFileSync(new URL("components/layout/layout.tsx", UI), "utf8");
+  const utilities = [...source.matchAll(/\[(?:GAP|INSET)\.\w+\]: "([^"]+)"/g)].flatMap(
+    ([, classes = ""]) => classes.split(" "),
   );
-  assert.ok(rules.length > 0);
-  for (const rule of rules) {
-    for (const [property, value] of rule.declarations) {
-      if (property !== "gap" && property !== "padding") continue;
-      assert.doesNotMatch(
-        value,
-        /--luke-space-/,
-        `layout.css: ${rule.selector} sets ${property}: ${value}`,
-      );
-    }
+  assert.ok(utilities.length > 0);
+  const theme = readFileSync(new URL("tailwind/theme.css", UI), "utf8");
+  for (const utility of utilities) {
+    const name = /^(?:gap|p[xy]?)-(.+)$/.exec(utility)?.[1];
+    assert.ok(name !== undefined, `layout.tsx: ${utility} is no gap or inset`);
+    if (name === "0") continue;
+    const value = new RegExp(`--spacing-${name}:\\s*([^;]+);`).exec(theme)?.[1];
+    assert.ok(value !== undefined, `layout.tsx: ${utility} names no role of the theme`);
+    assert.match(value, /^var\(--luke-/, `layout.tsx: ${utility} is ${value}`);
+    assert.doesNotMatch(value, /--luke-space-/, `layout.tsx: ${utility} is ${value}`);
   }
 });

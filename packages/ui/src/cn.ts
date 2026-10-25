@@ -111,6 +111,61 @@ const FEEDBACK_DISPLAY = {
   container: ["progress"],
 } as const;
 
+/**
+ * The names the page patterns' block of the theme adds (layout, settings,
+ * the collection, detail, public, and auth pages, the empty and error
+ * states, the failure note, and the group header), by the group
+ * tailwind-merge reads each in.
+ */
+const PAGE_PATTERNS = {
+  text: ["public-page-lead"],
+  "font-weight": ["public-page-hero"],
+  leading: ["public-page-hero"],
+  spacing: [
+    "failure-note-row",
+    "field-least",
+    "group-header-mark",
+    "item-gap",
+    "luke-32",
+    "luke-48",
+    "luke-64",
+    "luke-96",
+    "page-inset",
+    "page-section-gap",
+    "ring-reach",
+    "section-gap",
+    "auth-ring",
+    "collection-page-inset",
+    "detail-page-inset",
+    "public-media-reach",
+    "public-page-end",
+    "public-page-start",
+    "settings-row",
+    "settings-row-block",
+    "settings-row-compact",
+    "settings-row-compact-block",
+    "settings-row-compact-inline",
+    "settings-row-indent",
+    "settings-row-inline",
+    "settings-row-list",
+    "settings-row-list-block",
+    "settings-row-mark",
+    "settings-row-state-dot",
+    "settings-row-words-inset",
+    "state-row-inset",
+  ],
+  radius: ["public-media"],
+  shadow: ["auth-badge", "auth-card", "public-media"],
+  container: [
+    "auth-card",
+    "collection-page",
+    "empty-state",
+    "public-page",
+    "public-page-lead",
+    "public-page-wide",
+  ],
+} as const;
+
 const merge = extendTailwindMerge({
   extend: {
     theme: {
@@ -128,6 +183,7 @@ const merge = extendTailwindMerge({
         "group",
         "tag",
         ...FEEDBACK_DISPLAY.text,
+        ...PAGE_PATTERNS.text,
       ],
       "font-weight": [
         "text",
@@ -139,9 +195,10 @@ const merge = extendTailwindMerge({
         "emphasis",
         "title",
         ...FEEDBACK_DISPLAY["font-weight"],
+        ...PAGE_PATTERNS["font-weight"],
       ],
       tracking: ["title"],
-      leading: ["body", ...FEEDBACK_DISPLAY.leading],
+      leading: ["body", ...FEEDBACK_DISPLAY.leading, ...PAGE_PATTERNS.leading],
       spacing: [
         "luke-2",
         "luke-4",
@@ -206,6 +263,7 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
         ...FEEDBACK_DISPLAY.spacing,
+        ...PAGE_PATTERNS.spacing,
       ],
       radius: [
         "control",
@@ -223,6 +281,7 @@ const merge = extendTailwindMerge({
         "choice-segment",
         "choice-box",
         ...FEEDBACK_DISPLAY.radius,
+        ...PAGE_PATTERNS.radius,
       ],
       shadow: [
         "dialog",
@@ -231,6 +290,7 @@ const merge = extendTailwindMerge({
         "tooltip",
         "switch-thumb",
         ...FEEDBACK_DISPLAY.shadow,
+        ...PAGE_PATTERNS.shadow,
       ],
       font: ["ui"],
       container: [
@@ -244,6 +304,7 @@ const merge = extendTailwindMerge({
         "tooltip",
         "tooltip-card",
         ...FEEDBACK_DISPLAY.container,
+        ...PAGE_PATTERNS.container,
       ],
       animate: [
         "dialog-scrim",

@@ -261,9 +261,9 @@ function rulesFor(css: string, selector: string): string {
     .join("\n");
 }
 
-/** The duration tokens a block of declarations names. */
+/** The duration tokens a block of declarations or a module's utilities (`duration-(--luke-duration-hover)`) names. */
 function durations(declarations: string): string[] {
-  return [...declarations.matchAll(/var\((--luke-duration-[a-z-]+)\)/g)].flatMap(([, name]) =>
+  return [...declarations.matchAll(/(--luke-duration-[a-z-]+)/g)].flatMap(([, name]) =>
     name === undefined ? [] : [name],
   );
 }
@@ -277,7 +277,7 @@ test("every motion the fold and its chevron run is timed on a token reduced moti
     ...durations(rulesFor(disclosure, '[data-disclosure="opening"] > .luke-disclosure-body')),
     ...durations(rulesFor(disclosure, '[data-disclosure="closing"] > .luke-disclosure-body')),
     // Note that a hover's settle is a colour's or a fade's, which reduced motion keeps.
-    ...durations(read("./group-header.css")).filter((token) => token !== "--luke-duration-hover"),
+    ...durations(read("./group-header.tsx")).filter((token) => token !== "--luke-duration-hover"),
   ];
   assert.ok(motions.length >= 3);
   for (const token of motions) {

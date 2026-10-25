@@ -176,7 +176,7 @@ test("a placeholder row stands a mark, a description, and a value column where t
   ]);
   // The mark's own box is the page's to choose, so only the row's are compared.
   expect(boxes(placeholder)).toEqual(
-    boxes(real).filter((name) => name !== "luke-settings-row-mark"),
+    boxes(real).filter((name) => !name.split(/\s+/).includes("luke-settings-row-mark")),
   );
   expect(blocks(placeholder)).toBe(5);
 });

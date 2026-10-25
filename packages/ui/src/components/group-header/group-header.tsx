@@ -71,6 +71,14 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * A label is words, or a placeholder block while the group is read, so a
  * skeleton draws through the head its loaded state draws.
+ *
+ * It is drawn in Tailwind utilities over the theme with no shadcn base,
+ * since shadcn has no group head and the fold is the Disclosure's. Its
+ * reveals are the head's and the lead's states, which their parts read as
+ * named groups (`group/head`, `group/lead`): the pointer's stand only where
+ * there is a hover, because iOS spends a first tap on a hover, and a screen
+ * with no hover draws at rest what the pointer would have brought, since no
+ * pointer rests on the head to bring it.
  */
 
 /** The element a head stands in: a heading at its level in the page's outline, or none, for a head that is no heading. */
@@ -113,6 +121,78 @@ export type GroupRows = (typeof GROUP_ROWS)[keyof typeof GROUP_ROWS];
 /** How a group folds: open from the start or not, or as its holder keeps it. */
 export type GroupFold = { readonly defaultOpen: boolean } | DisclosureControl;
 
+/**
+ * What the pointer resting on the head, or the keyboard on its lead, brings:
+ * shown then, hidden at rest, and at rest on a screen with no hover.
+ */
+const BROUGHT =
+  "opacity-0 group-hover/head:opacity-100 group-focus-visible/lead:opacity-100 [@media(hover:none)]:opacity-100";
+
+/**
+ * A group's actions, shown while the head is hovered or holds the focus or
+ * while the menu it opened stands, and at rest on a screen with no hover, in
+ * the room they keep.
+ */
+const REVEALED =
+  "opacity-0 group-hover/head:opacity-100 group-focus-within/head:opacity-100 group-data-[menu-open=true]/head:opacity-100 [@media(hover:none)]:opacity-100";
+
+/** A glyph that gives way to the chevron when the pointer or the keyboard brings it. */
+const GIVES_WAY =
+  "group-hover/head:opacity-0 group-focus-visible/lead:opacity-0 [@media(hover:none)]:opacity-0";
+
+/** A part's fade as it is brought or put away, on the hover's settle. */
+const FADE = "transition-[opacity] duration-(--luke-duration-hover) ease-plain";
+
+/**
+ * The head's parts. Note that the glyph and the chevron share one cell, only
+ * one of them drawn, so the swap crossfades in place and the label never
+ * moves, and that the crossfade is each seat's, so the chevron's turn inside
+ * stays disclosure.css's one turn.
+ */
+const PART = {
+  HEADING: "luke-group-header-heading m-0 flex min-w-0 [font:inherit]",
+  LEAD: "luke-group-header-lead group/lead m-0 flex h-control min-w-0 flex-auto items-center gap-icon-gap rounded-control border-0 bg-transparent px-row-inset py-0 text-left font-ui text-muted-foreground",
+  GLYPH:
+    "luke-group-header-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center *:[grid-area:1/1]",
+  ICON: `luke-group-header-icon grid place-items-center [&>svg]:size-control-icon ${FADE}`,
+  CHEVRON: `luke-group-header-chevron grid place-items-center ${FADE}`,
+  MARK: "luke-group-header-mark inline-flex flex-none text-muted-foreground [&>svg]:size-group-header-mark",
+  COUNT: `luke-group-header-count flex-none text-caption-inline tabular-nums ${FADE}`,
+  ACTIONS: `luke-group-header-actions flex flex-none items-center ${FADE}`,
+} as const;
+
+/** The heading's share of the head, which a search's name hands it instead where the head offers one (`folding-search.css`). */
+const HEADING_SHARE = "flex-auto";
+
+/** A head that folds is pressed as a row is, so it wears a row's hover; and a desktop row answers a press the way a Mac's list does, without the web's pointing hand. */
+const PRESSED_AS_ROW = {
+  HEAD: "[&:hover]:bg-muted",
+  LEAD: "cursor-pointer in-data-[luke-profile=desktop]:cursor-default",
+} as const;
+
+/**
+ * The head: ringed while its menu is open, so the menu is plainly about this
+ * group, and out of the desktop window's drag region, so a press on it is
+ * the head's.
+ */
+const HEAD =
+  "luke-group-header-head group/head flex min-w-0 items-center gap-luke-2 rounded-control pr-luke-4 transition-[background-color] duration-(--luke-duration-hover) ease-plain data-[menu-open=true]:shadow-selected-edge in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]";
+
+/** A head that sticks stands at the top of its scroller while its rows scroll beneath it, on the page's ground so they do not show through. */
+const STICKS = "sticky top-0 z-3 bg-ground";
+
+/**
+ * A group in a grid hands the grid's columns on through its root and the
+ * fold's body down to its rows, so each column lines up down the whole
+ * page. Note that a subgrid is a grid whose parent is one, so the body,
+ * which the fold draws, must be a subgrid too.
+ */
+const SUBGRID = {
+  ROOT: "grid col-span-full grid-cols-subgrid gap-y-luke-2",
+  HEAD: "col-span-full",
+  BODY: "grid col-span-full grid-cols-subgrid gap-y-luke-2 *:col-span-full",
+} as const;
+
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(node: ReactNode): boolean {
   return node !== undefined && node !== null && node !== false && node !== "";
@@ -120,11 +200,15 @@ function said(node: ReactNode): boolean {
 
 /** The count after the label, read with its noun, at whatever value its caller gave. */
 function Count({ count }: { count: NavCount }): React.JSX.Element {
+  const shown = count.shown ?? NAV_COUNT_SHOWN.ALWAYS;
+  const tone = count.tone ?? STATUS_TONE.NEUTRAL;
+  // Note that a count of what waits on the reader is in its tone (`tokens/status-tone.css`).
+  const ink = tone === STATUS_TONE.NEUTRAL ? "text-muted-foreground" : "text-tone-ink";
   return (
     <span
-      className="luke-group-header-count"
-      data-shown={count.shown ?? NAV_COUNT_SHOWN.ALWAYS}
-      data-tone={count.tone ?? STATUS_TONE.NEUTRAL}
+      className={`${PART.COUNT} ${ink} ${shown === NAV_COUNT_SHOWN.ON_HOVER ? BROUGHT : ""}`}
+      data-shown={shown}
+      data-tone={tone}
     >
       {count.value}
       {count.noun === undefined ? null : (
@@ -148,13 +232,17 @@ function Lead({
   mark: ReactNode;
   count: NavCount | undefined;
 }): React.JSX.Element {
+  // Note that with a glyph the chevron waits unseen in its cell, and without one it stands at rest, so a fold always says it folds.
+  const swaps = said(glyph) && folds;
   return (
     <>
       {said(glyph) || folds ? (
-        <span className="luke-group-header-glyph" aria-hidden="true">
-          {said(glyph) ? <span className="luke-group-header-icon">{glyph}</span> : null}
+        <span className={PART.GLYPH} aria-hidden="true">
+          {said(glyph) ? (
+            <span className={`${PART.ICON} ${swaps ? GIVES_WAY : ""}`}>{glyph}</span>
+          ) : null}
           {folds ? (
-            <span className="luke-group-header-chevron">
+            <span className={`${PART.CHEVRON} ${swaps ? BROUGHT : ""}`}>
               <DisclosureChevron />
             </span>
           ) : null}
@@ -163,7 +251,7 @@ function Lead({
       <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.GROUP} truncate>
         {label}
       </Text>
-      {said(mark) ? <span className="luke-group-header-mark">{mark}</span> : null}
+      {said(mark) ? <span className={PART.MARK}>{mark}</span> : null}
       {count === undefined ? null : <Count count={count} />}
     </>
   );
@@ -253,7 +341,7 @@ export function GroupHeader({
   const control = folds ? (
     <button
       type="button"
-      className="luke-group-header-lead"
+      className={`${PART.LEAD} ${PRESSED_AS_ROW.LEAD}`}
       aria-expanded={state.open}
       aria-controls={rows ? rowsId : undefined}
       onClick={pulseOnPress(state.toggle, PRESS_PULSE.QUIET)}
@@ -261,10 +349,11 @@ export function GroupHeader({
       {lead}
     </button>
   ) : (
-    <span className="luke-group-header-lead">{lead}</span>
+    <span className={PART.LEAD}>{lead}</span>
   );
+  const subgrid = rowsStand === GROUP_ROWS.SUBGRID;
   const named = (
-    <Heading className="luke-group-header-heading">
+    <Heading className={`${PART.HEADING} ${search === undefined ? HEADING_SHARE : ""}`}>
       {hint === undefined ? (
         control
       ) : (
@@ -277,20 +366,28 @@ export function GroupHeader({
   return (
     <DisclosureScope state={state}>
       <div
-        className="luke-group-header"
+        className={`luke-group-header min-w-0 ${subgrid ? SUBGRID.ROOT : ""}`}
         data-folds={folds ? "true" : undefined}
         data-head={head === GROUP_HEAD.STICKS ? head : undefined}
-        data-rows={rowsStand === GROUP_ROWS.SUBGRID ? rowsStand : undefined}
+        data-rows={subgrid ? rowsStand : undefined}
         data-disclosure={folds ? details["data-disclosure"] : undefined}
       >
         <div
-          className="luke-group-header-head"
+          className={[
+            HEAD,
+            folds ? PRESSED_AS_ROW.HEAD : "",
+            head === GROUP_HEAD.STICKS ? STICKS : "",
+            subgrid ? SUBGRID.HEAD : "",
+          ].join(" ")}
           data-menu-open={menuOpen ? "true" : undefined}
           {...withContextMenu<HTMLDivElement>(contextMenu, {})}
         >
           {search === undefined ? named : <FoldingSearch {...search}>{named}</FoldingSearch>}
           {said(actions) ? (
-            <span className="luke-group-header-actions" data-shown={actionsShown}>
+            <span
+              className={`${PART.ACTIONS} ${actionsShown === GROUP_ACTIONS.ON_HOVER ? REVEALED : ""}`}
+              data-shown={actionsShown}
+            >
               {actions}
             </span>
           ) : null}
@@ -300,7 +397,7 @@ export function GroupHeader({
           <div
             ref={folds ? state.body : undefined}
             id={rowsId}
-            className="luke-disclosure-body"
+            className={`luke-disclosure-body ${subgrid ? SUBGRID.BODY : ""}`}
             data-inset="none"
             inert={folds && state.leaving}
           >

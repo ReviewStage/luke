@@ -6,6 +6,7 @@ import {
   BUTTON_SIZE,
   Checkbox,
   Disclosure,
+  GroupHeader,
   IconButton,
   INLINE_EDIT_LOOK,
   InlineEdit,
@@ -420,6 +421,12 @@ function built(markup: string, selector: string): HTMLElement {
   return holder.querySelector<HTMLElement>(selector) ?? assert.fail(`${selector} is built`);
 }
 
+/** `element`'s opacity as a browser computes it, a number: jsdom echoes a percentage as it was declared, as Tailwind's `opacity-100` declares `100%`. */
+function opacityOf(element: Element): string {
+  const declared = getComputedStyle(element).opacity;
+  return declared.endsWith("%") ? String(Number.parseFloat(declared) / 100) : declared;
+}
+
 /** The presses drawn only under the pointer on a desktop, each by what the developer calls it. */
 function pointerOnlyPresses(): ReadonlyMap<string, HTMLElement> {
   return new Map([
@@ -432,10 +439,13 @@ function pointerOnlyPresses(): ReadonlyMap<string, HTMLElement> {
     ],
     [
       "a fold's chevron",
-      built(
-        '<button class="luke-group-header-lead" aria-expanded="false"><span class="luke-group-header-glyph"><span class="luke-group-header-icon"></span><span class="luke-group-header-chevron"></span></span></button>',
-        ".luke-group-header-chevron",
-      ),
+      drawn(
+        createElement(GroupHeader, {
+          label: "acme/web",
+          glyph: createElement("svg"),
+          fold: { defaultOpen: false },
+        }),
+      ).querySelector<HTMLElement>(".luke-group-header-chevron") ?? assert.fail("a chevron"),
     ],
     [
       "a list row's chevron",
@@ -464,14 +474,14 @@ function pointerOnlyPresses(): ReadonlyMap<string, HTMLElement> {
 test("on a touch screen nothing a finger can press stands invisible: an archived agent's Unarchive and every chevron show at rest", () => {
   layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
   for (const [name, press] of pointerOnlyPresses()) {
-    assert.equal(getComputedStyle(press).opacity, "1", `${name} shows`);
+    assert.equal(opacityOf(press), "1", `${name} shows`);
   }
 });
 
 test("with a mouse those presses still wait for the pointer", () => {
   layFor(false, { "data-luke-profile": "desktop" });
   for (const [name, press] of pointerOnlyPresses()) {
-    assert.equal(getComputedStyle(press).opacity, "0", `${name} waits`);
+    assert.equal(opacityOf(press), "0", `${name} waits`);
   }
 });
 
