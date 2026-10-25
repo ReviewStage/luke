@@ -13,11 +13,7 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settin
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
-import {
-  type MicrophoneControl,
-  NOTIFICATIONS_GRANTOR,
-  NOTIFICATIONS_STATUS,
-} from "@luke/voice/settings-controls";
+import { type MicrophoneControl, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -57,10 +53,8 @@ function settingsOn(microphone: MicrophoneControl): SettingsPanelProps {
     microphone,
     notifications: {
       status: NOTIFICATIONS_STATUS.UNKNOWN,
-      grantor: NOTIFICATIONS_GRANTOR.MACOS,
       packaged: true,
       onOpenSettings: ignore,
-      onTest: ignore,
     },
     capabilities: DESKTOP_CAPABILITIES,
     updates: {

@@ -6,7 +6,7 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -115,10 +115,8 @@ async function mountFailing(
       },
       notifications: {
         status: NOTIFICATIONS_STATUS.UNKNOWN,
-        grantor: NOTIFICATIONS_GRANTOR.MACOS,
         packaged: true,
         onOpenSettings: ignore,
-        onTest: ignore,
       },
       capabilities: DESKTOP_CAPABILITIES,
       updates: {

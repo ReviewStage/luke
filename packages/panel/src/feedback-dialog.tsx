@@ -55,7 +55,6 @@ import {
   Inline,
   LAYOUT_ELEMENT,
   Shortcut,
-  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -68,7 +67,6 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { modEnterSends } from "./enter-sends.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
-import { TOAST_HOLD, type ToastNotice, useToast } from "./toast.js";
 import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
 
 /**
@@ -106,13 +104,6 @@ const MESSAGE_ROWS = 5;
 
 /** The chord that sends from anywhere in the dialog, as Send draws and announces it. */
 const SEND_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
-
-/** The toast a delivered note is thanked with: read on the way back from the Send button, gone before anyone wonders. */
-const SENT_NOTICE: ToastNotice = {
-  words: "Sent",
-  tone: STATUS_TONE.COMPLETE,
-  hold: TOAST_HOLD.DONE,
-};
 
 /** The note as it stands between openings: its words, its screenshots, and whether it is signed. */
 interface FeedbackDraft {
@@ -232,7 +223,6 @@ export function FeedbackDialog({
   const fileDrop = useFileDrop((files) => void attach(imageFiles(files)), {
     leave: DROP_LEAVE.WINDOW,
   });
-  const showToast = useToast();
   const open = kind !== undefined;
   const field = useRef<HTMLTextAreaElement | null>(null);
   const signatureId = useId();
@@ -343,7 +333,6 @@ export function FeedbackDialog({
     }
     discardDraft(kind);
     onClose();
-    showToast(SENT_NOTICE);
   };
 
   // Command or Ctrl with Return sends from anywhere in the card.

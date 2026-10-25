@@ -138,7 +138,7 @@ export function RunRow({
   const linkItem = useCopyLinkItem();
   const openLink = useOpenLink();
   const { agent } = run;
-  // Note that every run offers its link, one that started no agent too, because a failed run's notification links to it, and a run with no menu has no ⋯ track, so its time would stand out of line with the others'.
+  // Note that every run offers its link, one that started no agent too, because a run's own link opens it, and a run with no menu has no ⋯ track, so its time would stand out of line with the others'.
   const copyLink =
     automationId === undefined
       ? undefined

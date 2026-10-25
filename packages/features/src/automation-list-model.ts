@@ -345,13 +345,6 @@ export function automationRunTitle(run: AutomationRunSummary): string {
   return FIRING_WORDS[run.firing.kind];
 }
 
-/** What its owner is told of a run that failed to start: that it could not, and why, in its row's own words. */
-export function failedRunText(reason: AutomationRunReason | null): string {
-  return reason === null
-    ? "A run could not start."
-    : `A run could not start. ${RUN_REASON_WORDS[reason]}`;
-}
-
 /** A run's line: why it did not start, where it did not, else where its agent stands, or that it waits to start. */
 export function automationRunLine(
   run: AutomationRunSummary,

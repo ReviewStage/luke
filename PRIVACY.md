@@ -358,11 +358,7 @@ the agent), and for every task holding an item; it counts in its sidebar and on
 its Dock icon, and tells you of, only the items of agents you started. Opening the Inbox reads
 each of those tasks' items whole, the ones you settled included, with what
 each offered and the answer you picked; Luke holds them in memory only, never
-on disk. While its window is behind, a Mac notification names a new item by
-its task, agent, and title, and a coding agent's ended turn by its task, the
-agent's title, and whether it finished or failed, or its branch's pull request
-number, unless you turn these off in Settings › Coding agents; macOS shows and
-keeps them as it does any app's. Deleting the task, or your account, deletes
+on disk. Deleting the task, or your account, deletes
 its items.
 
 **A workspace's chat.** A workspace has one chat on our service where its
@@ -400,13 +396,7 @@ workspace deletes its chat. While you are signed in, the same read that keeps
 your waiting inbox items carries what waits on you in chat: every open ask
 someone else posted, and the last direct message or mention of you that you
 have not read, each named only by who posted it, its plan, and its place,
-never its words. While Luke's window is behind, a Mac notification says no
-more than that, such as "@agent-2 messaged you" under the plan's name,
-unless you turn notifications off in Settings › Coding agents. Luke in a
-browser tells you of the same things, in the same words, through the
-browser's own notifications, only while its tab is hidden and only once you
-allowed them from Settings › Notifications; the browser shows and keeps them
-as it does any site's, and nothing more leaves for it.
+never its words.
 
 **Files you attach to a coding agent.** You can attach files to a coding
 agent's message, to the prompt you start one with, or to an Inbox answer, by picking them with +,

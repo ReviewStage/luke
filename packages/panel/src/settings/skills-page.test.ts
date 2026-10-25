@@ -617,7 +617,7 @@ test("Add skill opens with its box focused, not the card", async () => {
   assert.ok(document.activeElement === document.querySelector("textarea"), "the box has focus");
 });
 
-test("an install lights its own rows once and says which skills and how to call one", async () => {
+test("an install lights its own rows once", async () => {
   await mountPage();
 
   act(() => button("Add skill").click());
@@ -631,9 +631,6 @@ test("an install lights its own rows once and says which skills and how to call 
     (each) => each.querySelector(".luke-settings-row-label")?.textContent,
   );
   assert.deepEqual(lit, ["react-best-practices", "web-design-guidelines"]);
-  const toast = document.querySelector('[aria-label="Notifications"]')?.textContent ?? "";
-  assert.match(toast, /Installed web-design-guidelines and react-best-practices/u);
-  assert.match(toast, /Type \/web-design-guidelines in any new agent/u);
 });
 
 test("a switch turns its skill off and draws the service's answer", async () => {

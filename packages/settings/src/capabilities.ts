@@ -16,8 +16,6 @@ export const HOST_CAPABILITY = {
   UPDATES: "updates",
   /** The microphone's permission and the route it is opened on. */
   MICROPHONE: "microphone",
-  /** The system's notifications and the page that tests them. */
-  NOTIFICATIONS: "notifications",
   /** `run_on_mac`, and the This Mac page that turns it on. */
   MAC_COMMANDS: "macCommands",
   /** This Mac's repositories and the Mac terminal tab that runs them. */

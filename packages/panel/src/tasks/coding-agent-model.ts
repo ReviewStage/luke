@@ -579,9 +579,8 @@ const UNARCHIVED_WORDS = {
 /** What a refused archive says of an agent still starting, or with a message awaiting its turn, which has no turn to stop yet. */
 export const ARCHIVE_NOT_READY = "The agent is still starting its turn. Try again in a moment.";
 
-/** What an agent's delete says once it landed, and what it says refused. */
+/** What an agent's delete says refused; one that landed says nothing, since the agent leaving its list says it. */
 export const DELETE_WORDS = {
-  done: "Agent deleted",
   refused: "The agent could not be deleted. Try again.",
 } as const;
 

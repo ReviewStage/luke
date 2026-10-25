@@ -3,7 +3,7 @@
  */
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import type { CodingAgentAccountInboxAnswerView } from "@luke/features/coding-agent-view";
-import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
+import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { Effect, FiberSet, Queue, type Scope, Stream } from "effect";
 import {
   AgentNoticeDoors,
@@ -11,19 +11,15 @@ import {
   type AgentNoticesDependencies,
   createAgentNotices,
   NOTICE_KIND,
-  noticeTaskTitle,
 } from "../agent-notices.js";
 import type { HostOperator } from "../host-operator.js";
 import type { AppStateStore } from "./app-state-store.js";
 
 /** Where a notice's click takes the developer, as the platform brings its window forward on it. */
-type NoticePresenter = Pick<
-  AgentNoticesDependencies,
-  "open" | "openInbox" | "openTasklessItem" | "openFailedRun" | "openChat"
-> & {
+interface NoticePresenter {
   /** Brings Luke's window forward, where the prompt for a command stands: a command ask's notification's click. */
   openMacCommandAsk: () => void;
-};
+}
 
 /** What the notification of a command waiting says: nothing of the command, which the prompt shows. */
 const MAC_COMMAND_ASK_NOTICE = {
@@ -36,7 +32,6 @@ type NoticeHost = Pick<
   HostOperator,
   | "codingAgentList"
   | "codingAgentPage"
-  | "codingAgentPullRequest"
   | "codingAgentAccountInboxFollow"
   | "codingAgentAccountInboxUnfollow"
   | "onAccountInboxChanged"
@@ -46,7 +41,7 @@ type NoticeHost = Pick<
 >;
 
 export interface ClientNoticesDependencies {
-  /** The document the notices read the tasks' names from and write the unseen agents and the inbox into. */
+  /** The document the notices read from and write the unseen agents and the inbox into. */
   state: AppStateStore;
   host: NoticeHost;
   presenter: NoticePresenter;
@@ -80,9 +75,9 @@ function accountInboxOf(host: NoticeHost): Stream.Stream<CodingAgentAccountInbox
 }
 
 /**
- * The notices for the client's scope. They read the tasks' names from the
- * document and write the unseen agents and the waiting inbox items back into
- * it; a click brings the window forward through the presenter. Whose inbox is
+ * The notices for the client's scope. They write the unseen agents and the
+ * waiting inbox items into the document, and a command ask's notification's
+ * click brings the window forward through the presenter. Whose inbox is
  * read follows the document's account, which the launch's bootstrap writes as
  * well as every change after it. Two rules stand beside them: the agents with
  * no plan each list read carries are the notices' to hold, and a panel coming
@@ -111,14 +106,8 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     );
   };
   const notices = yield* createAgentNotices({
-    readPullRequest: (agentId) => host.codingAgentPullRequest({ agentId }),
-    taskName: (taskId) => noticeTaskTitle(state.snapshot().tasks, taskId),
-    ...presenter,
     onUnseenChanged: (unseen) => state.update({ codingAgents: { unseen } }),
     onPanelFocusChanged,
-    notifying: () =>
-      state.snapshot().settings?.stored.agentNotifications ??
-      APP_SETTING_SCHEMA.agentNotifications.default,
     signedInAs: () => accountKey(state.snapshot().account),
     accountId: () => {
       const { account } = state.snapshot();
@@ -175,9 +164,9 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     ),
   );
   // A command asked while the window is behind would otherwise wait unseen
-  // until its timeout denies it, so each new ask is announced once, whatever
-  // the notifications setting says, since Ask every time is the developer's
-  // own ask to be asked; the window in front shows the prompt itself.
+  // until its timeout denies it, so each new ask is announced once, the one
+  // notification Luke posts, since Ask every time is the developer's own ask
+  // to be asked; the window in front shows the prompt itself.
   const told = new Set<string>();
   yield* Effect.forkScoped(
     Stream.runForEach(

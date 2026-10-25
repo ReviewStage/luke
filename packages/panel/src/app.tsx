@@ -12,7 +12,6 @@ import {
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
-import type { ChatShown } from "@luke/host/contract";
 import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
 import { agentKeyLink, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -38,7 +37,6 @@ import { type SettingsDoors, useSettingsPanel, useShownUpdate } from "./app-sett
 import { useDraftsOwner } from "./composer-drafts.js";
 import { CommandPalette } from "./desktop/command-palette.js";
 import { DesktopShell } from "./desktop/desktop-shell.js";
-import { type FailedRunPlace, useFailedRunToasts } from "./desktop/failed-runs.js";
 import { ListedAutomations } from "./desktop/listed-automations.js";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse.js";
 import { TabSwitcher } from "./desktop/tab-switcher.js";
@@ -63,11 +61,8 @@ import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./se
 import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
-import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
 import { useChatOn } from "./tasks/chat-gate.js";
-import { useChatToasts } from "./tasks/chat-toast.js";
 import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
-import { useInboxToasts } from "./tasks/inbox-toast.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
@@ -80,7 +75,6 @@ import { useUpdatedToast } from "./update-toast.js";
 import {
   APP_SETTINGS_VIEW,
   APP_SLICE,
-  appStateDerivedAtom,
   SETTINGS_HELD,
   useAdminAccess,
   useAdminAccessPending,
@@ -96,12 +90,17 @@ import { useWindowFullScreen } from "./window-full-screen.js";
 import { CallChords, WindowVoice } from "./window-voice.js";
 import { useWindowZoom } from "./window-zoom.js";
 
+/** Where an agent stands to be opened: its plan, on its tab, or its own page where it has no plan. */
+interface AgentPlace {
+  readonly taskId: string | null;
+  readonly agentId: string;
+}
+
 /** No agent ended unseen, as the document reads before main has answered. */
 const NO_UNSEEN_AGENTS: readonly string[] = [];
 
 /** Nothing waits on the developer, as the document reads before main has answered. */
 const NOTHING_WAITING: readonly AppInboxTask[] = [];
-const NO_CHAT_WAITING: readonly string[] = [];
 
 /** No task holds an inbox item, as the document reads before main has answered. */
 const NO_TASKS_HOLDING: readonly AppInboxTaskHolding[] = [];
@@ -139,21 +138,6 @@ const FULL_SCREEN = Atom.map(APP_SLICE.WINDOW, (facts) => facts?.fullScreen);
 
 /** The stored zoom, which the zoom keys step from. */
 const ZOOM = Atom.map(APP_SETTINGS_VIEW, (settings) => settings?.zoom);
-
-/** What waits on the developer across the account's tasks. */
-const INBOX_WAITING: Atom.Atom<readonly AppInboxTask[]> = Atom.map(
-  APP_SLICE.INBOX,
-  (inbox) => inbox?.waiting ?? NOTHING_WAITING,
-);
-
-/** The chat messages that wait on the developer across the account's workspaces, by id. */
-const CHAT_WAITING: Atom.Atom<readonly string[]> = Atom.map(
-  APP_SLICE.INBOX,
-  (inbox) => inbox?.chat ?? NO_CHAT_WAITING,
-);
-
-/** The version of main's document the window holds, which moves with every delivery. */
-const APP_STATE_VERSION: Atom.Atom<number> = appStateDerivedAtom((state) => state?.version ?? 0);
 
 /** Tells the shell the ask standing while a page holds unsaved work, or nothing once none does. */
 const tellShellUnsavedWork = (ask: LeaveAsk | undefined): void => {
@@ -205,34 +189,6 @@ function SettingsPalette({
  */
 function UpdatedToast(): null {
   useUpdatedToast(useShownUpdate());
-  return null;
-}
-
-/**
- * The toasts of what waits on the developer, withdrawn as it stops waiting.
- * Note that it reads the document's version where nothing else is drawn for
- * it, because the version moves with every delivery.
- */
-function InboxToasts({
-  onView,
-  shownInbox,
-}: {
-  onView: (taskId: string) => void;
-  shownInbox: string | null;
-}): null {
-  useInboxToasts(onView, useAppSlice(INBOX_WAITING), useAppSlice(APP_STATE_VERSION), shownInbox);
-  return null;
-}
-
-/** The toasts of chat messages that wait on the developer, withdrawn as they stop waiting, on the same terms as {@link InboxToasts}. */
-function ChatToasts({
-  onView,
-  shown,
-}: {
-  onView: (workspaceId: string, messageId: string) => void;
-  shown: ChatShown | null;
-}): null {
-  useChatToasts(onView, useAppSlice(CHAT_WAITING), useAppSlice(APP_STATE_VERSION), shown);
   return null;
 }
 
@@ -455,12 +411,12 @@ function AppWindow(): React.JSX.Element {
     !accountGated,
     room,
   );
-  // A coding agent's notification clicked: the Tasks tab, on that agent,
-  // its task's tab or its own page where it has no task. Read through refs,
-  // because the tab hands new closures each render and the subscription is
-  // owed to the window, not to a render. Note that each way here the window
-  // is moved by more than one step asks once, as a whole, while a page holds
-  // unsaved work, so Leave takes every step and Cancel takes none.
+  // The call card's way back to its agent pressed: the Tasks tab, on that
+  // agent, its task's tab or its own page where it has no task. Read through
+  // refs, because the tab hands new closures each render and the subscription
+  // is owed to the window, not to a render. Note that the window is moved by
+  // more than one step asks once, as a whole, while a page holds unsaved
+  // work, so Leave takes every step and Cancel takes none.
   const showAgent = useRef(tasks.onShowAgent);
   showAgent.current = tasks.onShowAgent;
   const showAgentPage = useRef(tasks.agentView.onOpen);
@@ -521,18 +477,6 @@ function AppWindow(): React.JSX.Element {
   const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
   const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
   useEffect(() => appBridge().onShowLink(openLink), [openLink]);
-  // A failed run's notification clicked, or its toast's View: the run's own link, held as any link is until the workspaces are read, so it opens in its automation's workspace.
-  const openRunLink = useRef(openLink);
-  openRunLink.current = openLink;
-  const openFailedRun = useCallback(
-    ({ automationId, runId, workspaceId }: FailedRunPlace) =>
-      openRunLink.current({
-        workspace: workspaceId,
-        place: { kind: LINK_PLACE.AUTOMATION_RUN, automationId, runId },
-      }),
-    [],
-  );
-  useEffect(() => appBridge().onShowFailedRun(openFailedRun), [openFailedRun]);
   // The agent whose call bar is on screen, which the call card gives way to
   // (`WindowVoice`): another agent's tab or page or none, the home page,
   // Settings, or the agent's own task under its version history, the Inbox,
@@ -548,58 +492,6 @@ function AppWindow(): React.JSX.Element {
     sidePanelFullScreen: tasks.sidePanel.fullScreen,
     columnAgentId: columnTab !== undefined && isAgentTab(columnTab) ? columnTab.agent : undefined,
   });
-  // An agent's end said in the toast while the window was focused: its View
-  // goes where the notification's click would, and it goes with the agent's
-  // unseen dot.
-  useAgentEndToasts(openAgent, unseenAgents);
-  // A run that failed to start, said in the toast while the window was focused: its View opens the automation.
-  useFailedRunToasts(openFailedRun);
-  // An inbox notification clicked, or an item's toast's View: the Tasks tab, on that task's Inbox.
-  const showInbox = useRef(tasks.onShowInbox);
-  showInbox.current = tasks.onShowInbox;
-  const openInbox = useCallback(
-    (taskId: string) =>
-      guardLeave(() => {
-        changeTab(PANEL_TAB.TASKS);
-        showInbox.current(taskId);
-      })(),
-    [changeTab, guardLeave],
-  );
-  useEffect(() => appBridge().onShowInbox(({ taskId }) => openInbox(taskId)), [openInbox]);
-  // A notification of an item of an agent with no task clicked: the window's Inbox, on that item
-  // in its own workspace's list, the item itself shown where the Inbox shows one column.
-  const inboxDoors = useRef(tasks);
-  inboxDoors.current = tasks;
-  useEffect(
-    () =>
-      appBridge().onShowInboxItem(({ agentId, itemId, workspaceId }) =>
-        guardLeave(() => {
-          const doors = inboxDoors.current;
-          changeTab(PANEL_TAB.TASKS);
-          if (workspaceId !== undefined && doors.workspace?.id !== workspaceId) {
-            doors.onChooseWorkspace(workspaceId);
-          }
-          doors.inboxView.onOpen();
-          doors.inboxView.onChoose({ agentId, itemId, opened: true });
-        })(),
-      ),
-    [changeTab, guardLeave],
-  );
-  // A chat notification clicked, or a waiting message's toast's View: the Tasks tab, on the Chat of
-  // the workspace the message waits in, listing that workspace first where another is listed, and
-  // from a toast on the channel the message stands in, as an inbox item's toast opens the item.
-  const openChat = useCallback(
-    (workspaceId: string, messageId?: string) =>
-      guardLeave(() => {
-        const doors = inboxDoors.current;
-        changeTab(PANEL_TAB.TASKS);
-        if (doors.workspace?.id !== workspaceId) doors.onChooseWorkspace(workspaceId);
-        if (messageId === undefined) doors.chatView.onOpen();
-        else doors.chatView.onShowMessage(messageId);
-      })(),
-    [changeTab, guardLeave],
-  );
-  useEffect(() => appBridge().onShowChat(({ workspaceId }) => openChat(workspaceId)), [openChat]);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({
@@ -884,8 +776,6 @@ function AppWindow(): React.JSX.Element {
                           {/* The menu a right-click on any link in the window hangs. */}
                           <LinkMenu />
                           <UpdatedToast />
-                          <InboxToasts onView={openInbox} shownInbox={tasks.inboxShown} />
-                          <ChatToasts onView={openChat} shown={tasks.chatShown} />
                           {/* The plans, the open plan's agents and files, every command the
           window can run now, and the settings, behind ⌘K, past the sign-in
           alone. */}

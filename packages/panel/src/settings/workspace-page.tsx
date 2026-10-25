@@ -64,7 +64,6 @@ import {
   SettingsSection,
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
-  STATUS_TONE,
   Stack,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
@@ -102,7 +101,6 @@ import { encodeImage } from "../feedback-images.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { TOAST_HOLD, useToast } from "../toast.js";
 import { useCapability } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
@@ -242,7 +240,6 @@ const LEAVE_WORDS = {
     name === undefined
       ? "Your own workspace isn't affected."
       : `Your own workspace, ${name}, isn't affected.`,
-  LEFT: (name: string) => `You left ${name}`,
 } as const;
 
 /** The role changes in a member's ⋯, the owner's alone. */
@@ -649,16 +646,10 @@ function MemberLeave({
   onLeft: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const show = useToast();
   const workspaceId = workspace.id;
   const automations = useOwnAutomations(workspaceId);
   const leave = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
     act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then(() => {
-      show({
-        words: LEAVE_WORDS.LEFT(workspace.name),
-        tone: STATUS_TONE.COMPLETE,
-        hold: TOAST_HOLD.DONE,
-      });
       onLeft();
       return ACCEPTED;
     }, refusedWith),

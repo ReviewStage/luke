@@ -136,16 +136,7 @@ export interface AgentProceduresDependencies {
   /** Where every answer's agents and what an agent published are noted, and which agent's tab the panel shows. */
   notices: Pick<
     AgentNotices,
-    | "observeAgents"
-    | "observeStatus"
-    | "observeTitle"
-    | "observeMessaged"
-    | "observeModels"
-    | "observeTaskGone"
-    | "shown"
-    | "seen"
-    | "shownInbox"
-    | "shownChat"
+    "observeAgents" | "observeStatus" | "observeMessaged" | "observeTaskGone" | "shown" | "seen"
   >;
 }
 
@@ -244,9 +235,7 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     [AGENT_ACT_KIND.CODING_AGENTS_MODELS]: actPort[AGENT_ACT_KIND.CODING_AGENTS_MODELS].effect(
       function* ({ context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* noted(host.codingAgentModels(), (answer) => {
-          if ("models" in answer) notices.observeModels(answer.models);
-        });
+        return yield* host.codingAgentModels();
       },
     ),
     [AGENT_ACT_KIND.CODING_AGENTS_DEFAULT_READ]: actPort[
@@ -290,8 +279,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         // A worker's page says where the worker stands and what it is called, which is no word on the agent.
         return yield* noted(host.codingAgentMessages(input), (answer) => {
           if ("status" in answer && input.callId === undefined) {
-            // The title first, so an end this page carries is announced under it.
-            notices.observeTitle(input.agentId, answer.title);
             notices.observeStatus(input.agentId, answer.status);
           }
         });
@@ -313,7 +300,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
             // A worker's page says where the worker stands, which is no word on the agent.
             if (!("status" in page)) return;
             if (input.kind !== TRANSCRIPT_KIND.AGENT || input.callId !== undefined) return;
-            notices.observeTitle(input.agentId, page.title);
             notices.observeStatus(input.agentId, page.status);
           }),
         ),
@@ -398,8 +384,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         notices.shown(input.agentId);
-        notices.shownInbox(input.inboxTaskId);
-        notices.shownChat(input.chatShown ?? null);
       },
     ),
     [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: actPort[AGENT_ACT_KIND.CODING_AGENTS_SEEN].effect(
