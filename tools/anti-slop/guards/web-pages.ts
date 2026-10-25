@@ -172,7 +172,9 @@ export function framedPageProblems(html: string, policy: string | undefined): re
 }
 
 /** Where a Tailwind entry leaves out `@luke/ui`'s sources or theme, or takes it before Tailwind's own. */
-export function themeImportProblems(file: string, css: string): readonly string[] {
+export function themeImportProblems(file: string, sheet: string): readonly string[] {
+  // Note that an import inside a comment is no import, so comments are taken out before reading.
+  const css = sheet.replace(/\/\*[\s\S]*?\*\//gu, "");
   const tailwind = TAILWIND_UTILITIES.exec(css);
   if (tailwind === null) return [];
   return UI_THEME_IMPORTS.filter(

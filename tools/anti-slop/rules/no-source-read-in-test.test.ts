@@ -30,7 +30,7 @@ tester.run("no-source-read-in-test", noSourceReadInTestRule, {
     { code: 'readdirSync(path.join(temporary, "out"));', filename: TEST_FILE },
     // A module in a checkout the test made is the test's own data.
     {
-      code: 'const fresh = cloned(checkout); readFileSync(join(fresh, "invites.ts"), "utf8");',
+      code: 'const fresh = cloned(checkout); readFileSync(join(fresh, "src", "invites.ts"), "utf8");',
       filename: TEST_FILE,
     },
     // A module that is no test may read what it likes.
@@ -47,7 +47,7 @@ tester.run("no-source-read-in-test", noSourceReadInTestRule, {
     },
     // The path held in a constant above the read.
     {
-      code: 'const SHEET = path.join(ROOT, "src", "text.css"); const text = fs.readFileSync(SHEET, "utf8");',
+      code: 'const ROOT = path.dirname(fileURLToPath(import.meta.url)); const SHEET = path.join(ROOT, "src", "text.css"); const text = fs.readFileSync(SHEET, "utf8");',
       filename: TEST_FILE,
       errors: [{ messageId: "sourceRead" }],
     },

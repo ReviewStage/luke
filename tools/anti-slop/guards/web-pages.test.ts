@@ -56,6 +56,9 @@ describe("the site's pages", () => {
     expect(themeImportProblems("app.css", entry)).toEqual([
       'app.css: compiles Tailwind\'s utilities without importing "@luke/ui/tailwind/theme.css" after them',
     ]);
+    expect(
+      themeImportProblems("app.css", `${entry}/* @import "@luke/ui/tailwind/theme.css"; */`),
+    ).toHaveLength(1);
     expect(themeImportProblems("page.css", ".page { margin: 0; }")).toEqual([]);
   });
 });

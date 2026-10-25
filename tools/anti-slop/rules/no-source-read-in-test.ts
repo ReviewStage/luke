@@ -17,10 +17,12 @@ const SOURCE_TREE = /(?:^|\/)src(?:\/|$)/u;
 
 /**
  * A path spelled from this checkout: relative to the test, a workspace
- * package's, or through one of the repository's own folders. A path into a
- * temporary directory or a checkout the test made is data, not source.
+ * package's, or through a workspace's source (`packages/<name>/src/`). A
+ * folder's name alone (`src`) proves nothing, since a checkout the test made
+ * holds the same names; a path into one is data, not source.
  */
-const CHECKOUT_PATH = /^@luke\/|(?:^|\/)(?:\.{1,2}|src|apps|packages|tools)(?:\/|$)/u;
+const CHECKOUT_PATH =
+  /^@luke\/|(?:^|\/)\.{1,2}(?:\/|$)|(?:^|\/)(?:apps|packages|tools)\/[^/]+\/src(?:\/|$)/u;
 
 /** The names a module reaches its own place on disk by. */
 const OWN_PLACE: ReadonlySet<string> = new Set(["__dirname", "__filename"]);
