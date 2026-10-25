@@ -66,8 +66,6 @@ export interface TerminalHandle {
    * is what a sender holding back on unacknowledged output waits for.
    */
   readonly write: (data: string | Uint8Array, written: () => void) => void;
-  /** Prints a note of the terminal's own on a line of its own, in the note's ink, which a dimmed screen leaves legible. */
-  readonly note: (line: string, written: () => void) => void;
   /** The size the terminal stands at now, which a shell attaching is told first. */
   readonly size: () => TerminalSize;
   readonly focus: () => void;

@@ -122,6 +122,10 @@ const readOutbound = Schema.decodeUnknownOption(terminalPortOutboundSchema);
 /** Return, as the screen reads it, which runs the bar's action. */
 const RETURN = "\r";
 
+/** The ink a terminal prints its own notes in: palette slot 245, which `terminal-theme.ts` gives the note colour and a dimmed screen leaves undimmed. */
+const NOTE_INK = "\x1b[38;5;245m";
+const RESET = "\x1b[0m";
+
 /** What hides the cursor, as a terminal reads it (DECTCEM). */
 const HIDE_CURSOR = "\x1b[?25l";
 
@@ -349,9 +353,9 @@ export function useTerminalSession(
     const was = terminalLook(live.current.state);
     live.current.state = next;
     setState(next);
+    const said = line === undefined ? "" : `\r\n${NOTE_INK}${line}${RESET}\r\n`;
     const hidden = dim && !was.dim ? HIDE_CURSOR : "";
-    if (line !== undefined) live.current.handle?.note(line, () => undefined);
-    if (hidden !== "") live.current.handle?.write(hidden, () => undefined);
+    if (said !== "" || hidden !== "") live.current.handle?.write(said + hidden, () => undefined);
   }, []);
 
   const letGo = useCallback(() => {

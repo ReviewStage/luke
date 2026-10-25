@@ -14,7 +14,7 @@ import {
   type TerminalProps,
 } from "./contract.js";
 import { TERMINAL_KEY, terminalKey } from "./terminal-keys.js";
-import { terminalFindTints, terminalNoteInk, terminalTheme } from "./terminal-theme.js";
+import { terminalFindTints, terminalTheme } from "./terminal-theme.js";
 
 /**
  * terminal-surface.ts -- a terminal's screen: xterm.js fitted to its box, coloured from the window's tokens, its keys sorted between the shell and the window.
@@ -250,8 +250,6 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
 
   return {
     write: (data, written) => terminal.write(data, written),
-    note: (line, written) =>
-      terminal.write(`\r\n${terminalNoteInk(host)}${line}\x1b[0m\r\n`, written),
     size: () => ({ cols: terminal.cols, rows: terminal.rows }),
     focus: () => terminal.focus(),
     reset: () => terminal.reset(),
