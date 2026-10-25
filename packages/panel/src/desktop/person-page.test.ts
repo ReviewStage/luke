@@ -338,10 +338,9 @@ function mountWith(
         open: false,
         chosen: undefined,
         onOpen: () => opened.inbox.push("inbox"),
-        onOpenList: () => undefined,
         onClose: () => undefined,
         onChoose: (chosen) => opened.inbox.push(chosen),
-        onOpenItem: () => undefined,
+        onOpenItem: (chosen) => opened.inbox.push(chosen),
         listed: false,
         onListed: () => undefined,
         pages: undefined,
@@ -502,7 +501,7 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   button(page, "Retry budget dashboard").click();
 
   assert.deepEqual(opened.agents, [[RETRIES.id, BACKOFF.id]]);
-  assert.deepEqual(opened.inbox, ["inbox", { taskId: RETRIES.id, itemId: RETRY_429.id }]);
+  assert.deepEqual(opened.inbox, [{ taskId: RETRIES.id, itemId: RETRY_429.id }]);
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 

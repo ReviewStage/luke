@@ -8,7 +8,9 @@
  * so an Inbox holding one item is that item rather than a list of one row.
  * The list stands alone only once the way back was taken or Show all
  * pressed, or while nothing is chosen, and a row pressed there opens its
- * item again. An Inbox whose
+ * item again. In a narrow room, a phone's, the list is the place, so an
+ * Inbox there opens on its list, and an item stands alone only once a row
+ * is pressed or a link asks for it. An Inbox whose
  * list holds nothing but the item has no way back, there being no list worth
  * going back to. The line is drawn by the Inbox's own width rather than the
  * window's, because the window's Inbox and a task's own Inbox tab stand in
@@ -28,6 +30,7 @@ import { TOOLBAR_LOOK } from "@luke/ui";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useColumnSplit } from "../column-split.js";
+import { usePhoneRoom } from "../stage-room.js";
 
 /**
  * The Inbox's two columns, the list as wide as it was last dragged and the
@@ -151,9 +154,10 @@ export interface InboxListing {
   readonly onSingle?: ((single: boolean) => void) | undefined;
 }
 
-/** Whether the list was asked for, held by the Inbox itself where its holder keeps none. */
+/** Whether the list was asked for, held by the Inbox itself where its holder keeps none: asked from the start in a narrow room, where the list is the place. */
 function useListing(kept: InboxListing | undefined): InboxListing {
-  const [asked, setAsked] = useState(false);
+  const phone = usePhoneRoom();
+  const [asked, setAsked] = useState(phone);
   return kept ?? { asked, onAsk: setAsked };
 }
 
