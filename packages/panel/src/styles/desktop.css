@@ -186,14 +186,6 @@ body,
   display: none;
 }
 
-/* A place standing alone, Chat one column by its own width or in a narrow
-   room (`desktop-chat.tsx`'s `single`), leads its head with the way back, so
-   its name keeps the room left and what is said beside it gives way; its
-   menu stays at the head's end, the only way to edit or archive a topic. */
-.chat-view[data-single="true"] .chat-stream > .luke-pane-bar .luke-pane-bar-detail {
-  display: none;
-}
-
 /* A narrow room is a phone's, whose keyboard takes half the screen: a box's
    field stops growing at a smaller share of what is seen
    (`--luke-stage-height`) than the two fifths every room keeps (tasks.css),
@@ -2157,28 +2149,6 @@ ul.actor-stack {
   padding: 0;
 }
 
-/* An item's bar holds its way back, its crumbs and its actions in a box of
-   its own (`inbox-pane.tsx`), so what it does as its column narrows is the
-   box's own: narrower than its crumbs, the way back, the pager, and the ⋯
-   menu need beside one another, the crumbs take a line of their own under
-   them, the whole bar wide; the item's own width says so, never the room. */
-@container inbox-item (width < 480px) {
-  .inbox-item-bar {
-    flex-wrap: wrap;
-    row-gap: var(--luke-tight-gap);
-  }
-
-  .inbox-item-bar > .inbox-crumbs {
-    order: 1;
-    flex-basis: 100%;
-  }
-}
-
-/* The way back folds to its glyph (`FoldingButton`). */
-@container inbox-item (width < 360px) {
-  .inbox-item-bar {
-    --luke-fold: folded;
-  }
 }
 
 /* Only the column's bar meets the folded sidebar's toggle, so the items' bar
@@ -2690,15 +2660,20 @@ ul.actor-stack {
   flex: 0 1000 auto;
 }
 
-/* A place standing alone under a folded sidebar's title-bar buttons starts
-   past them, where its way back stands, as a toolbar does (shell.css). */
+/* Only the rail's bar meets the folded sidebar's toggle, so the place's bar
+   (`chat-pane.tsx`'s `PlaceHead`) keeps its own inset beside it. A place
+   standing alone is the first column, so its bar, led by the way back,
+   leaves the title bar's buttons their room, as the Inbox item's does. */
+.chat-stream {
+  --luke-toolbar-start-at: initial;
+}
+
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
   > .page-find
   > .chat-view[data-single="true"]
-  .chat-stream
-  > .luke-pane-bar {
-  padding-left: var(--sidebar-toggle-clearance);
+  .chat-stream {
+  --luke-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
 /* A task's channel is named by its task's glyph before its name, wherever
@@ -2934,6 +2909,22 @@ ul.actor-stack {
 
 .chat-thread {
   margin-top: var(--luke-tight-gap);
+}
+
+/* A root's thread stands in a slot of its own after the message, so its open
+   box outlives the message turning from continued to named (`ThreadRow`): it
+   lines up under the words, in the words' column of a continued message, and
+   under a named one's comment past its face, as it stood inside them. */
+.chat-message > .chat-thread {
+  grid-column: 2;
+  margin-top: calc(var(--luke-tight-gap) + var(--luke-list-gap));
+}
+
+/* Note that a named message's words stand past its comment's face, a list
+   row's disc (`AVATAR_SIZE.ROW`, `--luke-space-20`), and the gap after it. */
+.chat-message > .luke-comment ~ .chat-thread {
+  grid-column: 1 / -1;
+  padding-inline-start: calc(var(--luke-space-20) + var(--luke-icon-gap));
 }
 
 /* A folded thread's press follows its repliers' faces, each hanging its

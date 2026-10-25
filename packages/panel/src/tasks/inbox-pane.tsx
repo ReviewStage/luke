@@ -32,7 +32,6 @@ import {
   MoreButton,
   moreLabel,
   ONE_LINE_END,
-  PageToolbar,
   SidePanelIcon,
   STATUS_TONE,
   Stack,
@@ -42,6 +41,7 @@ import {
   TEXT_VARIANT,
   Text,
   TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
   useMenu,
   useMinute,
@@ -1393,36 +1393,40 @@ export function InboxPane({
           }
         />
       ) : (
-        <PageToolbar
+        <Toolbar
+          place="inbox-item"
           start={TOOLBAR_INSET.COLUMN}
+          wrapHeading
           lead={
-            <div className="inbox-item-bar flex min-w-0 flex-1 items-center gap-control-gap">
-              {onBack === undefined ? null : (
-                <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
-              )}
-              <Crumbs
-                holder={holder}
-                by={by}
-                doors={doors}
-                title={cardTitle(item.title)}
-                titleShown={headingAway}
-              />
+            onBack === undefined ? undefined : (
+              <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
+            )
+          }
+          title={
+            <Crumbs
+              holder={holder}
+              by={by}
+              doors={doors}
+              title={cardTitle(item.title)}
+              titleShown={headingAway}
+            />
+          }
+          actions={
+            <>
               {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
-              <div className="luke-toolbar-actions inbox-item-actions ml-auto pr-column-inset">
-                {pager === undefined ||
-                (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
-                  <InboxPagerControls pager={pager} />
-                )}
-                <InboxItemMenu
-                  key={item.id}
-                  holder={holder}
-                  item={item}
-                  shown={!hidden}
-                  onMark={doors.onMark}
-                  onClose={doors.onClose}
-                />
-              </div>
-            </div>
+              {pager === undefined ||
+              (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
+                <InboxPagerControls pager={pager} />
+              )}
+              <InboxItemMenu
+                key={item.id}
+                holder={holder}
+                item={item}
+                shown={!hidden}
+                onMark={doors.onMark}
+                onClose={doors.onClose}
+              />
+            </>
           }
         />
       )}
