@@ -58,14 +58,20 @@
      far from the next as the first is from the light, and the row reads as one. */
   --title-bar-inset: var(--luke-space-8);
   --title-bar-left: calc(var(--traffic-lights-end) + var(--title-bar-inset));
+  /* Where the lights end below, half a light under their middle, and where a
+     card the window's size starts (`@luke/ui`'s Dialog): a gap under them. */
+  --traffic-lights-bottom: calc(var(--traffic-lights-middle) + 7px);
+  --luke-dialog-window-top: calc(var(--traffic-lights-bottom) + var(--luke-space-8));
 }
 
 /* In full screen macOS hides the traffic lights, so the title bar's buttons
    stand at the window's edge, as far in from it as the side panel's toggle
-   stands from the other, and every row that clears them starts that much
-   sooner (`window-full-screen.ts`). */
+   stands from the other, every row that clears them starts that much
+   sooner, and a card the window's size takes its own margin at its top
+   (`window-full-screen.ts`). */
 :root[data-full-screen="true"] {
   --title-bar-left: var(--column-inset);
+  --luke-dialog-window-top: initial;
 }
 
 html,

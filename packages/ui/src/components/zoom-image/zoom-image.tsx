@@ -10,10 +10,15 @@
  * zooms the same. The view is drawn as a transform on the picture, so the
  * frame's layout never changes under it. A change from a press or a key
  * glides, while one following the fingers or the pointer lands at once,
- * because a glide behind a gesture would trail it.
+ * because a glide behind a gesture would trail it. Once the picture has
+ * loaded it says its own pixels as `--luke-zoom-natural-width` and
+ * `--luke-zoom-natural-height`, plain numbers a frame may fit it by, as
+ * large as the frame and no larger than a set multiple of them; one opened
+ * at its own pixels says none, and stands no larger than they are.
  */
 
 import { useCallback, useRef, useState } from "react";
+import { cssCustomProperties } from "../../css.js";
 import {
   FITTED_VIEW,
   type FramePoint,
@@ -192,6 +197,8 @@ export function useImageZoom(
     : { subject: { name, url }, view: FITTED_VIEW, glide: false };
   const frame = useRef<HTMLDivElement | null>(null);
   const image = useRef<HTMLImageElement | null>(null);
+  // The picture's own pixels once it has loaded, which a frame may fit it by (`--luke-zoom-natural-*`).
+  const [loaded, setLoaded] = useState<{ url: string; width: number; height: number }>();
   const press = useRef<Press | undefined>(undefined);
   // Every pointer down on the frame, by its id, where it stood last.
   const fingers = useRef(new Map<number, Spot>());
@@ -300,15 +307,23 @@ export function useImageZoom(
       draggable: false,
       style: {
         transform: `translate(${String(view.x)}px, ${String(view.y)}px) scale(${String(view.scale)})`,
+        // Note that a picture opened at its own pixels says none, because a fit grown past them would undo the scale its opening set.
+        ...(loaded?.url === url && opening === IMAGE_OPENING.FITTED
+          ? cssCustomProperties({
+              "--luke-zoom-natural-width": loaded.width,
+              "--luke-zoom-natural-height": loaded.height,
+            })
+          : {}),
       },
       "data-zoom": isZoomed(view) ? "zoomed" : "fitted",
       "data-glide": String(glide),
       onLoad: (event) => {
-        if (opening !== IMAGE_OPENING.OWN_PIXELS) return;
         const natural = {
           width: event.currentTarget.naturalWidth,
           height: event.currentTarget.naturalHeight,
         };
+        setLoaded({ url, ...natural });
+        if (opening !== IMAGE_OPENING.OWN_PIXELS) return;
         change(false, (view, sizes) => (isZoomed(view) ? view : ownPixels(view, sizes, natural)));
       },
       onPointerDown: (event) => {
