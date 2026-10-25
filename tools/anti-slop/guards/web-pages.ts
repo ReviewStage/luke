@@ -14,13 +14,16 @@ import { type RepositoryGuard, readJson, readText, record } from "./guard.ts";
  * signed out; the page the app frames carries its one style by the digest
  * its policy admits and loads nothing; and every Tailwind entry takes
  * `@luke/ui`'s theme (`packages/ui/AGENTS.md`), without which the buttons'
- * utilities compile to nothing.
+ * utilities compile to nothing; and the panel's root stops a phone's text
+ * autosizing, without which iOS Safari draws a code block's lines larger
+ * than the words around them.
  */
 
 const WEB = "apps/web";
 const PUBLIC = `${WEB}/public`;
 const BRAND_FAVICON = "packages/brand/assets/icon/luke-favicon.svg";
 const FRAMED_PAGE = "page-in-mac-app.html";
+const PANEL_BASE = "packages/panel/src/styles/base.css";
 
 /** The icons every page links, in order, and no other. */
 const ICONS = [
@@ -36,6 +39,12 @@ const TAILWIND_UTILITIES = /@import\s+"tailwindcss(?:\/utilities\.css)?"/u;
 
 /** What every Tailwind entry takes from `@luke/ui`, so its components' utilities compile. */
 const UI_THEME_IMPORTS = ['"@luke/ui/tailwind/sources.css"', '"@luke/ui/tailwind/theme.css"'];
+
+/** What the panel's root declares so a phone draws its sizes as the tokens say: WebKit's spelling and the standard one. */
+const TEXT_SIZE_ADJUST = [
+  /-webkit-text-size-adjust:\s*100%/u,
+  /(?<![\w-])text-size-adjust:\s*100%/u,
+];
 
 /** Each `<link>` in a page's head, as its `rel` and `href`. */
 function linksOf(html: string): readonly { rel: string; href: string }[] {
@@ -185,6 +194,14 @@ export function themeImportProblems(file: string, sheet: string): readonly strin
   );
 }
 
+/** Where a sheet's root leaves a phone's browser free to inflate its text, in either spelling. */
+export function textSizeProblems(file: string, sheet: string): readonly string[] {
+  const css = sheet.replace(/\/\*[\s\S]*?\*\//gu, "");
+  const root = /(?:^|\})\s*:root\s*\{([^}]*)\}/u.exec(css)?.[1] ?? "";
+  if (TEXT_SIZE_ADJUST.every((declaration) => declaration.test(root))) return [];
+  return [`${file}: its :root does not set -webkit-text-size-adjust and text-size-adjust to 100%`];
+}
+
 /** The Content-Security-Policy a route of the web service answers the framed page with. */
 function framedPolicy(root: string): string | undefined {
   const services = record(readJson(root, "vercel.json").services, "vercel.json's services");
@@ -228,6 +245,7 @@ async function webPageProblems(root: string): Promise<readonly string[]> {
     ),
     ...framedPageProblems(readText(root, `${PUBLIC}/${FRAMED_PAGE}`), framedPolicy(root)),
     ...stylesheets(root).flatMap((file) => themeImportProblems(file, readText(root, file))),
+    ...textSizeProblems(PANEL_BASE, readText(root, PANEL_BASE)),
   ];
   if (readText(root, `${PUBLIC}/favicon.svg`) !== readText(root, BRAND_FAVICON))
     problems.push(`${PUBLIC}/favicon.svg: is not ${BRAND_FAVICON}`);
@@ -236,6 +254,6 @@ async function webPageProblems(root: string): Promise<readonly string[]> {
 
 export const webPagesGuard: RepositoryGuard = {
   holds:
-    "the site's pages carry their icons, theme colour, card and policy, and every Tailwind entry takes @luke/ui's theme",
+    "the site's pages carry their icons, theme colour, card and policy, and every Tailwind entry takes @luke/ui's theme, and the panel's root stops a phone's text autosizing",
   problems: webPageProblems,
 };
