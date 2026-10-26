@@ -2615,6 +2615,11 @@ test("with no plan open the window rests on the Inbox: it stands once the list l
 
   act(() => tab.control().inboxView.onOpenItem({ taskId: TASK.id, itemId: "item-2" }));
   assert.equal(tab.control().resting, false, "an item opened by a press is a place of its own");
+  assert.deepEqual(
+    tab.control().inboxView.chosen,
+    { taskId: TASK.id, itemId: "item-2", opened: true },
+    "an item opened from a place, as a person's page opens one, opens its thread",
+  );
 });
 
 test("leaving an open plan rests on the Inbox, on the item last chosen there", () => {

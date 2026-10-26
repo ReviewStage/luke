@@ -3296,10 +3296,12 @@ export function useTasksTab(input: {
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (chosen) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, chosen } : held)),
-      onOpenItem: guard((chosen: InboxChoice) => {
+      onOpenItem: guard((asked: InboxChoice) => {
         setHistoryFor(undefined);
         // An item opened by a press is a place of its own, as a link's is, not the Inbox rested on.
         setRested(undefined);
+        // Note that every door here opens the item's thread, so the choice says so (`desktop-inbox.tsx`).
+        const chosen: InboxChoice = { ...asked, opened: true };
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX
             ? { ...held, chosen, listed: false }
