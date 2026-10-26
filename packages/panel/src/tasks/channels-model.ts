@@ -59,6 +59,19 @@ export interface ChannelSections {
   readonly projects: readonly Channel[];
 }
 
+/**
+ * The sidebar's sections of channels, and a phone's list's, in their order:
+ * what each is called, whether it holds the projects', what its "+" makes,
+ * and how wide each of its rows' names stands while the channels are read,
+ * a few rows' worth, since nobody knows how many there are yet.
+ */
+export const CHANNEL_SECTIONS = [
+  { label: "Channels", project: false, add: "New channel", reading: ["56%", "72%", "44%"] },
+  { label: "Projects", project: true, add: "New project channel", reading: ["64%"] },
+] as const;
+
+export type ChannelSectionLook = (typeof CHANNEL_SECTIONS)[number];
+
 /** The replies line under a post: who replied, how many replies, and who the open ask waits on. */
 export interface RepliesLine {
   /** One message for each person who replied, the agent counted once, in the order they first replied. */
@@ -217,21 +230,73 @@ export function channelSections(channels: readonly Channel[]): ChannelSections {
   };
 }
 
+/** The channels one of `CHANNEL_SECTIONS` lists, in the service's order. */
+export function sectionChannels(
+  channels: readonly Channel[],
+  section: ChannelSectionLook,
+): readonly Channel[] {
+  return channels.filter((channel) => channel.project === section.project);
+}
+
 /** Whether a channel may be renamed or archived: any but #general. */
 export function channelEditable(channel: Channel): boolean {
   return channel.name !== GENERAL_CHANNEL_NAME;
 }
 
-/** The channel a stream opens on: the one chosen where it still stands, else #general, else the first. */
-export function shownChannel(
-  channels: readonly Channel[],
+/** The workspace's #general, where its channels hold it. */
+export function generalChannel(channels: readonly Channel[]): Channel | undefined {
+  return channels.find((channel) => channel.name === GENERAL_CHANNEL_NAME);
+}
+
+/** What the Inbox's place shows of the workspace's channels: one of them, that the channel chosen stands no more, or none. */
+export const CHANNEL_SHOWN = {
+  CHANNEL: "channel",
+  /** The channel chosen is archived, or was never one of the workspace's open channels. */
+  MISSING: "missing",
+  /** The channels are not read yet, or the workspace has none. */
+  NONE: "none",
+} as const;
+
+export type ChannelShown =
+  | { readonly kind: typeof CHANNEL_SHOWN.CHANNEL; readonly channel: Channel }
+  | { readonly kind: typeof CHANNEL_SHOWN.MISSING }
+  | { readonly kind: typeof CHANNEL_SHOWN.NONE };
+
+/**
+ * What the place shows once the channels are read: the channel chosen
+ * where it is still open, a missing channel's state where it is not, so a
+ * link to an archived or unknown channel says so rather than showing
+ * another, and #general, else the first, while nothing is chosen.
+ */
+export function channelShown(
+  channels: readonly Channel[] | undefined,
   chosenId: string | undefined,
+): ChannelShown {
+  if (channels === undefined) return { kind: CHANNEL_SHOWN.NONE };
+  const chosen = channels.find((channel) => channel.id === chosenId);
+  if (chosenId !== undefined && chosen === undefined) return { kind: CHANNEL_SHOWN.MISSING };
+  const channel = chosen ?? generalChannel(channels) ?? channels[0];
+  return channel === undefined
+    ? { kind: CHANNEL_SHOWN.NONE }
+    : { kind: CHANNEL_SHOWN.CHANNEL, channel };
+}
+
+/**
+ * The channel `by` steps from the one shown, through the sidebar's order,
+ * the standing channels then the projects', wrapping round at either end;
+ * from none shown, down is the first and up the last.
+ */
+export function channelStep(
+  channels: readonly Channel[],
+  shownId: string | undefined,
+  by: 1 | -1,
 ): Channel | undefined {
-  return (
-    channels.find((channel) => channel.id === chosenId) ??
-    channels.find((channel) => channel.name === GENERAL_CHANNEL_NAME) ??
-    channels[0]
-  );
+  const { standing, projects } = channelSections(channels);
+  const ordered = [...standing, ...projects];
+  if (ordered.length === 0) return undefined;
+  const at = ordered.findIndex((channel) => channel.id === shownId);
+  const from = at === -1 ? (by === 1 ? -1 : 0) : at;
+  return ordered[(from + by + ordered.length) % ordered.length];
 }
 
 /** "↑ N older asks need you", as the jump over the stream says it. */

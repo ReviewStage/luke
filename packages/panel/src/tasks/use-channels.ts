@@ -7,12 +7,14 @@ import {
 import type { ArchivedChannel, Channel, ChannelThread } from "@luke/features/channel-wire";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
+import { STATUS_TONE } from "@luke/ui";
 import { Schema } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { askAct, useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
+import { TOAST_HOLD, type ToastNotice, useToast } from "../toast.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { CHANNEL_VIEW, type ChannelView } from "./channels-model.js";
+import { CHANNEL_VIEW, type ChannelView, generalChannel } from "./channels-model.js";
 
 /**
  * use-channels.ts -- a workspace's channels as the window holds them, the channel chosen, one channel's threads page by page, and its archived channels, each read through the act port (STAG-547).
@@ -29,7 +31,10 @@ import { CHANNEL_VIEW, type ChannelView } from "./channels-model.js";
  * shows one of them, as far back as the older pages it loaded reached. Which channel the
  * window shows, and whether a thread stands open beside it, is the
  * window's own while it runs; which view the stream shows, Mine by
- * default, is kept on this Mac as the Inbox's view choices are.
+ * default, is kept on this Mac as the Inbox's view choices are. A channel
+ * made answers its id, so whoever made it opens it; archiving the channel
+ * the window shows moves the window to #general and says so, where an
+ * archive by someone else leaves the stream to say the channel is gone.
  */
 
 /** A workspace's channels as last read: none until a read answers, and whether the last read failed. */
@@ -74,6 +79,9 @@ const REFUSAL_WORDS = {
   [CHANNEL_CALL_FAILURE.INVALID]:
     "A name is lowercase words joined by dashes, and a purpose is one short line.",
 } as const satisfies Record<ChannelCallFailure, string>;
+
+/** What a channel's making answered: what refused it, or the channel made. */
+export type ChannelMade = { readonly refused: string } | { readonly channelId: string };
 
 /** Where the stream's view is kept on this Mac. */
 const KEPT_VIEW = keptKey<ChannelView>(
@@ -151,6 +159,28 @@ function moveTo(next: ChannelPlace): void {
   told();
 }
 
+/**
+ * Moves the window to #general where it showed the channel just archived,
+ * before the channels that leave it out are held, so the stream never says
+ * the channel it was just showing is gone; and says where it went.
+ */
+function leaveArchived(
+  channelId: string,
+  was: readonly Channel[] | undefined,
+  channels: readonly Channel[],
+  toast: (notice: ToastNotice) => void,
+): void {
+  if (place.channelId !== channelId) return;
+  const general = generalChannel(channels);
+  const name = was?.find((channel) => channel.id === channelId)?.name;
+  moveTo({ channelId: general?.id, threadId: undefined });
+  toast({
+    words: `${name === undefined ? "The channel" : `#${name}`} is archived. You're in #general now.`,
+    tone: STATUS_TONE.COMPLETE,
+    hold: TOAST_HOLD.DONE,
+  });
+}
+
 /** A workspace's channels and the writes on them, as `useChannels` hands them. */
 export interface ChannelsControl {
   /** The channels, none until first read. */
@@ -159,18 +189,14 @@ export interface ChannelsControl {
   readonly failed: boolean;
   /** Reads the channels again. */
   readonly onRefresh: () => void;
-  /** Makes a channel; what refused it, or none where it was made. */
-  readonly onCreate: (
-    name: string,
-    purpose: string,
-    project: boolean,
-  ) => Promise<string | undefined>;
+  /** Makes a channel; what refused it, or the channel made, which the caller opens. */
+  readonly onCreate: (name: string, purpose: string, project: boolean) => Promise<ChannelMade>;
   /** Gives a channel a new name, a new purpose, or both; what refused it, or none where it was edited. */
   readonly onEdit: (
     channelId: string,
     edit: { readonly name?: string; readonly purpose?: string },
   ) => Promise<string | undefined>;
-  /** Archives a channel; what refused it, or none where it was archived. */
+  /** Archives a channel, the window going to #general where it showed it; what refused it, or none where it was archived. */
   readonly onArchive: (channelId: string) => Promise<string | undefined>;
   /** Opens an archived channel again; what refused it, or none where it was opened. */
   readonly onUnarchive: (channelId: string) => Promise<string | undefined>;
@@ -183,6 +209,7 @@ export interface ChannelsControl {
 /** A workspace's channels as the window holds them, read as the first surface holding them is drawn and as `shown` comes back, and followed while it is. */
 export function useChannels(workspaceId: string | undefined, shown: boolean): ChannelsControl {
   const { act } = useAct();
+  const toast = useToast();
   const standing = useSyncExternalStore(subscribe, () =>
     workspaceId === undefined ? NOTHING_HELD : (held.get(workspaceId) ?? NOTHING_HELD),
   );
@@ -197,11 +224,15 @@ export function useChannels(workspaceId: string | undefined, shown: boolean): Ch
     [workspaceId, shown],
   );
   return useMemo(() => {
-    /** A write whose answer, the channels as they then stand, is held; what refused it, or none. */
-    const written = (asked: Promise<ChannelsView>): Promise<string | undefined> =>
+    /** A write whose answer, the channels as they then stand, is held, `before` run on them first; what refused it, or none. */
+    const written = (
+      asked: Promise<ChannelsView>,
+      before: (channels: readonly Channel[]) => void = () => undefined,
+    ): Promise<string | undefined> =>
       asked.then(
         (view) => {
           if ("failure" in view) return REFUSAL_WORDS[view.failure];
+          before(view.channels);
           if (workspaceId !== undefined) hold(workspaceId, view);
           return undefined;
         },
@@ -211,10 +242,21 @@ export function useChannels(workspaceId: string | undefined, shown: boolean): Ch
       channels: standing.channels,
       failed: standing.failed,
       onRefresh,
-      onCreate: (name, purpose, project) =>
-        workspaceId === undefined
-          ? Promise.resolve(ACT_UNREACHED_WORDS)
-          : written(act(ACT_KIND.CHANNELS_CREATE, { workspaceId, name, purpose, project })),
+      onCreate: (name, purpose, project) => {
+        if (workspaceId === undefined) return Promise.resolve({ refused: ACT_UNREACHED_WORDS });
+        let made: string | undefined;
+        // Note that a channel's name is its workspace's alone, so the made one is found by it among the channels answered.
+        return written(
+          act(ACT_KIND.CHANNELS_CREATE, { workspaceId, name, purpose, project }),
+          (channels) => {
+            made = channels.find((channel) => channel.name === name)?.id;
+          },
+        ).then((refused) =>
+          refused !== undefined || made === undefined
+            ? { refused: refused ?? ACT_UNREACHED_WORDS }
+            : { channelId: made },
+        );
+      },
       onEdit: (channelId, edit) =>
         workspaceId === undefined
           ? Promise.resolve(ACT_UNREACHED_WORDS)
@@ -222,7 +264,9 @@ export function useChannels(workspaceId: string | undefined, shown: boolean): Ch
       onArchive: (channelId) =>
         workspaceId === undefined
           ? Promise.resolve(ACT_UNREACHED_WORDS)
-          : written(act(ACT_KIND.CHANNELS_ARCHIVE, { workspaceId, channelId })),
+          : written(act(ACT_KIND.CHANNELS_ARCHIVE, { workspaceId, channelId }), (channels) =>
+              leaveArchived(channelId, standing.channels, channels, toast),
+            ),
       onUnarchive: (channelId) =>
         workspaceId === undefined
           ? Promise.resolve(ACT_UNREACHED_WORDS)
@@ -238,7 +282,7 @@ export function useChannels(workspaceId: string | undefined, shown: boolean): Ch
         written(act(ACT_KIND.CHANNELS_LOOK, { workspaceId, channelId })).catch(() => undefined);
       },
     };
-  }, [act, workspaceId, standing, onRefresh]);
+  }, [act, toast, workspaceId, standing, onRefresh]);
 }
 
 /** The channel the window shows, the thread opened in it, and the doors that move them. */

@@ -1,5 +1,6 @@
 import { createElement, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { AVATAR_SHAPE, AVATAR_SIZE, Avatar, type AvatarShape } from "../avatar/avatar.js";
+import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 import { TIME_LOOK, Time } from "../time/time.js";
 
@@ -23,6 +24,11 @@ import { TIME_LOOK, Time } from "../time/time.js";
  * the disc is decorative to a reader. A name that does more than name, a
  * chip hanging the writer's card, is the caller's (`nameRef`), drawn in
  * the name's place in the same role.
+ *
+ * A CommentSkeleton stands a comment while it is read, in the comment's
+ * own frame: a circle where the face will be, a block where the name will
+ * stand, and a block for each line of words under it, as wide as its
+ * caller says, so the comment lands where its blocks stood.
  */
 
 /** The element a comment stands in: a box of its own, or a row of a thread's list. */
@@ -64,6 +70,51 @@ function drawsSomething(node: ReactNode): boolean {
   return node !== undefined && node !== null && typeof node !== "boolean";
 }
 
+/** The face's cell. */
+function FaceCell({ children }: { children: ReactNode }): React.JSX.Element {
+  return <span className={FACE}>{children}</span>;
+}
+
+/** The head's line: the name, the time, and the trailing slot. */
+function HeadLine({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className={HEAD}>{children}</div>;
+}
+
+/** What was written, on the name's column. */
+function BodyCell({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className={BODY}>{children}</div>;
+}
+
+/** A comment's frame alone, a box of its own. */
+function Frame({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className={FRAME}>{children}</div>;
+}
+
+/** A comment while it is read: a face's circle, a name's block `name` wide, and a block for each line of words, each as wide as `lines` says, no two alike. */
+export function CommentSkeleton({
+  name,
+  lines,
+}: {
+  name: string;
+  lines: readonly string[];
+}): React.JSX.Element {
+  return (
+    <Frame>
+      <FaceCell>
+        <Skeleton shape={SKELETON_SHAPE.CIRCLE} width="var(--spacing-avatar-row)" />
+      </FaceCell>
+      <HeadLine>
+        <Skeleton width={name} />
+      </HeadLine>
+      <BodyCell>
+        {lines.map((width) => (
+          <Skeleton key={width} width={width} />
+        ))}
+      </BodyCell>
+    </Frame>
+  );
+}
+
 /** One comment by `author`, written `at`, with `trailing` at its head's end and `children` under it. */
 export function Comment({
   author,
@@ -98,7 +149,7 @@ export function Comment({
   return createElement(
     Element,
     { ...attributes, ref, className: FRAME },
-    <span className={FACE}>
+    <FaceCell>
       <Avatar
         name={author.name}
         {...(author.id === undefined ? {} : { id: author.id })}
@@ -109,8 +160,8 @@ export function Comment({
         size={AVATAR_SIZE.ROW}
         decorative
       />
-    </span>,
-    <div className={HEAD}>
+    </FaceCell>,
+    <HeadLine>
       <Text className={NAME} variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN} truncate>
         {nameRef ?? author.name}
       </Text>
@@ -125,7 +176,7 @@ export function Comment({
         </Text>
       )}
       {trailing === undefined ? null : <span className={TRAILING}>{trailing}</span>}
-    </div>,
-    children === undefined ? null : <div className={BODY}>{children}</div>,
+    </HeadLine>,
+    children === undefined ? null : <BodyCell>{children}</BodyCell>,
   );
 }

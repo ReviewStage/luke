@@ -4,6 +4,7 @@ import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { rovingItem } from "../roving-keys/roving-keys.js";
+import { Skeleton } from "../skeleton/skeleton.js";
 
 /**
  * nav-item.tsx -- a place in a column of places: its glyph, its name, and what stands at its end, a count, a mark, or its chord.
@@ -41,6 +42,11 @@ import { rovingItem } from "../roving-keys/roving-keys.js";
  * handlers and chord as a Button does, and keeps the focus where it is
  * under a pointer's press (`keepFocus`) as a Button does too. It takes no
  * class or style; its outer spacing is its column's.
+ *
+ * A NavItemSkeleton stands a row while the places it lists are read: the
+ * row's own box, its glyph's cell holding the glyph every row of the list
+ * wears, and a block where its name will stand, so the rows land where the
+ * blocks stood. It is no press; the region around it says what is read.
  */
 
 /**
@@ -198,6 +204,34 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
         </span>
       ) : null}
     </span>
+  );
+}
+
+/** A row's box with nothing to press, which a skeleton stands its blocks in. */
+function StillRow({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <div className={ROW} data-variant={NAV_ITEM_VARIANT.ROW} aria-hidden="true">
+      {children}
+    </div>
+  );
+}
+
+/** A row while its place is read: `icon`, the glyph its list's rows wear, and a block `width` wide where its name will stand. */
+export function NavItemSkeleton({
+  icon,
+  width,
+}: {
+  icon?: ReactNode;
+  /** How wide its name's block stands, a share of the row's room. */
+  width: string;
+}): React.JSX.Element {
+  return (
+    <StillRow>
+      {said(icon) ? <Glyph icon={icon} /> : null}
+      <Name>
+        <Skeleton width={width} />
+      </Name>
+    </StillRow>
   );
 }
 

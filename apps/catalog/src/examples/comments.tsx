@@ -4,6 +4,7 @@ import {
   BUTTON_SIZE,
   COMMENT_ELEMENT,
   Comment,
+  CommentSkeleton,
   GAP,
   LAYOUT_ELEMENT,
   MoreButton,
@@ -17,8 +18,8 @@ import { CatalogSection } from "../section";
 /**
  * comments.tsx -- a thread of comments: a person by their picture, a person
  * by their letter where no picture is given, an agent on its square, a
- * status and an action at a head's end, and a draft not yet sent, which
- * says no time.
+ * status and an action at a head's end, a draft not yet sent, which
+ * says no time, and a comment while it is read.
  */
 
 /** A synthetic picture drawn in place, so the catalog renders offline. */
@@ -77,6 +78,11 @@ function Comments(): React.JSX.Element {
           <Comment author={{ name: "Grace Hopper", id: "user-grace" }}>
             Pending review comment.
           </Comment>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="comment-skeleton" title="While it is read">
+        <div className="catalog-frame">
+          <CommentSkeleton name="24%" lines={["88%", "56%"]} />
         </div>
       </CatalogSection>
     </>

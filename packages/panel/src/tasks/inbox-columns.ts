@@ -22,7 +22,10 @@
  * keeps its Inbox's, so its history can go back to the list; such a holder
  * hears whether the Inbox shows one column too, so its history holds the
  * list and the item as steps of their own by this line rather than by the
- * window's room, which is narrower.
+ * window's room, which is narrower. While a channel's stream stands in the
+ * list's place, the stream is no list to go back to: Back's chord and Escape
+ * close the thread open from it instead, so a phone goes back to the stream
+ * and never past it to its list of channels.
  */
 
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -154,6 +157,11 @@ export interface InboxListing {
   readonly onSingle?: ((single: boolean) => void) | undefined;
 }
 
+/** A channel's stream standing in the list's place, and the press that closes the thread open from it; none while no thread is open. */
+export interface InboxStream {
+  readonly onClose: (() => void) | undefined;
+}
+
 /** Whether the list was asked for, held by the Inbox itself where its holder keeps none: asked from the start in a narrow room, where the list is the place. */
 function useListing(kept: InboxListing | undefined): InboxListing {
   const phone = usePhoneRoom();
@@ -185,12 +193,15 @@ function shownColumns(
  * they step to while the list stands, so ↑↓ go on from there, and leave it
  * where it is while the item stands alone. Note that the keyboard is moved before
  * the window paints, while the hidden control still holds it. `kept` is
- * whether the list was asked for where the holder keeps it.
+ * whether the list was asked for where the holder keeps it, and `stream`
+ * the channel's stream standing in the list's place, whose thread Back's
+ * chord and Escape close.
  */
 export function useInboxColumns(
   chosen: string | undefined,
   backable: boolean,
   kept?: InboxListing,
+  stream?: InboxStream,
 ): InboxColumns {
   // Note that the Inbox is neither one column nor split until it is measured, which lays it out split.
   const { ref: measure, single: measured } = useColumnSplit();
@@ -259,8 +270,9 @@ export function useInboxColumns(
           setListAsked(true);
         }
       : undefined;
-  useAppCommand(APP_COMMAND.BACK, back);
-  useAppCommand(APP_COMMAND.INBOX_LIST, back);
+  const keyed = stream === undefined ? back : stream.onClose;
+  useAppCommand(APP_COMMAND.BACK, keyed);
+  useAppCommand(APP_COMMAND.INBOX_LIST, keyed);
   return {
     ref,
     shown,

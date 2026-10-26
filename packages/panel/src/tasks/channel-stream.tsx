@@ -8,6 +8,7 @@ import {
   openAskOf,
   threadNeedsReader,
 } from "@luke/features/inbox-wire";
+import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   AVATAR_SIZE,
@@ -19,12 +20,16 @@ import {
   CardPress,
   CONTROL_GROUND,
   Comment,
+  CommentSkeleton,
   ControlGround,
+  EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
   NOTE_LINE_LOOK,
   NoteLine,
+  NotFoundIcon,
+  SkeletonRegion,
   STREAM_DIVIDER,
   StreamDivider,
   TEXT_BUTTON_TONE,
@@ -38,7 +43,8 @@ import {
   useMenu,
 } from "@luke/ui";
 import { ArrowUpIcon, SlidersHorizontalIcon } from "@luke/ui/icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { askScroll } from "@luke/ui/scroll-asked";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
 import {
@@ -74,7 +80,7 @@ import {
 } from "./inbox-model.js";
 import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
 import { TranscriptWords } from "./transcript-blocks.js";
-import { useChannelThreads, useChannelView } from "./use-channels.js";
+import { type ChannelThreadsControl, useChannelThreads, useChannelView } from "./use-channels.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 
 /**
@@ -106,6 +112,16 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
  * (`packages/panel/AGENTS.md`). Leaving the channel stamps the reader's
  * look at it, and the New line stands where it stood as the channel opened
  * while they read it.
+ *
+ * The stream is read by its holder (`useChannelStream`), which pages the
+ * threads its view shows with K and J as well (`inbox-pager.tsx`); a thread
+ * opened by a key that stands out of sight is scrolled into the stream's
+ * box. Until its first read lands, the stream stands a few posts' blocks
+ * through a post's own frame (`ChannelStreamSkeleton`); a first read that
+ * fails says so in its place with Retry, and a later one that fails over
+ * the threads held says so in a line at the stream's foot with Retry. Older
+ * threads are read as the reader nears the stream's top, the log keeping
+ * their place as they land above (`Conversation`'s `onNearTop`).
  */
 
 /**
@@ -145,6 +161,23 @@ const JUMP_ROOM_PX = 12;
 
 /** The post a scroll finds: one that needs the reader. */
 const NEEDS_SELECTOR = "[data-channel-post][data-needs]";
+
+/** The post of the thread open beside the stream. */
+const CHOSEN_SELECTOR = "[data-channel-post][data-chosen]";
+
+/** What the stream's placeholder says to a reader. */
+const READING_THREADS = readingWords("threads");
+
+/**
+ * The posts the stream stands while its first read is on its way, oldest
+ * first: how wide each one's name and each line of its words stand, a
+ * screen's worth of short posts.
+ */
+const SKELETON_POSTS = [
+  { name: "18%", lines: ["42%", "86%"] },
+  { name: "24%", lines: ["36%", "92%", "58%"] },
+  { name: "20%", lines: ["48%", "74%"] },
+] as const;
 
 /**
  * How many posts that need the reader stand scrolled out of sight above the
@@ -331,6 +364,41 @@ function PostAsk({
   );
 }
 
+/** A post's own box, its ground marking it chosen or needing the reader. */
+function PostFrame({
+  chosen,
+  needs,
+  children,
+}: {
+  chosen: boolean;
+  needs: boolean;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div
+      className={POST}
+      data-channel-post=""
+      data-chosen={chosen ? "" : undefined}
+      data-needs={needs ? "" : undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** The stream while its first read is on its way: a few posts' blocks, each in a post's own box and a comment's frame (`SKELETON_POSTS`). */
+export function ChannelStreamSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label={READING_THREADS}>
+      {SKELETON_POSTS.map((post) => (
+        <PostFrame key={post.name} chosen={false} needs={false}>
+          <CommentSkeleton name={post.name} lines={post.lines} />
+        </PostFrame>
+      ))}
+    </SkeletonRegion>
+  );
+}
+
 /** One thread as a post in the stream. */
 function ThreadPost({
   item,
@@ -354,12 +422,7 @@ function ThreadPost({
   const replies = repliesLine(item, readerId);
   const needs = threadNeedsReader(item, readerId);
   return (
-    <div
-      className={POST}
-      data-channel-post=""
-      data-chosen={chosen ? "" : undefined}
-      data-needs={needs ? "" : undefined}
-    >
+    <PostFrame chosen={chosen} needs={needs}>
       <Comment
         author={commentAuthor(actor)}
         nameRef={<ActorRef actor={actor} nameOnly />}
@@ -394,13 +457,132 @@ function ThreadPost({
           </div>
         </div>
       </Comment>
-    </div>
+    </PostFrame>
   );
 }
 
-/** The stream as one channel draws it; `listedOf` finds a thread as the Inbox lists it, `ownTask` whether it stands on a task of the reader's. */
+/** One channel's stream as its holder reads it: the read, the view chosen, the threads the view shows, the window's own answers laid over them, and how many need the reader. */
+export interface ChannelStreamRead {
+  readonly read: ChannelThreadsControl;
+  readonly view: ChannelView;
+  readonly onView: (view: ChannelView) => void;
+  /** The threads the view shows, oldest first, which the stream posts and K and J step through. */
+  readonly viewed: readonly ChannelThread[];
+  readonly needsCount: number;
+}
+
+/** Reads one channel's stream for its holder, which draws it (`ChannelStream`) and pages it (`useChannelPager`) from the one read; `ownTask` says which threads stand on a task of the reader's. */
+export function useChannelStream(
+  channelId: string | undefined,
+  readerId: string | undefined,
+  ownTask: (thread: ChannelThread) => boolean,
+): ChannelStreamRead {
+  const [view, onView] = useChannelView();
+  const read = useChannelThreads(channelId);
+  // Note that the window's own answers stand over the read, so a pick clears the tint the moment it is sent.
+  const readThreads = read.threads ?? NO_THREADS;
+  const settled = useSettledItems(readThreads);
+  // Note that an answer's item carries no agent of its own, so each thread keeps the one it was read with.
+  const threads = useMemo(() => {
+    const byId = new Map(readThreads.map((thread) => [thread.id, thread]));
+    return settled.flatMap((item): ChannelThread[] => {
+      const thread = byId.get(item.id);
+      return thread === undefined ? [] : [{ ...thread, ...item }];
+    });
+  }, [readThreads, settled]);
+  return {
+    read,
+    view,
+    onView,
+    viewed: viewedThreads(threads, view, readerId, ownTask),
+    needsCount: needsReaderCount(threads, readerId),
+  };
+}
+
+/** Scrolls the stream's own box to the chosen post where it stands out of sight, as a key opening the next thread leaves it; never `scrollIntoView`. */
+function useChosenInView(
+  log: React.RefObject<HTMLDivElement | null>,
+  chosenId: string | undefined,
+) {
+  useLayoutEffect(() => {
+    const box = log.current;
+    if (box === null || chosenId === undefined) return;
+    const post = box.querySelector<HTMLElement>(CHOSEN_SELECTOR);
+    if (post === null) return;
+    const room = box.getBoundingClientRect();
+    const at = post.getBoundingClientRect();
+    if (at.top >= room.top && at.bottom <= room.bottom) return;
+    // Note that a post below comes up to the box's foot, and one above, or one taller than the box, down to its head.
+    const below = at.top > room.top && at.height < room.height;
+    const offset = below
+      ? at.bottom - room.bottom + JUMP_ROOM_PX
+      : at.top - room.top - JUMP_ROOM_PX;
+    askScroll(box);
+    box.scrollTo({ top: box.scrollTop + offset });
+  }, [log, chosenId]);
+}
+
+/** The stream's column, named for what it holds, hidden while a thread stands in its place. */
+function StreamColumn({
+  label,
+  hidden = false,
+  children,
+}: {
+  label: string;
+  hidden?: boolean | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <section className={STREAM} aria-label={label} hidden={hidden}>
+      {children}
+    </section>
+  );
+}
+
+/** The stream's place while the workspace's channels are first read, so no channel is named yet: its bar, and a few posts' blocks under it. */
+export function ChannelReading(): React.JSX.Element {
+  return (
+    <StreamColumn label="Channel">
+      <Toolbar end={TOOLBAR_INSET.COLUMN} />
+      <Conversation>
+        <ConversationContent className={STREAM_BODY}>
+          <ChannelStreamSkeleton />
+        </ConversationContent>
+      </Conversation>
+    </StreamColumn>
+  );
+}
+
+/**
+ * The stream's place where the channel chosen stands no more: archived,
+ * by whoever archived it, or never one of the workspace's, as a link to it
+ * may name; with the way to #general where the workspace holds it.
+ */
+export function ChannelMissing({
+  onGeneral,
+}: {
+  onGeneral: (() => void) | undefined;
+}): React.JSX.Element {
+  return (
+    <StreamColumn label="Channel not found">
+      <Toolbar end={TOOLBAR_INSET.COLUMN} />
+      <EmptyState
+        icon={<NotFoundIcon />}
+        title="Channel not found"
+        action={
+          onGeneral === undefined ? undefined : { label: "Go to #general", onClick: onGeneral }
+        }
+      >
+        This channel was archived, or isn't one of this workspace's.
+      </EmptyState>
+    </StreamColumn>
+  );
+}
+
+/** The stream as one channel draws it; `listedOf` finds a thread as the Inbox lists it. */
 export function ChannelStream({
   channel,
+  stream,
   chosenId,
   hidden,
   readerId,
@@ -408,12 +590,13 @@ export function ChannelStream({
   shown,
   agents,
   listedOf,
-  ownTask,
   onOpen,
   onLook,
   onAnswered,
 }: {
   channel: Channel;
+  /** The channel's stream as its holder reads it (`useChannelStream`). */
+  stream: ChannelStreamRead;
   /** The thread open in the side panel beside the stream, where one is. */
   chosenId: string | undefined;
   /** Whether a thread stands in the stream's place, as on a phone, which keeps the stream and the New line where they stood. */
@@ -425,7 +608,6 @@ export function ChannelStream({
   /** The open thread's agents, as its pane names them, which every post naming one of them names it by. */
   agents: StreamAgents;
   listedOf: (itemId: string) => InboxListed | undefined;
-  ownTask: (thread: ChannelThread) => boolean;
   onOpen: (thread: ChannelThread) => void;
   /** Stamps the reader's look at the channel, as they leave it. */
   onLook: (channelId: string) => void;
@@ -435,28 +617,16 @@ export function ChannelStream({
   const { act } = useAct();
   const settler = useInboxSettler();
   const log = useRef<HTMLDivElement>(null);
-  const [view, onView] = useChannelView();
-  const read = useChannelThreads(channel.id);
+  const { read, view, onView, viewed, needsCount } = stream;
   // Note that the New line stands where the reader left off as the channel opened, and stays while they read it.
   const [lookedAt] = useState(channel.lookedAt);
   // Note that leaving the channel is having looked at it, so its New line is gone when the reader comes back.
   const look = useRef(onLook);
   look.current = onLook;
   useEffect(() => () => look.current(channel.id), [channel.id]);
-  // Note that the window's own answers stand over the read, so a pick clears the tint the moment it is sent.
-  const readThreads = read.threads ?? NO_THREADS;
-  const settled = useSettledItems(readThreads);
-  // Note that an answer's item carries no agent of its own, so each thread keeps the one it was read with.
-  const threads = useMemo(() => {
-    const byId = new Map(readThreads.map((thread) => [thread.id, thread]));
-    return settled.map(
-      (item): ChannelThread => ({ ...byId.get(item.id), ...item, channelId: channel.id }),
-    );
-  }, [readThreads, settled, channel.id]);
-  const viewed = viewedThreads(threads, view, readerId, ownTask);
-  const needsCount = needsReaderCount(threads, readerId);
   const rows = streamRows(viewed, { lookedAt, readerId, now });
   const above = useNeedsAbove(log, `${channel.id}:${view}:${viewed.length}:${needsCount}`);
+  useChosenInView(log, chosenId);
   const { onRefresh } = read;
   const pick = (item: InboxItem, label: string) => {
     const message = inboxThreadSend(item.thread ?? [], { ...EMPTY_INBOX_DRAFT, choices: [label] });
@@ -479,7 +649,7 @@ export function ChannelStream({
     );
   };
   return (
-    <section className={STREAM} aria-label={`#${channel.name}`} hidden={hidden}>
+    <StreamColumn label={`#${channel.name}`} hidden={hidden}>
       <Toolbar
         title={channelTitle(channel.name, view)}
         detail={channel.purpose}
@@ -493,8 +663,13 @@ export function ChannelStream({
           {`Could not read #${channel.name}.`}
         </ErrorState>
       ) : (
-        <Conversation subject={`${channel.id}:${view}`} list={log}>
+        <Conversation
+          subject={`${channel.id}:${view}`}
+          list={log}
+          onNearTop={read.hasOlder ? read.onOlder : undefined}
+        >
           <ConversationContent className={STREAM_BODY}>
+            {read.threads === undefined ? <ChannelStreamSkeleton /> : null}
             {read.threads !== undefined && rows.length === 0 ? (
               <NoteLine look={NOTE_LINE_LOOK.CENTRED}>
                 {emptyStreamWords(channel.name, view)}
@@ -522,6 +697,12 @@ export function ChannelStream({
                 </StreamDivider>
               ),
             )}
+            {/* Note that a refresh failing over the threads held keeps them, and says so under the newest. */}
+            {read.threads !== undefined && read.failure !== undefined ? (
+              <ErrorState
+                onRetry={onRefresh}
+              >{`Could not read #${channel.name} again.`}</ErrorState>
+            ) : null}
           </ConversationContent>
           <ConversationScrollButton />
           {above.count === 0 ? null : (
@@ -538,6 +719,6 @@ export function ChannelStream({
           )}
         </Conversation>
       )}
-    </section>
+    </StreamColumn>
   );
 }
