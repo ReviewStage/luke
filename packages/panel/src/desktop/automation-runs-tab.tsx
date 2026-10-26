@@ -7,7 +7,6 @@ import {
   type ChoiceItem,
   type CountPart,
   EmptyState,
-  LIST_VARIANT,
   List,
   ListMotion,
   STATUS_TONE,
@@ -106,7 +105,7 @@ export function runningRuns(read: WorkspaceRunsRead): number {
   return read !== undefined && "runs" in read ? shownRuns(read.runs, RUNS_SHOWN.RUNNING).length : 0;
 }
 
-/** The runs the narrowing keeps, in a card, or what the tab says where it keeps none. */
+/** The runs the narrowing keeps, in a plain list as an automation's own runs panel draws them, or what the tab says where it keeps none. */
 export function WorkspaceRuns({
   runs,
   shown,
@@ -127,7 +126,7 @@ export function WorkspaceRuns({
   return (
     <div ref={body}>
       <ListMotion root={body}>
-        <List label="Runs" variant={LIST_VARIANT.CARD} moves>
+        <List label="Runs" moves>
           {kept.map((run) => (
             <RunRow
               key={run.id}

@@ -1,5 +1,4 @@
 import {
-  LIST_VARIANT,
   List,
   ListMotion,
   ListRow,
@@ -16,7 +15,7 @@ import { type ReactNode, useCallback, useRef } from "react";
 /**
  * automation-list-frame.tsx -- the Automations list's boxes, which the list and its placeholders both draw.
  *
- * The list's toolbar, an owner's card, and a row's owner and next run each
+ * The list's toolbar, an owner's list, and a row's owner and next run each
  * stand in one component here, drawn by the list with what it
  * read and by its placeholder with blocks, so the placeholder is the list's
  * own shape rather than a copy of it. It stands outside the Automations
@@ -31,7 +30,7 @@ const AUTOMATION_GROUP = "automation-group [.automation-group+&]:mt-page-section
 export const AUTOMATION_ROW_META =
   "automation-row-meta inline-flex items-center gap-block-gap align-top";
 
-/** How many rows the list's placeholder stands, enough to fill the top of its card. */
+/** How many rows the list's placeholder stands, enough to fill the top of its list. */
 const SKELETON_ROWS = [
   { name: "38%", trigger: "52%" },
   { name: "46%", trigger: "40%" },
@@ -74,13 +73,15 @@ export function AutomationsActsSkeleton(): React.JSX.Element {
 }
 
 /**
- * One owner's automations in a card, under its heading where `headed`.
- * Note that a lone owner's card is still a region named by its owner, as a
+ * One owner's automations in a list, under its heading where `headed`.
+ * Note that the list is a plain one, each row lit on its own as the Tasks
+ * list's and the Inbox's are, so a row's hover, focus, and open menu draw
+ * as theirs do. A lone owner's list is still a region named by its owner, as a
  * headed one is by its heading, so a reader moving by landmark hears whose
  * automations they are either way. Its rows move (`ListMotion`): one made
  * slides in, one deleted slides out, and the rows under it glide up.
  */
-export function AutomationGroupCard({
+export function AutomationGroupList({
   name,
   headed,
   children,
@@ -90,14 +91,14 @@ export function AutomationGroupCard({
   children: ReactNode;
 }): React.JSX.Element {
   const root = useRef<HTMLElement | null>(null);
-  // Note that the card is a div or a section by whether it is headed, so the motion's root is held by a callback either takes.
+  // Note that the group is a div or a section by whether it is headed, so the motion's root is held by a callback either takes.
   const hold = useCallback((node: HTMLElement | null) => {
     root.current = node;
   }, []);
-  const card = (
+  const list = (
     <ListMotion root={root}>
       <SettingsSection title={headed ? name : undefined} frame={SETTINGS_SECTION_FRAME.NONE}>
-        <List label={name} variant={LIST_VARIANT.CARD} moves>
+        <List label={name} moves>
           {children}
         </List>
       </SettingsSection>
@@ -105,11 +106,11 @@ export function AutomationGroupCard({
   );
   return headed ? (
     <div ref={hold} className={AUTOMATION_GROUP}>
-      {card}
+      {list}
     </div>
   ) : (
     <section ref={hold} className={AUTOMATION_GROUP} aria-label={name}>
-      {card}
+      {list}
     </section>
   );
 }
@@ -158,14 +159,14 @@ export function AutomationOwnerFrame({
 }
 
 /**
- * The list while it is first read, in its own card and rows: each row's
+ * The list while it is first read, in its own list and rows: each row's
  * clock tile, its name over what fires it, its owner and its next run in their
  * columns, a narrow room's rows naming neither, and its switch, so the list
  * lands where the blocks stood. The rows open nothing.
  */
 export function AutomationListSkeleton({ narrow }: { narrow: boolean }): React.JSX.Element {
   return (
-    <AutomationGroupCard name="Automations" headed={false}>
+    <AutomationGroupList name="Automations" headed={false}>
       {SKELETON_ROWS.map(({ name, trigger }) => (
         <ListRow
           key={name}
@@ -188,6 +189,6 @@ export function AutomationListSkeleton({ narrow }: { narrow: boolean }): React.J
           actions={<SettingsControlSkeleton control={SETTINGS_SKELETON_CONTROL.SWITCH} />}
         />
       ))}
-    </AutomationGroupCard>
+    </AutomationGroupList>
   );
 }
