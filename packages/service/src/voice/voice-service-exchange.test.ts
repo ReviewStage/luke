@@ -20,6 +20,7 @@ import {
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
 import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
 import {
+  CALL_STANDING,
   callOpeningHistory,
   LIVE_CLIENT_EVENT,
   LIVE_INPUT_BOUNDS,
@@ -75,7 +76,7 @@ import {
   sendText,
   startFakeOpenAi,
 } from "../testing/voice-fakes.js";
-import { backendToolsOf, CALL_BACKEND } from "./call-backend.js";
+import { backendToolsOf } from "./call-backend.js";
 import { deploymentExchange } from "./deployment-exchange.js";
 import type { AttachedSession } from "./live-exchange.js";
 import { LOG_EVENT, type LogEntry } from "./log.js";
@@ -563,7 +564,7 @@ it.effect(
       assert.ok(Array.isArray(create.body.session.input));
       // The call's opening is the history's last message, so nothing is appended once it starts.
       assert.deepEqual(create.body.session.input.slice(1, -1), SEED);
-      assert.deepEqual(create.body.session.input.at(-1), callOpeningHistory());
+      assert.deepEqual(create.body.session.input.at(-1), callOpeningHistory(CALL_STANDING.SCOPING));
       assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
 
       const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
@@ -718,7 +719,7 @@ it.effect(
       assert.ok(create && isRecord(create.body.session));
       assert.equal(
         create.body.session.instructions,
-        sessionInstructions(backendToolsOf(CALL_BACKEND)),
+        sessionInstructions(CALL_STANDING.SCOPING, backendToolsOf(agent, false)),
       );
 
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
@@ -853,7 +854,7 @@ it.effect(
       assert.ok(create && isRecord(create.body.session));
       assert.equal(
         create.body.session.instructions,
-        sessionInstructions(backendToolsOf(CALL_BACKEND)),
+        sessionInstructions(CALL_STANDING.SCOPING, backendToolsOf(agent, false)),
       );
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       assert.equal((await sessionRowOf(context.target.userId, sessionId))?.agentId, agent.id);
@@ -1028,7 +1029,7 @@ it.effect(
         texts.some((text) => text.includes("Nothing in its plan is answered yet.")),
         false,
       );
-      assert.deepEqual(input.at(-1), callOpeningHistory());
+      assert.deepEqual(input.at(-1), callOpeningHistory(CALL_STANDING.AT_WORK));
 
       await hangUpConnection(session.desktop, session.attach, session.upstream);
       await until(
@@ -1075,7 +1076,7 @@ it.effect(
         texts.some((text) => text.includes("[task]")),
         false,
       );
-      assert.deepEqual(input.at(-1), callOpeningHistory());
+      assert.deepEqual(input.at(-1), callOpeningHistory(CALL_STANDING.NO_TASK));
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       const row = await database.run(sessionRecord.owned({ userId, sessionId }));
       assert.equal(row?.agentId, agent.id);
@@ -1189,7 +1190,7 @@ it.effect(
       assert.ok(Array.isArray(input));
       assert.equal(input.length, LIVE_INPUT_BOUNDS.MESSAGES);
       assert.ok(JSON.stringify(input[0]).includes(typed));
-      assert.deepEqual(input.at(-1), callOpeningHistory());
+      assert.deepEqual(input.at(-1), callOpeningHistory(CALL_STANDING.NO_TASK));
 
       await hangUpConnection(session.desktop, session.attach, session.upstream);
       await until(

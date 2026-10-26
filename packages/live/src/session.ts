@@ -5,7 +5,7 @@ import {
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
 } from "./events.js";
-import { sessionInstructions } from "./instructions.js";
+import { type CallStanding, sessionInstructions } from "./instructions.js";
 import type { InitialItem } from "./seed.js";
 import { LIVE_DEFAULTS, type LiveVoice, LiveVoiceSchema } from "./voices.js";
 
@@ -48,6 +48,8 @@ export const LIVE_DELEGATION_TYPE = "client";
 export const LiveDelegationTypeSchema = Schema.Literal(LIVE_DELEGATION_TYPE);
 
 interface LiveSessionOptions {
+  /** Where the agent the call speaks into stands, which its instructions' role and policies are chosen by (`sessionInstructions`). */
+  standing: CallStanding;
   /** The tools the call's backend holds, which its instructions name (`sessionInstructions`). */
   backendTools: readonly string[];
   /** The model, where a deployment pins one; `LIVE_DEFAULTS.MODEL` otherwise. */
@@ -64,7 +66,7 @@ interface LiveSessionOptions {
 
 /**
  * The session document a WebRTC session is created with: the model, the
- * task's call's instructions, the startup history where there is one, the
+ * call's instructions, the startup history where there is one, the
  * client's delegation, because the brain is the backend and nothing
  * else may act, no storage, the voice, and the renderer's data channel
  * restricted to the events named, so an untrusted window cannot append to the
@@ -76,7 +78,7 @@ export function liveSessionConfig(options: LiveSessionOptions) {
   const input = options.input ?? [];
   return {
     model: options.model ?? LIVE_DEFAULTS.MODEL,
-    instructions: sessionInstructions(options.backendTools),
+    instructions: sessionInstructions(options.standing, options.backendTools),
     ...(input.length > 0 ? { input: [...input] } : undefined),
     delegation: { type: LIVE_DELEGATION_TYPE },
     store: false,

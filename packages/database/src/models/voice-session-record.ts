@@ -1,3 +1,8 @@
+import {
+  CODING_AGENT_MACHINE,
+  type CodingAgentKind,
+  type CodingAgentMachine,
+} from "@luke/features/coding-agent-wire";
 import type { Task } from "@luke/features/task-wire";
 import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
@@ -99,13 +104,18 @@ interface EarlierCallsClaim {
 
 /**
  * An agent the account reaches, as a call into it is checked and opened:
- * the task it works on, whether it is archived, what answers its
+ * the task it works on, the repository it works in, its kind, and where it runs, which
+ * decide the tools it is offered, whether it is archived, what answers its
  * conversation, and that conversation under the member who started it,
  * which the call's turns and record are written to whoever is calling.
  */
 export interface HeldVoiceAgent {
   readonly agentId: string;
   readonly taskId: string | null;
+  readonly repository: string | null;
+  readonly kind: CodingAgentKind;
+  /** Where its runner runs; a Vercel Sandbox where unsaid, as the agent reads. */
+  readonly machine: CodingAgentMachine;
   readonly archived: boolean;
   /** What answers the agent's conversation; eve for a conversation from before the column. A call reaches eve alone. */
   readonly runtime: ConversationRuntime;
@@ -538,6 +548,9 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
         return {
           agentId: agent.value.id,
           taskId: agent.value.taskId,
+          repository: agent.value.repository,
+          kind: agent.value.kind,
+          machine: agent.value.machine ?? CODING_AGENT_MACHINE.VERCEL,
           archived: agent.value.archivedAt !== null,
           runtime: routing.value.runtime,
           conversation: { userId: agent.value.userId, conversationId: agent.value.conversationId },

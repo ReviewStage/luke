@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
@@ -105,6 +105,9 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
         const held = {
           agentId: agent.id,
           taskId: task.id,
+          repository: null,
+          kind: CODING_AGENT_KIND.CODER,
+          machine: CODING_AGENT_MACHINE.VERCEL,
           archived: false,
           runtime: CONVERSATION_RUNTIME.EVE,
           conversation: { userId: starter, conversationId: agent.conversationId },
