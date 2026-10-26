@@ -99,6 +99,7 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT, itemId: OTHER },
     `${HOME}/agent/${AGENT}/inbox/${OTHER}`,
   ],
+  [{ kind: LINK_PLACE.CHANNEL, channelId: OTHER }, `${HOME}/channel/${OTHER}`],
   [{ kind: LINK_PLACE.AUTOMATIONS }, `${HOME}/automations`],
   [{ kind: LINK_PLACE.AUTOMATION, automationId: OTHER }, `${HOME}/automation/${OTHER}`],
   [

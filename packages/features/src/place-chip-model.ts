@@ -56,6 +56,7 @@ const KIND_NAME = {
   [LINK_PLACE.MESSAGE]: "Message",
   [LINK_PLACE.INBOX]: "Inbox",
   [LINK_PLACE.INBOX_ITEM]: "Inbox item",
+  [LINK_PLACE.CHANNEL]: "Channel",
   [LINK_PLACE.AUTOMATIONS]: "Automations",
   [LINK_PLACE.AUTOMATION]: "Automation",
   [LINK_PLACE.AUTOMATION_RUN]: "Run",
