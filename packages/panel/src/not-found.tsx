@@ -2,7 +2,7 @@ import { EmptyState, type EmptyStateAction } from "@luke/ui";
 import { SearchXIcon } from "lucide-react";
 
 /**
- * not-found.tsx -- the window's one answer to a place it cannot show: a task, an agent, an automation, or an Inbox item that is not there for whoever opened it, and the admin dashboard's for an account.
+ * not-found.tsx -- the window's one answer to a place it cannot show: a task, an agent, an automation, an Inbox item, or a channel's thread that is not there for whoever opened it, and the admin dashboard's for an account.
  *
  * A link to anything in Luke may reach someone the thing is not shared
  * with, and the service answers them as it answers a thing that does not
@@ -18,6 +18,7 @@ export const NOT_FOUND_THING = {
   TASK: "task",
   AGENT: "agent",
   INBOX_ITEM: "Inbox item",
+  THREAD: "thread",
   AUTOMATION: "automation",
   PERSON: "profile",
   ACCOUNT: "account",

@@ -8,6 +8,7 @@ import { inboxWaitsOn } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -77,6 +78,7 @@ import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
+import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, rowMenu } from "./action-menu.js";
 import { useAgentArchive } from "./agent-archive.js";
 import { STANDING_GLYPH } from "./automation-runs-panel.js";
@@ -162,6 +164,12 @@ function PersonSection({
     </PersonSectionFrame>
   );
 }
+
+/** What the section of what waits says where some of it could not be read, and, with Channels on, while it is read, of threads rather than the Inbox. */
+const ITEMS_NOT_READ = "Some inbox items could not be read.";
+const THREADS_NOT_READ = "Some threads could not be read.";
+const THREADS_READING = "Reading your threads…";
+const THREADS_LIST = "Threads";
 
 /** What an agent's row is, naming its ⋯ and menu "Agent actions". */
 const AGENT_THING = "Agent";
@@ -641,6 +649,8 @@ function PersonColumn({
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;
   const read = useWaitingItems(tasks);
+  // With Channels on what waits is threads, so its wait and its failure say so.
+  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   // An item on a task is theirs where it waits on them (`inboxWaitsOn`), its task's assignee or else its agent's starter, by the task's row from a service that names neither.
   const waiting = read.items.filter(
     ({ holder, item }) =>
@@ -728,11 +738,17 @@ function PersonColumn({
         {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
         {read.failed ? (
           <div className="home-note my-tight-gap">
-            <ErrorState onRetry={read.onRetry}>Some inbox items could not be read.</ErrorState>
+            <ErrorState onRetry={read.onRetry}>
+              {channelsOn ? THREADS_NOT_READ : ITEMS_NOT_READ}
+            </ErrorState>
           </div>
         ) : waiting.length === 0 && read.reading ? (
           <SectionSkeleton>
-            <InboxListSkeleton />
+            {channelsOn ? (
+              <InboxListSkeleton reading={THREADS_READING} list={THREADS_LIST} />
+            ) : (
+              <InboxListSkeleton />
+            )}
           </SectionSkeleton>
         ) : null}
         {waiting.length === 0 ? null : (

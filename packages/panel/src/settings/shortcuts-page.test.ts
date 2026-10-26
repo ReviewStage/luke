@@ -83,7 +83,7 @@ test("the window's Escape is one row, under General, however many layers it step
 });
 
 test("the keys that answer in place stand in the group of what they act on", () => {
-  assert.ok(groupRows("Tasks").includes("Choose an inbox option by its number 1 – 9"));
+  assert.ok(groupRows("Tasks").includes("Choose an ask's option by its number 1 – 9"));
   assert.ok(groupRows("Tasks").includes("Choose an issue for a new task ⌘ L"));
   assert.ok(groupRows("Tabs & panels").includes("Close focused tab ⌫"));
   assert.ok(groupRows("Navigation").includes("Go to chosen card ⏎"));

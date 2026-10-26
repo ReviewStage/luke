@@ -478,7 +478,7 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, Automations, or Settings, and Luke once signed out", () => {
+test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, or Channels in its place, Automations, or Settings, and Luke once signed out", async () => {
   const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
     mount(
       inboxOpen,
@@ -514,6 +514,13 @@ test("the window is called by what stands in it: the plan on screen in its own w
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
   });
   assert.equal(document.title, "Automations — Acme");
+  act(() => root?.unmount());
+
+  // With Channels on the Inbox's place shows channels, and the window is called for them.
+  await handBridge(experimentsOn(EXPERIMENT.CHANNELS));
+  mount(true, false, { workspaces: [ACME], workspace: ACME });
+  await settle();
+  assert.equal(document.title, "Channels — Acme");
 });
 
 test("a plan opened with its Inbox tab shown rather than its plan is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {

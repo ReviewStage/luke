@@ -159,7 +159,7 @@ test("another agent's message in its whole shape is copied as its words alone, w
   );
 });
 
-test("an inbox answer is copied without its item's key, as the tab draws it", () => {
+test("a thread's answer is copied without its item's key, as the tab draws it", () => {
   const answer = said(
     "answer",
     MESSAGE_ROLE.USER,
@@ -177,7 +177,7 @@ test("an inbox answer is copied without its item's key, as the tab draws it", ()
       "## Plan",
       "Build invitations.",
       "## Developer",
-      'Inbox answer on "Ship it?": Approved.',
+      'Thread answer on "Ship it?": Approved.',
     ].join("\n\n") + "\n",
   );
 });
@@ -351,7 +351,7 @@ test("an agent's inbox posts and withdrawals from version 5 are copied as the ro
   const markdown = transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE);
   assert.ok(
     markdown.includes(
-      "- Posted to your inbox: 7 days or 14?\n- Withdrew an ask in your inbox: invite-ttl\n- Posted to your inbox: Still 7 days?",
+      "- Posted a thread: 7 days or 14?\n- Withdrew an ask: invite-ttl\n- Posted a thread: Still 7 days?",
     ),
     markdown,
   );

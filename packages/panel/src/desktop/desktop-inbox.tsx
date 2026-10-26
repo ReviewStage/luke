@@ -484,7 +484,7 @@ export function DesktopInbox({
     <section className={INBOX_VIEW_ITEMS} aria-label="Thread not found">
       <Toolbar end={TOOLBAR_INSET.COLUMN} />
       <NotFound
-        thing={NOT_FOUND_THING.INBOX_ITEM}
+        thing={NOT_FOUND_THING.THREAD}
         action={
           channel === undefined
             ? undefined

@@ -301,7 +301,7 @@ function automationStart(automation: Automation, run: ActedRun): AutomationStart
   const lines = [
     automation.action.prompt,
     "---",
-    `Luke started this run for the automation "${automation.name}" because ${firingSentence(automation, run)}. No one is watching it as it runs: decide on your own, and post to the inbox only what needs the developer.`,
+    `Luke started this run for the automation "${automation.name}" because ${firingSentence(automation, run)}. No one is watching it as it runs: decide on your own, and post a thread only for what needs the developer.`,
     ...githubEventLines(run),
   ];
   // Note that the body takes what room the rest leaves under the prompt's bound, less its own fence and lead line.

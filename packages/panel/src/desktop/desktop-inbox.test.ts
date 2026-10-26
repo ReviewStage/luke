@@ -9397,7 +9397,7 @@ test("an unread post wears the dot, and its ⋯ offers the thread's acts, its Mo
   assert.deepEqual(moves, [{ threadId: THRESHOLD.id, channelId: APP_CHANNEL.id }]);
 });
 
-test("a post pressed in a channel's stream opens its thread in the side panel, another post's press swaps the panel to its thread, and hiding the panel closes the thread while the stream stands as it stood, its look not yet stamped", async () => {
+test("a post pressed in a channel's stream opens its thread in the side panel as its Thread tab, another post's press swaps the panel to its thread, and hiding the panel closes the thread while the stream stands as it stood, its look not yet stamped", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
   // Note that the stream shows everyone's threads, so the two tasks' posts stand whoever owns them.
@@ -9442,6 +9442,11 @@ test("a post pressed in a channel's stream opens its thread in the side panel, a
   await settle();
   assert.equal(panel().open, true);
   assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX, "the thread is the panel's Inbox tab");
+  assert.deepEqual(
+    [...page.querySelectorAll('aside.side-panel [role="tab"]')].map((tab) => tab.textContent),
+    ["Thread"],
+    "the tab is named for the thread, never the Inbox",
+  );
   assert.match(threadBeside(), /Alert at 80%\?/u);
   assert.match(chosenPost() ?? "", /Alert at 80%\?/u);
 
@@ -9778,7 +9783,7 @@ test("an archived channel shown stays shown when a later read of the archived ch
   act(() => channelPlaceNow?.onChoose(GENERAL.id));
 });
 
-test("a thread opened in a channel's stream that is gone says so beside the stream, with the way back to it", async () => {
+test("a thread opened in a channel's stream that is gone says so beside the stream, as a thread, with the way back to it", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
   answerChannels({});
@@ -9791,7 +9796,10 @@ test("a thread opened in a channel's stream that is gone says so beside the stre
   });
   await settle();
   const beside = page.querySelector("aside.side-panel") ?? assert.fail("the panel stands");
-  assert.match(beside.textContent ?? "", /doesn't exist, or you don't have access to it/u);
+  assert.match(
+    beside.textContent ?? "",
+    /This thread doesn't exist, or you don't have access to it/u,
+  );
 
   act(() =>
     [...beside.querySelectorAll("button")]

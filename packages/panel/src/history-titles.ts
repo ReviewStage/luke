@@ -47,8 +47,9 @@ import type { TasksControl } from "./tasks/use-tasks-tab.js";
 /** What a version history's step says under its task's name. */
 const VERSION_HISTORY_WORDS = "Version history";
 
-/** What the Inbox's step is called. */
+/** What the Inbox's step is called, and what it is called while Channels shows channels in its place and no channel names it. */
 const INBOX_WORDS = "Inbox";
+const CHANNELS_WORDS = "Channels";
 
 /** What a Page tab is called where the window does not read its page's title. */
 const PAGE_WORDS = "Page";
@@ -132,11 +133,12 @@ function taskName(tasks: StepNameTasks, taskId: string | undefined): string | un
   return tasks.tasks.find((task) => task.id === taskId)?.name;
 }
 
-/** What the step the window stands on is called, in a room that is `narrow` or not; none while nothing names it, as a task not yet listed. */
+/** What the step the window stands on is called, in a room that is `narrow` or not, with Channels on or not; none while nothing names it, as a task not yet listed. */
 export function stepTitle(
   tab: PanelTab,
   tasks: StepTitleTasks,
   narrow = false,
+  channelsOn = false,
 ): StepTitle | undefined {
   if (tab === PANEL_TAB.SETTINGS) return { label: "Settings" };
   if (tasks.inboxView.open) {
@@ -144,7 +146,7 @@ export function stepTitle(
     const single = narrow || tasks.inboxView.single === true;
     const chosen = single && tasks.inboxView.listed ? undefined : tasks.inboxView.chosen;
     const holder = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
-    return { label: INBOX_WORDS, detail: taskName(tasks, holder) };
+    return { label: channelsOn ? CHANNELS_WORDS : INBOX_WORDS, detail: taskName(tasks, holder) };
   }
   if (tasks.agentView.agentId !== undefined) return { label: "Agent" };
   if (tasks.personView.userId !== undefined) {

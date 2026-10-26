@@ -236,8 +236,8 @@ const SCOPE = describeWire(
 
 const ARCHIVE_SUCCESSFUL = describeWire(
   Schema.Boolean,
-  "Whether each run's agent is archived once it finishes without failing and leaves nothing " +
-    "open in the inbox; false where left out.",
+  "Whether each run's agent is archived once it finishes without failing and leaves no thread " +
+    "open; false where left out.",
 );
 
 const AGENT_ID = describeWire(

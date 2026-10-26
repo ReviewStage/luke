@@ -988,6 +988,8 @@ function stripTabs(input: {
   inboxWaiting: number;
   /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
   inboxDrafted: boolean;
+  /** Whether the Inbox kind holds a channel's thread, as it does beside the window's Inbox, and is named Thread. */
+  thread: boolean;
   /** The task's Inbox as its board reads, which its tab's card says; none beside anything but a task's page. */
   inbox: InboxBoardView | undefined;
 }): DrawnTab[] {
@@ -1013,7 +1015,7 @@ function stripTabs(input: {
   const fixed = panel.tabs.map((tab) => ({
     tab,
     look: look(tab, {
-      ...tabLook({ kind: TAB_KIND.PANEL, tab, plan: input.plan }),
+      ...tabLook({ kind: TAB_KIND.PANEL, tab, plan: input.plan, thread: input.thread }),
       detail: tab === SIDE_PANEL_TAB.INBOX && inboxWaiting > 0 ? String(inboxWaiting) : undefined,
       endMark:
         tab === SIDE_PANEL_TAB.INBOX && inboxDrafted && !chosen(tab) ? <DraftMark /> : undefined,
@@ -1311,6 +1313,8 @@ function PanelTabs({
     planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
     inboxWaiting: inbox?.waiting.length ?? 0,
     inboxDrafted,
+    // Note that beside the window's Inbox the one Inbox tab is a channel's thread, never a task's Inbox (`use-side-panel.ts`'s `thread`).
+    thread: holder === SIDE_PANEL_HOLDER.INBOX,
     inbox,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);

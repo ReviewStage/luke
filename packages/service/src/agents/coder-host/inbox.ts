@@ -86,8 +86,8 @@ import {
  * to look at, review, or test by hand, such as a pull request, goes in a
  * thread rather than in a message, where it is lost in the transcript: a
  * thread of its own on the service (`inbox-store.ts`), posted to one of its
- * workspace's open channels, which every member reads, and drawn in the
- * developer's Inbox as well. The agent chooses the channel per thread by
+ * workspace's open channels, which every member reads, and drawn on the
+ * agent's task as well. The agent chooses the channel per thread by
  * the purposes its tool's words list (`postThreadDescription`), names it
  * by name, `#` or not, and may address the thread's ask to a member by
  * their mention link; a name no open channel goes by and a link naming no
@@ -136,7 +136,7 @@ const MAX_VIDEO_MB = (INBOX_BOUNDS.MAX_VIDEO_BYTES / 1_000_000).toFixed(1);
 /** What `post_thread`'s words say before the workspace's channels. */
 const POST_THREAD_WORDS =
   "Post a thread to one of your workspace's channels, apart from your transcript: something you need from a member, or something ready for them to look at or review, " +
-  "such as a pull request you opened or a page you showed. Every member of the workspace reads every channel, and the developer sees your threads in their Inbox too. " +
+  "such as a pull request you opened or a page you showed. Every member of the workspace reads every channel, and the developer sees each of your threads in its channel and on your task, where you work on one. " +
   "Post only what a person would act on or be glad to know; an update on something you posted goes into its thread, never a thread of its own. " +
   "Each post is one message on a thread under key, your own short lowercase slug such as branch-protection. " +
   "The first post under a key opens its thread and must name its title; a later post under the same key adds a message to that thread, never a second one, " +

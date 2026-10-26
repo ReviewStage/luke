@@ -955,7 +955,7 @@ export const inboxAnsweredSchema = EffectSchema.Struct({
 });
 
 /** How the developer's answer opens, in the message that hands it to the agent. */
-export const INBOX_ANSWER_LEAD = "Inbox answer";
+export const INBOX_ANSWER_LEAD = "Thread answer";
 
 /**
  * A member's close of one item without an answer: the revision they were
@@ -972,7 +972,7 @@ export const inboxCloseRequestSchema = EffectSchema.Struct({
 export type InboxCloseRequest = typeof inboxCloseRequestSchema.Type;
 
 /** How a member's close opens, in the message that tells the agent of it. */
-export const INBOX_CLOSE_LEAD = "Inbox closed";
+export const INBOX_CLOSE_LEAD = "Thread closed";
 
 /**
  * The message a member's close reaches the agent as: a first line naming
@@ -1112,7 +1112,7 @@ export type InboxReadAllRequest = typeof inboxReadAllRequestSchema.Type;
 export const inboxReadAllSchema = EffectSchema.Struct({ marked: countedNumber, ...writtenIn });
 
 /** How a member's message on an item's thread opens, in the message that hands it to the agent. */
-export const INBOX_MESSAGE_LEAD = "Inbox message";
+export const INBOX_MESSAGE_LEAD = "Thread message";
 
 /**
  * The message a member's message on an item's thread reaches the agent as:
@@ -1126,9 +1126,16 @@ export function inboxThreadMessage(item: Pick<InboxItem, "key" | "title">, text:
   return text.trim() === "" ? header : `${header}\n\n${text.trim()}`;
 }
 
-/** An answer's, a close's, or a thread message's first line, as `inboxAnswerMessage`, `inboxClosedMessage`, and `inboxThreadMessage` write it. */
+/** How an answer, a close, and a thread message opened before they were said as a thread's, which a transcript written then still holds, each by the lead it reads back as now. */
+const EARLIER_LEADS: Readonly<Record<string, string>> = {
+  "Inbox answer": INBOX_ANSWER_LEAD,
+  "Inbox closed": INBOX_CLOSE_LEAD,
+  "Inbox message": INBOX_MESSAGE_LEAD,
+};
+
+/** An answer's, a close's, or a thread message's first line, as `inboxAnswerMessage`, `inboxClosedMessage`, and `inboxThreadMessage` write it, or as they wrote it before. */
 const INBOX_LINE_HEAD = new RegExp(
-  `^(${INBOX_ANSWER_LEAD}|${INBOX_CLOSE_LEAD}|${INBOX_MESSAGE_LEAD}) on (".*") \\(key [a-z0-9][a-z0-9._-]*\\):`,
+  `^(${[INBOX_ANSWER_LEAD, INBOX_CLOSE_LEAD, INBOX_MESSAGE_LEAD, ...Object.keys(EARLIER_LEADS)].join("|")}) on (".*") \\(key [a-z0-9][a-z0-9._-]*\\):`,
   "u",
 );
 
@@ -1136,10 +1143,14 @@ const INBOX_LINE_HEAD = new RegExp(
  * An inbox answer or thread message as the developer reads it back in the
  * agent's transcript: its first line without the item's key, which names the
  * item to the agent and says nothing the title beside it does not to a
- * person. Any other line is answered as it is.
+ * person, and led as a thread's even where it was written as the Inbox's.
+ * Any other line is answered as it is.
  */
 export function inboxLineWords(text: string): string {
-  return text.replace(INBOX_LINE_HEAD, "$1 on $2:");
+  return text.replace(
+    INBOX_LINE_HEAD,
+    (_line, lead: string, title: string) => `${EARLIER_LEADS[lead] ?? lead} on ${title}:`,
+  );
 }
 
 /** A field's value as words: a number as it prints, yes or no for a boolean. */
