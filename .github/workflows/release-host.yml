@@ -1,0 +1,117 @@
+name: Release host
+
+# Builds Luke's host daemon (apps/host) for linux-x64 and linux-arm64 and
+# publishes both tarballs, each with its .sha256, to a GitHub release of their
+# own, tagged host-v<version> to match apps/host/package.json. A manual
+# dispatch is a rehearsal: it builds and keeps the tarballs as an artifact,
+# and publishes nothing.
+#
+# The release is never marked latest, because the desktop's download link and
+# its updater read releases/latest (scripts/release/publish-github.sh). It
+# stays a draft until both tarballs have uploaded, so the install script never
+# names a release with one missing. Once it is published, HOST_RELEASE in
+# packages/features/src/host-release.ts moves to its version and the digests
+# the .sha256 files carry, which is what the served install.sh checks.
+
+on:
+  push:
+    tags:
+      - "host-v*"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-host-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build linux-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+
+      - name: Resolve release version
+        run: |
+          VERSION=$(node -p "require('./apps/host/package.json').version")
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF" != "refs/tags/host-v$VERSION" ]]; then
+            echo "error: tag $GITHUB_REF does not match host version host-v$VERSION" >&2
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Build the daemon and the runner
+        run: |
+          pnpm --filter @luke/agent-runner build
+          pnpm --filter @luke/host-daemon build
+
+      - name: Package the tarball
+        run: pnpm --filter @luke/host-daemon package -- --arch "${{ matrix.arch }}"
+
+      - name: Check the tarball
+        run: |
+          cd apps/host/dist/release
+          tarball="luke-host-$VERSION-linux-${{ matrix.arch }}.tar.gz"
+          sha256sum -c "$tarball.sha256"
+          scratch=$(mktemp -d)
+          tar -xzf "$tarball" -C "$scratch"
+          reported=$("$scratch/luke-host/bin/luke-host" version)
+          if [[ "$reported" != "$VERSION" ]]; then
+            echo "error: the packaged daemon says $reported, not $VERSION" >&2
+            exit 1
+          fi
+          "$scratch/luke-host/node/bin/node" --version
+          sh -n "$scratch/luke-host/bin/luke-host"
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: luke-host-${{ env.VERSION }}-linux-${{ matrix.arch }}
+          path: |
+            apps/host/dist/release/luke-host-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz
+            apps/host/dist/release/luke-host-${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#host-v}"
+          cd release
+          sha256sum -c ./*.sha256
+          gh release create "$TAG" --draft --latest=false --verify-tag \
+            --title "Luke host $VERSION" \
+            --notes "Luke's host daemon $VERSION for linux-x64 and linux-arm64. Install it from Settings › Agents › Hosts › Add hosts." \
+            ./*.tar.gz ./*.sha256
+          gh release edit "$TAG" --draft=false --latest=false
+          echo "Move HOST_RELEASE (packages/features/src/host-release.ts) to $VERSION with these digests:"
+          cat ./*.sha256
