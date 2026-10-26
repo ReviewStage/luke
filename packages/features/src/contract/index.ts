@@ -18,6 +18,7 @@ import { dictationContract } from "./dictation.js";
 import { eventsContract } from "./events.js";
 import { githubContract } from "./github.js";
 import { githubTokenContract } from "./github-token.js";
+import { hostsContract } from "./hosts.js";
 import { inboxContract } from "./inbox.js";
 import { installedSkillsContract } from "./installed-skills.js";
 import { integrationsContract } from "./integrations.js";
@@ -58,6 +59,7 @@ export const hostedContract = {
   events: eventsContract,
   github: githubContract,
   githubToken: githubTokenContract,
+  hosts: hostsContract,
   inbox: inboxContract,
   installedSkills: installedSkillsContract,
   integrations: integrationsContract,

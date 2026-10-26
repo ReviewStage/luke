@@ -147,6 +147,16 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_AGENT_REQUESTS: "/api/device-agents/requests",
   /** One waiting request, named by its id, claimed for the Mac (POST). */
   DEVICE_AGENT_REQUEST_CLAIM: "/api/device-agents/requests/claim",
+  /** A host's enroll: an install token traded for a device of kind host and its device secret, answered once (POST). `host-wire.ts` declares the bodies. */
+  DEVICE_AGENT_ENROLL: "/api/device-agents/enroll",
+  /** The account's hosts, as Settings lists them (GET). `host-wire.ts` declares the bodies. */
+  HOSTS: "/api/hosts",
+  /** One of the account's hosts removed, its secret refused at once (POST). */
+  HOST_REMOVE: "/api/hosts/remove",
+  /** An install token of the account's kept by its hash, to enroll its hosts (POST). */
+  HOST_INSTALL_TOKENS: "/api/hosts/install-tokens",
+  /** One of the account's install tokens revoked, so it enrolls no box again (POST). */
+  HOST_INSTALL_TOKEN_REVOKE: "/api/hosts/install-tokens/revoke",
   /**
    * The shell commands the account's agents asked to run on the developer's
    * Mac: the ones waiting, held open while none is, each claimed for the
