@@ -469,7 +469,7 @@ const enrolledHost = (userId: string) =>
       version: HOST_VERSION.FLOOR,
       secretHash: secret.hash,
     });
-    assert.ok(Option.isSome(enrolled));
+    assert.ok("userId" in enrolled, "the host was not enrolled");
     return { deviceId, secret: secret.secret };
   });
 
@@ -489,7 +489,7 @@ const agentOnDevice = (
       prompt: null,
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-      machine: CODING_AGENT_MACHINE.MAC,
+      machine: CODING_AGENT_MACHINE.DEVICE,
       deviceId,
     });
     return Option.getOrThrow(started).agent.id;

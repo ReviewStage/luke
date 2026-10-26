@@ -152,7 +152,7 @@ const hostGithubToken = /* @__PURE__ */ Effect.fn("web/hostGithubToken")(functio
     found,
     (row) =>
       row.userId === host.userId &&
-      row.machine === CODING_AGENT_MACHINE.MAC &&
+      row.machine === CODING_AGENT_MACHINE.DEVICE &&
       row.deviceId === host.deviceId,
   );
   if (Option.isNone(agent) || !hasRepository(agent.value)) {
