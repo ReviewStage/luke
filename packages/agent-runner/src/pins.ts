@@ -113,3 +113,21 @@ export const CLAUDE_CODE_MAC_PIN: MacToolPin = {
   BINARY: "claude",
   TEAM: "Q6L2SF6YDW",
 };
+
+/**
+ * Codex on a Mac: the same release as the sandbox's (`CODEX_PIN.VERSION`),
+ * as npm keeps its macOS arm64 package, signed by OpenAI, the members of the
+ * build under `ROOT` kept as the archive lays them out, so the binary finds
+ * its `codex-path` tools beside it.
+ */
+export const CODEX_MAC_PIN: MacToolPin = {
+  NAME: "codex",
+  VERSION: CODEX_PIN.VERSION,
+  ARCHIVE: `https://registry.npmjs.org/@openai/codex/-/codex-${CODEX_PIN.VERSION}-darwin-arm64.tgz`,
+  SHA256: "1193ff4ce72387a5d6c34820b54a9dc57d007c67a958e8acb4715924facd3c31",
+  BYTES: 137_871_195,
+  ROOT: "package/vendor/aarch64-apple-darwin",
+  MEMBERS: ["bin/codex", "bin/codex-code-mode-host", "codex-path/rg", "codex-package.json"],
+  BINARY: "bin/codex",
+  TEAM: "2DC432GLL2",
+};
