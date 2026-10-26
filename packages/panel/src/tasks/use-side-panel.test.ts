@@ -669,6 +669,43 @@ test("beside a channel's stream the panel's Inbox tab is the thread open there: 
   );
 });
 
+test("closing a channel's thread beside its stream leaves the task's own Inbox tab viewed as it was, so a tab closed on the task's page still goes back to it", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ thread }: { thread: boolean }) {
+    control = useSidePanel(
+      undefined,
+      thread ? { id: TASK, holds: {}, bare: true, thread: true } : usedTask(TASK),
+      [],
+      [],
+      [],
+      [],
+      [AGENT],
+    );
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const render = (thread: boolean) => act(() => root.render(createElement(Probe, { thread })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  render(false);
+  act(() => panel().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.INBOX));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+
+  render(true);
+  act(() => panel().onChoose(SIDE_PANEL_TAB.INBOX));
+  act(() => panel().onClose(SIDE_PANEL_TAB.INBOX));
+
+  render(false);
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX, "the tab viewed before the Board is the Inbox");
+});
+
 test("an archived agent's Pull request tab is drawn as a live agent's, while its Terminal tab is not", () => {
   const drawn = { taskAgents: ["live"], heldAgents: ["live", "archived"] };
   assert.equal(drawsChanges({ changes: "archived" }, drawn), true);

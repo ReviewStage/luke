@@ -1384,12 +1384,11 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
                     }
                   : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
-  const forgotten = withoutViewed(closed, drawn.task.id, tab);
-  // Note that a bare panel's thread tab closes with its thread, which its holder closes as it asks this, so it is left out of what stands.
-  const after =
-    drawn.task.bare === true && isFixedTab(tab)
-      ? { ...drawn, task: { ...drawn.task, thread: undefined } }
-      : drawn;
+  // Note that a bare panel's thread tab closes with its thread, which its holder closes as it asks this, so it is left out of what stands,
+  // and the task's own Inbox tab keeps its place among those viewed, since it was never closed.
+  const threadTab = drawn.task.bare === true && isFixedTab(tab);
+  const forgotten = threadTab ? closed : withoutViewed(closed, drawn.task.id, tab);
+  const after = threadTab ? { ...drawn, task: { ...drawn.task, thread: undefined } } : drawn;
   const left = stripOf(forgotten, after);
   // Note that only a close that empties the strip shuts the panel, because a
   // tab the strip never drew may close without the developer seeing it go.
