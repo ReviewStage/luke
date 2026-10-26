@@ -681,7 +681,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
   );
 
   it.effect(
-    "edit_plan holds a turn to its 40 notes across calls, and a new turn starts its count afresh",
+    "edit_plan holds a turn to its 40 notes across calls, refuses notes before the turn is recorded, and a new turn starts its count afresh",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -704,6 +704,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
           return Effect.promise(() => client.callTool({ name: "edit_plan", arguments: { notes } }));
         };
 
+        const early = yield* editPlan(1, "Unrecorded turn");
         yield* runTurn;
         const first = yield* editPlan(39, "First turn");
         const fortieth = yield* editPlan(1, "First turn's last");
@@ -718,6 +719,10 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         const next = yield* editPlan(1, "Second turn");
         yield* Effect.promise(() => client.close());
 
+        assert.deepEqual(firstJson(early), {
+          status: "rejected",
+          reason: PLAN_EDIT_REFUSAL.NO_TURN,
+        });
         assert.deepEqual(firstJson(first), { status: "accepted", taken: 39 });
         assert.deepEqual(firstJson(fortieth), { status: "accepted", taken: 1 });
         assert.deepEqual(firstJson(past), {

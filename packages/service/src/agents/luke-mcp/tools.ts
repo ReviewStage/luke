@@ -339,18 +339,19 @@ function runAgentBrowser(admitted: AdmittedConversation, input: UnparsedWireValu
  * One `edit_plan` call under the turn's cap: its notes reserved against the
  * conversation's running turn in the store, the count before them handed to
  * the door as eve hands its session's, and the reservation settled to what
- * was taken once the door answers. A conversation with no turn running
- * holds no count, so its call is held to the cap alone. Note that the
- * settle is the reservation's release, because a call interrupted mid-save,
- * by a Stop or a request gone away, must not leave notes never taken counted
- * for the rest of the turn; the door itself stays interruptible, since its
- * read of the sandbox waits on no bound of its own. An interrupted call gives
- * its whole reservation back: a save it cut short rolls back, and one that
- * had just committed goes uncounted, which costs the cap one call's notes at
- * most. And a settle that
- * fails is logged and the door's answer stands, because the notes are saved
- * by then and a retry would take them twice, so the turn only counts the
- * reservation whole.
+ * was taken once the door answers. A call that asks for notes before the
+ * runner's events have recorded its turn is refused, to be tried again,
+ * since there is no count yet to hold it to; one that asks for none has
+ * nothing to count, and reaches the door. Note that the settle is the
+ * reservation's release, because a call interrupted mid-save, by a Stop or a
+ * request gone away, must not leave notes never taken counted for the rest
+ * of the turn; the door itself stays interruptible, since its read of the
+ * sandbox waits on no bound of its own. An interrupted call gives its whole
+ * reservation back: a save it cut short rolls back, and one that had just
+ * committed goes uncounted, which costs the cap one call's notes at most.
+ * And a settle that fails is logged and the door's answer stands, because
+ * the notes are saved by then and a retry would take them twice, so the
+ * turn only counts the reservation whole.
  */
 function runTurnCappedEditPlan(
   admitted: AdmittedConversation,
@@ -361,13 +362,14 @@ function runTurnCappedEditPlan(
   const requested = requestedNotes(input);
   return Effect.acquireUseRelease(
     reserveTurnPlanNotes(userId, conversationId, requested),
-    (turn) =>
-      runAgentEditPlan(
-        admitted,
-        input,
-        Option.isSome(turn) ? turn.value.taken - requested : 0,
-        sandbox,
-      ),
+    (turn) => {
+      if (Option.isSome(turn)) {
+        return runAgentEditPlan(admitted, input, turn.value.taken - requested, sandbox);
+      }
+      return requested > 0
+        ? Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.NO_TURN))
+        : runAgentEditPlan(admitted, input, 0, sandbox);
+    },
     (turn, exit) => {
       if (Option.isNone(turn)) return Effect.void;
       const answer = Exit.isSuccess(exit) ? exit.value : undefined;

@@ -140,6 +140,8 @@ export const PLAN_EDIT_REFUSAL = {
   TOO_MANY: `Not saved: a turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes on the plan. Go on, and name what you would have noted in your message.`,
   UNAVAILABLE: "Not saved: the service could not reach its store.",
   NO_TASK: "Not saved: you work on no task, so there is no plan of yours to update.",
+  NO_TURN:
+    "Not saved: Luke has not recorded your turn yet, so its notes cannot be counted. Try again in a moment.",
   TOO_MANY_PICTURES: `Not saved: the plan holds ${PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN} pictures, as many as a plan may. Leave the pictures out.`,
   TOO_MANY_VIDEOS: `Not saved: the plan holds ${PLAN_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_PLAN} videos, as many as a plan may. Leave the videos out, or show them with show_image instead.`,
   TASK_GONE: "Not saved: this task no longer exists, so no picture can be added to its plan.",
