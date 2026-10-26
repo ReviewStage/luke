@@ -643,6 +643,10 @@
   --color-badge-fill-edge: light-dark(var(--luke-badge-edge-light), var(--luke-badge-edge-dark));
   --color-badge-fill-words: light-dark(var(--luke-badge-words-light), var(--luke-badge-words-dark));
   --spacing-chip-inset: var(--luke-space-8);
+  /* A toolbar chip hung on its line's edge reaches out past it by its inset
+     and hairline, and may stand that much wider than its line. */
+  --spacing-chip-reach: calc(-1 * var(--luke-space-8) - 1px);
+  --spacing-chip-reach-most: calc(100% + var(--luke-space-8) + 1px);
   --spacing-chip-inset-wide: var(--luke-space-12);
   --spacing-chip-tight: var(--luke-space-4);
   --spacing-chip-compact: var(--luke-space-20);

@@ -662,9 +662,11 @@ body,
 }
 
 /* The box stands at the rows' own width, its edges on their hairlines: the
-   form's inset is already the room's, so the box takes none of its own. */
+   form's inset is already the room's, so the box takes none of its own. It
+   stands as far under Subject as Subject stands under To: the room a row
+   leaves around its control, which Subject's row already leaves under it. */
 .inbox-compose > .inbox-compose-box {
-  margin-top: var(--luke-section-gap);
+  margin-top: calc((var(--luke-space-48) - var(--luke-control-height)) / 2);
   padding-inline: 0;
 }
 
