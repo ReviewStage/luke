@@ -17,7 +17,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
  * channel-list.test.ts -- a phone's list of channels names each channel
  * with its purpose and what waits on the reader in it, the standing
  * channels first and the projects' under their heading, and a press opens
- * the channel pressed.
+ * the channel pressed; its "+" asks for a channel to make once the channels
+ * are read, and while they are read it stands placeholders and no "+".
  */
 
 function channel(
@@ -43,7 +44,10 @@ test("the list names each channel with its purpose and count, projects after the
           channel("c-launch", "launch", "The October launch", true, 0),
           channel("c-general", "general", "Everything else", false, 0),
         ],
+        failed: false,
         onOpen: (channelId) => opened.push(channelId),
+        onNew: () => opened.push("new"),
+        onRetry: () => undefined,
       }),
     ),
   );
@@ -61,7 +65,7 @@ test("the list names each channel with its purpose and count, projects after the
     { label: "Projects", rows: ["launchThe October launch"] },
   ]);
   // The Projects heading stands between the standing channels and the projects'.
-  const all = words(host) ?? "";
+  const all = words(host.querySelector(".channel-list-body") ?? host) ?? "";
   assert.ok(all.indexOf("Everything elseProjectslaunch") > 0);
 
   const general = [...host.querySelectorAll("button")].find((row) =>
@@ -69,5 +73,28 @@ test("the list names each channel with its purpose and count, projects after the
   );
   act(() => general?.click());
   assert.deepEqual(opened, ["c-general"]);
+  act(() => host.querySelector<HTMLButtonElement>('button[aria-label="New channel"]')?.click());
+  assert.deepEqual(opened, ["c-general", "new"], "the + asks for a channel to make");
+  act(() => root.unmount());
+});
+
+test("while the channels are read the list stands placeholders under a + that makes nothing yet", () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  act(() =>
+    root.render(
+      createElement(ChannelList, {
+        channels: undefined,
+        failed: false,
+        onOpen: () => undefined,
+        onNew: () => assert.fail("nothing is made before the channels are read"),
+        onRetry: () => undefined,
+      }),
+    ),
+  );
+  assert.match(host.querySelector('[role="status"]')?.textContent ?? "", /^Reading channels/u);
+  assert.equal(host.querySelectorAll("nav button").length, 0, "no channel's row stands yet");
+  const add = host.querySelector<HTMLButtonElement>('button[aria-label="New channel"]');
+  assert.equal(add?.disabled, true);
   act(() => root.unmount());
 });

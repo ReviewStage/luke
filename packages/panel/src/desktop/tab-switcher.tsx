@@ -78,7 +78,7 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
-import { shownChannel } from "../tasks/channels-model.js";
+import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
@@ -287,8 +287,10 @@ function useChannelsLook(tasks: TasksControl): KindLook | undefined {
   if (channelsOn && phone && tasks.inboxView.listed) {
     return { icon: <GLYPH.CHANNEL />, label: CHANNELS_WORDS };
   }
-  const channel = channels === undefined ? undefined : shownChannel(channels, channelId);
-  return channel === undefined ? undefined : { icon: <GLYPH.CHANNEL />, label: `#${channel.name}` };
+  const shown = channelShown(channels, channelId);
+  return shown.kind === CHANNEL_SHOWN.CHANNEL
+    ? { icon: <GLYPH.CHANNEL />, label: `#${shown.channel.name}` }
+    : undefined;
 }
 
 /** One card of a stop, named against the workspace's members around it (`cardLook`). */

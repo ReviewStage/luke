@@ -24,6 +24,7 @@ import {
   SHORTCUT_KEY,
   type ShortcutChord,
   shortcutAccelerator,
+  shortcutLabel,
   shortcutShown,
 } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
@@ -321,7 +322,8 @@ function developerItem(tools: DeveloperToolsMenu): MenuItemConstructorOptions {
  * Safari keep them) and the tab moves are Go's, the
  * window's own are macOS's Window menu, and the shortcuts and the notes to
  * the people who make Luke are Help's. A gated feature's item stands only
- * while `shown` says its command does (`shortcutShown`), and View's
+ * while `shown` says its command does (`shortcutShown`), a command item is
+ * called what `named` says, which an experiment may rename (`shortcutLabel`), and View's
  * Developer submenu only where `developerTools` is given. New Task brings a
  * closed window back only where `panel` is given, and Reload asks before it
  * loses unsaved edits only where `reload` is.
@@ -333,8 +335,9 @@ export function appMenuTemplate(
   developerTools?: DeveloperToolsMenu,
   panel?: PanelMenu,
   reload?: ReloadMenu,
+  named: (command: KeyedCommand) => string = (command) => APP_SHORTCUTS[command].label,
 ): MenuItemConstructorOptions[] {
-  return gated(fullMenuTemplate(appName, update, developerTools, panel, reload), shown);
+  return gated(fullMenuTemplate(appName, update, developerTools, panel, reload), shown, named);
 }
 
 /** Whether a menu item is a command item the gate keeps out: one whose command does not stand now. */
@@ -355,19 +358,33 @@ function strandedSeparator(items: readonly MenuItemConstructorOptions[], at: num
   return at === 0 || at === items.length - 1 || items[at + 1]?.type === "separator";
 }
 
+/** A command item called what `named` says where that is not its own name, as an experiment renames one. */
+function renamedItem(
+  item: MenuItemConstructorOptions,
+  named: (command: KeyedCommand) => string,
+): MenuItemConstructorOptions {
+  if (item.id === undefined || !isKeyedCommandItem(item.id)) return item;
+  const label = named(item.id);
+  return label === APP_SHORTCUTS[item.id].label ? item : { ...item, label: menuTitle(label) };
+}
+
 /**
  * The menus with a gated feature's items taken out while its experiment is
  * off, every submenu walked, and a separator the removal stranded taken out
- * with them, so an off experiment leaves no gap where its item stood.
+ * with them, so an off experiment leaves no gap where its item stood; and a
+ * command item an experiment renames called as it says.
  */
 function gated(
   items: readonly MenuItemConstructorOptions[],
   shown: (command: KeyedCommand) => boolean,
+  named: (command: KeyedCommand) => string,
 ): MenuItemConstructorOptions[] {
   const kept = items
     .filter((item) => !gatedOut(item, shown))
     .map((item) =>
-      Array.isArray(item.submenu) ? { ...item, submenu: gated(item.submenu, shown) } : item,
+      Array.isArray(item.submenu)
+        ? { ...item, submenu: gated(item.submenu, shown, named) }
+        : renamedItem(item, named),
     );
   return kept.filter((_item, at) => !strandedSeparator(kept, at));
 }
@@ -437,6 +454,7 @@ export function menuBarDrawer(
         build.packaged ? undefined : state.developerTools,
         state.panel,
         state.reload,
+        (command) => shortcutLabel(command, state.experiments),
       ),
     );
   };

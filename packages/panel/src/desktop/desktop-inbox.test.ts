@@ -76,7 +76,7 @@ import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { useChannelPlace } from "../tasks/use-channels.js";
+import { type ChannelPlaceControl, useChannelPlace } from "../tasks/use-channels.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -765,9 +765,14 @@ function mount(
 /** The side panel beside a channel's stream as the window last drew it. */
 let threadPanelNow: SidePanelControl | undefined;
 
+/** The channel the window shows and the thread open in it, as the window last drew them, which a test moves as a link would. */
+let channelPlaceNow: ChannelPlaceControl | undefined;
+
 /** The side panel as the tasks tab holds it beside a channel's stream: the chosen item's task's, its Inbox tab the thread open there (`use-tasks-tab.ts`). */
 function useThreadPanel(chosen: InboxChoice | undefined): SidePanelControl {
-  const { threadId } = useChannelPlace();
+  const place = useChannelPlace();
+  channelPlaceNow = place;
+  const { threadId } = place;
   const panel = useSidePanel(
     undefined,
     {
@@ -9553,4 +9558,396 @@ test("a post pressed in a channel's stream opens its thread in the side panel, a
   assert.deepEqual(looks, [], "the stream was never left, so its look is not stamped");
   act(() => panel().onToggle());
   assert.deepEqual(panel().strip, [], "the thread's tab went with it");
+});
+
+/** #app, a second standing channel of the workspace. */
+const APP_CHANNEL: Channel = {
+  id: "c0ffee00-0000-4000-8000-000000000002",
+  name: "app",
+  purpose: "The desktop and web apps",
+  project: false,
+  createdAt: 2,
+  waiting: 0,
+};
+
+/** A page of #general's threads as the service answers it, the two tasks' threads by default. */
+function threadsPage(
+  threads: readonly InboxItem[] = [THRESHOLD, EXPIRY],
+  older?: string,
+): { readonly threads: readonly unknown[]; readonly older?: string } {
+  const page = { threads: threads.map((thread) => ({ ...thread, channelId: GENERAL.id })) };
+  return older === undefined ? page : { ...page, older };
+}
+
+/** A follow of the channels a test pushes on: each word pushed is handed to the window as the host hands it. */
+function channelFollow() {
+  const queue: unknown[] = [];
+  let wake: (() => void) | undefined;
+  let closed = false;
+  const stream: AsyncIterableIterator<unknown> = {
+    [Symbol.asyncIterator]: () => stream,
+    next: async () => {
+      while (queue.length === 0 && !closed) {
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+      }
+      return closed ? { done: true, value: undefined } : { done: false, value: queue.shift() };
+    },
+    return: async () => {
+      closed = true;
+      wake?.();
+      return { done: true, value: undefined };
+    },
+  };
+  return {
+    stream,
+    push: (word: unknown) => {
+      queue.push(word);
+      wake?.();
+    },
+  };
+}
+
+/**
+ * Answers the channels' acts as a test says, every other act as before:
+ * the channels listed, each page of #general's threads by the thread it
+ * reads before, the latest page by none, and the follow where one is given.
+ */
+function answerChannels(answers: {
+  channels?: () => readonly Channel[];
+  threads?: (before: string | undefined) => Promise<unknown>;
+  follow?: AsyncIterableIterator<unknown>;
+  /** A channel made or archived, before the channels as they then stand are answered. */
+  onWrite?: (write: AnyAct) => void;
+}): void {
+  const previous = fakeActsAnswer();
+  const done = (value: unknown): Promise<FakeActAnswer> =>
+    Promise.resolve({ status: FAKE_ANSWER.DONE, value } as FakeActAnswer);
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.CHANNELS_LIST) {
+        return done({ channels: answers.channels?.() ?? [GENERAL] });
+      }
+      if (
+        request.kind === ACT_KIND.CHANNELS_LOOK ||
+        request.kind === ACT_KIND.CHANNELS_CREATE ||
+        request.kind === ACT_KIND.CHANNELS_ARCHIVE
+      ) {
+        answers.onWrite?.(request);
+        return done({ channels: answers.channels?.() ?? [GENERAL] });
+      }
+      if (request.kind === ACT_KIND.CHANNELS_THREADS) {
+        const read = answers.threads?.(request.payload.before) ?? Promise.resolve(threadsPage());
+        return read.then((value) => ({ status: FAKE_ANSWER.DONE, value }) as FakeActAnswer);
+      }
+      if (request.kind === ACT_KIND.CHANNELS_FOLLOW && answers.follow !== undefined) {
+        return done(answers.follow);
+      }
+      return previous(request);
+    },
+  });
+}
+
+/** The posts a channel's stream draws, by their titles, oldest first. */
+function postTitles(page: Element): readonly string[] {
+  return [
+    ...page.querySelectorAll<HTMLElement>(
+      '.channel-stream [data-channel-post] button[aria-label^="Open "]',
+    ),
+  ].map((open) => open.ariaLabel?.slice(5) ?? "");
+}
+
+/** The post of the thread open beside the stream, by its title. */
+function chosenPostTitle(page: Element): string | undefined {
+  return page
+    .querySelector('.channel-stream [data-channel-post][data-chosen] button[aria-label^="Open "]')
+    ?.ariaLabel?.slice(5);
+}
+
+test("K and J open the thread above and below the one open, through the threads the stream's view shows, the thread's bar counting where it stands; either opens the latest where none is open; and Escape closes the thread", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  answerChannels({});
+  const { page } = mount([], { channels: true });
+  await settle();
+  assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title]);
+
+  act(() => runAppCommand(APP_COMMAND.NEXT_INBOX_ITEM));
+  await settle();
+  assert.equal(chosenPostTitle(page), EXPIRY.title, "J with none open opens the latest");
+  assert.match(page.querySelector("aside.side-panel")?.textContent ?? "", /2 of 2/u);
+
+  act(() => runAppCommand(APP_COMMAND.PREVIOUS_INBOX_ITEM));
+  await settle();
+  assert.equal(chosenPostTitle(page), THRESHOLD.title);
+  assert.match(page.querySelector("aside.side-panel")?.textContent ?? "", /1 of 2/u);
+  act(() => {
+    assert.equal(
+      runAppCommand(APP_COMMAND.PREVIOUS_INBOX_ITEM),
+      false,
+      "K at the oldest goes nowhere",
+    );
+  });
+
+  act(() => runAppCommand(APP_COMMAND.INBOX_LIST));
+  await settle();
+  assert.equal(chosenPostTitle(page), undefined, "Escape closed the thread");
+  assert.ok(page.querySelector(".channel-stream"), "the stream stands");
+});
+
+test("on a phone, Back from a thread opened in a channel's stream goes back to the stream, never to the list of channels", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  answerChannels({});
+  const { page } = mount([], { channels: true, room: SHELL_ROOM.NARROW });
+  await settle();
+  act(() =>
+    page.querySelector<HTMLElement>(`button[aria-label="Open ${THRESHOLD.title}"]`)?.click(),
+  );
+  await settle();
+  const stream = () => page.querySelector<HTMLElement>(".channel-stream");
+  assert.equal(stream()?.hidden, true, "the thread stands in the stream's place");
+
+  act(() => runAppCommand(APP_COMMAND.BACK));
+  await settle();
+  assert.equal(stream()?.hidden, false, "Back gave the stream its place again");
+  assert.equal(page.querySelector(".channel-list"), null, "the list of channels stands nowhere");
+});
+
+test("a channel archived or unknown says so in the stream's place, with the way to #general", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  answerChannels({});
+  const { page } = mount([], { channels: true });
+  await settle();
+  act(() => channelPlaceNow?.onChoose("c0ffee00-0000-4000-8000-0000000000ff"));
+  await settle();
+  const missing =
+    page.querySelector<HTMLElement>('section[aria-label="Channel not found"]') ??
+    assert.fail("the channel's absence is said");
+  assert.equal(page.querySelector(".channel-stream [data-channel-post]"), null);
+
+  act(() =>
+    [...missing.querySelectorAll("button")]
+      .find((button) => button.textContent === "Go to #general")
+      ?.click(),
+  );
+  await settle();
+  assert.ok(page.querySelector('section[aria-label="#general"]'), "#general's stream stands");
+});
+
+test("a thread opened in a channel's stream that is gone says so beside the stream, with the way back to it", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  answerChannels({});
+  const { page } = mount([], { channels: true });
+  await settle();
+  const gone = "a1b2c3d4-0000-4000-8000-0000000000ff";
+  act(() => {
+    chooseFromOutside({ taskId: BILLING.id, itemId: gone, opened: true });
+    channelPlaceNow?.onOpenThread(gone);
+  });
+  await settle();
+  const beside = page.querySelector("aside.side-panel") ?? assert.fail("the panel stands");
+  assert.match(beside.textContent ?? "", /doesn't exist, or you don't have access to it/u);
+
+  act(() =>
+    [...beside.querySelectorAll("button")]
+      .find((button) => button.textContent === "Back to #general")
+      ?.click(),
+  );
+  await settle();
+  assert.equal(channelPlaceNow?.threadId, undefined, "the way back closed the thread");
+});
+
+test("a stream stands placeholders while its first read is on its way, and reads its older threads as the reader nears its top", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  const latest = Promise.withResolvers<unknown>();
+  const asked: (string | undefined)[] = [];
+  answerChannels({
+    threads: (before) => {
+      asked.push(before);
+      return before === undefined ? latest.promise : Promise.resolve(threadsPage([THRESHOLD]));
+    },
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  assert.match(
+    page.querySelector('.channel-stream [role="status"]')?.textContent ?? "",
+    /^Reading threads/u,
+  );
+  assert.deepEqual(postTitles(page), []);
+
+  latest.resolve(threadsPage([EXPIRY], THRESHOLD.id));
+  await settle();
+  // Note that the stream's box measures nothing here, so it stands at its top, where older threads are asked for.
+  assert.deepEqual(asked, [undefined, THRESHOLD.id], "the older page is read before the oldest");
+  assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title]);
+  assert.equal(page.querySelector('.channel-stream [role="status"]'), null);
+});
+
+test("a stream whose read again fails keeps its threads and says so under them, and Retry reads them again", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  const follow = channelFollow();
+  let fails = false;
+  answerChannels({
+    follow: follow.stream,
+    threads: () => Promise.resolve(fails ? { failure: "unanswered" } : threadsPage()),
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  const notice = () => page.querySelector(".channel-stream [role=alert]")?.textContent ?? "";
+
+  fails = true;
+  act(() => follow.push({ moved: [GENERAL.id] }));
+  await settle();
+  assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title], "the threads stand");
+  assert.match(notice(), /Could not read #general again\./u);
+
+  fails = false;
+  act(() =>
+    [...page.querySelectorAll<HTMLElement>(".channel-stream button")]
+      .find((button) => button.textContent === "Retry")
+      ?.click(),
+  );
+  await settle();
+  assert.equal(notice(), "", "the read landed again");
+});
+
+test("a thread posted from elsewhere lands in the stream and the sidebar's count as the follow hears its channel move, with no reopen", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  const follow = channelFollow();
+  let posted = false;
+  answerChannels({
+    follow: follow.stream,
+    channels: () => [posted ? { ...GENERAL, waiting: 1 } : GENERAL],
+    threads: () => Promise.resolve(threadsPage(posted ? [THRESHOLD, EXPIRY] : [THRESHOLD])),
+  });
+  const { page } = mount([], { channels: true, withSidebar: true });
+  await settle();
+  const generalRow = () =>
+    [...page.querySelectorAll('nav[aria-label="Channels"] button')].find((row) =>
+      row.textContent?.startsWith("general"),
+    )?.textContent;
+  assert.deepEqual(postTitles(page), [THRESHOLD.title]);
+  assert.equal(generalRow(), "general");
+
+  posted = true;
+  act(() => follow.push({ moved: [GENERAL.id] }));
+  await settle();
+  assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title]);
+  assert.equal(generalRow(), "general1 needs you");
+});
+
+test("with Channels on, ⌥↓ and ⌥↑ walk the sidebar's channels, wrapping round", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
+  const { page } = mount([], { channels: true, withSidebar: true });
+  await settle();
+  const shown = () => page.querySelector(".channel-stream")?.getAttribute("aria-label");
+  assert.equal(shown(), "#general");
+
+  act(() => runAppCommand(APP_COMMAND.NEXT_TASK));
+  await settle();
+  assert.equal(shown(), "#app");
+  act(() => runAppCommand(APP_COMMAND.NEXT_TASK));
+  await settle();
+  assert.equal(shown(), "#general", "down from the last wraps to the first");
+  act(() => runAppCommand(APP_COMMAND.PREVIOUS_TASK));
+  await settle();
+  assert.equal(shown(), "#app", "up from the first wraps to the last");
+  act(() => channelPlaceNow?.onChoose(GENERAL.id));
+});
+
+/** Types `words` into a field as a reader would. */
+function typeInto(field: HTMLInputElement | null, words: string): void {
+  if (field === null) assert.fail("the field stands");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The button standing anywhere in the window whose words are `words`. */
+function buttonSaying(words: string): HTMLButtonElement {
+  return (
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === words,
+    ) ?? assert.fail(`a button says ${words}`)
+  );
+}
+
+test("a channel made from the sidebar's + opens once the service has made it", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  let standing: readonly Channel[] = [GENERAL];
+  answerChannels({
+    channels: () => standing,
+    onWrite: (write) => {
+      if (write.kind === ACT_KIND.CHANNELS_CREATE) standing = [GENERAL, APP_CHANNEL];
+    },
+  });
+  const { page } = mount([], { channels: true, withSidebar: true });
+  await settle();
+  act(() =>
+    page
+      .querySelector<HTMLButtonElement>(
+        'nav[aria-label="Channels"] button[aria-label="New channel"]',
+      )
+      ?.click(),
+  );
+  const dialog = document.querySelector('[role="dialog"]') ?? assert.fail("the dialog stands");
+  const [name, purpose] = dialog.querySelectorAll<HTMLInputElement>("input");
+  typeInto(name ?? null, "app");
+  typeInto(purpose ?? null, "The desktop and web apps");
+  act(() => buttonSaying("Create channel").click());
+  await settle();
+  assert.equal(page.querySelector(".channel-stream")?.getAttribute("aria-label"), "#app");
+  act(() => channelPlaceNow?.onChoose(GENERAL.id));
+});
+
+test("archiving the channel shown moves the window to #general and says so", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  let standing: readonly Channel[] = [GENERAL, APP_CHANNEL];
+  answerChannels({
+    channels: () => standing,
+    onWrite: (write) => {
+      if (write.kind === ACT_KIND.CHANNELS_ARCHIVE) standing = [GENERAL];
+    },
+  });
+  const { page } = mount([], { channels: true, withSidebar: true, toasts: true });
+  await settle();
+  act(() => channelPlaceNow?.onChoose(APP_CHANNEL.id));
+  await settle();
+  const row =
+    [...page.querySelectorAll<HTMLElement>('nav[aria-label="Channels"] button')].find(
+      (each) => each.textContent === "app",
+    ) ?? assert.fail("#app's row stands");
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  act(() =>
+    (
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+        item.textContent?.startsWith("Archive"),
+      ) ?? assert.fail("the row offers Archive")
+    ).click(),
+  );
+  act(() => buttonSaying("Archive channel").click());
+  await settle();
+  assert.equal(page.querySelector(".channel-stream")?.getAttribute("aria-label"), "#general");
+  assert.equal(page.querySelector('section[aria-label="Channel not found"]'), null);
+  assert.match(newestToastSays() ?? "", /#app is archived\. You're in #general now\./u);
 });

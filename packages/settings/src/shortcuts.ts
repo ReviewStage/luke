@@ -369,6 +369,13 @@ export interface AppShortcut {
    */
   experiment?: Experiment;
   /**
+   * What the command is called while an experiment that changes what it
+   * reaches is on, as Previous task walks the channels while Channels is:
+   * the menu bar, the Keyboard shortcuts page, and the settings search say
+   * this instead (`shortcutLabel`).
+   */
+  renamed?: { readonly experiment: Experiment; readonly label: string };
+  /**
    * The platform capability the command's feature stands on. Where the
    * platform does not offer it, the command is in no list, as a gated
    * experiment's is not.
@@ -420,11 +427,17 @@ export const APP_SHORTCUTS = {
     label: "Permanently delete task",
     chord: { key: SHORTCUT_KEY.BACKSPACE },
   },
+  // Note that with Channels on the sidebar lists channels in the tasks' place, and these walk them.
   [APP_COMMAND.PREVIOUS_TASK]: {
     label: "Previous task",
     chord: { key: SHORTCUT_KEY.UP, option: true },
+    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Previous channel" },
   },
-  [APP_COMMAND.NEXT_TASK]: { label: "Next task", chord: { key: SHORTCUT_KEY.DOWN, option: true } },
+  [APP_COMMAND.NEXT_TASK]: {
+    label: "Next task",
+    chord: { key: SHORTCUT_KEY.DOWN, option: true },
+    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Next channel" },
+  },
   [APP_COMMAND.TOGGLE_SIDEBAR]: { label: "Toggle sidebar", chord: { key: SHORTCUT_KEY.B } },
   [APP_COMMAND.TOGGLE_SIDE_PANEL]: {
     label: "Toggle panel",
@@ -1221,6 +1234,15 @@ export function shortcutShown(
   const capabilityStands =
     shortcut.capability === undefined || capabilities.includes(shortcut.capability);
   return experimentStands && capabilityStands;
+}
+
+/** What a keyed command is called for the account's experiments: its `renamed` label while that experiment is on, its own otherwise. */
+export function shortcutLabel(command: KeyedCommand, experiments: ExperimentChoices): string {
+  const shortcut: AppShortcut = APP_SHORTCUTS[command];
+  const { renamed } = shortcut;
+  return renamed !== undefined && experimentOn(experiments, renamed.experiment)
+    ? renamed.label
+    : shortcut.label;
 }
 
 /** Whether a key that answers in place stands in the page's lists for the platform's capabilities. */

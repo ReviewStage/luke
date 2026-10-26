@@ -9,11 +9,13 @@ import {
 } from "@luke/features/inbox-wire";
 import { test } from "vitest";
 import {
+  CHANNEL_SHOWN,
   CHANNEL_VIEW,
+  channelShown,
   channelSlug,
+  channelStep,
   repliesLine,
   STREAM_ROW,
-  shownChannel,
   streamRows,
   viewedThreads,
 } from "./channels-model.js";
@@ -24,7 +26,9 @@ import {
  * them; the stream divides its days and draws the New line before the first
  * thread someone else posted since the reader looked; a post's replies line
  * says who replied and who the ask waits on; a typed name is written as a
- * channel's; and the stream opens on #general where none is chosen.
+ * channel's; the stream opens on #general where none is chosen and says a
+ * channel chosen that stands no more is gone; and ⌥↑ and ⌥↓ walk the
+ * channels in the sidebar's order, wrapping round.
  */
 
 const ME = { userId: "user-me", name: "Me Reader" } as const;
@@ -201,18 +205,38 @@ test("a typed name is written as a channel's", () => {
   assert.equal(channelSlug("  Release Train!  v2 "), "release-train-v2");
 });
 
-test("the stream opens on the channel chosen while it stands, else on #general", () => {
-  const channel = (id: string, name: string): Channel => ({
-    id,
-    name,
-    purpose: "A purpose",
-    project: false,
-    createdAt: NOON,
-    waiting: 0,
+/** A channel of the workspace, standing or a project's. */
+function channelOf(id: string, name: string, project = false): Channel {
+  return { id, name, purpose: "A purpose", project, createdAt: NOON, waiting: 0 };
+}
+
+test("the stream opens on the channel chosen while it stands, on #general where none is chosen, and says a channel chosen that stands no more is gone", () => {
+  const app = channelOf("c-app", "app");
+  const general = channelOf("c-general", "general");
+  assert.deepEqual(channelShown([app, general], "c-app"), {
+    kind: CHANNEL_SHOWN.CHANNEL,
+    channel: app,
   });
-  const app = channel("c-app", "app");
-  const general = channel("c-general", "general");
-  assert.equal(shownChannel([app, general], "c-app"), app);
-  assert.equal(shownChannel([app, general], "c-archived"), general);
-  assert.equal(shownChannel([app, general], undefined), general);
+  assert.deepEqual(channelShown([app, general], undefined), {
+    kind: CHANNEL_SHOWN.CHANNEL,
+    channel: general,
+  });
+  assert.deepEqual(channelShown([app, general], "c-archived"), { kind: CHANNEL_SHOWN.MISSING });
+  assert.deepEqual(channelShown(undefined, "c-app"), { kind: CHANNEL_SHOWN.NONE });
+});
+
+test("the channels are walked in the sidebar's order, the standing then the projects', wrapping round", () => {
+  // Note that the service's order mixes a project's channel among the standing ones.
+  const channels = [
+    channelOf("c-app", "app"),
+    channelOf("c-launch", "launch", true),
+    channelOf("c-general", "general"),
+  ];
+  const walk = (from: string | undefined, by: 1 | -1) => channelStep(channels, from, by)?.name;
+  assert.equal(walk("c-app", 1), "general");
+  assert.equal(walk("c-general", 1), "launch");
+  assert.equal(walk("c-launch", 1), "app", "down from the last wraps to the first");
+  assert.equal(walk("c-app", -1), "launch", "up from the first wraps to the last");
+  assert.equal(walk(undefined, 1), "app", "down from no channel shown is the first");
+  assert.equal(walk(undefined, -1), "launch", "up from no channel shown is the last");
 });

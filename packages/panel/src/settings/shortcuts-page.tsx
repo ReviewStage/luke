@@ -12,6 +12,7 @@ import {
   type InContextKey,
   type InContextShortcut,
   inContextShown,
+  shortcutLabel,
   shownShortcutGroups,
   WRITING_ACTIONS_LISTED,
   WRITING_GROUP_TITLE,
@@ -77,7 +78,10 @@ export function WindowShortcutSections({
         <SettingsSection key={group.title} title={group.title}>
           {group.commands.map((command) => (
             <div key={command} {...searchAnchorProps(command)}>
-              <SettingsRow density={SETTINGS_ROW_DENSITY.LIST} label={APP_SHORTCUTS[command].label}>
+              <SettingsRow
+                density={SETTINGS_ROW_DENSITY.LIST}
+                label={shortcutLabel(command, experiments)}
+              >
                 {() => <Shortcut value chord={APP_SHORTCUTS[command].chord} spoken />}
               </SettingsRow>
             </div>

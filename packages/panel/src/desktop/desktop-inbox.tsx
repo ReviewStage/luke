@@ -11,6 +11,7 @@ import {
   ErrorState,
   NOTE_LINE_LOOK,
   NoteLine,
+  TOOLBAR_INSET,
   Toolbar,
   useMinute,
 } from "@luke/ui";
@@ -28,8 +29,13 @@ import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ChannelList } from "../tasks/channel-list.js";
-import { ChannelStream } from "../tasks/channel-stream.js";
-import { shownChannel } from "../tasks/channels-model.js";
+import {
+  ChannelMissing,
+  ChannelReading,
+  ChannelStream,
+  useChannelStream,
+} from "../tasks/channel-stream.js";
+import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import {
   INBOX_COLUMNS,
@@ -48,7 +54,7 @@ import {
   listedItems,
   NEEDS_YOU,
 } from "../tasks/inbox-model.js";
-import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
+import { inboxNext, useChannelPager, useInboxPager } from "../tasks/inbox-pager.js";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import {
@@ -72,6 +78,7 @@ import {
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useExperiment } from "../use-app-state.js";
 import { useAgentCallDoors } from "./agent-actions.js";
+import { useChannelDialog } from "./channel-dialog.js";
 import { AgentPane } from "./main-tabs.js";
 import { NewTaskButton } from "./new-task-button.js";
 import {
@@ -134,6 +141,14 @@ import { taskCardOf } from "./task-card.js";
  * their `SKILL.md` in the panel beside it, as a file the item names opens,
  * or on GitHub where the item has no plan whose panel could open it.
  *
+ * With Channels on, a channel's stream stands in the list's place
+ * (`channel-stream.tsx`): K and J step through its threads rather than the
+ * list's items, Back's chord and Escape close the thread open from it, a
+ * thread that is gone says so where it would stand, beside the stream or,
+ * on a phone, in its place, and a channel archived or never the
+ * workspace's says so in the stream's place, with the way to #general. A
+ * phone's list of channels makes one from its "+", as the sidebar does.
+ *
  * Its items are read and listed by `use-inbox-listing.ts`. While the account
  * has the inbox-first sidebar on, the shell reads them once and hands the
  * listing to the sidebar, which lists them (`sidebar-inbox.tsx`), and here,
@@ -145,8 +160,7 @@ import { taskCardOf } from "./task-card.js";
 const CHANNELS_VIEW =
   "inbox-view channels-view @container grid min-h-0 flex-1 grid-cols-single [&>[hidden]]:hidden in-data-[luke-room=narrow]:[--luke-toolbar-start-at:initial]";
 
-/** What the page says while the workspace's channels are read, where none could be, and where none stand. */
-const CHANNELS_READING = "Reading channels…";
+/** What the page says where the workspace's channels could not be read, and where none stand. */
 const CHANNELS_NOT_READ = "Could not read this workspace's channels.";
 const CHANNELS_NONE = "This workspace has no channels yet.";
 
@@ -246,24 +260,40 @@ function InboxShown({
   const streaming = useExperiment(EXPERIMENT.CHANNELS) && !paneOnly;
   const channelPlace = useChannelPlace();
   const channels = useChannels(streaming ? tasks.workspace?.id : undefined, tasks.shown);
-  const channel = streaming
-    ? shownChannel(channels.channels ?? [], channelPlace.channelId)
-    : undefined;
+  const channelState = channelShown(
+    streaming ? channels.channels : undefined,
+    channelPlace.channelId,
+  );
+  const channel = channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel : undefined;
   // Note that a phone shows one thing at a time across the screen: the list of channels its bar opens, a channel's stream, or a thread in place of the stream.
   const phone = room === SHELL_ROOM.NARROW;
   // A phone's list of channels stands while the list is asked for, as the bar's Channels asks, so the window's Back returns to it from a stream.
   const channelsListed = streaming && phone && view.listed;
-  // A thread opened from a stream stands in the side panel as its Inbox tab (`use-tasks-tab.ts`), and on a phone in the stream's place.
-  const threadOpen = streaming && chosen !== undefined && channelPlace.threadId === chosen.item.id;
+  // A thread opened from a stream stands in the side panel as its Inbox tab (`use-tasks-tab.ts`), and on a phone in the stream's place; one that is gone says so there.
+  const threadMissing =
+    streaming &&
+    missing &&
+    channelPlace.threadId !== undefined &&
+    asked?.itemId === channelPlace.threadId;
+  const threadOpen =
+    streaming &&
+    ((chosen !== undefined && channelPlace.threadId === chosen.item.id) || threadMissing);
   const threadShown = threadOpen && channel !== undefined && !channelsListed;
   const threadBeside = threadOpen && !phone;
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
   // Note that the window keeps whether the list was asked for, so its history can go back to it.
   const { listed, onListed, onSingle } = view;
+  // Closing the thread gives the stream the place again, and what counts what waits is read again, an answer given there among it.
+  const closeThread = () => {
+    channelPlace.onCloseThread();
+    channels.onRefresh();
+  };
   const pageColumns = useInboxColumns(
     compose.on ? COMPOSE_COLUMN : (chosen?.item.id ?? (missing ? asked?.itemId : undefined)),
     !paneOnly,
     { asked: listed, onAsk: onListed, onSingle: paneOnly ? undefined : onSingle },
+    // Note that Back's chord and Escape close a stream's thread, so a phone goes back to the stream rather than to its list of channels.
+    streaming ? { onClose: threadOpen ? closeThread : undefined } : undefined,
   );
   // Note that the Inbox reports one column only once an item stands, since its list lives in the sidebar and a list step would show nothing new.
   const itemStands = chosen !== undefined;
@@ -286,8 +316,9 @@ function InboxShown({
     choose(listed);
     columns.onStep();
   };
+  // Note that the Inbox's pager stands down while a stream stands in its list's place, which pages its own threads.
   const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
-    shown: tasks.shown,
+    shown: tasks.shown && !streaming,
     folded: folds.folded,
   });
   const next = inboxNext(
@@ -354,13 +385,13 @@ function InboxShown({
           tasklessMentions(place, tasks.onShowMention, readMentionAgents),
           taskId === undefined ? undefined : openFile,
         );
-  // Closing the thread gives the stream the place again, and what counts what waits is read again, an answer given there among it.
-  const closeThread = () => {
-    channelPlace.onCloseThread();
-    channels.onRefresh();
-  };
   // The thread beside the stream is the panel's Inbox tab, so closing that tab closes the thread, and the panel's hiding closes it too.
-  const threadTabs = useThreadTab(sidePanel, threadBeside, chosen?.item.id, closeThread);
+  const threadTabs = useThreadTab(
+    sidePanel,
+    threadBeside,
+    threadOpen ? channelPlace.threadId : undefined,
+    closeThread,
+  );
   const drawing = useSidePanelDrawing(threadTabs);
   const views = useTabViews();
   const { onArea, focus } = useColumnFocus();
@@ -443,6 +474,36 @@ function InboxShown({
     channelPlace.onCloseThread();
     onListed(false);
   };
+  // The stream is read here, so K and J page the threads it posts, and the thread's bar counts them.
+  const stream = useChannelStream(channel?.id, tasks.me, ownTask);
+  const streamPager = useChannelPager(
+    stream.viewed,
+    threadOpen ? channelPlace.threadId : undefined,
+    openThread,
+    tasks.shown && channel !== undefined && !channelsListed && !sidePanel.fullScreen,
+  );
+  // A phone's list of channels makes one from its "+", as the sidebar does, opening it once made.
+  const making = useChannelDialog({
+    workspaceId: tasks.workspace?.id,
+    channels,
+    shown: tasks.shown && channelsListed,
+    onMade: openChannel,
+  });
+  const general = generalChannel(channels.channels ?? []);
+  // The thread asked for that is gone, where it would stand: beside the stream, or on a phone in its place.
+  const missingThread = (
+    <section className={INBOX_VIEW_ITEMS} aria-label="Thread not found">
+      <Toolbar end={TOOLBAR_INSET.COLUMN} />
+      <NotFound
+        thing={NOT_FOUND_THING.INBOX_ITEM}
+        action={
+          channel === undefined
+            ? undefined
+            : { label: backToWords(`#${channel.name}`), onClick: closeThread }
+        }
+      />
+    </section>
+  );
   const openHere: OpenHere = (href) => {
     const target = inboxPanelTarget(href, {
       taskId,
@@ -517,7 +578,9 @@ function InboxShown({
               agents={named}
               hidden={!streaming && columns.shown === INBOX_COLUMNS.LIST}
               onBack={beside ? undefined : streaming ? closeThread : columns.onBack}
-              pager={!streaming && columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+              pager={
+                streaming ? streamPager : columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined
+              }
               next={streaming ? undefined : next}
               mentions={mentions}
               channel={
@@ -567,25 +630,25 @@ function InboxShown({
                 data-columns={streaming ? undefined : columns.shown}
               >
                 {streaming ? (
-                  channel === undefined ? (
-                    channels.failed ? (
-                      <ErrorState
-                        placement={ERROR_STATE_PLACEMENT.CENTRED}
-                        onRetry={channels.onRefresh}
-                      >
-                        {CHANNELS_NOT_READ}
-                      </ErrorState>
-                    ) : (
-                      <NoteLine look={NOTE_LINE_LOOK.CENTRED} status>
-                        {channels.channels === undefined ? CHANNELS_READING : CHANNELS_NONE}
-                      </NoteLine>
-                    )
-                  ) : channelsListed ? (
-                    <ChannelList channels={channels.channels ?? []} onOpen={openChannel} />
-                  ) : (
+                  channelsListed ? (
+                    <ChannelList
+                      channels={channels.channels}
+                      failed={channels.failed}
+                      onOpen={openChannel}
+                      onNew={() => making.askNew(false)}
+                      onRetry={channels.onRefresh}
+                    />
+                  ) : channelState.kind === CHANNEL_SHOWN.MISSING ? (
+                    <ChannelMissing
+                      onGeneral={
+                        general === undefined ? undefined : () => channelPlace.onChoose(general.id)
+                      }
+                    />
+                  ) : channel !== undefined ? (
                     <ChannelStream
                       key={channel.id}
                       channel={channel}
+                      stream={stream}
                       chosenId={threadBeside ? chosen?.item.id : undefined}
                       hidden={threadShown && phone}
                       readerId={tasks.me}
@@ -593,11 +656,23 @@ function InboxShown({
                       shown={tasks.shown}
                       agents={named}
                       listedOf={listedOf}
-                      ownTask={ownTask}
                       onOpen={openThread}
                       onLook={channels.onLook}
                       onAnswered={channels.onRefresh}
                     />
+                  ) : channels.channels === undefined && !channels.failed ? (
+                    <ChannelReading />
+                  ) : channels.failed ? (
+                    <ErrorState
+                      placement={ERROR_STATE_PLACEMENT.CENTRED}
+                      onRetry={channels.onRefresh}
+                    >
+                      {CHANNELS_NOT_READ}
+                    </ErrorState>
+                  ) : (
+                    <NoteLine look={NOTE_LINE_LOOK.CENTRED} status>
+                      {CHANNELS_NONE}
+                    </NoteLine>
                   )
                 ) : paneOnly ? null : (
                   <InboxList
@@ -678,6 +753,8 @@ function InboxShown({
                     phone={room === SHELL_ROOM.NARROW}
                     onRestore={() => onCompose?.()}
                   />
+                ) : chosen === undefined && streaming ? (
+                  missingThread
                 ) : chosen === undefined ? (
                   <section
                     className={INBOX_VIEW_ITEMS}
@@ -732,7 +809,13 @@ function InboxShown({
                 agents={named}
                 views={views}
                 mentions={mentions}
-                thread={threadBeside && chosen !== undefined ? itemPane(chosen, true) : undefined}
+                thread={
+                  !threadBeside
+                    ? undefined
+                    : chosen === undefined
+                      ? missingThread
+                      : itemPane(chosen, true)
+                }
                 phone={
                   room === SHELL_ROOM.NARROW && chosen !== undefined
                     ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
@@ -740,6 +823,7 @@ function InboxShown({
                 }
               />
             ) : null}
+            {making.dialog}
           </div>
         </AutomationDirectory>
       </MemberDirectory>

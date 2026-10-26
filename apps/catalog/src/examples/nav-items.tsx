@@ -11,6 +11,7 @@ import {
   NAV_ITEM_VARIANT,
   NavItem,
   NavItemLink,
+  NavItemSkeleton,
   SearchIcon,
   STATUS_TONE,
   useMenu,
@@ -22,7 +23,8 @@ import { CatalogSection } from "../section";
 /**
  * nav-items.tsx -- a sidebar's places with their counts, marks, and chords,
  * the one shown, one unavailable, one unread; an account's menu trigger;
- * links with addresses of their own; and long names in a narrow column.
+ * links with addresses of their own; long names in a narrow column; and
+ * rows while the places they list are read.
  */
 
 /** A chord as an app draws one, hidden from a reader since the row names it. */
@@ -126,6 +128,13 @@ function NavItems(): React.JSX.Element {
           <NavItem icon={<FolderIcon />} detail="Reviewing the release notes for the spring launch">
             Grace Hopper
           </NavItem>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="nav-item-skeleton" title="Rows while their places are read">
+        <div className="catalog-narrow">
+          <NavItemSkeleton icon={<FolderIcon />} width="64%" />
+          <NavItemSkeleton icon={<FolderIcon />} width="48%" />
+          <NavItemSkeleton icon={<FolderIcon />} width="72%" />
         </div>
       </CatalogSection>
     </>

@@ -21,7 +21,8 @@ import {
  * The menu bar as a gated feature's experiment decides it: an item whose
  * command does not stand is not in its menu, and leaves no separator
  * stranded where it stood; and the one drawer redraws when the update item
- * or the account's experiments move, and only then; and an item ends its name
+ * or the account's experiments move, and only then, an experiment renaming
+ * the items it changes the reach of; and an item ends its name
  * with an ellipsis only where it opens a window or asks; and only a
  * development build offers the developer tools.
  */
@@ -124,6 +125,21 @@ describe("the menu bar's drawer", () => {
     // The experiments moving keeps the update item it was last told.
     show({ experiments: {}, capabilities: [] });
     assert.ok(labelsOf(drawn.at(-1) ?? [], "Luke").includes("Restart to Update"));
+  });
+
+  test("names the task steps for the channels they walk while Channels is on, and for the tasks again once it is off", () => {
+    const drawn: MenuItemConstructorOptions[][] = [];
+    const show = menuBarDrawer({ appName: "Luke", packaged: false }, (template) =>
+      drawn.push(template),
+    );
+    const steps = () => labelsOf(drawn.at(-1) ?? [], "View").slice(-2);
+
+    show();
+    assert.deepEqual(steps(), ["Previous Task", "Next Task"]);
+    show({ experiments: experimentsOn(EXPERIMENT.CHANNELS), capabilities: [] });
+    assert.deepEqual(steps(), ["Previous Channel", "Next Channel"]);
+    show({ experiments: {}, capabilities: [] });
+    assert.deepEqual(steps(), ["Previous Task", "Next Task"]);
   });
 });
 

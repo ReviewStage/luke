@@ -145,7 +145,7 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
-import { shownChannel } from "../tasks/channels-model.js";
+import { CHANNEL_SHOWN, channelShown, channelStep } from "../tasks/channels-model.js";
 import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
 import type { InboxListing } from "../tasks/use-inbox-listing.js";
@@ -1777,10 +1777,13 @@ function SidebarColumn({
     tasks.shown,
   );
   const channelPlace = useChannelPlace();
+  // Note that a channel archived or unknown marks no row, its place saying it is gone.
+  const channelState = channelShown(
+    channelsOn && inInbox ? channels.channels : undefined,
+    channelPlace.channelId,
+  );
   const shownChannelId =
-    channelsOn && inInbox
-      ? shownChannel(channels.channels ?? [], channelPlace.channelId)?.id
-      : undefined;
+    channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel.id : undefined;
   // With the inbox-first sidebar on, the Inbox's items stand where the task list stood, under the pins, and the tasks are a page of their own.
   const listsInbox = inboxFirst && tasks.signedIn && inboxListing !== undefined;
   const waiting = useInboxWaiting(tasks);
@@ -2080,8 +2083,19 @@ function SidebarColumn({
     else openAgent(row.agent.id);
   };
   const listed = tasks.signedIn && drawn.length > 0;
-  useAppCommand(APP_COMMAND.PREVIOUS_TASK, listed && at > 0 ? () => step(-1) : undefined);
-  useAppCommand(APP_COMMAND.NEXT_TASK, listed && at < drawn.length - 1 ? () => step(1) : undefined);
+  // With Channels on, the sidebar lists channels in the tasks' place, so ⌥↑ and ⌥↓ walk them, wrapping round, where they walk the tasks otherwise.
+  const channelBy = (by: 1 | -1) => {
+    const channel = channelStep(channels.channels ?? [], shownChannelId, by);
+    return channel === undefined ? undefined : () => openChannel(channel.id);
+  };
+  useAppCommand(
+    APP_COMMAND.PREVIOUS_TASK,
+    channelsOn ? channelBy(-1) : listed && at > 0 ? () => step(-1) : undefined,
+  );
+  useAppCommand(
+    APP_COMMAND.NEXT_TASK,
+    channelsOn ? channelBy(1) : listed && at < drawn.length - 1 ? () => step(1) : undefined,
+  );
 
   // The pages' rows, then the rule under them, heading the tasks' scroller.
   const places = (

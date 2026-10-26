@@ -1,3 +1,4 @@
+import type { ChannelThread } from "@luke/features/channel-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
@@ -54,6 +55,13 @@ import { cardTitle } from "./tool-call-model.js";
  * leads to the next without the list in between; it never moves on by
  * itself, so an answer is seen landing before the developer leaves it. A
  * press on a row turns no way, so Next goes on the way the keys last went.
+ *
+ * A channel's stream pages its own threads instead (`useChannelPager`), the
+ * Inbox's standing down while the stream stands in its place: K and J open
+ * the thread above and below the one open, through the threads its view
+ * shows in their order, oldest first, stopping at either end, and the open
+ * thread's bar draws the same "2 of 8" and arrows. With no thread open,
+ * either key opens the latest, where the stream opens scrolled to.
  */
 
 /** What a hint names as the key it is reached by: the chord, on the row's press, the row's card hung through `RowHintOptions` beside it. */
@@ -269,4 +277,23 @@ export function InboxPagerControls({ pager }: { pager: InboxPager }): React.JSX.
       </Tooltip>
     </div>
   );
+}
+
+/** The stream's pager over the threads its view shows (`viewed`, oldest first), K and J offered while `shown`; see the module's head. */
+export function useChannelPager(
+  viewed: readonly ChannelThread[],
+  chosenId: string | undefined,
+  onOpen: (thread: ChannelThread) => void,
+  shown: boolean,
+): InboxPager | undefined {
+  const at = viewed.findIndex((thread) => thread.id === chosenId);
+  const latest = viewed.at(-1);
+  const previous = at === -1 ? latest : viewed[at - 1];
+  const next = at === -1 ? latest : viewed[at + 1];
+  const onPrevious = previous === undefined ? undefined : () => onOpen(previous);
+  const onNext = next === undefined ? undefined : () => onOpen(next);
+  useAppCommand(APP_COMMAND.PREVIOUS_INBOX_ITEM, shown ? onPrevious : undefined);
+  useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, shown ? onNext : undefined);
+  if (at === -1) return undefined;
+  return { count: { at: at + 1, total: viewed.length }, onPrevious, onNext };
 }
