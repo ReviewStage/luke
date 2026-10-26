@@ -1,4 +1,5 @@
 import type { Channel, ChannelThread } from "@luke/features/channel-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   INBOX_ASK,
   INBOX_MESSAGE_AUTHOR,
@@ -35,6 +36,7 @@ import {
   NoteLine,
   NotFoundIcon,
   SkeletonRegion,
+  STATUS_TONE,
   STREAM_DIVIDER,
   StreamDivider,
   TEXT_BUTTON_TONE,
@@ -62,6 +64,7 @@ import {
 } from "../ai-elements/conversation.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
 import { usePerson } from "../member-directory.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { type AgentLine, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import {
   CHANNEL_VIEW,
@@ -76,6 +79,7 @@ import {
   streamRows,
   viewedThreads,
 } from "./channels-model.js";
+import { messageFailureWords } from "./coding-agent-model.js";
 import { AskControls } from "./inbox-ask-controls.js";
 import type { InboxCloser } from "./inbox-close.js";
 import { VIEW_OPTIONS } from "./inbox-columns.js";
@@ -108,10 +112,11 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
  * time, an agent named as the thread's pane names it (`agentSubject`), then
  * the thread's title and its first message's words. A decision
  * still open offers its options under the post with the thread's own
- * controls, numbered for no keys, and one pick answers it there; steps and
- * a written answer offer one press that opens the thread. The replies line
- * under every post shows who replied, how many replies or Reply in thread,
- * and who the open ask waits on. A post that needs the reader stands on the
+ * controls, numbered for no keys, and one pick answers it there, or, refused,
+ * stands its options again and says why in a toast, as the thread's box
+ * does; steps and a written answer offer one press that opens the
+ * thread. The replies line under every post shows who replied, how many
+ * replies or Reply in thread, and who the open ask waits on. A post that needs the reader stands on the
  * attention tint and nothing else marks it, its ask's controls standing on
  * the column's ground over it (`ControlGround`), cleared the moment it is
  * answered, since the window's own answers are laid over the read
@@ -142,6 +147,9 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
  * threads are read as the reader nears the stream's top, the log keeping
  * their place as they land above (`Conversation`'s `onNearTop`).
  */
+
+/** A pick's send that never came back, said as the thread's own box says one. */
+const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /**
  * The stream's column, its log filling what its head leaves. Note that its
@@ -827,6 +835,7 @@ export function ChannelStream({
   onAnswered: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
+  const toast = useToast();
   const settler = useInboxSettler();
   const log = useRef<HTMLDivElement>(null);
   const { read, view, onView, viewed, needsCount } = stream;
@@ -859,15 +868,22 @@ export function ChannelStream({
       text,
       answers,
       clientKey: crypto.randomUUID(),
-    }).then(
-      (answer) => {
-        if ("failure" in answer) return settler.refuse(sent);
+    })
+      .catch(() => UNANSWERED)
+      .then((answer) => {
+        if ("failure" in answer) {
+          settler.refuse(sent);
+          toast({
+            words: messageFailureWords(answer.failure),
+            tone: STATUS_TONE.DANGER,
+            hold: TOAST_HOLD.FAILED,
+          });
+          return;
+        }
         settler.take(sent, answer.item);
         onRefresh();
         onAnswered();
-      },
-      () => settler.refuse(sent),
-    );
+      });
   };
   return (
     <StreamColumn label={`#${channel.name}`} hidden={hidden}>

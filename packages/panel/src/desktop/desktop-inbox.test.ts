@@ -10157,3 +10157,21 @@ test("archiving the channel shown moves the window to #general and says so", asy
   assert.equal(page.querySelector('section[aria-label="Channel not found"]'), null);
   assert.match(newestToastSays() ?? "", /#app is archived\. You're in #general now\./u);
 });
+
+test("an option picked under a post that the service refuses stands open again and says why, as an alert", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  answerChannels({ threads: () => Promise.resolve(threadsPage([THRESHOLD])) });
+  heldMessages(() => ({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  const { page } = mount([], { channels: true, toasts: true });
+  await settle();
+  const option = () =>
+    [
+      ...page.querySelectorAll<HTMLElement>('.channel-stream [data-channel-post] [role="radio"]'),
+    ].find((each) => each.textContent?.includes("Retry once"));
+  act(() => (option() ?? assert.fail("the post offers its options")).click());
+  await settle();
+  assert.ok(option(), "the ask stands open again");
+  assert.equal(newestToastSays(), "This agent no longer exists.");
+});
