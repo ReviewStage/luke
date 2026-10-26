@@ -87,8 +87,8 @@
 
   /* Note that a crumb of words or a plain press keeps a floor its words read
      at, because a path that squeezes every crumb to two letters says
-     nothing; a path past that folds its first crumbs into one "…"
-     (`crumb-fold.ts`) rather than shrink these further. */
+     nothing. It gives way to that floor only once the path has nothing left
+     to fold (`crumb-fold.ts`); until then it keeps its whole width below. */
   .luke-breadcrumbs[data-variant="caption"] li[data-legible="true"] {
     --luke-breadcrumb-floor: 11em;
   }
@@ -110,10 +110,12 @@
     flex-grow: 9;
   }
 
-  /* A crumb that keeps its size, and one standing for others a narrow bar
-     leaves out, keep their width. */
+  /* A crumb that keeps its size, one standing for others a narrow bar
+     leaves out, and a crumb of words while the path may still fold one
+     (`crumb-fold.ts`) keep their width, so a path folds its first crumbs
+     before it cuts any. */
   .luke-breadcrumbs[data-variant="caption"]
-  li:is([data-fixed="true"], [data-shown="narrow"], [data-shown="narrowest"]) {
+  li:is([data-fixed="true"], [data-whole="true"], [data-shown="narrow"], [data-shown="narrowest"]) {
     flex: none;
   }
 

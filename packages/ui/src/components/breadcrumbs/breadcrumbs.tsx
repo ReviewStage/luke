@@ -48,10 +48,11 @@ import { useCrumbFold } from "./crumb-fold.js";
  * all; and a toolbar's heading, a way back then the page's name in the
  * dialog heading type.
  *
- * A path gives way on a narrow bar first in the stylesheet: each crumb
- * narrows by its share down to a floor its words stay legible at, and the
- * path that still overflows folds the crumbs at its start into one "…"
- * (`crumb-fold.ts`), the last always standing. The rest is the stylesheet's
+ * A path gives way on a narrow bar first by folding: one that does not
+ * fit whole folds the crumbs at its start into one "…" (`crumb-fold.ts`),
+ * the last always standing, before any crumb is cut; only once nothing is
+ * left to fold does each crumb narrow, in the stylesheet, by its share down
+ * to a floor its words stay legible at. The rest is the stylesheet's
  * alone, nothing measured: each crumb says at which of the bar's widths it is drawn
  * (`shownAt`), read off the `BreadcrumbBar` holding the path, the row of
  * the bar it stands in. A crumb may stand for others a narrow bar leaves
@@ -357,6 +358,7 @@ function CrumbItem({
   crumb,
   chevron,
   legible,
+  whole,
   variant,
   hint,
 }: {
@@ -364,6 +366,8 @@ function CrumbItem({
   chevron: Widths | undefined;
   /** Whether it keeps its words legible, down to a floor of its own, in a narrow bar. */
   legible: boolean;
+  /** Whether it keeps its whole width, because the path folds a crumb before it cuts this one. */
+  whole: boolean;
   variant: BreadcrumbsVariant;
   hint: BreadcrumbHint;
 }): React.JSX.Element | null {
@@ -390,6 +394,7 @@ function CrumbItem({
       data-words={words}
       data-fixed={crumb.fixed === true ? "true" : undefined}
       data-legible={legible ? "true" : undefined}
+      data-whole={whole ? "true" : undefined}
       data-motion={motion}
       inert={presence.leaving}
     >
@@ -461,6 +466,7 @@ export function Breadcrumbs({
             crumb={each.crumb}
             chevron={chevronBefore(path, at)}
             legible={each.legible}
+            whole={each.whole}
             variant={variant}
             hint={hint}
           />

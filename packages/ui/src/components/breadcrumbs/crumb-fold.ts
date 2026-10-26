@@ -5,11 +5,13 @@ import { BREADCRUMB_SHOWN, type Crumb } from "./breadcrumbs.js";
 /**
  * crumb-fold.ts -- a path that does not fit its bar leaves its first crumbs out as one "…", the way a crumb squeezes to two letters never reads.
  *
- * A crumb gives way by its share down to a floor the stylesheet keeps
- * legible; a path whose crumbs at their floors still overflow its bar folds
- * the crumbs at its start into a single "…" crumb, one more at a time, until
- * what is left fits, the last crumb, the page the reader stands on, always
- * standing. Only a crumb of words or a plain press may be folded: one that
+ * While a path has crumbs left to fold, every crumb of words keeps its
+ * whole width, so a path that does not fit whole folds the crumbs at its
+ * start into a single "…" crumb, one more at a time, until what is left
+ * fits whole, rather than cut any of them; the last crumb, the page the
+ * reader stands on, always stands. Only once nothing is left to fold does a
+ * crumb give way, by its share, down to a floor the stylesheet keeps
+ * legible, the last crumb last of all. Only a crumb of words or a plain press may be folded: one that
  * opens something, a glyph that is the toolbar's way back, and one a bar's
  * widths already stand in for (`shownAt`) are the caller's own folds, and
  * the fold stops short of them.
@@ -33,6 +35,8 @@ interface DrawnCrumb {
   readonly crumb: Crumb;
   /** Whether it keeps its words legible in a narrow bar, so the fold comes before it shrinks to its first letters. */
   readonly legible: boolean;
+  /** Whether it keeps its whole width, because the path may still fold a crumb rather than cut this one. */
+  readonly whole: boolean;
   /** Whether it is the "…" standing for the crumbs folded away. */
   readonly folded: boolean;
 }
@@ -60,17 +64,26 @@ function legible(crumb: Crumb): boolean {
   return crumb.icon === undefined && crumb.popup === undefined;
 }
 
-/** The path as drawn with its first `count` crumbs folded into one "…" that names them. */
-function folded(crumbs: readonly Crumb[], count: number): readonly DrawnCrumb[] {
+/** The path as drawn with its first `count` of the `most` crumbs it may fold folded into one "…" that names them. */
+function folded(crumbs: readonly Crumb[], count: number, most: number): readonly DrawnCrumb[] {
   const kept = crumbs
-    .map((crumb, at) => ({ key: String(at), crumb, legible: legible(crumb), folded: false }))
+    .map((crumb, at) => {
+      const words = legible(crumb);
+      return {
+        key: String(at),
+        crumb,
+        legible: words,
+        whole: words && count < most,
+        folded: false,
+      };
+    })
     .slice(count);
   if (count === 0) return kept;
   const names = crumbs.slice(0, count).map((crumb) => crumb.label);
   const hint = names.join(FOLDED_SEPARATOR);
   // Note that the "…" is no legible crumb, because its floor is its own width.
   const crumb: Crumb = { label: FOLDED_WORDS, hint, name: hint };
-  return [{ key: "folded", crumb, legible: false, folded: true }, ...kept];
+  return [{ key: "folded", crumb, legible: false, whole: false, folded: true }, ...kept];
 }
 
 /** What identifies a path for the fold: its words and which are drawn, so a renamed or arriving crumb is measured afresh. */
@@ -174,5 +187,5 @@ export function useCrumbFold(
     }
     settled.current = widthsOf(nav);
   });
-  return [attach, folded(crumbs, count), crumbs.slice(0, count)];
+  return [attach, folded(crumbs, count, most), crumbs.slice(0, count)];
 }
