@@ -103,7 +103,7 @@ When this is the first review and you found nothing, post the one-line review on
 
 ## 6. Fix what you found, where the settings say to
 
-Only where the settings say to fix what you find: check out the pull request's branch, fix each finding you just posted, run the checks that cover the change, commit, and push to that branch; your pushes start no review of their own. Reply in each finding's thread with the commit that fixed it. Where they say no, push nothing.
+Only where the settings say to fix what you find: check out the pull request's branch, fix each finding you just posted, run the checks that cover the change, commit, and push to that branch, opening no pull request of your own; your pushes start no review of their own. Reply in each finding's thread with the commit that fixed it. Where they say no, push nothing.
 
 ## 7. Say what you did
 

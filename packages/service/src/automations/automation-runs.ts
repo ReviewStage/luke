@@ -224,6 +224,20 @@ function githubEventLines(run: ActedRun): readonly string[] {
   ];
 }
 
+/**
+ * What the agent is told where its automation fires on GitHub's events but
+ * this run came without one, such as a run its owner asked for now: that no
+ * event came, so a prompt that acts on one, the code review's among them,
+ * ends there rather than choosing an issue or a pull request of its own.
+ */
+function missingEventLines(automation: Automation, run: ActedRun): readonly string[] {
+  if (automation.trigger.kind !== AUTOMATION_TRIGGER.GITHUB) return [];
+  if (run.firing.kind === AUTOMATION_FIRING.GITHUB) return [];
+  return [
+    "No GitHub event came with this run, since GitHub did not fire it. Where your prompt acts on the event, such as a pull request it names, act on none and choose none yourself: stop, and say in your final message that no event came with this run.",
+  ];
+}
+
 /** What a run hands its agent: the prompt, and the run as the agent keeps it. */
 interface AutomationStart {
   readonly prompt: string;
@@ -289,7 +303,8 @@ function integrationLines(run: ActedRun, room: number): readonly string[] {
  * The prompt the run's agent is handed, and the run as the agent keeps it:
  * the automation's prompt, then a line saying which automation started it
  * and why, so the agent and the developer reading its tab both know it was
- * not typed by hand, and what it is told of the event that fired it; the
+ * not typed by hand, and what it is told of the event that fired it, or
+ * that none came where its trigger is GitHub's; the
  * agent keeps the automation's name, the firing, the prompt alone, and a
  * webhook's body as its caller sent it, cut where the prompt cut it. An
  * MCP server its words mention is handed to the agent whatever the
@@ -303,6 +318,7 @@ function automationStart(automation: Automation, run: ActedRun): AutomationStart
     "---",
     `Luke started this run for the automation "${automation.name}" because ${firingSentence(automation, run)}. No one is watching it as it runs: decide on your own, and post a thread only for what needs the developer.`,
     ...githubEventLines(run),
+    ...missingEventLines(automation, run),
   ];
   // Note that the body takes what room the rest leaves under the prompt's bound, less its own fence and lead line.
   const room = PROMPT_BOUND - lines.join("\n\n").length - WEBHOOK_FRAME_CHARS;
