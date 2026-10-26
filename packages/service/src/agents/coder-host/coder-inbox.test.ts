@@ -1029,6 +1029,21 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           ["docs", GENERAL_CHANNEL.NAME],
           "the refused unarchive under a taken name left #site archived",
         );
+
+        // A name an open channel took from an archived one names the open one, until it is renamed.
+        yield* madeChannel(agent.userId, agent.organizationId, "site");
+        assert.deepEqual(channelNames(yield* update({ channel: "site", archived: false })), [
+          "docs",
+          GENERAL_CHANNEL.NAME,
+          "site",
+        ]);
+        yield* update({ channel: "site", name: "site-new" });
+        assert.deepEqual(channelNames(yield* update({ channel: "site", archived: false })), [
+          "docs",
+          GENERAL_CHANNEL.NAME,
+          "site",
+          "site-new",
+        ]);
       }),
   );
 

@@ -191,7 +191,8 @@ const CREATE_CHANNEL_WORDS =
 /** What `update_channel`'s words say. */
 const UPDATE_CHANNEL_WORDS =
   "Change one channel of your workspace, open or archived, as a member does; what you leave out stands. " +
-  "channel names it by its name, # or not. name renames it, to a lowercase slug no open channel goes by; " +
+  "channel names it by its name, # or not; where an open channel and an archived one go by the same name, it names the open one, " +
+  "so rename that first to reach the archived one. name renames it, to a lowercase slug no open channel goes by; " +
   "purpose replaces what belongs in it, in one plain line. " +
   "archived true archives it: its threads stay where they are, still readable, and its name is freed; archived false opens an archived channel again under its own name, " +
   "and an archived channel is renamed or given a purpose only in the call that opens it again. " +
