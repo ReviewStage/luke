@@ -18,7 +18,7 @@ import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
  *
  * The coding agent runs eve's own tools, authored one file each under
  * `apps/dev/tools/` so the set is exactly this list and eve adds nothing
- * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
+ * beside it but its tools over each connection it is handed (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
  * search, eve's provider-run web search on the agent's own model call and
  * key, the hosted page read (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
@@ -31,7 +31,7 @@ import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
  * (`../page-tool.ts`), eve's own durable `sleep`, which it waits on its
  * checks or a deploy with, and the call's own question queue and hang-up,
  * refused off a call (`runCallTool`). The worker's own rows name
- * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
+ * the few of the same tools its role is offered (`../agent-runtime/tools.ts`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
  * its part spells; eve declares each tool's input itself, so what is held
@@ -152,17 +152,22 @@ export type CallTool =
   | typeof CODER_TOOL.END_CALL;
 
 /**
- * Why each of the call's own tools is refused on a turn no call is live on.
- * Note that they are offered on every turn, spoken or typed, so the tools a
- * turn sends, which lead its prompt, are the same whichever kind it is, and
- * a call that starts mid-PR reads the agent's history from the provider's
- * cache; off a call each refuses as other tools refuse.
+ * Why each of the call's own tools is refused on a turn that is not spoken:
+ * a typed one, or the unheard one a call's last line opens once it has
+ * ended. Note that they are offered on every turn, spoken or not, so the
+ * tools a turn sends, which lead its prompt, are the same whichever kind it
+ * is, and a call that starts mid-PR reads the agent's history from the
+ * provider's cache; off a spoken turn each refuses as other tools refuse.
+ * Note too that the words name the turn rather than the call, because a
+ * line typed while a call stands opens a typed turn too (`channel.ts`).
  */
 const OFF_CALL_REASON = {
   [CODER_TOOL.QUEUE_QUESTION]:
-    "No call is live, so no one hears a queued question: post it to the developer in a thread instead.",
-  [CODER_TOOL.WITHDRAW_QUESTION]: "No call is live, so no question waits on one.",
-  [CODER_TOOL.END_CALL]: "No call is live to end.",
+    "This turn is not spoken (nothing you write is heard), so no one hears a queued question: post it to the developer in a thread instead.",
+  [CODER_TOOL.WITHDRAW_QUESTION]:
+    "This turn is not spoken (nothing you write is heard), so a queued question is taken back only on a spoken turn.",
+  [CODER_TOOL.END_CALL]:
+    "This turn is not spoken (nothing you write is heard), so it has no call to end.",
 } as const satisfies Record<CallTool, string>;
 
 /** One call of the call's own tools as the turn's kind answers it: its run on a spoken turn, refused on any other. */
@@ -176,31 +181,27 @@ export function runCallTool(
     : { status: ACTION_RESULT_STATUS.REJECTED, reason: OFF_CALL_REASON[tool] };
 }
 
-/** The tools only an agent working in a repository is offered: the pull request the service opens for it, the two that write into its checkout, and `show_code`, which puts lines of it on the developer's screen. */
+/** The tools only an agent working in a repository is offered: the pull request the service opens for it, `apply_patch`, which edits its checkout, and `show_code`, which puts lines of it on the developer's screen. */
 export type RepositoryTool =
   | typeof CODER_TOOL.OPEN_PULL_REQUEST
-  | typeof CODER_TOOL.WRITE_FILE
   | typeof CODER_TOOL.APPLY_PATCH
   | typeof CODER_TOOL.SHOW_CODE;
 
 /**
  * The repository's tools an agent is offered, on every turn, typed or
  * spoken: all of them for one working in a repository, and none for one
- * with no repository, whose sandbox holds no checkout to write into or
- * show lines of and which has no branch to open a pull request from. Note that its shell and its reads stay, in the empty working folder
- * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), and that the
+ * with no repository, whose sandbox holds no checkout to patch or show
+ * lines of and which has no branch to open a pull request from. Note that
+ * its shell, its reads, and `write_file` stay, in the empty working folder
+ * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), where it
+ * writes the files its work makes, such as a page to show; and that the
  * instructions leave out the same words (`instructions.ts`).
  */
 export function repositoryToolsOf(
   agent: Pick<CodingAgent, "repository">,
 ): ReadonlySet<RepositoryTool> {
   if (agent.repository === null) return new Set();
-  return new Set([
-    CODER_TOOL.OPEN_PULL_REQUEST,
-    CODER_TOOL.WRITE_FILE,
-    CODER_TOOL.APPLY_PATCH,
-    CODER_TOOL.SHOW_CODE,
-  ]);
+  return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.APPLY_PATCH, CODER_TOOL.SHOW_CODE]);
 }
 
 /** The tools offered by what kind of agent it is: `list_open_asks` to an operator alone, and `delete_section` and `delete_automation` to every agent but an operator. */
@@ -216,7 +217,7 @@ export type KindTool =
  * `list_open_asks` and never `delete_section` or `delete_automation`; every
  * other agent the reverse.
  * Note that each tool withheld is one its call would only be refused by,
- * since a native harness is offered every tool: an operator's delete by its
+ * since the tools a harness is offered are narrowed by role and kind: an operator's delete by its
  * door (`agent-doors.ts`'s `runAgentTools`), and another agent's read of the
  * member's asks by the tool itself (`../operator-desk.ts`); and that the
  * instructions leave out the same words (`instructions.ts`).

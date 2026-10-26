@@ -76,7 +76,7 @@ import {
   integrationUnavailable,
 } from "./integration-token.js";
 import { readStoredTools, storeTools } from "./integration-tool-store.js";
-import { INTEGRATION } from "./integrations.js";
+import { INTEGRATION, integrationInstructions } from "./integrations.js";
 import {
   callMcpTool,
   listMcpToolSchemas,
@@ -336,11 +336,7 @@ export function connectionInstructions(
 ): Effect.Effect<Option.Option<string>, never, ConnectionDoorServices> {
   return Effect.map(
     handedConnection(admitted, name),
-    Option.map(({ provider, accountNote }) =>
-      accountNote === undefined
-        ? INTEGRATION[provider].DESCRIPTION
-        : `${INTEGRATION[provider].DESCRIPTION} ${accountNote}`,
-    ),
+    Option.map(({ provider, accountNote }) => integrationInstructions(provider, accountNote)),
   );
 }
 

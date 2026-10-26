@@ -26,7 +26,6 @@ import {
 } from "@luke/features/channel-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import {
-  INBOX_ANSWER_LEAD,
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_BOUNDS,
@@ -135,16 +134,13 @@ const MAX_VIDEO_MB = (INBOX_BOUNDS.MAX_VIDEO_BYTES / 1_000_000).toFixed(1);
 
 /** What `post_thread`'s words say before the workspace's channels. */
 const POST_THREAD_WORDS =
-  "Post a thread to one of your workspace's channels, apart from your transcript: something you need from a member, or something ready for them to look at or review, " +
-  "such as a pull request you opened or a page you showed. Every member of the workspace reads every channel, and the developer sees each of your threads in its channel and on your task, where you work on one. " +
-  "Post only what a person would act on or be glad to know; an update on something you posted goes into its thread, never a thread of its own. " +
+  "Post a message on a thread in one of your workspace's channels, apart from your transcript. " +
   "Each post is one message on a thread under key, your own short lowercase slug such as branch-protection. " +
   "The first post under a key opens its thread and must name its title; a later post under the same key adds a message to that thread, never a second one, " +
   "and a title it names renames the thread only where the post asks. " +
   "channel is the open channel the thread goes to, by its name, such as general: choose one for each thread by what belongs in it. " +
   "A thread that names none goes to #general, and a later post under its key that names none leaves it where it stands; " +
   "a name no open channel of your workspace goes by, or an archived channel's, is refused. " +
-  `Post to a channel that stands: make one with ${CHANNEL_TOOL.CREATE} only for a lasting topic none of them covers, rename, edit, or archive one with ${CHANNEL_TOOL.UPDATE}, and move a thread elsewhere with ${CHANNEL_TOOL.MOVE}. ` +
   "to is the member the thread's ask is addressed to, by their mention link, the [@Name](link) you name a member by, and the ask waits on them; " +
   "without it, it waits on the task's assignee, or on the developer who started you. " +
   `body is the message, one Markdown body of at most ${INBOX_BOUNDS.MAX_MESSAGE_CHARS} characters. ` +
@@ -164,14 +160,13 @@ const POST_THREAD_WORDS =
   `or answer (one to ${INBOX_BOUNDS.MAX_FIELDS} typed fields, text, number, select with its options and the one you recommend, or boolean, each named by its label and required where it must be filled; ` +
   "or no fields for an answer in their own words); never end an answer with an optional free-text field, because the reply box under every ask already takes a note; " +
   "never ask for a credential or a secret in a form, since the answer reaches your transcript: " +
-  "that is a do the developer does by hand. A post without ask asks nothing: something they should only know, or your reply on the thread; never how the work is going, such as that you started or that a pull request is almost merged. " +
+  "that is a do the developer does by hand. A post without ask asks nothing: something they should only know, or your reply on the thread. " +
   "It waits until they acknowledge it, which never reaches you unless they write something; " +
   `you may have at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} such posts waiting to be acknowledged, apart from your open asks. ` +
   "A thread holds one open ask, and a newer ask replaces it. " +
   "An answer to decide or answer always reaches you as a message. " +
   "waits is for a do alone: whether you need to hear it is done as a message, only where you set it true; " +
   "a do you do not wait on is kept for you to read, though an answer carrying their words or a file still reaches you as a message. " +
-  `An answer reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
   `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks. The call answers with your threads as they stand, each with the mention you name it by.`;
 
 /** One open channel as the tool's words list it: its name and what belongs in it. */

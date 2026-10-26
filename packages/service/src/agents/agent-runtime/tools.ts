@@ -28,7 +28,7 @@ const { CODER, CODER_WORKER } = AGENT_ROLE;
 
 /**
  * The roles each tool serves. Note that a coding agent's worker is offered
- * only the reads of the checkout and the web, so workers run in parallel
+ * only reads, never an edit, so workers run in parallel
  * without colliding and the agent alone edits. A coding agent is offered the
  * call's own tools, `queue_question`, `withdraw_question`, and `end_call`, on
  * every turn, so its tools are the same whatever kind of turn it runs, and refused off a call

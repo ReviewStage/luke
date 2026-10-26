@@ -20,7 +20,11 @@ import {
   type CodingAgentListAnswer,
   INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
@@ -10076,4 +10080,58 @@ test("archiving the channel shown moves the window to #general and says so", asy
   assert.equal(page.querySelector(".channel-stream")?.getAttribute("aria-label"), "#general");
   assert.equal(page.querySelector('section[aria-label="Channel not found"]'), null);
   assert.match(newestToastSays() ?? "", /#app is archived\. You're in #general now\./u);
+});
+
+test("a channel's post draws its first message as its thread does: a pull request alone on its line as its card, read through the channel's workspace, and the thread's own picture", async () => {
+  const connected: Workspace = { ...ACME, github: { login: "acme", active: true } };
+  handState(experimentsOn(EXPERIMENT.CHANNELS), {
+    tasks: { ...IDLE_TASKS_VIEW, workspaces: [connected] },
+  });
+  listedWorkspace = connected;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  const shot = inboxAttachmentAddress(
+    { kind: LINK_PLACE.INBOX_ITEM, planId: BILLING.id, itemId: THRESHOLD.id },
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c77",
+    "acme",
+  );
+  const words = [
+    "Opened the pull request.",
+    "https://github.com/acme/relay/pull/42",
+    `![The alert as it fires](${shot})`,
+  ].join("\n\n");
+  answerChannels({ threads: () => Promise.resolve(threadsPage([saying(THRESHOLD, words)])) });
+  const previous = fakeActsAnswer();
+  const read: string[] = [];
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.TASKS_PULL_REQUEST) return previous(request);
+      read.push(request.payload.workspaceId);
+      return Promise.resolve({
+        status: FAKE_ANSWER.DONE,
+        value: {
+          number: 42,
+          title: "Alert at 80% of the plan's usage",
+          url: "https://github.com/acme/relay/pull/42",
+          state: PULL_REQUEST_STATE.OPEN,
+        },
+      });
+    },
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  for (const land of imageReads.splice(0)) land();
+  await settle();
+  const post =
+    page.querySelector(".channel-stream [data-channel-post]") ?? assert.fail("the post is drawn");
+  assert.equal(
+    post.querySelector('[data-lone-link="pull-request"] .luke-list-row-title')?.textContent,
+    "#42 Alert at 80% of the plan's usage",
+  );
+  assert.deepEqual(
+    read,
+    [connected.id],
+    "the pull request is read through the channel's workspace",
+  );
+  assert.equal(post.querySelector<HTMLImageElement>("img")?.alt, "The alert as it fires");
 });

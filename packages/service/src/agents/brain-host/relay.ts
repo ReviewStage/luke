@@ -250,6 +250,7 @@ interface StreamRelaySeams {
 const TURN_ORIGIN_OF_HOST_TURN = {
   [BRAIN_HOST_TURN.TYPED]: TURN_ORIGIN.TYPED,
   [BRAIN_HOST_TURN.SPOKEN]: TURN_ORIGIN.SPOKEN,
+  [BRAIN_HOST_TURN.UNHEARD]: TURN_ORIGIN.SPOKEN,
   [RELAY_TURN.CHILD]: TURN_ORIGIN.CHILD,
 } as const satisfies Record<RelayTurn, TurnOrigin>;
 
@@ -1027,9 +1028,11 @@ export class StreamRelay {
    * steers a turn (`channel.ts`) rides on every later event of the turn with
    * its own delivery beside the start's, so the binding runs where a received
    * line first names one, and a delivery the turn already holds binds nothing
-   * again. A spoken ask joining a typed turn keeps how many of its steps had
-   * begun, which the step the line steers is not yet among, since eve tells a
-   * line ahead of the step that takes it. Where the line was taken as a
+   * again. A spoken ask joining a typed or unheard turn keeps how many of its
+   * steps had begun, which the step the line steers is not yet among, since
+   * eve tells a line ahead of the step that takes it, so a call back's ask
+   * joining the turn its last call's ended line opened is not told what that
+   * turn said before it. Where the line was taken as a
    * typed one, `binds` is false and the deliveries are only kept, since no
    * ask is among them.
    */
@@ -1051,7 +1054,9 @@ export class StreamRelay {
             joining,
             eveTurnId,
             hostTurnId(standing.sessionId, eveTurnId),
-            turn.kind === BRAIN_HOST_TURN.TYPED ? Object.keys(turn.steps).length : undefined,
+            turn.kind === BRAIN_HOST_TURN.TYPED || turn.kind === BRAIN_HOST_TURN.UNHEARD
+              ? Object.keys(turn.steps).length
+              : undefined,
           )
         : [];
       standing.state.update((state) =>

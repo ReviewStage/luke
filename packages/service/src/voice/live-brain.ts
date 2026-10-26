@@ -35,7 +35,7 @@ import {
 } from "effect";
 import { SqlClient } from "effect/sql";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
-import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
+import type { BrainHostTurn } from "../agents/brain-host/bounds.js";
 import {
   ASK_REFUSAL,
   type AskInput,
@@ -436,8 +436,8 @@ export interface HostedLiveBrainOptions {
   readonly backend: Pick<CallBackend, "tools">;
   /** The developer's time zone, handed with every ask so the turn reads the day in it; none reads UTC. */
   readonly timeZone?: string | undefined;
-  /** The ask door's seams: the ask record, and eve under the deployment principal for this account, which sends a spoken ask and nothing else. */
-  readonly asks: AskSeams<typeof BRAIN_HOST_TURN.SPOKEN>;
+  /** The ask door's seams: the ask record, and eve under the deployment principal for this account, which sends a spoken ask, as an unheard turn where no one hears it. */
+  readonly asks: AskSeams<BrainHostTurn>;
   /** The store the standing and the journal are read from, on the connection the socket's own fiber holds. */
   readonly store: Pick<HostedStore, "turns" | "messages">;
   /** The writer a cancelled run's turn is stamped through, as every Stop stamps it. */
@@ -988,6 +988,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
           userId: options.conversation.userId,
           question: ask.question,
           origin: ASK_ORIGIN.SPOKEN,
+          heard: ask.heard,
           clientId: ask.submissionId,
           conversationId: options.conversation.conversationId,
           voice: { sessionId: ask.sessionId, revision: ask.revision },

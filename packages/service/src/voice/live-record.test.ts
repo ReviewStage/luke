@@ -214,6 +214,7 @@ async function stand(live: VoiceTarget) {
       Effect.provide(
         LiveSessionService.make({
           createId: () => `id-${++ids}`,
+          hasTask: true,
           report: () => undefined,
         }),
         Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),

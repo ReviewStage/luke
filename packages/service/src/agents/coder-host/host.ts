@@ -739,7 +739,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       const drawn = Option.getOrElse(board, () => EMPTY_BOARD);
       const threads = Option.getOrElse(comments, () => []);
       const key = taskKey(stored.value, drawn, threads);
-      const opening = since === undefined && turn.kind !== BRAIN_HOST_TURN.SPOKEN;
+      // Note that a turn opened on a spoken line, heard or not, carries no task in its message.
+      const opening =
+        since === undefined &&
+        turn.kind !== BRAIN_HOST_TURN.SPOKEN &&
+        turn.kind !== BRAIN_HOST_TURN.UNHEARD;
       const saved =
         since !== undefined &&
         savedByAnotherSince(
@@ -1055,7 +1059,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           );
         }
         const spoken = turn.kind === BRAIN_HOST_TURN.SPOKEN;
-        const kind = turnKindWords(spoken, handed, agent.taskId !== null);
+        const kind = turnKindWords(turn.kind, handed, agent.taskId !== null);
         const taskHanded = task === undefined ? handed.task : task.key;
         const next: TurnHanded = {
           ...(taskHanded === undefined ? undefined : { task: taskHanded }),

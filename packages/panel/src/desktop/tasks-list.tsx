@@ -293,7 +293,7 @@ const LIST_MORE_CELL = `${LIST_CELL} pointer-events-auto relative z-1 order-11`;
  * filled under the pointer and while its menu is open, a draft's as a task's.
  */
 const LIST_ROW =
-  "tasks-list-row relative col-span-full grid min-h-tasks-list-row grid-cols-subgrid items-center rounded-control px-row-inset py-luke-2 text-foreground [transition:transform_var(--luke-duration-fast)_var(--luke-spring-fast),background-color_var(--luke-duration-hover)_var(--luke-motion-exit),opacity_var(--luke-duration-quick)_var(--luke-motion-exit)] data-[menu-open=true]:bg-muted data-[menu-open=true]:shadow-selected-edge [&:hover]:bg-muted";
+  "tasks-list-row relative col-span-full grid min-h-tasks-list-row grid-cols-subgrid items-center rounded-control px-row-inset py-luke-2 text-foreground [transition:transform_var(--luke-duration-fast)_var(--luke-spring-fast),background-color_var(--luke-duration-hover)_var(--luke-motion-exit),opacity_var(--luke-duration-quick)_var(--luke-motion-exit)] data-[menu-open=true]:bg-muted data-[menu-open=true]:shadow-menu-open-edge [&:hover]:bg-muted";
 
 /** The name's cell, the one that takes the row's press. */
 const LIST_NAME_CELL =

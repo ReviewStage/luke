@@ -522,15 +522,10 @@ test("an agent asked for a plan, a proposal, or research opens no pull request o
   assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, true]);
 });
 
-test("the session is told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    assert.ok(
-      coderInstructions("Acme/Relay", brief, false, TASK_ADDRESS).includes(
-        "Never ask for a credential or a secret in a form",
-      ),
-      brief,
-    );
-  }
+test("the thread post tool tells the session never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
+  assert.ok(
+    INBOX_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
+  );
 });
 
 test("the session sends whatever is ready for the developer to look at or review to a thread, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post", () => {

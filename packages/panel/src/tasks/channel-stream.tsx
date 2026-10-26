@@ -1,7 +1,6 @@
 import type { Channel, ChannelThread } from "@luke/features/channel-wire";
 import {
   INBOX_ASK,
-  INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   type InboxItem,
   type InboxMessage,
@@ -53,7 +52,6 @@ import { ArrowUpIcon, GLYPH, SlidersHorizontalIcon } from "@luke/ui/icons";
 import { askScroll } from "@luke/ui/scroll-asked";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { ActorRef, commentAuthor } from "../actor-ref.js";
 import {
   Conversation,
   ConversationContent,
@@ -61,7 +59,6 @@ import {
   FLOATING_OVER_LOG_CLASS,
 } from "../ai-elements/conversation.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
-import { usePerson } from "../member-directory.js";
 import { type AgentLine, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import {
   CHANNEL_VIEW,
@@ -78,8 +75,10 @@ import {
 } from "./channels-model.js";
 import { AskControls } from "./inbox-ask-controls.js";
 import type { InboxCloser } from "./inbox-close.js";
+import type { InboxCodeDoors } from "./inbox-code-card.js";
 import { VIEW_OPTIONS } from "./inbox-columns.js";
 import { useInboxItemActions } from "./inbox-item-actions.js";
+import { type ItemAgent, ItemWords, MessageWords, useMessageWriter } from "./inbox-message.js";
 import {
   EMPTY_INBOX_DRAFT,
   INBOX_HOLDER,
@@ -91,9 +90,9 @@ import {
 } from "./inbox-model.js";
 import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
 import { useMoveThreadDialog } from "./move-thread-dialog.js";
-import { TranscriptWords } from "./transcript-blocks.js";
 import { type ChannelThreadsControl, useChannelThreads, useChannelView } from "./use-channels.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
+import { type InboxImageReads, useInboxImageReads } from "./use-task-inbox.js";
 
 /**
  * channel-stream.tsx -- one channel drawn as a stream of its threads, as Slack draws a channel, in the Inbox's place (STAG-547).
@@ -104,9 +103,12 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
  * it is not Mine (`channels-model.ts`). Under it, each thread the view shows
  * is a post, oldest first, a divider before each day and the New line
  * before the first posted since the reader last looked: drawn as the
- * Inbox's thread draws a message (`Comment`), the writer's face, name, and
- * time, an agent named as the thread's pane names it (`agentSubject`), then
- * the thread's title and its first message's words. A decision
+ * Inbox's thread draws a message, through the same parts
+ * (`inbox-message.tsx`), the writer's face, name, and time, an agent named
+ * with its card as the thread's pane names it (`agentSubject`), then the
+ * thread's title and its first message's files and words, its pictures
+ * read by the stream and a link alone on its line drawn as its card, read
+ * through the channel's workspace. A decision
  * still open offers its options under the post with the thread's own
  * controls, numbered for no keys, and one pick answers it there; steps and
  * a written answer offer one press that opens the thread. The replies line
@@ -276,13 +278,21 @@ function StreamViewOptions({
 /** The agents a post names its writer from: the open thread's, as its pane names them. */
 type StreamAgents = Pick<
   CodingAgentsControl,
-  "agents" | "archived" | "models" | "me" | "pullRequests"
+  "agents" | "archived" | "models" | "me" | "pullRequests" | "readInboxImage"
 >;
 
-/** What a post names its writers from: the open thread's agents, and the thread as the Inbox lists it, none until its holder is read. */
+/** Where the stream's posts read their words, as a thread's pane reads its own: the channel's workspace, and the code a thread's holder reads a file's lines through. */
+export interface StreamWords {
+  readonly workspaceId: string | undefined;
+  readonly codeOf: (holder: InboxHolder) => InboxCodeDoors;
+}
+
+/** What a post names its writers from and draws its words through: the open thread's agents, the thread as the Inbox lists it, none until its holder is read, and the stream's picture reads. */
 interface PostDoors {
   readonly agents: StreamAgents;
   readonly listed: InboxListed | undefined;
+  readonly words: StreamWords;
+  readonly images: InboxImageReads;
 }
 
 /**
@@ -306,25 +316,23 @@ function threadAgentLine(
   return { ...thread.agent, kind: row.kind, status: row.status };
 }
 
-/** A message's writer, a member as the directory draws them, or the thread's agent as its pane names it (`agentSubject`), by a line read beside it where the open thread's agents hold none of it. */
-function useWriter(message: InboxMessage | undefined, thread: ChannelThread, doors: PostDoors) {
-  const member = usePerson(message?.member);
-  if (message?.author !== INBOX_MESSAGE_AUTHOR.AGENT) return member;
+/** A post's thread's agent as its pane names it (`agentSubject`), by a line read beside it where the open thread's agents hold none of it, and the press that opens its tab. */
+function postAgent(
+  thread: ChannelThread,
+  doors: PostDoors,
+  onOpen: (thread: ChannelThread, holder: InboxHolder | undefined) => void,
+): ItemAgent {
   const line = threadAgentLine(thread, doors.listed);
-  return agentSubject(doors.agents, thread.agentId, NOTHING_HELD, false, line).tile;
+  return {
+    subject: agentSubject(doors.agents, thread.agentId, NOTHING_HELD, false, line),
+    models: doors.agents.models,
+    onOpen: () => onOpen(thread, doors.listed?.holder),
+  };
 }
 
-/** A replier's face, a member's own or the thread's agent's. */
-function ReplierFace({
-  message,
-  thread,
-  doors,
-}: {
-  message: InboxMessage;
-  thread: ChannelThread;
-  doors: PostDoors;
-}): React.JSX.Element {
-  const author = commentAuthor(useWriter(message, thread, doors));
+/** A replier's face, a member's own or the thread's agent's, as the thread's head draws them. */
+function ReplierFace({ message, by }: { message: InboxMessage; by: ItemAgent }): React.JSX.Element {
+  const { author } = useMessageWriter(message, by);
   return (
     <Avatar
       size={AVATAR_SIZE.INLINE}
@@ -558,7 +566,7 @@ function usePostMenu({
     contextMenu: menu.contextMenu(),
     button: (
       <div className="comment-tools">
-        <MoreButton thing={POST_THING} size={BUTTON_SIZE.COMPACT} {...menu.trigger()} />
+        <MoreButton thing={POST_THING} {...menu.trigger()} />
       </div>
     ),
     drawn: (
@@ -603,7 +611,9 @@ function ThreadPost({
   onOpen: () => void;
 }): React.JSX.Element {
   const first = item.thread?.[0];
-  const actor = useWriter(first, item, doors);
+  const by = postAgent(item, doors, menuDoors.onOpenAgent);
+  const writer = useMessageWriter(first, by);
+  const holder = doors.listed?.holder;
   const replies = repliesLine(item, readerId);
   const needs = threadNeedsReader(item, readerId);
   const unread = isUnread(item);
@@ -624,8 +634,8 @@ function ThreadPost({
       menu={menu.drawn}
     >
       <Comment
-        author={commentAuthor(actor)}
-        nameRef={<ActorRef actor={actor} nameOnly />}
+        author={writer.author}
+        nameRef={writer.nameRef}
         at={item.postedAt}
         now={now}
         trailing={
@@ -639,10 +649,15 @@ function ThreadPost({
           <CardPress reach={CARD_PRESS_REACH.CARD} label={`Open ${item.title}`} onPress={onOpen}>
             <Text variant={TEXT_VARIANT.LABEL}>{item.title}</Text>
           </CardPress>
-          {first === undefined || first.text === "" ? null : (
-            <div className="channel-post-words min-w-0 text-body-size leading-reading text-foreground">
-              <TranscriptWords text={first.text} asDocument />
-            </div>
+          {first === undefined ? null : (
+            <ItemWords
+              itemId={item.id}
+              workspaceId={doors.words.workspaceId}
+              images={doors.images}
+              code={holder === undefined ? undefined : doors.words.codeOf(holder)}
+            >
+              <MessageWords itemId={item.id} message={first} images={doors.images} />
+            </ItemWords>
           )}
           {/* Note that on the attention tint the ask's controls stand on the column's ground, so they read gray as in the thread. */}
           <ControlGround ground={needs ? CONTROL_GROUND.OPAQUE : CONTROL_GROUND.CLEAR}>
@@ -650,7 +665,7 @@ function ThreadPost({
           </ControlGround>
           <div className={POST_LINE}>
             {replies.repliers.map((reply) => (
-              <ReplierFace key={reply.id} message={reply} thread={item} doors={doors} />
+              <ReplierFace key={reply.id} message={reply} by={by} />
             ))}
             <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={onOpen}>
               {replies.words}
@@ -796,6 +811,7 @@ export function ChannelStream({
   shown,
   agents,
   listedOf,
+  words,
   menuDoors,
   archived,
   onOpen,
@@ -816,6 +832,8 @@ export function ChannelStream({
   /** The open thread's agents, as its pane names them, which every post naming one of them names it by. */
   agents: StreamAgents;
   listedOf: (itemId: string) => InboxListed | undefined;
+  /** Where the posts read their words, as the thread's pane reads its own. */
+  words: StreamWords;
   /** What each post's ⋯ acts through. */
   menuDoors: PostMenuDoors;
   /** Where the channel is archived, which draws its threads to read alone: no ask answered from a post and no thread moved, and Unarchive at its head. */
@@ -830,6 +848,13 @@ export function ChannelStream({
   const settler = useInboxSettler();
   const log = useRef<HTMLDivElement>(null);
   const { read, view, onView, viewed, needsCount } = stream;
+  // Note that the posts are threads of many tasks, so the stream reads their pictures itself, as a thread's pane reads its task's.
+  const images = useInboxImageReads({
+    read: agents.readInboxImage,
+    scope: channel.id,
+    items: viewed,
+    drawn: true,
+  });
   // Note that the New line stands where the reader left off as the channel opened, and stays while they read it.
   const [lookedAt] = useState(channel.lookedAt);
   // Note that leaving the channel is having looked at it, so its New line is gone when the reader comes back.
@@ -904,7 +929,7 @@ export function ChannelStream({
                 <ThreadPost
                   key={row.thread.id}
                   item={row.thread}
-                  doors={{ agents, listed: listedOf(row.thread.id) }}
+                  doors={{ agents, listed: listedOf(row.thread.id), words, images }}
                   chosen={row.thread.id === chosenId}
                   readerId={readerId}
                   now={now}

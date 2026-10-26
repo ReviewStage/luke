@@ -35,6 +35,7 @@ import {
   ChannelStream,
   type PostMenuDoors,
   type StreamChannel,
+  type StreamWords,
   useChannelStream,
 } from "../tasks/channel-stream.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
@@ -457,6 +458,12 @@ export function DesktopInbox({
     onMove: channels.onMove,
     channels: channels.channels ?? [],
   };
+  // A post's words are read as its thread's pane reads them: under the channel's workspace, a file's lines through its holder.
+  const postWords: StreamWords = {
+    workspaceId: listedWorkspace?.id,
+    codeOf: (holder) =>
+      paneDoors(tasks, holder, { act, now, panelFor, besideAgents: named.agentIds }).code,
+  };
   // A channel pressed on a phone's list opens on its stream, never on a thread left open in it.
   const openChannel = (channelId: string) => {
     channelPlace.onChoose(channelId);
@@ -648,6 +655,7 @@ export function DesktopInbox({
                       shown={tasks.shown}
                       agents={named}
                       listedOf={listedOf}
+                      words={postWords}
                       menuDoors={postMenu}
                       archived={
                         archivedShown === undefined

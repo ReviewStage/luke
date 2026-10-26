@@ -1074,7 +1074,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             "## The checkout",
             CODER_TOOL.OPEN_PULL_REQUEST,
             CODER_TOOL.APPLY_PATCH,
-            CODER_TOOL.WRITE_FILE,
             "Co-authored-by",
             "gh pr checks",
           ]) {
@@ -1094,18 +1093,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "an agent with a repository is offered its pull request, the tools that write into its checkout, and show_code",
+      "an agent with a repository is offered its pull request, apply_patch, and show_code",
       () =>
         Effect.gen(function* () {
           const { agent } = yield* unclaimedAgent();
           assert.deepEqual(
             [...repositoryToolsOf(agent)].sort(),
-            [
-              CODER_TOOL.APPLY_PATCH,
-              CODER_TOOL.OPEN_PULL_REQUEST,
-              CODER_TOOL.WRITE_FILE,
-              CODER_TOOL.SHOW_CODE,
-            ].sort(),
+            [CODER_TOOL.APPLY_PATCH, CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.SHOW_CODE].sort(),
           );
         }),
     );
@@ -2424,6 +2418,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
 
           const after = yield* turnOf(BRAIN_HOST_TURN.TYPED, still.handed);
           assert.ok(after.text?.startsWith("This turn is typed"), after.text ?? "");
+          // The line a call hands over once it has ended is not heard either.
+          const unheard = yield* turnOf(BRAIN_HOST_TURN.UNHEARD, still.handed);
+          assert.ok(unheard.text?.startsWith("The call has ended"), unheard.text ?? "");
           const again = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, after.handed);
           assert.ok(again.text?.includes("## This turn is spoken"), again.text ?? "");
 
@@ -2438,7 +2435,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "the call's own tools run on a spoken turn and are refused on a typed one, so both are offered the same tools",
+      "the call's own tools run on a spoken turn and are refused on a typed or unheard one, so every kind is offered the same tools",
       () =>
         Effect.sync(() => {
           const accepted = { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -2451,9 +2448,11 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
               runCallTool(BRAIN_HOST_TURN.SPOKEN, tool, () => accepted),
               accepted,
             );
-            const refused = runCallTool(BRAIN_HOST_TURN.TYPED, tool, () => accepted);
-            assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
-            assert.match(String(refused.reason), /No call is live/u);
+            for (const turn of [BRAIN_HOST_TURN.TYPED, BRAIN_HOST_TURN.UNHEARD]) {
+              const refused = runCallTool(turn, tool, () => accepted);
+              assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+              assert.match(String(refused.reason), /This turn is not spoken/u);
+            }
           }
         }),
     );

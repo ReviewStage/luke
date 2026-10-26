@@ -1,6 +1,6 @@
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import { type KeyboardEvent, type ReactNode, type RefObject, useRef } from "react";
-import type { ButtonSize } from "../button/button.js";
+import { BUTTON_LIGHT, type ButtonSize } from "../button/button.js";
 import {
   dropBelowStart,
   Menu,
@@ -105,12 +105,14 @@ export function useRowMenu(
   };
   const doors = offered ? state.contextMenu(opener ?? moreElement) : undefined;
   const open = state.open !== undefined;
+  // Note that a row's ⋯ lights its glyph alone at any size, because the row is already lit and, while its menu stands, ringed.
   const button = ({ size, describedBy }: RowMoreOptions = {}): ReactNode =>
     live !== undefined ? (
       <MoreButton
         ref={moreElement}
         thing={live.thing}
         size={size}
+        lights={BUTTON_LIGHT.GLYPH}
         aria-describedby={describedBy}
         {...state.trigger()}
       />

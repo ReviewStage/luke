@@ -22,7 +22,7 @@ function backendToolsLines(tools: readonly string[]): string {
 }
 
 /**
- * A task's call's backend is the brain, which holds the saved
+ * A task's call's backend is the coding agent, which holds the saved
  * document, reads the task's repository, and writes the plan itself; no
  * notetaker reads the call beside it, so what the developer settles reaches
  * the plan only through a delegation, and every decision, requirement,

@@ -18,7 +18,12 @@ import {
   type CodingAgentInboxChanged,
   INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
+import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -30,6 +35,7 @@ import {
   type InboxMessage,
   threadNeedsReader,
 } from "@luke/features/inbox-wire";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
@@ -44,6 +50,7 @@ import {
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
 import { EXPERIMENT } from "@luke/settings";
+import { longRunPicture } from "./agent-long-run-fixture.js";
 
 const LANDED = Date.now();
 const MINUTE = 60_000;
@@ -277,6 +284,24 @@ const STRAY: StraySeed = {
 };
 
 /* ----- The threads ----- */
+
+/** The workspace's slug, which its links are written under. */
+const WORKSPACE_SLUG = "stage";
+
+/** The release's pull request, which the release's post names alone on its line, as GitHub answers for it. */
+const RELEASE_PULL_REQUEST = {
+  number: 4893,
+  title: "chore(release): bump the workspace to 0.48.0 and write its changelog",
+  url: "https://github.com/ReviewStage/luke/pull/4893",
+  state: PULL_REQUEST_STATE.MERGED,
+  author: "luke-agent[bot]",
+  authorBot: true,
+  additions: 212,
+  deletions: 38,
+} as const;
+
+/** The picture the release's post draws in its words. */
+const RELEASE_PICTURE = fixtureId("e5000005", 1);
 
 function agentSaid(n: number, ago: number, text: string, ask?: InboxMessage["ask"]): InboxMessage {
   return {
@@ -583,7 +608,21 @@ const THREADS: ThreadSeed[] = [
       agentSaid(
         115,
         2 * DAY,
-        "Signed, notarized, and verified. The update manifest is live, so every Mac picks it up on its next check.",
+        [
+          "Signed, notarized, and verified. The update manifest is live, so every Mac picks it up on its next check.",
+          "",
+          RELEASE_PULL_REQUEST.url,
+          "",
+          `![The update manifest as every Mac reads it](${inboxAttachmentAddress(
+            {
+              kind: LINK_PLACE.INBOX_ITEM,
+              planId: TASK.RELEASE,
+              itemId: fixtureId("d4000004", 12),
+            },
+            RELEASE_PICTURE,
+            WORKSPACE_SLUG,
+          )})`,
+        ].join("\n"),
       ),
     ],
     { status: INBOX_STATUS.ANSWERED, settledAt: LANDED - 2 * DAY },
@@ -976,7 +1015,7 @@ export function channelsTasksView(profile: string, list: TasksView): TasksView {
       .map(({ personal: _personal, ...workspace }) => ({
         ...workspace,
         name: "Stage",
-        slug: "stage",
+        slug: WORKSPACE_SLUG,
         memberCount: MEMBERS.length,
         github: { login: "ReviewStage", active: true },
       })),
@@ -1116,6 +1155,9 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     const item = replied(itemId, text, answers);
     return item === undefined ? { failure: "unanswered" } : { item };
   },
+  [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: () => longRunPicture(),
+  [ACT_KIND.TASKS_PULL_REQUEST]: ({ number }) =>
+    number === RELEASE_PULL_REQUEST.number ? RELEASE_PULL_REQUEST : null,
   [ACT_KIND.CHANNELS_LIST]: () => channelsAnswer(),
   [ACT_KIND.CHANNELS_THREADS]: ({ channelId }) => ({ threads: threadsOf(channelId) }),
   [ACT_KIND.CHANNELS_LOOK]: ({ channelId }) => {

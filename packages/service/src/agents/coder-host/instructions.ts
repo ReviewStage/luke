@@ -168,8 +168,10 @@ interface ToolWords {
   readonly glob: string;
   /** How the public web is searched and a page read, up to what the search is for. */
   readonly searchWeb: string;
-  /** How a skill the developer names is loaded. */
+  /** How a skill the developer names is loaded, of the repository's or the ones the member installed. */
   readonly skills: string;
+  /** How a skill the developer names is loaded with no repository, where the member's installed ones are all it is offered. */
+  readonly installedSkills: string;
   /** What it is told of a browser the developer can watch, a tool of Luke's every harness is offered. */
   readonly browser: string;
   /** How the agent keeps its to-dos. */
@@ -187,7 +189,6 @@ const NATIVE_INTEGRATION_WORDS = `The services the developer connected, such as 
 
 `;
 
-/** The repository named in the examples of an agent with none of its own. */
 /**
  * What a coding agent is told of `browser`, the Chromium in its own sandbox
  * whose tabs the developer watches and may take over: for what the
@@ -233,14 +234,15 @@ const SCHEDULE_WAKEUP_WORDS =
 const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
   [CODER_HARNESS.EVE]: {
     checkout: `Every \`bash\` command already starts in the checkout, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, \`grep\`, and \`apply_patch\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. The checkout opens one commit deep, so a turn that only reads the code starts fast: your first write, and the first \`bash\` command that is more than a plain read, such as any \`git\` or \`gh\` command or a script, fetches the rest of its history before it runs.`,
-    sandbox: `Every \`bash\` command starts in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in, in a fresh shell; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from it, and an absolute path is taken as written.`,
+    sandbox: `Every \`bash\` command starts in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in, in a fresh shell; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from it, and an absolute path is taken as written.`,
     serve:
       "Start the app with `bash`, which keeps a server running in the background while your turn lasts",
     started: STOPS_AT_TURN_END,
     readFile: "`read_file`",
     glob: "`glob`",
     searchWeb: `Search the public web with \`${CODER_TOOL.WEB_SEARCH}\` and read a page it found with \`${CODER_TOOL.READ_WEB_PAGE}\``,
-    skills: `A word like \`/name\` in the developer's message names one of the repository's skills, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers. The list is the repository's skills as your session began, so where \`${CODER_TOOL.LOAD_SKILL}\` knows no such skill, fetch the default branch and read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on it, and follow that instead.`,
+    skills: `A word like \`/name\` in the developer's message names one of your skills, listed under Available skills: the repository's, or one your developer installed into Luke. Call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers. The list is your skills as your session began, so where \`${CODER_TOOL.LOAD_SKILL}\` knows no such skill, it may be one the repository added since: fetch the default branch and read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on it, and follow that instead.`,
+    installedSkills: `A word like \`/name\` in the developer's message names one of the skills your developer installed into Luke, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers.`,
     browser: browserWords("`bash`"),
     todos: `For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.`,
     checks: { readable: CHECKS_WORDS.readable, rest: CHECKS_WORDS.rest },
@@ -259,6 +261,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     glob: "Glob",
     searchWeb: "Search the public web with WebSearch and read a page with WebFetch",
     skills: `A word like \`/name\` in the developer's message names one of your skills: the repository's, or one your developer installed into Luke, which Claude Code lists as \`${INSTALLED_SKILLS.PLUGIN}:<name>\`. Load it with Claude Code's Skill tool before anything else, and follow what it answers. Where it knows no such skill, read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on the default branch, and follow that instead.`,
+    installedSkills: `A word like \`/name\` in the developer's message names one of the skills your developer installed into Luke, which Claude Code lists as \`${INSTALLED_SKILLS.PLUGIN}:<name>\`. Load it with Claude Code's Skill tool before anything else, and follow what it answers.`,
     browser: browserWords("Bash"),
     todos:
       "For work of more than a couple of steps, keep your to-dos with TaskCreate, one task per item, and TaskUpdate: create them all before you start, keep exactly one in progress, and mark each completed as it finishes.",
@@ -280,6 +283,9 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     glob: "your shell (`rg --files`, or `ls`)",
     searchWeb: "Search the public web with Codex's own web search",
     skills: `A word like \`/name\` in the developer's message names one of your skills, which Codex lists with where each one's \`SKILL.md\` stands: the checkout's own, under \`.agents/skills\`, and the ones your developer installed into Luke. Read that skill's \`SKILL.md\` before anything else, and follow what it says. Where Codex lists no such skill, read \`.agents/skills/<name>/SKILL.md\` or \`.claude/skills/<name>/SKILL.md\` on the default branch, and follow that instead.`,
+    // Note that no path is named, because a local agent's Mac keeps the installed skills in a folder of its own, which Codex lists beside each skill.
+    installedSkills:
+      "A word like `/name` in the developer's message names one of the skills your developer installed into Luke, which Codex lists among your skills: read that skill's `SKILL.md` before anything else, and follow what it says.",
     browser: browserWords("your shell"),
     todos:
       "For work of more than a couple of steps, keep your to-dos with Codex's plan tool (`update_plan`), which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",
@@ -420,11 +426,16 @@ ${read}${EDIT_PLAN_WORDS}`,
  * named by the mention the tool that made or listed it answered, so no
  * address is spelled by hand. An MCP server is named by its connection's
  * mention, and a skill as `/name`, since Luke draws both as chips. A name
- * Luke shows as a label is written in sentence case, with no period.
+ * Luke shows as a label is written in sentence case, with no period. An
+ * agent with no repository is told of no file of one, and its pull request
+ * example names an example repository.
  */
-function namingWords(repository: string, taskLink: string | null): string {
-  const file = `https://github.com/${repository}/blob/HEAD/apps/web/session-store.ts`;
-  const lines = `https://github.com/${repository}/blob/<commit>/apps/web/session-store.ts#L3-L5`;
+function namingWords(repository: string | null, taskLink: string | null): string {
+  const files =
+    repository === null
+      ? ""
+      : `
+- A file of your repository: \`[@session-store.ts](https://github.com/${repository}/blob/HEAD/apps/web/session-store.ts)\`; a folder the same way with \`tree\` for \`blob\`; lines at a commit already on GitHub: \`[@session-store.ts:3–5](https://github.com/${repository}/blob/<commit>/apps/web/session-store.ts#L3-L5)\`.`;
   const inboxItem =
     taskLink === null
       ? "https://tryluke.dev/acme/agent/<agent-id>/inbox/<item-id>"
@@ -436,9 +447,8 @@ function namingWords(repository: string, taskLink: string | null): string {
       : `
 - Your task's plan, whose link is \`${taskLink}\`: \`[@<the task's name>](${taskLink})\`, and one of its sections by its heading's anchor, the heading as GitHub spells an anchor (lower case, spaces as hyphens, punctuation dropped): \`[@Rollout](${taskLink}#rollout)\`.
 - A page shown on the task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](${taskLink}/page/<page-id>)\`.`;
-  return `Name a thing the developer can open as a mention: a Markdown link whose words are \`@\` and the thing's name, \`[@name](target)\`. Luke draws it as the thing's chip, which opens it, wherever you write it: in a message, a thread, or the plan. Keep a mention in the plan exactly as it stands when you edit around it. Copy a target a tool answered rather than spelling one:
-- A file of your repository: \`[@session-store.ts](${file})\`; a folder the same way with \`tree\` for \`blob\`; lines at a commit already on GitHub: \`[@session-store.ts:3–5](${lines})\`.
-- A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`.${ownTask}
+  return `Name a thing the developer can open as a mention: a Markdown link whose words are \`@\` and the thing's name, \`[@name](target)\`. Luke draws it as the thing's chip, which opens it, wherever you write it: in a message, a thread, or the plan. Keep a mention in the plan exactly as it stands when you edit around it. Copy a target a tool answered rather than spelling one:${files}
+- A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository ?? EXAMPLE_REPOSITORY}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`.${ownTask}
 - Another coding agent, or another task, by the \`mention\` \`${CODER_TOOL.LIST_AGENTS}\`, \`${CODER_TOOL.START_AGENT}\`, or \`${CODER_TOOL.LIST_TASKS}\` answered: \`[@Wire the desktop](https://tryluke.dev/acme/plan/<task-id>/agent/<agent-id>)\`.
 - One of your threads, by the \`mention\` each of your thread tools answered for it: \`[@Review the invite flow](${inboxItem})\`.
 - A date, which opens nothing, by its day, or its time with the offset it is at, and a range by both ends joined by a slash, its words the date in full: \`[@Oct 20, 2026](luke://date/2026-10-20)\`, \`[@Oct 20, 2026, 3:00 PM PDT](luke://date/2026-10-20T15:00-07:00)\`, \`[@Oct 20, 2026 → Oct 24, 2026](luke://date/2026-10-20/2026-10-24)\`.
@@ -502,7 +512,7 @@ interface WorkWords {
   readonly work: string;
   /** How it searches the public web. */
   readonly search: string;
-  /** The repository's skills, ending on a blank line; empty for an agent with no repository, which is offered none. */
+  /** How a skill is loaded: the repository's and the installed ones, or the installed ones alone with no repository; ending on a blank line. */
   readonly skills: string;
   /** What a link the developer pointed at names, up to a task's link. */
   readonly links: string;
@@ -510,6 +520,7 @@ interface WorkWords {
   readonly worker: { readonly reads: string; readonly readOnly: string };
 }
 
+/** The repository named in the examples of an agent with none of its own. */
 const EXAMPLE_REPOSITORY = "acme/app";
 
 /**
@@ -647,7 +658,9 @@ Where the ${words.brief} is unclear, say so plainly in your final message rather
     search: `${tools.searchWeb} when a fact lies outside what you were handed, such as a library's documentation. A query leaves for the public web, so never put private names or words into one.
 
 ${tools.integrations}`,
-    skills: "",
+    skills: `${tools.installedSkills}
+
+`,
     links: `A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at.`,
     worker: {
       reads: "a worker that reads the same sandbox, what you wrote in it included;",
@@ -694,7 +707,9 @@ You run one conversation with the developer that goes on for weeks and is never 
     search: `${tools.searchWeb} when a fact lies outside what you were handed, such as a library's documentation. A query leaves for the public web, so never put private names or words into one.
 
 ${tools.integrations}`,
-    skills: "",
+    skills: `${tools.installedSkills}
+
+`,
     links:
       "A link in the developer's message whose label starts with `@`, such as `[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)`, is something they pointed you at.",
     worker: {
@@ -836,13 +851,13 @@ ${place.search}${place.skills}${place.links}${place.link} Older messages write t
 
 What you need from the developer goes in a thread with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), something only they can do by hand, such as changing a repository setting on GitHub or adding a secret, or anything ready for them to look at or review. Post the moment something is ready for their eyes: a pull request you opened or marked ready, a page you showed, a screenshot of a UI you built, a draft or a finding they should read before you go on. Post too when the developer needs to test something by hand that your own checks cannot reach, such as a change that only shows on their Mac, against their own account, or in a flow you could not drive yourself: say what to try and what they should see, as a \`do\`. Most changes need no such test, so ask for one only where yours fall short. Your final message still says what you published.
 
-A thread goes to one of your workspace's channels, which every member reads, and shows on your task as well where you work on one. Choose its channel by what belongs there, as \`${INBOX_TOOLS.POST.name}\` lists them; a thread that names none goes to #general. Where its ask is a particular member's rather than the developer's, address it to them with \`to\` and their mention link. Post only what a person would act on or be glad to know: an update on something you posted goes into its thread, never a thread of its own. Keep to the channels that stand: make one with \`${INBOX_TOOLS.CREATE_CHANNEL.name}\` only for a lasting topic or a project of several weeks that none of them covers, never one per task, rename it, edit its purpose, or archive it with \`${INBOX_TOOLS.UPDATE_CHANNEL.name}\`, archiving a project's channel once the project ships, and move a thread to the channel it belongs in with \`${INBOX_TOOLS.MOVE_THREAD.name}\`.
+A thread goes to one of your workspace's channels, which every member reads, and shows on your task as well where you work on one. Post only what a person would act on or be glad to know: an update on something you posted goes into its thread, never a thread of its own. Keep to the channels that stand: make one with \`${INBOX_TOOLS.CREATE_CHANNEL.name}\` only for a lasting topic or a project of several weeks that none of them covers, never one per task, rename it, edit its purpose, or archive it with \`${INBOX_TOOLS.UPDATE_CHANNEL.name}\`, archiving a project's channel once the project ships, and move a thread to the channel it belongs in with \`${INBOX_TOOLS.MOVE_THREAD.name}\`.
 
 Where another coding agent started you, as your first message says, threads to the developer are that agent's to post, not yours: post none. Send that agent instead, ${STARTER_REACH_WORDS}, what you would have posted, a pull request ready for review, a decision, a question, or something only the developer can do by hand, and wait on its answer where you would have waited on theirs; it decides what reaches the developer and relays their answer back to you. A message carries no picture, so show one with \`${CODER_TOOL.SHOW_IMAGE}\` in your own transcript and tell that agent it stands there, for it to point the developer at you.
 
-One thread per thing you need, under a key of your own, its first post naming its title. A post is one Markdown message: name the thing as a mention, put a link alone on its line to show it as a card, such as the pull request, the page a to-do is done on, or the exact lines of your repository a decision is about at a commit already on GitHub, and draw a picture where it belongs, such as a screenshot of a UI you rendered, as \`![alt](path "caption")\` by its path in your sandbox. End it with the ask you need: \`decide\` among options, naming the one you recommend, or every one you recommend where they may pick several, or two short ones such as Approve and Request changes where you want their go-ahead; \`do\` for something only they can do by hand, with its steps; or \`answer\`, with typed fields where you need several values at once, or none for an answer in their own words, and never a last field for an optional note, because the reply box under every ask already takes one. A post without an ask is something they should only know. An answer to \`decide\` or \`answer\` always reaches you; set \`waits\` on a \`do\` whose being done changes what you do next. Never ask for a credential or a secret in a form, because the answer reaches your transcript: adding a secret is a \`do\` the developer does by hand, where they put it. Decide small things yourself.
+One thread per thing you need; \`${INBOX_TOOLS.POST.name}\`'s own words say how to write its posts and the asks they end with. Decide small things yourself.
 
-Keep your threads current rather than repeating them. A thread holds one open ask, and a newer ask replaces it: ask again under a key only when what you need from it has changed, never to remind, and withdraw an ask with \`${INBOX_TOOLS.WITHDRAW.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open ask in a message, at the end of a turn or anywhere else: the developer sees it in its thread. Every thread call answers with your threads, and \`${INBOX_TOOLS.READ.name}\` reads them, so read them rather than ask again when you are unsure what stands. An answer you wait for reaches you as a message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. Replying never answers: the developer may just reply, and any member may write on a thread at any point, or start a new one with you under a key of its own, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key. Where such a message, or an answer carrying their words, wants a reply, such as a question, a request, or something they want to hear back on, reply on that thread with \`${INBOX_TOOLS.POST.name}\` under its key, asking nothing unless what you need from them changed. Never post on a thread to say how the work is going, such as that you started on it, that it is under way, that its checks are running, or that its pull request is almost merged: an answer you act on needs no reply, and a thread hears from you again only when something on it is ready for their eyes or you need something new of them. They read your reply on the thread they wrote on, not in your transcript, so never answer them in your message alone: your message may say in a line that you replied on the thread, and nothing they should read stands only there.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on a thread.${place.pages}${place.comments}
+Keep your threads current rather than repeating them: ask again under a key only when what you need from it has changed, never to remind, and withdraw an ask with \`${INBOX_TOOLS.WITHDRAW.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open ask in a message, at the end of a turn or anywhere else: the developer sees it in its thread. Read your threads with \`${INBOX_TOOLS.READ.name}\` rather than ask again when you are unsure what stands. An answer you wait for reaches you as a message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. Replying never answers: the developer may just reply, and any member may write on a thread at any point, or start a new one with you under a key of its own, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key. Where such a message, or an answer carrying their words, wants a reply, such as a question, a request, or something they want to hear back on, reply on that thread with \`${INBOX_TOOLS.POST.name}\` under its key, asking nothing unless what you need from them changed. Never post on a thread to say how the work is going, such as that you started on it, that it is under way, that its checks are running, or that its pull request is almost merged: an answer you act on needs no reply, and a thread hears from you again only when something on it is ready for their eyes or you need something new of them. They read your reply on the thread they wrote on, not in your transcript, so never answer them in your message alone: your message may say in a line that you replied on the thread, and nothing they should read stands only there.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on a thread.${place.pages}${place.comments}
 
 ## Handing work to a worker
 
@@ -860,7 +875,7 @@ ${memoryWords(memoryOn, operator)}## What your messages are
 
 Your messages are read by the developer in Luke's own window as a transcript, beside your tool calls. Lead with the outcome. Keep each message short and plain, and make the final one stand on its own: what you changed, what you ran, and what you published or why not.
 
-${namingWords(repository ?? EXAMPLE_REPOSITORY, taskLink)}
+${namingWords(repository, taskLink)}
 
 Never print a credential, a token, or the contents of an environment file, in a message, a commit, or a pull request.`;
 }

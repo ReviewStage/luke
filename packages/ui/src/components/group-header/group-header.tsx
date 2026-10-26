@@ -170,7 +170,7 @@ const PRESSED_AS_ROW = {
  * the head's.
  */
 const HEAD =
-  "luke-group-header-head group/head flex min-w-0 items-center gap-luke-2 rounded-control pr-luke-4 transition-[background-color] duration-(--luke-duration-hover) ease-plain data-[menu-open=true]:shadow-selected-edge in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]";
+  "luke-group-header-head group/head flex min-w-0 items-center gap-luke-2 rounded-control pr-luke-4 transition-[background-color] duration-(--luke-duration-hover) ease-plain data-[menu-open=true]:shadow-menu-open-edge in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]";
 
 /** A head that sticks stands at the top of its scroller while its rows scroll beneath it, on the page's ground so they do not show through. */
 const STICKS = "sticky top-0 z-3 bg-ground";

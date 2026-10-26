@@ -456,6 +456,7 @@ function stand() {
     const service = yield* Effect.provide(
       LiveSessionService.make({
         createId: () => `id-${++ids}`,
+        hasTask: true,
         report: () => undefined,
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),

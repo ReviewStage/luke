@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
 import type { MenuEntry } from "../menu/menu.js";
-import { List, ListRow, type ListRowMenu } from "./list-row.js";
+import { LIST_DENSITY, List, ListRow, type ListRowMenu } from "./list-row.js";
 
 /**
  * list-row-menu.test.ts -- a row's one menu (`menu`) opens alike from its
@@ -15,7 +15,9 @@ import { List, ListRow, type ListRowMenu } from "./list-row.js";
  * its other acts, named "{Thing} actions" and described by the row's title,
  * and Escape hands focus back to the door the keyboard opened the menu
  * from. A row whose thing offers no acts now, or which is unavailable,
- * draws no ⋯ and opens nothing by any door. Synthetic tasks.
+ * draws no ⋯ and opens nothing by any door. A row's ⋯ lights its glyph
+ * alone while its menu is open, whatever its list's density, where a
+ * header's fills. Synthetic tasks.
  */
 
 declare global {
@@ -211,6 +213,31 @@ test("the ⋯ is a Tab stop after the row's press and its acts, named for the ro
   expect(more.getAttribute("aria-haspopup")).toBe("menu");
   const described = document.getElementById(more.getAttribute("aria-describedby") ?? "");
   expect(described?.textContent).toBe(TASK);
+});
+
+test("an open row's ⋯ lights its glyph alone at every density, never a fill", () => {
+  for (const density of Object.values(LIST_DENSITY)) {
+    draw(
+      createElement(List, {
+        label: "Tasks",
+        density,
+        children: createElement(ListRow, {
+          title: TASK,
+          onPress: () => undefined,
+          menu: taskMenu([]),
+        }),
+      }),
+    );
+    const more = button("Task actions");
+    act(() => more.click());
+    expect([density, more.getAttribute("aria-expanded"), more.dataset.lights]).toEqual([
+      density,
+      "true",
+      "glyph",
+    ]);
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    document.body.replaceChildren();
+  }
 });
 
 test("the keyboard opens the menu from the ⋯ it focused, and Escape hands focus back to it", () => {

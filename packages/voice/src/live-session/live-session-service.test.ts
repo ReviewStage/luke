@@ -386,6 +386,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const service = yield* Effect.provide(
       LiveSessionService.make({
         createId: () => `id-${++ids}`,
+        hasTask: true,
         report: (message) => reports.push(message),
         onStatus: (status) => statuses.push(status),
         onCode: (shown) => codes.push(shown),
@@ -920,6 +921,11 @@ it.effect(
       const last = f.brain.asks[1];
       assert.ok(last?.question.endsWith("Actually, invites should expire after three days."));
       assert.equal(last?.sessionId, "sess-1");
+      // Nobody hears the brain's reply to it, as the call's own ask was heard.
+      assert.deepEqual(
+        f.brain.asks.map((ask) => ask.heard),
+        [true, false],
+      );
       assert.equal(f.record.attached.at(-1)?.delegationId, last?.submissionId);
       // Nothing of the earlier ask's span is asked again.
       assert.ok(!last?.question.includes("Their line: What changed?"));
