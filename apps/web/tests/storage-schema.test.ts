@@ -85,6 +85,7 @@ const DECLARED_TABLES = [
   "memory",
   "member",
   "messages",
+  "native_call_key",
   "oauth_access_token",
   "oauth_client",
   "oauth_client_assertion",
