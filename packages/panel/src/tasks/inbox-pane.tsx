@@ -12,8 +12,10 @@ import {
   type InboxItem,
   type InboxMessage,
   type InboxReadAsk,
+  inboxWaitsOn,
+  openAskOf,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, markdownLink } from "@luke/features/link-grammar";
+import { markdownLink } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -65,7 +67,6 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { useAutomation } from "../automation-directory.js";
-import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PhoneHead } from "../desktop/phone-head.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
@@ -100,11 +101,12 @@ import {
   WithdrawnWords,
 } from "./inbox-ask-controls.js";
 import { askHeadWords } from "./inbox-ask-words.js";
-import { type InboxCloser, useInboxClose } from "./inbox-close.js";
+import type { InboxCloser } from "./inbox-close.js";
 import type { InboxCodeDoors } from "./inbox-code-card.js";
 import { INBOX_VIEW_ITEMS } from "./inbox-columns.js";
 import { COMMENT, INBOX_THREAD, InboxComment } from "./inbox-comment.js";
 import type { FormTextDoors } from "./inbox-form-text.js";
+import { useInboxItemActions } from "./inbox-item-actions.js";
 import { HolderGlyph } from "./inbox-item-parts.js";
 import {
   answerOf,
@@ -116,11 +118,8 @@ import {
   type InboxKnownAsk,
   inboxCommentFiles,
   inboxFileChips,
-  inboxWaitsOn,
-  isUnread,
   itemWorkspaceId,
   knownAsk,
-  openAskOf,
   readersItem,
   sentStamp,
 } from "./inbox-model.js";
@@ -132,7 +131,6 @@ import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
-import { markReadItem } from "./task-menu-items.js";
 import { cardTitle } from "./tool-call-model.js";
 import { INERT_LINK_CLASS, TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
@@ -1034,25 +1032,13 @@ function InboxItemMenu({
   heading?: React.ReactNode;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
-  const read: MenuAction | undefined =
-    onMark === undefined
-      ? undefined
-      : {
-          ...markReadItem({ unread: isUnread(item), onMark: (unread) => onMark(item, unread) }),
-          command: APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
-        };
-  const copyLink = useCopyLinkItem()(
-    holder.kind === INBOX_HOLDER.TASK
-      ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
-      : { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id },
-  );
-  const close = useInboxClose(item, onClose, shown);
-  const groups = [
-    ...lead,
-    read === undefined ? [] : [read],
-    copyLink === undefined ? [] : [copyLink],
-    close.action === undefined ? [] : [close.action],
-  ].filter((group) => group.length > 0);
+  const { close, groups: itemGroups } = useInboxItemActions(holder, item, {
+    onMark,
+    onClose,
+    shown,
+    keyed: true,
+  });
+  const groups = itemGroups(lead);
   if (groups.length === 0) return null;
   return (
     <>

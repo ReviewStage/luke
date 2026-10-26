@@ -121,7 +121,7 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
   }
 });
 
-test("an Unarchive that answers at once, as a chat topic's which asks first, shows nothing busy", () => {
+test("an Unarchive that answers at once shows nothing busy", () => {
   const note = drawn(createElement(ArchivedComposerNote, { onUnarchive: () => undefined }));
   const unarchive = press(note, "Unarchive");
   act(() => unarchive.click());

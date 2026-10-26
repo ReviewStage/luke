@@ -73,8 +73,8 @@ import { WEBM_TYPE } from "./video-signature.js";
  * newer service added. An ask of a type this build does not know reads as
  * its type alone, so a desktop behind the service draws what it knows and a
  * placeholder for the rest rather than refusing the whole inbox. The
- * blocks and the responses below are the vocabulary a workspace chat's ask
- * is written in (`chat-wire.ts`), and an old transcript's post.
+ * blocks and the responses below are also the vocabulary an old
+ * transcript's post is written in.
  */
 
 /**
@@ -153,22 +153,27 @@ export const INBOX_BOUNDS = {
   MAX_STEPS: 8,
   /** The most characters one step of a `do` ask may spell, in Markdown. */
   MAX_STEP_CHARS: 600,
+  /** The most characters a post's channel may spell: a channel's name at its bound (`channel-wire.ts`), and the `#` an agent may write before it. */
+  MAX_CHANNEL_CHARS: 81,
+  /** The most characters a post's addressee may spell: a member's mention link written whole. */
+  MAX_ADDRESSEE_CHARS: 512,
 } as const;
 
 /**
  * The tools an agent keeps its threads with, by the names their tool parts
  * carry in its transcript. Note that `close_inbox_item` and `reply_inbox`,
- * which a transcript before version 5 names, are retired
- * (`agent-tools.ts`'s `RETIRED_TOOL`): a post that asks nothing is a reply,
- * and a withdrawn ask is a close.
+ * which a transcript before version 5 names, are retired, and so are
+ * `post_to_inbox` and `read_inbox`, since named for the channels a thread
+ * is posted to (`agent-tools.ts`'s `RETIRED_TOOL`): a post that asks
+ * nothing is a reply, and a withdrawn ask is a close.
  */
 export const INBOX_TOOL = {
-  /** Adds the agent's message to the thread under its key, opening one under a new key, its ask replacing the open one. */
-  POST: "post_to_inbox",
+  /** Adds the agent's message to the thread under its key, opening one under a new key in the channel it names, its ask replacing the open one. */
+  POST: "post_thread",
   /** Withdraws the thread's open ask, with why. */
   WITHDRAW: "withdraw_ask",
   /** Reads the agent's threads as they stand, answers and all. */
-  READ: "read_inbox",
+  READ: "read_threads",
 } as const;
 
 /** The blocks an item's context is made of. */
@@ -191,9 +196,6 @@ export const INBOX_IMAGE_TYPE = {
 } as const;
 
 export type InboxImageType = (typeof INBOX_IMAGE_TYPE)[keyof typeof INBOX_IMAGE_TYPE];
-
-/** An image's media type as the wire carries it: one of the three the service keeps. */
-export const inboxImageTypeSchema = EffectSchema.Literals(Object.values(INBOX_IMAGE_TYPE));
 
 /**
  * The types a file of an item's may be kept and served under: any a
@@ -313,7 +315,7 @@ export const INBOX_APPROVAL_OPTION = {
 } as const;
 
 /** An item's key as the agent spells it: a short slug, the same each time it means the same item. */
-export const inboxKeySchema = EffectSchema.String.check(
+const inboxKeySchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_KEY_CHARS),
   EffectSchema.isPattern(/^[a-z0-9][a-z0-9._-]*$/u),
@@ -353,14 +355,11 @@ const WORD_BLOCKS = [
   }),
 ] as const;
 
-/** One word block as a person writes it from the window: Markdown, a link, or lines of code, never a picture. */
-export const inboxWordBlockSchema = EffectSchema.Union(WORD_BLOCKS);
-
 /** What an image block says of its picture: the words that stand for it where it cannot be seen. */
 const imageWords = { alt: filledText(INBOX_BOUNDS.MAX_ALT_CHARS) };
 
 /** One block of an item's context as the service keeps it and the desktop reads it: a word block as the agent wrote it, or an image by the attachment the service keeps it as. */
-export const inboxBlockSchema = EffectSchema.Union([
+const inboxBlockSchema = EffectSchema.Union([
   ...WORD_BLOCKS,
   EffectSchema.Struct({
     type: EffectSchema.Literal(INBOX_BLOCK.IMAGE),
@@ -369,7 +368,7 @@ export const inboxBlockSchema = EffectSchema.Union([
   }),
 ]);
 
-export type InboxBlock = typeof inboxBlockSchema.Type;
+type InboxBlock = typeof inboxBlockSchema.Type;
 
 /** A code block as an item carries it: the repository, the path, the lines, and the commit. */
 export type InboxCodeBlock = Extract<InboxBlock, { type: typeof INBOX_BLOCK.CODE }>;
@@ -381,9 +380,6 @@ export function codeLinesReadable(block: Pick<InboxCodeBlock, "startLine" | "end
     block.endLine - block.startLine < INBOX_BOUNDS.MAX_CODE_LINES
   );
 }
-
-/** An image block as an item carries one, naming the attachment the desktop fetches. */
-export type InboxImageBlock = Extract<InboxBlock, { type: typeof INBOX_BLOCK.IMAGE }>;
 
 /** One block as the agent posts it: the word blocks as they are kept, and an image by the path of its file in the agent's sandbox, which the service reads and keeps. */
 const inboxPostBlockSchema = EffectSchema.Union([
@@ -403,13 +399,13 @@ const inboxPostBlocksSchema = EffectSchema.Array(inboxPostBlockSchema).check(
 );
 
 /** One option of a choice: its label, and the trade-off in a sentence where the agent wrote one. */
-export const inboxOptionSchema = EffectSchema.Struct({
+const inboxOptionSchema = EffectSchema.Struct({
   label: filledText(INBOX_BOUNDS.MAX_LABEL_CHARS),
   detail: EffectSchema.optionalKey(boundedText(INBOX_BOUNDS.MAX_OPTION_DETAIL_CHARS)),
 });
 
 /** One field of a form: its type, its label, which names its value in the answer, whether it must be filled, and a select's options, one perhaps recommended. */
-export const inboxFieldSchema = EffectSchema.Struct({
+const inboxFieldSchema = EffectSchema.Struct({
   type: EffectSchema.Literals(Object.values(INBOX_FIELD)),
   label: filledText(INBOX_BOUNDS.MAX_LABEL_CHARS),
   required: EffectSchema.optionalKey(EffectSchema.Boolean),
@@ -430,7 +426,7 @@ export type InboxField = typeof inboxFieldSchema.Type;
  * one label, or a list of them, several only where the choice lets several
  * be picked.
  */
-export const recommendedInputSchema = EffectSchema.Union([
+const recommendedInputSchema = EffectSchema.Union([
   EffectSchema.String,
   EffectSchema.Array(EffectSchema.String).check(
     EffectSchema.isMinLength(1),
@@ -444,7 +440,7 @@ export const recommendedInputSchema = EffectSchema.Union([
  * first stays a label of its own, because a desktop from before several
  * reads `recommended` as one label and drops `recommendations` unread.
  */
-export const RECOMMENDED_FIELDS = {
+const RECOMMENDED_FIELDS = {
   recommended: EffectSchema.optionalKey(EffectSchema.String),
   recommendations: EffectSchema.optionalKey(
     EffectSchema.Array(EffectSchema.String).check(
@@ -468,7 +464,7 @@ export function recommendedLabels(choice: Recommending): readonly string[] {
 }
 
 /** A posted recommendation as a choice keeps it: nothing, its one label, or its first label and every label. */
-export function keptRecommendation(choice: Recommending): {
+function keptRecommendation(choice: Recommending): {
   recommended?: string;
   recommendations?: readonly string[];
 } {
@@ -558,14 +554,14 @@ export const inboxFormValueSchema = EffectSchema.Struct({
 export type InboxFormValue = typeof inboxFormValueSchema.Type;
 
 /** A form's values, one per field filled, each named by its field's label. */
-export const inboxFormValuesSchema = EffectSchema.Array(inboxFormValueSchema).check(
+const inboxFormValuesSchema = EffectSchema.Array(inboxFormValueSchema).check(
   EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_FIELDS),
 );
 
 type InboxFormValues = typeof inboxFormValuesSchema.Type;
 
 /** The developer's answer: how they answered, the options where they picked, the form's values where they filled one, and their note. */
-export const inboxReplySchema = EffectSchema.Struct({
+const inboxReplySchema = EffectSchema.Struct({
   reply: EffectSchema.Literals(Object.values(INBOX_REPLY)),
   choices: EffectSchema.optionalKey(
     EffectSchema.Array(EffectSchema.String).check(
@@ -670,13 +666,19 @@ export function keptInboxAsk(ask: InboxAskInput): InboxAsk {
  * thread's key, its title, which a first post under the key names, the
  * agent's message as one Markdown body, its pictures by their paths in the
  * agent's sandbox, the ask it may end with, and whether the agent waits to
- * hear a `do` done; an answer to any other ask is always heard. The model
- * is shown this schema and eve holds the call to it.
+ * hear a `do` done; an answer to any other ask is always heard. From
+ * Channels, the channel it goes to by name, `#` or not, and the member its
+ * ask is addressed to by their mention link, each read by the service
+ * rather than held to a grammar here, so a name or a link that names
+ * nothing is refused in words the model can act on. The model is shown
+ * this schema and eve holds the call to it.
  */
 export const inboxThreadPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
   title: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_TITLE_CHARS)),
   body: filledText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
+  channel: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_CHANNEL_CHARS)),
+  to: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_ADDRESSEE_CHARS)),
   ask: EffectSchema.optionalKey(inboxAskInputSchema),
   waits: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
@@ -858,9 +860,55 @@ export const inboxItemSchema = EffectSchema.Struct({
    * which the desktop reads as read.
    */
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
+   * The channel of its workspace the thread lives in (`channel-wire.ts`),
+   * which a link to the item opens it in. Absent from a service before it.
+   */
+  channelId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type InboxItem = typeof inboxItemSchema.Type;
+
+/** A member an item names, as the service names them: who it waits on (`inboxWaitsOn`), or who started its agent. */
+export type InboxPerson = NonNullable<InboxItem["startedBy"]>;
+
+/** The message whose ask waits on an answer, and the ask; none where nothing waits. */
+export interface InboxAsking {
+  readonly message: InboxMessage;
+  readonly ask: InboxReadAsk;
+}
+
+/** The thread's open ask: the latest message whose ask stands open; none where none does. */
+export function openAskOf(thread: readonly InboxMessage[]): InboxAsking | undefined {
+  const message = thread.findLast((each) => each.ask?.status === INBOX_ASK_STATUS.OPEN);
+  return message?.ask === undefined ? undefined : { message, ask: message.ask };
+}
+
+/**
+ * The member an item waits on: the member its agent addressed it to, else
+ * its task's assignee, or its agent's starter where the task has nobody
+ * assigned or the agent works on no task, as the service resolves it
+ * (`inbox-store.ts`'s `WAITS_ON`); its starter from a service before it
+ * said; none where it names neither.
+ */
+export function inboxWaitsOn(item: InboxItem): InboxPerson | undefined {
+  return item.waitsOn ?? item.startedBy;
+}
+
+/** Whether a thread still asks someone something: open, and holding an ask open, as the service's `ASKING` reads it. */
+export function inboxAsksOpen(item: InboxItem): boolean {
+  return item.status === INBOX_STATUS.OPEN && openAskOf(item.thread ?? []) !== undefined;
+}
+
+/**
+ * Whether a thread needs the reader: its ask stands open and waits on them.
+ * The one reading of it, which a channel's count (`inbox-store.ts`'s
+ * `askingReader`) must agree with and its stream, Needs me, and the tint
+ * all draw from.
+ */
+export function threadNeedsReader(item: InboxItem, readerId: string | undefined): boolean {
+  return readerId !== undefined && inboxAsksOpen(item) && inboxWaitsOn(item)?.userId === readerId;
+}
 
 /** Where a reader of an inbox starts: before anything. */
 export const INBOX_CURSOR_START = "0";
@@ -1293,8 +1341,7 @@ function ownWordsRefusal(words: string, files: AnswerFiles): string | undefined 
  * does: the response takes the reply, a pick names offered options, a
  * form's values fit it, filling it or giving something beside the note or
  * the files, and words or files stand where the answer is the developer's
- * own, as a message to an agent may be files alone. A chat ask answers by
- * this vocabulary (`chat-wire.ts`).
+ * own, as a message to an agent may be files alone.
  */
 export function inboxReplyRefusal(
   response: InboxResponse,
@@ -1370,35 +1417,6 @@ export function inboxAnswersRefusal(
           : NOT_TAKEN;
       }
       return answers.reply === INBOX_REPLY.ANSWERED ? ownWordsRefusal(words, files) : NOT_TAKEN;
-  }
-}
-
-/**
- * The ask a response stands for, as a chat ask's answer is read: a choice
- * is a `decide` of its options, an approval a `decide` between Approve and
- * Decline, a to-do a `do` of no steps, a form an `answer` of its fields,
- * words an `answer` of none, and an acknowledgement no ask at all.
- */
-export function inboxResponseAsk(response: InboxResponse): InboxAsk | undefined {
-  switch (response.type) {
-    case INBOX_RESPONSE.CHOICE:
-      return { ...response, type: INBOX_ASK.DECIDE };
-    case INBOX_RESPONSE.APPROVAL:
-      return {
-        type: INBOX_ASK.DECIDE,
-        options: [
-          { label: INBOX_APPROVAL_OPTION.APPROVE },
-          { label: INBOX_APPROVAL_OPTION.DECLINE },
-        ],
-      };
-    case INBOX_RESPONSE.TODO:
-      return { type: INBOX_ASK.DO, steps: [] };
-    case INBOX_RESPONSE.FORM:
-      return { type: INBOX_ASK.ANSWER, fields: response.fields };
-    case INBOX_RESPONSE.TEXT:
-      return { type: INBOX_ASK.ANSWER };
-    case INBOX_RESPONSE.NONE:
-      return undefined;
   }
 }
 

@@ -175,7 +175,7 @@ export const CREATE_TASK_REFUSAL = {
     `link or none, and at most ${TASK_BOUNDS.MAX_ISSUES} issues to link or none.`,
   NOT_MEMBER:
     "Not made: that assignee is no member of the workspace, or names no person; name a member by " +
-    "the mention link read_chat hands you, or leave it out for no one.",
+    `the mention link ${AGENT_TOOL.LIST_TASKS} hands you, or leave it out for no one.`,
 } as const;
 
 const CREATE_TASK_INPUT = Schema.Struct({

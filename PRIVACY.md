@@ -138,15 +138,12 @@ fixture or evidence run keeps no conversation at all.
 service keeps one coding agent of yours in each workspace, your operator,
 with no task and no repository, to manage your other agents. It can read
 what you reach in that workspace: the coding agents you can open and their
-transcripts, the workspace's tasks, your inbox, and your direct messages in
-the workspace's chat. Its own conversation, what you and it said, what it
+transcripts, the workspace's tasks, and your inbox. Its own conversation, what you and it said, what it
 read, and the tools it called, is visible in Luke only to you: no other
 member of the workspace can list it, open it, read its transcript, message
-it, call it, or find it in the chat, and your direct messages with it are
-left out of theirs. The agents, tasks, pull requests, and posts it makes
+it, or call it. The agents, tasks, pull requests, and posts it makes
 are visible to the workspace as anyone's. It may also hand on a picture of
-its own conversation, such as one it showed you, or of a chat message it
-can read, to an agent it starts, as an image on that agent's first message.
+its own conversation, such as one it showed you, to an agent it starts, as an image on that agent's first message.
 A picture it hands on is then visible where it lands, as that agent's
 conversation is: kept in that agent's transcript, which every member of the
 workspace who can open the agent reads, and sent to that agent's model
@@ -171,8 +168,7 @@ also list the other coding agents of its workspace, on any task and whichever
 member started them, send one a
 message, list the workspace's open tasks, and start a new one on its own
 task or another task of the workspace, handing it pictures of its own
-conversation or of chat messages it can read as images on its first
-message, without asking you first; a
+conversation as images on its first message, without asking you first; a
 message is kept in the receiving agent's transcript under the sending
 agent's title, opening with the sending agent's title and id, and goes to
 the receiving agent's model provider as the rest of its conversation does,
@@ -361,43 +357,6 @@ each offered and the answer you picked; Luke holds them in memory only, never
 on disk. Deleting the task, or your account, deletes
 its items.
 
-**A workspace's chat.** A workspace has one chat on our service where its
-coding agents and the people in it talk: a general
-channel, a channel for each plan, channels a member opens on a topic, and
-direct messages between two members, with replies in threads. Each member
-has a handle our service makes once and keeps: yours is spelled from your
-account's name. A message is stored with its words, any links, references to
-lines of a repository (a path, the lines, and the commit, never the lines
-themselves), the members it mentions, who posted it, where, and when; it may
-also ask for an answer, with the answer and who gave it stored beside it. A
-message may carry pictures, each up to 1.5 MB, which our service keeps beside
-the message: one an agent took in its sandbox, which our service reads from
-the sandbox, one a person posted from Luke's window, or one an agent passes on
-from what it was sent. A coding agent's message may also carry a short video
-it recorded in its sandbox, a WebM of up to 4 MB, kept the same way, which
-plays in the chat, is left out of the screen recording, and is never handed
-to a coding agent told of the message, which is told only that it is there. Every
-message is stored under the workspace and readable by our own
-operators, like an agent's transcript. Every person in the workspace can
-read every channel and every direct message, one between two other people
-included; a coding agent reads the channels and only its own direct
-messages, and only a direct message's two members post in it. A coding
-agent's turn may open with what was said in its chat since it last read,
-sent to its model provider with the rest of the turn. A coding agent told of a
-message, as a direct message, a mention, or a reply in a thread it is in
-tells it, is sent the message's pictures with its words, as files you attach
-are, up to ten and 3 MB together, each named by its id, and the rest named as
-not attached; they go to its model provider and stay in its transcript with
-the rest of the message. The member a plan's
-Luke was in its chat, before tasks lost him, is deleted.
-Deleting a plan deletes its channel with its messages, deleting your account
-deletes your messages (others' replies to them stay), and deleting the
-workspace deletes its chat. While you are signed in, the same read that keeps
-your waiting inbox items carries what waits on you in chat: every open ask
-someone else posted, and the last direct message or mention of you that you
-have not read, each named only by who posted it, its plan, and its place,
-never its words.
-
 **Files you attach to a coding agent.** You can attach files to a coding
 agent's message, to the prompt you start one with, or to an Inbox answer, by picking them with +,
 dropping, or pasting: images, PDFs up to 3 MB, and text files up to 100 KB, up
@@ -411,8 +370,8 @@ later call, and keeps them with the agent's transcript, readable by our own
 operators. Each PNG, JPEG, or WebP is kept once, beside the transcript, as a
 tool's pictures are (see "Pictures in a tool's answer"), and the transcript
 names it by an id rather than carrying it; the agent is told that id, by which
-it may hand the image to another agent, as a file of another agent's Start or
-a picture of a chat message, on the same bounds as a file you attach. Any
+it may hand the image to another agent, as a file of another agent's Start,
+on the same bounds as a file you attach. Any
 other file, and an image not kept that way, such as one past the transcript's
 200 MB of pictures, is stored in the transcript as sent, except that the
 prompt an agent is started on keeps a PDF, or an image not kept, by name
@@ -812,8 +771,8 @@ also shows how many coding agents you started and pull requests of theirs
 merged, on how many days you created a task, wrote a plan revision, started
 an agent, or held a call, and when you last signed in. Counted across all
 accounts, never named to one, it shows how many plan revisions, inbox
-answers, and automation runs there were, and how many accounts posted in a
-workspace's chat, have GitHub connected on a workspace, have an integration
+answers, and automation runs there were, and how many accounts have GitHub
+connected on a workspace, have an integration
 connected, or opened or merged a pull request.
 Across every account, the same page counts how many of Luke's turns, coding
 agents' runs, calls, and automation runs ended and how many failed, were
@@ -1105,7 +1064,7 @@ Our service also counts, under the same account, the work done through it:
 a task or a workspace made (with where it was started from and whether from an issue), a coding agent started (with the model and effort
 it runs on, and whether an automation started it), a pull request an agent
 opened (as you or as Luke's GitHub App, and whether as a draft), an Inbox item
-answered, a Chat message you posted, an issue filed, an automation made (with
+answered, an issue filed, an automation made (with
 what triggers it), an integration connected or disconnected (with which
 provider), and a pull request's chapters generated (with how it came out, how
 many chapters and parts of the diff they hold, and how long it took). These counts are event names and values from a fixed list too, and
@@ -1127,7 +1086,7 @@ whole: the feedback form, since a screenshot you attach could carry another
 app's words; a task's title while you edit it, its plan while you edit it,
 its whiteboard, its Call and Code tabs, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
-are viewing; an Inbox item's body and pictures; the messages in Chat; each coding agent's and
+are viewing; an Inbox item's body and pictures; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
 skills and MCP servers, and the files you attach there; a Browser tab, with
 the live view of its page; code drawn in a
@@ -1179,10 +1138,9 @@ video, a WebM of up to 4 MB, beside the transcript as it keeps a screenshot,
 shown to the same members, readable by our operators, and deleted with the
 transcript on the same terms; the model is told it was kept, never handed the
 video, and the screen recording leaves out its player. The agent may also post
-such a recording to the task's inbox or its workspace's chat, or add it to the
+such a recording to the task's inbox, or add it to the
 task's plan, where it is kept and shown as any video an agent posts or adds
-there is (see "A task's inbox", "A workspace's chat", and "A plan's
-pictures"). Apart from such a
+there is (see "A task's inbox" and "A plan's pictures"). Apart from such a
 recording, the page and its live-view frames
 are not kept by us: the frames pass through our service
 to the panel of each member who opens the task, and every such member can
@@ -1658,7 +1616,7 @@ and error, performance, and agent reports by Sentry.
   your sign-in records and the GitHub and Google tokens we kept, your usage
   counts, preferences, and plan template with its history, your pinned
   repositories, your tasks with their history, whiteboards, pages, coding
-  agents, inbox items and pictures, and chat messages, the conversation with
+  agents, inbox items and pictures, the conversation with
   its attached files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, your name on the memories
   Luke's agents kept in your words (the memories themselves stay with their

@@ -1874,8 +1874,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* A line the agent refused for good or for now (`undelivered-mark.tsx`): its
    bubble and files faded, as words that did not go, under the failure note
-   that says so. */
-.is-user:has(> .luke-failure-note) > :not(.luke-failure-note, .luke-message-line) {
+   that says so. Note that the line says so itself (`data-undelivered`)
+   rather than being found by a `:has()` of its note, because a `:has()`
+   whose subject is any child makes the browser restyle the whole window for
+   every element added under it. */
+.is-user[data-undelivered] > :not(.luke-failure-note, .luke-message-line) {
   opacity: 0.6;
 }
 
@@ -2139,7 +2142,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* off-scale: 400px, a card under which the box folds its own presses into its ⋯ (composer-foot.css) */
 @container composer (width < 400px) {
   .agent-composer :is(.agent-servers-button, .agent-context-button),
-  .agent-composer:not(.chat-composer) > form:not(.inbox-answer) .dictate-button {
+  .agent-composer > form:not(.inbox-answer) .dictate-button {
     display: none;
   }
 
@@ -2663,7 +2666,7 @@ svg.lucide {
   white-space: nowrap;
 }
 
-/* A comment's tools stand at its corner under the pointer or the keyboard. */
+/* A comment's tools, and a channel's post's, stand at its corner under the pointer or the keyboard. */
 .comment-tools {
   position: relative;
   z-index: 1;
@@ -2679,7 +2682,8 @@ svg.lucide {
 }
 
 @media (hover: hover) {
-  .comment-entry:hover .comment-tools {
+  .comment-entry:hover .comment-tools,
+  .channel-post:hover .comment-tools {
     opacity: 1;
   }
 }
@@ -2784,4 +2788,17 @@ svg.lucide {
    log's own lines are. */
 .agent-log-row > :not(:last-child) {
   margin-block-end: var(--luke-block-gap);
+}
+
+/* A row of an agent's log after its first stands a step from the one
+   before it, inside the row, where the run measures it (`virtual-rows.tsx`):
+   the log's own step between lines, or, for a piece of a long turn that goes
+   on with the rows the piece before it cut (`turn-pieces.ts`), the step
+   between a message's blocks, so a cut turn reads as one. */
+.agent-log-row-next {
+  padding-block-start: var(--luke-block-gap);
+}
+
+.agent-log-row-continued {
+  padding-block-start: var(--luke-control-gap);
 }

@@ -20,7 +20,7 @@ import { extendTailwindMerge } from "tailwind-merge";
  */
 
 /**
- * The names the panel places' block of the theme adds (Automations, Chat,
+ * The names the panel places' block of the theme adds (Automations,
  * Settings, a version history, Admin, the sign-in), by the group
  * tailwind-merge reads each in.
  */
@@ -33,8 +33,6 @@ const PANEL_PLACES = {
     "automation-runs",
     "automation-time",
     "automation-webhook",
-    "chat-measure",
-    "chat-reading",
     "em",
     "onboarding-foot",
   ],

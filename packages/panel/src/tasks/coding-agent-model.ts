@@ -86,7 +86,7 @@ import {
 import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
-  type ChatNoticeMetadata,
+  type AgentMessageMetadata,
   isRecord,
   isWireString,
   MESSAGE_AUTHOR,
@@ -328,7 +328,7 @@ const RECEIVED_SENDERS: ReadonlySet<string> = new Set([
 
 /**
  * Whether one of the developer's lines is the other side's words, drawn at
- * the column's left as a chat notice is: Luke's from a call, GitHub's, and
+ * the column's left as another agent's message is: Luke's from a call, GitHub's, and
  * another coding agent's. A person's and an automation's, which runs on its
  * creator's behalf, stand at the right.
  */
@@ -1544,17 +1544,16 @@ export function agentPart(part: WireValue): AgentPart {
 const readUserMetadata = Schema.decodeUnknownOption(USER_MESSAGE_METADATA);
 
 /**
- * What a chat notice says of the message it tells, where a chat notice
- * wrote the line rather than the developer: which kind of member posted
- * it, its place in the workspace's chat, and the poster's handle. Nothing
+ * What another coding agent's message, sent with `message_agent`, says of
+ * its sender, where one wrote the line rather than the developer; nothing
  * for the developer's own words, typed or spoken, or a row this build
  * cannot read.
  */
-export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | undefined {
+export function agentMessageOf(message: CodingAgentMessage): AgentMessageMetadata | undefined {
   if (message.role !== MESSAGE_ROLE.USER || message.metadata === undefined) return undefined;
   const read = Option.getOrUndefined(readUserMetadata(message.metadata));
   if (read === undefined || !("channel" in read)) return undefined;
-  return read.channel === MESSAGE_CHANNEL.CHAT ? read : undefined;
+  return read.channel === MESSAGE_CHANNEL.AGENT_MESSAGE ? read : undefined;
 }
 
 /**
@@ -1579,10 +1578,28 @@ export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
   const cuts = new Map((message.cutParts ?? []).map((cut) => [cut.index, cut]));
   const parts = message.parts.map((part, index) => {
     const cut = cuts.get(index);
-    return cut === undefined ? agentPart(part) : cutAgentPart(part, cut, message.id);
+    return cut === undefined ? storedPartRead(part) : cutAgentPart(part, cut, message.id);
   });
   partsRead.set(message, parts);
   return parts;
+}
+
+/**
+ * Each stored part as read, by the part: a page that rewrites a message
+ * keeps every part it did not touch (`keepIdentity`), so a running turn's
+ * thousand parts are read once and each read stays the same value, which
+ * lets the rows drawn from them stand as they were drawn.
+ */
+const partRead = new WeakMap<object, AgentPart>();
+
+/** A stored part read for drawing, once per part. */
+function storedPartRead(part: WireValue): AgentPart {
+  if (typeof part !== "object" || part === null) return agentPart(part);
+  const read = partRead.get(part);
+  if (read !== undefined) return read;
+  const fresh = agentPart(part);
+  partRead.set(part, fresh);
+  return fresh;
 }
 
 /**

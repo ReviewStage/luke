@@ -41,7 +41,7 @@ export interface AdminPlaceProps {
  * window's work column (`desktop/desktop-admin.tsx`). Every view
  * names other accounts, so the views are blocked from the screen recording
  * whole (`ph-no-capture`, `session-replay.ts`), past the masking of their
- * words, as the Inbox and Chat are.
+ * words, as the Inbox is.
  */
 export function AdminPlace(props: AdminPlaceProps): React.JSX.Element {
   return (

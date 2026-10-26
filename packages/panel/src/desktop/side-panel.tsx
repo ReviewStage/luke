@@ -321,7 +321,9 @@ const NO_PAGES: readonly PageLine[] = [];
  * chosen item's task, holding what the item opened there, the task's
  * files, pages, and Pull requests, and none of the kinds its page draws
  * from what it holds, the fixed three and Terminal; nor is a tab of it
- * pinned there, since the Inbox is no plan's page.
+ * pinned there, since the Inbox is no plan's page. Beside a channel's
+ * stream it holds the thread open there as its Inbox tab
+ * (`use-side-panel.ts`'s `thread`).
  */
 export const SIDE_PANEL_HOLDER = {
   TASK: "plan",
@@ -354,19 +356,17 @@ const HOLDER_KINDS = {
 
 /**
  * The fixed kinds a holder's panel offers: the Inbox only on a task holding an
- * agent, the Chat only where the task's page draws one, which it does while
- * Chat is on, and an agent's page Code only while a call into its agent showed
+ * agent, and an agent's page Code only while a call into its agent showed
  * some. The panel's "+" and ⌘K both ask here, so neither offers a tab that
  * would open blank.
  */
 export function offeredPanelKinds(
   holder: SidePanelHolder,
-  drawn: { readonly inbox: boolean; readonly chat: boolean; readonly code: boolean },
+  drawn: { readonly inbox: boolean; readonly code: boolean },
 ): readonly FixedSidePanelTab[] {
   return HOLDER_KINDS[holder].filter(
     (kind) =>
       (kind !== SIDE_PANEL_TAB.INBOX || drawn.inbox) &&
-      (kind !== SIDE_PANEL_TAB.CHAT || drawn.chat) &&
       (kind !== SIDE_PANEL_TAB.CODE || holder === SIDE_PANEL_HOLDER.TASK || drawn.code),
   );
 }
@@ -844,8 +844,6 @@ export function panelOffers(input: {
   agents: CodingAgentsControl;
   shownCode: readonly TaskCodeShowing[];
   pages: readonly PageLine[];
-  /** Whether the task's page draws its Chat. */
-  chat: boolean;
   /** Adds a shell to an agent's sandbox; none where the platform runs no terminals. */
   onNewTerminal: ((agentId: string) => void) | undefined;
   /** Whether the Browser tab experiment is on. */
@@ -873,7 +871,6 @@ export function panelOffers(input: {
     panel,
     kinds: offeredPanelKinds(holder, {
       inbox: inboxOffered(agents, panel),
-      chat: input.chat,
       code: shownCode.length > 0,
     }),
     files: shownFiles(shownCode),
@@ -1042,7 +1039,6 @@ function stripTabs(input: {
               messages,
               brief: undefined,
               task,
-              chatOn: agents.chatOn,
             }),
       );
     return {
@@ -1691,7 +1687,6 @@ function subagentCardReading(
           messages,
           brief: undefined,
           task: delegation.task,
-          chatOn: agents.chatOn,
         }),
     };
   };
@@ -1773,8 +1768,6 @@ export function taskCards(input: {
         return { kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.BOARD };
       case TOOL_TARGET.INBOX:
         return { kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.INBOX };
-      case TOOL_TARGET.CHAT:
-        return { kind: TAB_KIND.CHAT };
     }
   };
   const target = (opened: ToolTarget, name?: string): ReactNode => {
@@ -1860,7 +1853,6 @@ function TabContent({
   cloudDrafts,
   plan,
   inbox,
-  chat,
   transcript,
   onTabActions,
   onRunOnMac,
@@ -1924,8 +1916,6 @@ function TabContent({
   plan: React.ReactNode;
   /** The task's Inbox, drawn by the task's page on the same terms. */
   inbox: React.ReactNode;
-  /** The task's Chat, its channel, drawn by the task's page on the same terms. */
-  chat: React.ReactNode;
   /** An agent's transcript and composer, drawn by the panel's holder: the Inbox's, beside an item. */
   transcript: ((agentId: string) => React.ReactNode) | undefined;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
@@ -2100,8 +2090,6 @@ function TabContent({
       return <>{plan}</>;
     case SIDE_PANEL_TAB.INBOX:
       return <>{inbox}</>;
-    case SIDE_PANEL_TAB.CHAT:
-      return <>{chat}</>;
     case SIDE_PANEL_TAB.BOARD:
       // An archived task's board only shows, as its agents only read.
       return (
@@ -2380,7 +2368,6 @@ export function SidePanel({
   plan,
   task,
   inbox,
-  chat,
   transcript,
   activity: taskActivity,
   phone,
@@ -2419,16 +2406,14 @@ export function SidePanel({
   plan?: React.ReactNode;
   /** The task whose plan that is, whose name and status its Plan tab wears; none beside anything but a task's page. */
   task?: PlanStanding | undefined;
-  /** The task's Inbox, which its Inbox tab shows, its board, whose items waiting on the developer the tab counts and its card says, and whether a card holds a draft, which the tab marks; none beside anything but a task's page. */
+  /** The task's Inbox, which its Inbox tab shows, its board, whose items waiting on the developer the tab counts and its card says, and whether a card holds a draft, which the tab marks; beside the window's Inbox, the channel's thread open beside its stream, with no board; none elsewhere. */
   inbox?:
     | {
         readonly body: React.ReactNode;
-        readonly board: InboxBoardView;
+        readonly board: InboxBoardView | undefined;
         readonly drafted: boolean;
       }
     | undefined;
-  /** The task's Chat, its channel, which its Chat tab shows; none where Chat is off or beside anything but a task's page. */
-  chat?: React.ReactNode;
   /** An agent's transcript and composer, which its transcript tab shows beside the Inbox; none elsewhere, where the agent's column shows them. */
   transcript?: ((agentId: string) => React.ReactNode) | undefined;
   /**
@@ -2644,7 +2629,6 @@ export function SidePanel({
     agents,
     shownCode: shownCode ?? [],
     pages: taskPages,
-    chat: chat !== undefined,
     onNewTerminal: terminalsHere
       ? (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW)
       : undefined,
@@ -2823,7 +2807,6 @@ export function SidePanel({
                 cloudDrafts={cloudDrafts}
                 plan={plan}
                 inbox={inbox?.body}
-                chat={chat}
                 transcript={transcript}
                 onTabActions={handTabActions}
                 onRunOnMac={macTerminalDoors.onOpenOnMac}

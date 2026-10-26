@@ -188,16 +188,12 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Browser tab", "cloud browsers"]) {
     assert.deepEqual(experimentalFound(query, true), ["Browser tab"], query);
   }
-  for (const query of ["Chat", "direct messages"]) {
-    assert.deepEqual(experimentalFound(query, true), ["Chat"], query);
-  }
   for (const query of ["Video calls", "Keyframe"]) {
     assert.deepEqual(experimentalFound(query, true), ["Video calls"], query);
   }
   for (const query of ["Inbox-first", "inbox's items under their tasks"]) {
     assert.deepEqual(experimentalFound(query, true), ["Inbox-first sidebar"], query);
   }
-  // Note that Channels is not looked for by its name, which Chat's words say too.
   for (const query of ["threads by topic", "a stream your agents post to"]) {
     assert.deepEqual(experimentalFound(query, true), ["Channels"], query);
   }
@@ -214,13 +210,12 @@ test("an experiment is found by its name, what it brings, and what other apps ca
         "Inbox-first sidebar",
         "Code review",
         "Browser tab",
-        "Chat",
         "Video calls",
       ],
       query,
     );
   }
-  assert.deepEqual(experimentalFound("Chat", false), []);
+  assert.deepEqual(experimentalFound("Browser tab", false), []);
 });
 
 test("Video calls is one switch, on the Experimental page, and not among the Voice page's controls", () => {

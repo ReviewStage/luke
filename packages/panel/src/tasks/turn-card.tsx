@@ -172,9 +172,15 @@ export function RunCard({
       {figures === undefined ? null : (
         <>
           <HoverCardRule />
-          <dl className="run-card-figures" aria-label={figures.label}>
+          <dl
+            className="run-card-figures m-0 flex flex-col gap-list-gap text-caption-inline"
+            aria-label={figures.label}
+          >
             {figures.rows.map(([label, said]) => (
-              <div key={label} className="run-card-figure">
+              <div
+                key={label}
+                className="run-card-figure flex justify-between gap-control-gap [&_dd]:m-0 [&_dd]:tabular-nums [&_dt]:text-muted-foreground"
+              >
                 <dt>{label}</dt>
                 <dd>{said}</dd>
               </div>

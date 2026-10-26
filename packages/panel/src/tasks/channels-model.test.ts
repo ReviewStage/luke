@@ -9,11 +9,14 @@ import {
 } from "@luke/features/inbox-wire";
 import { test } from "vitest";
 import {
+  CHANNEL_SHOWN,
   CHANNEL_VIEW,
+  channelShown,
   channelSlug,
+  channelStep,
+  channelUnread,
   repliesLine,
   STREAM_ROW,
-  shownChannel,
   streamRows,
   viewedThreads,
 } from "./channels-model.js";
@@ -24,7 +27,10 @@ import {
  * them; the stream divides its days and draws the New line before the first
  * thread someone else posted since the reader looked; a post's replies line
  * says who replied and who the ask waits on; a typed name is written as a
- * channel's; and the stream opens on #general where none is chosen.
+ * channel's; the stream opens on #general where none is chosen and says a
+ * channel chosen that stands no more is gone; ⌥↑ and ⌥↓ walk the channels
+ * in the sidebar's order, wrapping round; and a channel reads unread while
+ * something was posted since the reader looked.
  */
 
 const ME = { userId: "user-me", name: "Me Reader" } as const;
@@ -93,12 +99,54 @@ test("Mine lists the reader's own threads and Needs me only the open asks waitin
   const ownTask = thread("own-task", NOON, [said("m3", undefined)]);
   const wroteIn = thread("wrote-in", NOON, [said("m4", undefined), said("m5", ME)]);
   const matesAsk = thread("mates-ask", NOON, [agentAsks("m6", true)]);
-  const all = [asksMe, answeredMine, ownTask, wroteIn, matesAsk];
+  // A notice waiting on a nod, an ask withdrawn, and one standing on a thread no longer open ask nothing of anyone.
+  const noticeForMe = thread("notice", NOON, [said("m7", undefined)], { waitsOn: ME });
+  const doForMe = thread(
+    "do",
+    NOON,
+    [
+      {
+        ...said("m8", undefined),
+        ask: { type: INBOX_ASK.DO, steps: [], status: INBOX_ASK_STATUS.OPEN },
+      },
+    ],
+    { waitsOn: ME },
+  );
+  const withdrawn = thread(
+    "withdrawn",
+    NOON,
+    [
+      {
+        ...agentAsks("m9", true),
+        ask: {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "This" }],
+          status: INBOX_ASK_STATUS.WITHDRAWN,
+        },
+      },
+    ],
+    { waitsOn: ME, status: INBOX_STATUS.CLOSED },
+  );
+  const settledOverAsk = thread("settled-over-ask", NOON, [agentAsks("m10", true)], {
+    waitsOn: ME,
+    status: INBOX_STATUS.ANSWERED,
+  });
+  const all = [
+    asksMe,
+    answeredMine,
+    ownTask,
+    wroteIn,
+    matesAsk,
+    noticeForMe,
+    doForMe,
+    withdrawn,
+    settledOverAsk,
+  ];
   const ids = (view: (typeof CHANNEL_VIEW)[keyof typeof CHANNEL_VIEW]) =>
     viewedThreads(all, view, ME.userId, (each) => each.id === "own-task").map(({ id }) => id);
 
-  assert.deepEqual(ids(CHANNEL_VIEW.MINE), ["asks-me", "own-task", "wrote-in"]);
-  assert.deepEqual(ids(CHANNEL_VIEW.NEEDS_ME), ["asks-me"]);
+  assert.deepEqual(ids(CHANNEL_VIEW.MINE), ["asks-me", "own-task", "wrote-in", "do"]);
+  assert.deepEqual(ids(CHANNEL_VIEW.NEEDS_ME), ["asks-me", "do"]);
   assert.deepEqual(
     ids(CHANNEL_VIEW.EVERYONE),
     all.map(({ id }) => id),
@@ -159,18 +207,64 @@ test("a typed name is written as a channel's", () => {
   assert.equal(channelSlug("  Release Train!  v2 "), "release-train-v2");
 });
 
-test("the stream opens on the channel chosen while it stands, else on #general", () => {
-  const channel = (id: string, name: string): Channel => ({
-    id,
-    name,
+/** A channel of the workspace, standing or a project's. */
+function channelOf(id: string, name: string, project = false): Channel {
+  return { id, name, purpose: "A purpose", project, createdAt: NOON, waiting: 0 };
+}
+
+test("the stream opens on the channel chosen while it stands, on #general where none is chosen, and says a channel chosen that stands no more is gone", () => {
+  const app = channelOf("c-app", "app");
+  const general = channelOf("c-general", "general");
+  assert.deepEqual(channelShown([app, general], "c-app"), {
+    kind: CHANNEL_SHOWN.CHANNEL,
+    channel: app,
+  });
+  assert.deepEqual(channelShown([app, general], undefined), {
+    kind: CHANNEL_SHOWN.CHANNEL,
+    channel: general,
+  });
+  assert.deepEqual(channelShown([app, general], "c-archived"), { kind: CHANNEL_SHOWN.MISSING });
+  assert.deepEqual(channelShown(undefined, "c-app"), { kind: CHANNEL_SHOWN.NONE });
+});
+
+test("a channel chosen among the archived ones is shown to read, and one neither open nor archived is gone", () => {
+  const general = channelOf("c-general", "general");
+  const old = { ...channelOf("c-old", "old-app"), archivedAt: NOON };
+  assert.deepEqual(channelShown([general], "c-old", [old]), {
+    kind: CHANNEL_SHOWN.ARCHIVED,
+    channel: old,
+  });
+  assert.deepEqual(channelShown([general], "c-unknown", [old]), { kind: CHANNEL_SHOWN.MISSING });
+});
+
+test("the channels are walked in the sidebar's order, the standing then the projects', wrapping round", () => {
+  // Note that the service's order mixes a project's channel among the standing ones.
+  const channels = [
+    channelOf("c-app", "app"),
+    channelOf("c-launch", "launch", true),
+    channelOf("c-general", "general"),
+  ];
+  const walk = (from: string | undefined, by: 1 | -1) => channelStep(channels, from, by)?.name;
+  assert.equal(walk("c-app", 1), "general");
+  assert.equal(walk("c-general", 1), "launch");
+  assert.equal(walk("c-launch", 1), "app", "down from the last wraps to the first");
+  assert.equal(walk("c-app", -1), "launch", "up from the first wraps to the last");
+  assert.equal(walk(undefined, 1), "app", "down from no channel shown is the first");
+  assert.equal(walk(undefined, -1), "launch", "up from no channel shown is the last");
+});
+
+test("a channel reads unread once something is posted after the reader's look, or where they never looked at one holding a thread", () => {
+  const channel = (seen: Partial<Channel>): Channel => ({
+    id: "c-app",
+    name: "app",
     purpose: "A purpose",
     project: false,
     createdAt: NOON,
     waiting: 0,
+    ...seen,
   });
-  const app = channel("c-app", "app");
-  const general = channel("c-general", "general");
-  assert.equal(shownChannel([app, general], "c-app"), app);
-  assert.equal(shownChannel([app, general], "c-archived"), general);
-  assert.equal(shownChannel([app, general], undefined), general);
+  assert.equal(channelUnread(channel({ lookedAt: NOON, latestPostedAt: NOON + HOUR })), true);
+  assert.equal(channelUnread(channel({ lookedAt: NOON + HOUR, latestPostedAt: NOON })), false);
+  assert.equal(channelUnread(channel({ latestPostedAt: NOON })), true);
+  assert.equal(channelUnread(channel({})), false);
 });

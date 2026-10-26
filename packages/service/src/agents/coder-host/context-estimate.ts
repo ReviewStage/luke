@@ -41,8 +41,8 @@ import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
 import { READ_WEB_PAGE_TOOL } from "../public-research.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
+import { MESSAGE_AGENT_TOOL } from "./agent-message.js";
 import { CODER } from "./bounds.js";
-import { CHAT_TOOLS } from "./chat.js";
 import { DELEGATE_TOOL } from "./delegation.js";
 import { applyPatchIn, globIn, grepIn, readFileIn, writeFileIn } from "./files.js";
 import { INBOX_TOOLS } from "./inbox.js";
@@ -118,7 +118,7 @@ const AUTHORED_TOOLS = {
     description: TODOS_TOOL.description,
     inputSchema: emitJsonSchema(TODOS_TOOL.inputSchema),
   },
-  [CODER_TOOL.POST_TO_INBOX]: {
+  [CODER_TOOL.POST_THREAD]: {
     description: INBOX_TOOLS.POST.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.POST.inputSchema),
   },
@@ -126,9 +126,21 @@ const AUTHORED_TOOLS = {
     description: INBOX_TOOLS.WITHDRAW.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.WITHDRAW.inputSchema),
   },
-  [CODER_TOOL.READ_INBOX]: {
+  [CODER_TOOL.READ_THREADS]: {
     description: INBOX_TOOLS.READ.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
+  },
+  [CODER_TOOL.CREATE_CHANNEL]: {
+    description: INBOX_TOOLS.CREATE_CHANNEL.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.CREATE_CHANNEL.inputSchema),
+  },
+  [CODER_TOOL.UPDATE_CHANNEL]: {
+    description: INBOX_TOOLS.UPDATE_CHANNEL.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.UPDATE_CHANNEL.inputSchema),
+  },
+  [CODER_TOOL.MOVE_THREAD]: {
+    description: INBOX_TOOLS.MOVE_THREAD.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.MOVE_THREAD.inputSchema),
   },
   [CODER_TOOL.LIST_OPEN_ASKS]: {
     description: LIST_OPEN_ASKS_TOOL.description,
@@ -145,6 +157,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.READ_AGENT]: {
     description: CODER_READ_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(CODER_READ_AGENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.MESSAGE_AGENT]: {
+    description: MESSAGE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(MESSAGE_AGENT_TOOL.inputSchema),
   },
   [CODER_TOOL.START_AGENT]: {
     description: START_AGENT_TOOL.description,
@@ -201,22 +217,6 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.RUN_AUTOMATION]: {
     description: RUN_AUTOMATION_TOOL.description,
     inputSchema: emitJsonSchema(RUN_AUTOMATION_TOOL.inputSchema),
-  },
-  [CODER_TOOL.POST_CHAT]: {
-    description: CHAT_TOOLS.POST.description,
-    inputSchema: emitJsonSchema(CHAT_TOOLS.POST.inputSchema),
-  },
-  [CODER_TOOL.READ_CHAT]: {
-    description: CHAT_TOOLS.READ.description,
-    inputSchema: emitJsonSchema(CHAT_TOOLS.READ.inputSchema),
-  },
-  [CODER_TOOL.RESOLVE_ASK]: {
-    description: CHAT_TOOLS.RESOLVE.description,
-    inputSchema: emitJsonSchema(CHAT_TOOLS.RESOLVE.inputSchema),
-  },
-  [CODER_TOOL.EDIT_CHANNEL]: {
-    description: CHAT_TOOLS.EDIT_CHANNEL.description,
-    inputSchema: emitJsonSchema(CHAT_TOOLS.EDIT_CHANNEL.inputSchema),
   },
   [CODER_TOOL.LIST_MODELS]: {
     description: LIST_MODELS_TOOL.description,

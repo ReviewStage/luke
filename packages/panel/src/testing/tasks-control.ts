@@ -7,7 +7,6 @@ import {
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
-import { FOR_YOU } from "@luke/ui/chat-model";
 import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -115,7 +114,6 @@ export function codingAgentsControl(
 ): CodingAgentsControl {
   return {
     me: undefined,
-    chatOn: true,
     agents: [],
     archived: [],
     agentIds: [],
@@ -333,7 +331,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     commentReveal: undefined,
     onSectionRevealed: ignore,
     onShowInbox: ignore,
-    onShowChat: ignore,
     inbox: [],
     inboxShown: null,
     inboxTasks: [],
@@ -344,6 +341,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onClose: ignore,
       onChoose: ignore,
       onOpenItem: ignore,
+      onOpenChannel: ignore,
       listed: false,
       onListed: ignore,
       pages: undefined,
@@ -373,25 +371,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onOpen: ignore,
       onRuns: ignore,
       onClose: ignore,
-    },
-    chatView: {
-      open: false,
-      available: false,
-      chat: undefined,
-      failed: false,
-      onRetry: ignore,
-      place: FOR_YOU,
-      listed: true,
-      onList: ignore,
-      onOpen: ignore,
-      onClose: ignore,
-      onChoose: ignore,
-      onShow: ignore,
-      onPost: () => Promise.resolve(undefined),
-      onAnswer: () => Promise.resolve(undefined),
-      onChannel: () => Promise.resolve(undefined),
-      onRead: ignore,
-      readPicture: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
     },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,

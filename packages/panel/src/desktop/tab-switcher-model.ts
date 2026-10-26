@@ -4,7 +4,7 @@
  * A stop is a whole screen the window stood on, the same unit as a step of
  * Back's (`navigation-history.ts`): a task with the tab its column showed
  * and the tab its side panel showed, either of them none, or a place the
- * window shows in the task's place, the Inbox, Chat, the Board,
+ * window shows in the task's place, the Inbox, the Board,
  * Automations, an agent's own page, or a person's. Settings and a
  * version history are no stop, since each is a layer over the window rather
  * than a place in it, and nor is a new account's welcome, which stands only
@@ -37,7 +37,6 @@ const SWITCHER_CARDS = 5;
 /** The places the window shows in a task's place, each opened by its own door. */
 export const SWITCHER_PLACE = {
   INBOX: "inbox",
-  CHAT: "chat",
   BOARD: "board",
   AUTOMATIONS: "automations",
 } as const;
@@ -204,7 +203,6 @@ export function switcherTarget(state: SwitcherState): Stop | undefined {
 export interface WindowStanding {
   /** Settings or a version history stands over the window, which is no stop. */
   readonly over: boolean;
-  readonly chat: boolean;
   readonly inbox: boolean;
   readonly agentId: string | undefined;
   readonly person:
@@ -237,7 +235,6 @@ export interface WindowStanding {
 export function shownStop(standing: WindowStanding): Stop | undefined {
   if (standing.over) return undefined;
   const place = (place: SwitcherPlace): Stop => ({ kind: STOP_KIND.PLACE, place });
-  if (standing.chat) return place(SWITCHER_PLACE.CHAT);
   if (standing.inbox) return place(SWITCHER_PLACE.INBOX);
   if (standing.agentId !== undefined) return { kind: STOP_KIND.AGENT, agentId: standing.agentId };
   if (standing.person !== undefined) return { kind: STOP_KIND.PERSON, ...standing.person };

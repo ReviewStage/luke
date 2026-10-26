@@ -66,7 +66,6 @@ const STORAGE_KEY = {
   INBOX_MEDIA_PREVIEWS: "luke.inboxMediaPreviews",
   INBOX_SECOND_LINE: "luke.inboxSecondLine",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
-  CHAT_LIST_WIDTH: "luke.chatListWidth",
   RUNS_PANEL: "luke.automationRunsPanel",
   FILE_TREE_WIDTH: "luke.fileTreeWidth",
 } as const;
@@ -216,7 +215,6 @@ const KEPT = {
   FOLDED_SECTIONS: keptKey(STORAGE_KEY.SECTIONS, storedTasks),
   INBOX_TASKS: keptKey(STORAGE_KEY.INBOX_TASKS, storedTasks, STORAGE_KEY.INBOX_TASKS_EARLIER),
   INBOX_LIST_WIDTH: keptKey(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth),
-  CHAT_LIST_WIDTH: keptKey(STORAGE_KEY.CHAT_LIST_WIDTH, storedWidth),
   FILE_TREE_WIDTH: keptKey(STORAGE_KEY.FILE_TREE_WIDTH, storedWidth),
   RUNS_PANEL: keptKey(STORAGE_KEY.RUNS_PANEL, storedRunsPanel),
 } as const;
@@ -398,19 +396,7 @@ export interface InboxListWidth {
 
 /** The Inbox list's width, the default until first dragged, and kept as it is. */
 export function useInboxListWidth(): InboxListWidth {
-  return useListWidth(KEPT.INBOX_LIST_WIDTH);
-}
-
-/** Chat's rail's width, on the Inbox list's bounds, since it stands where the Inbox's list does, and kept apart from it. */
-export function useChatListWidth(): InboxListWidth {
-  return useListWidth(KEPT.CHAT_LIST_WIDTH);
-}
-
-/** A list column's width beside the item it opens, the default until first dragged, and kept under its key. */
-function useListWidth(
-  key: typeof KEPT.INBOX_LIST_WIDTH | typeof KEPT.CHAT_LIST_WIDTH,
-): InboxListWidth {
-  const [kept, keep] = useKept(key, INBOX_LIST_WIDTH.DEFAULT);
+  const [kept, keep] = useKept(KEPT.INBOX_LIST_WIDTH, INBOX_LIST_WIDTH.DEFAULT);
   return { width: clampListWidth(kept), onResize: (asked) => keep(clampListWidth(asked)) };
 }
 

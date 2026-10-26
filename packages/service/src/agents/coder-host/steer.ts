@@ -24,8 +24,8 @@ import {
   type StoreWriter,
 } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { withoutMemberLinks } from "@luke/features/chat-mentions";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { withoutMemberLinks } from "@luke/features/mention-link";
 import { causeKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
@@ -120,7 +120,7 @@ import { codingAgentStatusOf } from "./status.js";
  * The developer's words, the files they attached where they did, the key the
  * send is made under, which a repeat carries again, and what sent them, which
  * the row keeps and eve is not told; and who the row says wrote it, the
- * developer's typed ask unless a chat notice names its poster.
+ * developer's typed ask unless another agent's message names its sender.
  */
 export interface SteerLine {
   readonly text: string;
@@ -331,11 +331,12 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   // What the words mention goes with them: of the task this send read as its sender, and of the agent's workspace.
   // Note that GitHub's line carries a reviewer's words, which mention nothing on the developer's behalf, so it hands no note of what they mention;
-  // and a chat notice's links to people, agents, and Lukes name who said it and whom it addresses, members the agent reads the chat by,
-  // so only what else it mentions is noted.
+  // and another agent's message links its sender to name who said it, so only what else it mentions is noted.
   const reviewers = line.sender.kind === MESSAGE_SENDER.GITHUB;
   const pointed =
-    line.metadata?.channel === MESSAGE_CHANNEL.CHAT ? withoutMemberLinks(line.text) : line.text;
+    line.metadata?.channel === MESSAGE_CHANNEL.AGENT_MESSAGE
+      ? withoutMemberLinks(line.text)
+      : line.text;
   // GitHub is asked beside the mentions' read, each judged in turn as above.
   const reached = yield* Effect.all(
     {

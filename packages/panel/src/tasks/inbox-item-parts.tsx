@@ -14,6 +14,7 @@ import {
   INBOX_ASK,
   INBOX_STATUS,
   type InboxItem,
+  inboxWaitsOn,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
@@ -57,6 +58,7 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { AutomationChipCard, ChipCardSkeleton, TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
+import { HOME_ROW_META } from "./home-row.js";
 import {
   holderName,
   INBOX_HOLDER,
@@ -67,7 +69,6 @@ import {
   inboxSettledStanding,
   inboxSettledWords,
   inboxShownTicks,
-  inboxWaitsOn,
   itemWorkspaceId,
   NEEDS_YOU,
   needsYou as needsYouOf,
@@ -79,7 +80,7 @@ import { TASK_CARD_STANDING, TASK_STATUS_WORDS, TaskKey } from "./task-standing.
 import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
 
-/** A row's mark before its words, a Chat place's or the next item's, which keeps its own size. */
+/** A row's mark before its words, the next item's, which keeps its own size. */
 export const INBOX_ROW_MARK = "inbox-row-mark flex flex-none";
 
 /**
@@ -87,7 +88,7 @@ export const INBOX_ROW_MARK = "inbox-row-mark flex flex-none";
  * a size under a row glyph's, as a sidebar plan wears it, so the disc's edge
  * reads at the time's height.
  */
-export const INBOX_ROW_ATTENTION =
+const INBOX_ROW_ATTENTION =
   "inbox-row-attention inline-flex [&_.attention-mark]:size-luke-12 [&_.attention-mark_svg]:size-attention-glyph-small";
 
 /** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
@@ -508,7 +509,7 @@ export function useInboxStanding(listed: InboxListed, readerId: string | undefin
 
 /** An item row's meta, its context, marks, and time in one line at the title's right. */
 function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element {
-  return <span className="home-row-meta">{children}</span>;
+  return <span className={HOME_ROW_META}>{children}</span>;
 }
 
 /**

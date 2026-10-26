@@ -15,7 +15,6 @@
  * Code's appended to its prompt, Codex's as its `developer_instructions`.
  */
 
-import { chatEnabledFor } from "@luke/database/models/account-store";
 import { type CodingAgent, hasRepository } from "@luke/database/models/coding-agent-store";
 import { readNativeSequence } from "@luke/database/models/native-projection-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
@@ -54,7 +53,7 @@ export interface NativeAgentSessionsOptions {
  * what its row names as an eve session's are (`host.ts`'s `prompt`): whether
  * its token reads the repository's CI, the co-author trailer where it writes
  * as its developer, the workspace its links are written under, and whether
- * its starter turned Chat on; each read that fails reads as eve's does.
+ * its starter turned Memory on; each read that fails reads as eve's does.
  */
 const nativeCoderInstructions = (
   userId: string,
@@ -70,16 +69,11 @@ const nativeCoderInstructions = (
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed(() => agent.organizationId),
     );
-    const chatOn = yield* chatEnabledFor(userId).pipe(
-      Effect.tapError(logStoreFailure),
-      Effect.orElseSucceed(() => false),
-    );
     const memoryOn = yield* memoryOnFor(userId);
     return agentCoderInstructions(agent, {
       ciReadable,
       coAuthor,
       workspace,
-      chatOn,
       memoryOn,
       harness,
       checkoutPath,

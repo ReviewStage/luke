@@ -15,7 +15,7 @@ import {
   purgeClearedConversations,
 } from "../../models/soft-delete.js";
 import { createTask, deleteTask } from "../../models/task-store.js";
-import { getTestDB, migrationStatements, openWorkspace } from "../../testing/index.js";
+import { getTestDB, migrationStatements, openWorkspace, replayable } from "../../testing/index.js";
 import { user } from "../auth.js";
 import { sessionSandboxCleanup } from "../session-sandbox.js";
 import { conversations } from "../storage.js";
@@ -23,11 +23,11 @@ import { conversations } from "../storage.js";
 /**
  * The migration that drops the per-task Luke's data: his conversations,
  * stamped deleted with every child under them so the sweep purges them; the
- * words said on calls with no agent; his chat members, kept where one wrote
- * a message or is in a DM; and `task.conversation_id` and
- * `chat_member.task_id`. Each test stands its own database where it stood
- * before the migration, the migration undone over it, and runs the
- * migration's own statements. Synthetic accounts and rows throughout.
+ * words said on calls with no agent; and `task.conversation_id`. Each test
+ * stands its own database where it stood before the migration, the migration
+ * undone over it, and runs the migration's own statements, less those on the
+ * tables a later migration dropped (`replayable`). Synthetic accounts and
+ * rows throughout.
  */
 
 const MIGRATION = "20261021105816_per_task_luke_data_drop";
@@ -36,18 +36,10 @@ const MIGRATION = "20261021105816_per_task_luke_data_drop";
 const UNDO = [
   `ALTER TABLE "task" ADD COLUMN "conversation_id" uuid`,
   `ALTER TABLE "task" ADD CONSTRAINT "plan_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE set null`,
-  `ALTER TABLE "chat_member" ADD COLUMN "task_id" uuid`,
-  `ALTER TABLE "chat_member" ADD CONSTRAINT "chat_member_plan_id_plan_id_fkey" FOREIGN KEY ("task_id") REFERENCES "task"("id") ON DELETE set null`,
-  `CREATE UNIQUE INDEX "chat_member_task" ON "chat_member" ("task_id") WHERE "task_id" is not null`,
-  `ALTER TABLE "chat_member" DROP CONSTRAINT "chat_member_id_of_kind"`,
-  `ALTER TABLE "chat_member" ADD CONSTRAINT "chat_member_id_of_kind" CHECK (("kind" = 'human') = ("user_id" is not null) and ("agent_id" is null or "kind" = 'agent') and ("task_id" is null or "kind" = 'planner'))`,
-  // Note that the handle and its index were dropped after this migration (`20261022112904_chat_member_handle_drop`), so they are stood up again as this migration found them.
-  `ALTER TABLE "chat_member" ADD COLUMN "handle" text DEFAULT gen_random_uuid()::text NOT NULL`,
-  `CREATE UNIQUE INDEX "chat_member_organization_handle" ON "chat_member" ("organization_id", "handle") WHERE "kind" <> 'planner'`,
 ];
 
-/** The per-task Luke's conversation kind and chat member kind, as old rows store them; no code names either now. */
-const OLD_KIND = { CONVERSATION: "plan", MEMBER: "planner" } as const;
+/** The per-task Luke's conversation kind, as old rows store it; no code names it now. */
+const OLD_KIND = { CONVERSATION: "plan" } as const;
 
 /** The database stood where it was before the migration. */
 const undo = Effect.gen(function* () {
@@ -58,7 +50,7 @@ const undo = Effect.gen(function* () {
 /** The migration's statements, run in one transaction as the migrator runs them; its exit. */
 const migrate = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const statements = yield* migrationStatements(MIGRATION);
+  const statements = replayable(yield* migrationStatements(MIGRATION));
   return yield* Effect.exit(
     sql.withTransaction(Effect.forEach(statements, (statement) => sql.unsafe(statement))),
   );
@@ -102,38 +94,6 @@ const stampsOf = (ids: readonly string[]) =>
       const stamp = rows.find((row) => row.id === id)?.deleted_at;
       return stamp === undefined || stamp === null ? null : new Date(stamp).toISOString();
     });
-  });
-
-/** A planner member of the workspace on the task, as one minted while a task had its own Luke stands; its id. */
-const openPlanner = (organizationId: string, taskId: string, ordinal: number) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const [row] = yield* sql<{ readonly id: string }>`
-      INSERT INTO chat_member (organization_id, kind, task_id, ordinal, joined_at)
-      VALUES (${organizationId}, ${OLD_KIND.MEMBER}, ${taskId}, ${ordinal}, now())
-      RETURNING id
-    `;
-    assert.ok(row);
-    return row.id;
-  });
-
-/** How many planner members stand. */
-const plannerCount = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  const [row] = yield* sql<{ readonly count: number }>`
-    SELECT count(*)::int AS count FROM chat_member WHERE kind = ${OLD_KIND.MEMBER}
-  `;
-  return row?.count ?? 0;
-});
-
-/** Whether the table has the column, which the migration drops. */
-const hasColumn = (table: string, column: string) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const rows = yield* sql`
-      SELECT 1 FROM information_schema.columns WHERE table_name = ${table} AND column_name = ${column}
-    `;
-    return rows.length > 0;
   });
 
 it.layer(getTestDB())("a task deleted after the migration", (it) => {
@@ -305,61 +265,6 @@ it.layer(getTestDB())("calls with no agent", (it) => {
             [1, 1],
             [1, 1],
           ],
-        );
-      }),
-  );
-});
-
-it.layer(getTestDB())("the per-task Luke's chat members", (it) => {
-  it.effect(
-    "a planner that wrote a message or is in a DM is never deleted: the migration fails and drops nothing, and once neither holds, every planner goes with the column only they used",
-    () =>
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        yield* undo;
-        const { userId, organizationId, taskId } = yield* openTask;
-        const other = (yield* createTask(userId, { organizationId, name: "Billing export" })).id;
-        const third = (yield* createTask(userId, { organizationId, name: "Release notes" })).id;
-        const writer = yield* openPlanner(organizationId, taskId, 1);
-        const inDm = yield* openPlanner(organizationId, other, 2);
-        yield* openPlanner(organizationId, third, 3);
-        const [person] = yield* sql<{ readonly id: string }>`
-          INSERT INTO chat_member (organization_id, kind, user_id, ordinal, joined_at)
-          VALUES (${organizationId}, 'human', ${userId}, 1, now()) RETURNING id
-        `;
-        assert.ok(person);
-        const [channel] = yield* sql<{ readonly id: string }>`
-          INSERT INTO chat_channel (organization_id, kind, name, task_id, created_at)
-          VALUES (${organizationId}, 'plan', 'teammate-invitations', ${taskId}, now()) RETURNING id
-        `;
-        assert.ok(channel);
-        yield* sql`
-          INSERT INTO chat_message (organization_id, channel_id, seq, touched_seq, author_member_id, blocks, client_key, created_at)
-          VALUES (${organizationId}, ${channel.id}, 1, 1, ${writer}, '[]'::jsonb, 'key', now())
-        `;
-        const pair = [inDm, person.id].toSorted();
-        yield* sql`
-          INSERT INTO chat_channel (organization_id, kind, dm_a_member_id, dm_b_member_id, created_at)
-          VALUES (${organizationId}, 'dm', ${pair[0] ?? ""}, ${pair[1] ?? ""}, now())
-        `;
-
-        // A planner that wrote a message holds the whole migration back.
-        assert.ok(Exit.isFailure(yield* migrate));
-        assert.equal(yield* plannerCount, 3);
-        assert.ok(yield* hasColumn("chat_member", "task_id"));
-        assert.ok(yield* hasColumn("task", "conversation_id"));
-
-        // So does one in a DM, once no planner wrote anything.
-        yield* sql`DELETE FROM chat_message WHERE author_member_id = ${writer}`;
-        assert.ok(Exit.isFailure(yield* migrate));
-        assert.equal(yield* plannerCount, 3);
-
-        yield* sql`DELETE FROM chat_channel WHERE kind = 'dm'`;
-        assert.ok(Exit.isSuccess(yield* migrate));
-        assert.equal(yield* plannerCount, 0);
-        assert.deepEqual(
-          [yield* hasColumn("chat_member", "task_id"), yield* hasColumn("task", "conversation_id")],
-          [false, false],
         );
       }),
   );

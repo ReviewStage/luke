@@ -2,11 +2,10 @@ import { jsonSchemaGoldenRoot, settleJsonSchemaGolden } from "@luke/wire/testing
 import type { Schema } from "effect";
 import { test } from "vitest";
 import {
-  editChannelInputSchema,
-  postChatAskInputSchema,
-  readChatInputSchema,
-  resolveAskInputSchema,
-} from "./chat-wire.js";
+  channelCreateInputSchema,
+  channelUpdateInputSchema,
+  threadMoveInputSchema,
+} from "./channel-wire.js";
 import {
   codingAgentDelegationInputSchema,
   codingAgentTodosInputSchema,
@@ -19,7 +18,7 @@ import {
 
 /**
  * The schemas this package declares that a model is shown whole as a tool's
- * input: the coder's chat, inbox, delegation, and to-do tools. A model
+ * input: the coder's thread, channel, delegation, and to-do tools. A model
  * provider keys its prompt cache on the text of a request, so these bytes are
  * recorded and move only under `LUKE_UPDATE_FIXTURES=1`. A schema no model is
  * shown as a tool's input is not recorded.
@@ -28,13 +27,12 @@ import {
 const ROOT = jsonSchemaGoldenRoot(import.meta.url);
 
 const TOOL_INPUTS: readonly (readonly [string, Schema.Top])[] = [
-  ["chat-wire-postChatAskInputSchema", postChatAskInputSchema],
-  ["chat-wire-readChatInputSchema", readChatInputSchema],
-  ["chat-wire-resolveAskInputSchema", resolveAskInputSchema],
-  ["chat-wire-editChannelInputSchema", editChannelInputSchema],
   ["inbox-wire-inboxThreadPostInputSchema", inboxThreadPostInputSchema],
   ["inbox-wire-inboxWithdrawInputSchema", inboxWithdrawInputSchema],
   ["inbox-wire-inboxReadInputSchema", inboxReadInputSchema],
+  ["channel-wire-channelCreateInputSchema", channelCreateInputSchema],
+  ["channel-wire-channelUpdateInputSchema", channelUpdateInputSchema],
+  ["channel-wire-threadMoveInputSchema", threadMoveInputSchema],
   ["coding-agent-wire-codingAgentDelegationInputSchema", codingAgentDelegationInputSchema],
   ["coding-agent-wire-codingAgentTodosInputSchema", codingAgentTodosInputSchema],
 ];

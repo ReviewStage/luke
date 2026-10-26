@@ -1,3 +1,4 @@
+import type { Channel } from "@luke/features/channel-wire";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   isAgentTab,
@@ -27,14 +28,17 @@ import type { TasksControl } from "./tasks/use-tasks-tab.js";
  * only while its task is open: the page by what the window's title calls it
  * (`window-title.ts`), and a task's step by the task, with the tabs its
  * column and side panel showed under it, "Fix token refresh · Code". An
- * Inbox item's step names the task the item is of. A Settings page or a
- * Chat place is named by its page alone.
+ * Inbox item's step names the task the item is of. With Channels on, the
+ * Inbox's step is named by the channel its stream shows, "#app", and by the
+ * task of the thread open in it, where one is. A Settings page is
+ * named by its page alone.
  *
  * A step listed later is named again as what it names stands now
  * (`liveStepTitle`), by the ids it stood on: a task by the name the task
  * list gives it, an agent's tab by its agent's name as the open task's
  * agents or the task's row's agent line give it, and a person's page by
- * the name the workspace's members give them. So a task, agent, or person
+ * the name the workspace's members give them, and a channel's by the name
+ * the workspace's channels give it. So a task, agent, person, or channel
  * renamed since is listed under the new name, and the name kept as the step
  * stood is only what a step falls back to where nothing the window reads
  * names it now.
@@ -118,7 +122,6 @@ export type StepTitleTasks = Pick<
   | "agentView"
   | "personView"
   | "automationsView"
-  | "chatView"
   | "boardView"
   | "history"
 >;
@@ -148,7 +151,6 @@ export function stepTitle(
     return { label: tasks.personView.name ?? "Profile" };
   }
   if (tasks.automationsView.open) return { label: "Automations" };
-  if (tasks.chatView.open) return { label: "Chat" };
   if (tasks.boardView.open) return { label: "Tasks" };
   if (tasks.boundFor === undefined) return { label: "Welcome" };
   const name = taskName(tasks, tasks.boundFor);
@@ -170,6 +172,11 @@ export function stepTitle(
   return { label: name, detail: shown.join(" · "), panes: { column, side } };
 }
 
+/** What a channel's step is called: the channel, `#app`, and the task of the thread open in it, where one is. */
+export function channelStepTitle(name: string, detail: string | undefined): StepTitle {
+  return { label: `#${name}`, detail };
+}
+
 /** The kinds of step a name is read again for: those naming a task, a task's Inbox item, or a person. */
 export const NAMED_STEP = {
   TASK: "task",
@@ -187,7 +194,12 @@ export type NamedStep =
       readonly side: SidePanelTab | undefined;
     }
   | { readonly kind: typeof NAMED_STEP.VERSION_HISTORY; readonly taskId: string }
-  | { readonly kind: typeof NAMED_STEP.INBOX; readonly taskId: string | undefined }
+  | {
+      readonly kind: typeof NAMED_STEP.INBOX;
+      readonly taskId: string | undefined;
+      /** The channel the stream showed, with Channels on. */
+      readonly channelId?: string | undefined;
+    }
   | { readonly kind: typeof NAMED_STEP.PERSON; readonly userId: string };
 
 /** The name a person goes by now, by their id, as the workspace's members say; none for someone not among them, or while they are unread. */
@@ -229,6 +241,7 @@ export function liveStepTitle(
   kept: StepTitle | undefined,
   tasks: StepNameTasks,
   members: readonly WorkspaceMember[] | undefined,
+  channels?: readonly Channel[] | undefined,
 ): StepTitle | undefined {
   switch (step?.kind) {
     case undefined:
@@ -242,6 +255,8 @@ export function liveStepTitle(
     case NAMED_STEP.INBOX: {
       // Note that an Inbox step names an item only where it was kept naming one, as one column standing its list names none.
       const detail = kept?.detail === undefined ? undefined : taskName(tasks, step.taskId);
+      const channel = channels?.find((each) => each.id === step.channelId);
+      if (channel !== undefined) return channelStepTitle(channel.name, detail ?? kept?.detail);
       return { label: kept?.label ?? INBOX_WORDS, detail: detail ?? kept?.detail };
     }
     case NAMED_STEP.PERSON: {

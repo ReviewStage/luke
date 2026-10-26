@@ -7,7 +7,7 @@
  * comes back as the panel's own answer; on its way it is noted by the
  * notices (`@luke/host/agent-notices`), which hold where each agent stands
  * so an end the panel is not looking at is still announced, and which
- * agent's tab, task's Inbox, and Chat the panel shows, so an item it is
+ * agent's tab and task's Inbox the panel shows, so an item it is
  * looking at is not; and an agent's own pull request, read, is noted as
  * what it published. Nothing else is held here.
  */

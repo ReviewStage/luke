@@ -1,0 +1,27 @@
+/* control-ground.css -- the ground an opaque region's controls lay their
+   translucent fills over (control-ground.tsx).
+
+   A choice's row composites its fill over `--luke-choice-ground`, and a
+   button its lit fill over `--luke-button-ground`, both nothing unless a
+   container names them; this region names the window's ground for both.
+   A resting quiet or outlined button draws no fill, so here it rests on
+   that ground too, as it does on the column. A stepped-back region inside
+   one still quiets its rows, its sheet coming after this one. */
+
+@layer components {
+  /* The region draws no box, so what holds it lays out its controls. */
+  .luke-control-ground {
+    display: contents;
+  }
+
+  .luke-control-ground[data-ground="opaque"] {
+    --luke-choice-ground: var(--luke-color-ground);
+    --luke-button-ground: var(--luke-color-ground);
+  }
+
+  .luke-control-ground:where([data-ground="opaque"])
+    .luke-button:is([data-variant="quiet"], [data-variant="subtle"], [data-variant="outline"]) {
+    background: linear-gradient(var(--luke-button-fill), var(--luke-button-fill))
+      var(--luke-button-ground);
+  }
+}

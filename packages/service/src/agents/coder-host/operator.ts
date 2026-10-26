@@ -37,7 +37,7 @@
  *
  * Only a member of the workspace who turned the operator experiment on
  * (`EXPERIMENT.OPERATOR`) ensures one; anyone else is answered as though
- * the workspace named nothing, as Chat's gate answers.
+ * the workspace named nothing.
  */
 
 import { randomUUID } from "node:crypto";

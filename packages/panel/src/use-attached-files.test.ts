@@ -9,7 +9,6 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { AgentComposer } from "./tasks/agent-composer.js";
-import { ChatComposer, type ChatComposerMentions } from "./tasks/chat-composer.js";
 import { useAgentComposer } from "./tasks/use-agent-composer.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { attachmentChipName } from "./testing/attachment-chip.js";
@@ -23,21 +22,13 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 
 /**
- * The agent's box and a channel's box take files one way: a picture
- * dropped on the card or pasted into the field is held as its chip, and
- * pictures past the bytes a message carries together are left out, the box
- * saying why in its note while the ones that fit still come.
+ * The agent's box takes files: a picture dropped on the card or pasted into
+ * the field is held as its chip, and pictures past the bytes a message
+ * carries together are left out, the box saying why in its note while the
+ * ones that fit still come.
  */
 
 const ignore = () => undefined;
-
-/** A channel's box standing alone: no member, no task, and no channel to mention. */
-const NO_MENTIONS: ChatComposerMentions = {
-  source: { taskId: "", taskName: "", workspace: "", repository: null, text: () => "" },
-  members: { people: [], agents: [] },
-  channels: [],
-  crowded: () => false,
-};
 
 /** The agent's box on its own control, whose sends never answer. */
 function AgentBox(): ReactNode {
@@ -54,14 +45,6 @@ function AgentBox(): ReactNode {
 /** The boxes that take files, each drawn alone. */
 const BOXES = {
   agent: () => createElement(AgentBox),
-  chat: () =>
-    createElement(ChatComposer, {
-      channelId: "c0a1b2c3-d4e5-4f60-8a7b-9c0d1e2f3a4b",
-      label: "Message #general",
-      mentions: NO_MENTIONS,
-      keywords: [],
-      onSend: ignore,
-    }),
 } as const;
 
 /** A PNG's signature, and bytes past it to give the picture its size. */
@@ -141,7 +124,7 @@ function held(container: HTMLElement) {
   };
 }
 
-test("a picture dropped on the agent's box and on a channel's box is held as its chip, and says nothing", async () => {
+test("a picture dropped on the agent's box is held as its chip, and says nothing", async () => {
   for (const box of Object.keys(BOXES) as (keyof typeof BOXES)[]) {
     const container = await mounted(box);
     await drop(container, [png("dropped.png")]);
@@ -149,7 +132,7 @@ test("a picture dropped on the agent's box and on a channel's box is held as its
   }
 });
 
-test("a picture pasted into the agent's box and into a channel's box is held as its chip, the paste writing no words", async () => {
+test("a picture pasted into the agent's box is held as its chip, the paste writing no words", async () => {
   for (const box of Object.keys(BOXES) as (keyof typeof BOXES)[]) {
     const container = await mounted(box);
     assert.equal(await paste(container, [png("pasted.png")]), false, `${box} takes the paste`);
@@ -158,7 +141,7 @@ test("a picture pasted into the agent's box and into a channel's box is held as 
   }
 });
 
-test("pictures past the bytes a message carries together leave the last out of the agent's box and a channel's box alike, and the note says why", async () => {
+test("pictures past the bytes a message carries together leave the last out of the agent's box, and the note says why", async () => {
   // Note that each picture fits a message alone, kept as it is, and two of them fit together while three do not.
   const size = Math.floor(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES / 2.5);
   assert.ok(size <= CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES);

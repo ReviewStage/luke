@@ -11,13 +11,15 @@ import {
   CHANNEL_WRITE_REFUSAL,
   type ChannelWriteRefusal,
   createChannel,
+  editChannel,
   ensureGeneralChannel,
+  listArchivedChannels,
   listChannelLooks,
   listChannels,
   openChannels,
-  renameChannel,
   resolveChannel,
   stampChannelLook,
+  unarchiveChannel,
 } from "../channel-store.js";
 
 /**
@@ -25,9 +27,9 @@ import {
  * however often and however concurrently it is asked for, every member reads
  * the workspace's channels and an account outside it reads none, and a
  * member's look moves only forward and is never stamped by an outsider. Any
- * member makes, renames, and archives a channel, an outsider none, and
- * #general is never renamed or archived; an agent's name for a channel
- * finds only an open one.
+ * member makes, edits, archives, and unarchives a channel, an outsider none,
+ * and #general is never renamed or archived though its purpose is edited;
+ * an agent's name for a channel finds only an open one.
  *
  * Synthetic accounts and workspaces throughout.
  */
@@ -121,15 +123,15 @@ it.layer(getTestDB())("a workspace's channels", (it) => {
           yield* createChannel(dean, workspace, draft("app"), new Date(7)),
           yield* createChannel(dean, workspace, draft("general"), new Date(7)),
           yield* createChannel(outsider, workspace, draft("infra"), new Date(7)),
-          yield* renameChannel(dean, workspace, general, "lobby"),
+          yield* editChannel(dean, workspace, general, { name: "lobby" }),
           yield* archiveChannel(dean, workspace, general, new Date(7)),
-          yield* renameChannel(outsider, workspace, app.id, "web"),
+          yield* editChannel(outsider, workspace, app.id, { name: "web" }),
           yield* archiveChannel(outsider, workspace, app.id, new Date(7)),
         ];
         const refused = outcomes.map((outcome) =>
           Result.isFailure(outcome) ? outcome.failure : "written",
         );
-        const renamed = yield* renameChannel(dean, workspace, app.id, "web");
+        const renamed = yield* editChannel(dean, workspace, app.id, { name: "web" });
         const archived = yield* archiveChannel(dean, workspace, app.id, new Date(8));
         const remade = yield* createChannel(dean, workspace, draft("web"), new Date(9));
 
@@ -197,6 +199,97 @@ it.layer(getTestDB())("a workspace's channels", (it) => {
           ["general", "infra"],
         );
         assert.deepEqual(yield* openChannels(outsider, workspace, new Date(3)), []);
+      }),
+  );
+
+  it.effect(
+    "#general's purpose is edited and its name kept, an edit leaves out what it does not name, and an outsider edits nothing",
+    () =>
+      Effect.gen(function* () {
+        const [dean, outsider] = [yield* openAccount, yield* openAccount];
+        const workspace = yield* openWorkspace(dean);
+        const general = yield* ensureGeneralChannel(workspace, new Date(1));
+        const draft = { name: "app", purpose: "Desktop and panel.", project: false };
+        const app = Result.getOrThrow(yield* createChannel(dean, workspace, draft, new Date(2)));
+
+        const outcomes = [
+          yield* editChannel(dean, workspace, general, { name: "lobby", purpose: "Hello." }),
+          yield* editChannel(outsider, workspace, general, { purpose: "Mine now." }),
+          yield* editChannel(dean, workspace, app.id, { name: "general" }),
+        ];
+        const purposed = yield* editChannel(dean, workspace, general, {
+          name: "general",
+          purpose: "Whatever fits nowhere else.",
+        });
+        const renamed = yield* editChannel(dean, workspace, app.id, { name: "web" });
+
+        assert.deepEqual(outcomes, [
+          Result.fail(CHANNEL_WRITE_REFUSAL.GENERAL),
+          Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND),
+          Result.fail(CHANNEL_WRITE_REFUSAL.NAME_TAKEN),
+        ]);
+        assert.deepEqual(
+          Result.map(purposed, (row) => [row.name, row.purpose]),
+          Result.succeed(["general", "Whatever fits nowhere else."]),
+        );
+        assert.deepEqual(
+          Result.map(renamed, (row) => [row.name, row.purpose]),
+          Result.succeed(["web", "Desktop and panel."]),
+        );
+      }),
+  );
+
+  it.effect(
+    "a member lists the archived channels and opens one again under its own name, refused where an open channel took it, and an outsider does neither",
+    () =>
+      Effect.gen(function* () {
+        const [dean, charles, outsider] = [
+          yield* openAccount,
+          yield* openAccount,
+          yield* openAccount,
+        ];
+        const workspace = yield* openWorkspace(dean);
+        yield* joinWorkspace(workspace, charles);
+        const draft = (name: string) => ({ name, purpose: "Shipping.", project: false });
+        const made = (name: string) =>
+          Effect.map(createChannel(dean, workspace, draft(name), new Date(1)), Result.getOrThrow);
+        const [infra, release] = [yield* made("infra"), yield* made("release")];
+        yield* archiveChannel(dean, workspace, infra.id, new Date(2));
+        yield* archiveChannel(dean, workspace, release.id, new Date(3));
+        const taken = yield* made("release");
+
+        const archived = (yield* listArchivedChannels(charles, workspace)).map((row) => [
+          row.name,
+          row.archivedAt,
+        ]);
+        const outsiders = [
+          yield* listArchivedChannels(outsider, workspace),
+          yield* unarchiveChannel(outsider, workspace, infra.id),
+        ];
+        const refused = yield* unarchiveChannel(charles, workspace, release.id);
+        const opened = yield* unarchiveChannel(charles, workspace, infra.id);
+        const again = yield* unarchiveChannel(dean, workspace, infra.id);
+
+        assert.deepEqual(archived, [
+          ["release", 3],
+          ["infra", 2],
+        ]);
+        assert.deepEqual(outsiders, [[], Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND)]);
+        assert.deepEqual(refused, Result.fail(CHANNEL_WRITE_REFUSAL.NAME_TAKEN));
+        assert.deepEqual(opened, Result.succeed(infra));
+        assert.deepEqual(again, Result.succeed(infra));
+        assert.deepEqual(
+          (yield* listChannels(dean, workspace)).map((row) => [row.name, row.id]),
+          [
+            ["general", yield* ensureGeneralChannel(workspace, new Date(4))],
+            ["infra", infra.id],
+            ["release", taken.id],
+          ],
+        );
+        assert.deepEqual(
+          (yield* listArchivedChannels(dean, workspace)).map((row) => row.id),
+          [release.id],
+        );
       }),
   );
 });

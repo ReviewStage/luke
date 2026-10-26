@@ -127,8 +127,6 @@
      and the attention mark's glyph a size under a row's. */
   --grid-template-columns-inbox: auto minmax(0, 1fr);
   --grid-template-columns-single: minmax(0, 1fr);
-  /* A channel's stream and the thread opened beside it, the thread the narrower. */
-  --grid-template-columns-channel-thread: minmax(0, 1fr) minmax(0, 44%);
   --spacing-list-held-least: var(--luke-list-held-height, 0);
   --spacing-inbox-face-half: calc(var(--luke-space-20) / 2);
   --spacing-inbox-line: calc(var(--luke-space-20) / 2 - 1px);
@@ -359,17 +357,13 @@
   --spacing-control-gap: var(--luke-control-gap);
 
   /* The panel's places beside the sidebar (`@luke/panel`: Automations,
-     Chat, Settings, a version history, the Admin place, the sign-in): the
-     profile's spacing roles they read; the Inbox's two columns, which Chat
-     shares, and the list-and-item split Settings, a history, and Admin
-     stand in; an automation row's columns and fields; a message's face
-     column and Chat's reading inset and measure; a glyph at its words'
-     size; the sign-in's foot; the experiment tag's tracking; and the spring
-     a byline's presses fade on. */
-  --grid-template-columns-inbox: auto minmax(0, 1fr);
+     Settings, a version history, the Admin place, the sign-in): the
+     profile's spacing roles they read; the list-and-item split Settings, a
+     history, and Admin stand in; an automation row's columns and fields; a
+     glyph at its words' size; the sign-in's foot; the experiment tag's
+     tracking; and the spring a byline's presses fade on. */
   --grid-template-columns-place-split: min(var(--sidebar-width), 35%) minmax(0, 1fr);
   --grid-template-rows-single: minmax(0, 1fr);
-  --grid-template-columns-chat-message: var(--luke-space-32) minmax(0, 1fr);
   --grid-template-columns-automation-suggestions: repeat(
     auto-fill,
     minmax(240px, 1fr)
@@ -387,8 +381,6 @@
     280px,
     calc(100% - 480px)
   ); /* off-scale: the form's reserve, FORM_RESERVE */
-  --spacing-chat-reading: max(var(--luke-space-12), calc((100% - var(--luke-page-measure)) / 2));
-  --spacing-chat-measure: min(var(--luke-page-measure), calc(100% - 2 * var(--luke-space-12)));
   --spacing-em: 1em;
   --spacing-onboarding-foot: calc(var(--luke-stage-height) * 0.08);
   --color-sidebar: var(--luke-color-sidebar);
@@ -763,7 +755,6 @@
   );
   --spacing-offline-mark: 24px; /* off-scale: the offline pill, a compact button's height */
   --spacing-offline-glyph: 13px; /* off-scale: the offline pill's glyph */
-  --color-attention-tint: var(--luke-color-attention-tint);
   --animate-offline-arrive: luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit)
     backwards;
 

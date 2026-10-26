@@ -1,97 +1,94 @@
-import { CHANNEL_BOUNDS, type Channel } from "@luke/features/channel-wire";
+import type { Channel } from "@luke/features/channel-wire";
+import { readingWords } from "@luke/features/words";
 import {
-  CONFIRM_LOSS,
-  ConfirmDialog,
-  DIALOG_TONE,
-  Dialog,
-  DialogActions,
-  ErrorLine,
-  FormField,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
   GROUP_ACTIONS,
   GROUP_HEADING,
   GroupHeader,
   IconButton,
   NAV_CURRENT,
   NavItem,
+  NavItemSkeleton,
   SidebarPlaces,
+  SkeletonRegion,
   STATUS_TONE,
-  Stack,
-  TEXT_TONE,
-  Text,
-  TextField,
   Tooltip,
-  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useId, useRef, useState } from "react";
-import { channelEditable, channelSections, channelSlug } from "../tasks/channels-model.js";
+import { useChannelMenu } from "../tasks/channel-menu.js";
+import {
+  CHANNEL_SECTIONS,
+  type ChannelSectionLook,
+  channelUnread,
+  sectionChannels,
+} from "../tasks/channels-model.js";
 import type { ChannelsControl } from "../tasks/use-channels.js";
-import { ActionMenu } from "./action-menu.js";
+import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { useArchivedChannelsDialog } from "./archived-channels-dialog.js";
+import { useChannelDialog } from "./channel-dialog.js";
 import { needsYouNoun } from "./places-waiting.js";
-import { useFormDialog } from "./use-form-dialog.js";
 
 /**
- * sidebar-channels.tsx -- the sidebar's Channels and Projects sections while Channels is on: every open channel of the workspace, and the questions that make, rename, and archive one (STAG-547).
+ * sidebar-channels.tsx -- the sidebar's Channels and Projects sections while Channels is on: every open channel of the workspace, and the questions that make, edit, and archive one (STAG-547).
  *
  * Each section heads its rows with a "+" that makes a channel there, a
- * project's under Projects. A row is the channel's glyph and name, and at
- * its end how many open asks in it wait on the reader, in the attention's
- * tone; a press shows the channel in the Inbox's place, and its row is
- * marked while it stands there. A right-click offers Rename and Archive on
- * any channel but #general, which no member may rename or archive; any
- * member may do either to every other. Making one asks for a name, written
- * as a channel's is (`channelSlug`), and a purpose, the line an agent reads
- * to choose it; renaming asks for the name alone. Archiving asks first, in
- * the accent, since it can be undone but reaches everyone in the workspace
- * (`packages/panel/AGENTS.md`'s Confirms). Every answer waits on the
- * service, and a refusal stands in the card until what was asked changes.
+ * project's under Projects, and opens it once made, and beside it Browse
+ * archived channels, which lists the section's archived channels to open or
+ * unarchive (`archived-channels-dialog.tsx`). A row is the channel's glyph
+ * and name, and at its end how many open asks in it wait on the reader, in
+ * the attention's tone; its name stands in the unread weight while
+ * something was posted in it since the reader last looked
+ * (`channelUnread`). A press shows the channel in the Inbox's place, and
+ * its row is marked while it stands there. While the channels are first
+ * read, each section stands a few rows' blocks in its rows' place
+ * (`SidebarChannelRowsSkeleton`), and where that read failed, the Channels
+ * section says so with Retry. A right-click offers the channel's menu
+ * (`channel-menu.tsx`): Copy link, Mark as read, and Edit on every channel,
+ * #general's name staying as it is, and Archive on any but #general, which
+ * is never archived. Making and editing ask through `channel-dialog.tsx`; archiving
+ * the channel shown moves the window to #general (`use-channels.ts`).
+ * Every answer waits on the service, and a refusal stands in the card
+ * until what was asked changes.
  */
 
-/** Which question is asked: a channel to make, standing or a project's, or one to rename. */
-const CHANNEL_ASK = { NEW: "new", RENAME: "rename" } as const;
+/** What the sidebar's rows say to a reader while the channels are read. */
+const READING_CHANNELS = readingWords("channels");
 
-type ChannelAsk =
-  | { readonly kind: typeof CHANNEL_ASK.NEW; readonly project: boolean }
-  | { readonly kind: typeof CHANNEL_ASK.RENAME; readonly channel: Channel };
+/** What the Channels section says where the channels could not be read. */
+const CHANNELS_NOT_READ = "Could not read this workspace's channels.";
 
-/** A refusal as the confirming card reads it. */
-function answered(refused: string | undefined): ActionResult {
-  return refused === undefined
-    ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-    : { status: ACTION_RESULT_STATUS.REJECTED, reason: refused };
-}
+/** What each section's head offers beside its "+", which opens the section's archived channels. */
+const BROWSE_ARCHIVED = "Browse archived channels";
 
-/** One channel's row: its glyph, its name, what waits on the reader in it, and its menu. */
+/** One channel's row: its glyph, its name, in the unread weight while something in it is unread, what waits on the reader in it, and its menu. */
 function ChannelRow({
   channel,
   current,
   shown,
+  groups,
   onOpen,
-  onRename,
-  onArchive,
 }: {
   channel: Channel;
   current: boolean;
   shown: boolean;
+  groups: MenuAction[][];
   onOpen: () => void;
-  onRename: () => void;
-  onArchive: () => void;
 }): React.JSX.Element {
   const menu = useMenu(shown);
-  const editable = channelEditable(channel);
   return (
     <>
       <NavItem
         icon={<GLYPH.CHANNEL />}
         current={current ? NAV_CURRENT.PAGE : undefined}
+        unread={channelUnread(channel)}
         count={{
           value: channel.waiting,
           noun: needsYouNoun(channel.waiting),
           tone: STATUS_TONE.ATTENTION,
         }}
-        contextMenu={editable ? menu.contextMenu() : undefined}
+        contextMenu={menu.contextMenu()}
         roving
         onClick={onOpen}
       >
@@ -101,16 +98,28 @@ function ChannelRow({
         <ActionMenu
           label={`#${channel.name} actions`}
           menu={menu.drawn}
-          groups={[
-            [
-              { label: "Rename…", onSelect: onRename },
-              { label: "Archive…", onSelect: onArchive },
-            ],
-          ]}
+          groups={groups}
           onClose={menu.close}
         />
       )}
     </>
+  );
+}
+
+/** One section's rows while the channels are first read: a row's blocks for each the section declares, through the row's own box. */
+export function SidebarChannelRowsSkeleton({
+  section,
+}: {
+  section: ChannelSectionLook;
+}): React.JSX.Element {
+  return (
+    <SkeletonRegion label={READING_CHANNELS}>
+      <SidebarPlaces>
+        {section.reading.map((width) => (
+          <NavItemSkeleton key={width} icon={<GLYPH.CHANNEL />} width={width} />
+        ))}
+      </SidebarPlaces>
+    </SkeletonRegion>
   );
 }
 
@@ -128,191 +137,73 @@ export function SidebarChannels({
   currentId: string | undefined;
   /** Whether the sidebar is in sight, which its menus and questions close with. */
   shown: boolean;
+  /** Shows a channel, one just made among them. */
   onOpen: (channelId: string) => void;
 }): React.JSX.Element {
-  const [ask, setAsk] = useState<ChannelAsk | undefined>(undefined);
-  const [askedIn, setAskedIn] = useState<string | undefined>(undefined);
-  const [doomed, setDoomed] = useState<Channel | undefined>(undefined);
-  const [name, setName] = useState("");
-  const [purpose, setPurpose] = useState("");
-  const field = useRef<HTMLInputElement | null>(null);
-  const bodyId = useId();
-  const listed = channels.channels ?? [];
-  /** Whether a question still stands: asked in the workspace listed, its channel still open there. */
-  const standing = (channel: Channel | undefined) =>
-    askedIn === workspaceId &&
-    (channel === undefined || listed.some((each) => each.id === channel.id));
-  const confirm = useConfirmDialog(
-    {
-      subject:
-        ask !== undefined && standing(ask.kind === CHANNEL_ASK.RENAME ? ask.channel : undefined),
-      surfaceOpen: shown,
-    },
-    () => {
-      if (ask === undefined) return Promise.resolve(answered(undefined));
-      const written = channelSlug(name);
-      return (
-        ask.kind === CHANNEL_ASK.NEW
-          ? channels.onCreate(written, purpose.replace(/[\r\n]+/gu, " ").trim(), ask.project)
-          : channels.onRename(ask.channel.id, written)
-      ).then(answered);
-    },
-  );
-  const archive = useConfirmDialog(
-    { subject: doomed !== undefined && standing(doomed), surfaceOpen: shown },
-    () =>
-      doomed === undefined
-        ? Promise.resolve(answered(undefined))
-        : channels.onArchive(doomed.id).then(answered),
-  );
-  const renaming = ask?.kind === CHANNEL_ASK.RENAME;
-  const valid = channelSlug(name) !== "" && (renaming || purpose.trim() !== "");
-  const form = useFormDialog(confirm, valid);
-  // Note that a refused answer stands in the card until what was asked changes, which asks again.
-  const typed = (set: (words: string) => void) => (words: string) => {
-    set(words);
-    if (confirm.rejection !== undefined) confirm.ask();
-  };
-  const askNew = (project: boolean) => {
-    setAskedIn(workspaceId);
-    setAsk({ kind: CHANNEL_ASK.NEW, project });
-    setName("");
-    setPurpose("");
-    confirm.ask();
-  };
-  const askRename = (channel: Channel) => {
-    setAskedIn(workspaceId);
-    setAsk({ kind: CHANNEL_ASK.RENAME, channel });
-    setName(channel.name);
-    confirm.ask();
-  };
-  const askArchive = (channel: Channel) => {
-    setAskedIn(workspaceId);
-    setDoomed(channel);
-    archive.ask();
-  };
-  const { standing: standingChannels, projects } = channelSections(listed);
-  const section = (label: string, rows: readonly Channel[], project: boolean, add: string) => (
-    <nav className="sidebar-group" aria-label={label}>
-      <GroupHeader
-        heading={GROUP_HEADING.NONE}
-        label={label}
-        actionsShown={GROUP_ACTIONS.AT_REST}
-        actions={
-          <Tooltip label={add}>
-            <IconButton
-              icon={<GLYPH.ADD />}
-              label={add}
-              disabled={channels.channels === undefined}
-              onClick={() => askNew(project)}
-            />
-          </Tooltip>
-        }
-      />
+  const asking = useChannelDialog({ workspaceId, channels, shown, onMade: onOpen });
+  const menu = useChannelMenu({ workspaceId, channels, shown, onEdit: asking.askEdit });
+  const archived = useArchivedChannelsDialog({ workspaceId, channels, shown, onOpen });
+  const listed = channels.channels;
+  const places = (section: ChannelSectionLook) => {
+    if (listed === undefined) {
+      // Note that a failed first read is said once, under Channels, and Projects stands bare.
+      if (!channels.failed) return <SidebarChannelRowsSkeleton section={section} />;
+      return section.project ? null : (
+        <ErrorState placement={ERROR_STATE_PLACEMENT.ROWS} onRetry={channels.onRefresh}>
+          {CHANNELS_NOT_READ}
+        </ErrorState>
+      );
+    }
+    return (
       <SidebarPlaces>
-        {rows.map((channel) => (
+        {sectionChannels(listed, section).map((channel) => (
           <ChannelRow
             key={channel.id}
             channel={channel}
             current={channel.id === currentId}
             shown={shown}
+            groups={menu.groups(channel)}
             onOpen={() => onOpen(channel.id)}
-            onRename={() => askRename(channel)}
-            onArchive={() => askArchive(channel)}
           />
         ))}
       </SidebarPlaces>
-    </nav>
-  );
-  const making = ask?.kind === CHANNEL_ASK.NEW ? ask : undefined;
+    );
+  };
   return (
     <>
-      {section("Channels", standingChannels, false, "New channel")}
-      {section("Projects", projects, true, "New project channel")}
-      <Dialog
-        open={form.open}
-        title={
-          renaming
-            ? "Rename channel"
-            : making?.project === true
-              ? "New project channel"
-              : "New channel"
-        }
-        describedBy={bodyId}
-        busy={form.settling}
-        refused={form.refusal !== undefined}
-        initialFocus={field}
-        onDismiss={form.dismiss}
-        actions={
-          <DialogActions
-            onCancel={form.dismiss}
-            act={{
-              verb: renaming ? "Rename" : "Create channel",
-              tone: DIALOG_TONE.PRIMARY,
-              running: renaming ? "Renaming" : "Creating channel",
-              ...form.act,
-            }}
+      {CHANNEL_SECTIONS.map((section) => (
+        <nav key={section.label} className="sidebar-group" aria-label={section.label}>
+          <GroupHeader
+            heading={GROUP_HEADING.NONE}
+            label={section.label}
+            actionsShown={GROUP_ACTIONS.AT_REST}
+            actions={
+              <>
+                <Tooltip label={BROWSE_ARCHIVED}>
+                  <IconButton
+                    icon={<GLYPH.ARCHIVE />}
+                    label={BROWSE_ARCHIVED}
+                    disabled={listed === undefined}
+                    onClick={() => archived.ask(section.project)}
+                  />
+                </Tooltip>
+                <Tooltip label={section.add}>
+                  <IconButton
+                    icon={<GLYPH.ADD />}
+                    label={section.add}
+                    disabled={listed === undefined}
+                    onClick={() => asking.askNew(section.project)}
+                  />
+                </Tooltip>
+              </>
+            }
           />
-        }
-      >
-        <Text id={bodyId} tone={TEXT_TONE.MUTED}>
-          {renaming
-            ? "Agents post to it under its new name from now on."
-            : "Everyone in the workspace sees it, and agents choose it by its purpose."}
-        </Text>
-        <Stack>
-          <FormField
-            label="Name"
-            description="Lowercase, with dashes, as agents write it after #."
-            count={{ length: name.length, limit: CHANNEL_BOUNDS.MAX_NAME_CHARS }}
-          >
-            {(control) => (
-              <TextField
-                ref={field}
-                field={control}
-                placeholder="release-train"
-                spellCheck={false}
-                maxLength={CHANNEL_BOUNDS.MAX_NAME_CHARS}
-                value={name}
-                disabled={form.settling}
-                onEnter={form.submit}
-                onChange={typed(setName)}
-              />
-            )}
-          </FormField>
-          {renaming ? null : (
-            <FormField
-              label="Purpose"
-              description="Agents read it to choose where a thread goes."
-              count={{ length: purpose.length, limit: CHANNEL_BOUNDS.MAX_PURPOSE_CHARS }}
-            >
-              {(control) => (
-                <TextField
-                  field={control}
-                  placeholder="What belongs in the channel, in a line"
-                  maxLength={CHANNEL_BOUNDS.MAX_PURPOSE_CHARS}
-                  value={purpose}
-                  disabled={form.settling}
-                  onEnter={form.submit}
-                  onChange={typed(setPurpose)}
-                />
-              )}
-            </FormField>
-          )}
-        </Stack>
-        <ErrorLine>{form.refusal}</ErrorLine>
-      </Dialog>
-      <ConfirmDialog
-        open
-        confirm={archive}
-        question={{
-          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
-          title: "Archive channel?",
-          body: `#${doomed?.name ?? ""} leaves the sidebar for everyone, and agents can no longer post to it. Its threads stay where they are.`,
-          verb: "Archive channel",
-          running: "Archiving",
-        }}
-      />
+          {places(section)}
+        </nav>
+      ))}
+      {asking.dialog}
+      {menu.dialog}
+      {archived.dialog}
     </>
   );
 }

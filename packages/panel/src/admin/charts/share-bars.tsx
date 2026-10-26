@@ -38,7 +38,6 @@ const REACH_LABEL = {
   [REACH_FEATURE.VOICE_CALLS]: "Voice calls",
   [REACH_FEATURE.INTEGRATIONS]: "Integration connected",
   [REACH_FEATURE.AUTOMATIONS]: "Automations",
-  [REACH_FEATURE.CHAT]: "Chat",
 } as const satisfies Record<ReachFeature, string>;
 
 const REACH_TITLE = "Feature reach · this week";

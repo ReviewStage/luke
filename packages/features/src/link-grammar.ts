@@ -34,11 +34,11 @@ import { parsedUrl } from "./parsed-url.js";
  * - the Inbox, `/inbox`, and an item in it under the task or the agent with
  *   no task that holds it, `/plan/<id>/inbox/<itemId>` or
  *   `/agent/<agentId>/inbox/<itemId>`, since the Inbox is read by its holders;
+ * - a channel of the workspace, `/channel/<channelId>`, whose threads are
+ *   those Inbox items, each still linked under its holder;
  * - the Automations page, `/automations`, an automation,
  *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
  * - a page of Settings, `/settings[/<page>]`;
- * - Chat, `/chat`, and one of its channels, `/chat/<channelId>`, a topic,
- *   a task's channel, or a direct message alike;
  * - a person's page in the workspace, `/person/<userId>`, a member or
  *   someone who left, by the account id the service names them by;
  * - the Admin place, an admin's alone, which reads every workspace's
@@ -102,13 +102,12 @@ export const LINK_PLACE = {
   MESSAGE: "message",
   INBOX: "inbox",
   INBOX_ITEM: "inbox-item",
+  CHANNEL: "channel",
   AUTOMATIONS: "automations",
   AUTOMATION: "automation",
   AUTOMATION_RUN: "automation-run",
   SETTINGS: "settings",
   PERSON: "person",
-  /** Chat, on For you, or on one of its channels by the id the service mints it. */
-  CHAT: "chat",
   /** The Admin place: its Overview, a section, an account's page, or a day's. */
   ADMIN: "admin",
 } as const;
@@ -150,12 +149,12 @@ const STEP = {
   MESSAGE: "message",
   FILES: "files",
   INBOX: "inbox",
+  CHANNEL: "channel",
   AUTOMATIONS: "automations",
   AUTOMATION: "automation",
   RUN: "run",
   SETTINGS: "settings",
   PERSON: "person",
-  CHAT: "chat",
   ADMIN: "admin",
   USER: "user",
   DAY: "day",
@@ -367,6 +366,7 @@ const linkPlaceSchema = EffectSchema.Union([
     agentId: idSchema,
     itemId: idSchema,
   }),
+  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.CHANNEL), channelId: idSchema }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.AUTOMATIONS) }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.AUTOMATION),
@@ -379,16 +379,12 @@ const linkPlaceSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.PERSON), userId: idSchema }),
   EffectSchema.Struct({
-    kind: EffectSchema.Literal(LINK_PLACE.CHAT),
-    channelId: EffectSchema.optionalKey(idSchema),
-  }),
-  EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.SETTINGS),
     page: EffectSchema.optionalKey(
       EffectSchema.String.check(EffectSchema.isPattern(SETTINGS_PAGE)),
     ),
   }),
-  // One struct with every view optional, as Settings' and Chat's are, so a
+  // One struct with every view optional, as Settings' is, so a
   // section the schema does not know is refused rather than read as the
   // Overview by a struct naming none.
   EffectSchema.Struct({
@@ -528,6 +524,10 @@ function placeFields(steps: readonly string[]) {
       return id === undefined ? undefined : agentFields(undefined, id, rest);
     case STEP.INBOX:
       return id === undefined ? { kind: LINK_PLACE.INBOX } : undefined;
+    case STEP.CHANNEL:
+      return id === undefined || rest.length > 0
+        ? undefined
+        : { kind: LINK_PLACE.CHANNEL, channelId: id };
     case STEP.AUTOMATIONS:
       return id === undefined ? { kind: LINK_PLACE.AUTOMATIONS } : undefined;
     case STEP.AUTOMATION:
@@ -545,11 +545,6 @@ function placeFields(steps: readonly string[]) {
       return id === undefined
         ? { kind: LINK_PLACE.SETTINGS }
         : { kind: LINK_PLACE.SETTINGS, page: id };
-    case STEP.CHAT:
-      if (rest.length > 0) return undefined;
-      return id === undefined
-        ? { kind: LINK_PLACE.CHAT }
-        : { kind: LINK_PLACE.CHAT, channelId: id };
     case STEP.ADMIN:
       return adminFields(id, rest);
     default:
@@ -618,6 +613,8 @@ function placePath(place: LinkPlace): readonly string[] {
       return "planId" in place
         ? [STEP.PLAN, place.planId, STEP.INBOX, place.itemId]
         : [STEP.AGENT, place.agentId, STEP.INBOX, place.itemId];
+    case LINK_PLACE.CHANNEL:
+      return [STEP.CHANNEL, place.channelId];
     case LINK_PLACE.AUTOMATIONS:
       return [STEP.AUTOMATIONS];
     case LINK_PLACE.AUTOMATION:
@@ -628,8 +625,6 @@ function placePath(place: LinkPlace): readonly string[] {
       return [STEP.PERSON, place.userId];
     case LINK_PLACE.SETTINGS:
       return place.page === undefined ? [STEP.SETTINGS] : [STEP.SETTINGS, place.page];
-    case LINK_PLACE.CHAT:
-      return place.channelId === undefined ? [STEP.CHAT] : [STEP.CHAT, place.channelId];
     case LINK_PLACE.ADMIN:
       if (place.userId !== undefined) return [STEP.ADMIN, STEP.USER, place.userId];
       if (place.day !== undefined) return [STEP.ADMIN, STEP.DAY, place.day];
@@ -659,6 +654,11 @@ export function linkOf(place: LinkPlace, workspace: string): string {
     return `${link}?${new URLSearchParams({ [COMMENT_QUERY]: place.threadId })}`;
   }
   return link;
+}
+
+/** The place a channel of the workspace is linked by, which a menu's Copy link copies. */
+export function channelPlace(channelId: string): LinkPlace {
+  return { kind: LINK_PLACE.CHANNEL, channelId };
 }
 
 /**

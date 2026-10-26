@@ -100,20 +100,20 @@ function item(overrides: Partial<InboxItem> & Pick<InboxItem, "id">): InboxItem 
 
 const DANA = { userId: "user-dana", name: "Dana Reyes" };
 
-/** A chat ask's choice of one, as its version 4 response asks it. */
+/** A choice of one, as a version 4 response asks it. */
 const QUEUE: InboxResponse = {
   type: INBOX_RESPONSE.CHOICE,
   options: [{ label: "Postgres" }, { label: "Redis" }],
 };
 
-/** A chat ask's choice of several. */
+/** A choice of several. */
 const CHANNELS: InboxResponse = {
   type: INBOX_RESPONSE.CHOICE,
   options: [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }],
   multiple: true,
 };
 
-/** A chat ask's form. */
+/** A form. */
 const SMTP: InboxResponse = {
   type: INBOX_RESPONSE.FORM,
   fields: [
@@ -124,7 +124,7 @@ const SMTP: InboxResponse = {
   ],
 };
 
-/** A chat ask asking for words. */
+/** An ask for words. */
 const QUESTION: InboxResponse = { type: INBOX_RESPONSE.TEXT };
 
 /** A draft holding an approval's or a to-do's decision, as its card holds it: its one pick, by the reply's kind. */
@@ -364,7 +364,7 @@ test("an option picked by its number is the one pick of a choice of one, picked 
   assert.deepEqual(withChoice(several, draft, "SMS").choices, ["Email"]);
 });
 
-test("an approval and a task are answered by the decision the card holds, or a chat ask's press, an item asking nothing by its nod with or without a note, and words by words", () => {
+test("an approval and a task are answered by the decision the card holds, or a press given, an item asking nothing by its nod with or without a note, and words by words", () => {
   const task: InboxResponse = { type: INBOX_RESPONSE.TODO };
   assert.equal(inboxReply(task, { ...EMPTY_INBOX_DRAFT, note: "done it" }), undefined);
   assert.deepEqual(inboxReply(task, decided(INBOX_REPLY.NOT_DONE)), {

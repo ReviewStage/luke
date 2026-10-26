@@ -14,20 +14,20 @@ import {
   browserTranscriptOf,
   runBrowserTool,
 } from "@luke/service/agents/browser/browser-tool";
-import { type ChatToolResult, chatRejected } from "@luke/service/agents/coder-host/chat";
 import { CheckoutRefused } from "@luke/service/agents/coder-host/checkout";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
 import {
   type AgentToolCall,
   type BoardTool,
-  type ChatCall,
   type CoderHost,
   type CoderTurnMessage,
   coderHost,
   describeFailure,
   type InboxCall,
+  type ThreadToolResult,
 } from "@luke/service/agents/coder-host/host";
-import { type InboxToolResult, inboxRejected } from "@luke/service/agents/coder-host/inbox";
+import { INBOX_TOOLS, inboxRejected } from "@luke/service/agents/coder-host/inbox";
+import { postThreadWords } from "@luke/service/agents/coder-host/inbox-door";
 import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
 import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
 import { type PlanEditResult, planEditRejected } from "@luke/service/agents/coder-host/plan-edit";
@@ -372,12 +372,27 @@ export function runPullRequestTool(
   );
 }
 
-/** One call of the agent's inbox tools run under its session, for the tool, which runs here rather than at an edge of its own. */
+/**
+ * The words `post_thread` is offered with for the turn the session opens,
+ * for the tool's own file: its agent's workspace's open channels among
+ * them (`postThreadWords`), or none for a session the host does not admit.
+ */
+export function threadWords(auth: SessionAuth, sessionId: string): Promise<string> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return INBOX_TOOLS.POST.description;
+      return yield* postThreadWords(admitted.success);
+    }),
+  );
+}
+
+/** One call of the agent's thread and channel tools run under its session, for the tool, which runs here rather than at an edge of its own. */
 export function runInboxTool(
   auth: SessionAuth,
   sessionId: string,
   call: InboxCall,
-): Promise<InboxToolResult> {
+): Promise<ThreadToolResult> {
   return admitted(auth, sessionId, inboxRejected, (session) => host.inbox(session, call));
 }
 
@@ -438,15 +453,6 @@ export function agentToolFor(
         callId: ctx.callId,
       }),
   });
-}
-
-/** One call of the agent's chat tools run under its session, for the tool, which runs here rather than at an edge of its own. */
-export function runChatTool(
-  auth: SessionAuth,
-  sessionId: string,
-  call: ChatCall,
-): Promise<ChatToolResult> {
-  return admitted(auth, sessionId, chatRejected, (session) => host.chat(session, call));
 }
 
 /** One `show_page` call run under the agent's session, its path read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */

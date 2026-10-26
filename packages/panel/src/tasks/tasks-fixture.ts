@@ -154,7 +154,7 @@ const CALL_AT = Date.parse("2026-10-07T16:40:00Z");
 const HOUR = 60 * 60_000;
 const DAY = 24 * HOUR;
 
-/** The reference journey's task, by the id its chat channel (`chat-fixture.ts`) and the host's staged call (`@luke/host/fixture-stage`) name it by too. */
+/** The reference journey's task, by the id the host's staged call (`@luke/host/fixture-stage`) names it by too. */
 export const FIXTURE_TASK_ID = FIXTURE_IDS.TASK;
 
 const FIXTURE_TASK: Task = {

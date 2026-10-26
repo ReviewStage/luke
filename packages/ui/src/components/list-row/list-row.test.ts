@@ -331,7 +331,7 @@ test("Tab meets the list's one row, then each row's acts, the other rows left to
 });
 
 test("Tab enters a list once, at its first row, and comes back to the row it left", () => {
-  const container = draw(walked(["Inbox", "Tasks", "Chat"]));
+  const container = draw(walked(["Inbox", "Tasks", "Board"]));
   expect(tabStops(container)).toEqual([button(container, "Inbox")]);
   act(() => button(container, "Inbox").focus());
   key("ArrowDown");
@@ -340,26 +340,26 @@ test("Tab enters a list once, at its first row, and comes back to the row it lef
 });
 
 test("↑↓ step between rows, Home and End go to the first and the last", () => {
-  const container = draw(walked(["Inbox", "Tasks", "Chat", "Automations"]));
+  const container = draw(walked(["Inbox", "Tasks", "Board", "Automations"]));
   act(() => button(container, "Inbox").focus());
   const visited = ["ArrowDown", "ArrowDown", "ArrowUp", "End", "Home"].map((name) => {
     key(name);
     return document.activeElement?.textContent;
   });
-  expect(visited).toEqual(["Tasks", "Chat", "Tasks", "Automations", "Inbox"]);
+  expect(visited).toEqual(["Tasks", "Board", "Tasks", "Automations", "Inbox"]);
 });
 
 test("the arrows wrap from the last row to the first and back", () => {
-  const container = draw(walked(["Inbox", "Tasks", "Chat"]));
-  act(() => button(container, "Chat").focus());
+  const container = draw(walked(["Inbox", "Tasks", "Board"]));
+  act(() => button(container, "Board").focus());
   key("ArrowDown");
   expect(document.activeElement).toBe(button(container, "Inbox"));
   key("ArrowUp");
-  expect(document.activeElement).toBe(button(container, "Chat"));
+  expect(document.activeElement).toBe(button(container, "Board"));
 });
 
 test("an unavailable row is stepped over and is never the Tab stop", () => {
-  const container = draw(walked(["Inbox", "Tasks", "Chat", "Automations"], ["Inbox", "Chat"]));
+  const container = draw(walked(["Inbox", "Tasks", "Board", "Automations"], ["Inbox", "Board"]));
   expect(tabStops(container)).toEqual([button(container, "Tasks")]);
   act(() => button(container, "Tasks").focus());
   key("ArrowDown");
@@ -371,7 +371,7 @@ test("an unavailable row is stepped over and is never the Tab stop", () => {
 });
 
 test("the Tab stop moves on when its row turns unavailable", async () => {
-  const container = draw(createElement(Unavailable, { names: ["Inbox", "Tasks", "Chat"] }));
+  const container = draw(createElement(Unavailable, { names: ["Inbox", "Tasks", "Board"] }));
   expect(tabStops(container)).toEqual([button(container, "Inbox")]);
   await act(async () => button(container, "Turn off Inbox").click());
   expect(tabStops(container)).toEqual([button(container, "Tasks")]);
@@ -383,7 +383,7 @@ test("an arrow held with ⌘, ⌥, Ctrl, or ⇧ is left to the app's own shortcu
     createElement(
       "div",
       { onKeyDown: (event: React.KeyboardEvent) => heard.push(String(event.defaultPrevented)) },
-      walked(["Inbox", "Tasks", "Chat"]),
+      walked(["Inbox", "Tasks", "Board"]),
     ),
   );
   act(() => button(container, "Inbox").focus());

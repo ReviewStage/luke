@@ -61,7 +61,7 @@ const PLATFORM_KINDS: ReadonlySet<string> = new Set([
   ...Object.values(WINDOW_SURFACE_ACT_KIND),
 ]);
 
-/** Whether a port kind is one of the agents' reads, their Inbox's, or the chat's, which a window with no agents is refused. */
+/** Whether a port kind is one of the agents' reads or their Inbox's, which a window with no agents is refused. */
 const isAgentRead = (kind: string): boolean =>
   Object.values<string>({ ...AGENT_ACT_KIND, ...AGENT_INBOX_ACT_KIND }).includes(kind) &&
   kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN;

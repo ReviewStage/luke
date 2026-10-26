@@ -27,16 +27,19 @@
  *
  * Two things eve's tool files keep in the session's own state have none
  * here, since the server keeps no session: a call's id, which the agent
- * tools key a start or a message on and chat a post, is minted for each
- * call; and the turn's count of plan notes and chat posts, which each call
- * starts from nothing, so those caps hold per call. The list is narrowed
- * per agent as eve narrows its own (`offeredLukeMcpTool`), and a tool left
- * out is still refused by its door where a harness calls it anyway.
+ * tools key a start or a message on, is minted for each call; and the
+ * turn's count of plan notes, which each call starts from nothing, so that
+ * cap holds per call. The list is narrowed per agent as eve narrows its
+ * own (`offeredLukeMcpTool`), and a tool left out is still refused by its
+ * door where a harness calls it anyway. A tool whose words differ by
+ * workspace, `post_thread`'s naming its open channels, is described for
+ * the agent as the list is made (`describe`), as eve describes it at each
+ * turn's start.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
-import { CHAT_TOOL } from "@luke/features/chat-wire";
+import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { pictureTypeSchema } from "@luke/features/picture-wire";
@@ -89,7 +92,6 @@ import {
   type AgentDoorSeams,
   type AgentToolCall,
   runAgentBoard,
-  runAgentChat,
   runAgentComment,
   runAgentEditPlan,
   runAgentLookAtPicture,
@@ -99,9 +101,9 @@ import {
   runAgentShowPage,
   runAgentTools,
 } from "../coder-host/agent-doors.js";
-import { CHAT_TOOLS } from "../coder-host/chat.js";
+import { MESSAGE_AGENT_TOOL } from "../coder-host/agent-message.js";
 import { INBOX_TOOLS } from "../coder-host/inbox.js";
-import { runAgentInbox } from "../coder-host/inbox-door.js";
+import { postThreadWords, runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { EDIT_PLAN_TOOL } from "../coder-host/plan-edit.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
@@ -174,6 +176,10 @@ export interface LukeMcpTool {
   ) => Effect.Effect<LukeMcpToolResult, unknown, LukeMcpToolServices>;
   /** How a result is shown to the agent, where it is more than its JSON: a picture as an image. */
   readonly content?: (result: LukeMcpToolResult) => readonly McpContent[];
+  /** The tool's words as the admitted agent is shown them, where they differ by workspace; `description` otherwise. */
+  readonly describe?: (
+    admitted: AdmittedConversation,
+  ) => Effect.Effect<string, never, LukeMcpServices>;
 }
 
 /** A tool as its eve file declares it: its name, its words, and its input schema. */
@@ -205,6 +211,14 @@ function entryOf(
     ...(content === undefined ? {} : { content }),
   };
   return [name, tool];
+}
+
+/** An entry whose words the admitted agent is shown as `describe` answers them. */
+function described(
+  [name, tool]: readonly [string, LukeMcpTool],
+  describe: NonNullable<LukeMcpTool["describe"]>,
+): readonly [string, LukeMcpTool] {
+  return [name, { ...tool, describe }];
 }
 
 /** A tool about the workspace's agents and tasks, run through their one door. */
@@ -307,15 +321,27 @@ function runAgentBrowser(admitted: AdmittedConversation, input: UnparsedWireValu
 
 /** The tools served, by name, in the order `tools/list` names them. */
 export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, LukeMcpTool>([
-  // The inbox.
-  entry(INBOX_TOOLS.POST, (admitted, input, { sandbox }) =>
-    runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox }),
+  // The threads, posted to the workspace's channels, and the channels themselves.
+  described(
+    entry(INBOX_TOOLS.POST, (admitted, input, { sandbox }) =>
+      runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox }),
+    ),
+    postThreadWords,
   ),
   entry(INBOX_TOOLS.READ, (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
   ),
   entry(INBOX_TOOLS.WITHDRAW, (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
+  ),
+  entry(INBOX_TOOLS.CREATE_CHANNEL, (admitted, input) =>
+    runAgentInbox(admitted, { tool: CHANNEL_TOOL.CREATE, input }),
+  ),
+  entry(INBOX_TOOLS.UPDATE_CHANNEL, (admitted, input) =>
+    runAgentInbox(admitted, { tool: CHANNEL_TOOL.UPDATE, input }),
+  ),
+  entry(INBOX_TOOLS.MOVE_THREAD, (admitted, input) =>
+    runAgentInbox(admitted, { tool: CHANNEL_TOOL.MOVE, input }),
   ),
   // The pull request, the plan, and pages and pictures.
   entry(OPEN_PULL_REQUEST_TOOL, (admitted, input) => runAgentOpenPullRequest(admitted, input)),
@@ -351,6 +377,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(STOP_AGENT_TOOL),
   agentTool(LIST_AGENTS_TOOL),
   agentTool(CODER_READ_AGENT_TOOL),
+  agentTool(MESSAGE_AGENT_TOOL),
   agentTool(UPDATE_AGENT_TOOL),
   agentTool(LIST_MODELS_TOOL),
   agentTool(LIST_OPEN_ASKS_TOOL),
@@ -370,25 +397,6 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   // The workspace's shared memory.
   agentTool(REMEMBER_TOOL),
   agentTool(RECALL_TOOL),
-  // Chat.
-  entry(CHAT_TOOLS.POST, (admitted, input, { seams, sandbox, callId }) =>
-    runAgentChat(seams, admitted, {
-      tool: CHAT_TOOL.POST,
-      input,
-      clientKey: callId,
-      postsInTurn: 0,
-      sandbox,
-    }),
-  ),
-  entry(CHAT_TOOLS.READ, (admitted, input, { seams }) =>
-    runAgentChat(seams, admitted, { tool: CHAT_TOOL.READ, input }),
-  ),
-  entry(CHAT_TOOLS.RESOLVE, (admitted, input, { seams }) =>
-    runAgentChat(seams, admitted, { tool: CHAT_TOOL.RESOLVE, input }),
-  ),
-  entry(CHAT_TOOLS.EDIT_CHANNEL, (admitted, input, { seams }) =>
-    runAgentChat(seams, admitted, { tool: CHAT_TOOL.EDIT_CHANNEL, input }),
-  ),
   // The plan's comments.
   commentTool(READ_COMMENTS_TOOL),
   commentTool(REPLY_TO_COMMENT_TOOL),

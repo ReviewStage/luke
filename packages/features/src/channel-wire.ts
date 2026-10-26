@@ -1,14 +1,16 @@
 import { Schema as EffectSchema } from "effect";
-import { inboxItemSchema } from "./inbox-wire.js";
+import { INBOX_BOUNDS, inboxItemSchema } from "./inbox-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 import { workspaceIdSchema } from "./task-wire.js";
+import { filledText } from "./text-schema.js";
 
 /**
  * channel-wire.ts -- a workspace's channels, the topic areas its inbox threads live in, as the panel and the service read them.
  *
- * Every member of a workspace sees every one of its open channels, and any
- * member creates, renames, or archives one, but never its #general, where
- * every thread that names no channel goes. What differs per reader is how
+ * Every member of a workspace sees every one of its channels, open and
+ * archived, and any member creates, edits, archives, or unarchives one, and
+ * moves any thread they may read into another open one; but never renames
+ * or archives its #general, where every thread that names no channel goes. What differs per reader is how
  * many open asks wait on them in each channel and when they last looked at
  * it. Every write answers the workspace's channels as they then stand, as
  * the read does, so the panel draws the service's word rather than its
@@ -30,7 +32,7 @@ export const channelNameSchema = EffectSchema.String.check(
 );
 
 /** A channel's purpose: one line saying what belongs in it, which an agent reads to choose it. */
-const channelPurposeSchema = EffectSchema.Trim.check(
+export const channelPurposeSchema = EffectSchema.Trim.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(CHANNEL_BOUNDS.MAX_PURPOSE_CHARS),
 );
@@ -49,6 +51,8 @@ export const channelSchema = EffectSchema.Struct({
   waiting: countedNumber,
   /** When the reader last looked at it; absent where they never have. */
   lookedAt: EffectSchema.optionalKey(countedNumber),
+  /** When the latest of its threads the reader may read was posted, which a row beside `lookedAt` reads as unread; absent where it holds none. */
+  latestPostedAt: EffectSchema.optionalKey(countedNumber),
 });
 
 export type Channel = typeof channelSchema.Type;
@@ -76,38 +80,151 @@ export type ChannelCreateRequest = typeof channelCreateRequestSchema.Type;
 /** One open channel of a workspace, named by both. */
 const channelOfWorkspace = { workspaceId: workspaceIdSchema, channelId: wireUuidSchema };
 
-/** A channel given a new name; never #general. */
-export const channelRenameRequestSchema = EffectSchema.Struct({
+/** A channel given a new name, a new purpose, or both, what it leaves out standing; #general's name never changes, and its purpose does. */
+export const channelEditRequestSchema = EffectSchema.Struct({
   ...channelOfWorkspace,
-  name: channelNameSchema,
+  name: EffectSchema.optionalKey(channelNameSchema),
+  purpose: EffectSchema.optionalKey(channelPurposeSchema),
 });
 
-export type ChannelRenameRequest = typeof channelRenameRequestSchema.Type;
+export type ChannelEditRequest = typeof channelEditRequestSchema.Type;
 
 /** A channel archived, which frees its name and leaves its threads where they are; never #general. */
 export const channelArchiveRequestSchema = EffectSchema.Struct(channelOfWorkspace);
 
 export type ChannelArchiveRequest = typeof channelArchiveRequestSchema.Type;
 
+/** An archived channel opened again under its own name, its threads where they stood; refused where an open channel now goes by it. */
+export const channelUnarchiveRequestSchema = EffectSchema.Struct(channelOfWorkspace);
+
+export type ChannelUnarchiveRequest = typeof channelUnarchiveRequestSchema.Type;
+
+/** One archived channel of a workspace: what it was, and when it was archived. Its threads stay readable. */
+export const archivedChannelSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  name: EffectSchema.String,
+  purpose: EffectSchema.String,
+  project: EffectSchema.Boolean,
+  createdBy: EffectSchema.optionalKey(EffectSchema.String),
+  createdAt: countedNumber,
+  archivedAt: countedNumber,
+});
+
+export type ArchivedChannel = typeof archivedChannelSchema.Type;
+
+/** A workspace's archived channels, the latest archived first. */
+export const archivedChannelsAnswerSchema = EffectSchema.Struct({
+  channels: EffectSchema.Array(archivedChannelSchema),
+});
+
+export type ArchivedChannelsAnswer = typeof archivedChannelsAnswerSchema.Type;
+
 /** The reader's look at a channel, stamped at the service's now, which marks what was posted before it as seen. */
 export const channelLookRequestSchema = EffectSchema.Struct(channelOfWorkspace);
 
 export type ChannelLookRequest = typeof channelLookRequestSchema.Type;
 
-/** The threads read's query: the channel whose threads are read. */
-export const channelThreadsQuerySchema = EffectSchema.Struct({ channelId: wireUuidSchema });
+/** The threads read's query: the channel whose threads are read, and the thread an older page is read before, which the last page's `older` named; the first page where it is left out. */
+export const channelThreadsQuerySchema = EffectSchema.Struct({
+  channelId: wireUuidSchema,
+  before: EffectSchema.optionalKey(wireUuidSchema),
+});
 
-/** One thread as a channel carries it: the inbox item, and the channel it lives in. */
+/**
+ * The agent that posted a thread, as the account's read names one
+ * (`account-inbox-wire.ts`), which a post draws where no read of its
+ * task's agents the window holds names it: a channel holds every task's
+ * threads, and a task's row names only its first few agents.
+ */
+export const channelThreadAgentSchema = EffectSchema.Struct({
+  /** The name it goes by, Luke for a member's operator, else its title; null where it has neither. */
+  title: EffectSchema.NullOr(EffectSchema.String),
+  /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
+  model: EffectSchema.String,
+  /** The name of the automation whose run started it, which an untitled agent goes by; absent for one started by hand. */
+  automationName: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type ChannelThreadAgent = typeof channelThreadAgentSchema.Type;
+
+/** One thread as a channel carries it: the inbox item, the channel it lives in, and its agent. */
 export const channelThreadSchema = EffectSchema.Struct({
   ...inboxItemSchema.fields,
   channelId: wireUuidSchema,
+  /** Absent from a service before it, and where the agent's row is gone. */
+  agent: EffectSchema.optionalKey(channelThreadAgentSchema),
 });
 
 export type ChannelThread = typeof channelThreadSchema.Type;
 
-/** A channel's latest threads the reader may read, oldest posted first. */
+/**
+ * A page of a channel's threads the reader may read, oldest posted first.
+ * The first carries the latest posted of those holding no ask open that
+ * waits on the reader, and every one that holds such an ask however old; an
+ * older page the next latest of the former alone, so paging back reads every
+ * thread once. `older` is the thread to read the next older page before,
+ * absent where none stands.
+ */
 export const channelThreadsAnswerSchema = EffectSchema.Struct({
   threads: EffectSchema.Array(channelThreadSchema),
+  older: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type ChannelThreadsAnswer = typeof channelThreadsAnswerSchema.Type;
+
+/** A thread the reader may read moved into another open channel of its own workspace. */
+export const channelMoveRequestSchema = EffectSchema.Struct({
+  threadId: wireUuidSchema,
+  channelId: wireUuidSchema,
+});
+
+export type ChannelMoveRequest = typeof channelMoveRequestSchema.Type;
+
+/** The thread a move answers, as it then stands in the channel it went to. */
+export const channelMoveAnswerSchema = EffectSchema.Struct({ thread: channelThreadSchema });
+
+export type ChannelMoveAnswer = typeof channelMoveAnswerSchema.Type;
+
+/**
+ * The tools a coding agent keeps its workspace's channels with, as a member
+ * does, by the names their tool parts carry in its transcript: it makes a
+ * channel, edits, archives, or unarchives one, and moves a thread it may
+ * read into an open one. Note that `edit_channel`, a retired Chat tool's
+ * name (`agent-tools.ts`'s `RETIRED_TOOL`), is not reused.
+ */
+export const CHANNEL_TOOL = {
+  /** Makes an open channel of the agent's workspace. */
+  CREATE: "create_channel",
+  /** Renames a channel, edits its purpose, or archives or unarchives it. */
+  UPDATE: "update_channel",
+  /** Moves a thread the agent may read into an open channel. */
+  MOVE: "move_thread",
+} as const;
+
+/** A channel an agent makes: its name and purpose, held to a member's own, and whether it is one project's, which it is not where the call says nothing. The model is shown this schema. */
+export const channelCreateInputSchema = EffectSchema.Struct({
+  name: channelNameSchema,
+  purpose: channelPurposeSchema,
+  project: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+/**
+ * A channel an agent changes, open or archived, by its name, `#` or not,
+ * read by the service rather than held to a grammar here, as a post's
+ * channel is: its new name, its new purpose, and whether it is archived,
+ * what the call leaves out standing. The model is shown this schema.
+ */
+export const channelUpdateInputSchema = EffectSchema.Struct({
+  channel: filledText(INBOX_BOUNDS.MAX_CHANNEL_CHARS),
+  name: EffectSchema.optionalKey(channelNameSchema),
+  purpose: EffectSchema.optionalKey(channelPurposeSchema),
+  archived: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+export type ChannelUpdateInput = typeof channelUpdateInputSchema.Type;
+
+/** A thread an agent moves: by its own key, or by the id its thread read answers, into the open channel its name names, `#` or not. The model is shown this schema. */
+export const threadMoveInputSchema = EffectSchema.Struct({
+  thread: filledText(INBOX_BOUNDS.MAX_KEY_CHARS),
+  channel: filledText(INBOX_BOUNDS.MAX_CHANNEL_CHARS),
+});

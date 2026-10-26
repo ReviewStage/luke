@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { type DatabaseServices, READ_CONCURRENCY } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
 import type { HandedFile } from "@luke/database/models/attached-file-parts";
-import { ensureMember } from "@luke/database/models/chat-store";
 import {
   type CodingAgent,
   type CodingAgentPlace,
@@ -37,7 +36,6 @@ import {
   stepsBytes,
   summaryBytes,
 } from "@luke/features/agent-replay";
-import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
@@ -74,7 +72,6 @@ import { GitHubApp } from "../../github/github-app.js";
 import { githubReachOrRefusal } from "../../github/github-refusal.js";
 import { readBranchHead } from "../../github/repository-file.js";
 import { workspaceRepository } from "../../github/workspace-repository.js";
-import { afterResponse } from "../../http/after-response.js";
 import {
   credentialMissing,
   HOSTED_REFUSAL,
@@ -212,10 +209,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * answers the operator already standing where there is one
  * (`createCodingAgent`), so a Start of it is an ensure.
  * An eve that did not take the opening leaves no agent behind, so the retry
- * under the same key starts afresh. An agent started is minted as a member
- * of its workspace's chat in the order agents were started, so it answers
- * to its mention link before it ever posts; a mint that fails is
- * logged and left to the agent's first post or read. A choice an ask names
+ * under the same key starts afresh. A choice an ask names
  * runs that one agent and is never kept as the account's default, which only
  * Settings writes. Who reaches eve is the caller's: the route holds the developer's
  * own bearer, and the voice brain's and a coding agent's tool act as the
@@ -1237,15 +1231,6 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       if (Option.isSome(assigned)) committed = assigned.value.txid;
     }
   }
-  // Every agent joins its workspace's chat as it starts, whatever its starter's Chat setting, since the chat is how agents message each other.
-  // Note that the Start does not wait on it, because the agent's own first post joins it as well (`chat.ts`).
-  yield* afterResponse(
-    "a started agent's chat membership",
-    ensureMember(userId, landing.workspaceId, {
-      kind: MEMBER_KIND.AGENT,
-      agentId: agent.id,
-    }).pipe(Effect.asVoid, Effect.catch(logStoreFailure)),
-  );
   yield* recordServerEvent(SERVER_EVENT.AGENT_START, userId, {
     model: choice.model,
     effort: choice.effort,

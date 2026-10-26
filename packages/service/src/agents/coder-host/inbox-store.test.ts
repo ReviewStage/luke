@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   createAutomation,
   ownFailedRunsLiveStatement,
@@ -15,15 +14,7 @@ import {
   createChannel,
   ensureGeneralChannel,
 } from "@luke/database/models/channel-store";
-import {
-  ensureMember,
-  ensureTaskChannel,
-  findOrMakeDm,
-  markNoticed,
-  postAsk,
-  postMessage,
-} from "@luke/database/models/chat-store";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createCodingAgent, renameCodingAgent } from "@luke/database/models/coding-agent-store";
 import { updateTask } from "@luke/database/models/task-store";
 import { organization, user } from "@luke/database/schemas/auth";
 import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
@@ -31,7 +22,7 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import { ACCOUNT_CHAT_REASON, type AccountInboxTask } from "@luke/features/account-inbox-wire";
+import type { AccountInboxTask } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -41,7 +32,6 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import { CHAT_ASK, CHAT_BLOCK, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_KIND,
@@ -58,6 +48,7 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
+  threadNeedsReader,
 } from "@luke/features/inbox-wire";
 import {
   accountInboxLiveRowSchemas,
@@ -67,7 +58,6 @@ import {
   scopeInboxLiveRowsSchema,
 } from "@luke/features/live-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -79,6 +69,9 @@ import {
   accountWaitingStamps,
   acknowledgeInboxItem,
   answerInboxAsk,
+  CHANNEL_MOVE_REFUSAL,
+  type ChannelThreadPage,
+  channelLatestPosts,
   channelThreads,
   channelWaitingCounts,
   closeInboxItem,
@@ -94,6 +87,7 @@ import {
   markInboxRead,
   memberAgentInboxItems,
   memberAgentInboxLiveStatements,
+  moveChannelThread,
   postInboxMessage,
   postInboxThread,
   readInboxAttachment,
@@ -123,6 +117,10 @@ import { accountInboxPast, taskInboxPast } from "./inbox-page.js";
  *
  * Synthetic accounts, tasks, and words throughout.
  */
+
+/** A channel's first page of threads the reader may read, oldest first. */
+const firstPage = (userId: string, channelId: string) =>
+  Effect.map(channelThreads(userId, channelId), (page) => Option.getOrThrow(page).threads);
 
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
@@ -283,51 +281,12 @@ const liveAnswerOf = (userId: string, readAt: number) =>
         plans: yield* runLive(parts.plans, accountInboxLiveRowSchemas.plans),
         automations: yield* runLive(parts.automations, accountInboxLiveRowSchemas.automations),
         failedRuns: yield* runLive(failedRuns, accountInboxLiveRowSchemas.failedRuns),
-        chatAsks: yield* runLive(parts.chatAsks, accountInboxLiveRowSchemas.chatAsks),
-        chatNotices: yield* runLive(parts.chatNotices, accountInboxLiveRowSchemas.chatNotices),
       },
       readAt,
     );
   });
 
 it.layer(getTestDB())("the inbox store", (it) => {
-  it.effect(
-    "a message that waits names its author by what they are called, a person by their account's name, alike in the live read and the held read",
-    () =>
-      Effect.gen(function* () {
-        const { agent, workspaceId } = yield* openAgentIn;
-        const owner = agent.userId;
-        const teammate = yield* openUser;
-        yield* Database.use((db) =>
-          db.update(user).set({ name: "Grace Hopper" }).where(eq(user.id, teammate)),
-        );
-        yield* joinWorkspace(workspaceId, teammate);
-        for (const each of [owner, teammate]) {
-          yield* writeAccountPreferences(each, { experiments: { [EXPERIMENT.CHAT]: true } });
-        }
-        const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, agent.taskId));
-        const grace = Option.getOrThrow(
-          yield* ensureMember(owner, workspaceId, { kind: MEMBER_KIND.HUMAN, userId: teammate }),
-        );
-        // A person posts as themselves, so Grace's ask is hers.
-        const fromGrace = Result.getOrThrow(
-          yield* postAsk(teammate, workspaceId, {
-            authorMemberId: grace.id,
-            to: { channelId: channel.id },
-            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Ship it?" }],
-            clientKey: randomUUID(),
-            key: "ship",
-            ask: { response: { type: CHAT_ASK.APPROVAL } },
-          }),
-        );
-        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START);
-        const live = yield* liveAnswerOf(owner, held.readAt);
-        assert.deepEqual({ ...live, cursor: held.cursor }, held);
-        const fromOf = new Map(held.chat?.map((entry) => [entry.messageId, entry.from]));
-        assert.equal(fromOf.get(fromGrace.message.id), "Grace Hopper");
-      }),
-  );
-
   it.effect(
     "the live statements of a plan's inbox and an agent's deliver the items their held reads answer, open, answered, and closed alike, to a member and to no one else",
     () =>
@@ -441,62 +400,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         });
         yield* updateTask(onTask.agent.userId, shelved.id, { status: TASK_STATUS.DONE });
 
-        // Chat on for everyone but the taskless agent's starter: an open ask the plan's agent
-        // posts in its channel, a direct message to the teammate they were told of, and the
-        // starter told of the ask itself, which waits once.
         const owner = onTask.agent.userId;
-        const workspace = onTask.workspaceId;
-        for (const each of [owner, teammate, outsider]) {
-          yield* writeAccountPreferences(each, { experiments: { [EXPERIMENT.CHAT]: true } });
-        }
-        const person = (userId: string) =>
-          Effect.map(
-            ensureMember(owner, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
-            Option.getOrThrow,
-          );
-        const ownerMember = yield* person(owner);
-        const teammateMember = yield* person(teammate);
-        const agentMember = Option.getOrThrow(
-          yield* ensureMember(owner, workspace, {
-            kind: MEMBER_KIND.AGENT,
-            agentId: onTask.agent.agentId,
-          }),
-        );
-        const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, onTask.agent.taskId));
-        const asked = Result.getOrThrow(
-          yield* postAsk(owner, workspace, {
-            authorMemberId: agentMember.id,
-            to: { channelId: channel.id },
-            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Which expiry?" }],
-            clientKey: randomUUID(),
-            key: "invite-expiry",
-            ask: {
-              title: "Invite expiry",
-              response: {
-                type: CHAT_ASK.CHOICE,
-                options: [{ label: "Seven days" }, { label: "Five days" }],
-              },
-            },
-          }),
-        );
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(owner, workspace, agentMember.id, teammateMember.id),
-        );
-        const direct = Result.getOrThrow(
-          yield* postMessage(owner, workspace, {
-            authorMemberId: agentMember.id,
-            to: { channelId: dm.id },
-            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
-            clientKey: randomUUID(),
-          }),
-        );
-        assert.ok(
-          yield* markNoticed(owner, workspace, teammateMember.id, dm.id, direct.message.seq),
-        );
-        assert.ok(
-          yield* markNoticed(owner, workspace, ownerMember.id, channel.id, asked.message.seq),
-        );
-
         for (const reader of [owner, taskless.userId, teammate, outsider]) {
           const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
           const live = yield* liveAnswerOf(reader, held.readAt);
@@ -512,34 +416,12 @@ it.layer(getTestDB())("the inbox store", (it) => {
           shelvedRead.items.some((item) => item.planId === shelved.id),
           "its item waits like any other",
         );
-        // The notices name their sender by its title, or its model before it has one.
-        const [authorRow] = yield* Database.use((db) =>
-          db
-            .select({ title: codingAgent.title, model: codingAgent.model })
-            .from(codingAgent)
-            .where(eq(codingAgent.id, onTask.agent.agentId)),
-        );
-        const author = authorRow?.title ?? authorRow?.model;
         const read = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
         assert.equal(read.items.length + (read.planless?.length ?? 0), 4);
         const unreadOf = (answer: typeof read) =>
           answer.items.find((item) => item.id === first.id)?.unread;
         assert.equal(unreadOf(read), true, "the teammate has not read it");
         assert.equal(unreadOf(yield* accountInboxPast(owner, INBOX_CURSOR_START)), false);
-        // Every change in a test lands at one instant, so the asks stand before the notices.
-        assert.deepEqual(
-          read.chat?.map((entry) => [entry.messageId, entry.reason, entry.from]),
-          [
-            [asked.message.id, ACCOUNT_CHAT_REASON.ASK, author],
-            [direct.message.id, ACCOUNT_CHAT_REASON.DIRECT, author],
-          ],
-        );
-        assert.deepEqual(
-          (yield* accountInboxPast(owner, INBOX_CURSOR_START)).chat?.map((entry) => entry.reason),
-          [ACCOUNT_CHAT_REASON.ASK],
-          "a notice of an ask is the ask",
-        );
-        assert.deepEqual((yield* accountInboxPast(outsider, INBOX_CURSOR_START)).chat, []);
       }),
   );
 
@@ -1964,7 +1846,7 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         yield* updateTask(owner, agent.taskId ?? "", { assigneeId: owner });
         const app = yield* channelIn(owner, workspaceId, "app");
         const standing = Effect.gen(function* () {
-          const [item] = yield* channelThreads(teammate, app);
+          const [item] = yield* firstPage(teammate, app);
           const stamps = yield* accountWaitingStamps(teammate);
           return {
             waitsOn: item?.waitsOn?.userId,
@@ -1995,6 +1877,20 @@ it.layer(getTestDB())("a thread's channel", (it) => {
   );
 
   it.effect(
+    "an item read names the channel its thread lives in, so a link to it opens it there",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const app = yield* channelIn(agent.userId, workspaceId, "app");
+        const item = yield* post(agent, { ...SETTINGS, channelId: app });
+
+        const read = yield* taskInboxItems(agent.userId, agent.taskId ?? "");
+
+        assert.equal(read.find((each) => each.id === item.id)?.channelId, app);
+      }),
+  );
+
+  it.effect(
     "a thread goes to #general where it names no channel, moves only to a channel it names, and is refused one archived or of another workspace, or an addressee outside its workspace",
     () =>
       Effect.gen(function* () {
@@ -2009,7 +1905,7 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         );
         const theirs = yield* channelIn(outsider, elsewhere.workspaceId, "app");
         const channelOf = (readerId: string, channelId: string) =>
-          Effect.map(channelThreads(readerId, channelId), (threads) =>
+          Effect.map(firstPage(readerId, channelId), (threads) =>
             threads.map((thread) => thread.key),
           );
 
@@ -2054,27 +1950,242 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         assert.equal(moved.id, asked.id);
         assert.equal(moved.waitsOn?.userId, teammate);
         assert.deepEqual(
-          (yield* channelThreads(agent.userId, app)).map((thread) => thread.id),
+          (yield* firstPage(agent.userId, app)).map((thread) => thread.id),
           [asked.id],
         );
         assert.deepEqual(refused, Result.fail(INBOX_POST_REFUSAL.NO_CHANNEL));
       }),
   );
 
-  it.effect("an account outside the workspace reads none of a channel's threads or counts", () =>
-    Effect.gen(function* () {
-      const { agent, workspaceId } = yield* openAgentIn;
-      const outsider = yield* openUser;
-      yield* openWorkspace(outsider);
-      const app = yield* channelIn(agent.userId, workspaceId, "app");
-      const item = yield* post(agent, { ...SETTINGS, channelId: app, addresseeId: agent.userId });
+  it.effect(
+    "a channel's count of what waits on each reader is the threads Needs me shows them, however many newer threads stand over the asks, and whoever they wait on",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        yield* updateTask(owner, agent.taskId ?? "", { assigneeId: null });
+        const app = yield* channelIn(owner, workspaceId, "app");
+        const inApp = (key: string, write: Partial<InboxThreadPost> = SETTINGS) =>
+          post(agent, { ...SETTINGS, ...write, key, channelId: app });
+        // The asks and their neighbours, posted first, so every one is older than the read's bound.
+        yield* inApp("do");
+        yield* inApp("decide", {
+          ask: { type: INBOX_ASK.DECIDE, options: [{ label: "iad1" }, { label: "sfo1" }] },
+        });
+        yield* inApp("for-teammate", { addresseeId: teammate });
+        yield* post(agent, { ...NOTICE, channelId: app });
+        yield* inApp("withdrawn");
+        yield* closeInboxItem(agent, "withdrawn", "Found the setting.");
+        const settledOver = yield* inApp("settled-over-ask");
+        yield* Database.use((db) =>
+          db
+            .update(inboxItem)
+            .set({ status: INBOX_STATUS.ANSWERED })
+            .where(eq(inboxItem.id, settledOver.id)),
+        );
+        // More notices than a read carries, all posted since.
+        const at = (step: number) => new Date(Date.parse("2026-10-21T12:00:00Z") + step * 1_000);
+        yield* Database.use((db) =>
+          db.insert(inboxItem).values(
+            Array.from({ length: INBOX_BOUNDS.MAX_ITEMS_READ + 1 }, (_, step) => ({
+              userId: owner,
+              taskId: agent.taskId,
+              organizationId: workspaceId,
+              agentId: agent.agentId,
+              channelId: app,
+              key: `newer-${step}`,
+              revision: 1,
+              version: INBOX_WIRE_VERSION,
+              title: `Newer ${step}`,
+              needsReply: false,
+              status: INBOX_STATUS.OPEN,
+              postedAt: at(step),
+              updatedAt: at(step),
+            })),
+          ),
+        );
+        const standing = (readerId: string) =>
+          Effect.gen(function* () {
+            const threads = yield* firstPage(readerId, app);
+            return {
+              counted: (yield* channelWaitingCounts(readerId, workspaceId)).get(app) ?? 0,
+              needsMe: threads
+                .filter((thread) => threadNeedsReader(thread, readerId))
+                .map((thread) => thread.key)
+                .toSorted(),
+            };
+          });
 
-      assert.deepEqual(
-        (yield* channelThreads(agent.userId, app)).map((thread) => [thread.id, thread.channelId]),
-        [[item.id, app]],
-      );
-      assert.deepEqual(yield* channelThreads(outsider, app), []);
-      assert.deepEqual([...(yield* channelWaitingCounts(outsider, workspaceId))], []);
-    }),
+        const unassigned = { owner: yield* standing(owner), teammate: yield* standing(teammate) };
+        yield* updateTask(owner, agent.taskId ?? "", { assigneeId: teammate });
+        const assigned = { owner: yield* standing(owner), teammate: yield* standing(teammate) };
+
+        assert.deepEqual(unassigned, {
+          owner: { counted: 2, needsMe: ["decide", "do"] },
+          teammate: { counted: 1, needsMe: ["for-teammate"] },
+        });
+        assert.deepEqual(assigned, {
+          owner: { counted: 0, needsMe: [] },
+          teammate: { counted: 3, needsMe: ["decide", "do", "for-teammate"] },
+        });
+        assert.equal(
+          (yield* firstPage(owner, app)).length,
+          INBOX_BOUNDS.MAX_ITEMS_READ,
+          "the latest a read carries, and no thread asking nobody past them",
+        );
+      }),
+  );
+
+  it.effect(
+    "a channel's thread names the agent that posted it as its post draws it, and an account outside the workspace reads none of a channel's threads or counts",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        yield* renameCodingAgent(agent.userId, agent.agentId, "Teammate invitations");
+        const app = yield* channelIn(agent.userId, workspaceId, "app");
+        const item = yield* post(agent, { ...SETTINGS, channelId: app, addresseeId: agent.userId });
+        yield* TestClock.adjust(Duration.seconds(1));
+        const theirs = yield* post(agent, { ...SETTINGS, key: "theirs", channelId: app });
+        // An ask that names the outsider, as one addressed to a member who has since left would.
+        yield* Database.use((db) =>
+          db.update(inboxItem).set({ addresseeId: outsider }).where(eq(inboxItem.id, theirs.id)),
+        );
+
+        const NAMED = { title: "Teammate invitations", model: "anthropic/claude-opus-5.5" };
+        assert.deepEqual(
+          (yield* firstPage(agent.userId, app)).map((thread) => [
+            thread.id,
+            thread.channelId,
+            thread.agent,
+          ]),
+          [
+            [item.id, app, NAMED],
+            [theirs.id, app, NAMED],
+          ],
+        );
+        assert.deepEqual(yield* firstPage(outsider, app), []);
+        assert.deepEqual([...(yield* channelWaitingCounts(outsider, workspaceId))], []);
+      }),
+  );
+
+  it.effect(
+    "a member moves a thread they may read into another open channel of its workspace, and is refused one archived, unknown, or another workspace's, as an outsider is the thread",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const elsewhere = yield* openAgentIn;
+        const outsider = elsewhere.agent.userId;
+        const app = yield* channelIn(agent.userId, workspaceId, "app");
+        const web = yield* channelIn(agent.userId, workspaceId, "web");
+        const retired = yield* channelIn(agent.userId, workspaceId, "retired");
+        yield* archiveChannel(agent.userId, workspaceId, retired, new Date(2));
+        const theirs = yield* channelIn(outsider, elsewhere.workspaceId, "app");
+        const item = yield* post(agent, { ...NOTICE, channelId: app });
+        const idsIn = (channelId: string) =>
+          Effect.map(firstPage(agent.userId, channelId), (threads) =>
+            threads.map((thread) => thread.id),
+          );
+
+        const refused = yield* Effect.all([
+          moveChannelThread(teammate, item.id, retired),
+          moveChannelThread(teammate, item.id, theirs),
+          moveChannelThread(teammate, item.id, randomUUID()),
+          moveChannelThread(outsider, item.id, web),
+          moveChannelThread(outsider, item.id, theirs),
+        ]);
+        const unmoved = yield* idsIn(app);
+        const moved = yield* moveChannelThread(teammate, item.id, web);
+
+        assert.deepEqual(refused, [
+          Result.fail(CHANNEL_MOVE_REFUSAL.NO_CHANNEL),
+          Result.fail(CHANNEL_MOVE_REFUSAL.NO_CHANNEL),
+          Result.fail(CHANNEL_MOVE_REFUSAL.NO_CHANNEL),
+          Result.fail(CHANNEL_MOVE_REFUSAL.NO_THREAD),
+          Result.fail(CHANNEL_MOVE_REFUSAL.NO_THREAD),
+        ]);
+        assert.deepEqual(unmoved, [item.id]);
+        assert.deepEqual(
+          Result.map(moved, (thread) => [thread.id, thread.channelId]),
+          Result.succeed([item.id, web]),
+        );
+        assert.deepEqual([yield* idsIn(app), yield* idsIn(web)], [[], [item.id]]);
+      }),
+  );
+
+  it.effect(
+    "paging back from a channel's first page reads every thread once, ties on the bound included, the asks waiting on the reader on the first page alone, and an outsider pages nothing",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        yield* updateTask(owner, agent.taskId ?? "", { assigneeId: owner });
+        const app = yield* channelIn(owner, workspaceId, "app");
+        // Two asks waiting on the reader, posted first, so both are older than every page's bound.
+        const asks = [
+          yield* post(agent, { ...SETTINGS, key: "ask-1", channelId: app }),
+          yield* post(agent, { ...SETTINGS, key: "ask-2", channelId: app }),
+        ];
+        // Two pages of threads asking nobody and seven more, the two either side of the first page's bound posted at one instant.
+        const notices = 2 * INBOX_BOUNDS.MAX_ITEMS_READ + 7;
+        const bound = notices - INBOX_BOUNDS.MAX_ITEMS_READ;
+        const at = (step: number) =>
+          new Date(
+            Date.parse("2026-10-21T12:00:00Z") + (step === bound - 1 ? bound : step) * 1_000,
+          );
+        yield* Database.use((db) =>
+          db.insert(inboxItem).values(
+            Array.from({ length: notices }, (_, step) => ({
+              userId: owner,
+              taskId: agent.taskId,
+              organizationId: workspaceId,
+              agentId: agent.agentId,
+              channelId: app,
+              key: `notice-${step}`,
+              revision: 1,
+              version: INBOX_WIRE_VERSION,
+              title: `Notice ${step}`,
+              needsReply: false,
+              status: INBOX_STATUS.OPEN,
+              postedAt: at(step),
+              updatedAt: at(step),
+            })),
+          ),
+        );
+
+        const pages: ChannelThreadPage[] = [];
+        let before: string | undefined;
+        do {
+          const page = Option.getOrThrow(yield* channelThreads(owner, app, before));
+          pages.push(page);
+          before = page.older;
+        } while (before !== undefined);
+        const read = pages.flatMap((page) => page.threads.map((thread) => thread.id));
+        const stored = yield* Database.use((db) =>
+          db.select({ id: inboxItem.id }).from(inboxItem).where(eq(inboxItem.channelId, app)),
+        );
+
+        assert.deepEqual(
+          pages.map((page) => page.threads.length),
+          [INBOX_BOUNDS.MAX_ITEMS_READ + asks.length, INBOX_BOUNDS.MAX_ITEMS_READ, 7],
+        );
+        assert.deepEqual(read.toSorted(), stored.map((row) => row.id).toSorted());
+        assert.deepEqual(
+          asks.map((ask) => pages[0]?.threads.some((thread) => thread.id === ask.id)),
+          [true, true],
+        );
+        assert.equal(
+          (yield* channelLatestPosts(owner, workspaceId)).get(app),
+          at(notices - 1).getTime(),
+        );
+        assert.deepEqual(yield* channelThreads(outsider, app, pages[0]?.older), Option.none());
+      }),
   );
 });

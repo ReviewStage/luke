@@ -33,6 +33,8 @@ export interface KnownNames {
   readonly inboxItems: ReadonlyMap<string, string>;
   readonly people: ReadonlyMap<string, string>;
   readonly automations: ReadonlyMap<string, string>;
+  /** The channels of the workspaces the window holds channels of, each by its name without its `#`; none where it holds none. */
+  readonly channels?: ReadonlyMap<string, string> | undefined;
 }
 
 /** What a chip says of a place: its name, and the task it stands under where that is known and is not the place itself. */
@@ -56,12 +58,12 @@ const KIND_NAME = {
   [LINK_PLACE.MESSAGE]: "Message",
   [LINK_PLACE.INBOX]: "Inbox",
   [LINK_PLACE.INBOX_ITEM]: "Inbox item",
+  [LINK_PLACE.CHANNEL]: "Channel",
   [LINK_PLACE.AUTOMATIONS]: "Automations",
   [LINK_PLACE.AUTOMATION]: "Automation",
   [LINK_PLACE.AUTOMATION_RUN]: "Run",
   [LINK_PLACE.SETTINGS]: "Settings",
   [LINK_PLACE.PERSON]: "Profile",
-  [LINK_PLACE.CHAT]: "Chat",
   [LINK_PLACE.ADMIN]: "Admin",
 } as const satisfies Record<LinkPlace["kind"], string>;
 

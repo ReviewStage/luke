@@ -163,7 +163,7 @@ interface ContinuedDoors {
   readonly titles: ReadonlyMap<string, string>;
   readonly control: Pick<
     CodingAgentsControl,
-    "agents" | "archived" | "models" | "me" | "pullRequests" | "chatOn"
+    "agents" | "archived" | "models" | "me" | "pullRequests"
   >;
   /** Opens an agent's tab; none where nothing opens one, when a chip hangs its card alone. */
   readonly onOpenAgent: ((agentId: string) => void) | undefined;

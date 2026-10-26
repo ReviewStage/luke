@@ -1085,7 +1085,7 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
   const state: ServiceState = {
     user: { ...USER },
     outages: 0,
-    experiments: { [EXPERIMENT.CHAT]: true },
+    experiments: { [EXPERIMENT.MEMORY]: true },
     // The account saved its voice before; this browser's own is another.
     preferences: { voice: LIVE_VOICE.CEDAR },
     updatedAt: 1,
@@ -1114,7 +1114,7 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     );
     const voice = Effect.orDie(settings.store.get("voice"));
     yield* until(() => Effect.map(voice, (chosen) => chosen === LIVE_VOICE.CEDAR));
-    assert.equal((yield* experiments)[EXPERIMENT.CHAT], true);
+    assert.equal((yield* experiments)[EXPERIMENT.MEMORY], true);
     // The voice the account saved is applied here, and the service keeps it.
     assert.equal(yield* voice, LIVE_VOICE.CEDAR);
     assert.deepEqual(state.preferences, { voice: LIVE_VOICE.CEDAR });

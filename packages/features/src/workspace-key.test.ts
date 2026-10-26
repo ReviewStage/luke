@@ -54,6 +54,16 @@ describe("keySpansIn", () => {
     expect(found("STAG-422/notes STAG-422.md STAG-422#plan")).toEqual([]);
   });
 
+  it("finds a channel's name the words write as #name, but in a path, an address, or joined to more words, and leaves one it does not hold", () => {
+    const channels = new Map([["#app", "channel-app"], ...known]);
+    const spans = keySpansIn("ask in #app, or STAG-42 and #design", channels);
+    expect(spans.map((span) => [span.key, span.known])).toEqual([
+      ["#app", "channel-app"],
+      ["STAG-42", "task-42"],
+    ]);
+    expect(keySpansIn("page#app docs/#app #app-x #apple #app/notes", channels)).toEqual([]);
+  });
+
   it("finds a key ending a sentence or a clause", () => {
     expect(found("Shipped STAG-422. Then STAG-42: done; STAG-422!")).toEqual([
       ["STAG-422", "task-422"],

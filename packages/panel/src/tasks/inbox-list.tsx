@@ -1,7 +1,6 @@
-import { LINK_PLACE } from "@luke/features/link-grammar";
+import type { InboxPerson } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { readFailedWords, TERM } from "@luke/features/words";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
   CHIP_LOOK,
@@ -56,6 +55,7 @@ import {
   TOOLBAR_INSET,
   Toolbar,
   Tooltip,
+  UnreadMark,
   useLeaving,
   useMenu,
   useMinute,
@@ -105,7 +105,6 @@ import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useInboxItemDraft } from "../composer-drafts.js";
-import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "../desktop/action-menu.js";
 import {
   INBOX_LIST_WIDTH,
@@ -128,7 +127,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { TaskChipCard } from "./chip-cards.js";
-import { type InboxCloser, useInboxClose } from "./inbox-close.js";
+import type { InboxCloser } from "./inbox-close.js";
 import {
   INBOX_COLUMNS,
   type InboxColumnsShown,
@@ -137,6 +136,7 @@ import {
   VIEW_OPTIONS,
 } from "./inbox-columns.js";
 import { NEW_THREAD } from "./inbox-compose.js";
+import { useInboxItemActions } from "./inbox-item-actions.js";
 import { HolderGlyph, InboxItemCard, InboxItemEnd, useInboxStanding } from "./inbox-item-parts.js";
 import {
   EVERYONES,
@@ -155,7 +155,6 @@ import {
   type InboxLineKind,
   type InboxListed,
   type InboxListView,
-  type InboxPerson,
   type InboxPersonGroup,
   type InboxShow,
   type InboxSort,
@@ -180,7 +179,6 @@ import {
 } from "./inbox-row-media.js";
 import { type InboxListMark, InboxSelectionBar } from "./inbox-selection.js";
 import { PlanGlyph } from "./tab-look.js";
-import { markReadItem } from "./task-menu-items.js";
 import { cardTitle } from "./tool-call-model.js";
 
 /**
@@ -474,25 +472,13 @@ export function InboxItemRow({
   const preview = inboxPreview(item, nameOf, ticked);
   const carried = useMemo(() => inboxMedia(item), [item]);
   useRowMediaAsks(item.id, item.updatedAt, carried, media);
-  const copyLink = useCopyLinkItem()(
-    holder.kind === INBOX_HOLDER.TASK
-      ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
-      : { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id },
-  );
-  const read =
-    onMark === undefined
-      ? undefined
-      : {
-          ...markReadItem({ unread, onMark: (next) => onMark(listed, next) }),
-          // Note that U acts only on the chosen item, so only its row names the chord.
-          ...(chosen ? { command: APP_COMMAND.TOGGLE_INBOX_ITEM_READ } : {}),
-        };
-  const close = useInboxClose(item, onClose, true);
-  const groups = [
-    read === undefined ? [] : [read],
-    copyLink === undefined ? [] : [copyLink],
-    close.action === undefined ? [] : [close.action],
-  ].filter((group) => group.length > 0);
+  // Note that U acts only on the chosen item, so only its row names the chord.
+  const { read, close, groups } = useInboxItemActions(holder, item, {
+    onMark: onMark === undefined ? undefined : (_item, next) => onMark(listed, next),
+    onClose,
+    shown: true,
+    keyed: chosen,
+  });
   // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
   const region = useRef<HTMLElement | null>(null);
   const hold = useCallback(
@@ -513,7 +499,7 @@ export function InboxItemRow({
           ref={hold}
           motionKey={listed.item.id}
           ink={LIST_ROW_INK.SIDEBAR}
-          leading={<InboxRowLeading unread={unread} />}
+          leading={<UnreadMark unread={unread} />}
           title={title}
           description={
             line ? (
@@ -591,7 +577,7 @@ export function InboxItemRow({
           hint={{ Hint: RowHint, label: title }}
           selectKey={selectKey}
           onPress={() => onChoose(listed)}
-          menu={rowMenu(ITEM_THING, groups)}
+          menu={rowMenu(ITEM_THING, groups())}
         />
       </RowHintOptions>
       {close.dialog}
@@ -835,8 +821,8 @@ function ViewOptions({
   );
 }
 
-/** Mark all as read, as the view's menu offers it at its foot, pressable while anything is unread; Chat's view menu offers the same. */
-export function markAllEntries(readAll: InboxReadAll): MenuEntry[] {
+/** Mark all as read, as the view's menu offers it at its foot, pressable while anything is unread. */
+function markAllEntries(readAll: InboxReadAll): MenuEntry[] {
   return [
     {
       label: MARK_ALL_READ,
@@ -1068,26 +1054,6 @@ export function ShowEmpty({
 }
 
 /**
- * An item row's leading: the gutter the unread dot stands in, on every row so
- * the words line up whether a row wears the dot or not. The list's rows and
- * its placeholder rows both lead with it, so a title lands where its block
- * stood, and Chat's rows lead with it too. The gutter sets its line in the
- * title's type, so its baseline is the title's, and the dot stands centred
- * on the title's capitals rather than on its line's box. The dot is the
- * accent's ink rather than its fill, because the web's cyan fill reads at
- * 1.7:1 on its light page, under a mark's 3:1.
- */
-export function InboxRowLeading({ unread }: { unread: boolean }): React.JSX.Element {
-  return (
-    <span className="inbox-row-gutter block w-status-dot flex-none text-center text-label">
-      {unread ? (
-        <span className="inbox-row-unread inline-block size-status-dot rounded-disc bg-accent-ink align-[calc(0.5cap-var(--spacing-status-dot)/2)]" />
-      ) : null}
-    </span>
-  );
-}
-
-/**
  * The list while its items are first read: rows in an item's own row, a
  * block where its title, its time, and the line under them will stand,
  * so the
@@ -1102,7 +1068,7 @@ export function InboxListSkeleton({
 }: {
   /** How many placeholder rows stand, at most five. */
   rows?: number;
-  /** What a reader hears is being read, where the list is another's than the Inbox's, as Chat's rail. */
+  /** What a reader hears is being read, where the list is another's than the Inbox's. */
   reading?: string;
   /** What the list is called, where it is another's than the Inbox's. */
   list?: string;
@@ -1113,7 +1079,7 @@ export function InboxListSkeleton({
         {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}
-            leading={<InboxRowLeading unread={false} />}
+            leading={<UnreadMark unread={false} />}
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
             meta={<Skeleton width={SKELETON_TIME} />}

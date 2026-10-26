@@ -70,6 +70,7 @@ import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/cont
 import { FIXTURE_IDS, FIXTURE_PAGE } from "@luke/host/fixture-stage";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { AsyncIteratorClass } from "@orpc/client";
+import { longRunPicture, longRunStream } from "./agent-long-run-fixture.js";
 import {
   PULL_REQUEST_VIEW,
   type PullRequestView,
@@ -256,7 +257,7 @@ const ADDITIONS = CHANGED_FILES.reduce((sum, file) => sum + file.additions, 0);
 const DELETIONS = CHANGED_FILES.reduce((sum, file) => sum + file.deletions, 0);
 
 /** The agent as the task's list and its tab hold it. */
-function agentSummary(taskId: string): CodingAgentSummary {
+function agentSummary(taskId: string, running = false): CodingAgentSummary {
   return {
     id: FIXTURE_AGENT_ID,
     planId: taskId,
@@ -264,7 +265,7 @@ function agentSummary(taskId: string): CodingAgentSummary {
     effort: "high",
     title: "Add teammate invitations",
     createdAt: STARTED_AT,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: running ? CODING_AGENT_STATUS.RUNNING : CODING_AGENT_STATUS.COMPLETED,
     turnId: TURN_ID,
     runStartedAt: STARTED_AT,
     brief: CODING_AGENT_BRIEF.PROMPT,
@@ -737,6 +738,8 @@ type TerminalStage =
 const TRANSCRIPT_LENGTH = {
   SHORT: "short",
   LONG: "long",
+  /** An orchestrator's days-long run, still written to (`agent-long-run-fixture.ts`). */
+  LONG_RUN: "long-run",
 } as const;
 
 type TranscriptLength = (typeof TRANSCRIPT_LENGTH)[keyof typeof TRANSCRIPT_LENGTH];
@@ -754,6 +757,10 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   [
     RUN_PROFILE.AGENT_TRANSCRIPT,
     { view: PULL_REQUEST_VIEW.CONVERSATION, transcript: TRANSCRIPT_LENGTH.LONG },
+  ],
+  [
+    RUN_PROFILE.AGENT_LONG_RUN,
+    { view: PULL_REQUEST_VIEW.CONVERSATION, transcript: TRANSCRIPT_LENGTH.LONG_RUN },
   ],
   [RUN_PROFILE.AGENT_CHECKS, { view: PULL_REQUEST_VIEW.CHECKS }],
   [RUN_PROFILE.AGENT_FILES, { view: PULL_REQUEST_VIEW.FILES }],
@@ -845,6 +852,7 @@ function postShellPort(stage: Extract<TerminalStage, { kind: typeof TERMINAL_STA
 
 /** The transcript's stream, as main opens one: its one page, as long as the stage says, then its end, as a finished agent's stands. */
 function transcriptStream(stage: AgentStage): AsyncIteratorClass<CodingAgentTranscriptPage, void> {
+  if (longRun(stage)) return longRunStream();
   const page =
     "view" in stage && stage.transcript === TRANSCRIPT_LENGTH.LONG
       ? { ...TRANSCRIPT_PAGE, messages: LONG_MESSAGES }
@@ -860,6 +868,11 @@ function transcriptStream(stage: AgentStage): AsyncIteratorClass<CodingAgentTran
   );
 }
 
+/** Whether the profile stages the orchestrator's long run. */
+function longRun(stage: AgentStage): boolean {
+  return "view" in stage && stage.transcript === TRANSCRIPT_LENGTH.LONG_RUN;
+}
+
 /** The agent's Terminal stage, where the profile stages one. */
 function terminalStage(stage: AgentStage): TerminalStage | undefined {
   return "terminal" in stage ? stage.terminal : undefined;
@@ -873,11 +886,14 @@ type StagedAnswer<Kind extends PortActKind> = (
 
 /** Every read the agent's tabs ask, answered as the service would answer it for this agent. */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }) => ({ agents: [agentSummary(taskId)] }),
+  [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }, stage) => ({
+    agents: [agentSummary(taskId, longRun(stage))],
+  }),
   [ACT_KIND.CODING_AGENTS_TRANSCRIPT]: (_payload, stage) => transcriptStream(stage),
   [ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: () => ({
     failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   }),
+  [ACT_KIND.CODING_AGENTS_PICTURE]: () => longRunPicture(),
   [ACT_KIND.CODING_AGENTS_CALLS]: () => ({ transcript: { calls: [], earlierOmitted: false } }),
   [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: () => ({
     repository: REPOSITORY,
@@ -957,7 +973,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
 export function agentTasksView(profile: string, open: TasksView): TasksView | undefined {
   const taskId = open.activeTaskId;
   if (!AGENT_STAGES.has(profile) || taskId === undefined) return undefined;
-  const agent = agentSummary(taskId);
+  const agent = agentSummary(taskId, longRun(AGENT_STAGES.get(profile) ?? { plan: true }));
   const agents: TaskSummary["agents"] = {
     total: 1,
     working: 0,

@@ -319,7 +319,8 @@ function callLukeTool(
 
 /**
  * The tools listed to the admitted agent: those eve offers it, by its task,
- * its repository, and its kind (`offeredLukeMcpTool`); those eve offers
+ * its repository, and its kind (`offeredLukeMcpTool`), each in the words it
+ * is shown them with (`describe`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
  * carry out a call for an agent that no longer stands.
  */
@@ -328,17 +329,20 @@ function listLukeTools(
 ): Effect.Effect<RpcAnswer, never, LukeMcpServices> {
   const { userId, conversationId } = admitted.target;
   return readCodingAgentOfConversation(userId, conversationId).pipe(
-    Effect.map((found) => {
+    Effect.flatMap((found) => {
       const offered = offeredLukeMcpTool(Option.getOrElse(found, () => NO_AGENT_OFFERED));
-      const tools = [...LUKE_MCP_TOOLS]
-        .filter(([name]) => offered(name))
-        .map(([name, tool]) => ({
-          name,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-          _meta: TOOL_META,
-        }));
-      return Result.succeed({ tools });
+      const listed = [...LUKE_MCP_TOOLS].filter(([name]) => offered(name));
+      return Effect.map(
+        Effect.forEach(listed, ([name, tool]) =>
+          Effect.map(tool.describe?.(admitted) ?? Effect.succeed(tool.description), (words) => ({
+            name,
+            description: words,
+            inputSchema: tool.inputSchema,
+            _meta: TOOL_META,
+          })),
+        ),
+        (tools) => Result.succeed({ tools }),
+      );
     }),
     Effect.catchCause((cause) =>
       Effect.as(

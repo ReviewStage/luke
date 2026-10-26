@@ -8,7 +8,6 @@ import {
 } from "@luke/database/github-installation-vocabulary";
 import { session, user } from "@luke/database/schemas/auth";
 import { automation, automationRun } from "@luke/database/schemas/automation";
-import { chatChannel, chatMember, chatMessage } from "@luke/database/schemas/chat";
 import { codingAgent, type StoredPullRequest } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { inboxItem } from "@luke/database/schemas/inbox";
@@ -34,7 +33,6 @@ import {
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
@@ -206,38 +204,6 @@ const fireAutomation = (userId: string, organizationId: string, when: string) =>
     return id;
   });
 
-const postInChat = (userId: string, organizationId: string, when: string) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    const memberId = randomUUID();
-    const channelId = randomUUID();
-    yield* db.insert(chatMember).values({
-      id: memberId,
-      organizationId,
-      kind: MEMBER_KIND.HUMAN,
-      userId,
-      ordinal: 1,
-      joinedAt: at(when),
-    });
-    yield* db.insert(chatChannel).values({
-      id: channelId,
-      organizationId,
-      kind: CHANNEL_KIND.GENERAL,
-      name: "general",
-      createdAt: at(when),
-    });
-    yield* db.insert(chatMessage).values({
-      organizationId,
-      channelId,
-      seq: 1,
-      touchedSeq: 1,
-      authorMemberId: memberId,
-      blocks: [],
-      clientKey: randomUUID(),
-      createdAt: at(when),
-    });
-  });
-
 const connectIntegration = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -297,7 +263,6 @@ const seedService = Effect.gen(function* () {
   yield* startAgent(ada, adaWorkspace, "2026-10-19T02:00:00Z", { automationId });
   yield* holdCall(ada, "2026-10-19T16:00:00Z", 600);
   yield* answerInboxItem(ada, adaWorkspace, merged, "2026-10-20T12:00:00Z");
-  yield* postInChat(ada, adaWorkspace, "2026-10-20T13:00:00Z");
   yield* connectIntegration(ada);
   yield* signIn(ada, "2026-10-21T09:00:00Z");
 
@@ -375,7 +340,6 @@ it.layer(getTestDB())("the overview's reads", (it) => {
           [REACH_FEATURE.VOICE_CALLS]: 1,
           [REACH_FEATURE.INTEGRATIONS]: 1,
           [REACH_FEATURE.AUTOMATIONS]: 1,
-          [REACH_FEATURE.CHAT]: 1,
         });
 
         assert.deepEqual(

@@ -22,6 +22,7 @@ export const STYLE_RULE = {
   SPACING: "literal-spacing",
   CURSOR: "pointer-cursor",
   CRUMB_WIDTH: "crumb-width",
+  HAS_OVER_ANY: "has-over-any",
 } as const;
 export type StyleRule = (typeof STYLE_RULE)[keyof typeof STYLE_RULE];
 
@@ -67,6 +68,11 @@ export const STYLE_RULES: Readonly<
   [STYLE_RULE.CURSOR]: {
     refuses:
       "the pointing hand spelled out (`cursor: pointer`, `cursor-pointer`) or a cursor chosen per profile: a control reads `cursor-press` (`--luke-cursor-press`), a real link `cursor-link` (`--luke-cursor-link`)",
+    backlog: false,
+  },
+  [STYLE_RULE.HAS_OVER_ANY]: {
+    refuses:
+      "a `:has()` on an ancestor or an earlier sibling of a subject that is any element (`> *`, `> :not(.a)`): the browser then restyles the whole window for every element added under it, so the state is said on the subject's parent or by an attribute the component sets",
     backlog: false,
   },
   [STYLE_RULE.CRUMB_WIDTH]: {
@@ -484,6 +490,42 @@ function withoutArguments(selector: string): string {
   return out;
 }
 
+/** A selector with what its brackets and parentheses hold taken out, as `withoutArguments` does, but a `:has()` inside another's, as `:not(:has(> .b))` holds one, left standing as `:has`, so a compound still says it holds one. */
+function withoutArgumentsKeepingHas(selector: string): string {
+  let out = selector.replace(/\[[^\]]*\]/gu, "[]");
+  while (/\([^()]*\)/u.test(out)) {
+    out = out.replace(/\(([^()]*)\)/gu, (_whole, inner: string) =>
+      inner.includes(":has") ? ":has" : "",
+    );
+  }
+  return out;
+}
+
+/** A subject that is any element: `*`, or pseudo-classes and pseudo-elements alone, `:is()` and `:where()` aside, which name what they match. */
+const ANY_SUBJECT = /^\*?(?:::?(?!is$|where$|is:|where:)[\w-]+)*$/u;
+
+/**
+ * Whether a block's selector puts `:has()` on a compound before its last,
+ * an ancestor or an earlier sibling, whose subject is any element. Note that
+ * Chrome cannot tell which elements such a selector reaches, so every
+ * element added anywhere under the `:has()`'s anchor restyles all of it.
+ */
+function hasOverAnySubject(block: CssBlock): boolean {
+  return withoutArgumentsKeepingHas(selectorOf(block))
+    .split(",")
+    .some((part) => {
+      const compounds = part
+        .trim()
+        .split(/[\s>+~]+/u)
+        .filter((compound) => compound !== "");
+      const subject = compounds.at(-1) ?? "";
+      return (
+        compounds.slice(0, -1).some((compound) => compound.includes(":has")) &&
+        ANY_SUBJECT.test(subject)
+      );
+    });
+}
+
 /** Whether a block's selector draws a path's crumb: a list item, in its last compound, of a path. */
 function isCrumbBox(block: CssBlock): boolean {
   return withoutArguments(selectorOf(block))
@@ -755,6 +797,13 @@ export function styleViolations(
     const { blocks } = scanCss(text);
     const capped = capsCrumbs(blocks);
     for (const block of blocks) {
+      if (block.declarations.length > 0 && hasOverAnySubject(block)) {
+        violations.push({
+          rule: STYLE_RULE.HAS_OVER_ANY,
+          line: block.line,
+          excerpt: selectorOf(block),
+        });
+      }
       for (const declaration of block.declarations) {
         const rule =
           cssRuleOf(declaration, block) ??

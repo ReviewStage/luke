@@ -1686,6 +1686,45 @@ export type PullRequestReviewer = typeof pullRequestReviewerSchema.Type;
  */
 export const CODING_AGENT_DELEGATE_TOOL = "delegate";
 
+/**
+ * The tool one coding agent sends another of its workspace a message with,
+ * by the name its tool part carries in the sender's transcript; the line it
+ * writes in the other agent's opens on `AGENT_MESSAGE_LEAD` and who sent it,
+ * and closes on how to answer (`agentMessageReplyLine`).
+ */
+export const AGENT_MESSAGE_TOOL = "message_agent";
+
+/** How a message another coding agent sent opens, in the line that hands it to the agent it was sent to. */
+export const AGENT_MESSAGE_LEAD = "Message";
+
+/** A message's closing line telling the agent how to answer the agent that sent it, by that agent's id. */
+export function agentMessageReplyLine(agentId: string): string {
+  return `Reply with ${AGENT_MESSAGE_TOOL}({ agentId: "${agentId}", text }).`;
+}
+
+/** A message's head as `agent-message.ts` writes it, whole: its lead, and who sent it. */
+const AGENT_MESSAGE_HEAD = new RegExp(`^${AGENT_MESSAGE_LEAD} · .+ to you:$`, "u");
+
+/** A message's closing line as `agentMessageReplyLine` writes it, whole. */
+const AGENT_MESSAGE_REPLY = new RegExp(
+  `^Reply with ${AGENT_MESSAGE_TOOL}\\(\\{ agentId: "[0-9a-f-]+", text \\}\\)\\.$`,
+  "u",
+);
+
+/**
+ * A message another agent sent, as a person reads it: its words, without
+ * the head naming who sent it and the closing line telling the agent how to
+ * answer, which are the model's alone; nothing for a text of no message's
+ * shape.
+ */
+export function agentMessageWords(text: string): string | undefined {
+  const [head, ...rest] = text.split("\n\n");
+  if (head === undefined || !AGENT_MESSAGE_HEAD.test(head)) return undefined;
+  const last = rest.at(-1);
+  const words = last !== undefined && AGENT_MESSAGE_REPLY.test(last) ? rest.slice(0, -1) : rest;
+  return words.join("\n\n").trim();
+}
+
 /** eve's id for a tool call, as the path names a subagent's transcript by it. */
 export const codingAgentCallIdSchema = trimmedText(CODING_AGENT_BOUNDS.MAX_CALL_ID_CHARS);
 
@@ -1816,8 +1855,7 @@ export type TurnRecord = typeof turnRecordSchema.Type;
  * the message box or an Inbox answer; Luke, from a call; an automation's
  * run, on its creator's behalf; GitHub, telling the agent of a review, a
  * comment, or a failed check on its pull request, by who caused it there;
- * or another coding agent of the workspace, through a chat message told to
- * it, or, in a line written before it was retired, through `message_agent`.
+ * or another coding agent of the workspace, through `message_agent`.
  */
 export const MESSAGE_SENDER = {
   MEMBER: "member",

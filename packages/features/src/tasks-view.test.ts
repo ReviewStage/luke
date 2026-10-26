@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Schema as EffectSchema } from "effect";
 import { test } from "vitest";
-import { VOICE_PHASE, taskActivitySchema } from "./tasks-view.js";
+import { taskActivitySchema, VOICE_PHASE } from "./tasks-view.js";
 
 test("a task call's activity parses whether or not it carries the notetaker's `notes`, which an older service still sent", () => {
   const decode = EffectSchema.decodeUnknownSync(taskActivitySchema);

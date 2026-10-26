@@ -1,23 +1,21 @@
 /**
- * agent-inbox-procedures.test.ts -- the Inbox's and the workspace chat's acts, through the act port.
+ * agent-inbox-procedures.test.ts -- the Inbox's acts, through the act port.
  *
- * What a task's coding agents need of the developer, and the workspace's
- * chat, through the act port as a window calls them: only a panel of this
- * build's own renderer asks; the voice and call windows, and a frame this
- * build does not trust, are refused in each kind's own words before the host
- * is asked; a panel's ask reaches the host with its payload as the panel
- * sent it, and what the host answers is the panel's; a host that fails
- * answers the kind's own sentence; and a panel's chat stream follows the
- * chat at the host while any stream of it stands.
+ * What a task's coding agents need of the developer, through the act port
+ * as a window calls them: only a panel of this build's own renderer asks;
+ * the voice and call windows, and a frame this build does not trust, are
+ * refused in each kind's own words before the host is asked; a panel's ask
+ * reaches the host with its payload as the panel sent it, and what the host
+ * answers is the panel's; a host that fails answers the kind's own
+ * sentence; and a panel's inbox stream follows the inbox at the host while
+ * any stream of it stands.
  */
 
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
-import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
-  type CodingAgentChatChanged,
   type CodingAgentInboxChanged,
   type CodingAgentInboxScope,
   INBOX_SCOPE_KIND,
@@ -51,18 +49,7 @@ const CALL: ActSender = { ...PANEL, panel: false, call: true };
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
-const MEMBER_ID = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
 const PICTURE_ID = "4fb17055-c16e-4293-bea5-7a8b9cadbec5";
-
-/** A workspace's chat as the service answers it: the reader alone, nothing posted yet. */
-const CHAT = {
-  self: MEMBER_ID,
-  readSeq: 0,
-  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, name: "Ada", left: false }],
-  channels: [],
-  messages: [],
-  cursor: "1",
-};
 
 const ITEM: InboxItem = {
   id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
@@ -96,10 +83,6 @@ const REFUSAL = {
     "Could not read the inbox item's image on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE]:
     "Could not read the agent's picture on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST]:
-    "Could not write to the workspace's chat on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT]:
-    "Could not read the chat message's picture on this system.",
 } as const;
 
 type HostAsk = AgentInboxProceduresDependencies["host"];
@@ -145,19 +128,6 @@ const ACTS: readonly {
     payload: { agentId: AGENT_ID, pictureId: PICTURE_ID },
     ask: "codingAgentPicture",
   },
-  {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST,
-    payload: {
-      workspaceId: WORKSPACE_ID,
-      write: { text: "Morning, @agent-2.", to: "#general", clientKey: "send-1" },
-    },
-    ask: "codingAgentChatPost",
-  },
-  {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT,
-    payload: { workspaceId: WORKSPACE_ID, messageId: "message-1", attachmentId: "picture-1" },
-    ask: "codingAgentChatAttachment",
-  },
 ];
 
 const ports: TestActPort<unknown>[] = [];
@@ -199,7 +169,7 @@ function windowPort(
   return { call, asked };
 }
 
-it("the voice and call windows are refused every inbox and chat act in the kind's own words, and the host is not asked", async () => {
+it("the voice and call windows are refused every inbox act in the kind's own words, and the host is not asked", async () => {
   for (const actor of [VOICE, CALL]) {
     const { call, asked } = windowPort(actor);
     for (const act of ACTS) {
@@ -209,7 +179,7 @@ it("the voice and call windows are refused every inbox and chat act in the kind'
   }
 });
 
-it("a frame this build does not trust is refused every inbox and chat act, even as a panel, and the host is not asked", async () => {
+it("a frame this build does not trust is refused every inbox act, even as a panel, and the host is not asked", async () => {
   const { call, asked } = windowPort(PANEL, { trusted: false });
   for (const act of ACTS) {
     assert.deepEqual(await call(act.kind, act.payload), { refused: REFUSAL[act.kind] });
@@ -321,13 +291,12 @@ it("a panel marks an inbox item read or unread, or its whole Inbox read in one w
   ]);
 });
 
-it("a panel's read of an inbox image, an agent's or a worker's picture, or a chat message's picture reaches the host as asked and hears its bytes", async () => {
+it("a panel's read of an inbox image, or an agent's or a worker's picture, reaches the host as asked and hears its bytes", async () => {
   const picture = () => Effect.succeed(PICTURE);
   const { call, asked } = windowPort(PANEL, {
     answers: {
       codingAgentInboxAttachment: picture,
       codingAgentPicture: picture,
-      codingAgentChatAttachment: picture,
     },
   });
   const reads = [
@@ -340,10 +309,6 @@ it("a panel's read of an inbox image, an agent's or a worker's picture, or a cha
       AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE,
       { agentId: AGENT_ID, pictureId: PICTURE_ID, callId: "call-worker" },
     ],
-    [
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT,
-      { workspaceId: WORKSPACE_ID, messageId: "message-1", attachmentId: "picture-1" },
-    ],
   ] as const;
 
   for (const [kind, payload] of reads) {
@@ -353,32 +318,7 @@ it("a panel's read of an inbox image, an agent's or a worker's picture, or a cha
     ["codingAgentInboxAttachment", reads[0][1]],
     ["codingAgentPicture", reads[1][1]],
     ["codingAgentPicture", reads[2][1]],
-    ["codingAgentChatAttachment", reads[3][1]],
   ]);
-});
-
-it("a panel's chat write reaches the host with the workspace and the write as sent, and hears the answer; a write naming two places is refused before the host", async () => {
-  const { call, asked } = windowPort(PANEL, {
-    answers: {
-      codingAgentChatPost: () => Effect.succeed({ readSeq: 4 }),
-    },
-  });
-  const write = {
-    workspaceId: WORKSPACE_ID,
-    write: { text: "Morning, @agent-2.", to: "#general", clientKey: "send-1" },
-  };
-
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST, write), {
-    answer: { readSeq: 4 },
-  });
-  assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST, {
-      workspaceId: WORKSPACE_ID,
-      write: { text: "Two places.", to: "#general", replyTo: 4, clientKey: "send-2" },
-    }),
-    { refused: REFUSAL[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST] },
-  );
-  assert.deepEqual(asked, [["codingAgentChatPost", write]]);
 });
 
 it("a host that dies, or answers what the kind cannot carry, is refused in the kind's own words", async () => {
@@ -420,13 +360,6 @@ it("a payload carrying a key its kind's schema does not name is refused in the k
     const payload = { ...(act.payload as Record<string, WireBoundaryInput>), stray: true };
     assert.deepEqual(await call(act.kind, payload), { refused: REFUSAL[act.kind] });
   }
-  assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST, {
-      workspaceId: WORKSPACE_ID,
-      write: { text: "Hi.", to: "#general", clientKey: "send-3", stray: true },
-    }),
-    { refused: REFUSAL[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST] },
-  );
   assert.deepEqual(asked, []);
 });
 
@@ -476,154 +409,6 @@ it("an item whose thread carries an ask of a type this build does not know reach
 async function until(ready: () => boolean): Promise<void> {
   for (let turn = 0; turn < 200 && !ready(); turn += 1) await nextTurn();
 }
-
-it("a panel's chat stream follows the chat at the host, hears each change told of it alone, and lets it go once its last stream closes; the voice window is refused it", async () => {
-  const asked: string[] = [];
-  const listeners = new Set<(changed: CodingAgentChatChanged) => void>();
-  const chats: Pick<
-    HostAsk,
-    "codingAgentChatFollow" | "codingAgentChatUnfollow" | "onChatChanged"
-  > = {
-    codingAgentChatFollow: (workspaceId) =>
-      Effect.sync(() => void asked.push(`follow:${workspaceId}`)),
-    codingAgentChatUnfollow: (workspaceId) =>
-      Effect.sync(() => void asked.push(`unfollow:${workspaceId}`)),
-    onChatChanged: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
-  // SAFETY: the stream reaches the chat's follow asks alone.
-  const host = chats as HostAsk;
-  const port = testActPort(agentInboxProcedures({ host }));
-  ports.push(port);
-  const client = port.as(PANEL);
-  const chat = { ...CHAT, cursor: "" };
-
-  const one = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
-    workspaceId: WORKSPACE_ID,
-  });
-  const two = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
-    workspaceId: WORKSPACE_ID,
-  });
-  const first = one.next();
-  const second = two.next();
-  await until(() => asked.length === 2);
-  for (const listener of [...listeners]) {
-    listener({ workspaceId: "another-workspace", chat: UNANSWERED });
-    listener({ workspaceId: WORKSPACE_ID, chat });
-  }
-  assert.deepEqual((await first).value, chat);
-  assert.deepEqual((await second).value, chat);
-
-  await one.return(undefined);
-  await until(() => listeners.size === 1);
-  assert.deepEqual(asked, [`follow:${WORKSPACE_ID}`, `follow:${WORKSPACE_ID}`]);
-  await two.return(undefined);
-  await until(() => asked.length === 3);
-  assert.deepEqual(asked.at(-1), `unfollow:${WORKSPACE_ID}`);
-
-  assert.deepEqual(
-    await port.call(VOICE, AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW, {
-      workspaceId: WORKSPACE_ID,
-    }),
-    { refused: "Could not follow the workspace's chat on this system." },
-  );
-  assert.equal(asked.length, 3);
-});
-
-it("a stream opened while the last one's unfollow is on its way asks the host to follow only once that unfollow is done, so the new follow stands", async () => {
-  const asked: string[] = [];
-  const unfollowed = Promise.withResolvers<void>();
-  const chats: Pick<
-    HostAsk,
-    "codingAgentChatFollow" | "codingAgentChatUnfollow" | "onChatChanged"
-  > = {
-    codingAgentChatFollow: (workspaceId) =>
-      Effect.sync(() => void asked.push(`follow:${workspaceId}`)),
-    codingAgentChatUnfollow: (workspaceId) =>
-      Effect.andThen(
-        Effect.sync(() => void asked.push(`unfollow:${workspaceId}`)),
-        Effect.promise(() => unfollowed.promise),
-      ),
-    onChatChanged: () => () => undefined,
-  };
-  // SAFETY: the stream reaches the chat's follow asks alone.
-  const host = chats as HostAsk;
-  const port = testActPort(agentInboxProcedures({ host }));
-  ports.push(port);
-  const client = port.as(PANEL);
-
-  const first = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
-    workspaceId: WORKSPACE_ID,
-  });
-  void first.next();
-  await until(() => asked.length === 1);
-  const closed = first.return(undefined);
-  await until(() => asked.length === 2);
-  const second = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
-    workspaceId: WORKSPACE_ID,
-  });
-  void second.next();
-  await until(() => asked.length === 3);
-  assert.deepEqual(asked, [`follow:${WORKSPACE_ID}`, `unfollow:${WORKSPACE_ID}`]);
-
-  unfollowed.resolve();
-  await closed;
-  await until(() => asked.length === 3);
-  assert.deepEqual(asked, [
-    `follow:${WORKSPACE_ID}`,
-    `unfollow:${WORKSPACE_ID}`,
-    `follow:${WORKSPACE_ID}`,
-  ]);
-  await second.return(undefined);
-});
-
-it("one workspace's unfollow on its way holds no other workspace's follow", async () => {
-  const asked: string[] = [];
-  const unfollowed = Promise.withResolvers<void>();
-  const chats: Pick<
-    HostAsk,
-    "codingAgentChatFollow" | "codingAgentChatUnfollow" | "onChatChanged"
-  > = {
-    codingAgentChatFollow: (workspaceId) =>
-      Effect.sync(() => void asked.push(`follow:${workspaceId}`)),
-    codingAgentChatUnfollow: (workspaceId) =>
-      Effect.andThen(
-        Effect.sync(() => void asked.push(`unfollow:${workspaceId}`)),
-        Effect.promise(() => unfollowed.promise),
-      ),
-    onChatChanged: () => () => undefined,
-  };
-  // SAFETY: the stream reaches the chat's follow asks alone.
-  const host = chats as HostAsk;
-  const port = testActPort(agentInboxProcedures({ host }));
-  ports.push(port);
-  const client = port.as(PANEL);
-  const other = "6f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f";
-
-  const first = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
-    workspaceId: WORKSPACE_ID,
-  });
-  void first.next();
-  await until(() => asked.length === 1);
-  const closed = first.return(undefined);
-  await until(() => asked.length === 2);
-  const elsewhere = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
-    workspaceId: other,
-  });
-  void elsewhere.next();
-  await until(() => asked.length === 3);
-  assert.deepEqual(asked, [
-    `follow:${WORKSPACE_ID}`,
-    `unfollow:${WORKSPACE_ID}`,
-    `follow:${other}`,
-  ]);
-
-  unfollowed.resolve();
-  await closed;
-  await elsewhere.return(undefined);
-});
 
 it("a panel's inbox stream follows the inbox at the host, hears each change told of it alone, and lets it go once its last stream closes", async () => {
   const asked: string[] = [];

@@ -32,7 +32,9 @@
  * names they go by now and a person's card by the name the workspace's
  * members give them, each falling back to what was kept as it stood, the
  * column's agent wearing its glyph as its tab drew it (`switcher-looks.ts`),
- * at work or failed as everywhere.
+ * at work or failed as everywhere. With Channels on, the Inbox's card names
+ * what its place shows, wearing the channel's glyph: the channel, "#general",
+ * or "Channels" where a phone stands its list of channels.
  * Its preview is a still of the whole work area, taken once the window
  * settles on the screen and again as ⌃Tab leaves it: main takes a downscaled
  * picture of that part of the window (`window.capture`). A still is a picture
@@ -46,9 +48,10 @@ import { useAtomSet } from "@effect/atom-react";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND, commandForKey, type KeyedCommand } from "@luke/settings/shortcuts";
 import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import {
   isAgentTab,
   isChangesTab,
@@ -63,7 +66,7 @@ import {
 } from "@luke/ui/tab-strip-model";
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
-import { type HouseIcon, InboxIcon, ListTodoIcon, MessagesSquareIcon, ZapIcon } from "lucide-react";
+import { type HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
@@ -73,12 +76,15 @@ import { MemberDirectory, useMemberDirectory, usePerson } from "../member-direct
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { usePhoneRoom } from "../stage-room.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
+import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCapability } from "../use-app-state.js";
+import { useCapability, useExperiment } from "../use-app-state.js";
 import { type HeldLook, heldLook, LOOK_STRIP } from "./switcher-looks.js";
 import {
   forgotten,
@@ -123,13 +129,15 @@ const WORK_AREA = ".desktop-main";
 /** What a place's card wears, as the sidebar's row for it does. */
 const PLACE_LOOK = {
   [SWITCHER_PLACE.INBOX]: { icon: InboxIcon, label: TAB_WORDS.INBOX },
-  [SWITCHER_PLACE.CHAT]: { icon: MessagesSquareIcon, label: TAB_WORDS.CHAT },
   [SWITCHER_PLACE.BOARD]: { icon: ListTodoIcon, label: "Tasks" },
   [SWITCHER_PLACE.AUTOMATIONS]: { icon: ZapIcon, label: "Automations" },
 } as const satisfies Record<SwitcherPlace, { icon: typeof HouseIcon; label: string }>;
 
 /** What a task's card is called where the window lists no name for it. */
 const TASK_WORDS = "Task";
+
+/** What a phone's list of channels is called, as its bar names it (`channel-list.tsx`). */
+const CHANNELS_WORDS = "Channels";
 
 /** What a person's page is called where the name is not known. */
 const PERSON_WORDS = "Profile";
@@ -201,6 +209,7 @@ function cardLook(
   tasks: TasksControl,
   title: StepTitle | undefined,
   members: readonly WorkspaceMember[] | undefined,
+  channels: KindLook | undefined,
 ): CardLook {
   switch (stop.kind) {
     case STOP_KIND.TASK: {
@@ -228,6 +237,10 @@ function cardLook(
       };
     }
     case STOP_KIND.PLACE: {
+      // Note that with Channels on the Inbox's place is what Channels shows, so its card is named for that.
+      if (stop.place === SWITCHER_PLACE.INBOX && channels !== undefined) {
+        return { ...channels, detail: undefined };
+      }
       const { icon: Icon, label } = PLACE_LOOK[stop.place];
       return { icon: <Icon />, label, detail: undefined };
     }
@@ -258,6 +271,28 @@ function cardLook(
   }
 }
 
+/**
+ * What the Inbox's place shows with Channels on, which its card goes back
+ * to: a phone's list of channels while it is asked for, as the place stands
+ * it (`desktop-inbox.tsx`), and a channel's stream otherwise; none with
+ * Channels off, or before the window has read its channels. Note that it
+ * reads the channels the window holds rather than reading them again, as
+ * the phone's bar does.
+ */
+function useChannelsLook(tasks: TasksControl): KindLook | undefined {
+  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const phone = usePhoneRoom();
+  const { channels } = useChannels(channelsOn ? tasks.workspace?.id : undefined, false);
+  const { channelId } = useChannelPlace();
+  if (channelsOn && phone && tasks.inboxView.listed) {
+    return { icon: <GLYPH.CHANNEL />, label: CHANNELS_WORDS };
+  }
+  const shown = channelShown(channels, channelId);
+  return shown.kind === CHANNEL_SHOWN.CHANNEL
+    ? { icon: <GLYPH.CHANNEL />, label: `#${shown.channel.name}` }
+    : undefined;
+}
+
 /** One card of a stop, named against the workspace's members around it (`cardLook`). */
 function StopCard({
   stop,
@@ -279,7 +314,8 @@ function StopCard({
   onPick: () => void;
 }): React.JSX.Element {
   const { members } = useMemberDirectory();
-  const look = cardLook(stop, tasks, title, members);
+  const channels = useChannelsLook(tasks);
+  const look = cardLook(stop, tasks, title, members, channels);
   return (
     <TabCard
       icon={look.icon}
@@ -304,7 +340,6 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
   const column = mainTabs.tab;
   return shownStop({
     over: tab === PANEL_TAB.SETTINGS || tasks.history.open,
-    chat: tasks.chatView.open,
     inbox: tasks.inboxView.open,
     agentId: tasks.agentView.agentId,
     person:
@@ -670,9 +705,6 @@ function openPlace(tasks: TasksControl, place: SwitcherPlace): void {
   switch (place) {
     case SWITCHER_PLACE.INBOX:
       tasks.inboxView.onOpen();
-      return;
-    case SWITCHER_PLACE.CHAT:
-      tasks.chatView.onOpen();
       return;
     case SWITCHER_PLACE.BOARD:
       tasks.boardView.onOpen();

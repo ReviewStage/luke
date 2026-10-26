@@ -31,10 +31,10 @@ import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
 import { composeAutomations } from "./compose-automations.js";
+import { composeChannels } from "./compose-channels.js";
 import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
-import { composeChannels } from "./compose-channels.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
@@ -210,6 +210,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const channels = yield* composeChannels({
       kernel,
       account,
+      accountId,
       client: new HostedChannelClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         credential: account.credential,
@@ -305,6 +306,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* tasks.reset;
       yield* codingAgents.reset;
       yield* automations.reset;
+      yield* channels.reset;
       yield* terminals.reset;
       yield* chatGptSignIn.reset;
       yield* account.applyVoiceCredential;

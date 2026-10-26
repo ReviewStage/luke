@@ -3,10 +3,13 @@ import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { archiveChannel, createChannel } from "@luke/database/models/channel-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
+import { GENERAL_CHANNEL } from "@luke/database/schemas/channel";
 import { inboxItem } from "@luke/database/schemas/inbox";
-import { getTestDB, leaveWorkspace, startTask } from "@luke/database/testing";
+import { getTestDB, leaveWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
@@ -24,15 +27,17 @@ import {
   INBOX_STATUS,
   type InboxItem,
 } from "@luke/features/inbox-wire";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { paddedTo, webmBytes } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Duration, Effect, Option } from "effect";
+import { DateTime, Duration, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../../core.js";
 import {
   acknowledgeInboxItem,
   answerInboxAsk,
+  channelThreads,
   closeInboxItemAsMember,
   type InboxAgent,
   postInboxMessage,
@@ -40,7 +45,18 @@ import {
   taskInboxItems,
 } from "../../inbox/inbox-store.js";
 import { CODER } from "./bounds.js";
-import { INBOX_REFUSAL, postToInbox, readOwnInbox, withdrawAsk } from "./inbox.js";
+import {
+  CHANNEL_REFUSAL,
+  type ChannelToolResult,
+  createAgentChannel,
+  INBOX_REFUSAL,
+  moveAgentThread,
+  postToInbox,
+  readOwnInbox,
+  type ThreadPoster,
+  updateAgentChannel,
+  withdrawAsk,
+} from "./inbox.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
@@ -55,6 +71,10 @@ import type { InboxSandboxDoor } from "./inbox-image.js";
  * Synthetic accounts, tasks, and words throughout.
  */
 
+/** A channel's first page of threads the reader may read, oldest first. */
+const firstPage = (userId: string, channelId: string) =>
+  Effect.map(channelThreads(userId, channelId), (page) => Option.getOrThrow(page).threads);
+
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -62,27 +82,48 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
+/** An agent the account starts on the task, in its repository. */
+const agentOn = (userId: string, task: { readonly id: string; readonly workspaceId: string }) =>
+  Effect.gen(function* () {
+    const started = yield* createCodingAgent(userId, {
+      taskId: task.id,
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: "acme/relay",
+      planSnapshot: "# Teammate invitations\n",
+      prompt: null,
+    });
+    assert.ok(Option.isSome(started));
+    const agent = {
+      userId,
+      taskId: task.id,
+      agentId: started.value.agent.id,
+      organizationId: started.value.agent.organizationId,
+    } satisfies ThreadPoster;
+    return { ...agent, workspaceId: task.workspaceId };
+  });
+
 /** An account with one task and one agent started on it, in its repository. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
-    taskId: task.id,
-    idempotencyKey: randomUUID(),
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    repository: "acme/relay",
-    planSnapshot: "# Teammate invitations\n",
-    prompt: null,
-  });
-  assert.ok(Option.isSome(started));
-  const agent = {
-    userId,
-    taskId: task.id,
-    agentId: started.value.agent.id,
-  } satisfies InboxAgent;
-  return { ...agent, workspaceId: task.workspaceId };
+  return yield* agentOn(userId, task);
 });
+
+/** The open channel the account makes in its workspace, as a member makes one. */
+const madeChannel = (userId: string, organizationId: string, name: string) =>
+  Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    const draft = { name, purpose: "Its work.", project: false };
+    return Result.getOrThrow(yield* createChannel(userId, organizationId, draft, now));
+  });
+
+/** The open channels a channel tool answered, by name, or a failure where it was refused. */
+function channelNames(result: ChannelToolResult): readonly string[] {
+  assert.ok("channels" in result, JSON.stringify(result));
+  return result.channels.map((channel) => channel.name);
+}
 
 const QUEUE = {
   key: "invite-queue",
@@ -137,7 +178,7 @@ function sandboxWith(files: Readonly<Record<string, Uint8Array>>): InboxSandboxD
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
 /** A post run as the tool runs one, over the sandbox given. */
-const post = (agent: InboxAgent, value: WireBoundaryInput, sandbox = noSandbox) =>
+const post = (agent: ThreadPoster, value: WireBoundaryInput, sandbox = noSandbox) =>
   postToInbox(agent, input(value), sandbox);
 
 /** The one thread of the agent's task, as the task's inbox reads it. */
@@ -183,6 +224,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           inbox: [
             {
+              id: first.id,
               key: QUEUE.key,
               title: QUEUE.title,
               mention: mentionOf(agent, QUEUE.title, first.id),
@@ -237,6 +279,52 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
+    "a post goes to the open channel it names, # or not, addressed to the member its link names; an unknown or archived channel, or a link naming no member of the workspace, is refused and posts nothing",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const now = yield* DateTime.nowAsDate;
+        const { organizationId, userId } = agent;
+        const made = (name: string) =>
+          Effect.map(
+            createChannel(
+              userId,
+              organizationId,
+              { name, purpose: "Its work.", project: false },
+              now,
+            ),
+            Result.getOrThrow,
+          );
+        const app = yield* made("app");
+        const old = yield* made("old");
+        Result.getOrThrow(yield* archiveChannel(userId, organizationId, old.id, now));
+        const person = (id: string) =>
+          `[@Ada](${encodeMention({ kind: MENTION_KIND.PERSON, userId: id }, { workspace: "acme", repository: null })})`;
+        const posted = yield* post(agent, { ...QUEUE, channel: "#app", to: person(userId) });
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+        assert.deepEqual(
+          (yield* firstPage(userId, app.id)).map((thread) => thread.key),
+          [QUEUE.key],
+        );
+
+        const agentLink = `[@Agent](${encodeMention({ kind: MENTION_KIND.AGENT, agentId: agent.agentId }, { workspace: "acme", repository: null })})`;
+        for (const [place, reason] of [
+          [{ channel: "release" }, INBOX_REFUSAL.UNKNOWN_CHANNEL],
+          [{ channel: "old" }, INBOX_REFUSAL.ARCHIVED_CHANNEL],
+          [{ to: person(`user-${randomUUID()}`) }, INBOX_REFUSAL.NO_ADDRESSEE],
+          [{ to: agentLink }, INBOX_REFUSAL.NO_MEMBER],
+        ] as const) {
+          assert.deepEqual(
+            yield* post(agent, { ...QUEUE, key: "elsewhere", ...place }),
+            { status: ACTION_RESULT_STATUS.REJECTED, reason },
+            JSON.stringify(place),
+          );
+        }
+        assert.equal((yield* onlyItem(agent)).key, QUEUE.key);
+      }),
+  );
+
+  it.effect(
     "a first post naming no title is refused and writes nothing; a first post that asks nothing opens a notice the agent reads as no ask of its own, which no withdrawal finds",
     () =>
       Effect.gen(function* () {
@@ -251,6 +339,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           inbox: [
             {
+              id: notice.id,
               key: "pr-ready",
               title: "PR ready",
               mention: mentionOf(agent, "PR ready", notice.id),
@@ -583,6 +672,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           inbox: [
             {
+              id: settings.id,
               key: SETTINGS.key,
               title: SETTINGS.title,
               mention: mentionOf(agent, SETTINGS.title, settings.id),
@@ -695,6 +785,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         assert.equal(settled.status, ACTION_RESULT_STATUS.ACCEPTED);
         assert.deepEqual(settled.inbox, [
           {
+            id: asked.id,
             key: QUEUE.key,
             title: QUEUE.title,
             mention: mentionOf(agent, QUEUE.title, asked.id),
@@ -825,6 +916,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           read.inbox?.toSorted((left, right) => left.key.localeCompare(right.key)),
           [
             {
+              id: merged.id,
               key: "pr-merged",
               title: "PR merged",
               mention: mentionOf(agent, "PR merged", merged.id),
@@ -833,6 +925,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
               closedReason: "Merged by hand.",
             },
             {
+              id: ready.id,
               key: "pr-ready",
               title: "PR ready",
               mention: mentionOf(agent, "PR ready", ready.id),
@@ -855,6 +948,159 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         const refused = yield* post(agent, { key: SETTINGS.key, body: "Still here." });
 
         assert.equal(refusalOf(refused), INBOX_REFUSAL.NO_AGENT);
+      }),
+  );
+
+  it.effect(
+    "create_channel makes an open channel and answers the open channels; a name an open channel goes by, #general's among them, one no slug, and a workspace the developer left are refused",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const made = yield* createAgentChannel(
+          agent,
+          input({ name: "release", purpose: "Shipping notes.", project: true }),
+        );
+        assert.deepEqual(made, {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          channels: [
+            { name: GENERAL_CHANNEL.NAME, purpose: GENERAL_CHANNEL.PURPOSE, project: false },
+            { name: "release", purpose: "Shipping notes.", project: true },
+          ],
+        });
+
+        for (const [value, reason] of [
+          [{ name: "release", purpose: "Again." }, CHANNEL_REFUSAL.NAME_TAKEN],
+          [{ name: GENERAL_CHANNEL.NAME, purpose: "Mine." }, CHANNEL_REFUSAL.NAME_TAKEN],
+          [{ name: "#Release Notes", purpose: "Notes." }, CHANNEL_REFUSAL.UNREADABLE_CREATE],
+        ] as const) {
+          assert.equal(refusalOf(yield* createAgentChannel(agent, input(value))), reason);
+        }
+        yield* leaveWorkspace(agent.organizationId, agent.userId);
+        assert.equal(
+          refusalOf(yield* createAgentChannel(agent, input({ name: "late", purpose: "Late." }))),
+          CHANNEL_REFUSAL.NO_WORKSPACE,
+        );
+      }),
+  );
+
+  it.effect(
+    "update_channel renames, edits, archives, and unarchives a channel by its name; an unknown or another workspace's channel, an edit of an archived one, #general's name, and a taken name are refused, and a refused change writes nothing of itself",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const update = (value: WireBoundaryInput) => updateAgentChannel(agent, input(value));
+        yield* madeChannel(agent.userId, agent.organizationId, "app");
+        yield* madeChannel(agent.userId, agent.organizationId, "docs");
+        const stranger = yield* openAgent;
+        yield* madeChannel(stranger.userId, stranger.organizationId, "secret");
+
+        assert.deepEqual(
+          channelNames(yield* update({ channel: "#app", name: "web", purpose: "The web app." })),
+          ["docs", GENERAL_CHANNEL.NAME, "web"],
+        );
+        assert.deepEqual(channelNames(yield* update({ channel: "web", archived: true })), [
+          "docs",
+          GENERAL_CHANNEL.NAME,
+        ]);
+        assert.deepEqual(
+          channelNames(yield* update({ channel: "web", archived: false, name: "site" })),
+          ["docs", GENERAL_CHANNEL.NAME, "site"],
+        );
+        const general = yield* update({
+          channel: GENERAL_CHANNEL.NAME,
+          purpose: "Everything else.",
+        });
+        assert.equal(general.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(general));
+
+        yield* update({ channel: "site", archived: true });
+        for (const [value, reason] of [
+          [{ channel: "nowhere", archived: true }, CHANNEL_REFUSAL.UNKNOWN_CHANNEL],
+          [{ channel: "secret", purpose: "Mine now." }, CHANNEL_REFUSAL.UNKNOWN_CHANNEL],
+          [{ channel: "site", purpose: "Still here." }, CHANNEL_REFUSAL.ARCHIVED_CHANNEL],
+          [{ channel: GENERAL_CHANNEL.NAME, name: "lobby" }, CHANNEL_REFUSAL.GENERAL],
+          [{ channel: GENERAL_CHANNEL.NAME, archived: true }, CHANNEL_REFUSAL.GENERAL],
+          [{ channel: "site", archived: false, name: "docs" }, CHANNEL_REFUSAL.NAME_TAKEN],
+          [{ channel: "docs" }, CHANNEL_REFUSAL.NO_CHANGE],
+        ] as const) {
+          assert.equal(refusalOf(yield* update(value)), reason, JSON.stringify(value));
+        }
+        assert.deepEqual(
+          channelNames(yield* update({ channel: "docs", purpose: "The docs." })),
+          ["docs", GENERAL_CHANNEL.NAME],
+          "the refused unarchive under a taken name left #site archived",
+        );
+
+        // A name an open channel took from an archived one names the open one, until it is renamed.
+        yield* madeChannel(agent.userId, agent.organizationId, "site");
+        assert.deepEqual(channelNames(yield* update({ channel: "site", archived: false })), [
+          "docs",
+          GENERAL_CHANNEL.NAME,
+          "site",
+        ]);
+        yield* update({ channel: "site", name: "site-new" });
+        assert.deepEqual(channelNames(yield* update({ channel: "site", archived: false })), [
+          "docs",
+          GENERAL_CHANNEL.NAME,
+          "site",
+          "site-new",
+        ]);
+      }),
+  );
+
+  it.effect(
+    "move_thread moves the agent's own thread by its key, and any thread it may read by its id, into an open channel, where the channel's threads read it; an unknown or archived channel, a thread it may not read, and a thread of another workspace are refused",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const move = (value: WireBoundaryInput) => moveAgentThread(agent, input(value));
+        const app = yield* madeChannel(agent.userId, agent.organizationId, "app");
+        const old = yield* madeChannel(agent.userId, agent.organizationId, "old");
+        const now = yield* DateTime.nowAsDate;
+        Result.getOrThrow(yield* archiveChannel(agent.userId, agent.organizationId, old.id, now));
+        yield* post(agent, QUEUE);
+        const own = yield* onlyItem(agent);
+
+        assert.deepEqual(yield* move({ thread: QUEUE.key, channel: "#app" }), {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          thread: { id: own.id, title: QUEUE.title, channel: "app" },
+        });
+        assert.deepEqual(
+          (yield* firstPage(agent.userId, app.id)).map((thread) => thread.key),
+          [QUEUE.key],
+        );
+
+        const sibling = yield* agentOn(
+          agent.userId,
+          yield* startTask(agent.userId, { name: "Billing" }),
+        );
+        yield* post(sibling, SETTINGS);
+        const theirs = yield* onlyItem(sibling);
+        const moved = yield* move({ thread: theirs.id, channel: "app" });
+        assert.equal(moved.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(moved));
+
+        const stranger = yield* openAgent;
+        yield* post(stranger, QUEUE);
+        const unreadable = yield* onlyItem(stranger);
+        const elsewhere = yield* openWorkspace(agent.userId);
+        const away = yield* agentOn(
+          agent.userId,
+          yield* createTask(agent.userId, { name: "Elsewhere", organizationId: elsewhere }),
+        );
+        yield* post(away, SETTINGS);
+        const awayThread = yield* onlyItem(away);
+        for (const [value, reason] of [
+          [{ thread: QUEUE.key, channel: "release" }, CHANNEL_REFUSAL.UNKNOWN_CHANNEL],
+          [{ thread: QUEUE.key, channel: "old" }, CHANNEL_REFUSAL.MOVE_ARCHIVED],
+          [{ thread: "no-such-thread", channel: "app" }, CHANNEL_REFUSAL.NO_THREAD],
+          [{ thread: unreadable.id, channel: "app" }, CHANNEL_REFUSAL.NO_THREAD],
+          [{ thread: awayThread.id, channel: "app" }, CHANNEL_REFUSAL.OTHER_WORKSPACE],
+        ] as const) {
+          assert.equal(refusalOf(yield* move(value)), reason, JSON.stringify(value));
+        }
+        assert.deepEqual(
+          (yield* firstPage(agent.userId, app.id)).map((thread) => thread.key).toSorted(),
+          [QUEUE.key, SETTINGS.key].toSorted(),
+        );
       }),
   );
 });

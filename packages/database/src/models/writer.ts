@@ -15,8 +15,8 @@ import {
 } from "@luke/features/brain";
 import { causeKind } from "@luke/runtime/effect";
 import {
+  type AgentMessageMetadata,
   type AssistantMessageMetadata,
-  type ChatNoticeMetadata,
   isWireString,
   jsonRoundTrip,
   MESSAGE_AUTHOR,
@@ -349,8 +349,8 @@ type UserMessageWriteResult = Result.Result<
  * What sent a line to a coding agent, as its row keeps it: the member by
  * their account, Luke, an automation by its name as it stands at the send,
  * GitHub by the login of who caused what it tells of, or another coding
- * agent by its name as it stands at the send, and by its id and the model
- * it runs on then where the send knows them, as a chat notice may not.
+ * agent by its name, its id, and the model it runs on, as they stand at the
+ * send.
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
@@ -359,9 +359,9 @@ export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
   | {
       readonly kind: typeof MESSAGE_SENDER.AGENT;
-      readonly agentId?: string | undefined;
+      readonly agentId: string;
       readonly name: string;
-      readonly model?: string | undefined;
+      readonly model: string;
     };
 
 /** The name a line's row keeps beside its sender's kind: an automation's or an agent's, or the GitHub login; none for any other. */
@@ -381,8 +381,8 @@ function senderNameOf(sender: LineSender | undefined): string | null {
  * The line to a coding agent as the message route and the queue's drain
  * write it: its words, the files attached to it, each image with what was
  * kept of it, the client's key for the send, what sent it, and who the row
- * says wrote it, the developer's typed ask where it names no one else, or a
- * chat notice steered on a member's behalf.
+ * says wrote it, the developer's typed ask where it names no one else, or
+ * another coding agent's message.
  */
 interface AwaitingLineWrite {
   readonly text: string;
@@ -395,7 +395,7 @@ interface AwaitingLineWrite {
 }
 
 /** Who an awaiting line says wrote it. */
-export type AwaitingLineMetadata = TypedAskMetadata | ChatNoticeMetadata;
+export type AwaitingLineMetadata = TypedAskMetadata | AgentMessageMetadata;
 
 /** An awaiting line naming no author is the developer's typed ask. */
 const TYPED_LINE_METADATA: TypedAskMetadata = {
@@ -562,7 +562,7 @@ export interface StoreWriter {
 
 /**
  * The plan's turn origin for each origin the brain's stream names. The one
- * fold is observation: the hosted tier opens observation turns from a chat's
+ * fold is observation: the hosted tier opens observation turns from a
  * transcript changing alone, having no provider hooks, so the brain's
  * `observation` and the plan's `transcript_change` are one event under two names. Every other origin is
  * written as reported.
@@ -1416,8 +1416,8 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     sender: nullable(row.sender?.kind),
     senderUserId: row.sender?.kind === MESSAGE_SENDER.MEMBER ? row.sender.userId : null,
     senderName: senderNameOf(row.sender),
-    senderModel: row.sender?.kind === MESSAGE_SENDER.AGENT ? (row.sender.model ?? null) : null,
-    senderAgentId: row.sender?.kind === MESSAGE_SENDER.AGENT ? (row.sender.agentId ?? null) : null,
+    senderModel: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.model : null,
+    senderAgentId: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.agentId : null,
   });
   const written = yield* required(inserted, "the message insert answered no row");
   return { id: written.id, seq, txid: written.txid };

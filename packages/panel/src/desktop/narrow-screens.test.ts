@@ -3,13 +3,10 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { PROFILE } from "@luke/ui";
-import { CHAT_PLACE, type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -23,7 +20,6 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { followSettingsLink, useSettingsPlace } from "../settings-link.js";
 import { useStageRoom } from "../stage-room.js";
-import { fixtureChat } from "../tasks/chat-fixture.js";
 import {
   type HistorySpot,
   type PlanHistorySource,
@@ -32,7 +28,7 @@ import {
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -47,16 +43,16 @@ import { DesktopShell } from "./desktop-shell.js";
 import { useSidebarCollapse } from "./sidebar-collapse.js";
 
 /**
- * narrow-screens.test.ts -- on a stage as narrow as a phone's, Settings, a
- * plan's version history, and Chat each show their list or the item chosen
+ * narrow-screens.test.ts -- on a stage as narrow as a phone's, Settings and a
+ * plan's version history each show their list or the item chosen
  * in it, one at a time and the whole width: each opens on its list, a row
  * pressed stands its item alone under a way back to the list, and a link to
  * an item opens on it with the same way back. The focus goes with each swap:
  * to the item's way back, and back to the row chosen. The desktop's width
  * keeps both columns side by side, with no way back drawn, and the focus where
  * it was. A Settings page standing alone on a phone is named by its bar and
- * opens a section's gap under the way back, over the places bar. Synthetic
- * plan and chat, no account of anyone's.
+ * opens a section's gap under the way back, over the places bar. A synthetic
+ * plan, no account of anyone's.
  */
 
 const ignore = () => undefined;
@@ -249,39 +245,6 @@ function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): Rea
   return createElement(Shell, { tab: PANEL_TAB.TASKS, tasks });
 }
 
-/** Lands the chat read the last Chat window drawn with `readLate` is waiting on. */
-let landChatRead: (() => void) | undefined;
-
-/** The window's Chat over the fixture's chat, its place and its rail held as the plans tab holds them; with `readLate`, the read is still out until `landChatRead`. */
-function ChatWindow({
-  opensOn,
-  readLate = false,
-}: {
-  opensOn: ChatPlace | undefined;
-  readLate?: boolean;
-}): React.JSX.Element {
-  const [read, setRead] = useState(!readLate);
-  landChatRead = () => setRead(true);
-  const [standing, setStanding] = useState({
-    place: opensOn ?? FOR_YOU,
-    listed: opensOn === undefined,
-  });
-  const base = tasksControl();
-  const tasks = tasksControl({
-    chatView: {
-      ...base.chatView,
-      open: true,
-      available: true,
-      chat: read ? fixtureChat({ fixtureMode: true }, 1_000_000) : undefined,
-      place: standing.place,
-      listed: standing.listed,
-      onList: () => setStanding((held) => ({ ...held, listed: true })),
-      onChoose: (place) => setStanding({ place, listed: false }),
-    },
-  });
-  return createElement(Shell, { tab: PANEL_TAB.TASKS, tasks });
-}
-
 /** Draws the window on a stage of a width, and lets what it reads land. */
 async function mount(width: number, window: React.JSX.Element): Promise<HTMLElement> {
   stageWidth = width;
@@ -323,9 +286,6 @@ function onScreen(page: HTMLElement, columns: Readonly<Record<string, string>>):
     .filter(([, selector]) => shown(the(page, selector)))
     .map(([name]) => name);
 }
-
-/** What a phone's way back from a Chat place to its rail is named, its glyph alone. */
-const BACK_TO_CHAT = "Chat";
 
 /** What a control is named: its words, folded or not, or its label where it has no words. */
 function controlName(control: Element | null | undefined): string | null {
@@ -556,55 +516,6 @@ test("a version history gone back to on its list in a narrow room opens on its l
   assert.equal(standingVersions?.selected, 2, "the list stands over the version chosen");
 });
 
-const CHAT_COLUMNS = {
-  rail: "nav.chat-rail",
-  place: "section.chat-stream",
-};
-
-test("Chat on a narrow stage opens on its rail, a place chosen stands alone under a way back, and Back returns to the rail", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const page = await mount(PHONE, createElement(ChatWindow, { opensOn: undefined }));
-  assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["rail"]);
-  assert.equal(
-    getComputedStyle(the(page, ".chat-view")).gridTemplateColumns,
-    "minmax(0, 1fr)",
-    "the rail is the view's one column",
-  );
-
-  // Note that the row's words run on into its count.
-  const forYou = [...the(page, CHAT_COLUMNS.rail).querySelectorAll("button")].find((button) =>
-    button.textContent?.startsWith("For you"),
-  );
-  act(() => forYou?.click());
-  assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["place"]);
-  assert.equal(the(page, CHAT_COLUMNS.place).getAttribute("aria-label"), "For you");
-  // A phone heads the place as it heads every page: the way back's glyph alone, the name centred, nothing else.
-  const head = the(page, ".chat-place-head");
-  assert.deepEqual([...head.querySelectorAll("button")].map(controlName), [BACK_TO_CHAT]);
-  assert.equal(head.querySelector("h1")?.textContent, "For you");
-
-  press(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
-  assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["rail"]);
-
-  resizeStage(WIDE);
-  assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["rail", "place"]);
-  assert.equal(buttonSaying(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT), undefined);
-});
-
-test("a link to a chat place on a narrow stage opens on that place, with the way back to the rail", async () => {
-  const chat = fixtureChat({ fixtureMode: true }, 1_000_000);
-  const channel = chat?.answer.channels[0] ?? assert.fail("the fixture has a channel");
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const page = await mount(
-    PHONE,
-    createElement(ChatWindow, { opensOn: { kind: CHAT_PLACE.CHANNEL, channelId: channel.id } }),
-  );
-  assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["place"]);
-
-  press(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
-  assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["rail"]);
-});
-
 /** Focuses the button in `within` that says `words`, as a press of a key or a tap does, and presses it. */
 function pressFocused(within: HTMLElement, words: string): void {
   const button = buttonSaying(within, words) ?? assert.fail(`a button says ${words}`);
@@ -654,44 +565,6 @@ test("a version chosen on a narrow stage takes the focus to its way back, and Ba
   assert.equal(document.activeElement, versionRow(page, 1), "the row chosen");
 });
 
-test("a place chosen in a narrow Chat takes the focus to its way back, and Back hands it to the place's row", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const page = await mount(PHONE, createElement(ChatWindow, { opensOn: undefined }));
-  const forYou =
-    [...the(page, CHAT_COLUMNS.rail).querySelectorAll("button")].find((button) =>
-      button.textContent?.startsWith("For you"),
-    ) ?? assert.fail("For you's row stands");
-  act(() => {
-    forYou.focus();
-    forYou.click();
-  });
-  assert.equal(focusIn(page, CHAT_COLUMNS), "place");
-  assert.equal(controlName(document.activeElement), BACK_TO_CHAT, "the way back to the rail");
-
-  pressFocused(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
-  assert.equal(document.activeElement, forYou, "the row chosen");
-});
-
-test("a narrow Chat stepped to another place by its key hands the focus back to that place's row, not the row it was opened from", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const page = await mount(PHONE, createElement(ChatWindow, { opensOn: undefined }));
-  const forYou =
-    [...the(page, CHAT_COLUMNS.rail).querySelectorAll("button")].find((button) =>
-      button.textContent?.startsWith("For you"),
-    ) ?? assert.fail("For you's row stands");
-  act(() => {
-    forYou.focus();
-    forYou.click();
-  });
-  act(() => runAppCommand(APP_COMMAND.NEXT_CHAT_CHANNEL));
-  const shown = the(page, CHAT_COLUMNS.place).getAttribute("aria-label");
-  assert.notEqual(shown, "For you", "the key stepped to another place");
-
-  pressFocused(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
-  assert.notEqual(document.activeElement, forYou);
-  assert.ok(document.activeElement?.closest("[aria-current]"), "the row of the place shown");
-});
-
 test("a wide Settings turned narrow hands the focus from the hidden page list to the page's way back", async () => {
   const page = await mount(WIDE, createElement(SettingsWindow, { link: undefined }));
   pressFocused(the(page, SETTINGS_COLUMNS.list), "Appearance");
@@ -707,20 +580,4 @@ test("a link to a version on a narrow stage opens with the focus on its way back
   );
   assert.equal(focusIn(page, HISTORY_COLUMNS), "version");
   assert.equal(document.activeElement?.textContent?.trim(), "Versions", "the way back to the list");
-});
-
-test("a link to a chat channel on a narrow stage opened while the read is out hands the caret to its box once the read lands", async () => {
-  const chat = fixtureChat({ fixtureMode: true }, 1_000_000);
-  const channel = chat?.answer.channels[0] ?? assert.fail("the fixture has a channel");
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const page = await mount(
-    PHONE,
-    createElement(ChatWindow, {
-      opensOn: { kind: CHAT_PLACE.CHANNEL, channelId: channel.id },
-      readLate: true,
-    }),
-  );
-  act(() => landChatRead?.());
-  assert.equal(focusIn(page, CHAT_COLUMNS), "place");
-  assert.ok(document.activeElement?.closest(".chat-composer"), "the channel's box");
 });

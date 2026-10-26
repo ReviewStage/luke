@@ -13,6 +13,7 @@ import { tellAct } from "../act.js";
 import { useAutomation } from "../automation-directory.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { appStateDerivedAtom } from "../use-app-state.js";
+import { useHeldChannels } from "./use-channels.js";
 
 /**
  * use-known-names.ts -- the names the window already holds for places in Luke, by id, for a chip to call a Luke link by.
@@ -23,8 +24,9 @@ import { appStateDerivedAtom } from "../use-app-state.js";
  * model), and the models they run on, the agents with no task the list
  * carries, theirs, and the automations that started them, the active task's
  * pages, each task's key, the Inbox items waiting, and the agents an
- * automation started with no task; and from the directories standing around
- * the caller, the members and the automation asked for. Nothing is fetched,
+ * automation started with no task; from the directories standing around
+ * the caller, the members and the automation asked for; and the channels
+ * the window holds (`use-channels.ts`), by name and as `#app` among words. Nothing is fetched,
  * so a name the window does not hold is not here; a chip naming a task
  * before the list was ever read asks for it once (`useTaskNameCatchUp`), and
  * the follow that read starts brings each task's name as the service gives it.
@@ -179,13 +181,36 @@ const heldKeyTargetsAtom: Atom.Atom<ReadonlyMap<string, string>> = Atom.withEqua
   sameTargets,
 );
 
+/** The workspaces the window lists, by id, which a channel's link is written under by slug. */
+const heldWorkspacesAtom = Atom.map(namedSlicesAtom, ({ planning }) => planning?.workspaces);
+
 /**
- * The link each listed task's key names its task by, which words written
- * with a key in them are drawn with as that task's chip; the one shared
- * value, the same object until a task's key or its link changes.
+ * The link each listed task's key names its task by, and each held
+ * channel's name, `#app`, its channel by, which words written with either
+ * among them are drawn with as its chip. A name two workspaces' channels
+ * share names neither, as a key two tasks share does. The same object
+ * until a key, a channel, or a link changes.
  */
-export function useTaskKeyTargets(): ReadonlyMap<string, string> {
-  return useAtomValue(heldKeyTargetsAtom);
+export function useWordTargets(): ReadonlyMap<string, string> {
+  const keys = useAtomValue(heldKeyTargetsAtom);
+  const workspaces = useAtomValue(heldWorkspacesAtom);
+  const channels = useHeldChannels();
+  return useMemo(() => {
+    if (channels.size === 0) return keys;
+    const targets = new Map(keys);
+    const shared = new Set<string>();
+    for (const [workspaceId, held] of channels) {
+      const slug = workspaces?.find((each) => each.id === workspaceId)?.slug ?? workspaceId;
+      for (const channel of held) {
+        const name = `#${channel.name}`;
+        if (targets.has(name)) shared.add(name);
+        const mention = { kind: MENTION_KIND.CHANNEL, channelId: channel.id } as const;
+        targets.set(name, encodeMention(mention, { workspace: slug, repository: null }));
+      }
+    }
+    for (const name of shared) targets.delete(name);
+    return targets;
+  }, [keys, workspaces, channels]);
 }
 
 /**
@@ -208,6 +233,18 @@ export function useKnownNames(automationId?: string): KnownNames {
   const held = useAtomValue(heldNamesAtom);
   const { members, former } = useMemberDirectory();
   const automation = useAutomation(automationId)?.automation;
+  const heldChannels = useHeldChannels();
+  const channels = useMemo(
+    () =>
+      heldChannels.size === 0
+        ? undefined
+        : new Map(
+            [...heldChannels.values()].flatMap((each) =>
+              each.map((channel) => [channel.id, channel.name] as const),
+            ),
+          ),
+    [heldChannels],
+  );
   const people = useMemo(
     () =>
       members === undefined && former === undefined
@@ -225,9 +262,9 @@ export function useKnownNames(automationId?: string): KnownNames {
   );
   return useMemo(
     () =>
-      people === held.people && automations === held.automations
+      people === held.people && automations === held.automations && channels === undefined
         ? held
-        : { ...held, people, automations },
-    [held, people, automations],
+        : { ...held, people, automations, channels },
+    [held, people, automations, channels],
   );
 }

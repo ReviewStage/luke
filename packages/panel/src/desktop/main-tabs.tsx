@@ -30,7 +30,6 @@ import { agentCardReading } from "../tasks/agent-ref.js";
 import { AgentTab, StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
-import type { ChatNoticeDoors } from "../tasks/chat-notice.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import { DraftAgentTab } from "../tasks/draft-agent-tab.js";
 import { agentForkDoors, ForkProvider } from "../tasks/fork-action.js";
@@ -60,7 +59,7 @@ import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
 
 /**
- * main-tabs.tsx -- the task's column's tabs: each agent's, the draft agent's, and its Chat, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
+ * main-tabs.tsx -- the task's column's tabs: each agent's and the draft agent's, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
  *
  * Each part draws what `use-main-tabs.ts` holds and hands every press back
  * to it. The strip is the side panel's in every way: the same pills, the
@@ -93,7 +92,7 @@ import { TabStrip } from "./tab-strip.js";
  * The "+" after the last tab drops the shared searchable menu: New agent,
  * which opens a draft agent's tab, or chooses the
  * task's draft where it has one, unavailable with Start's own reason while
- * Start could not run; the task's Chat while there is one; and each of the
+ * Start could not run; and each of the
  * task's agents in the order started, picking one choosing its tab or
  * opening it again. An archived task starts nothing, so its menu offers
  * only the agents to read, and its agents are not renamed.
@@ -121,8 +120,6 @@ export const INBOX_ROW = "inbox";
 
 /** What the press that reads the plan's agents again, after a first read did not land, says. */
 const RETRY_AGENTS = "Retry agents";
-/** The "+" menu's row for the plan's Chat tab. */
-const CHAT_ROW = "chat";
 
 /**
  * A tab whose name may be edited where it stands: an agent's.
@@ -378,20 +375,11 @@ export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): A
   return [inboxEntry(onPick, 0)];
 }
 
-/** The plan's Chat tab as the "+" menu and ⌘K offer it, by itself, while there is a chat to read. */
-export function chatEntries(available: boolean, onPick: () => void): AddEntry[] {
-  if (!available) return [];
-  return [
-    { row: { id: CHAT_ROW, ...tabLook({ kind: TAB_KIND.CHAT }) }, endMark: undefined, onPick },
-  ];
-}
-
 /**
  * The "+" menu's rows: New agent, unavailable with Start's own reason while
  * Start could not run, left out on an archived task, by itself under no
  * heading; then each of its agents under Agents (`agentEntries`). A voice
- * chat is started from a draft's composer, its Call. The task's Chat
- * stands in the side panel, whose own "+" offers it.
+ * chat is started from a draft's composer, its Call.
  */
 function addEntries(
   main: MainTabsControl,
@@ -596,7 +584,6 @@ export function MainTabContent({
   onOpenPullRequest,
   onOpenTarget,
   cards,
-  chat,
   onFork,
   onContinue,
   call,
@@ -620,8 +607,6 @@ export function MainTabContent({
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
   cards: TaskCards;
-  /** The chat a chat notice's card reads and opens; none where the window holds none. */
-  chat?: ChatNoticeDoors | undefined;
   /** Opens the task's draft as a fork of one of an agent's messages; none where no draft opens, as on an agent no task holds. */
   onFork?: ((fork: AgentFork) => void) | undefined;
   /** Opens the task's draft as a continue of an agent with the words and files its closed box held; none where no draft opens, as on an agent no task holds. */
@@ -680,7 +665,6 @@ export function MainTabContent({
         }
         onOpenTarget={onOpenTarget}
         cards={cards.agent(agentId)}
-        chat={chat}
         onHeld={views.onAgentHeld}
         run={agents.origin}
         call={call}

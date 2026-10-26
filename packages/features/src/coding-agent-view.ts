@@ -1,6 +1,5 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
-import { chatAnswerSchema, chatWriteAnswerSchema, chatWriteRequestSchema } from "./chat-wire.js";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
@@ -779,15 +778,6 @@ export const codingAgentPartViewSchema = EffectSchema.Union([codingAgentPartAnsw
 
 export type CodingAgentPartView = typeof codingAgentPartViewSchema.Type;
 
-/** One picture a chat message carries, as the window asks it: the workspace, the message, and the attachment its image block names. */
-export const codingAgentChatAttachmentParamsSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-  messageId: EffectSchema.NonEmptyString,
-  attachmentId: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentChatAttachmentParams = typeof codingAgentChatAttachmentParamsSchema.Type;
-
 /**
  * The image, or the file an inbox answer carried, as the window hears it:
  * its bytes in base64 under the media type the service sniffed and kept, or
@@ -837,40 +827,3 @@ export const codingAgentGitHubImageViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentGitHubImageView = typeof codingAgentGitHubImageViewSchema.Type;
-
-/** A workspace's chat past a cursor, as the window hears it: the roster, the channels, the messages past it, and the cursor to read on from, or why there is none. */
-const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSchema, failed]);
-
-export type CodingAgentChatAnswerView = typeof codingAgentChatAnswerViewSchema.Type;
-
-/** A workspace's chat as the window follows it: the workspace. */
-export const codingAgentChatFollowParamsSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-});
-
-/**
- * A followed workspace's chat as it now stands, as the host tells it: whole,
- * with no cursor, or why there is none.
- */
-export const codingAgentChatChangedSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-  chat: codingAgentChatAnswerViewSchema,
-});
-
-export type CodingAgentChatChanged = typeof codingAgentChatChangedSchema.Type;
-
-/** A write to a workspace's chat, as the window asks it: the workspace, and the write the service takes, its key the window's own where it carries one. */
-export const codingAgentChatPostParamsSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-  write: chatWriteRequestSchema,
-});
-
-export type CodingAgentChatPostParams = typeof codingAgentChatPostParamsSchema.Type;
-
-/** A write to a workspace's chat, as the window hears it: what the write came to, or why there is no answer. */
-export const codingAgentChatWriteAnswerViewSchema = EffectSchema.Union([
-  chatWriteAnswerSchema,
-  failed,
-]);
-
-export type CodingAgentChatWriteAnswerView = typeof codingAgentChatWriteAnswerViewSchema.Type;

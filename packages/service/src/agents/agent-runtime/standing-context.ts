@@ -5,7 +5,7 @@
  * turn, and on a typed one where its plan changed since its last turn
  * (`../coder-host/turn-context.ts`): the developer's own time, the task's
  * name, brief, and linked issues, its saved document, the agents' recent
- * notes on it, what the chat said, the sections the developer wrote, the
+ * notes on it, the sections the developer wrote, the
  * open comment threads, and the whiteboard. It is data, read again as each
  * turn opens and remembered by none, so a turn reads what was saved and
  * drawn since the last one rather than a stale copy.
@@ -21,14 +21,6 @@ import { NOTE_KIND, type PlanAgentEdit } from "@luke/features/plan-template";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { DateTime, Option } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
-import type { MessageLine } from "../coder-host/chat.js";
-
-/** What a turn opens with of the chat: the messages the agent had not read, oldest change first, whether more wait, and the place it has read through once the turn settles, where it was handed any. */
-export interface ChatSince {
-  readonly messages: readonly MessageLine[];
-  readonly more: boolean;
-  readonly through?: number;
-}
 
 /** The marker the standing context rides behind, so the model reads what follows as the service's data. */
 const TASK_MARKER = "[task]";
@@ -37,7 +29,6 @@ const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
 const BRIEF_MARKER = "[the developer's brief for the task]";
 const ISSUE_LINKS_MARKER = "[issues the task links]";
-const CHAT_SINCE_MARKER = "[chat since the last call]";
 /** The marker the sections the developer last wrote ride behind, which the brain is told to keep as written. */
 const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
 
@@ -77,19 +68,6 @@ function agentEditsText(edits: readonly LabelledAgentEdit[]): readonly string[] 
         `- ${edit.label}, ${new Date(edit.at).toISOString()}: ${edit.notes.map((note) => agentNoteLine(note)).join("; ")}`,
     ),
   ];
-}
-
-/** One chat message in a line: its place, where it was said and the thread it replies in, who said it, and its words whole, since the turn's read has marked them read. */
-function chatLine(message: ChatSince["messages"][number]): string {
-  const thread = message.thread === undefined ? "" : `, in the thread of m ${message.thread}`;
-  return `- m ${message.seq} in ${message.in}${thread}, ${message.from}: ${JSON.stringify(message.text)}`;
-}
-
-/** What was said in the chat since Luke last read it, one line a message, and that more waits where it does; nothing where nothing was. */
-function chatSinceText(chat: ChatSince): readonly string[] {
-  if (chat.messages.length === 0) return [];
-  const more = chat.more ? ["- More is unread: read_chat reads it."] : [];
-  return [CHAT_SINCE_MARKER, ...chat.messages.map(chatLine), ...more];
 }
 
 /** The sections the developer wrote last, by heading, each with when; nothing where the developer wrote none. */
@@ -189,8 +167,7 @@ function developerTimeText({ now, timeZone }: TurnClock): string {
  * developer's own time and today (`developerTimeText`), the plan's name, the
  * developer's brief where they wrote one as they started it, the issues it
  * links, the saved document as JSON, the newest saves coding agents made on it (so Luke
- * can raise what an agent asked or decided), what was
- * said in the chat since Luke last read it (`chat.ts`), the sections
+ * can raise what an agent asked or decided), the sections
  * the developer last wrote themselves (so Luke treats them as decided), the
  * plan's open comment threads (so Luke can raise what a member asked), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
@@ -201,7 +178,6 @@ function developerTimeText({ now, timeZone }: TurnClock): string {
 export function standingContext(
   stored: StoredTask | undefined,
   board: Board,
-  chat: ChatSince,
   clock: TurnClock,
   comments: readonly PlanCommentThread[] = [],
 ): string {
@@ -219,7 +195,6 @@ export function standingContext(
     DOCUMENT_MARKER,
     JSON.stringify(task.document),
     ...agentEditsText(stored.agentEdits),
-    ...chatSinceText(chat),
     ...developerFieldsText(stored),
     ...openThreadsText(comments),
     boardText(board),

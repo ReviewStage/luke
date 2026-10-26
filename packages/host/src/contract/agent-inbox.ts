@@ -1,16 +1,15 @@
 /**
- * agent-inbox.ts -- the Inbox's and the workspace chat's asks of the host, as procedures.
+ * agent-inbox.ts -- the Inbox's asks of the host, as procedures.
  *
- * What a task's coding agents need of the developer, and what they say in
- * the workspace: a task's or an agent's inbox followed, one item answered, closed, messaged, or
- * marked, a thread started, every item marked read, an item's image and an agent's picture,
- * and the workspace's chat read, written to, and a message's picture.
+ * What a task's coding agents need of the developer: a task's or an agent's
+ * inbox followed, one item answered, closed, messaged, or marked, a thread
+ * started, every item marked read, and an item's image and an agent's picture.
  *
  * Each output is its view schema's type side (`EffectSchema.toType`) rather
  * than the view flipped, as the agents' acts' are. The only difference
  * between a view's two sides here is the phantom brand on a block, a
- * response, or a chat type this build does not know (`UnknownInboxType` in
- * `inbox-wire.ts`, `UnknownChatType` in `chat-wire.ts`), so encoding is the
+ * response this build does not know (`UnknownInboxType` in
+ * `inbox-wire.ts`), so encoding is the
  * identity; flipped, the window would read the encoded side, whose
  * unbranded `{ type: string }` swallows the union every reader narrows. The
  * output check still runs each view's checks and leaves out a key the view
@@ -18,12 +17,7 @@
  */
 
 import {
-  type CodingAgentChatAnswerView,
   type CodingAgentInboxChanged,
-  codingAgentChatAttachmentParamsSchema,
-  codingAgentChatFollowParamsSchema,
-  codingAgentChatPostParamsSchema,
-  codingAgentChatWriteAnswerViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerParamsSchema,
   codingAgentInboxAttachmentParamsSchema,
@@ -90,19 +84,4 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(codingAgentPictureParamsSchema))
     .output(EffectSchema.toType(codingAgentInboxAttachmentViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_POST]: actProcedure(
-    "Could not write to the workspace's chat on this system.",
-  )
-    .input(exactInput(codingAgentChatPostParamsSchema))
-    .output(EffectSchema.toType(codingAgentChatWriteAnswerViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT]: actProcedure(
-    "Could not read the chat message's picture on this system.",
-  )
-    .input(exactInput(codingAgentChatAttachmentParamsSchema))
-    .output(EffectSchema.toType(codingAgentInboxAttachmentViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: actProcedure(
-    "Could not follow the workspace's chat on this system.",
-  )
-    .input(exactInput(codingAgentChatFollowParamsSchema))
-    .output(eventIterator(type<CodingAgentChatAnswerView>())),
 };

@@ -1,8 +1,13 @@
-import { LINK_PLACE, type LinkPlace, linkOf, type ReadLink } from "@luke/features/link-grammar";
+import {
+  channelPlace,
+  LINK_PLACE,
+  type LinkPlace,
+  linkOf,
+  type ReadLink,
+} from "@luke/features/link-grammar";
 import type { Workspace } from "@luke/features/workspace-wire";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { CHAT_PLACE } from "@luke/ui/chat-model";
 import { isAgentTab, isChangesTab, isPageTab, isSubagentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { createContext, useContext, useEffect, useState } from "react";
@@ -10,8 +15,9 @@ import { adminLinkFields } from "./admin/routing.js";
 import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
+import { type ShownChannel, useShownChannel } from "./tasks/use-channels.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
-import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/use-tasks-tab.js";
 
 /**
  * links-at-hand.ts -- the links the window can copy right now: what is open or focused, the most specific first.
@@ -22,7 +28,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
  * fills the window, else the
  * work column's agent, then the side panel's tab, then the task under them;
  * what stands in the plan's place (an agent's page, the Inbox on an item,
- * an automation, a channel of Chat, an Admin view) before the list it is in; and a page of Settings
+ * an automation, an Admin view) before the list it is in; and a page of Settings
  * while Settings stands. A tab with nothing of its own to link to, a
  * file's, the board, the code, the Inbox, or a terminal, is passed over for
  * the task, and so is the plan's, whose link is the task's.
@@ -36,16 +42,21 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
  * One of them names the step the window stands on, as its history counts
  * steps (`navigation-history.ts`): the task, or its version while its
  * version history stands, the Inbox, an agent's or a person's page, an
- * automation or the list, Chat, the Admin place's view, or a page of Settings. The history
+ * automation or the list, the Admin place's view, or a page of Settings. The history
  * writes that link as the step's address, so the address and Copy link
- * never disagree. Chat names its channel shown, or itself on For you. The
- * Board, a new automation's page, and the home page have none. A narrow
+ * never disagree. The Board, a new automation's page, and the home page have none. A narrow
  * room, which shows one pane at a time, names the pane it shows as the
  * step: the side panel's tab over the plan, where the tab has a link, the
  * Inbox's item standing alone (as it is in an Inbox showing one column by
  * its own width, in a room still wide), Settings' page list, whose link
- * names no page, Chat's rail, whose link names no channel, and the Admin
+ * names no page, and the Admin
  * place's section list, whose link names no view.
+ *
+ * With Channels on, the Inbox's place shows a channel's stream, so it is
+ * the channel's link that names the step, and the thread open beside it,
+ * while one is, is at hand before it and names the step in its place; a
+ * thread closed since is no longer at hand, though the Inbox still holds
+ * it chosen. A phone's list of channels has the Inbox's link.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -61,12 +72,12 @@ const LINK_THING = {
   CHANGES: "pull request",
   INBOX: "Inbox",
   INBOX_ITEM: "Inbox item",
+  CHANNEL: "channel",
+  THREAD: "thread",
   AUTOMATIONS: "Automations",
   AUTOMATION: "automation",
   SETTINGS: "settings page",
   PERSON: "profile",
-  CHAT: "Chat",
-  CHANNEL: "channel",
   ADMIN: "Admin",
   ADMIN_PAGE: "admin page",
 } as const;
@@ -102,6 +113,8 @@ export interface WindowAt {
   readonly pageWorkspace?: PageWorkspace | undefined;
   /** Whether the room is narrow, showing one pane at a time. */
   readonly narrow?: boolean;
+  /** The channel the Inbox's place shows and the thread opened in it, with Channels on. */
+  readonly channel?: ShownChannel | undefined;
 }
 
 const PageWorkspaceContext = createContext<(held: PageWorkspace | undefined) => void>(
@@ -145,6 +158,33 @@ function panelThing(place: LinkPlace): LinkThing | undefined {
     default:
       return undefined;
   }
+}
+
+/** An Inbox item's place, under the task or the agent with no task that holds it. */
+function inboxItemPlace(chosen: InboxChoice): LinkPlace {
+  return "taskId" in chosen
+    ? { kind: LINK_PLACE.INBOX_ITEM, planId: chosen.taskId, itemId: chosen.itemId }
+    : { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
+}
+
+/** The links of a channel's stream standing in the Inbox's place: the thread open beside it, while one is, and the channel; the Inbox's own while a phone lists its channels. */
+function channelLinks(
+  tasks: TasksControl,
+  shown: ShownChannel,
+  narrow: boolean,
+  at: (place: LinkPlace, thing: LinkThing, step: boolean) => LinkAtHand,
+): readonly LinkAtHand[] {
+  if (narrow && tasks.inboxView.listed)
+    return [at({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX, true)];
+  const channel = channelPlace(shown.channel.id);
+  const { chosen } = tasks.inboxView;
+  if (chosen === undefined || shown.threadId !== chosen.itemId) {
+    return [at(channel, LINK_THING.CHANNEL, true)];
+  }
+  return [
+    at(inboxItemPlace(chosen), LINK_THING.THREAD, true),
+    at(channel, LINK_THING.CHANNEL, false),
+  ];
 }
 
 /** The links of the task drawn: its version chosen, its tabs', and its own, the most specific first. */
@@ -250,14 +290,16 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     const home = workspaceId === undefined ? listed : slugOf(tasks.workspaces, workspaceId);
     return [at_({ kind: LINK_PLACE.PERSON, userId }, LINK_THING.PERSON, home)];
   }
+  if (tasks.inboxView.open && at.channel !== undefined) {
+    return channelLinks(tasks, at.channel, at.narrow === true, (place, thing, step) =>
+      step ? at_(place, thing) : within(place, thing),
+    );
+  }
   if (tasks.inboxView.open) {
     const inbox = at_({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX);
     const { chosen } = tasks.inboxView;
     if (chosen === undefined) return [inbox];
-    const item: LinkPlace =
-      "taskId" in chosen
-        ? { kind: LINK_PLACE.INBOX_ITEM, planId: chosen.taskId, itemId: chosen.itemId }
-        : { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
+    const item = inboxItemPlace(chosen);
     // An item standing alone, in a narrow room or an Inbox showing one column by its own width, is a step of its own.
     if ((at.narrow === true || tasks.inboxView.single === true) && !tasks.inboxView.listed) {
       return [
@@ -290,17 +332,6 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     const fields = adminLinkFields(tasks.adminView.view);
     if (Object.keys(fields).length === 0) return [at_(root, LINK_THING.ADMIN)];
     return [at_({ ...root, ...fields }, LINK_THING.ADMIN_PAGE), within(root, LINK_THING.ADMIN)];
-  }
-  if (tasks.chatView.open) {
-    const root = { kind: LINK_PLACE.CHAT } as const;
-    const { place } = tasks.chatView;
-    if (place.kind !== CHAT_PLACE.CHANNEL) return [at_(root, LINK_THING.CHAT)];
-    // A rail standing alone, in a narrow room or a Chat showing one column by its own width, hides the channel, so the rail is the step, at Chat's own link.
-    if ((at.narrow === true || tasks.chatView.single === true) && tasks.chatView.listed) {
-      return [at_(root, LINK_THING.CHAT)];
-    }
-    const channel: LinkPlace = { kind: LINK_PLACE.CHAT, channelId: place.channelId };
-    return [at_(channel, LINK_THING.CHANNEL), within(root, LINK_THING.CHAT)];
   }
   // The Board has no link of its own either, on the same terms.
   if (tasks.boardView.open) return [];
@@ -351,12 +382,14 @@ export function useCopyLink(
   const copy = (held: LinkAtHand) =>
     copyWords(linkOf(held.link.place, held.link.workspace), LINK_COPY.COPIED);
   const [pageWorkspace, onPageWorkspace] = useState<PageWorkspace | undefined>(undefined);
+  const channel = useShownChannel(tasks.workspace?.id);
   const linksAt = (sidePanelFocused: boolean) =>
     linksAtHand(tasks, {
       settings,
       sidePanelFocused,
       pageWorkspace,
       narrow: room === SHELL_ROOM.NARROW,
+      channel,
     });
   useAppCommand(
     APP_COMMAND.COPY_LINK,

@@ -53,7 +53,7 @@ function draw(element: ReactElement): void {
   );
 }
 
-/** A way back to chat drawn in `look`, and how many times it went back. */
+/** A way back to the inbox drawn in `look`, and how many times it went back. */
 function wayBack(
   look: BackButtonLook,
   keyed: Pick<Parameters<typeof BackButton>[0], "command" | "tabbable" | "keepFocus"> = {},
@@ -63,8 +63,8 @@ function wayBack(
     createElement(BackButton, {
       ...keyed,
       look,
-      label: "Chat",
-      place: "chat",
+      label: "Inbox",
+      place: "inbox",
       onBack: () => {
         backs += 1;
       },
@@ -88,7 +88,7 @@ function focusByKeyboard(button: HTMLButtonElement): void {
 
 test.each(LOOKS)("a way back in a %s is named by its words and goes back once pressed", (look) => {
   const { button, backs } = wayBack(look);
-  expect(button.textContent).toContain("Chat");
+  expect(button.textContent).toContain("Inbox");
   act(() => button.click());
   expect(backs()).toBe(1);
 });
@@ -97,9 +97,9 @@ test.each(LOOKS)("a way back in a %s hints where it leads, with the key that goe
   const { button } = wayBack(look);
   focusByKeyboard(button);
   const hint = document.querySelector('[role="tooltip"]');
-  expect(hint?.textContent).toContain("Back to chat");
+  expect(hint?.textContent).toContain("Back to inbox");
   const described = document.getElementById(button.getAttribute("aria-describedby") ?? "");
-  expect(described?.textContent).toBe("Back to chat");
+  expect(described?.textContent).toBe("Back to inbox");
   expect(button.getAttribute("aria-keyshortcuts")).toBe("Meta+[");
 });
 
@@ -109,7 +109,7 @@ test.each(LOOKS)(
     const { button } = wayBack(look, { command: NO_BACK_KEY });
     focusByKeyboard(button);
     const hint = document.querySelector('[role="tooltip"]');
-    expect(hint?.textContent).toBe("Back to chat");
+    expect(hint?.textContent).toBe("Back to inbox");
     expect(button.getAttribute("aria-keyshortcuts")).toBeNull();
   },
 );

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
-import { chatNoticeReplyLine } from "@luke/features/chat-wire";
 import {
+  agentMessageReplyLine,
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
   type CodingAgentMessage,
@@ -71,7 +71,6 @@ test("a message GitHub sent while the turn ran is copied between the steps befor
     title: "Tile",
     messages,
     brief: CODING_AGENT_BRIEF.PROMPT,
-    chatOn: true,
   });
 
   assert.equal(
@@ -95,15 +94,14 @@ function said(id: string, role: CodingAgentMessage["role"], text: string): Codin
   return { id, role, parts: [{ type: "text", text }] };
 }
 
-test("a chat notice is copied under the member it tells of a message from, never as the developer's words nor as the plan, and is no step of the agent's own", () => {
+test("another agent's message is copied under the agent that sent it, never as the developer's words nor as the plan, and is no step of the agent's own", () => {
   const notice: CodingAgentMessage = {
     ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
-    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "Invite emails" },
+    metadata: { author: "agent", channel: "agent_message", from: "Invite emails" },
   };
   const transcript = agentTranscript({
     title: "Add teammate invitations",
     brief: undefined,
-    chatOn: true,
     messages: [
       notice,
       said("plan", MESSAGE_ROLE.USER, "Build invitations."),
@@ -117,11 +115,11 @@ test("a chat notice is copied under the member it tells of a message from, never
       "# Add teammate invitations",
       "## Plan",
       "Build invitations.",
-      "## Chat from Invite emails",
+      "## Message from Invite emails",
       "@agent-1 are you changing memberships?",
       "## Agent",
       "Yes, base on my migration.",
-      "## Chat from Invite emails",
+      "## Message from Invite emails",
       "@agent-1 are you changing memberships?",
     ].join("\n\n") + "\n",
   );
@@ -131,19 +129,37 @@ test("a chat notice is copied under the member it tells of a message from, never
   });
 });
 
-test("a notice in its whole shape is copied as the message alone under who said it, and an inbox answer without its item's key, as the tab draws both", () => {
-  const notice: CodingAgentMessage = {
+test("another agent's message in its whole shape is copied as its words alone, without who sent it or how to answer, which its heading says instead", () => {
+  const message: CodingAgentMessage = {
     ...said(
-      "notice",
+      "message",
       MESSAGE_ROLE.USER,
       [
-        "Chat · @agent-2 in #invitations (m 43):",
-        "Are you changing memberships?",
-        chatNoticeReplyLine(43),
+        "Message · [@Invite emails](https://tryluke.dev/acme/agent/a1) to you:",
+        "Rebase before you push.",
+        agentMessageReplyLine("5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f"),
       ].join("\n\n"),
     ),
-    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "Invite emails" },
+    metadata: { author: "agent", channel: "agent_message", from: "Invite emails" },
   };
+  const transcript = agentTranscript({
+    title: "Add teammate invitations",
+    brief: undefined,
+    messages: [said("plan", MESSAGE_ROLE.USER, "Build invitations."), message],
+  });
+  assert.equal(
+    transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
+    [
+      "# Add teammate invitations",
+      "## Plan",
+      "Build invitations.",
+      "## Message from Invite emails",
+      "Rebase before you push.",
+    ].join("\n\n") + "\n",
+  );
+});
+
+test("an inbox answer is copied without its item's key, as the tab draws it", () => {
   const answer = said(
     "answer",
     MESSAGE_ROLE.USER,
@@ -152,8 +168,7 @@ test("a notice in its whole shape is copied as the message alone under who said 
   const transcript = agentTranscript({
     title: "Add teammate invitations",
     brief: undefined,
-    chatOn: true,
-    messages: [said("plan", MESSAGE_ROLE.USER, "Build invitations."), notice, answer],
+    messages: [said("plan", MESSAGE_ROLE.USER, "Build invitations."), answer],
   });
   assert.equal(
     transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
@@ -161,33 +176,8 @@ test("a notice in its whole shape is copied as the message alone under who said 
       "# Add teammate invitations",
       "## Plan",
       "Build invitations.",
-      "## Chat from Invite emails",
-      "Are you changing memberships?",
       "## Developer",
       'Inbox answer on "Ship it?": Approved.',
-    ].join("\n\n") + "\n",
-  );
-});
-
-test("with Chat off, a chat notice is copied as the plain line it is drawn as, under the developer's heading, and still never as the plan", () => {
-  const notice: CodingAgentMessage = {
-    ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
-    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "Invite emails" },
-  };
-  const transcript = agentTranscript({
-    title: "Add teammate invitations",
-    brief: undefined,
-    chatOn: false,
-    messages: [notice, said("plan", MESSAGE_ROLE.USER, "Build invitations.")],
-  });
-  assert.equal(
-    transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
-    [
-      "# Add teammate invitations",
-      "## Plan",
-      "Build invitations.",
-      "## Developer",
-      "@agent-1 are you changing memberships?",
     ].join("\n\n") + "\n",
   );
 });
@@ -220,7 +210,6 @@ test("an agent started from another is copied as its brief, the source's steps i
       said("turn", MESSAGE_ROLE.ASSISTANT, "Squared."),
     ],
     brief: CODING_AGENT_BRIEF.PROMPT,
-    chatOn: true,
   });
   const concise = transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE);
   assert.equal(
@@ -256,7 +245,6 @@ test("an agent started from another that has done nothing yet previews no step, 
     title: "Tile (2)",
     messages: [said("first", MESSAGE_ROLE.USER, FORKED_FIRST)],
     brief: CODING_AGENT_BRIEF.PLAN,
-    chatOn: true,
   });
   assert.equal(latestActivity(copied), undefined);
 });
@@ -277,7 +265,6 @@ test("a summary Luke wrote of the source's oldest steps is copied under its line
     title: "Tile (2)",
     messages: [said("first", MESSAGE_ROLE.USER, first)],
     brief: CODING_AGENT_BRIEF.PROMPT,
-    chatOn: true,
   });
   assert.equal(
     transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE),
@@ -314,7 +301,6 @@ test("a replay longer than the card draws at first is copied whole, every kept s
     title: "Tile (2)",
     messages: [said("first", MESSAGE_ROLE.USER, first)],
     brief: CODING_AGENT_BRIEF.PROMPT,
-    chatOn: true,
   });
   for (const copy of [TRANSCRIPT_COPY.CONCISE, TRANSCRIPT_COPY.FULL]) {
     const markdown = transcriptMarkdown(copied, copy);
@@ -361,7 +347,6 @@ test("an agent's inbox posts and withdrawals from version 5 are copied as the ro
     title: "Invites",
     messages,
     brief: CODING_AGENT_BRIEF.PROMPT,
-    chatOn: true,
   });
   const markdown = transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE);
   assert.ok(
@@ -385,7 +370,6 @@ test("an agent started blank is copied with no brief, its first line, spoken on 
       { ...said("answered", MESSAGE_ROLE.ASSISTANT, "I moved the export."), metadata: spoken },
     ],
     brief: CODING_AGENT_BRIEF.BLANK,
-    chatOn: true,
   });
 
   assert.equal(
@@ -407,14 +391,12 @@ test("an operator's heartbeat that found nothing is copied, and previewed, as no
     title: "Luke",
     messages,
     brief: CODING_AGENT_BRIEF.BLANK,
-    chatOn: true,
     quiet: true,
   });
   const coder = agentTranscript({
     title: "Tile",
     messages,
     brief: CODING_AGENT_BRIEF.BLANK,
-    chatOn: true,
   });
 
   assert.deepEqual(latestActivity(operator), {

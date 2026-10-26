@@ -31,7 +31,7 @@ export const PANEL_SPAN = {
   WINDOW_FIRST_PAINT: "window.first_paint",
   /** The window's root starting to the sidebar's first task list read answered. */
   WINDOW_FIRST_USABLE: "window.first_usable",
-  /** A key pressed in a message box, the agent's or the chat's, to the paint after it. */
+  /** A key pressed in a message box to the paint after it. */
   KEYSTROKE_COMPOSER: "keystroke.composer",
   /** A key pressed in ⌘K's search field to the paint after it. */
   KEYSTROKE_COMMAND_PALETTE: "keystroke.command_palette",

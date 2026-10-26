@@ -176,54 +176,6 @@ function modelOf(read: AsyncResult.AsyncResult<AgentsRead>, agentId: string): st
   return read.value?.find((agent) => agent.id === agentId)?.model;
 }
 
-/** An agent the window holds no line of, and the task it works on; none for an agent on none. */
-export interface UnlinedAgent {
-  readonly agentId: string;
-  readonly taskId: string | undefined;
-}
-
-/** What separates an agent's task from its id, and one agent from the next, in a key of the agents read together. */
-const KEY_SEPARATOR = { TASK: "/", AGENT: "," } as const;
-
-/** The agents asked for as one key, each `task/agent` with no task before the slash for one on none, in one order whatever order they were asked in. */
-function unlinedKey(agents: readonly UnlinedAgent[]): string {
-  return agents
-    .map(({ agentId, taskId }) => `${taskId ?? ""}${KEY_SEPARATOR.TASK}${agentId}`)
-    .toSorted()
-    .join(KEY_SEPARATOR.AGENT);
-}
-
-/**
- * The agents a key names, each read as its mark reads it: by its task's
- * agents, archived ones among them, where it works on one, and by its own
- * id where it works on none. Each answers as its read lands; one still out,
- * failed, or that found no such agent is left out.
- */
-const unlinedAgentsAtom = Atom.family((key: string) =>
-  Atom.make((get): readonly CodingAgentSummary[] =>
-    key.split(KEY_SEPARATOR.AGENT).flatMap((entry) => {
-      const [taskId = "", agentId = ""] = entry.split(KEY_SEPARATOR.TASK);
-      if (agentId === "") return [];
-      const read = get(taskId === "" ? agentByIdAtom(agentId) : taskAgentsAtom(taskId));
-      const agent = AsyncResult.isSuccess(read)
-        ? read.value?.find((each) => each.id === agentId)
-        : undefined;
-      return agent === undefined ? [] : [agent];
-    }),
-  ),
-);
-
-/**
- * The agents a place draws that the window holds no line of, an archived
- * agent's or one past the few its task's row names, read by the very reads
- * their marks and cards take (`ReadAgentModel`), so each is read once for
- * every place that draws it. Note that a read lands once, so where one
- * stands it is no newer than its first answer.
- */
-export function useUnlinedAgents(agents: readonly UnlinedAgent[]): readonly CodingAgentSummary[] {
-  return useAtomValue(unlinedAgentsAtom(unlinedKey(agents)));
-}
-
 /** What a mark draws of the model read, or of none, and whether the read has answered, which is false while it is out. */
 type ModelDrawer = (model: string | undefined, settled: boolean) => ReactNode;
 

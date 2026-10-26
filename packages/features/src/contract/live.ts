@@ -11,14 +11,13 @@
  * statements its pages are read from; and the
  * commands of the kinds `?kinds=` names that no Mac of the account has
  * claimed, as one statement; and one plan's inbox, or one agent's, named by
- * `?id=`, as its items, their threads, and their files; and one workspace's
- * chat, named by `?workspaceId=`, as the statements the window's chat read
- * is built from, once the account has joined it; and the account's
+ * `?id=`, as its items, their threads, and their files; and the account's
  * workspaces, as the statements of the workspaces and of the GitHub
  * installations connected to them; and one workspace's people, named by
  * `?workspaceId=`, as its members and who its work names but left, and its
  * pending invitations, to an owner or an admin of it, with the origin each
- * accept link is built on. Each
+ * accept link is built on; and one workspace's channels, named by
+ * `?workspaceId=`, as its channels and where each one's threads stand. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. Each
@@ -35,6 +34,7 @@ import {
   automationsLiveAnswerSchema,
   automationWorkspaceRunsLiveAnswerSchema,
 } from "../automation-live.js";
+import { channelsLiveAnswerSchema } from "../channel-live.js";
 import {
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
@@ -47,7 +47,6 @@ import {
   taskHistoryLiveAnswerSchema,
   taskPagesLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
-  workspaceChatLiveAnswerSchema,
 } from "../live-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
@@ -108,14 +107,6 @@ const liveMacCommandsSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
-/** The workspace whose chat is followed, read as text, a workspace of no shape answered as invalid. */
-const liveChatSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.String,
-  [LIVE_POLL.QUERY]: pollField,
-  [LIVE_POLL.AFTER]: afterField,
-  [LIVE_USER_QUERY]: userField,
-});
-
 /** The workspace a live read is followed for; one that names no workspace of the account's is answered as not found, so it is read as text here. */
 const liveWorkspaceSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.String,
@@ -125,6 +116,10 @@ const liveWorkspaceSchema = EffectSchema.Struct({
 });
 
 export const liveContract = {
+  channels: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_CHANNELS }))
+    .input(liveWorkspaceSchema)
+    .output(EffectSchema.flip(channelsLiveAnswerSchema)),
   inbox: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }))
     .input(liveReadSchema)
@@ -197,10 +192,6 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX }))
     .input(liveScopeSchema)
     .output(EffectSchema.flip(scopeInboxLiveAnswerSchema)),
-  workspaceChat: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_CHAT }))
-    .input(liveChatSchema)
-    .output(EffectSchema.flip(workspaceChatLiveAnswerSchema)),
   sidebar: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_SIDEBAR }))
     .input(liveReadSchema)

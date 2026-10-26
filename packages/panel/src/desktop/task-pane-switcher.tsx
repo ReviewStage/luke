@@ -92,7 +92,7 @@ export interface TaskHeadBack {
 /**
  * The way out of a task, named for the page it goes back to, as the
  * window's history names that step (`WindowHistory`'s `away`): the Tasks
- * page, the Inbox, Chat, or another task; the Tasks page where none stands
+ * page, the Inbox, or another task; the Tasks page where none stands
  * behind it, which `onLeave` then opens.
  */
 export function awayBack(away: AwayStep | undefined, onLeave: () => void): TaskHeadBack {

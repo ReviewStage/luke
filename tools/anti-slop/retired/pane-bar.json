@@ -7,8 +7,6 @@
     { "class": "chapter-foot*", "allow": ["packages/ui/src/components/pane-bar/"] },
     { "class": "terminal-shells-head", "allow": ["packages/ui/src/components/pane-bar/"] },
     { "class": "terminal-shells-title", "allow": ["packages/ui/src/components/pane-bar/"] },
-    { "class": "comments-head*", "allow": ["packages/ui/src/components/pane-bar/"] },
-    { "class": "chat-head", "allow": ["packages/ui/src/components/pane-bar/"] },
-    { "class": "chat-head-meta", "allow": ["packages/ui/src/components/pane-bar/"] }
+    { "class": "comments-head*", "allow": ["packages/ui/src/components/pane-bar/"] }
   ]
 }

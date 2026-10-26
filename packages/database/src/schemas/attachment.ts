@@ -1,4 +1,3 @@
-import { CHAT_BOUNDS } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_BOUNDS,
   type CodingAgentAttachmentType,
@@ -24,7 +23,6 @@ import {
 import { INBOX_ATTACHMENT_KIND, type InboxAttachmentKind } from "../storage-vocabulary.js";
 import { bytea, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
-import { chatMessage } from "./chat.js";
 import { inboxItem } from "./inbox.js";
 import { inboxMessage } from "./inbox-message.js";
 import { planComment } from "./plan-comment.js";
@@ -35,22 +33,20 @@ import { task } from "./task.js";
 const literal = (value: string) => sql.raw(`'${value}'`);
 const bound = (bytes: number) => sql.raw(String(bytes));
 
-/** Whether a row's bytes are a WebM an agent recorded, which a chat message, an inbox message, or a plan holds to a video's bound rather than a picture's. */
+/** Whether a row's bytes are a WebM an agent recorded, which an inbox message or a plan holds to a video's bound rather than a picture's. */
 const isWebm = (table: { readonly contentType: AnyPgColumn }) =>
   sql`${table.contentType} = ${literal(CONVERSATION_MEDIA_TYPE.WEBM)}`;
 
 /** The columns that each name an owner of their own kind; a row names one of them, or none but its task. */
 const ownerColumns = (table: {
-  readonly chatMessageId: AnyPgColumn;
   readonly inboxItemId: AnyPgColumn;
   readonly conversationId: AnyPgColumn;
   readonly planCommentId: AnyPgColumn;
-}) => [table.chatMessageId, table.inboxItemId, table.conversationId, table.planCommentId];
+}) => [table.inboxItemId, table.conversationId, table.planCommentId];
 
 /** Whether the row is owned by its task alone, a plan's picture: it names a task and no owner of another kind. */
 export const ownedByTaskAlone = (table: {
   readonly taskId: AnyPgColumn;
-  readonly chatMessageId: AnyPgColumn;
   readonly inboxItemId: AnyPgColumn;
   readonly conversationId: AnyPgColumn;
   readonly planCommentId: AnyPgColumn;
@@ -115,10 +111,6 @@ export const attachment = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     /** The task it belongs to, which moves it to the task's workspace, and owns it where no other owner stands: a plan's picture. Null where it belongs to no task. */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
-    /** The chat message whose image block names it; null for every other owner's. */
-    chatMessageId: uuid("chat_message_id").references(() => chatMessage.id, {
-      onDelete: "cascade",
-    }),
     /** The inbox item it belongs to; null for every other owner's. */
     inboxItemId: uuid("inbox_item_id").references(() => inboxItem.id, { onDelete: "cascade" }),
     /** The message on the inbox item's thread that carried it; null but for an inbox message's file. */
@@ -139,7 +131,7 @@ export const attachment = pgTable(
     name: text("name"),
     /** A file's place among the files it travelled with, from zero, in the order they were attached; null for a picture. */
     position: integer("position"),
-    /** The media type the bytes were sniffed to be, or travelled as: what they are served under. A conversation's, a chat message's, an inbox message's, or a plan's may be a WebM an agent recorded, which no other owner's is. */
+    /** The media type the bytes were sniffed to be, or travelled as: what they are served under. A conversation's, an inbox message's, or a plan's may be a WebM an agent recorded, which no other owner's is. */
     contentType: text("content_type")
       .$type<CodingAgentAttachmentType | ConversationMediaType>()
       .notNull(),
@@ -156,10 +148,6 @@ export const attachment = pgTable(
     savedAt: timestamptz("saved_at"),
   },
   (table) => [
-    // A message's pictures are read and deleted by the message.
-    index("attachment_chat_message")
-      .on(table.chatMessageId)
-      .where(sql`${table.chatMessageId} is not null`),
     // An item's files are read and deleted by the item, and a message's by the message.
     index("attachment_inbox_item")
       .on(table.inboxItemId)
@@ -184,10 +172,10 @@ export const attachment = pgTable(
       "attachment_one_owner",
       sql`(num_nonnulls(${sql.join(ownerColumns(table), sql`, `)}) = 1 or ${ownedByTaskAlone(table)}) and (${table.inboxMessageId} is null or ${table.inboxItemId} is not null)`,
     ),
-    // Each owner holds its bytes to its own bound, as the table it kept before did; a chat message's recording and a plan's to a video's.
+    // Each owner holds its bytes to its own bound, as the table it kept before did; a plan's recording to a video's.
     check(
       "attachment_bytes_bound",
-      sql`(${table.chatMessageId} is null or octet_length(${table.bytes}) <= ${bound(CHAT_BOUNDS.MAX_IMAGE_BYTES)} or (${isWebm(table)} and octet_length(${table.bytes}) <= ${bound(CHAT_BOUNDS.MAX_VIDEO_BYTES)})) and (${table.conversationId} is null or octet_length(${table.bytes}) <= ${bound(CONVERSATION_PICTURE_BOUNDS.MAX_BYTES)}) and (not ${ownedByTaskAlone(table)} or octet_length(${table.bytes}) <= ${bound(PICTURE_BOUNDS.MAX_BYTES)} or (${isWebm(table)} and octet_length(${table.bytes}) <= ${bound(PICTURE_BOUNDS.MAX_VIDEO_BYTES)}))`,
+      sql`(${table.conversationId} is null or octet_length(${table.bytes}) <= ${bound(CONVERSATION_PICTURE_BOUNDS.MAX_BYTES)}) and (not ${ownedByTaskAlone(table)} or octet_length(${table.bytes}) <= ${bound(PICTURE_BOUNDS.MAX_BYTES)} or (${isWebm(table)} and octet_length(${table.bytes}) <= ${bound(PICTURE_BOUNDS.MAX_VIDEO_BYTES)}))`,
     ),
     // A plan comment's file names its task and workspace, has a name and a place among the comment's files, and is held to a file's bound.
     check(

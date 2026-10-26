@@ -1926,18 +1926,6 @@ test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile a
   assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
 });
 
-test("on Chat over an open task nothing has a link, so ⌘K lists no Copy link and ⌥⌘C copies nothing", async () => {
-  const copied = installClipboard();
-  openPalette({ ...ON_AGENT_TAB, chatView: { ...ON_AGENT_TAB.chatView, open: true } });
-  type("copy link");
-  const listed = rows().filter((row) => row.startsWith("Copy link to "));
-  act(() => runAppCommand(APP_COMMAND.COPY_LINK));
-  await act(async () => undefined);
-
-  assert.deepEqual(listed, []);
-  assert.deepEqual(copied, []);
-});
-
 test("on the home page nothing has a link, so ⌥⌘C is not offered and ⌘K lists no Copy link", () => {
   openPalette(tasksControl());
   type("copy link");
@@ -2470,65 +2458,6 @@ async function paletteUnderState(tasks: TasksControl): Promise<void> {
   });
 }
 
-test("⌘K offers the open task's Chat tab only while the account has Chat on", async () => {
-  const tasks = tasksControl({
-    activeTaskId: "plan-1",
-    tasks: [
-      {
-        id: "plan-1",
-        workspaceId: "workspace-personal",
-        name: "Billing usage alerts",
-        createdAt: 1,
-        updatedAt: 2,
-        repository: null,
-      },
-    ],
-    chatView: { ...tasksControl().chatView, available: true },
-  });
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  await paletteUnderState(tasks);
-  chooseFilter("This task");
-  assert.ok(rows().includes("Chat · Billing usage alerts"), "Chat on offers the task's Chat");
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  document.body.innerHTML = "";
-
-  handState({});
-  await paletteUnderState(tasks);
-  chooseFilter("This task");
-  assert.ok(!rows().some((row) => row.startsWith("Chat")), "Chat off offers no Chat");
-});
-
-test("⌘K's Show chat is offered only while the account has Chat on, as the side panel's \"+\" offers the tab, since a Chat tab with no Chat drawn opens blank", async () => {
-  const tasks = tasksControl({
-    activeTaskId: DOCUMENT_TASK.id,
-    tasks: [
-      {
-        id: DOCUMENT_TASK.id,
-        workspaceId: DOCUMENT_TASK.workspaceId,
-        name: DOCUMENT_TASK.name,
-        createdAt: 1,
-        updatedAt: 2,
-        repository: null,
-      },
-    ],
-    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-    chatView: { ...tasksControl().chatView, available: true },
-  });
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  await paletteUnderState(tasks);
-  chooseFilter("Commands");
-  assert.ok(rows().includes("Show chat"), "Chat on offers Show chat");
-  assert.ok(rows().includes("Show board"));
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  document.body.innerHTML = "";
-
-  handState({});
-  await paletteUnderState(tasks);
-  chooseFilter("Commands");
-  assert.ok(!rows().includes("Show chat"), "Chat off offers no Show chat");
-  assert.ok(rows().includes("Show board"), "the tabs that exist are still offered");
-});
-
 test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for each agent, as the side panel\'s "+" offers them, and each opens as the "+" opens it', async () => {
   const agent = {
     id: "agent-7",
@@ -2937,8 +2866,47 @@ test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no
 
   assert.deepEqual(
     filterOptions().map((option) => option.textContent),
-    ["All", "Tasks", "This task", "Inbox", "People", "Files", "Commands", "Settings"],
+    ["All", "Tasks", "This task", "Inbox", "Channels", "People", "Files", "Commands", "Settings"],
   );
+});
+
+test("with Channels on, ⌘K's Channels lists the workspace's channels by name and purpose, and one chosen opens its stream; with Channels off it draws no Channels filter", async () => {
+  const app = {
+    id: "a1000001-0000-4000-8000-000000000002",
+    name: "app",
+    purpose: "The desktop and web app",
+    project: false,
+    createdAt: 1,
+    waiting: 0,
+  };
+  fakeActPort({ [ACT_KIND.CHANNELS_LIST]: () => Promise.resolve({ channels: [app] }) });
+  handState({});
+  await paletteUnderState(tasksControl({ workspace: ACME }));
+  await settle();
+  const offWithout = filterOptions().every((option) => option.textContent !== "Channels");
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  document.body.innerHTML = "";
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  const opened: string[] = [];
+  const base = tasksControl({ workspace: ACME });
+  await paletteUnderState(
+    tasksControl({
+      workspace: ACME,
+      inboxView: { ...base.inboxView, onOpenChannel: (channelId) => opened.push(channelId) },
+    }),
+  );
+  await settle();
+  chooseFilter("Channels");
+  await settle();
+
+  assert.ok(offWithout, "no Channels filter stands with Channels off");
+  assert.deepEqual(rows(), ["app · The desktop and web app"]);
+  press("app · The desktop and web app");
+  await settle();
+  assert.deepEqual(opened, [app.id]);
+  handState({});
 });
 
 /** The agent asking the Inbox's questions below, as its task's list sums it up. */

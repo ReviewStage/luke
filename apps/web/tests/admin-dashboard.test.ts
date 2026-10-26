@@ -87,7 +87,6 @@ function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
         { feature: REACH_FEATURE.VOICE_CALLS, developers: 3, share: 0.25 },
         { feature: REACH_FEATURE.INTEGRATIONS, developers: 4, share: 1 / 3 },
         { feature: REACH_FEATURE.AUTOMATIONS, developers: 1, share: 1 / 12 },
-        { feature: REACH_FEATURE.CHAT, developers: 0, share: 0 },
       ],
     },
     topAccounts: [
@@ -293,7 +292,6 @@ test("the funnel and reach read each row's count and its share of the base", () 
     "Voice calls | 3 | 25%",
     "Integration connected | 4 | 33%",
     "Automations | 1 | 8%",
-    "Chat | 0 | 0%",
   ]);
   expect(page.textContent).toContain("of 12 active developers");
 });

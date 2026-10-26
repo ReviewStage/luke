@@ -23,7 +23,6 @@ import { useAttachedFiles } from "../use-attached-files.js";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import type { ChatComposerMentions } from "./chat-composer.js";
 import { ComposerField } from "./composer-field.js";
 import { type ComposerPickers, useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
@@ -58,7 +57,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * message says what it asks: an ask's options, steps and presses, or
  * fields, each numbered and pressed as before. Under them stands the note line, "Add a note", a
  * full-width line that grows as it is written, and under it the foot's row
- * of presses, laid as the agent's and the chat's boxes lay theirs. Where no
+ * of presses, laid as the agent's box lays its. Where no
  * controls stand, an ask of words alone, a notice, or a settled item, the
  * box is that line and that row alone and its line asks for a "Reply", the
  * words of which answer an ask of words alone (`inbox-model.ts`'s
@@ -135,7 +134,7 @@ const UNARCHIVE = "Unarchive";
  * stand over it as the answer; the asker's own placeholder where it gave
  * one for words; and a reply otherwise.
  */
-export function answerPlaceholder(asks: boolean, own: string | undefined): string {
+function answerPlaceholder(asks: boolean, own: string | undefined): string {
   if (asks) return NOTE_PLACEHOLDER;
   return own ?? REPLY_PLACEHOLDER;
 }
@@ -155,9 +154,7 @@ export interface AnswerField {
  * A box's field, its editor, its lists, and its dictation, all its own: an
  * `@` lists what the page hands, a `/` the repository's skills, and a
  * server's chip says what a send does with it, a turn opened or the running
- * one steered, by the agent the words go to. A box answering a chat
- * message's ask is handed its channel's offer instead (`chat`), so its `@`
- * and `#` list what the chat's own box lists there.
+ * one steered, by the agent the words go to.
  */
 export function useAnswerField({
   draft,
@@ -167,7 +164,6 @@ export function useAnswerField({
   skills,
   keywords,
   statuses,
-  chat,
   onNote,
 }: {
   draft: string;
@@ -179,8 +175,6 @@ export function useAnswerField({
   skills: SkillSource | undefined;
   keywords: readonly string[];
   statuses: IntegrationStatuses;
-  /** What the chat channel offers where the words answer an ask posted in it (`chat-mention-source.ts`); none where they answer an Inbox item. */
-  chat?: ChatComposerMentions | undefined;
   /** Says why a dictation left nothing, or clears what the last one said. */
   onNote: (note: string | undefined) => void;
 }): AnswerField {
@@ -206,7 +200,6 @@ export function useAnswerField({
             : SERVER_HANDED.OPENS,
       },
     },
-    chat,
     onNote,
   });
   return {

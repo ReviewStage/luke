@@ -90,7 +90,6 @@ export interface FindTally {
 /** The pages that stand in the plan's place, each finding in its words as one scope (`PageFind`). */
 export const FIND_PAGE = {
   INBOX: "inbox",
-  CHAT: "chat",
   AUTOMATIONS: "automations",
   BOARD: "board",
   VERSION_HISTORY: "version-history",

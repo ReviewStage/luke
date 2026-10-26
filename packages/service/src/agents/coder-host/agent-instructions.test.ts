@@ -43,7 +43,6 @@ const CONTEXT = {
   ciReadable: false,
   coAuthor: undefined,
   workspace: "acme",
-  chatOn: false,
   memoryOn: false,
 } as const;
 

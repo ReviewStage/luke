@@ -85,7 +85,7 @@ const UPLOAD_POLICY = {
 /**
  * The two rows the deployment is admitted for here, each the typed line and
  * the spoken ask. The typed follow-up is a message the voice brain sends an
- * agent, or a chat message told to it (`chat-notify.ts`), delivered exactly
+ * agent, or another agent's message to it (`agent-message.ts`), delivered exactly
  * as one the developer typed in the
  * message box, on a session the named account's agent recorded. The typed
  * opening is the start of an agent the voice brain or another coding agent

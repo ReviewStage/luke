@@ -676,7 +676,7 @@ function SendGlyph(): React.JSX.Element {
   );
 }
 
-/** A submit's Stop, filled as every chat draws it; an outline reads as a checkbox at this size. */
+/** A submit's Stop, filled as every chat app draws it; an outline reads as a checkbox at this size. */
 function StopGlyph(): React.JSX.Element {
   return (
     <svg

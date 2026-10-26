@@ -114,14 +114,12 @@ component, factored out of the surface where it builds the box by hand.
   deleted on the same terms; the model is never handed the video, the
   transcript's player is left out of session replay, and none of it goes into a
   trace, a counted event, a fixture, or the voice window. An agent may also
-  post such a recording, or any WebM it recorded in its sandbox, to its task's
-  inbox or its workspace's chat
+  post such a recording, or any WebM it recorded in its sandbox, to a thread in
+  one of its workspace's channels
   (`packages/service/src/agents/coder-host/inbox-image.ts`), kept beside the
-  inbox item or the chat message, up to 4 MB, as a picture posted there is,
-  shown to whoever may read that item or message and deleted with it; an agent
-  told of a chat message is never handed the video, only told it is there
-  (`coder-host/chat-notify.ts`), the inbox's and the chat's players are left
-  out of session replay, and none of it goes into a trace, a counted event, a
+  thread's message, up to 4 MB, as a picture posted there is, shown to whoever
+  may read that thread and deleted with it; the thread's player is left out of
+  session replay, and none of it goes into a trace, a counted event, a
   fixture, or the voice window. Such a recording may also be added to its
   task's plan, from the file viewer's Add to plan or an agent's `edit_plan`,
   at most ten to a plan, kept beside the plan as its pictures are

@@ -1,9 +1,4 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  type ChatMemberSubject,
-  joinedMemberOf,
-  readAttachmentFor,
-} from "@luke/database/models/chat-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
@@ -20,14 +15,10 @@ import { AGENT_TOOL } from "../agent-runtime/tools.js";
  * forwarded-images.ts -- pictures one agent hands another by their attachment ids, read as the forwarder may read them and made the files a Start or a steer carries.
  *
  * An id names a row of the one `attachment` table, and a forwarder may hand
- * on two kinds of row: a picture kept beside its own conversation
- * (`conversation-pictures.ts`), such as one `show_image` kept, and a
- * picture of a chat message it can read, as its reads of the chat scope it
- * (`chat-store.ts`'s `readAttachmentFor`): a coding agent its home channel
- * and the DMs it is one of, a person every channel. Any other id, another
- * conversation's picture or a DM the forwarder is not in among them, is
- * refused alike, so a refusal never says that a picture stands where the
- * forwarder cannot read it. A video kept beside the conversation, as
+ * on one kind of row: a picture kept beside its own conversation
+ * (`conversation-pictures.ts`), such as one `show_image` kept. Any other id,
+ * another conversation's picture among them, is refused alike, so a refusal
+ * never says that a picture stands where the forwarder cannot read it. A video kept beside the conversation, as
  * `show_image` keeps a recording, is refused by name, since a message
  * carries pictures alone. Each picture is held to the bound one image of
  * a message is held to, and all of them to a message's bytes together
@@ -39,7 +30,7 @@ import { AGENT_TOOL } from "../agent-runtime/tools.js";
  */
 
 /** Why a forward handed on nothing. */
-export const FORWARDED_IMAGE_REFUSAL = {
+const FORWARDED_IMAGE_REFUSAL = {
   /** The id names no picture the forwarder may hand on. */
   UNREACHED: "unreached",
   /** The id names a video the forwarder recorded, which no message carries as a file. */
@@ -60,17 +51,10 @@ export type ForwardedImageRefusal =
     }
   | { readonly kind: typeof FORWARDED_IMAGE_REFUSAL.TOO_MUCH; readonly bytes: number };
 
-/**
- * Who forwards: the account acting; the conversation whose own pictures it
- * may name, none for a caller with none; and the workspace's chat it reads
- * and the member it reads as, none where it reads no chat.
- */
+/** Who forwards: the account acting, and the conversation whose own pictures it may name, none for a caller with none. */
 export interface ImageForwarder {
   readonly userId: string;
   readonly conversationId: string | undefined;
-  readonly chat:
-    | { readonly organizationId: string; readonly reader: ChatMemberSubject }
-    | undefined;
 }
 
 /** The extension a forwarded file is named with, by its type. */
@@ -85,26 +69,12 @@ function megabytes(bytes: number): string {
   return `${Math.ceil(bytes / 100_000) / 10} MB`;
 }
 
-/** The picture under the id as the forwarder may read it: its conversation's own first, then a chat message's; nothing otherwise. */
-const pictureOf = (forwarder: ImageForwarder, readerId: string | undefined, id: string) =>
-  Effect.gen(function* () {
-    if (forwarder.conversationId !== undefined) {
-      const own = yield* readConversationPicture(forwarder.conversationId, id);
-      if (Option.isSome(own)) return own;
-    }
-    if (forwarder.chat === undefined || readerId === undefined) return Option.none();
-    const { organizationId } = forwarder.chat;
-    return yield* readAttachmentFor(forwarder.userId, organizationId, readerId, id);
-  });
-
-/** The member the forwarder reads the chat as, never made; none where it reads no chat or holds no seat in it. */
-const readerOf = (forwarder: ImageForwarder) =>
-  forwarder.chat === undefined
-    ? Effect.succeed(undefined)
-    : Effect.map(
-        joinedMemberOf(forwarder.userId, forwarder.chat.organizationId, forwarder.chat.reader),
-        (member) => Option.getOrUndefined(Option.map(member, (row) => row.id)),
-      );
+/** The picture under the id as the forwarder may read it: its conversation's own; nothing otherwise. */
+function pictureOf(forwarder: ImageForwarder, id: string) {
+  return forwarder.conversationId === undefined
+    ? Effect.succeed(Option.none())
+    : readConversationPicture(forwarder.conversationId, id);
+}
 
 /**
  * The pictures under the ids, in the order named, each once, as the files
@@ -123,11 +93,10 @@ export function forwardedImages(
   return Effect.gen(function* () {
     const named = [...new Set(ids)];
     if (named.length === 0) return Result.succeed([]);
-    const readerId = yield* readerOf(forwarder);
     const files: CodingAgentAttachment[] = [];
     let total = 0;
     for (const id of named) {
-      const picture = yield* pictureOf(forwarder, readerId, id);
+      const picture = yield* pictureOf(forwarder, id);
       if (Option.isNone(picture)) {
         return Result.fail({ kind: FORWARDED_IMAGE_REFUSAL.UNREACHED, id });
       }
@@ -160,7 +129,7 @@ export function forwardedImageRefusalWords(refusal: ForwardedImageRefusal): stri
     case FORWARDED_IMAGE_REFUSAL.UNREACHED:
       return (
         `attachment ${refusal.id} is no picture you can hand on. Name a picture of your own ` +
-        `conversation, such as one ${AGENT_TOOL.SHOW_IMAGE} kept, or one of a chat message you can read.`
+        `conversation, such as one ${AGENT_TOOL.SHOW_IMAGE} kept.`
       );
     case FORWARDED_IMAGE_REFUSAL.VIDEO:
       return (

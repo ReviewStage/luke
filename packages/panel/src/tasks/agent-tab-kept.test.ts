@@ -23,13 +23,15 @@ import { focusRestOn } from "../testing/hint-rest.js";
 import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AgentTab, type BriefTask, type TranscriptCards } from "./agent-tab.js";
+import { TOOL_TARGET } from "./tool-call-model.js";
 import type { TranscriptFollower } from "./use-agent-transcript.js";
 
 /**
  * agent-tab-kept.test.ts -- a running agent's tab draws again only the
  * messages a page touched: a page that rewrites the reply still being
  * written leaves every other message's rows as they were drawn, and so
- * does the window drawing the tab again with new presses. The messages it
+ * does the window drawing the tab again with new presses; inside the reply,
+ * a page that adds a call draws that call alone. The messages it
  * keeps still hang the cards the window hands now, and say where their
  * workers stand as the newest page reads it.
  *
@@ -308,4 +310,68 @@ test("a task renamed while its agent's tab stands names the plan's sender anew, 
   act(() => tab.draw(control, tab.cardsOf(control, task("Final draft"))));
   assert.match(sender().textContent ?? "", /Final draft/u);
   assert.equal(cardOf(sender()), "Final draft, its card");
+});
+
+test("a page that adds a call to a running turn draws that call alone, the calls before it standing as drawn", async () => {
+  fakeAppBridge({});
+  const messaged = (count: number): CodingAgentMessage => ({
+    id: "newest",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: Array.from({ length: count }, (_, at) => [
+      { type: "step-start" },
+      tool(
+        "message_coding_agent",
+        `call-${at}`,
+        { agentId: `agent-${at}`, text: "Rebase" },
+        { status: "accepted" },
+      ),
+    ]).flat(),
+    startedAt: 3_000,
+  });
+  let hear: ((page: CodingAgentTranscriptPage) => void) | undefined;
+  const transcripts: TranscriptFollower = (_transcript, heard) => {
+    hear = heard;
+    heard(pushedPage(page([PLAN, messaged(5)], CODING_AGENT_STATUS.RUNNING, "1:1")));
+    return () => {
+      hear = undefined;
+    };
+  };
+  // Each call about an agent asks for that agent's card as its row is drawn, so the cards asked for are the rows drawn.
+  const asked: string[] = [];
+  const cards: TranscriptCards = {
+    target: (target) => {
+      if (target.kind === TOOL_TARGET.AGENT) asked.push(target.agent);
+      return null;
+    },
+    worker: () => null,
+  };
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentTab, {
+          agent: AGENT,
+          control: codingAgentsControl({ agents: [AGENT], transcripts }),
+          shown: true,
+          cards,
+          onOpenSubagent: () => undefined,
+          onOpenTarget: () => undefined,
+          onHeld: () => undefined,
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  assert.ok(asked.includes("agent-0"), "the turn's open run of calls is drawn");
+
+  asked.length = 0;
+  await act(async () => {
+    hear?.(pushedPage(page([messaged(6)], CODING_AGENT_STATUS.RUNNING, "1:2")));
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  assert.deepEqual(asked, ["agent-5"]);
 });

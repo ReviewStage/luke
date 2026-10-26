@@ -9,7 +9,6 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
-import { CHAT_PLACE, type ChatPlace } from "@luke/ui/chat-model";
 import { type HistoryAdapter, type HistorySnapshot, memoryHistory } from "@luke/ui/history-adapter";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -31,6 +30,15 @@ import {
 } from "./navigation-history.js";
 import { PANEL_TAB } from "./panel-tabs.js";
 import { SHELL_ROOM } from "./shell-room.js";
+import {
+  type ChannelPlaceControl,
+  chooseChannel,
+  listChannelWorkspace,
+  openChannelThread,
+  useArchivedChannels,
+  useChannelPlace,
+  useChannels,
+} from "./tasks/use-channels.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -52,9 +60,6 @@ type HeldPlace = ReturnType<
 
 const TASK_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 const AUTOMATION_ID = "5d1e7a9c-3b2f-4c6d-8e0a-9f1b2c3d4e5a";
-
-/** A channel of Acme's chat. */
-const CHANNEL_ID = "6e2f8b0d-4c3a-4d7e-9f1b-0a2c3d4e5f6b";
 
 const roots: Root[] = [];
 
@@ -626,32 +631,6 @@ test("a deleted automation's page is passed over by Back, which returns to the p
   assert.deepEqual(opened, [kept]);
 });
 
-/** The window with Chat standing or not, in the workspace given, each time Chat is asked to open, or to open on a place, counted in `opened`. */
-function onChat(open: boolean, opened: string[], workspaceId = "workspace-acme"): TasksControl {
-  const base = tasksControl();
-  const ask = () => opened.push(workspaceId);
-  return tasksControl({
-    workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
-    chatView: { ...base.chatView, open, onOpen: ask, onShow: ask },
-  });
-}
-
-test("Chat is the chat of the workspace it stood in, so Back returns to it in that workspace and passes over it once another is listed", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const opened: string[] = [];
-  const same = mount(onChat(true, opened));
-  await settle();
-  same.stand(onChat(false, opened));
-  assert.equal(same.history().canGoBack, true);
-  act(() => same.history().onBack());
-  assert.deepEqual(opened, ["workspace-acme"]);
-
-  const other = mount(onChat(true, opened));
-  await settle();
-  other.stand(onChat(false, opened, "workspace-platform"));
-  assert.equal(other.history().canGoBack, false, "Chat of another workspace is no step back");
-});
-
 /** The window with the Board standing or not, in the workspace given, each time the Board is asked to open counted in `opened`. */
 function onBoard(open: boolean, opened: string[], workspaceId = "workspace-acme"): TasksControl {
   const base = tasksControl();
@@ -715,16 +694,6 @@ test("each step's address is the path of the link ⌥⌘C copies there", async (
       ...listed,
       personView: { ...tasksControl().personView, userId: "user-charles", workspaceId: ACME.id },
     }),
-    tasksControl({ ...listed, chatView: { ...tasksControl().chatView, open: true } }),
-    tasksControl({
-      ...listed,
-      chatView: {
-        ...tasksControl().chatView,
-        open: true,
-        place: { kind: CHAT_PLACE.CHANNEL, channelId: CHANNEL_ID },
-        listed: false,
-      },
-    }),
   ];
   const addresses: string[] = [];
   for (const tasks of places) {
@@ -755,26 +724,6 @@ test("a place with no link stands at /app: the home page, and the Board though a
   window.stand({ ...task, boardView: { ...task.boardView, open: true } });
 
   assert.deepEqual(window.addresses(), ["/app", "/app"]);
-});
-
-test("Chat stands at its workspace's /chat though a task stands under it, and a channel shown in it at /chat/<channelId>, taking Chat's step in place", () => {
-  const window = mount(onTask([ACME]));
-  const task = onTask([ACME]);
-  window.stand({ ...task, chatView: { ...task.chatView, open: true } });
-  window.stand({
-    ...task,
-    chatView: {
-      ...task.chatView,
-      open: true,
-      place: { kind: CHAT_PLACE.CHANNEL, channelId: CHANNEL_ID },
-      listed: false,
-    },
-  });
-
-  assert.deepEqual(window.addresses(), [
-    `/acme/plan/${DOCUMENT_TASK.id}`,
-    `/acme/chat/${CHANNEL_ID}`,
-  ]);
 });
 
 test("the Admin place stands at its workspace's /admin though a task stands under it, a section at /admin/<section> in place, and an account's page at /admin/user/<id> as a step, as Copy link copies each", async () => {
@@ -1135,31 +1084,6 @@ test("an Inbox item chosen by a press where the Inbox splits is a step of its ow
   assert.deepEqual(chosen, ["item-2"]);
 });
 
-test("a Chat channel chosen by a press on the desktop's width is a step of its own, which Back returns from to the place before", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const shownPlaces: string[] = [];
-  const onChat = (place: ChatPlace) =>
-    tasksControl({
-      workspace: { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null },
-      chatView: {
-        ...tasksControl().chatView,
-        open: true,
-        available: true,
-        place,
-        listed: false,
-        onShow: (to) => shownPlaces.push(to.kind === CHAT_PLACE.CHANNEL ? to.channelId : to.kind),
-      },
-    });
-  const window = mount(onChat({ kind: CHAT_PLACE.CHANNEL, channelId: "channel-1" }));
-  await settle();
-  press();
-  window.stand(onChat({ kind: CHAT_PLACE.CHANNEL, channelId: CHANNEL_ID }));
-  assert.equal(window.addresses().length, 2);
-
-  act(() => window.history().onBack());
-  assert.deepEqual(shownPlaces, ["channel-1"]);
-});
-
 test("the side panel's tabs are steps though the task's agents are not read, as a task with none never reads them in a fixture run", () => {
   const shown: string[] = [];
   const unread = (side: SidePanelTab) => {
@@ -1245,3 +1169,149 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
     ["agent-c"],
   );
 });
+
+/** What reads a workspace's channels as the sidebar does, so the window holds them, and its channel place as a surface drawing it reads it. */
+async function channelsRead(workspaceId: string): Promise<() => ChannelPlaceControl> {
+  let seen: ChannelPlaceControl | undefined;
+  const Reader = () => {
+    useChannels(workspaceId, true);
+    seen = useChannelPlace();
+    return null;
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Reader))));
+  await settle();
+  return () => seen ?? assert.fail("the channel place is read");
+}
+
+test("with Channels on, a channel chosen and a thread opened in it are each a step, named and linked by the channel, which Back goes back through, closing the thread", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  const workspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const general = { id: "a1000001-0000-4000-8000-000000000001", name: "general" };
+  const app = { id: "a1000001-0000-4000-8000-000000000002", name: "app" };
+  fakeActPort({
+    [ACT_KIND.CHANNELS_LIST]: () =>
+      Promise.resolve({
+        channels: [general, app].map((each) => ({
+          ...each,
+          purpose: "",
+          project: false,
+          createdAt: 1,
+          waiting: 0,
+        })),
+      }),
+  });
+  listChannelWorkspace(workspace.id);
+  const place = await channelsRead(workspace.id);
+  const item = { itemId: "item-1", taskId: TASK_ID };
+  const onInbox = (chosen: typeof item | undefined) => {
+    const base = tasksControl();
+    return tasksControl({
+      workspace,
+      workspaces: [workspace],
+      inboxView: {
+        ...base.inboxView,
+        open: true,
+        chosen,
+        onOpen: () => undefined,
+        onChoose: () => undefined,
+      },
+    });
+  };
+  const window = mount(onInbox(undefined), memoryHistory(), stepTitleOf);
+  await settle();
+  press();
+  act(() => chooseChannel(app.id));
+  press();
+  act(() => openChannelThread(item.itemId, app.id));
+  window.stand(onInbox(item));
+
+  assert.deepEqual(window.addresses(), [
+    `/acme/channel/${general.id}`,
+    `/acme/channel/${app.id}`,
+    `/acme/plan/${TASK_ID}/inbox/item-1`,
+  ]);
+  assert.deepEqual(
+    window.history().steps.back.map((step) => step.title?.label),
+    ["#app", "#general"],
+  );
+  act(() => window.history().onBack());
+  assert.deepEqual(
+    { channelId: place().channelId, threadId: place().threadId },
+    { channelId: app.id, threadId: undefined },
+  );
+  act(() => window.history().onBack());
+  assert.equal(place().channelId, general.id);
+  handState({});
+});
+
+test("with Channels on, an archived channel shown, once its stream read the archived channels, is a step named and linked by it", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  const workspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const general = { id: "a1000001-0000-4000-8000-000000000001", name: "general" };
+  const old = { id: "a1000001-0000-4000-8000-0000000000aa", name: "old-app" };
+  const channel = (each: { id: string; name: string }) => ({
+    ...each,
+    purpose: "",
+    project: false,
+    createdAt: 1,
+  });
+  fakeActPort({
+    [ACT_KIND.CHANNELS_LIST]: () =>
+      Promise.resolve({ channels: [{ ...channel(general), waiting: 0 }] }),
+    [ACT_KIND.CHANNELS_ARCHIVED]: () =>
+      Promise.resolve({ channels: [{ ...channel(old), archivedAt: 2 }] }),
+  });
+  listChannelWorkspace(workspace.id);
+  await channelsRead(workspace.id);
+  // Note that the stream showing an archived channel reads the archived channels, as the Inbox does.
+  const ArchivedReader = () => {
+    useArchivedChannels(workspace.id);
+    return null;
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(ArchivedReader))));
+  await settle();
+  const base = tasksControl();
+  const window = mount(
+    tasksControl({
+      workspace,
+      workspaces: [workspace],
+      inboxView: {
+        ...base.inboxView,
+        open: true,
+        onOpen: () => undefined,
+        onChoose: () => undefined,
+      },
+    }),
+    memoryHistory(),
+    stepTitleOf,
+  );
+  await settle();
+  press();
+  act(() => chooseChannel(old.id));
+  await settle();
+
+  assert.equal(window.addresses().at(-1), `/acme/channel/${old.id}`);
+  act(() => chooseChannel(general.id));
+  handState({});
+});
+
+/** Each step named as the window's root names the one it stands on. */
+function stepTitleOf(tasks: TasksControl): StepTitle | undefined {
+  return stepTitle(PANEL_TAB.TASKS, tasks);
+}

@@ -92,14 +92,19 @@ export const AUTOMATION_ACT_KIND = {
   AUTOMATIONS_FOLLOW: "automations.follow",
 } as const;
 
-/** The Channels view's asks: a workspace's channels listed, made, renamed, archived, and looked at, and one's threads read. */
+/** The Channels view's asks: a workspace's channels listed, made, edited, archived, unarchived, and looked at, its archived ones read, a page of one's threads read, a thread moved, and the channels followed. */
 export const CHANNEL_ACT_KIND = {
   CHANNELS_LIST: "channels.list",
   CHANNELS_CREATE: "channels.create",
-  CHANNELS_RENAME: "channels.rename",
+  CHANNELS_EDIT: "channels.edit",
   CHANNELS_ARCHIVE: "channels.archive",
+  CHANNELS_UNARCHIVE: "channels.unarchive",
+  CHANNELS_ARCHIVED: "channels.archived",
   CHANNELS_LOOK: "channels.look",
   CHANNELS_THREADS: "channels.threads",
+  CHANNELS_MOVE: "channels.move",
+  /** Which of a workspace's channels moved, pushed to the window while it holds the stream open. */
+  CHANNELS_FOLLOW: "channels.follow",
 } as const;
 
 /**
@@ -184,10 +189,9 @@ export const AGENT_ACT_KIND = {
  * say in the workspace: the Inbox read past a cursor (held open by the
  * service while nothing changed), a task's or one agent's; one item
  * answered, closed, messaged on its thread, or marked read or unread, and
- * every item marked read; an item's image and an agent's picture read by the
- * host under the account; and the workspace's chat read past a cursor,
- * written to as the account's own member, and a message's picture read. The
- * window holds what it draws; nothing here does.
+ * every item marked read; and an item's image and an agent's picture read
+ * by the host under the account. The window holds what it draws; nothing
+ * here does.
  */
 export const AGENT_INBOX_ACT_KIND = {
   /**
@@ -210,13 +214,6 @@ export const AGENT_INBOX_ACT_KIND = {
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
-  CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
-  CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
-  /**
-   * A workspace's chat followed while the window holds the stream open: the
-   * chat whole each time it changes, or why there is none.
-   */
-  CODING_AGENTS_CHAT_FOLLOW: "codingAgents.chatFollow",
 } as const;
 
 /**

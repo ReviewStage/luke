@@ -52,7 +52,6 @@ import {
 import { usePendingNow } from "../pending-clock.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
-import { useChatOn } from "./chat-gate.js";
 import {
   type AgentRun,
   ARCHIVE_NOT_READY,
@@ -193,8 +192,6 @@ export interface HeldPeople {
 export interface CodingAgentsControl {
   /** The signed-in account's id, whose own agents carry no "Started by"; none while signed out, or for an identity stored without one. */
   me: string | undefined;
-  /** Whether the window offers Chat (`chat-gate.ts`): what a chat notice in an agent's transcript is drawn and copied as, a card from its sender or the plain line it is. */
-  chatOn: boolean;
   /** The open task's agents in the order started, an archived one left out, or nothing before the first read lands. */
   agents: readonly CodingAgentSummary[] | undefined;
   /** The open task's archived agents in the order started, or nothing before the first read lands. */
@@ -794,7 +791,6 @@ export function useCodingAgents(input: {
   /** Mints one press's key. */
   mintKey?: () => string;
 }): CodingAgentsControl {
-  const chatOn = useChatOn();
   const { taskId, agentId, repository } = input;
   const { act } = input.acts;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
@@ -1879,7 +1875,6 @@ export function useCodingAgents(input: {
 
   // Handed back steady, so a part drawn from the agents holds while they do (`memo`).
   return useSteadyDoors({
-    chatOn,
     agents,
     archived: archivedAgents,
     workspaceId,

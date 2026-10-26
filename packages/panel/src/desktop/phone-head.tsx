@@ -18,8 +18,8 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
 /**
  * phone-head.tsx -- a phone's page header: one control in each corner and the page's title centred between them.
  *
- * A narrow room, a phone's, heads a task and each of its places, the Inbox,
- * the Tasks page, and Chat, the one standard way: the way back, or the one
+ * A narrow room, a phone's, heads a task and each of its places, the Inbox
+ * and the Tasks page, the one standard way: the way back, or the one
  * thing the page is for, such as New task, in the start corner; one ⋯ in the
  * end corner holding everything else the page offers; and the title of what
  * is on screen between them. The corners are one control wide each, so the

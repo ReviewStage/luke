@@ -80,6 +80,9 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  *   `/person/<userId>` after it, the link their page is opened and copied
  *   by (`link-grammar.ts`): the account's id alone, never their name or email,
  *   so a mention of someone who renames themselves still names them.
+ * - A channel is the workspace's address with `/channel/<channelId>` after
+ *   it, the link its stream is opened and copied by: its id alone, never its
+ *   name, so a mention of a channel renamed since still names it.
  * - A section's anchor is its heading as GitHub spells a Markdown heading's
  *   (`sectionAnchors`): lower case, its punctuation dropped, a space a
  *   hyphen, and `-1`, `-2` after a heading the plan already held, so the
@@ -137,6 +140,8 @@ export const MENTION_KIND = {
   PAGE: "page",
   AGENT: "agent",
   PERSON: "person",
+  /** A channel of the workspace, `#app`. */
+  CHANNEL: "channel",
   /** Luke on one task, whom a comment's mention sends its thread. */
   LUKE: "luke",
   /** A day, a time on one, or a range of either. */
@@ -342,6 +347,10 @@ const mentionSchema = EffectSchema.Union([
     userId: thingIdSchema,
   }),
   EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.CHANNEL),
+    channelId: thingIdSchema,
+  }),
+  EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.LUKE),
     taskId: taskIdSchema,
   }),
@@ -467,7 +476,7 @@ function legacyFields({ host, steps, hash, search }: LegacyLink) {
   }
 }
 
-/** The fields a place of Luke's own spells as a mention: a task, a section, a page, an agent, or a person; nothing for a place no mention names. */
+/** The fields a place of Luke's own spells as a mention: a task, a section, a page, an agent, a person, or a channel; nothing for a place no mention names. */
 function placeFields(place: LinkPlace, hash: string) {
   // Note that only a task's address takes a fragment, its section's anchor; a fragment past any other's names nothing.
   if (hash !== "" && place.kind !== LINK_PLACE.TASK && place.kind !== LINK_PLACE.SECTION) {
@@ -490,6 +499,8 @@ function placeFields(place: LinkPlace, hash: string) {
         : { kind: MENTION_KIND.AGENT, taskId: place.planId, agentId: place.agentId };
     case LINK_PLACE.PERSON:
       return { kind: MENTION_KIND.PERSON, userId: place.userId };
+    case LINK_PLACE.CHANNEL:
+      return { kind: MENTION_KIND.CHANNEL, channelId: place.channelId };
     default:
       return undefined;
   }
@@ -795,6 +806,8 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
     }
     case MENTION_KIND.PERSON:
       return linkOf({ kind: LINK_PLACE.PERSON, userId: mention.userId }, workspace);
+    case MENTION_KIND.CHANNEL:
+      return linkOf({ kind: LINK_PLACE.CHANNEL, channelId: mention.channelId }, workspace);
     case MENTION_KIND.LUKE:
       return `${linkOf({ kind: LINK_PLACE.TASK, planId: mention.taskId }, workspace)}/${LUKE_STEP}`;
     // A date has no page of its own, so it keeps the app's own form; its ends spell nothing a target must encode.
@@ -869,21 +882,23 @@ export function mentionName(label: string): string {
   return isMentionLabel(label) ? label.slice(MENTION_SIGIL.length) : label;
 }
 
-/** The kinds an address of Luke's own names, which a bare address of one is read as the mention of, pasted or handed: a plan, one of its sections, a page on it, a coding agent, and a person. */
+/** The kinds an address of Luke's own names, which a bare address of one is read as the mention of, pasted or handed: a plan, one of its sections, a page on it, a coding agent, a person, and a channel. */
 const LUKE_KINDS: ReadonlySet<Mention["kind"]> = new Set([
   MENTION_KIND.TASK,
   MENTION_KIND.SECTION,
   MENTION_KIND.PAGE,
   MENTION_KIND.AGENT,
   MENTION_KIND.PERSON,
+  MENTION_KIND.CHANNEL,
 ]);
 
-/** What a bare link's chip names a plan, a page, an agent, and a person by, since its address holds no name of theirs. */
+/** What a bare link's chip names a plan, a page, an agent, a person, and a channel by, since its address holds no name of theirs. */
 const BARE_NAME = {
   TASK: "Plan",
   PAGE: "Page",
   AGENT: "Agent",
   PERSON: "Person",
+  CHANNEL: "Channel",
   LUKE: "Luke",
 } as const;
 
@@ -923,6 +938,8 @@ function bareName(mention: Mention): string {
       return BARE_NAME.AGENT;
     case MENTION_KIND.PERSON:
       return BARE_NAME.PERSON;
+    case MENTION_KIND.CHANNEL:
+      return BARE_NAME.CHANNEL;
     case MENTION_KIND.LUKE:
       return BARE_NAME.LUKE;
     case MENTION_KIND.DATE:
@@ -1265,6 +1282,48 @@ export function handedMentionsIn(
       found.push({ ...link, mention });
   }
   return found;
+}
+
+/** A mention that names a member of a workspace: a person or an agent. */
+export type MemberMention = Extract<
+  Mention,
+  { readonly kind: typeof MENTION_KIND.PERSON | typeof MENTION_KIND.AGENT }
+>;
+
+/** Whether a mention names a member, which a file's, a task's, or a Luke's does not. */
+function namesMember(mention: Mention): mention is MemberMention {
+  return mention.kind === MENTION_KIND.PERSON || mention.kind === MENTION_KIND.AGENT;
+}
+
+/**
+ * The member words are, where they are a person's or an agent's mention
+ * link written whole, `[@Name](address)`, or its address alone; nothing for
+ * a link of any other kind, or words that are more than the one link.
+ */
+export function memberMentionOf(words: string): MemberMention | undefined {
+  const [link] = mentionLinksIn(words);
+  const whole = link !== undefined && link.start === 0 && link.end === words.length;
+  const mention = decodeMention(whole ? link.target : words, null);
+  return mention !== undefined && namesMember(mention) ? mention : undefined;
+}
+
+/**
+ * The words with each person or agent they name written as `@` and its name
+ * alone, whether by a mention link or by its address written bare, every
+ * other link left as written: what a line another agent sent mentions
+ * beside who sent it, whose link names the sender rather than pointing at it.
+ */
+export function withoutMemberLinks(text: string): string {
+  let out = "";
+  let at = 0;
+  // Note that every link is read, past the cap a message's mentions are handed under, so none is left to be handed.
+  for (const found of handedMentionsIn(text, null, text.length)) {
+    if (!namesMember(found.mention)) continue;
+    const name = linkMention(found.label, found.target, null)?.name ?? found.label;
+    out += `${text.slice(at, found.start)}@${name}`;
+    at = found.end;
+  }
+  return out + text.slice(at);
 }
 
 /**

@@ -2,7 +2,7 @@
  * runtime-sessions.ts -- a coding agent's sessions answered by the runtime its conversation runs on: eve as today, or a native harness Luke launches.
  *
  * Every place that reaches a coding agent's session holds one
- * `AgentSessions`: the composer, an Inbox answer, a chat notice, a GitHub
+ * `AgentSessions`: the composer, an Inbox answer, another agent's message, a GitHub
  * wake, an automation's run, the agent tools, Stop, delete, and a Start,
  * Fork, or Continue. Each composes eve's client for its caller as it always
  * has, and wraps it here (`routedSessions`), so each call is answered by the

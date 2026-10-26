@@ -134,7 +134,7 @@ test("the browser landing elsewhere than a move of the panel's went, as when the
   const history = browserHistory<string>();
   history.push({ address: "/acme/inbox", state: "inbox" });
   history.push({ address: "/acme/settings", state: "settings" });
-  history.push({ address: "/acme/chat", state: "chat" });
+  history.push({ address: "/acme/person/u1", state: "person" });
   const browserGo = window.history.go.bind(window.history);
   // The person's own Back lands with the panel's, so the browser goes one further than asked.
   vi.spyOn(window.history, "go").mockImplementationOnce((delta = 0) => browserGo(delta - 1));
@@ -175,8 +175,8 @@ test("a write the browser refuses, as Safari does past a hundred in ten seconds,
     { entries: [{ address: "/acme/settings", state: "settings" }], at: 0 },
     "the panel's own step stands, with nothing held behind it the browser may not hold",
   );
-  history.push({ address: "/acme/chat", state: "chat" });
-  assert.equal(addressBar(), "/acme/chat");
+  history.push({ address: "/acme/person/u1", state: "person" });
+  assert.equal(addressBar(), "/acme/person/u1");
 
   await travel(() => history.go(-1));
   assert.equal(addressBar(), "/acme/inbox", "the browser never held the refused entry");
@@ -213,8 +213,8 @@ test("a move the browser refuses stands the entry the browser stayed on, so the 
 
   assert.equal(standing(history), "settings");
   assert.equal(addressBar(), "/acme/settings");
-  history.push({ address: "/acme/chat", state: "chat" });
-  assert.equal(addressBar(), "/acme/chat");
+  history.push({ address: "/acme/person/u1", state: "person" });
+  assert.equal(addressBar(), "/acme/person/u1");
   await travel(() => window.history.back());
   assert.equal(standing(history), "settings", "the browser's Back is followed, not swallowed");
 });
@@ -224,7 +224,7 @@ test("a move refused while it waited on another of the panel's stands the entry 
   const history = browserHistory<string>();
   history.push({ address: "/acme/inbox", state: "inbox" });
   history.push({ address: "/acme/settings", state: "settings" });
-  history.push({ address: "/acme/chat", state: "chat" });
+  history.push({ address: "/acme/person/u1", state: "person" });
   const browserGo = window.history.go.bind(window.history);
   let moves = 0;
   vi.spyOn(window.history, "go").mockImplementation((delta = 0) => {

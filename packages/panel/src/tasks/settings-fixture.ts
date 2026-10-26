@@ -465,7 +465,6 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
     [REACH_FEATURE.VOICE_CALLS, 21],
     [REACH_FEATURE.INTEGRATIONS, 29],
     [REACH_FEATURE.AUTOMATIONS, 9],
-    [REACH_FEATURE.CHAT, 12],
   ] as const;
   const activeDevelopers = adminsHidden ? 42 : 42 + ADMIN_ACCOUNTS;
   const topAccounts = [

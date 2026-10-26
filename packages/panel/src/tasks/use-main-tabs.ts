@@ -16,7 +16,7 @@ import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
- * use-main-tabs.ts -- the task's column's tabs: each of its agents and its draft agent, and its Chat, which is chosen, and the order they stand in, kept per task across launches.
+ * use-main-tabs.ts -- the task's column's tabs: each of its agents and its draft agent, which is chosen, and the order they stand in, kept per task across launches.
  *
  * The column is the agents': each agent started on the task under a tab of
  * its own, as an editor draws its files, so an agent's transcript, its calls,
@@ -59,8 +59,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  *
  * These facts are this window's preference rather than anything main
  * holds, so they are kept in the renderer's own storage, read once at
- * mount. The plan's own tab, the Inbox, the task's Call, and its Chat, which
- * stands in the side panel now, once stood here (`RETIRED_MAIN_TAB`); what
+ * mount. The plan's own tab, the Inbox, the task's Call, and its Chat once
+ * stood here (`RETIRED_MAIN_TAB`); what
  * a launch kept of them reads and is let go, so every other choice it holds
  * still stands. The agents' tabs once stood in
  * the side panel, whose record kept them; a window with no record of its own
@@ -79,7 +79,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * The column's own tabs an earlier version had and this one does not, which
  * what it kept may still name: the plan's own and the Inbox, which stand in
  * the side panel now, the task's Call, whose calls every agent's tab takes
- * now, and the task's Chat, which stands in the side panel now. Note that a
+ * now, and the task's Chat, gone with Chat. Note that a
  * kind is retired here rather than deleted, because a kept state naming one
  * would otherwise not read at all and lose every other choice it holds.
  */
@@ -233,7 +233,7 @@ const NO_STAMPS: readonly ViewedAt<MainTab>[] = [];
 
 /** What the column draws and hands back. */
 export interface MainTabsControl {
-  /** The column's tabs in the strip's order: the open agents', the draft's, and the Chat where open, in the task's order. */
+  /** The column's tabs in the strip's order: the open agents' and the draft's, in the task's order. */
   tabs: readonly MainTab[];
   /** The tab shown; none where no tab stands, which leaves the column empty beside the plan. */
   tab: MainTab | undefined;

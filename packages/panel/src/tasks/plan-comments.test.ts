@@ -383,7 +383,7 @@ test("the Comments tab draws a skeleton while its threads are read, then neither
   );
 });
 
-test("a comment's time reads as chat's does, a few letters, with the full moment on hover", () => {
+test("a comment's time reads as a thread's does, a few letters, with the full moment on hover", () => {
   // Note that the window's minute counts on the real clock here, so the comment is dated from it.
   const at = Date.now() - 3 * 3_600_000 - 30_000;
   const [open] = THREADS;

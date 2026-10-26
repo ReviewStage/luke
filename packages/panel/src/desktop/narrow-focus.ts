@@ -1,8 +1,8 @@
 /**
  * narrow-focus.ts -- keeps the keyboard's and a screen reader's place as a narrow room swaps a screen's list for the item chosen in it, and back.
  *
- * A narrow room shows Settings', a version history's, and Chat's list or
- * the item chosen in it one at a time (`hiddenColumns`), so the press that
+ * A narrow room shows Settings' and a version history's list or the item
+ * chosen in it one at a time (`hiddenColumns`), so the press that
  * chose a row hides the column holding it, and the focus falls to the page's
  * body with it. This hook hands it on: as the item comes to stand, to the
  * first control in its column, the way back to the list each screen leads
@@ -69,7 +69,7 @@ export interface NarrowColumns {
   readonly item: string;
 }
 
-/** The columns Settings, a version history, and Chat draw: the root's `<nav>` and its `<section>`. */
+/** The columns Settings and a version history draw: the root's `<nav>` and its `<section>`. */
 const LIST_AND_ITEM: NarrowColumns = { list: ":scope > nav", item: ":scope > section" };
 
 /** What the screen last showed: the room, and whether the list stood. */
@@ -130,7 +130,7 @@ export function useNarrowFocus(
     const root = screen.current;
     const list = root?.querySelector<HTMLElement>(columns.list);
     const item = root?.querySelector<HTMLElement>(columns.item);
-    // Note that a screen still standing in for its columns, as Chat does
+    // Note that a screen still standing in for its columns, as one does
     // while its read is out, keeps the swap pending, so it is handed on once
     // the columns are drawn.
     if (list === null || list === undefined || item === null || item === undefined) return;

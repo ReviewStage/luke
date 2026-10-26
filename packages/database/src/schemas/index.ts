@@ -7,7 +7,6 @@ export * from "./attachment.js";
 export * from "./auth.js";
 export * from "./automation.js";
 export * from "./channel.js";
-export * from "./chat.js";
 export * from "./coding-agent.js";
 export * from "./coding-agent-runner-lease.js";
 export * from "./coding-agent-wakeup.js";

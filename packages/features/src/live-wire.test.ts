@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
-import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "./account-inbox-wire.js";
 import {
   type AccountInboxLiveRows,
   accountInboxOfLiveRows,
@@ -32,25 +31,12 @@ const RUN = {
   failedAt: NOW - 1_000,
 };
 
-const DIRECT: AccountChatEntry = {
-  messageId: "5f6a7b8c-9d0e-4f1a-8b2c-3d4e5f6a7b8c",
-  seq: 7,
-  workspaceId: "workspace-1",
-  reason: ACCOUNT_CHAT_REASON.DIRECT,
-  from: "agent-1",
-  planId: null,
-  touchedSeq: 7,
-  updatedAt: NOW - 2_000,
-};
-
 const ROWS: AccountInboxLiveRows = {
   items: [ITEM],
   planless: [],
   plans: [{ planId: ITEM.planId, items: 1, updatedAt: ITEM.updatedAt }],
   automations: [],
   failedRuns: [RUN],
-  chatAsks: [],
-  chatNotices: [],
 };
 
 const cursorOf = (rows: AccountInboxLiveRows, now = NOW) =>
@@ -69,14 +55,16 @@ describe("a live answer's cursor", () => {
   it("moves where the held read's would, though the items are as many as before", () => {
     const before = cursorOf(ROWS);
     for (const [why, rows] of [
-      ["a direct message waits", { ...ROWS, chatNotices: [DIRECT] }],
       ["the item was read", { ...ROWS, items: [{ ...ITEM, unread: false }] }],
       ["the item was posted again", { ...ROWS, items: [{ ...ITEM, revision: 2, updatedAt: NOW }] }],
       [
         "another item took its place",
         { ...ROWS, items: [{ ...ITEM, id: "6a7b8c9d-0e1f-4a2b-9c3d-4e5f6a7b8c9d" }] },
       ],
-      ["a run failed", { ...ROWS, failedRuns: [RUN, { ...RUN, id: DIRECT.messageId }] }],
+      [
+        "a run failed",
+        { ...ROWS, failedRuns: [RUN, { ...RUN, id: "5f6a7b8c-9d0e-4f1a-8b2c-3d4e5f6a7b8c" }] },
+      ],
     ] as const) {
       assert.notEqual(cursorOf(rows), before, why);
     }

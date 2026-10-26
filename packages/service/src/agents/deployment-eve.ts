@@ -17,8 +17,7 @@ import { sessionsRouter } from "./coder-host/runtime-sessions.js";
  * The web functions that reach eve, over the web runtime's own
  * `HttpClient`, for an account whose bearer they do not hold compose the
  * deployment's caller here: a cookie request's `eveFor`
- * (`coder-host/stop.ts`), a chat notice to an agent's starter
- * (`workspace-chat.ts`), a GitHub wake (`github-webhook-app.ts`), and an
+ * (`coder-host/stop.ts`), a GitHub wake (`github-webhook-app.ts`), and an
  * automation's run (`maintenance-app.ts`). The caller is the deployment's
  * own secret at eve's door, `HostedEnvironment.eveDeploymentSecret` (read as
  * unset where it is blank or the cron's own value, `environment.ts`),

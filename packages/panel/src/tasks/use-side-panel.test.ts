@@ -76,44 +76,6 @@ function launch(stood: Stood) {
   };
 }
 
-test("the Chat stands opened on a task with no channel yet and once its channel is held, never while Chat is off, and again as it was left once Chat is back on", () => {
-  let control: SidePanelControl | undefined;
-  function Probe({ chat }: { chat: boolean | undefined }) {
-    control = useSidePanel(
-      undefined,
-      { id: TASK, holds: { ...usedTask(TASK).holds, [SIDE_PANEL_TAB.CHAT]: chat } },
-      [],
-      [],
-      [],
-      [],
-      [],
-    );
-    return null;
-  }
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  const render = (chat: boolean | undefined) =>
-    act(() => root.render(createElement(Probe, { chat })));
-  const panel = () => {
-    assert.ok(control);
-    return control;
-  };
-
-  // Chat on and no channel yet: the Chat stands only once opened, on its empty state.
-  render(undefined);
-  assert.ok(!panel().strip.includes(SIDE_PANEL_TAB.CHAT), "no channel opens no Chat by itself");
-  act(() => panel().onChoose(SIDE_PANEL_TAB.CHAT));
-  assert.equal(panel().tab, SIDE_PANEL_TAB.CHAT);
-  render(true);
-  assert.equal(panel().tab, SIDE_PANEL_TAB.CHAT);
-  render(false);
-  assert.ok(!panel().strip.includes(SIDE_PANEL_TAB.CHAT), "Chat off draws no Chat tab");
-  assert.notEqual(panel().tab, SIDE_PANEL_TAB.CHAT);
-  render(true);
-  assert.ok(panel().strip.includes(SIDE_PANEL_TAB.CHAT), "Chat back on draws it again");
-});
-
 test("an agent's Changes tab opens on its plan, stands chosen across a launch, and stands on no other plan", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
@@ -383,7 +345,6 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
     SIDE_PANEL_TAB.PLAN,
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.COMMENTS,
-    SIDE_PANEL_TAB.CHAT,
     { changes: AGENT },
     { file: "src/invites.ts" },
   ]);
@@ -480,13 +441,7 @@ test("a record kept while the Call stood in the panel reads with its tab let go 
   const panel = launch({ task: TASK, taskAgents: [] });
   assert.deepEqual(
     panel.control().strip,
-    [
-      SIDE_PANEL_TAB.PLAN,
-      SIDE_PANEL_TAB.BOARD,
-      SIDE_PANEL_TAB.CODE,
-      SIDE_PANEL_TAB.COMMENTS,
-      SIDE_PANEL_TAB.CHAT,
-    ],
+    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.COMMENTS],
     "the Call stands in no strip of the panel, and the plan leads it",
   );
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
@@ -661,6 +616,94 @@ test("an agent's transcript stands in a panel beside the Inbox alone, once the t
     !panel().strip.some((tab) => typeof tab === "object" && "transcript" in tab),
     "a task's own page draws its agents in its column, never beside",
   );
+});
+
+test("beside a channel's stream the panel's Inbox tab is the thread open there: what the thread opens stands beside it and closing that goes back to it, closing it closes the panel where nothing else stands, and the task's own page keeps no Inbox tab of it", () => {
+  /** Where the panel stands: the task's own page, beside a stream with a thread open, or beside the stream alone. */
+  type Beside = "task" | "thread" | "stream";
+  let control: SidePanelControl | undefined;
+  function Probe({ beside }: { beside: Beside }) {
+    control = useSidePanel(
+      undefined,
+      beside === "task"
+        ? usedTask(TASK)
+        : { id: TASK, holds: {}, bare: true, thread: beside === "thread" ? true : undefined },
+      [],
+      [],
+      [],
+      [],
+      [AGENT],
+    );
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const render = (beside: Beside) => act(() => root.render(createElement(Probe, { beside })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  render("stream");
+  assert.deepEqual(panel().strip, [], "a stream with no thread open holds no tab beside it");
+  render("thread");
+  act(() => panel().onChoose(SIDE_PANEL_TAB.INBOX));
+  assert.equal(panel().open, true);
+  assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX);
+
+  // A pull request the thread links opens beside it, and closing it is the way back to the thread.
+  act(() => panel().onPreview({ changes: AGENT }));
+  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.INBOX, { changes: AGENT }]);
+  assert.deepEqual(panel().tab, { changes: AGENT });
+  act(() => panel().onClose({ changes: AGENT }));
+  assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX);
+
+  // Closing the thread's tab, the last standing, closes the panel with it.
+  act(() => panel().onClose(SIDE_PANEL_TAB.INBOX));
+  assert.equal(panel().open, false);
+
+  render("task");
+  assert.ok(
+    !panel().strip.includes(SIDE_PANEL_TAB.INBOX),
+    "the thread's tab was the stream's, never a choice of the task's",
+  );
+});
+
+test("closing a channel's thread beside its stream leaves the task's own Inbox tab viewed as it was, so a tab closed on the task's page still goes back to it", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ thread }: { thread: boolean }) {
+    control = useSidePanel(
+      undefined,
+      thread ? { id: TASK, holds: {}, bare: true, thread: true } : usedTask(TASK),
+      [],
+      [],
+      [],
+      [],
+      [AGENT],
+    );
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const render = (thread: boolean) => act(() => root.render(createElement(Probe, { thread })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  render(false);
+  act(() => panel().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.INBOX));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+
+  render(true);
+  act(() => panel().onChoose(SIDE_PANEL_TAB.INBOX));
+  act(() => panel().onClose(SIDE_PANEL_TAB.INBOX));
+
+  render(false);
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX, "the tab viewed before the Board is the Inbox");
 });
 
 test("an archived agent's Pull request tab is drawn as a live agent's, while its Terminal tab is not", () => {

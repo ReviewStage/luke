@@ -13,6 +13,8 @@ import {
   type ChoiceLook,
   type ChoiceOption,
   type ChoiceSelect,
+  CONTROL_GROUND,
+  ControlGround,
   GAP,
   Inline,
   STATUS_TONE,
@@ -30,8 +32,9 @@ import { CatalogSection } from "../section";
  * unavailable one, a pick-several list, both marked with their radios or
  * checkboxes and numbered, a yes and a no across, toned, pills, faces as pictures, cards holding controls of their own, rows with a mark before their words, an
  * unavailable list, a settled record of what was picked, a marked list
- * stepped back beside a step and its presses, as an ask taken back, and a
- * narrow column of long words.
+ * stepped back beside a step and its presses, as an ask taken back, a list
+ * and its presses on a tint laid over the column's ground, as a post that
+ * needs the reader draws its ask, and a narrow column of long words.
  */
 
 const RETRIES: readonly ChoiceOption<string>[] = [
@@ -268,6 +271,26 @@ function ChoiceLists(): React.JSX.Element {
             </Inline>
           </Stack>
         </SteppedBack>
+      </CatalogSection>
+      <CatalogSection id="choice-list-on-tint" title="On a tint, laid over the column's ground">
+        <div className="catalog-tint">
+          <ControlGround ground={CONTROL_GROUND.OPAQUE}>
+            <Held
+              legend="How often to retry"
+              options={RETRIES}
+              start={[]}
+              look={CHOICE_LOOK.MARKED}
+            />
+            <Inline>
+              <Button variant={BUTTON_VARIANT.OUTLINE} size={BUTTON_SIZE.COMPACT}>
+                Approve
+              </Button>
+              <Button variant={BUTTON_VARIANT.OUTLINE} size={BUTTON_SIZE.COMPACT}>
+                Request changes
+              </Button>
+            </Inline>
+          </ControlGround>
+        </div>
       </CatalogSection>
       <CatalogSection id="choice-list-narrow" title="Narrow column, long words">
         <div className="catalog-narrow">

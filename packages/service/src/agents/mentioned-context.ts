@@ -1,6 +1,5 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { AGENT_TOOL, CONNECTION_TOOL } from "@luke/features/agent-tools";
-import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import {
   handedMentionsIn,
@@ -255,7 +254,7 @@ function agentNoteOf(
       : `, whose pull request is #${agent.pullRequest.number} (${agent.pullRequest.url})`;
   const message = agent.archived
     ? ""
-    : ` To message it, send it a direct message: \`${CHAT_TOOL.POST}\` with \`to\` set to the link the developer pointed you at.`;
+    : ` To message it, call \`${AGENT_TOOL.MESSAGE_AGENT}\` with its id.`;
   return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, task)}, "${agent.name}" (id \`${agent.id}\`)${archived}${working}${branch}${pullRequest}.${readingOf(agent, task?.repository ?? null)}${message} Its conversation is not yours to read.`;
 }
 
@@ -325,6 +324,8 @@ function handedMention(mention: Mention, task: Task | undefined): Handed | undef
     case MENTION_KIND.LUKE:
     // A date's words are the date in full, which is all there is to hand.
     case MENTION_KIND.DATE:
+    // A channel's link names it, which the agent posts to by name; nothing more is handed.
+    case MENTION_KIND.CHANNEL:
       return undefined;
   }
 }

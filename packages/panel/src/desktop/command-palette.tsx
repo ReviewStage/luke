@@ -55,6 +55,7 @@
  * each row's words instead.
  */
 
+import type { Channel } from "@luke/features/channel-wire";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
@@ -65,7 +66,9 @@ import { taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   EXPERIMENT,
+  type Experiment,
   type ExperimentChoices,
+  experimentOn,
   HOST_CAPABILITY,
   type HostCapability,
 } from "@luke/settings";
@@ -103,6 +106,7 @@ import {
   type CommandGroup,
   type CommandItem,
 } from "@luke/ui/command";
+import { GLYPH } from "@luke/ui/icons";
 import {
   hitRangesIn,
   SEARCH_TIER,
@@ -163,7 +167,6 @@ import {
   settingsSearchEntries,
 } from "../settings-search.js";
 import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../tasks/agent-ref.js";
-import { useChatOn } from "../tasks/chat-gate.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
@@ -174,6 +177,7 @@ import { markReadItem, type OpenTaskRename, useTaskRenameOffer } from "../tasks/
 import { TaskKey } from "../tasks/task-standing.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
+import { useChannels } from "../tasks/use-channels.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
@@ -189,7 +193,7 @@ import { useCapability, useExperiment, useExperimentChoices } from "../use-app-s
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
-import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
+import { agentEntries, inboxEntries } from "./main-tabs.js";
 import { strandedHome } from "./move-task-dialog.js";
 import {
   ADD_SECTION,
@@ -209,6 +213,7 @@ const PALETTE_FILTER = {
   TASKS: "plans",
   THIS_TASK: "this-task",
   INBOX: "inbox",
+  CHANNELS: "channels",
   PEOPLE: "people",
   FILES: "files",
   COMMANDS: "commands",
@@ -222,12 +227,26 @@ type PaletteKind = Exclude<PaletteFilter, typeof PALETTE_FILTER.ALL>;
 
 const PALETTE_FILTERS: readonly PaletteFilter[] = Object.values(PALETTE_FILTER);
 
+/** The filters an experiment holds, which stand only while the account has it on. */
+const FILTER_EXPERIMENT: Partial<Record<PaletteFilter, Experiment>> = {
+  [PALETTE_FILTER.CHANNELS]: EXPERIMENT.CHANNELS,
+};
+
+/** The filters standing for the account's experiments, in their order. */
+function filtersOn(experiments: ExperimentChoices): readonly PaletteFilter[] {
+  return PALETTE_FILTERS.filter((each) => {
+    const experiment = FILTER_EXPERIMENT[each];
+    return experiment === undefined || experimentOn(experiments, experiment);
+  });
+}
+
 /** Each filter's name, which is also each kind's heading under All. */
 const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
   [PALETTE_FILTER.TASKS]: "Tasks",
   [PALETTE_FILTER.THIS_TASK]: "This task",
   [PALETTE_FILTER.INBOX]: "Inbox",
+  [PALETTE_FILTER.CHANNELS]: "Channels",
   [PALETTE_FILTER.PEOPLE]: "People",
   [PALETTE_FILTER.FILES]: "Files",
   [PALETTE_FILTER.COMMANDS]: "Commands",
@@ -644,11 +663,15 @@ function arrowStep(event: React.KeyboardEvent, query: string): number {
   return 0;
 }
 
-/** The filter `step` places from the one given, wrapping at either end. */
-function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
-  const at = PALETTE_FILTERS.indexOf(filter);
-  const count = PALETTE_FILTERS.length;
-  return PALETTE_FILTERS[(at + step + count) % count] ?? PALETTE_FILTER.ALL;
+/** The filter `step` places from the one given among those standing, wrapping at either end. */
+function steppedFilter(
+  filters: readonly PaletteFilter[],
+  filter: PaletteFilter,
+  step: number,
+): PaletteFilter {
+  const at = filters.indexOf(filter);
+  const count = filters.length;
+  return filters[(at + step + count) % count] ?? PALETTE_FILTER.ALL;
 }
 
 /** The word a task Luke or an agent made is also found by, beside its maker's name. */
@@ -837,7 +860,7 @@ function paletteEntries(entry: AddEntry): readonly AddEntry[] {
 }
 
 /**
- * The open task's Inbox, Chat, and coding agents, as the column's "+" lists them,
+ * The open task's Inbox and coding agents, as the column's "+" lists them,
  * then what the side panel's "+" offers past its kinds, by its own rules
  * (`panelOffers`): the files Luke showed, the agents' Pull request tabs, the
  * plan's pages, a terminal for each agent, and a new Browser tab in each
@@ -851,7 +874,6 @@ function paletteEntries(entry: AddEntry): readonly AddEntry[] {
  */
 function agentRows(
   tasks: TasksControl,
-  chatOn: boolean,
   doors: PanelOfferDoors,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
@@ -859,7 +881,6 @@ function agentRows(
   if (taskId === undefined) return [];
   const taskName = tasks.tasks.find((task) => task.id === taskId)?.name;
   const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
-  const chat = chatEntries(chatOn && tasks.chatView.available, () => tasks.onShowChat(taskId));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
@@ -879,7 +900,6 @@ function agentRows(
         agents: tasks.agents,
         shownCode,
         pages,
-        chat: chatOn && tasks.chatView.available,
         onNewTerminal: doors.onNewTerminal,
         browsers: doors.browsers,
         viewedAgent: undefined,
@@ -898,7 +918,7 @@ function agentRows(
         .flatMap(paletteEntries)
         .map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
     : [];
-  const entries: readonly AddEntry[] = [...inbox, ...chat, ...agents, ...places];
+  const entries: readonly AddEntry[] = [...inbox, ...agents, ...places];
   const standing = entries.map(({ row, endMark, card, onPick, agent }) => {
     // Note that a terminal's row is named by its agent, as under the "+"'s Terminal heading, which ⌘K draws none of, so the row says it.
     const heading = row.section === ADD_SECTION.TERMINAL ? row.section : undefined;
@@ -978,6 +998,20 @@ function peopleRows(
     terms: row.terms,
     card: row.card,
     onChoose: () => open(row.member.userId),
+  }));
+}
+
+/** The listed workspace's open channels, each by its glyph and name, as the sidebar lists it, and its purpose, which choosing opens on its stream; `#app` typed finds it too. */
+function channelRows(
+  channels: readonly Channel[],
+  open: (channelId: string) => void,
+): readonly PaletteRow[] {
+  return channels.map((channel) => ({
+    icon: <GLYPH.CHANNEL />,
+    label: channel.name,
+    detail: channel.purpose,
+    terms: [channel.name, `#${channel.name}`, channel.purpose],
+    onChoose: () => open(channel.id),
   }));
 }
 
@@ -1068,7 +1102,6 @@ function inboxRows(
 const PLACE_COMMANDS: ReadonlySet<AppCommand> = new Set([
   APP_COMMAND.TASKS,
   APP_COMMAND.INBOX,
-  APP_COMMAND.CHAT,
   APP_COMMAND.AUTOMATIONS,
   APP_COMMAND.SETTINGS,
   APP_COMMAND.KEYBOARD_SHORTCUTS,
@@ -1208,7 +1241,6 @@ function copyLinkRows(
  */
 function panelTabRows(
   tasks: TasksControl,
-  chatOn: boolean,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
   if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
@@ -1218,7 +1250,6 @@ function panelTabRows(
     inbox:
       inboxOffered(tasks.agents, tasks.sidePanel) ||
       tasks.listed.inbox.some((waiting) => waiting.taskId === tasks.activeTaskId),
-    chat: chatOn && tasks.chatView.available,
     // Note that this is the "+"'s own input, though only an agent's page holds Code to it: a task's panel offers Code either way.
     code: (tasks.shownCode?.length ?? 0) > 0,
   });
@@ -1602,9 +1633,11 @@ function revealChecked(band: HTMLElement): void {
  * moving there would bring it.
  */
 function PaletteFilters({
+  filters,
   filter,
   onFilter,
 }: {
+  filters: readonly PaletteFilter[];
   filter: PaletteFilter;
   onFilter: (filter: PaletteFilter) => void;
 }): React.JSX.Element {
@@ -1616,7 +1649,7 @@ function PaletteFilters({
     <div ref={band}>
       <ChoiceBar
         label="Filter"
-        items={PALETTE_FILTERS.map((each) => ({ value: each, label: FILTER_LABEL[each] }))}
+        items={filters.map((each) => ({ value: each, label: FILTER_LABEL[each] }))}
         value={filter}
         onChange={onFilter}
         look={CHOICE_BAR_LOOK.FILL}
@@ -1718,8 +1751,8 @@ export function CommandPalette({
   readFiles: (taskId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const chatOn = useChatOn();
   const experiments = useExperimentChoices();
+  const filters = filtersOn(experiments);
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   const [query, setQuery] = useState("");
@@ -1842,7 +1875,7 @@ export function CommandPalette({
     const step = arrowStep(event, query);
     if (step !== 0) {
       event.preventDefault();
-      changeFilter(steppedFilter(filter, step));
+      changeFilter(steppedFilter(filters, filter, step));
       return;
     }
     const pressed = commandForKey(
@@ -1854,7 +1887,7 @@ export function CommandPalette({
     // claims their chords for its filters while it stands.
     event.preventDefault();
     if (pressed === APP_COMMAND.COMMAND_PALETTE) setOpen(false);
-    else changeFilter(steppedFilter(filter, pressed === APP_COMMAND.BACK ? -1 : 1));
+    else changeFilter(steppedFilter(filters, filter, pressed === APP_COMMAND.BACK ? -1 : 1));
   };
 
   const tokens = searchTokens(sought);
@@ -1907,6 +1940,12 @@ export function CommandPalette({
   const inboxAsked =
     open && tasks.signedIn && (filter === PALETTE_FILTER.INBOX || tokens.length > 0);
   const inboxSearch = useInboxSearch(tasks, inboxAsked);
+  // Note that the channels are those the window holds, read again as the palette opens, as the sidebar reads them as it is shown.
+  const channelsOn = filters.includes(PALETTE_FILTER.CHANNELS);
+  const channels = useChannels(
+    channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined,
+    open,
+  );
   const now = useMinute();
 
   // Note that the repository is read the first time its files are searched
@@ -1972,7 +2011,7 @@ export function CommandPalette({
           )
         : [],
     ],
-    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, chatOn, offerDoors, onTasks)],
+    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
     [PALETTE_FILTER.INBOX]: () => [
       inboxAsked
         ? inboxRows(inboxSearch.items, {
@@ -1981,9 +2020,19 @@ export function CommandPalette({
             tokens,
             now,
             open: (listed) =>
-              onTasks(() => tasks.inboxView.onOpenItem({ ...choiceOf(listed), opened: true })),
+              onTasks(() =>
+                tasks.inboxView.onOpenItem(
+                  { ...choiceOf(listed), opened: true },
+                  listed.item.channelId,
+                ),
+              ),
           })
         : [],
+    ],
+    [PALETTE_FILTER.CHANNELS]: () => [
+      channelRows(channels.channels ?? [], (channelId) =>
+        onTasks(() => tasks.inboxView.onOpenChannel(channelId)),
+      ),
     ],
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
@@ -2002,7 +2051,7 @@ export function CommandPalette({
         ...agentPinRows(listedTasks, choose),
         ...taskCommandRows(tasks, reads, renameOffer, choose),
         ...agentArchiveRows(openAgent, askArchive, choose),
-        ...panelTabRows(tasks, chatOn, onTasks),
+        ...panelTabRows(tasks, onTasks),
         ...actionRows(OPEN_THING_SHOW_COMMANDS, runCommand),
         ...actionRows(OPEN_THING_LAST_COMMANDS, runCommand),
         ...actionRows(GO_TO_COMMANDS, runCommand),
@@ -2026,7 +2075,7 @@ export function CommandPalette({
       : tiersOf[kind]()
           .flatMap((tier) => ranked(tier, sought, limit, byRow))
           .slice(0, limit);
-  const kinds = PALETTE_FILTERS.filter((each): each is PaletteKind =>
+  const kinds = filters.filter((each): each is PaletteKind =>
     filter === PALETTE_FILTER.ALL ? each !== PALETTE_FILTER.ALL : each === filter,
   );
   // Each kind's word for its rows' absence: still reading, refused, or a line of its own.
@@ -2034,6 +2083,7 @@ export function CommandPalette({
     [PALETTE_FILTER.TASKS]: () => tasksNotice(tasks),
     [PALETTE_FILTER.THIS_TASK]: () => undefined,
     [PALETTE_FILTER.INBOX]: () => (inboxAsked ? inboxNotice(inboxSearch) : undefined),
+    [PALETTE_FILTER.CHANNELS]: () => undefined,
     [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
     [PALETTE_FILTER.FILES]: () =>
       fileQuery === undefined ? undefined : filesNotice(filesOpen, held),
@@ -2110,7 +2160,7 @@ export function CommandPalette({
         onSelectedChange={setSelected}
         // Note that a listing cut short is said where nothing matches too, since what was sought may lie past the cut.
         empty={cut ? `${NOTHING_MATCHES}. ${TRUNCATED_LINE}` : NOTHING_MATCHES}
-        band={<PaletteFilters filter={filter} onFilter={changeFilter} />}
+        band={<PaletteFilters filters={filters} filter={filter} onFilter={changeFilter} />}
         foot={<PaletteFooter typed={query !== ""} runs={runs} />}
         onKeyDown={keyDown}
         inputRef={keystrokes}

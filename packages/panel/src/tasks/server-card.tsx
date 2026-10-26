@@ -141,8 +141,8 @@ export function ServerCard({
   const tools = shownTools(row, tool);
   return (
     <HoverCard data-server-card="">
-      <div className="task-card-line agent-servers-row">
-        <span className="task-card-glyph">
+      <div className="task-card-line agent-servers-row -mx-row-inset flex h-menu-row w-card-line min-w-0 items-center gap-icon-gap rounded-menu-row px-row-inset text-body-size text-foreground">
+        <span className="task-card-glyph inline-flex w-menu-glyph flex-none justify-center [&>svg]:size-menu-glyph">
           <ProviderMark provider={row.provider} />
         </span>
         <ServerRowWords row={row} />

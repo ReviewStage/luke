@@ -8,10 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 
 /** The workspace's Sentry as a row reads it: still reading, read, or a read that did not land. */
-type SentryRead =
-  | { readonly sentry: WorkspaceSentry }
-  | { readonly failed: true }
-  | undefined;
+type SentryRead = { readonly sentry: WorkspaceSentry } | { readonly failed: true } | undefined;
 
 /** A read that did not land, which keeps no earlier answer. */
 const SENTRY_READ_FAILED = { failed: true } as const;

@@ -162,6 +162,7 @@ export const THING_CARD: ThingCards = {
   [THING_KIND.MESSAGE]: OWN_CARD,
   [THING_KIND.INBOX]: OWN_CARD,
   [THING_KIND.INBOX_ITEM]: (item, at) => <InboxItemChipCard place={item} fallback={at.own} />,
+  [THING_KIND.CHANNEL]: OWN_CARD,
   [THING_KIND.AUTOMATIONS]: OWN_CARD,
   [THING_KIND.AUTOMATION]: AUTOMATION_CARD,
   [THING_KIND.AUTOMATION_RUN]: AUTOMATION_CARD,
@@ -175,7 +176,6 @@ export const THING_CARD: ThingCards = {
       fallback={at.own}
     />
   ),
-  [THING_KIND.CHAT]: OWN_CARD,
   [THING_KIND.ADMIN]: OWN_CARD,
   [THING_KIND.FILE]: (file, at) => (
     <FileCard

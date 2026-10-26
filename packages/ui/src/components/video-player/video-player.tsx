@@ -17,7 +17,7 @@ import { SLIDER_LENGTH, Slider } from "../slider/slider.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
- * video-player.tsx -- a video an agent recorded of what it did, played where a picture of it would be drawn, in its transcript, its inbox item, and its task's chat, and in the file viewer an Expand opens.
+ * video-player.tsx -- a video an agent recorded of what it did, played where a picture of it would be drawn, in its transcript and its inbox item, and in the file viewer an Expand opens.
  *
  * The player is Luke's own rather than the browser's: a bar along the
  * video's foot of the same icon buttons, glyphs, and slider the window draws
@@ -44,7 +44,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * `--luke-video-natural-height`, plain numbers the place may fit it by.
  *
  * The bytes arrive as a picture's do, as a `data:` URL the window's picture
- * reads hold (`picture-cache.ts`, the inbox's and the chat's own), and play
+ * reads hold (`picture-cache.ts`, the inbox's own), and play
  * from a `blob:` address made of them here and let go of as the player goes,
  * because neither window's content policy lets media load from a `data:`
  * address, where both allow `blob:`. What holds the player keeps it out of

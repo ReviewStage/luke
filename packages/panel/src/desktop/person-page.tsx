@@ -4,6 +4,7 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
+import { inboxWaitsOn } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -67,10 +68,12 @@ import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
+import { HOME_ROW_CONTEXT, HOME_ROW_META, HOME_ROW_PICTURE } from "../tasks/home-row.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
-import { INBOX_HOLDER, type InboxListed, inboxWaitsOn, NEEDS_YOU } from "../tasks/inbox-model.js";
+import { INBOX_HOLDER, type InboxListed, NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark } from "../tasks/tab-look.js";
 import { readAgentById } from "../tasks/use-coding-agents.js";
+import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
@@ -196,15 +199,15 @@ function AgentRow({
         <ListRow
           motionKey={agent.id}
           leading={
-            <span className="home-row-picture">
+            <span className={HOME_ROW_PICTURE}>
               <ActorMark actor={subject.tile} />
             </span>
           }
           title={subject.name}
           hint={{ Hint: RowHint, label: subject.name }}
           meta={
-            <span className="home-row-meta">
-              <OneLine className="home-row-context" words={task.name}>
+            <span className={HOME_ROW_META}>
+              <OneLine className={HOME_ROW_CONTEXT} words={task.name}>
                 {task.name}
               </OneLine>
               {agentEndMark(agent, false)}
@@ -432,14 +435,14 @@ function AutomationRow({
         ref={hold}
         motionKey={automation.id}
         leading={
-          <span className="home-row-picture">
+          <span className={HOME_ROW_PICTURE}>
             <ActorMark actor={automationActor(automation)} />
           </span>
         }
         title={automation.name}
         meta={
-          <span className="home-row-meta">
-            <OneLine className="home-row-context" words={trigger}>
+          <span className={HOME_ROW_META}>
+            <OneLine className={HOME_ROW_CONTEXT} words={trigger}>
               {trigger}
             </OneLine>
             {stateEndMark(state, true)}
@@ -645,12 +648,8 @@ function PersonColumn({
       (inboxWaitsOn(item)?.userId ?? agentStarter(holder.task, item.agentId)) === userId,
   );
   const { inboxView } = tasks;
-  const openItem = ({ holder, item }: InboxListed) =>
-    inboxView.onOpenItem(
-      holder.kind === INBOX_HOLDER.TASK
-        ? { taskId: holder.task.id, itemId: item.id }
-        : { agentId: item.agentId, itemId: item.id },
-    );
+  const openItem = (listed: InboxListed) =>
+    inboxView.onOpenItem(choiceOf(listed), listed.item.channelId);
   // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
@@ -671,7 +670,7 @@ function PersonColumn({
   // A refused read will not name them, so the page says so and offers Retry rather than wait.
   const note =
     refused && unnamed ? (
-      <div className="home-note">
+      <div className="home-note my-tight-gap">
         <ErrorState
           onRetry={retry}
         >{`${you ? "Your" : "Their"} profile could not be read.`}</ErrorState>
@@ -713,7 +712,7 @@ function PersonColumn({
       <PersonBody reading={!tasks.listRead || read.reading || theirAutomations.reading || unnamed}>
         <PersonTop>{note}</PersonTop>
         {tasks.listFailed ? (
-          <div className="home-note">
+          <div className="home-note my-tight-gap">
             <ErrorState onRetry={tasks.onRetryList}>
               {`${you ? "Your" : "Their"} tasks could not be read.`}
             </ErrorState>
@@ -728,7 +727,7 @@ function PersonColumn({
         )}
         {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
         {read.failed ? (
-          <div className="home-note">
+          <div className="home-note my-tight-gap">
             <ErrorState onRetry={read.onRetry}>Some inbox items could not be read.</ErrorState>
           </div>
         ) : waiting.length === 0 && read.reading ? (
@@ -782,7 +781,7 @@ function PersonColumn({
           </PersonSection>
         )}
         {theirAutomations.failed ? (
-          <div className="home-note">
+          <div className="home-note my-tight-gap">
             <ErrorState onRetry={theirAutomations.onRetry}>
               {`${you ? "Your" : "Their"} automations could not be read.`}
             </ErrorState>
@@ -799,7 +798,7 @@ function PersonColumn({
         theirAutomations.reading ? null : personPageEmpty(page) &&
           waiting.length === 0 &&
           automations.length === 0 ? (
-          <div className="home-note">
+          <div className="home-note my-tight-gap">
             <NoteLine look={NOTE_LINE_LOOK.INSET}>
               {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
             </NoteLine>

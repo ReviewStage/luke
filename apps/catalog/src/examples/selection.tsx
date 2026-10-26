@@ -31,7 +31,7 @@ const TASKS = [
   { id: "inbox", title: "Move the Inbox to one list", status: "Ready" },
   { id: "workers", title: "Name the workers", status: "Done" },
   { id: "deleting", title: "Old onboarding notes", status: "Deleting" },
-  { id: "folds", title: "Remember the chat rail's folds", status: "Ready" },
+  { id: "folds", title: "Remember the channel list's folds", status: "Ready" },
 ] as const;
 
 const UNAVAILABLE = "deleting";

@@ -1,6 +1,11 @@
-import type { Channel, ChannelThread } from "@luke/features/channel-wire";
-import { INBOX_STATUS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
-import { inboxWaitsOn, openAskOf } from "./inbox-model.js";
+import type { ArchivedChannel, Channel, ChannelThread } from "@luke/features/channel-wire";
+import {
+  type InboxItem,
+  type InboxMessage,
+  inboxAsksOpen,
+  inboxWaitsOn,
+  threadNeedsReader,
+} from "@luke/features/inbox-wire";
 
 /**
  * channels-model.ts -- a workspace's channels as the sidebar lists them and one channel's threads as its stream draws them (STAG-547).
@@ -14,7 +19,9 @@ import { inboxWaitsOn, openAskOf } from "./inbox-model.js";
  * the threads of their own tasks, those asking them, and those they wrote
  * in; Everyone, every thread; and Needs me, the open asks addressed to them
  * alone. A thread needs the reader while its ask stands open and it waits
- * on them, which the stream marks on the attention tint and nothing else.
+ * on them, which the stream marks on the attention tint and nothing else. A
+ * channel reads as unread while something was posted in it since the
+ * reader last looked, which its row says in the unread weight.
  */
 
 /** The channel every thread that names none goes to, which is never renamed or archived; the service mints it under this name (`GENERAL_CHANNEL`). */
@@ -54,6 +61,19 @@ export interface ChannelSections {
   readonly projects: readonly Channel[];
 }
 
+/**
+ * The sidebar's sections of channels, and a phone's list's, in their order:
+ * what each is called, whether it holds the projects', what its "+" makes,
+ * and how wide each of its rows' names stands while the channels are read,
+ * a few rows' worth, since nobody knows how many there are yet.
+ */
+export const CHANNEL_SECTIONS = [
+  { label: "Channels", project: false, add: "New channel", reading: ["56%", "72%", "44%"] },
+  { label: "Projects", project: true, add: "New project channel", reading: ["64%"] },
+] as const;
+
+export type ChannelSectionLook = (typeof CHANNEL_SECTIONS)[number];
+
 /** The replies line under a post: who replied, how many replies, and who the open ask waits on. */
 export interface RepliesLine {
   /** One message for each person who replied, the agent counted once, in the order they first replied. */
@@ -84,26 +104,12 @@ function dayWords(at: number, now: number): string {
   });
 }
 
-/** Whether a thread still asks someone something. */
-function asksOpen(item: InboxItem): boolean {
-  return item.status === INBOX_STATUS.OPEN && openAskOf(item.thread ?? []) !== undefined;
-}
-
-/** Whether a thread needs the reader: its ask stands open and waits on them. */
-export function threadNeedsReader(item: InboxItem, readerId: string | undefined): boolean {
-  return readerId !== undefined && asksOpen(item) && inboxWaitsOn(item)?.userId === readerId;
-}
-
 /**
  * Whether a thread is the reader's own, as Mine lists it: of a task of
  * theirs (`ownTask`) or an agent they started, asking them, or one they
  * wrote in.
  */
-function threadIsMine(
-  item: InboxItem,
-  readerId: string | undefined,
-  ownTask: boolean,
-): boolean {
+function threadIsMine(item: InboxItem, readerId: string | undefined, ownTask: boolean): boolean {
   if (readerId === undefined) return false;
   if (ownTask || item.startedBy?.userId === readerId) return true;
   if (threadNeedsReader(item, readerId)) return true;
@@ -208,7 +214,7 @@ export function repliesLine(item: InboxItem, readerId: string | undefined): Repl
     replies.length === 0
       ? "Reply in thread"
       : `${replies.length} ${replies.length === 1 ? "reply" : "replies"}`;
-  const waitsOn = asksOpen(item) ? inboxWaitsOn(item) : undefined;
+  const waitsOn = inboxAsksOpen(item) ? inboxWaitsOn(item) : undefined;
   const waiting =
     waitsOn === undefined
       ? undefined
@@ -226,21 +232,94 @@ export function channelSections(channels: readonly Channel[]): ChannelSections {
   };
 }
 
+/** The channels one of `CHANNEL_SECTIONS` lists, in the service's order. */
+export function sectionChannels(
+  channels: readonly Channel[],
+  section: ChannelSectionLook,
+): readonly Channel[] {
+  return channels.filter((channel) => channel.project === section.project);
+}
+
+/**
+ * Whether a channel reads as unread to the reader: something they may read
+ * was posted in it since they last looked, or they never looked at one that
+ * holds a thread.
+ */
+export function channelUnread(channel: Channel): boolean {
+  const { latestPostedAt, lookedAt } = channel;
+  if (latestPostedAt === undefined) return false;
+  return lookedAt === undefined || latestPostedAt > lookedAt;
+}
+
 /** Whether a channel may be renamed or archived: any but #general. */
 export function channelEditable(channel: Channel): boolean {
   return channel.name !== GENERAL_CHANNEL_NAME;
 }
 
-/** The channel a stream opens on: the one chosen where it still stands, else #general, else the first. */
-export function shownChannel(
-  channels: readonly Channel[],
+/** The workspace's #general, where its channels hold it. */
+export function generalChannel(channels: readonly Channel[]): Channel | undefined {
+  return channels.find((channel) => channel.name === GENERAL_CHANNEL_NAME);
+}
+
+/** What the Inbox's place shows of the workspace's channels: one of them, an archived one to read, that the channel chosen stands nowhere, or none. */
+export const CHANNEL_SHOWN = {
+  CHANNEL: "channel",
+  /** The channel chosen is one of the workspace's archived channels, its threads drawn to read. */
+  ARCHIVED: "archived",
+  /** The channel chosen is neither open nor among the archived channels given. */
+  MISSING: "missing",
+  /** The channels are not read yet, or the workspace has none. */
+  NONE: "none",
+} as const;
+
+export type ChannelShown =
+  | { readonly kind: typeof CHANNEL_SHOWN.CHANNEL; readonly channel: Channel }
+  | { readonly kind: typeof CHANNEL_SHOWN.ARCHIVED; readonly channel: ArchivedChannel }
+  | { readonly kind: typeof CHANNEL_SHOWN.MISSING }
+  | { readonly kind: typeof CHANNEL_SHOWN.NONE };
+
+/**
+ * What the place shows once the channels are read: the channel chosen
+ * where it is still open, or where it is among the `archived` channels
+ * given, that one to read; a missing channel's state where it is neither,
+ * so a link to an unknown channel says so rather than showing another; and
+ * #general, else the first, while nothing is chosen.
+ */
+export function channelShown(
+  channels: readonly Channel[] | undefined,
   chosenId: string | undefined,
+  archived: readonly ArchivedChannel[] = [],
+): ChannelShown {
+  if (channels === undefined) return { kind: CHANNEL_SHOWN.NONE };
+  const chosen = channels.find((channel) => channel.id === chosenId);
+  if (chosenId !== undefined && chosen === undefined) {
+    const gone = archived.find((channel) => channel.id === chosenId);
+    return gone === undefined
+      ? { kind: CHANNEL_SHOWN.MISSING }
+      : { kind: CHANNEL_SHOWN.ARCHIVED, channel: gone };
+  }
+  const channel = chosen ?? generalChannel(channels) ?? channels[0];
+  return channel === undefined
+    ? { kind: CHANNEL_SHOWN.NONE }
+    : { kind: CHANNEL_SHOWN.CHANNEL, channel };
+}
+
+/**
+ * The channel `by` steps from the one shown, through the sidebar's order,
+ * the standing channels then the projects', wrapping round at either end;
+ * from none shown, down is the first and up the last.
+ */
+export function channelStep(
+  channels: readonly Channel[],
+  shownId: string | undefined,
+  by: 1 | -1,
 ): Channel | undefined {
-  return (
-    channels.find((channel) => channel.id === chosenId) ??
-    channels.find((channel) => channel.name === GENERAL_CHANNEL_NAME) ??
-    channels[0]
-  );
+  const { standing, projects } = channelSections(channels);
+  const ordered = [...standing, ...projects];
+  if (ordered.length === 0) return undefined;
+  const at = ordered.findIndex((channel) => channel.id === shownId);
+  const from = at === -1 ? (by === 1 ? -1 : 0) : at;
+  return ordered[(from + by + ordered.length) % ordered.length];
 }
 
 /** "↑ N older asks need you", as the jump over the stream says it. */

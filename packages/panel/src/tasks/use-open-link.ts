@@ -47,7 +47,7 @@ import { useSteadyDoor } from "../steady-door.js";
  * rather than on GitHub (`openPullRequestsHere`). Past the place, the window opens
  * a pull request any listed task's agent opened in that agent's Pull request
  * tab, on its task (`ListedPullRequests`), wherever it is pressed:
- * Chat, a version, a task's card, or another task. Inside a pull
+ * a thread, a version, a task's card, or another task. Inside a pull
  * request's own tab, a link leaves for GitHub (`PullRequestsOnGitHub`).
  */
 

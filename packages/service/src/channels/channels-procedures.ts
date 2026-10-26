@@ -1,27 +1,33 @@
 /**
- * channels-procedures.ts -- a workspace's channels: read them, make, rename, or archive one, stamp the reader's look at one, and read one's threads.
+ * channels-procedures.ts -- a workspace's channels: read them, open or archived, make, edit, archive, or unarchive one, stamp the reader's look at one, read a page of one's threads, and move a thread into one.
  *
  * The channels resource of the hosted oRPC router (`@luke/features/contract`'s
  * `channels.ts`). Any member of a workspace reads and writes its channels,
  * but never renames or archives its #general (`channel-store.ts`), and every
- * write answers the workspace's channels as they then stand, each with how
- * many open asks wait on the reader there (`inbox-store.ts`'s `WAITS_ON`)
- * and when they last looked at it. A workspace the account is not in, or a
- * channel none of its own, is not found.
+ * write on a channel answers the workspace's channels as they then stand,
+ * each with how many open asks wait on the reader there (`inbox-store.ts`'s
+ * `WAITS_ON`), when they last looked at it, and when its latest thread was
+ * posted. A member moves any thread they may read into another open channel
+ * of its workspace. A workspace the account is not in, a channel none of
+ * its own, or a thread they may not read, is not found.
  */
 
 import {
+  type ArchivedChannelRow,
   archiveChannel,
   CHANNEL_WRITE_REFUSAL,
   type ChannelWriteRefusal,
   channelWorkspaceOf,
   createChannel,
+  editChannel,
+  listArchivedChannels,
   listChannelLooks,
   openChannels,
-  renameChannel,
   stampChannelLook,
+  unarchiveChannel,
 } from "@luke/database/models/channel-store";
-import type { Channel, ChannelsAnswer } from "@luke/features/channel-wire";
+import { isWorkspaceMember } from "@luke/database/models/workspace-store";
+import type { ArchivedChannel, Channel, ChannelsAnswer } from "@luke/features/channel-wire";
 import { DateTime, Effect, Option, Result } from "effect";
 import {
   HOSTED_REFUSAL,
@@ -29,7 +35,12 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { channelThreads, channelWaitingCounts } from "../inbox/inbox-store.js";
+import {
+  channelLatestPosts,
+  channelThreads,
+  channelWaitingCounts,
+  moveChannelThread,
+} from "../inbox/inbox-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 
 export interface ChannelsProcedureSeams {
@@ -74,17 +85,19 @@ const channelsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   organizationId: string,
 ) {
   const now = yield* DateTime.nowAsDate;
-  const [rows, waiting, looks] = yield* hostedStoreOrUnavailable(
+  const [rows, waiting, looks, latest] = yield* hostedStoreOrUnavailable(
     Effect.all([
       openChannels(userId, organizationId, now),
       channelWaitingCounts(userId, organizationId),
       listChannelLooks(userId, organizationId),
+      channelLatestPosts(userId, organizationId),
     ]),
   );
   if (rows.length === 0) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const lookedAt = new Map(looks.map((look) => [look.channelId, look.lookedAt]));
   const channels = rows.map((row): Channel => {
     const looked = lookedAt.get(row.id);
+    const posted = latest.get(row.id);
     return {
       id: row.id,
       name: row.name,
@@ -94,13 +107,27 @@ const channelsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       createdAt: row.createdAt,
       waiting: waiting.get(row.id) ?? 0,
       ...(looked === undefined ? undefined : { lookedAt: looked }),
+      ...(posted === undefined ? undefined : { latestPostedAt: posted }),
     };
   });
   const answer: ChannelsAnswer = { channels };
   return answer;
 });
 
-/** The channels resource: the workspace's channels, one made, renamed, archived, or looked at, and one's threads. */
+/** An archived channel as the wire carries it. */
+function archivedChannel(row: ArchivedChannelRow): ArchivedChannel {
+  return {
+    id: row.id,
+    name: row.name,
+    purpose: row.purpose,
+    project: row.project,
+    ...(row.createdBy === null ? undefined : { createdBy: row.createdBy }),
+    createdAt: row.createdAt,
+    archivedAt: row.archivedAt,
+  };
+}
+
+/** The channels resource: the workspace's channels, open or archived, one made, edited, archived, unarchived, or looked at, a page of one's threads, and a thread moved. */
 export function channelsProcedures(seams: ChannelsProcedureSeams) {
   const signedIn = hosted.channels.use(accountMiddleware(seams.resolveUserId));
   return {
@@ -116,12 +143,12 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
       yield* written(made);
       return yield* channelsOf(context.userId, workspaceId);
     }),
-    rename: signedIn.rename.effect(function* ({ input, context }) {
-      const { workspaceId, channelId, name } = input;
-      const renamed = yield* hostedStoreOrUnavailable(
-        renameChannel(context.userId, workspaceId, channelId, name),
+    edit: signedIn.edit.effect(function* ({ input, context }) {
+      const { workspaceId, channelId, name, purpose } = input;
+      const edited = yield* hostedStoreOrUnavailable(
+        editChannel(context.userId, workspaceId, channelId, { name, purpose }),
       );
-      yield* written(renamed);
+      yield* written(edited);
       return yield* channelsOf(context.userId, workspaceId);
     }),
     archive: signedIn.archive.effect(function* ({ input, context }) {
@@ -132,6 +159,26 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
       );
       yield* written(archived);
       return yield* channelsOf(context.userId, workspaceId);
+    }),
+    unarchive: signedIn.unarchive.effect(function* ({ input, context }) {
+      const { workspaceId, channelId } = input;
+      const opened = yield* hostedStoreOrUnavailable(
+        unarchiveChannel(context.userId, workspaceId, channelId),
+      );
+      yield* written(opened);
+      return yield* channelsOf(context.userId, workspaceId);
+    }),
+    archived: signedIn.archived.effect(function* ({ input, context }) {
+      const { workspaceId } = input;
+      // Note that membership is read first, because a workspace with no archived channel answers none as one the account is not in would.
+      const member = yield* hostedStoreOrUnavailable(
+        isWorkspaceMember(context.userId, workspaceId),
+      );
+      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const rows = yield* hostedStoreOrUnavailable(
+        listArchivedChannels(context.userId, workspaceId),
+      );
+      return { channels: rows.map(archivedChannel) };
     }),
     look: signedIn.look.effect(function* ({ input, context }) {
       const { workspaceId, channelId } = input;
@@ -145,10 +192,20 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
     threads: signedIn.threads.effect(function* ({ input, context }) {
       // Note that the channel is reached first, so one of a workspace the reader is not in is not found rather than empty.
       yield* workspaceOfChannel(context.userId, input.channelId);
-      const threads = yield* hostedStoreOrUnavailable(
-        channelThreads(context.userId, input.channelId),
+      const page = yield* hostedStoreOrUnavailable(
+        channelThreads(context.userId, input.channelId, input.before),
       );
-      return { threads };
+      // A thread to read before that the reader may not read is not found, so a page never reads past one they cannot see.
+      if (Option.isNone(page)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return page.value;
+    }),
+    move: signedIn.move.effect(function* ({ input, context }) {
+      const moved = yield* hostedStoreOrUnavailable(
+        moveChannelThread(context.userId, input.threadId, input.channelId),
+      );
+      // Note that a thread the mover may not read and a channel that is no open one of its workspace are one refusal, so a move tells nothing of either.
+      if (Result.isFailure(moved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { thread: moved.success };
     }),
   };
 }

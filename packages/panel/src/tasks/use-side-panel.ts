@@ -34,7 +34,7 @@ import {
 } from "@luke/ui/tab-strip-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import { Option, Schema } from "effect";
-import { InboxIcon, MessagesSquareIcon } from "lucide-react";
+import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { pressedWithCommand } from "../press-intent.js";
@@ -74,7 +74,11 @@ plan); an item has not
  * what waits across the account says an item waits on it. So a new task
  * has the plan's tab alone,
  * and what arrives on it adds its tab at the strip's end as it arrives,
- * never taking the chosen one's place. The developer's own choices lie
+ * never taking the chosen one's place. Beside the window's Inbox the panel
+ * draws none of them but the Inbox, and that only while a channel's thread
+ * stands open beside its stream, the tab showing the thread and closing
+ * with it, a choice of the thread's rather than the task's (`OpenTask`'s
+ * `thread`). The developer's own choices lie
  * over that, per task: a tab they open from the "+" stands on that task
  * though it holds nothing, and one they close stays closed on that task however
  * much more arrives, until they or Luke's next drawing or snippet open it again. The tab chosen is the
@@ -179,7 +183,7 @@ plan); an item has not
  * holds the window's focus, which stands until the "+" opens its menu.
  */
 
-/** The panel's kinds of tab, the fixed six. A kind is one entry here, one row below, and one case where the panel draws it. */
+/** The panel's kinds of tab, the fixed five. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   /** The task's plan, its document (`plan-body.tsx`). */
   PLAN: "plan",
@@ -189,15 +193,14 @@ export const SIDE_PANEL_TAB = {
   CODE: "code",
   /** The plan's comment threads, open and resolved (`plan-comments.tsx`). */
   COMMENTS: "comments",
-  /** The task's chat channel, where its agents talk as a team (`desktop-chat.tsx`'s `TaskChatTab`). */
-  CHAT: "chat",
 } as const;
 
 /**
  * The kinds an earlier version had and this one does not, which what it kept
  * may still name: History, whose versions now take the whole window
- * (`desktop-version-history.tsx`), and Transcript, Work, and Call, the
- * task's calls with Luke, whose calls every agent's tab takes now. Note that a
+ * (`desktop-version-history.tsx`), Transcript, Work, and Call, the task's
+ * calls with Luke, whose calls every agent's tab takes now, and the task's
+ * Chat channel, gone with Chat. Note that a
  * kind is retired here rather than deleted, because a kept state naming one
  * would otherwise not read at all and lose every other choice it holds.
  */
@@ -206,6 +209,7 @@ const RETIRED_SIDE_PANEL_TAB = {
   TRANSCRIPT: "transcript",
   WORK: "work",
   CALL: "call",
+  CHAT: "chat",
 } as const;
 
 type RetiredSidePanelTab = (typeof RETIRED_SIDE_PANEL_TAB)[keyof typeof RETIRED_SIDE_PANEL_TAB];
@@ -285,7 +289,6 @@ export const SIDE_PANEL_TAB_KIND = {
   [SIDE_PANEL_TAB.BOARD]: { label: "Board", icon: BoardIcon },
   [SIDE_PANEL_TAB.CODE]: { label: "Code", icon: CodeIcon },
   [SIDE_PANEL_TAB.COMMENTS]: { label: "Comments", icon: CommentsIcon },
-  [SIDE_PANEL_TAB.CHAT]: { label: TAB_WORDS.CHAT, icon: MessagesSquareIcon },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
 /** Every kind of tab, in the order the "+" offers them and a task whose order holds none of them stands them in. */
@@ -714,6 +717,13 @@ export interface OpenTask {
   holds: TaskHolds;
   /** Whether the panel draws none of the task's fixed tabs, standing beside the window's Inbox rather than the task's page, which draws what they show. */
   bare?: true | undefined;
+  /**
+   * Whether a channel's thread stands open beside its stream, which the bare
+   * panel draws as its one fixed tab, the Inbox, as a task's page draws its
+   * threads there. Note that the tab is the open thread's rather than any
+   * choice of the task's, so opening or closing it keeps nothing on the task.
+   */
+  thread?: true | undefined;
 }
 
 /** What the task holds for the tabs: its id and its kinds, its agents whose tabs are open, or nothing while unread, the brain's workers its work holds, by the call that started each, and the files shown on it. */
@@ -744,6 +754,9 @@ const NO_PAGES: readonly string[] = [];
 /** A task with no Changes tab open, the same array every render. */
 const NO_CHANGES: readonly ChangesStripTab[] = [];
 
+/** The bare panel's fixed tabs while a channel's thread stands open beside it: the Inbox alone, the same array every render. */
+const THREAD_TABS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX];
+
 /** A task no tab was opened or moved on. */
 const NO_ORDER: readonly SidePanelTab[] = [];
 
@@ -758,23 +771,15 @@ function orderOn(held: HeldState, taskId: string | undefined): readonly SidePane
 /**
  * The task's fixed tabs in the strip's order: each it holds something of and
  * was not closed on, and each opened on it. The Inbox stands only opened, and
- * only on a task that may draw one; the Chat stands opened, or once its
- * channel is held, and never where it is held false, which is Chat off: a
- * Chat opened on a task with no channel yet stands on its empty state, and
- * one opened while Chat was on stands nowhere once it is off, and stands
- * again, as it was left, once it is back on.
+ * only on a task that may draw one.
  */
 function drawnFixed(held: HeldState, task: OpenTask): readonly FixedSidePanelTab[] {
-  if (task.bare === true) return [];
+  if (task.bare === true) return task.thread === true ? THREAD_TABS : [];
   const chosen = taskTabs(held, task.id);
   const open = held.tabs.filter((tab) =>
     tab === SIDE_PANEL_TAB.INBOX
       ? chosen.opened.includes(tab) && task.holds[tab] === true
-      : tab === SIDE_PANEL_TAB.CHAT
-        ? task.holds[tab] !== false &&
-          (chosen.opened.includes(tab) ||
-            (!chosen.closed.includes(tab) && task.holds[tab] === true))
-        : chosen.opened.includes(tab) || (!chosen.closed.includes(tab) && task.holds[tab] === true),
+      : chosen.opened.includes(tab) || (!chosen.closed.includes(tab) && task.holds[tab] === true),
   );
   return inTaskOrder(open, orderOn(held, task.id), (tab) => tab);
 }
@@ -952,9 +957,17 @@ function withChangesOpened(
  * Changes tab; a subagent's opens at the end of its own run, and one
  * already open is chosen as it stands, whichever path named its call.
  */
-function withTab(held: HeldState, tab: SidePanelTab, taskId: string | undefined): HeldState {
+function withTab(
+  held: HeldState,
+  tab: SidePanelTab,
+  taskId: string | undefined,
+  bare = false,
+): HeldState {
+  // Note that a bare panel's fixed tab is a channel's thread's, so the task keeps no choice of it.
   const opened = isFixedTab(tab)
-    ? withChoice(held, taskId, tab, true)
+    ? bare
+      ? held
+      : withChoice(held, taskId, tab, true)
     : isChangesTab(tab)
       ? withChangesOpened(held, taskId, tab)
       : held;
@@ -1343,7 +1356,9 @@ function withChosenViewed(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs):
 function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldState {
   const closed: HeldState | undefined = isFixedTab(tab)
     ? drawnFixed(held, drawn.task).includes(tab)
-      ? withChoice(held, drawn.task.id, tab, false)
+      ? drawn.task.bare === true
+        ? held
+        : withChoice(held, drawn.task.id, tab, false)
       : undefined
     : isTranscriptTab(tab)
       ? { ...held, transcripts: held.transcripts.filter((each) => !sameTab(each, tab)) }
@@ -1369,8 +1384,12 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
                     }
                   : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
-  const forgotten = withoutViewed(closed, drawn.task.id, tab);
-  const left = stripOf(forgotten, drawn);
+  // Note that a bare panel's thread tab closes with its thread, which its holder closes as it asks this, so it is left out of what stands,
+  // and the task's own Inbox tab keeps its place among those viewed, since it was never closed.
+  const threadTab = drawn.task.bare === true && isFixedTab(tab);
+  const forgotten = threadTab ? closed : withoutViewed(closed, drawn.task.id, tab);
+  const after = threadTab ? { ...drawn, task: { ...drawn.task, thread: undefined } } : drawn;
+  const left = stripOf(forgotten, after);
   // Note that only a close that empties the strip shuts the panel, because a
   // tab the strip never drew may close without the developer seeing it go.
   const shut = left.length === 0 && stripOf(held, drawn).length > 0;
@@ -1781,13 +1800,10 @@ function shownTab(
 }
 
 /**
- * The kinds whose first hold opens the panel on them, which every kind but the Inbox and the Chat does: the
- * Inbox stands only once opened (`drawnFixed`), and the Chat stands while the task has a channel but never
- * opens the panel by itself, since its channel opens as soon as an agent posts.
+ * The kinds whose first hold opens the panel on them, which every kind but the Inbox does: the Inbox stands
+ * only once opened (`drawnFixed`).
  */
-const HELD_KINDS = SIDE_PANEL_TABS.filter(
-  (tab) => tab !== SIDE_PANEL_TAB.INBOX && tab !== SIDE_PANEL_TAB.CHAT,
-);
+const HELD_KINDS = SIDE_PANEL_TABS.filter((tab) => tab !== SIDE_PANEL_TAB.INBOX);
 
 /** Whether two reads of what a task holds say the same of every kind. */
 function sameHolds(a: TaskHolds, b: TaskHolds): boolean {
@@ -1903,7 +1919,12 @@ export function useSidePanel(
   // chosen on this very task and stands in for nothing: a file's waits for
   // the task's code to be read, however much arrives before it. A kind that
   // arrived stands at the strip's end, as a tab opened does (`firstHeld`).
-  if (seen.id !== taskId || seen.bare !== task.bare || !sameHolds(seen.holds, task.holds)) {
+  if (
+    seen.id !== taskId ||
+    seen.bare !== task.bare ||
+    seen.thread !== task.thread ||
+    !sameHolds(seen.holds, task.holds)
+  ) {
     setSeen(task);
     const before =
       seen.id === taskId && arrived(seen.holds, task.holds) ? shownFor(seen.holds) : undefined;
@@ -2027,7 +2048,12 @@ export function useSidePanel(
     (tab: SidePanelTab) => {
       setAsked(undefined);
       update((held) => ({
-        ...withTab(withTabLast(withChosenViewed(held, tab, drawn), tab, drawn), tab, taskId),
+        ...withTab(
+          withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
+          tab,
+          taskId,
+          drawn.task.bare === true,
+        ),
         open: true,
       }));
     },

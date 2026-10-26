@@ -35,15 +35,19 @@ afterEach(() => {
 
 const WORKSPACE_ID = "workspace-1";
 const CHANNEL_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
+const THREAD_ID = "8a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
 /** Each kind's refusal, as its contract procedure words it. */
 const REFUSAL = {
   [CHANNEL_ACT_KIND.CHANNELS_LIST]: "Could not read the channels on this system.",
   [CHANNEL_ACT_KIND.CHANNELS_CREATE]: "Could not make the channel on this system.",
-  [CHANNEL_ACT_KIND.CHANNELS_RENAME]: "Could not rename the channel on this system.",
+  [CHANNEL_ACT_KIND.CHANNELS_EDIT]: "Could not edit the channel on this system.",
   [CHANNEL_ACT_KIND.CHANNELS_ARCHIVE]: "Could not archive the channel on this system.",
+  [CHANNEL_ACT_KIND.CHANNELS_UNARCHIVE]: "Could not unarchive the channel on this system.",
+  [CHANNEL_ACT_KIND.CHANNELS_ARCHIVED]: "Could not read the archived channels on this system.",
   [CHANNEL_ACT_KIND.CHANNELS_LOOK]: "Could not mark the channel seen on this system.",
   [CHANNEL_ACT_KIND.CHANNELS_THREADS]: "Could not read the channel's threads on this system.",
+  [CHANNEL_ACT_KIND.CHANNELS_MOVE]: "Could not move the thread on this system.",
 } as const;
 
 type Kind = keyof typeof REFUSAL;
@@ -74,14 +78,20 @@ const ACTS: readonly {
       }),
   },
   {
-    kind: CHANNEL_ACT_KIND.CHANNELS_RENAME,
-    host: "rename",
-    payload: { workspaceId: WORKSPACE_ID, channelId: CHANNEL_ID, name: "ship" },
+    kind: CHANNEL_ACT_KIND.CHANNELS_EDIT,
+    host: "edit",
+    payload: {
+      workspaceId: WORKSPACE_ID,
+      channelId: CHANNEL_ID,
+      name: "ship",
+      purpose: "Releases",
+    },
     call: (client) =>
-      client[CHANNEL_ACT_KIND.CHANNELS_RENAME]({
+      client[CHANNEL_ACT_KIND.CHANNELS_EDIT]({
         workspaceId: WORKSPACE_ID,
         channelId: CHANNEL_ID,
         name: "ship",
+        purpose: "Releases",
       }),
   },
   {
@@ -95,6 +105,22 @@ const ACTS: readonly {
       }),
   },
   {
+    kind: CHANNEL_ACT_KIND.CHANNELS_UNARCHIVE,
+    host: "unarchive",
+    payload: { workspaceId: WORKSPACE_ID, channelId: CHANNEL_ID },
+    call: (client) =>
+      client[CHANNEL_ACT_KIND.CHANNELS_UNARCHIVE]({
+        workspaceId: WORKSPACE_ID,
+        channelId: CHANNEL_ID,
+      }),
+  },
+  {
+    kind: CHANNEL_ACT_KIND.CHANNELS_ARCHIVED,
+    host: "archived",
+    payload: { workspaceId: WORKSPACE_ID },
+    call: (client) => client[CHANNEL_ACT_KIND.CHANNELS_ARCHIVED]({ workspaceId: WORKSPACE_ID }),
+  },
+  {
     kind: CHANNEL_ACT_KIND.CHANNELS_LOOK,
     host: "look",
     payload: { workspaceId: WORKSPACE_ID, channelId: CHANNEL_ID },
@@ -104,8 +130,16 @@ const ACTS: readonly {
   {
     kind: CHANNEL_ACT_KIND.CHANNELS_THREADS,
     host: "threads",
-    payload: { channelId: CHANNEL_ID },
-    call: (client) => client[CHANNEL_ACT_KIND.CHANNELS_THREADS]({ channelId: CHANNEL_ID }),
+    payload: { channelId: CHANNEL_ID, before: THREAD_ID },
+    call: (client) =>
+      client[CHANNEL_ACT_KIND.CHANNELS_THREADS]({ channelId: CHANNEL_ID, before: THREAD_ID }),
+  },
+  {
+    kind: CHANNEL_ACT_KIND.CHANNELS_MOVE,
+    host: "move",
+    payload: { threadId: THREAD_ID, channelId: CHANNEL_ID },
+    call: (client) =>
+      client[CHANNEL_ACT_KIND.CHANNELS_MOVE]({ threadId: THREAD_ID, channelId: CHANNEL_ID }),
   },
 ];
 
@@ -122,10 +156,16 @@ function windowPort(actor: ActSender) {
   const host: HostAsk = {
     channelsList: unanswered("list"),
     channelsCreate: unanswered("create"),
-    channelsRename: unanswered("rename"),
+    channelsEdit: unanswered("edit"),
     channelsArchive: unanswered("archive"),
+    channelsUnarchive: unanswered("unarchive"),
+    channelsArchived: unanswered("archived"),
     channelsLook: unanswered("look"),
     channelsThreads: unanswered("threads"),
+    channelsMove: unanswered("move"),
+    channelsFollow: () => Effect.void,
+    channelsUnfollow: () => Effect.void,
+    onChannelsChanged: () => () => undefined,
   };
   const port = testActPort<unknown>(channelProcedures({ host }));
   ports.push(port);

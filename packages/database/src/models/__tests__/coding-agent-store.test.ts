@@ -240,12 +240,6 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           name: "Invite expiry",
           model: "anthropic/claude-opus-5.5",
         });
-        // A line that kept the agent but no model names none, never the model the agent runs on now.
-        const byChatAgent = yield* line("chat-agent", {
-          kind: MESSAGE_SENDER.AGENT,
-          agentId: sender.agentId,
-          name: "agent-1",
-        });
         // A line whose agent is gone keeps the model it was sent under, and names no agent.
         const byGoneAgent = yield* line("gone-agent", {
           kind: MESSAGE_SENDER.AGENT,
@@ -273,7 +267,6 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           byAutomation,
           byGitHub,
           byAgent,
-          byChatAgent,
           byGoneAgent,
           earlier?.id ?? "",
         ];
@@ -290,12 +283,6 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
               kind: MESSAGE_SENDER.AGENT,
               name: "Invite expiry",
               model: "anthropic/claude-opus-5.5",
-              agent: { id: sender.agentId, taskId: undefined },
-            },
-            {
-              kind: MESSAGE_SENDER.AGENT,
-              name: "agent-1",
-              model: undefined,
               agent: { id: sender.agentId, taskId: undefined },
             },
             {
@@ -2154,6 +2141,7 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
         const header = {
           id: agent.id,
           userId: starter,
+          organizationId: workspace,
           taskId: null,
           repository: "acme/api",
           title: "Flaky tests",

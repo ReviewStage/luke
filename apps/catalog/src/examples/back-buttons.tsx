@@ -26,7 +26,7 @@ function BackButtons(): React.JSX.Element {
     <>
       <CatalogSection id="back-button-header" title="In a bar">
         <Toolbar
-          lead={<BackButton label="Chat" place="chat" onBack={stay} />}
+          lead={<BackButton label="Inbox" place="inbox" onBack={stay} />}
           title="Nightly triage"
         />
       </CatalogSection>

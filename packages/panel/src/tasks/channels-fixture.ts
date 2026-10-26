@@ -24,6 +24,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
   type InboxMessage,
+  threadNeedsReader,
 } from "@luke/features/inbox-wire";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksView } from "@luke/features/tasks-view";
@@ -38,7 +39,6 @@ import {
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
 import { EXPERIMENT } from "@luke/settings";
-import { threadNeedsReader } from "./channels-model.js";
 
 const LANDED = Date.now();
 const MINUTE = 60_000;
@@ -109,6 +109,8 @@ const CHANNEL = {
   INFRA: fixtureId("f6000006", 3),
   GENERAL: fixtureId("f6000006", 4),
   CHANNELS: fixtureId("f6000006", 5),
+  DESIGN_REVIEW: fixtureId("f6000006", 6),
+  LAUNCH_SITE: fixtureId("f6000006", 7),
 } as const;
 
 /** A channel as the service keeps it, before what it counts for a reader. */
@@ -129,7 +131,7 @@ let CHANNELS: readonly ChannelSeed[] = [
   {
     id: CHANNEL.CHANNELS,
     name: "channels",
-    purpose: "Project: Chat rebuilt on the Inbox, archived when it ships",
+    purpose: "Project: threads read by topic, archived when it ships",
     project: true,
     createdAt: LANDED - 2 * DAY,
     createdBy: DEAN,
@@ -216,8 +218,8 @@ const TASKS: readonly TaskSeed[] = [
   {
     id: TASK.SEARCH,
     agentId: AGENT.SEARCH,
-    name: "Chat search",
-    agentTitle: "Search the chat",
+    name: "Thread search",
+    agentTitle: "Search the threads",
     owner: CHARLES,
     done: false,
     number: 541,
@@ -336,24 +338,24 @@ const THREADS: ThreadSeed[] = [
     1,
     seed(TASK.SCHEMA),
     CHANNEL.SERVICE,
-    "Chat search and Channels schema both change chat-store.ts",
+    "Thread search and Channels schema both change inbox-store.ts",
     [
       agentSaid(
         101,
         2 * MINUTE,
         [
-          "Charles's **Chat search** and this task both edit `postMessage` and `unreadFor` in [chat-store.ts](https://github.com/ReviewStage/luke/blob/HEAD/packages/database/src/models/chat-store.ts). The branches will conflict, and Chat search indexes the table Channels schema retires.",
+          "Charles's **Thread search** and this task both edit `postMessage` and `unreadFor` in [inbox-store.ts](https://github.com/ReviewStage/luke/blob/HEAD/packages/service/src/inbox/inbox-store.ts). The branches will conflict, and Thread search indexes the table Channels schema retires.",
           "",
           "Asking you both, since either task could wait.",
         ].join("\n"),
         {
           type: INBOX_ASK.DECIDE,
           options: [
-            { label: "Pause Chat search", detail: "It picks up on top of the new thread table." },
-            { label: "Land Chat search first", detail: "Channels schema rebases onto it." },
+            { label: "Pause Thread search", detail: "It picks up on top of the new thread table." },
+            { label: "Land Thread search first", detail: "Channels schema rebases onto it." },
             { label: "Carry on, rebase later" },
           ],
-          recommended: "Pause Chat search",
+          recommended: "Pause Thread search",
           ...OPEN,
         },
       ),
@@ -469,13 +471,13 @@ const THREADS: ThreadSeed[] = [
     7,
     seed(TASK.SEARCH),
     CHANNEL.SERVICE,
-    "Don't add columns to chat_message until the backfill lands",
+    "Don't add columns to inbox_message until the backfill lands",
     [
       memberSaid(
         108,
         CHARLES,
         20 * MINUTE,
-        "The batched backfill runs Thursday. Until then a migration on `chat_message` conflicts with it. Pinned until Friday, and told the three agents working in #service.",
+        "The batched backfill runs Thursday. Until then a migration on `inbox_message` conflicts with it. Pinned until Friday, and told the three agents working in #service.",
       ),
     ],
     { startedBy: CHARLES, waitsOn: CHARLES },
@@ -677,7 +679,7 @@ THREADS.push(
     18,
     seed(TASK.SEARCH),
     CHANNEL.SERVICE,
-    "Shipped: the chat_message backfill runs in batches",
+    "Shipped: the inbox_message backfill runs in batches",
     [
       agentSaid(
         123,
@@ -767,11 +769,15 @@ function needsReader(each: InboxItem): boolean {
   return threadNeedsReader(each, READER.userId);
 }
 
-/** The workspace's channels as the reader reads them: each with what waits on them in it and when they last looked. */
+/** The workspace's channels as the reader reads them: each with what waits on them in it, when they last looked, and when its latest thread was posted. */
 function channelsRead(): readonly Channel[] {
   const looked = LAST_LOOKED.get(READER.userId);
   return CHANNELS.map((channel) => {
     const at = looked?.get(channel.id);
+    const posted = THREADS.filter((each) => each.channelId === channel.id).map(
+      (each) => each.item.postedAt,
+    );
+    const latest = posted.length === 0 ? undefined : Math.max(...posted);
     const { createdBy, ...rest } = channel;
     return {
       ...rest,
@@ -779,6 +785,7 @@ function channelsRead(): readonly Channel[] {
       waiting: THREADS.filter((each) => each.channelId === channel.id && needsReader(each.item))
         .length,
       ...(at === undefined ? {} : { lookedAt: at }),
+      ...(latest === undefined ? {} : { latestPostedAt: latest }),
     };
   });
 }
@@ -786,7 +793,11 @@ function channelsRead(): readonly Channel[] {
 /** A channel's threads, oldest posted first, as the service reads them. */
 function threadsOf(channelId: string): readonly ChannelThread[] {
   return THREADS.filter((each) => each.channelId === channelId)
-    .map((each) => ({ ...each.item, channelId }))
+    .map((each) => ({
+      ...each.item,
+      channelId,
+      agent: { title: seed(each.taskId).agentTitle, model: MODEL },
+    }))
     .toSorted((a, b) => a.postedAt - b.postedAt);
 }
 
@@ -956,6 +967,38 @@ function channelsAnswer() {
   return { channels: channelsRead() };
 }
 
+/** The workspace's archived channels, the latest archived first; an archive or an unarchive here moves them for the run. */
+let ARCHIVED: readonly (ChannelSeed & { readonly archivedAt: number })[] = [
+  {
+    id: CHANNEL.LAUNCH_SITE,
+    name: "launch-site",
+    purpose: "Project: the marketing site's October launch",
+    project: true,
+    createdAt: LANDED - 40 * DAY,
+    createdBy: CHARLES,
+    archivedAt: LANDED - 3 * DAY,
+  },
+  {
+    id: CHANNEL.DESIGN_REVIEW,
+    name: "design-review",
+    purpose: "Screens waiting on a design pass",
+    project: false,
+    createdAt: LANDED - 60 * DAY,
+    createdBy: DEAN,
+    archivedAt: LANDED - 9 * DAY,
+  },
+];
+
+/** The archived channels as the service reads them. */
+function archivedAnswer() {
+  return {
+    channels: ARCHIVED.map(({ createdBy, ...rest }) => ({
+      ...rest,
+      ...(createdBy === undefined ? {} : { createdBy: createdBy.userId }),
+    })),
+  };
+}
+
 /** A channel's stored row changed by `change`, where it is one this run holds. */
 function changed(channelId: string, change: (channel: ChannelSeed) => ChannelSeed | undefined) {
   CHANNELS = CHANNELS.flatMap((channel) => {
@@ -1001,16 +1044,51 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     CHANNELS = [...CHANNELS, made].toSorted((a, b) => a.name.localeCompare(b.name));
     return channelsAnswer();
   },
-  [ACT_KIND.CHANNELS_RENAME]: ({ channelId, name }) => {
-    if (CHANNELS.some((channel) => channel.name === name)) return { failure: "name-taken" };
-    if (channelId === CHANNEL.GENERAL) return { failure: "not-permitted" };
-    changed(channelId, (channel) => ({ ...channel, name }));
+  [ACT_KIND.CHANNELS_FOLLOW]: () => pushedOnce({ moved: [] }),
+  [ACT_KIND.CHANNELS_ARCHIVED]: () => archivedAnswer(),
+  [ACT_KIND.CHANNELS_UNARCHIVE]: ({ channelId }) => {
+    const archived = ARCHIVED.find((channel) => channel.id === channelId);
+    if (archived === undefined) return { failure: "not-found" };
+    if (CHANNELS.some((channel) => channel.name === archived.name)) {
+      return { failure: "name-taken" };
+    }
+    const { archivedAt: _at, ...open } = archived;
+    ARCHIVED = ARCHIVED.filter((channel) => channel.id !== channelId);
+    CHANNELS = [...CHANNELS, open].toSorted((a, b) => a.name.localeCompare(b.name));
+    return channelsAnswer();
+  },
+  [ACT_KIND.CHANNELS_MOVE]: ({ threadId, channelId }) => {
+    const at = THREADS.findIndex((each) => each.item.id === threadId);
+    const moved = THREADS[at];
+    if (moved === undefined || !CHANNELS.some((channel) => channel.id === channelId)) {
+      return { failure: "not-found" };
+    }
+    THREADS[at] = { ...moved, channelId };
+    const thread = threadsOf(channelId).find((each) => each.id === threadId);
+    return thread === undefined ? { failure: "not-found" } : { thread };
+  },
+  [ACT_KIND.CHANNELS_EDIT]: ({ channelId, name, purpose }) => {
+    const standing = CHANNELS.find((channel) => channel.id === channelId);
+    if (standing === undefined) return { failure: "not-found" };
+    const renamed = name !== undefined && name !== standing.name;
+    if (renamed && CHANNELS.some((channel) => channel.name === name)) {
+      return { failure: "name-taken" };
+    }
+    if (renamed && channelId === CHANNEL.GENERAL) return { failure: "not-permitted" };
+    changed(channelId, (channel) => ({
+      ...channel,
+      ...(name === undefined ? undefined : { name }),
+      ...(purpose === undefined ? undefined : { purpose }),
+    }));
     CHANNELS = CHANNELS.toSorted((a, b) => a.name.localeCompare(b.name));
     return channelsAnswer();
   },
   [ACT_KIND.CHANNELS_ARCHIVE]: ({ channelId }) => {
     if (channelId === CHANNEL.GENERAL) return { failure: "not-permitted" };
-    changed(channelId, () => undefined);
+    changed(channelId, (channel) => {
+      ARCHIVED = [{ ...channel, archivedAt: Date.now() }, ...ARCHIVED];
+      return undefined;
+    });
     return channelsAnswer();
   },
 };

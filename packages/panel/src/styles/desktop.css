@@ -148,13 +148,13 @@ body,
 /* A narrow room shows a screen's list or the item chosen in it, one at a
    time, the other hidden (`shell-room.ts`'s `hiddenColumns`): Settings' page
    list or its page and a version history's versions or the version, each the
-   shell's one column. Chat, Settings, and a version history do the
+   shell's one column. Settings and a version history do the
    same by their own width as well as a narrow room's (`column-split.ts`),
    their list or its item the screen's one column. The one shown stands
    alone, so no edge parts it from the other. */
 :where(:root)[data-luke-room="narrow"] .desktop-shell:not([data-sidebar-collapsed]),
 :where(:root)[data-luke-room="narrow"] :is(.desktop-settings, .desktop-version-history),
-:is(.chat-view, .desktop-settings, .desktop-version-history)[data-single="true"] {
+:is(.desktop-settings, .desktop-version-history)[data-single="true"] {
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -162,14 +162,13 @@ body,
   .desktop-shell
   :is(.desktop-settings, .desktop-version-history)
   > [hidden],
-:is(.chat-view, .desktop-settings, .desktop-version-history)[data-single="true"] > [hidden] {
+:is(.desktop-settings, .desktop-version-history)[data-single="true"] > [hidden] {
   display: none;
 }
 
 :where(:root)[data-luke-room="narrow"] .desktop-shell :is(.settings-pages, .version-log),
 :is(.desktop-settings, .desktop-version-history)[data-single="true"]
-  > :is(.settings-pages, .version-log),
-.chat-view[data-single="true"] > .chat-rail {
+  > :is(.settings-pages, .version-log) {
   border-right: 0;
 }
 
@@ -350,8 +349,7 @@ body,
 /* A repository's plans under a `GroupHeader`, a group a section's gap
    below the one before it. */
 .sidebar-repository + .sidebar-repository,
-.sidebar-tasks + .sidebar-repository,
-.chat-rail-body > .luke-list + .sidebar-repository {
+.sidebar-tasks + .sidebar-repository {
   margin-top: var(--luke-control-gap);
 }
 
@@ -917,8 +915,7 @@ body,
   > .desktop-task
   > .page-find
   > .inbox-view
-  .inbox-tasks,
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-main > .page-find > .chat-view .chat-rail {
+  .inbox-tasks {
   --luke-toolbar-centre: on;
 }
 
@@ -956,13 +953,6 @@ body,
   > .sidebar-repository:not([data-leaving])
   ~ .sidebar-repository:not([data-leaving]) {
   margin-top: var(--luke-control-gap);
-}
-
-/* An item whose box holds a draft wears its pencil at the attention mark's
-   size, as a sidebar task's row wears it at its glyph's (`draft-mark.tsx`). */
-.home-row-meta .draft-mark {
-  width: 12px;
-  height: 12px;
 }
 
 /* A comment holding a form's composer field lets what stands over the
@@ -1068,148 +1058,6 @@ body,
   .desktop-shell[data-room="wide"][data-sidebar-collapsed="true"]
   .automation-runs-screen::before {
   -webkit-app-region: drag;
-}
-
-/* Chat ----------------------------------------------------------------------- */
-
-/* Only the rail's bar meets the folded sidebar's toggle, so the place's bar
-   (`chat-pane.tsx`'s `PlaceHead`) keeps its own inset beside it. A place
-   standing alone is the first column, so its bar, led by the way back,
-   leaves the title bar's buttons their room, as the Inbox item's does. */
-.chat-stream {
-  --luke-toolbar-start-at: initial;
-}
-
-.desktop-shell[data-sidebar-collapsed="true"]
-  .desktop-main
-  > .page-find
-  > .chat-view[data-single="true"]
-  .chat-stream {
-  --luke-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
-}
-
-/* An ask draws as the Inbox's ask in its row (`chat-ask.tsx`), a step
-   under the byline: the Inbox's bordered card and head, and under the head
-   its title, the poster's words, and its answer box or its answer. The box
-   is the Inbox's answer card with the note under it, as the agent
-   composer's stands, though it is no `.agent-composer`, which docks at a
-   column's foot (`column-dock.ts`) where this box scrolls with the
-   messages. */
-.chat-ask {
-  margin-top: var(--luke-tight-gap);
-}
-
-.chat-ask-body {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-block-gap);
-  padding: var(--luke-tight-gap) var(--luke-list-inset) var(--luke-list-inset);
-}
-
-.chat-ask-box {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
-}
-
-/* A root's thread stands in a slot of its own after the message, so its open
-   box outlives the message turning from continued to named (`ThreadRow`): it
-   lines up under the words, in the words' column of a continued message, and
-   under a named one's comment past its face, as it stood inside them. */
-.chat-message > .chat-thread {
-  grid-column: 2;
-  margin-top: calc(var(--luke-tight-gap) + var(--luke-list-gap));
-}
-
-/* Note that a named message's words stand past its comment's face, a list
-   row's disc (`AVATAR_SIZE.ROW`, `--luke-space-20`), and the gap after it. */
-.chat-message > .luke-comment ~ .chat-thread {
-  grid-column: 1 / -1;
-  padding-inline-start: calc(var(--luke-space-20) + var(--luke-icon-gap));
-}
-
-/* Under a finger a thread's press, Reply or how many replied, takes a press
-   a finger's height and some way either side of its words. Its box grows
-   by its padding and gives the room back by as much margin, so the line it
-   stands on lays out as before. Note that the words are a TextButton, which
-   clips what overflows it, so the reach is its own padding rather than a
-   box drawn past it, and which is held to its holder's width, which its
-   negative margin would shrink. */
-@media (pointer: coarse) {
-  .chat-byline-action > .luke-text-button,
-  .chat-thread-toggle > .luke-text-button {
-    --chat-thread-press-block: calc(
-      (var(--luke-touch-target) - var(--luke-type-label-leading)) /
-      2
-    );
-    padding-top: var(--chat-thread-press-block);
-    padding-right: var(--luke-row-inset);
-    padding-bottom: var(--chat-thread-press-block);
-    padding-left: var(--luke-row-inset);
-    margin-top: calc(-1 * var(--chat-thread-press-block));
-    margin-right: calc(-1 * var(--luke-row-inset));
-    margin-bottom: calc(-1 * var(--chat-thread-press-block));
-    margin-left: calc(-1 * var(--luke-row-inset));
-    max-width: none;
-    line-height: var(--luke-type-label-leading);
-  }
-}
-
-/* The composer at a place's foot, at the stream's reading measure, or the
-   pane's width inside its insets where that is narrower: the shared composer
-   card (`PromptInput`) around the box, its foot saying what the box takes
-   with the round send at its end. */
-.chat-composer {
-  width: min(var(--luke-page-measure), calc(100% - 2 * var(--column-inset)));
-  margin: var(--luke-block-gap) auto var(--luke-space-16);
-  padding: 0;
-}
-
-.chat-thread .chat-composer {
-  width: 100%;
-  margin: var(--luke-item-gap) 0 0;
-}
-
-/* The plain box in the card (`PlainChatComposer`), bare at the agent
-   composer's insets (`.agent-composer-input`). */
-.chat-composer {
-  --luke-text-area-inset-start: var(--luke-space-16);
-  --luke-text-area-inset-inline: var(--luke-space-16);
-  --luke-text-area-inset-end: var(--luke-space-8);
-}
-
-/* A thread's box stands a line high, its field and its placeholder at
-   the plain field's compact insets, as a plan comment's field does
-   (`.comment-field .agent-composer-input`). */
-.chat-composer[data-compact="true"] {
-  --luke-text-area-inset-start: var(--luke-space-8);
-  --luke-text-area-inset-inline: var(--luke-space-12);
-  --luke-text-area-inset-end: var(--luke-space-4);
-}
-
-.chat-composer[data-compact="true"] .agent-composer-field {
-  --agent-composer-field-block: calc(var(--luke-row-inset) + var(--luke-tight-gap));
-}
-
-.chat-composer[data-compact="true"] .agent-composer-input {
-  padding: var(--luke-row-inset) var(--luke-list-inset) var(--luke-tight-gap);
-}
-
-.chat-composer[data-compact="true"] .agent-composer-placeholder {
-  padding: var(--luke-row-inset) var(--luke-list-inset) 0;
-}
-
-/* A picture a message carries (`chat-pane.tsx`'s ChatPicture): a plan's
-   picture block, kept to a chat's height so the stream reads on past it. */
-.chat-picture > .picture-block {
-  margin: var(--luke-item-gap) 0;
-}
-
-.chat-picture .picture-image {
-  max-height: 320px;
 }
 
 /* Settings ------------------------------------------------------------------- */
@@ -1727,86 +1575,6 @@ body,
 
 /* Feedback dialog ------------------------------------------------------------ */
 
-/* New task's composer (`new-task-composer.tsx`) under the welcome's line,
-   its head row and card as the dialog draws them. */
-.home-composer {
-  margin-bottom: var(--luke-page-section-gap);
-}
-
-.home-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-tight-gap);
-}
-
-.home-section + .home-section {
-  margin-top: var(--luke-page-section-gap);
-}
-
-/* A section's note, nothing waiting or a read refused, on the title's edge. */
-.home-note {
-  margin: var(--luke-tight-gap) 0;
-}
-
-/* What the row is about keeps a floor beside a long title, so the title is
-   what gives way and the context is never cut to a letter or a sliver. Past
-   the floor it takes what the title leaves. */
-.home-row-context {
-  overflow: hidden;
-  min-width: min(16ch, 35%);
-  flex: 1;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  white-space: nowrap;
-}
-
-/* A ListRow's metadata on Home and a person's page: what
-   the row is about, a teammate's face, the row's mark, and its time, set
-   apart by the line's own gap and centred on it. */
-.home-row-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-item-gap);
-}
-
-/* Note that the context gives way before the marks and the time, because
-   the metadata's slot clips at its end and the time is what ends it, and
-   stops at a bound, so a long one never takes the row's title's room. */
-.home-row-meta > .home-row-context {
-  min-width: 0;
-  max-width: 20ch;
-  flex: 0 1 auto;
-}
-
-.home-row-meta > :not(.home-row-context) {
-  flex: none;
-}
-
-.home-row-picture {
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-/* Note that a state glyph's own drawing is left to its mark, which fills
-   the share of the face the glyph is given (`actor-ref.tsx`). */
-.home-row-picture :not(.state-glyph) > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
-/* A finger opens a row on Home, so on a coarse pointer each row stands a
-   touch target tall, its words centred in it as at the pointer's height. */
-@media (pointer: coarse) {
-  .home-section .luke-list-row-main {
-    min-height: var(--luke-touch-target);
-  }
-}
-
 /* A person's page (`person-page.tsx`), a `DetailPage` under its toolbar:
    Home's sections, headed by their face at the page's size beside their
    name and who they are here, and each block a section's gap under the
@@ -1815,99 +1583,12 @@ body,
   margin-top: var(--luke-page-section-gap);
 }
 
-/* A new account's welcome: Luke's face on a tile and a title, centred over
-   New task's composer, the card as wide as the page's measure. */
-.home-welcome {
-  align-items: center;
-  /* Note that `safe` keeps the page's top reachable where it is taller than
-     the window, because plain centring overflows both ends and the shell
-     clips what stands above its top; the page scrolls instead. */
-  justify-content: safe center;
-  overflow-y: auto;
-  gap: var(--luke-block-gap);
-  padding: var(--luke-page-inset);
-  text-align: center;
-}
-
-.home-welcome .home-composer {
-  width: min(var(--luke-page-measure), 100%);
-  margin: var(--luke-control-gap) 0 0;
-  text-align: start;
-}
-
-.home-welcome-face {
-  display: flex;
-  width: 56px;
-  height: 56px;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: var(--luke-tight-gap);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-}
-
-.home-welcome-face .luke-face {
-  width: 34px;
-  height: 34px;
-}
-
-/* New task (`new-task-dialog.tsx`), inside the shared dialog's wide card:
-   its head and its composer card, in one column the screen recording leaves
-   out (`ph-no-capture`). */
-.new-task {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  gap: var(--luke-block-gap);
-}
-
-/* New task's head row (`new-task-composer.tsx`, over the card): the title
-   with the repository chip, and the Issue chip at its right end. */
-.new-task-head {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-block-gap);
-}
-
-/* The title says what starts, "New task", then the repository's chip in
-   the title's own line, as Linear's team chip stands in its title. The
-   chip keeps a floor of room, so the repository can always be chosen. */
-.new-task-title {
-  --new-task-chip-floor: calc(var(--luke-control-height) * 2);
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-item-gap);
-}
-
-/* The title keeps its own width, so a phone's narrow head gives the room
-   that is left to the chips after it, which fade where they are cut, and
-   "New task" stays on one line. Only a longer title, such as "Create with
-   an agent" on a zoomed phone, wraps, short of the chip's floor. */
-.new-task-title > h2 {
-  flex-shrink: 0;
-  max-width: calc(100% - var(--new-task-chip-floor) - var(--luke-item-gap));
-}
-
 /* New task's chips are Settings pickers (`settings/picker-row.tsx`)
    standing alone at the head of their lines, not in a column, so each is as
    wide as its value and gives way, ellipsized, to a long one. */
 .new-task .settings-picker {
   min-width: 0;
   flex-shrink: 1;
-}
-
-/* New task's composer (`new-task-composer.tsx`): the agent box's own card
-   on the dialog's inset rather than a tab's foot, the reason its Start is
-   held under it. */
-.new-task-composer {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-control-gap);
 }
 
 .new-task-composer .agent-composer {
@@ -1987,181 +1668,6 @@ body,
   .new-task-composer .agent-composer-actions .agent-composer-more {
     display: inline-flex;
   }
-}
-
-/* The issue picked, over the words inside the card: one outlined line
-   (`Card`), its mark, its key, its title cut short, a Linear issue's state,
-   and the × at its end. */
-.new-task-issue {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-item-gap);
-  margin: var(--luke-control-gap) var(--luke-control-gap) 0;
-  padding: 0 0 0 var(--luke-row-inset);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.new-task-issue > svg {
-  flex: none;
-  width: 12px;
-  height: 12px;
-}
-
-.new-task-issue-name {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-item-gap);
-}
-
-.new-task-issue-key {
-  flex: none;
-  font-family: var(--luke-font-mono);
-}
-
-.new-task-issue-title {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--luke-color-text);
-  white-space: nowrap;
-}
-
-.new-task-issue-drop {
-  display: flex;
-  margin-left: auto;
-}
-
-/* The GitHub and Linear issues the card links (`new-task-links.tsx`): each
-   one's chip as above, wrapping in the order picked, a GitHub issue's open
-   mark in GitHub's open ink, and its Closes / Part of switch before the ×. */
-.new-task-links {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: var(--luke-item-gap);
-  margin: var(--luke-control-gap) var(--luke-control-gap) 0;
-}
-
-.new-task-links > .new-task-issue {
-  max-width: 100%;
-  margin: 0;
-}
-
-.new-task-issue > .new-task-issue-github,
-.issue-picker-github-open {
-  color: var(--luke-color-complete);
-}
-
-.new-task-issue-relation {
-  display: flex;
-  flex: none;
-}
-
-/* A GitHub row's detail in the Issue chip's menu: the outside badge where
-   its author is outside the repository, then its number, author, and age,
-   or the grant row's words and the mark that says they leave for GitHub. */
-.issue-picker-github-detail {
-  display: inline-flex;
-  max-width: 100%;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-item-gap);
-}
-
-.issue-picker-github-detail > :not(.issue-picker-github-said) {
-  flex: none;
-}
-
-.issue-picker-github-detail > svg {
-  width: 12px;
-  height: 12px;
-}
-
-/* Move to workspace (`move-task-dialog.tsx`), inside the shared dialog's
-   card: the other workspaces as `@luke/ui`'s ChoiceList, a tile and two
-   lines each, then what the move does in a well under them, and the answers
-   at its foot. The list is the card's body, which scrolls in a `ScrollArea`
-   where the window is too short for all of it. */
-.move-dialog {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  gap: var(--luke-block-gap);
-}
-
-.move-effects {
-  display: grid;
-  gap: var(--luke-tight-gap);
-  margin: 0;
-  padding: var(--luke-card-inset-snug) var(--luke-card-inset-snug) var(--luke-card-inset-snug)
-    var(--luke-space-24);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text-body);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* A server's line at a card's head (`server-card.tsx`), set as a card's
-   row is, a menu row's height and corner, its mark on the card's glyph
-   column and the row's words beside it. */
-.task-card-line {
-  display: flex;
-  width: calc(100% + 2 * var(--row-inset));
-  height: var(--luke-menu-row-height);
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  margin-inline: calc(-1 * var(--row-inset));
-  padding: 0 var(--row-inset);
-  border-radius: var(--luke-menu-row-radius);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-}
-
-.task-card-glyph {
-  display: inline-flex;
-  width: var(--luke-menu-glyph);
-  flex: none;
-  justify-content: center;
-}
-
-.task-card-glyph > svg {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-}
-
-.task-card-number {
-  color: var(--luke-color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-/* A run's figures under its card's rule (`turn-card.tsx`), a turn's tokens
-   or a call's metered time, each label muted at the start and its count at
-   the end in tabular figures. */
-.run-card-figures {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-  margin: 0;
-  font-size: var(--luke-type-caption-size);
-}
-
-.run-card-figure {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-}
-
-.run-card-figure dt {
-  color: var(--luke-color-text-muted);
-}
-
-.run-card-figure dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
 }
 
 /* The card holding the keyboard, or whose menu is open, stands over its

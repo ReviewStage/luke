@@ -5,17 +5,8 @@ import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { askRecord } from "@luke/database/models/asks";
 import { readBoard } from "@luke/database/models/board-store";
-import {
-  agentWorkspace,
-  ensureGeneral,
-  ensureMember,
-  ensureTaskChannel,
-  postMessage,
-  roster,
-} from "@luke/database/models/chat-store";
 import { fillChildTitle } from "@luke/database/models/child-titles";
 import {
-  archiveCodingAgent,
   type CodingAgentBriefText,
   createCodingAgent,
   delegationsOf,
@@ -48,8 +39,6 @@ import {
   OPERATOR_NOTICE_KIND,
 } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
-import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
-import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_ATTACHMENT_TYPE,
@@ -58,15 +47,8 @@ import {
   type CodingAgentMessage,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import {
-  INBOX_ASK,
-  INBOX_ASK_STATUS,
-  INBOX_CURSOR_START,
-  INBOX_STATUS,
-  INBOX_TOOL,
-} from "@luke/features/inbox-wire";
+import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_STATUS, INBOX_TOOL } from "@luke/features/inbox-wire";
 import { agentTranscriptLiveRowsSchema } from "@luke/features/live-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
@@ -130,11 +112,9 @@ import { runRemember } from "../memory-tools.js";
 import { DESK_LEAD } from "../operator-desk.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
-import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
 import { contextWindowOf } from "./context.js";
 import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
-import { accountInboxPast } from "./inbox-page.js";
 import type { ProviderKeys } from "./model.js";
 import { cutMessage } from "./part-cut.js";
 import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
@@ -344,10 +324,6 @@ const openOperator = (host: CoderHost, userId: string, workspaceId: string) =>
 /** Memory turned on for the account, as Settings › Experimental turns it on. */
 const memoryOn = (userId: string) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
-
-/** Chat turned on for the account, as Settings › Experimental turns it on. */
-const chatOn = (userId: string) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
 
 /** A GitHub where the developer reaches the agent's repository through one installation, granting the App what the test says; the fixture's own grant when unsaid. */
 const reachingRelay = (permissions?: Readonly<Record<string, string>>) =>
@@ -598,9 +574,24 @@ function scriptedTitleModel(answers: readonly string[]) {
 
 const STEP_START = "step-start";
 
-/** A chat notice as the chat steers one in: another agent's words, which are no task of the developer's. */
-const CHAT_NOTICE =
-  "Chat · [@Invite emails](https://tryluke.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) in #teammate-invitations (m 41):\n\nThe invite table is mine, leave it.";
+/** Another agent's message as `message_agent` steers one in: its words, which are no task of the developer's. */
+const AGENT_MESSAGE =
+  "Message · [@Invite emails](https://tryluke.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:\n\nThe invite table is mine, leave it.";
+
+/** The agent that sends `AGENT_MESSAGE`, as its line's row keeps it. */
+const MESSAGE_SENDING_AGENT = {
+  kind: MESSAGE_SENDER.AGENT,
+  agentId: "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+  name: "Invite emails",
+  model: "anthropic/claude-opus-5.5",
+} as const;
+
+/** What the row of `AGENT_MESSAGE` says wrote it. */
+const AGENT_MESSAGE_METADATA = {
+  author: MESSAGE_AUTHOR.AGENT,
+  channel: MESSAGE_CHANNEL.AGENT_MESSAGE,
+  from: "Invite emails",
+} as const;
 
 /** A second turn as eve emits it for a line it received while the agent was idle: the line, then a word of answer. */
 function answeredTurn(turnId: string, received: string): MessageStreamEvent[] {
@@ -788,7 +779,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             {
               text: "The invite emails are in.",
               clientKey: "from-an-agent",
-              sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
+              sender: MESSAGE_SENDING_AGENT,
             },
             Effect.succeed(true),
           );
@@ -1677,8 +1668,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           });
 
           assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
-          // The thread's mention is spelled out in `coder-inbox.test.ts`; here it is only carried.
-          const [{ mention, ...line } = { mention: undefined }] = read.inbox ?? [];
+          // The thread's id and mention are spelled out in `coder-inbox.test.ts`; here they are only carried.
+          const [{ mention, id: _id, ...line } = { mention: undefined, id: undefined }] =
+            "inbox" in read ? read.inbox : [];
           assert.match(mention ?? "", /^\[@Which region\?\]\(https:\/\/tryluke\.dev\//u);
           assert.deepEqual(
             { ...read, inbox: [line] },
@@ -1849,7 +1841,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "a chat notice steered into an agent is taken into the turn that received it as the chat's line, and the agent's title is named from the developer's words alone",
+      "another agent's message steered into an agent is taken into the turn that received it as that agent's line, and the agent's title is named from the developer's words alone",
       () =>
         Effect.gen(function* () {
           // A title model that names nothing as the turns relay, so the agent is still untitled when it is asked below.
@@ -1872,29 +1864,18 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             );
           yield* relayed("turn_0", codingTurn("turn_0", "turn.completed"));
           const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-          const notice = {
-            author: MESSAGE_AUTHOR.AGENT,
-            channel: MESSAGE_CHANNEL.CHAT,
-            chat_seq: 41,
-            from: "Invite emails",
-          } as const;
           const written = yield* writer.writeAwaitingLine(
             target,
             {
-              text: CHAT_NOTICE,
-              clientKey: "chat-notice-41",
-              sender: {
-                kind: MESSAGE_SENDER.AGENT,
-                agentId: randomUUID(),
-                name: "Invite emails",
-                model: agent.model,
-              },
-              metadata: notice,
+              text: AGENT_MESSAGE,
+              clientKey: "agent-message",
+              sender: MESSAGE_SENDING_AGENT,
+              metadata: AGENT_MESSAGE_METADATA,
             },
             Effect.succeed(true),
           );
           assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
-          yield* relayed("turn_1", answeredTurn("turn_1", CHAT_NOTICE));
+          yield* relayed("turn_1", answeredTurn("turn_1", AGENT_MESSAGE));
 
           const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
             Effect.provide(modelCatalogOf(CATALOG)),
@@ -1904,7 +1885,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           );
           assert.deepEqual(said, [
             { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
-            notice,
+            AGENT_MESSAGE_METADATA,
           ]);
 
           const model = titleModelAnswering("Teammate invitations by email");
@@ -1912,7 +1893,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
           assert.ok(asked.includes("Invite a teammate by email."));
           assert.ok(!asked.includes("the invite table is mine"));
-          // The agent's answer to the chat notice speaks to another member, so the title reads its answer to the developer.
+          // The agent's answer to the other agent's message speaks to that agent, so the title reads its answer to the developer.
           assert.ok(asked.includes("The guide is read; the plan fits the code."));
           assert.ok(!asked.includes("Understood."));
           const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
@@ -1921,7 +1902,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "a chat notice steered into the developer's own turn leaves that turn's answer to name the agent from",
+      "another agent's message steered into the developer's own turn leaves that turn's answer to name the agent from",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
@@ -1946,15 +1927,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           yield* writer.writeAwaitingLine(
             target,
             {
-              text: CHAT_NOTICE,
-              clientKey: "chat-notice-mid-turn",
-              sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
-              metadata: {
-                author: MESSAGE_AUTHOR.AGENT,
-                channel: MESSAGE_CHANNEL.CHAT,
-                chat_seq: 41,
-                from: "Invite emails",
-              },
+              text: AGENT_MESSAGE,
+              clientKey: "agent-message-mid-turn",
+              sender: MESSAGE_SENDING_AGENT,
+              metadata: AGENT_MESSAGE_METADATA,
             },
             Effect.succeed(true),
           );
@@ -1968,7 +1944,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "a title's recent window opening on notices steered into the developer's turn keeps that turn's answer",
+      "a title's recent window opening on agents' messages steered into the developer's turn keeps that turn's answer",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
@@ -1990,20 +1966,15 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const steeredAt = events.findIndex((event) => event.type === "reasoning.completed");
           yield* relayed(events.slice(0, steeredAt));
           const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-          // Eight notices steered in leave the developer's line before the recent window of eight.
+          // Eight messages steered in leave the developer's line before the recent window of eight.
           yield* Effect.forEach([1, 2, 3, 4, 5, 6, 7, 8], (at) =>
             writer.writeAwaitingLine(
               target,
               {
-                text: CHAT_NOTICE,
-                clientKey: `chat-notice-steered-${at}`,
-                sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
-                metadata: {
-                  author: MESSAGE_AUTHOR.AGENT,
-                  channel: MESSAGE_CHANNEL.CHAT,
-                  chat_seq: 40 + at,
-                  from: "Invite emails",
-                },
+                text: AGENT_MESSAGE,
+                clientKey: `agent-message-steered-${at}`,
+                sender: MESSAGE_SENDING_AGENT,
+                metadata: AGENT_MESSAGE_METADATA,
               },
               Effect.succeed(true),
             ),
@@ -2017,61 +1988,58 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
         }),
     );
 
-    it.effect("a title's recent window opening on a chat notice leaves the answer to it out", () =>
-      Effect.gen(function* () {
-        const host = yield* hostOverStore();
-        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
-        const state = memoryRelayState();
-        const prompt = yield* composedPrompt(host, admitted, agent);
-        const relayed = (turnId: string, events: readonly MessageStreamEvent[]) =>
-          Effect.forEach(events, (event) =>
-            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-            host.relay(
-              event,
-              admitted,
-              { id: sessionId, auth, turn: { id: turnId } } as never,
-              state,
-              { hash: prompt.hash },
-            ),
-          );
-        yield* relayed("turn_0", codingTurn("turn_0", "turn.completed"));
-        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-        // The second turn takes five notices in, the third one more, so the recent window of eight opens on a notice.
-        const notice = (at: number) =>
-          writer.writeAwaitingLine(
-            target,
-            {
-              text: CHAT_NOTICE,
-              clientKey: `chat-notice-${at}`,
-              sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
-              metadata: {
-                author: MESSAGE_AUTHOR.AGENT,
-                channel: MESSAGE_CHANNEL.CHAT,
-                chat_seq: 40 + at,
-                from: "Invite emails",
+    it.effect(
+      "a title's recent window opening on another agent's message leaves the answer to it out",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* hostOverStore();
+          const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+          const state = memoryRelayState();
+          const prompt = yield* composedPrompt(host, admitted, agent);
+          const relayed = (turnId: string, events: readonly MessageStreamEvent[]) =>
+            Effect.forEach(events, (event) =>
+              // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+              host.relay(
+                event,
+                admitted,
+                { id: sessionId, auth, turn: { id: turnId } } as never,
+                state,
+                { hash: prompt.hash },
+              ),
+            );
+          yield* relayed("turn_0", codingTurn("turn_0", "turn.completed"));
+          const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+          // The second turn takes five messages in, the third one more, so the recent window of eight opens on a message.
+          const notice = (at: number) =>
+            writer.writeAwaitingLine(
+              target,
+              {
+                text: AGENT_MESSAGE,
+                clientKey: `agent-message-${at}`,
+                sender: MESSAGE_SENDING_AGENT,
+                metadata: AGENT_MESSAGE_METADATA,
               },
-            },
-            Effect.succeed(true),
+              Effect.succeed(true),
+            );
+          yield* Effect.forEach([1, 2, 3, 4, 5], notice);
+          yield* relayed("turn_1", answeredTurn("turn_1", AGENT_MESSAGE));
+          yield* notice(6);
+          yield* relayed("turn_2", answeredTurn("turn_2", AGENT_MESSAGE));
+          const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
           );
-        yield* Effect.forEach([1, 2, 3, 4, 5], notice);
-        yield* relayed("turn_1", answeredTurn("turn_1", CHAT_NOTICE));
-        yield* notice(6);
-        yield* relayed("turn_2", answeredTurn("turn_2", CHAT_NOTICE));
-        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
-          Effect.provide(modelCatalogOf(CATALOG)),
-        );
-        assert.equal(page.messages.length, 10, JSON.stringify(page.messages.map((m) => m.role)));
+          assert.equal(page.messages.length, 10, JSON.stringify(page.messages.map((m) => m.role)));
 
-        const model = titleModelAnswering("Teammate invitations by email");
-        yield* titleCodingAgent(model, target, agent);
-        const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
-        assert.ok(asked.includes("Invite a teammate by email."), asked);
-        assert.ok(!asked.includes("Understood."), asked);
-      }),
+          const model = titleModelAnswering("Teammate invitations by email");
+          yield* titleCodingAgent(model, target, agent);
+          const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
+          assert.ok(asked.includes("Invite a teammate by email."), asked);
+          assert.ok(!asked.includes("Understood."), asked);
+        }),
     );
 
     it.effect(
-      "a title leaves out the answer to a turn a chat notice opened, though the notices it took in push that notice out of the recent window",
+      "a title leaves out the answer to a turn another agent's message opened, though the messages it took in push that message out of the recent window",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
@@ -2095,21 +2063,16 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             writer.writeAwaitingLine(
               target,
               {
-                text: CHAT_NOTICE,
-                clientKey: `chat-notice-opening-${at}`,
-                sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
-                metadata: {
-                  author: MESSAGE_AUTHOR.AGENT,
-                  channel: MESSAGE_CHANNEL.CHAT,
-                  chat_seq: 40 + at,
-                  from: "Invite emails",
-                },
+                text: AGENT_MESSAGE,
+                clientKey: `agent-message-opening-${at}`,
+                sender: MESSAGE_SENDING_AGENT,
+                metadata: AGENT_MESSAGE_METADATA,
               },
               Effect.succeed(true),
             );
-          // A notice opens the second turn, and the eight it takes in mid-run leave it before the recent window of eight.
+          // A message opens the second turn, and the eight it takes in mid-run leave it before the recent window of eight.
           yield* notice(0);
-          const events = answeredTurn("turn_1", CHAT_NOTICE);
+          const events = answeredTurn("turn_1", AGENT_MESSAGE);
           const steeredAt = events.findIndex((event) => event.type === "message.completed");
           yield* relayed("turn_1", events.slice(0, steeredAt));
           yield* Effect.forEach([1, 2, 3, 4, 5, 6, 7, 8], notice);
@@ -2120,169 +2083,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
           assert.ok(asked.includes("Invite a teammate by email."), asked);
           assert.ok(!asked.includes("Understood."), asked);
-        }),
-    );
-
-    it.effect(
-      "a planless agent reaches its chat through the host, its own channel its workspace's general one",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { userId, agent, admitted } = yield* openAgent(host);
-          yield* chatOn(userId);
-          const db = yield* Database;
-          yield* db.update(codingAgent).set({ taskId: null }).where(eq(codingAgent.id, agent.id));
-          const read = yield* host
-            .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
-            .pipe(Effect.provide(reachingRelay()));
-          assert.ok("channels" in read, JSON.stringify(read));
-          assert.deepEqual(
-            read.channels.map((channel) => channel.name),
-            ["#general"],
-          );
-        }),
-    );
-
-    it.effect(
-      "an agent whose starter never turned Chat on still has its chat: a read answers, since the chat is how agents message each other",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { admitted } = yield* openAgent(host);
-          const read = yield* host
-            .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
-            .pipe(Effect.provide(reachingRelay()));
-          assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
-        }),
-    );
-
-    it.effect(
-      "a post from an archived agent is refused without stamping it as having left, so once brought back it posts again",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const post = (admitted: Parameters<CoderHost["chat"]>[0]) =>
-            host
-              .chat(admitted, {
-                tool: CHAT_TOOL.POST,
-                input: unparsedWire({ text: "Still here." }),
-                clientKey: "call-left",
-                postsInTurn: 0,
-                sandbox: () => Promise.reject(new Error("the sandbox was opened")),
-              })
-              .pipe(Effect.provide(reachingRelay()));
-          const stamped = (userId: string, agentId: string) =>
-            Effect.gen(function* () {
-              const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agentId));
-              const members = yield* roster(userId, workspace);
-              return members.some((member) => member.agentId === agentId && member.leftAt !== null);
-            });
-          const refused = { status: ACTION_RESULT_STATUS.REJECTED, reason: CHAT_TOOL_REFUSAL.LEFT };
-
-          const archived = yield* openAgent(host);
-          yield* chatOn(archived.userId);
-          yield* archiveCodingAgent(archived.userId, archived.agent.id, true);
-          assert.deepEqual(yield* post(archived.admitted), refused);
-          assert.equal(yield* stamped(archived.userId, archived.agent.id), false);
-          yield* archiveCodingAgent(archived.userId, archived.agent.id, false);
-          assert.notDeepEqual(yield* post(archived.admitted), refused, "brought back, it posts");
-        }),
-    );
-
-    it.effect(
-      "an agent's post mentioning a person tells them through their account's read, which carries who and why",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { userId, agent, admitted } = yield* openAgent(host);
-          yield* chatOn(userId);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
-          yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.HUMAN, userId });
-          const posted = yield* host
-            .chat(admitted, {
-              tool: CHAT_TOOL.POST,
-              input: unparsedWire({
-                text: `${mentionMarkdown({ kind: MENTION_KIND.PERSON, userId }, "Test User", { workspace: "acme", repository: null })} the invite table is yours.`,
-              }),
-              clientKey: "call-mention",
-              postsInTurn: 0,
-              sandbox: () => Promise.reject(new Error("the sandbox was opened")),
-            })
-            .pipe(Effect.provide(reachingRelay()));
-          assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
-          const read = yield* accountInboxPast(userId, INBOX_CURSOR_START);
-          assert.deepEqual(
-            read.chat?.map(({ reason, workspaceId }) => ({ reason, workspaceId })),
-            [{ reason: ACCOUNT_CHAT_REASON.MENTION, workspaceId: workspace }],
-          );
-        }),
-    );
-
-    it.effect(
-      "a chat post lands where the deployment names no secret or no origin for eve, the members it addresses left to read it next",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { userId, admitted } = yield* openAgent(host);
-          yield* chatOn(userId);
-          const posted = yield* host
-            .chat(admitted, {
-              tool: CHAT_TOOL.POST,
-              input: unparsedWire({ text: "Taking the invite table." }),
-              clientKey: "call-1",
-              postsInTurn: 0,
-              sandbox: () => Promise.reject(new Error("the sandbox was opened")),
-            })
-            .pipe(Effect.provide(reachingRelay()));
-          assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
-          const read = yield* host
-            .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
-            .pipe(Effect.provide(reachingRelay()));
-          assert.ok("channels" in read);
-          assert.deepEqual(
-            read.channels.map((channel) => channel.name),
-            ["#teammate-invitations"],
-          );
-        }),
-    );
-
-    it.effect(
-      "a turn opens with no chat for an agent whose starter never turned Chat on, and with what it has not read once it is on",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { userId, agent, admitted } = yield* openAgent(host);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
-          const person = Option.getOrThrow(
-            yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
-          );
-          // The agent's own channel, the one its chat is scoped to.
-          const home = Option.getOrThrow(
-            agent.taskId === null
-              ? yield* ensureGeneral(userId, workspace)
-              : yield* ensureTaskChannel(userId, agent.taskId),
-          );
-          // The agent joins before the post, as a member joins the chat at its head.
-          yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.AGENT, agentId: agent.id });
-          yield* postMessage(userId, workspace, {
-            authorMemberId: person.id,
-            to: { channelId: home.id },
-            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "The invite table is mine." }],
-            clientKey: "post-1",
-          });
-          const typed = (handed: TurnHanded) =>
-            host.turnMessage(admitted, { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined }, handed);
-          const off = yield* typed({});
-          assert.ok(!off.text?.includes(CHAT_DIGEST_HEADING), off.text ?? "");
-          yield* chatOn(userId);
-          const on = yield* typed(off.handed);
-          const text = on.text ?? "";
-          const digest = text.slice(text.indexOf(CHAT_DIGEST_HEADING));
-          assert.ok(digest.startsWith(CHAT_DIGEST_HEADING), text);
-          assert.ok(digest.endsWith("The invite table is mine."), text);
-          // The same unread chat is not handed twice: the history already holds it.
-          const again = yield* typed(on.handed);
-          assert.ok(!again.text?.includes(CHAT_DIGEST_HEADING), again.text ?? "");
         }),
     );
 
@@ -2298,7 +2098,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             auth,
             sessionId,
           } = yield* openAgent(host);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+          const workspace = agent.organizationId;
           const operator = yield* openOperator(host, userId, workspace);
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
@@ -2362,7 +2162,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             auth,
             sessionId,
           } = yield* openAgent(host);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+          const workspace = agent.organizationId;
           const operator = yield* openOperator(host, userId, workspace);
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
@@ -2466,7 +2266,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
         Effect.gen(function* () {
           const host = yield* hostOverStore();
           const { userId, agent } = yield* openAgent(host);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+          const workspace = agent.organizationId;
           const operator = yield* openOperator(host, userId, workspace);
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
@@ -2550,7 +2350,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             auth: coderAuth,
             sessionId: coderSession,
           } = yield* openAgent(host);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+          const workspace = agent.organizationId;
           const operator = yield* openOperator(host, userId, workspace);
           const kept = {
             tests: "The web server's store tests run on PGlite through test:store.",

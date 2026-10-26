@@ -23,6 +23,7 @@ import {
   INBOX_STATUS,
   type InboxAnswers,
   type InboxAsk,
+  type InboxAsking,
   type InboxChoice,
   type InboxCodeBlock,
   type InboxFieldValue,
@@ -30,12 +31,15 @@ import {
   type InboxFormValue,
   type InboxItem,
   type InboxMessage,
+  type InboxPerson,
   type InboxReadAsk,
   type InboxReply,
   type InboxReplyKind,
   type InboxResponse,
   inboxAnswersRefusal,
   inboxReplyRefusal,
+  inboxWaitsOn,
+  openAskOf,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
@@ -74,8 +78,8 @@ import { plainWords } from "./tool-call-model.js";
  * agent that posted it, since the service reads the inbox by task and an
  * agent's items go with it. A reply's answer is held to the same rule the
  * service holds it to (`inbox-wire.ts`'s `inboxAnswersRefusal`), so a press
- * the service would refuse is never sent, and a chat ask's version 4
- * answer to its own (`inboxReplyRefusal`). A code block's lines
+ * the service would refuse is never sent, and a version 4 answer to its
+ * response's (`inboxReplyRefusal`). A code block's lines
  * are read as the File tab reads a file, at the block's commit, with a few
  * of the file around them, the lines it points at lit. Nothing here draws.
  */
@@ -291,7 +295,7 @@ function formSendable(form: Pick<InboxForm, "fields">, draft: InboxDraft): boole
 
 /**
  * The answer the card holds, or nothing where it holds none the response
- * takes, as a chat ask's version 4 response is answered (`chat-ask-model.ts`): a choice is answered by its options, with the note beside them,
+ * takes, as a version 4 response is answered: a choice is answered by its options, with the note beside them,
  * or by the developer's own words; an approval and a task by the decision
  * picked, or a press given, and an item asking nothing by its nod, with the
  * note beside them; words by words; a
@@ -383,7 +387,7 @@ function decisionsOf(
  * Note that the draft holds it as its one pick, by its reply's kind, so it
  * is kept with the card's words as a choice's pick is.
  */
-export function decidedOf(response: InboxDecided, draft: InboxDraft): InboxReplyKind | undefined {
+function decidedOf(response: InboxDecided, draft: InboxDraft): InboxReplyKind | undefined {
   const held = draft.choices[0];
   return decisionsOf(response).find((decision) => decision.reply === held)?.reply;
 }
@@ -418,18 +422,6 @@ export type InboxDoAsk = Extract<InboxKnownAsk, { type: typeof INBOX_ASK.DO }>;
 /** Whether an ask read off the wire is one this build knows, which its type decides. */
 export function knownAsk(ask: InboxReadAsk): ask is InboxKnownAsk {
   return Object.values<string>(INBOX_ASK).includes(ask.type);
-}
-
-/** The message whose ask waits on an answer, and the ask; none where nothing waits. */
-export interface InboxAsking {
-  readonly message: InboxMessage;
-  readonly ask: InboxReadAsk;
-}
-
-/** The thread's open ask: the latest message whose ask stands open; none where none does. */
-export function openAskOf(thread: readonly InboxMessage[]): InboxAsking | undefined {
-  const message = thread.findLast((each) => each.ask?.status === INBOX_ASK_STATUS.OPEN);
-  return message?.ask === undefined ? undefined : { message, ask: message.ask };
 }
 
 /**
@@ -779,8 +771,7 @@ export function answerOf(
 
 /**
  * The two ways an approval and a to-do are decided, the one that holds
- * back and the one that goes ahead, as a chat ask's version 4 response
- * names them.
+ * back and the one that goes ahead, as a version 4 response names them.
  */
 const INBOX_PRESSES = {
   [INBOX_RESPONSE.APPROVAL]: {
@@ -793,18 +784,6 @@ const INBOX_PRESSES = {
   },
 } as const;
 
-/** What each answer's kind says its answerer did, after who they are. */
-const REPLY_WORDS = {
-  [INBOX_REPLY.CHOSE]: "chose",
-  [INBOX_REPLY.APPROVED]: "approved",
-  [INBOX_REPLY.DECLINED]: "declined",
-  [INBOX_REPLY.ANSWERED]: "answered",
-  [INBOX_REPLY.DONE]: "marked it done",
-  [INBOX_REPLY.NOT_DONE]: "couldn't do it",
-  [INBOX_REPLY.SUBMITTED]: "filled it in",
-  [INBOX_REPLY.ACKNOWLEDGED]: "acknowledged it",
-} as const satisfies Record<InboxReplyKind, string>;
-
 /**
  * Whether an item was closed by a member without an answer rather than taken
  * back by its agent. Note that the agent's close always says why, so a closed
@@ -815,13 +794,6 @@ function closedByMember(item: InboxItem): boolean {
     item.status === INBOX_STATUS.CLOSED &&
     (item.closedBy !== undefined || item.closedReason === undefined)
   );
-}
-
-/** What an answer's answerer did, in a few words after who they are: "chose Postgres", "marked it done". */
-export function answerDid(answer: InboxReply): string {
-  return answer.reply === INBOX_REPLY.CHOSE
-    ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
-    : REPLY_WORDS[answer.reply];
 }
 
 /** A member named on an item, as an answer's or a message's writer. */
@@ -841,7 +813,7 @@ function filesWords(files: readonly unknown[] | undefined): string | undefined {
 }
 
 /** A word set as the start of a sentence. */
-export function sentenceCased(words: string): string {
+function sentenceCased(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
@@ -1422,9 +1394,6 @@ export interface InboxListed {
   readonly item: InboxItem;
 }
 
-/** A member an item names, as the service names them: who it waits on (`inboxWaitsOn`), or who started its agent. */
-export type InboxPerson = NonNullable<InboxItem["startedBy"]>;
-
 /** One person's items, by whoever they wait on (`inboxWaitsOn`); the reader's own where `person` is none. */
 export interface InboxPersonGroup {
   /** What the group is folded by, apart from any plan's or automation's key. */
@@ -1459,16 +1428,6 @@ export type InboxListView = { readonly readerId: string | undefined } & (
       readonly groups: readonly InboxStatusGroup[];
     }
 );
-
-/**
- * The member an item waits on: its task's assignee, or its agent's starter
- * where the task has nobody assigned or the agent works on no task, as the
- * service resolves it; its starter from a service before it said; none where
- * it names neither.
- */
-export function inboxWaitsOn(item: InboxItem): InboxPerson | undefined {
-  return item.waitsOn ?? item.startedBy;
-}
 
 /**
  * Whether an item is the reader's: it waits on them (`inboxWaitsOn`), or on

@@ -1,7 +1,7 @@
 /**
  * shortcuts.ts -- the window's keyboard shortcuts: one table the menu bar, the renderer's keymap, the hovers, and the Keyboard shortcuts page all read.
  *
- * Every shortcut but Escape, the Inbox's and Chat's J and K, the tab switcher's
+ * Every shortcut but Escape, the Inbox's J and K, the tab switcher's
  * ⌃Tab, and the ⌥↓ that opens a focused control's card holds Command, the way a
  * Mac app's own chords do, since Command chords belong to whichever app is
  * frontmost; in a browser on Windows or Linux, Command is pressed as Ctrl, as
@@ -72,11 +72,6 @@ export const APP_COMMAND = {
   INBOX_LIST: "inbox-list",
   PREVIOUS_INBOX_ITEM: "previous-inbox-item",
   NEXT_INBOX_ITEM: "next-inbox-item",
-  CHAT: "chat",
-  CHAT_LIST: "chat-list",
-  PREVIOUS_CHAT_CHANNEL: "previous-chat-channel",
-  NEXT_CHAT_CHANNEL: "next-chat-channel",
-  NEXT_UNREAD_CHAT_CHANNEL: "next-unread-chat-channel",
   TOGGLE_INBOX_ITEM_READ: "toggle-inbox-item-read",
   REPLY_TO_SELECTION: "reply-to-selection",
   EXIT_AGENT_PAGE: "exit-agent-page",
@@ -127,16 +122,12 @@ export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
 
 /**
  * The commands ⌘K alone offers, by the name it gives them: the sidebar's
- * view of its tasks, which its View options menu sets too, and Chat, which
- * the sidebar's row opens, so no chord or menu bar item spends a key on
- * them. Chat keeps no chord while it is an experiment, so ⇧⌘F stays free
- * for a find across everything; ⌘K offers it only while the account has it
- * on, since its command is offered nothing otherwise. Admin is an admin's
+ * view of its tasks, which its View options menu sets too, so no chord or
+ * menu bar item spends a key on them. Admin is an admin's
  * alone, so it spends no chord, and ⌘K offers it only to an admin, as its
  * sidebar row stands only for one.
  */
 const PALETTE_COMMAND_LABELS = {
-  [APP_COMMAND.CHAT]: "Chat",
   [APP_COMMAND.ADMIN]: "Admin",
   [APP_COMMAND.GROUP_TASKS_BY_REPOSITORY]: "Group tasks by repository",
   [APP_COMMAND.GROUP_TASKS_BY_ASSIGNEE]: "Group tasks by assignee",
@@ -378,6 +369,13 @@ export interface AppShortcut {
    */
   experiment?: Experiment;
   /**
+   * What the command is called while an experiment that changes what it
+   * reaches is on, as Previous task walks the channels while Channels is:
+   * the menu bar, the Keyboard shortcuts page, and the settings search say
+   * this instead (`shortcutLabel`).
+   */
+  renamed?: { readonly experiment: Experiment; readonly label: string };
+  /**
    * The platform capability the command's feature stands on. Where the
    * platform does not offer it, the command is in no list, as a gated
    * experiment's is not.
@@ -429,11 +427,17 @@ export const APP_SHORTCUTS = {
     label: "Permanently delete task",
     chord: { key: SHORTCUT_KEY.BACKSPACE },
   },
+  // Note that with Channels on the sidebar lists channels in the tasks' place, and these walk them.
   [APP_COMMAND.PREVIOUS_TASK]: {
     label: "Previous task",
     chord: { key: SHORTCUT_KEY.UP, option: true },
+    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Previous channel" },
   },
-  [APP_COMMAND.NEXT_TASK]: { label: "Next task", chord: { key: SHORTCUT_KEY.DOWN, option: true } },
+  [APP_COMMAND.NEXT_TASK]: {
+    label: "Next task",
+    chord: { key: SHORTCUT_KEY.DOWN, option: true },
+    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Next channel" },
+  },
   [APP_COMMAND.TOGGLE_SIDEBAR]: { label: "Toggle sidebar", chord: { key: SHORTCUT_KEY.B } },
   [APP_COMMAND.TOGGLE_SIDE_PANEL]: {
     label: "Toggle panel",
@@ -569,27 +573,6 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.TOGGLE_INBOX_ITEM_READ]: {
     label: "Mark inbox item as read or unread",
     chord: { key: SHORTCUT_KEY.U, plain: true },
-  },
-  [APP_COMMAND.CHAT_LIST]: {
-    label: "Back to chat list",
-    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
-    experiment: EXPERIMENT.CHAT,
-  },
-  // Note that Chat's K and J are the Inbox's own keys, because the two never stand at once and the keymap runs whichever is offered.
-  [APP_COMMAND.PREVIOUS_CHAT_CHANNEL]: {
-    label: "Previous chat channel",
-    chord: { key: SHORTCUT_KEY.K, plain: true },
-    experiment: EXPERIMENT.CHAT,
-  },
-  [APP_COMMAND.NEXT_CHAT_CHANNEL]: {
-    label: "Next chat channel",
-    chord: { key: SHORTCUT_KEY.J, plain: true },
-    experiment: EXPERIMENT.CHAT,
-  },
-  [APP_COMMAND.NEXT_UNREAD_CHAT_CHANNEL]: {
-    label: "Next unread chat channel",
-    chord: { key: SHORTCUT_KEY.J, plain: true, shift: true },
-    experiment: EXPERIMENT.CHAT,
   },
   [APP_COMMAND.REPLY_TO_SELECTION]: {
     label: "Reply to selection",
@@ -833,10 +816,6 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.PREVIOUS_INBOX_ITEM,
       APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
-      APP_COMMAND.CHAT_LIST,
-      APP_COMMAND.PREVIOUS_CHAT_CHANNEL,
-      APP_COMMAND.NEXT_CHAT_CHANNEL,
-      APP_COMMAND.NEXT_UNREAD_CHAT_CHANNEL,
       APP_COMMAND.REPLY_TO_SELECTION,
       APP_COMMAND.EXIT_AGENT_PAGE,
       APP_COMMAND.EXIT_PERSON_PAGE,
@@ -1255,6 +1234,15 @@ export function shortcutShown(
   const capabilityStands =
     shortcut.capability === undefined || capabilities.includes(shortcut.capability);
   return experimentStands && capabilityStands;
+}
+
+/** What a keyed command is called for the account's experiments: its `renamed` label while that experiment is on, its own otherwise. */
+export function shortcutLabel(command: KeyedCommand, experiments: ExperimentChoices): string {
+  const shortcut: AppShortcut = APP_SHORTCUTS[command];
+  const { renamed } = shortcut;
+  return renamed !== undefined && experimentOn(experiments, renamed.experiment)
+    ? renamed.label
+    : shortcut.label;
 }
 
 /** Whether a key that answers in place stands in the page's lists for the platform's capabilities. */

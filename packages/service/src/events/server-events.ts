@@ -32,7 +32,6 @@ export const SERVER_EVENT = {
   AGENT_START: "agent:start",
   PULL_REQUEST_CREATE: "agent:pull_request_create",
   INBOX_ANSWER_SEND: "inbox:answer_send",
-  CHAT_MESSAGE_SEND: "chat:message_send",
   AUTOMATION_CREATE: "automation:create",
   PULL_REQUEST_CHAPTERS_GENERATE: "pull_request:chapters_generate",
   INTEGRATION_CONNECTION_CREATE: "integration:connection_create",
@@ -113,7 +112,6 @@ interface ServerEventProperties {
     is_draft: boolean;
   };
   [SERVER_EVENT.INBOX_ANSWER_SEND]: Record<string, never>;
-  [SERVER_EVENT.CHAT_MESSAGE_SEND]: { is_reply: boolean };
   [SERVER_EVENT.AUTOMATION_CREATE]: { trigger_kind: AutomationTriggerKind };
   /** Counts alone: how many chapters and hunks a generation told, how long it took, and how it came out. */
   [SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE]: {

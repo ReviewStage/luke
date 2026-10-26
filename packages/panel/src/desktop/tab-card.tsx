@@ -59,7 +59,6 @@ export type CardSubject =
       readonly status?: TaskStatus | undefined;
     }
   | { readonly kind: typeof TAB_KIND.INBOX; readonly inbox?: InboxBoardView | undefined }
-  | { readonly kind: typeof TAB_KIND.CHAT }
   | { readonly kind: typeof TAB_KIND.DRAFT }
   | {
       readonly kind: typeof TAB_KIND.AGENT;
@@ -174,7 +173,6 @@ function panelCard(subject: Extract<CardSubject, { kind: typeof TAB_KIND.PANEL }
     case SIDE_PANEL_TAB.BOARD:
     case SIDE_PANEL_TAB.CODE:
     case SIDE_PANEL_TAB.COMMENTS:
-    case SIDE_PANEL_TAB.CHAT:
       return null;
   }
 }
@@ -201,7 +199,6 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
       );
     case TAB_KIND.INBOX:
       return subject.inbox === undefined ? null : <InboxCard inbox={subject.inbox} />;
-    case TAB_KIND.CHAT:
     case TAB_KIND.DRAFT:
     case TAB_KIND.MAC_TERMINAL:
       return null;

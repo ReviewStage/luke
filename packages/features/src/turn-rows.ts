@@ -67,14 +67,12 @@ export const CALL_KIND = {
   INBOX_REPLY: "inbox-reply",
   /** An ask on one of the agent's inbox threads taken back with why (`withdraw_ask`), its row naming the thread's key. */
   INBOX_WITHDRAW: "inbox-withdraw",
-  /** A message posted in the workspace's chat (`post_chat`), to a channel, a member, or a thread, its row saying the words. */
-  CHAT_POST: "chat-post",
-  /** The workspace's chat read (`read_chat`), its row naming the channel where the call named one. */
-  CHAT_READ: "chat-read",
-  /** An ask posted in chat taken back with why (`resolve_ask`), its row naming the ask's key. */
-  CHAT_RESOLVE: "chat-resolve",
-  /** A topic channel renamed, given a purpose, or archived (`edit_channel`), its row naming the channel. */
-  CHAT_EDIT_CHANNEL: "chat-edit-channel",
+  /** A channel made in the workspace (`create_channel`), its row naming it. */
+  CREATE_CHANNEL: "create-channel",
+  /** A channel renamed, given a purpose, archived, or unarchived (`update_channel`), its row naming it. */
+  UPDATE_CHANNEL: "update-channel",
+  /** A thread moved into another channel (`move_thread`), its row naming the channel. */
+  MOVE_THREAD: "move-thread",
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
@@ -176,10 +174,9 @@ export const CALL_WORDS = {
   [CALL_KIND.INBOX_READ]: { verb: "Read your inbox", code: false },
   [CALL_KIND.INBOX_REPLY]: { verb: "Replied in your inbox:", code: false },
   [CALL_KIND.INBOX_WITHDRAW]: { verb: "Withdrew an ask in your inbox:", code: false },
-  [CALL_KIND.CHAT_POST]: { verb: "Posted in the chat:", code: false },
-  [CALL_KIND.CHAT_READ]: { verb: "Read the chat", code: false },
-  [CALL_KIND.CHAT_RESOLVE]: { verb: "Resolved an ask in the chat:", code: false },
-  [CALL_KIND.CHAT_EDIT_CHANNEL]: { verb: "Changed the channel", code: false },
+  [CALL_KIND.CREATE_CHANNEL]: { verb: "Made the channel", code: false },
+  [CALL_KIND.UPDATE_CHANNEL]: { verb: "Changed the channel", code: false },
+  [CALL_KIND.MOVE_THREAD]: { verb: "Moved a thread to", code: false },
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
   [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped subagent", code: false },
@@ -438,6 +435,69 @@ export type TurnRow<B> =
       /** Whether a call it holds failed. */
       readonly failed: boolean;
     };
+
+/** Whether a value is a record of its own keys, rather than an array or a primitive. */
+function isRecordValue(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Whether two values read alike, `depth` records deep: the same value;
+ * arrays alike item by item; or records with the same keys, each value
+ * alike one record less deep, where a record past the depth is alike only
+ * as the same value. Note that it names no field, so a field added to a
+ * shape it compares is compared with the rest, never missed, and that
+ * arrays cost no depth, so a fold's rows inside a row are read as the row
+ * is.
+ */
+export function sameShape(a: unknown, b: unknown, depth: number): boolean {
+  if (Object.is(a, b)) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((item, at) => sameShape(item, b[at], depth))
+    );
+  }
+  if (depth <= 0 || !isRecordValue(a) || !isRecordValue(b)) return false;
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => Object.hasOwn(b, key) && sameShape(a[key], b[key], depth - 1))
+  );
+}
+
+/**
+ * Whether two records hold the same values under the same keys, each the
+ * same value unless `by` names how that key is read: a memoised component's
+ * props, every one compared, so a prop added later is never missed.
+ */
+export function sameFieldsBy<T extends object>(
+  a: T,
+  b: T,
+  by: { readonly [K in keyof T]?: (ours: T[K], theirs: T[K]) => boolean },
+): boolean {
+  const keys = Object.keys(a) as (keyof T)[];
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => {
+      const read = by[key];
+      return (
+        Object.hasOwn(b, key) &&
+        (read === undefined ? Object.is(a[key], b[key]) : read(a[key], b[key]))
+      );
+    })
+  );
+}
+
+/** How deep a turn's row is read: the row, a fold's rows inside it, then each block's own fields, a part read again from the same stored part reading alike. */
+export const TURN_ROW_DEPTH = 3;
+
+/** Whether two of a turn's rows draw alike: every field of the row, its fold's rows, and its blocks' own fields (`sameShape`). */
+export function sameTurnRow<B>(a: TurnRow<B>, b: TurnRow<B>): boolean {
+  return sameShape(a, b, TURN_ROW_DEPTH);
+}
 
 /** What a lead's blocks hold, as its fold's line counts them. */
 interface Held {

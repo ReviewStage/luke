@@ -99,6 +99,7 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT, itemId: OTHER },
     `${HOME}/agent/${AGENT}/inbox/${OTHER}`,
   ],
+  [{ kind: LINK_PLACE.CHANNEL, channelId: OTHER }, `${HOME}/channel/${OTHER}`],
   [{ kind: LINK_PLACE.AUTOMATIONS }, `${HOME}/automations`],
   [{ kind: LINK_PLACE.AUTOMATION, automationId: OTHER }, `${HOME}/automation/${OTHER}`],
   [
@@ -108,8 +109,6 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
   [{ kind: LINK_PLACE.SETTINGS }, `${HOME}/settings`],
   [{ kind: LINK_PLACE.SETTINGS, page: "coding-agents" }, `${HOME}/settings/coding-agents`],
   [{ kind: LINK_PLACE.PERSON, userId: "user_9Fq2-x" }, `${HOME}/person/user_9Fq2-x`],
-  [{ kind: LINK_PLACE.CHAT }, `${HOME}/chat`],
-  [{ kind: LINK_PLACE.CHAT, channelId: OTHER }, `${HOME}/chat/${OTHER}`],
   [{ kind: LINK_PLACE.ADMIN }, `${HOME}/admin`],
   [{ kind: LINK_PLACE.ADMIN, section: ADMIN_LINK_SECTION.COST }, `${HOME}/admin/cost`],
   [{ kind: LINK_PLACE.ADMIN, section: ADMIN_LINK_SECTION.USERS }, `${HOME}/admin/users`],
@@ -252,9 +251,6 @@ test("an address that names no place in Luke names nothing", () => {
     `${HOME}/person/user_9Fq2-x/tasks`,
     `${HOME}/person/charles%40acme.dev`,
     `${HOME}/issue/${OTHER}`,
-    `${HOME}/chats/${OTHER}`,
-    `${HOME}/chat/${OTHER}/message/${AGENT}`,
-    `${HOME}/chat/%23general`,
     // The Admin place's Overview is the place's own link, and a section, an account, or a day it does not know is no place.
     `${HOME}/admin/dashboard`,
     `${HOME}/admin/animations`,

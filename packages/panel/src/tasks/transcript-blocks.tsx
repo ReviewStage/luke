@@ -19,6 +19,8 @@ import {
   callPlace,
   isAgentCallKind,
   isCommandKind,
+  sameFieldsBy,
+  sameTurnRow,
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
@@ -91,9 +93,6 @@ import {
   type LucideIcon,
   MessageCircleQuestionIcon,
   MessageCircleXIcon,
-  MessageSquareCheckIcon,
-  MessageSquareTextIcon,
-  MessagesSquareIcon,
   PencilLineIcon,
   PlayIcon,
   ScrollTextIcon,
@@ -119,6 +118,7 @@ import {
   createContext,
   Fragment,
   type MouseEvent,
+  memo,
   type ReactNode,
   useContext,
   useEffect,
@@ -167,7 +167,7 @@ import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   TranscriptMarkdownSource,
 } from "./transcript-markdown.js";
-import { useTaskKeyTargets } from "./use-known-names.js";
+import { useWordTargets } from "./use-known-names.js";
 import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { type CutBody, WHOLE_PART } from "./whole-parts.js";
 import { WorkingTime } from "./working-time.js";
@@ -501,7 +501,7 @@ let keySetsSeen = 0;
  * Note that a transcript is drawn again under it, because its library reads
  * each block of words once and does not read it again for a change of
  * steps alone, so words drawn before the tasks were listed would never
- * chip a key; the set changes only as a key does (`useTaskKeyTargets`).
+ * chip a key; the set changes only as a key does (`useWordTargets`).
  */
 function keySerial(targets: ReadonlyMap<string, string>): number {
   const held = keySerials.get(targets);
@@ -833,7 +833,7 @@ export function TranscriptWords({
   /** Whether the words are still being written, as a running turn's newest are. */
   streaming?: boolean | undefined;
 }): ReactNode {
-  const keyTargets = useTaskKeyTargets();
+  const keyTargets = useWordTargets();
   const remarkPlugins = useMemo(
     () => remarkPluginsFor(typed, asDocument, keyTargets),
     [typed, asDocument, keyTargets],
@@ -945,7 +945,7 @@ function CutWords({
   );
 }
 
-/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one; a list of the models wears a chip, what an agent runs on. A chat call wears a speech bubble, and an edit of a channel the hash the chat's list leads a channel with. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one; a list of the models wears a chip, what an agent runs on. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
@@ -970,10 +970,9 @@ const CALL_ICON = {
   [CALL_KIND.INBOX_READ]: InboxIcon,
   [CALL_KIND.INBOX_REPLY]: InboxIcon,
   [CALL_KIND.INBOX_WITHDRAW]: InboxIcon,
-  [CALL_KIND.CHAT_POST]: MessageSquareTextIcon,
-  [CALL_KIND.CHAT_READ]: MessagesSquareIcon,
-  [CALL_KIND.CHAT_RESOLVE]: MessageSquareCheckIcon,
-  [CALL_KIND.CHAT_EDIT_CHANNEL]: HashIcon,
+  [CALL_KIND.CREATE_CHANNEL]: HashIcon,
+  [CALL_KIND.UPDATE_CHANNEL]: HashIcon,
+  [CALL_KIND.MOVE_THREAD]: FolderInputIcon,
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
@@ -1734,6 +1733,15 @@ function TurnRowView<B>({
 }
 
 /**
+ * A turn's row, drawn again only where it reads otherwise than it did, or
+ * the tab draws its blocks another way: a running turn's page touches its
+ * newest row alone, so every row before it is kept as it was drawn.
+ */
+const SteadyTurnRow = memo(TurnRowView, (a, b) =>
+  sameFieldsBy(a, b, { row: sameTurnRow }),
+) as typeof TurnRowView;
+
+/**
  * A turn's rows (`turn-rows.ts`): each block drawn by its tab, a run of
  * calls and a folded lead drawn here. What trails the turn, as a spoken
  * turn's "Worked for" line does, is drawn inside its last row where that
@@ -1753,13 +1761,13 @@ export function TranscriptRows<B>({
 }): ReactNode {
   // Note that a group is keyed by whether it opens, because the fold reads `defaultOpen` once, and a group that stops being the turn's latest work has to fold.
   return rows.map((row, index) => (
-    <TurnRowView
+    <SteadyTurnRow
       key={row.kind === TURN_ROW.GROUP ? `${row.key}-${String(row.open)}` : row.key}
       row={row}
       trailer={index === rows.length - 1 ? trailer : null}
     >
       {children}
-    </TurnRowView>
+    </SteadyTurnRow>
   ));
 }
 

@@ -12,19 +12,11 @@ import {
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
 import {
-  CHAT_ATTACHMENT_QUERY,
-  CHAT_QUERY,
-  type ChatJoinAnswer,
-  type ChatWriteRequest,
-  chatWriteRequestSchema,
-} from "./chat-wire.js";
-import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
-  type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentDeleteAnswerView,
   type CodingAgentGitHubImageView,
@@ -120,7 +112,6 @@ import {
   LIVE_USER_QUERY,
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
-  type WorkspaceChatLiveAnswer,
 } from "./live-wire.js";
 import { MEMORY_QUERY } from "./memory-wire.js";
 import {
@@ -151,7 +142,6 @@ import { type RepositoryUnreached, repositoryNotReachableSchema } from "./reposi
 import {
   agentGitHubImagePath,
   agentPicturePath,
-  HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
 } from "./service-paths.js";
 import {
@@ -169,8 +159,8 @@ import type { TaskAgentRefusal } from "./task-wire.js";
  * attempt and a 401 is renewed and retried once. Each call answers one of
  * the view's shapes rather than failing, because every caller does the same
  * thing with a failure: draws why, and offers to try again. The transcript
- * read, the two inbox reads, a task's and the account's, and the
- * workspace's chat read are the calls the service holds open, for as long
+ * read and the two inbox reads, a task's and the account's, are the calls
+ * the service holds open, for as long
  * as it waits on the agent's next message or the next change, so they
  * travel under a deadline of
  * their own that outlasts that hold; a Start travels under a longer one
@@ -333,7 +323,7 @@ export function startRefusedAs(refusal: TaskAgentRefusal): Failed {
   return refusedAs(unparsedWire(refusal), START_REFUSALS);
 }
 
-/** A transcript's or a chat message's picture's bytes in base64 under its type: a picture, or a WebM an agent recorded; unanswered under any other type. */
+/** A transcript's picture's bytes in base64 under its type: a picture, or a WebM an agent recorded; unanswered under any other type. */
 function readConversationPicture(
   response: Response,
 ): Effect.Effect<CodingAgentInboxAttachmentView> {
@@ -1138,40 +1128,6 @@ export class HostedCodingAgentClient {
   }
 
   /**
-   * One picture a chat message carries, by the attachment its image block
-   * names, fetched under the account: its bytes in base64 under the media
-   * type the service sniffed and kept, as an inbox image is; not found
-   * where the account is not in the workspace or the message carries no
-   * such picture; unanswered for anything else.
-   */
-  chatAttachment(
-    workspaceId: string,
-    messageId: string,
-    attachmentId: string,
-  ): Effect.Effect<CodingAgentInboxAttachmentView, never, HttpClient.HttpClient> {
-    const query = new URLSearchParams({
-      [CHAT_ATTACHMENT_QUERY.WORKSPACE_ID]: workspaceId,
-      [CHAT_ATTACHMENT_QUERY.MESSAGE_ID]: messageId,
-      [CHAT_ATTACHMENT_QUERY.ATTACHMENT_ID]: attachmentId,
-    });
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT_ATTACHMENT}?${query}`,
-      }),
-      (answer) => {
-        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-        if (!answer.response.ok) {
-          return Effect.map(jsonOf(answer.response), (body) =>
-            refusedAs(unparsedWire(body), ROW_REFUSALS),
-          );
-        }
-        return readConversationPicture(answer.response);
-      },
-    );
-  }
-
-  /**
    * What waits on the developer across the account sealed for following
    * over Neon Realtime, or with `poll` its rows inline, answered at once:
    * unanswered for anything that went wrong, which the caller answers by
@@ -1304,79 +1260,6 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /**
-   * The account's person joining a workspace's chat: their member and its
-   * `#general` made where they are not yet, which a follow does once before
-   * it seals. Not found where the account is not in the workspace or has
-   * Chat off; unanswered for anything else.
-   */
-  chatJoin(
-    workspaceId: string,
-  ): Effect.Effect<ChatJoinAnswer | Failed, never, HttpClient.HttpClient> {
-    return Effect.map(
-      hostedAnswer(
-        askHosted(this.#hosted.messages.chatWrite, {
-          query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
-          body: { join: true },
-        }),
-        ROW_REFUSALS,
-      ),
-      // A write answers no member, which only a join is answered with.
-      (answer) => ("failure" in answer || "self" in answer ? answer : UNANSWERED),
-    );
-  }
-
-  /**
-   * A workspace's chat sealed for following over Neon Realtime for the
-   * account named, answered at once: not found where the account has not
-   * joined it, signed out where the session is another's, unanswered for
-   * anything else, which the caller answers by sealing it again; with
-   * `poll`, its rows inline, held past `after` until they move.
-   */
-  workspaceChatLive(
-    workspaceId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    WorkspaceChatLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const named = { workspaceId, [LIVE_USER_QUERY]: userId };
-    return Effect.catchIf(
-      askLive(this.#hosted.live.workspaceChat, named, poll, after),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
-  }
-
-  /**
-   * Writes to a workspace's chat as the account's own member of it: a post,
-   * an answer to an ask, a resolve, or how far the person has read, under
-   * the key the window made where the write carries one, which a retry
-   * carries again; a write the service would refuse by shape is refused
-   * here without traveling.
-   */
-  chatPost(
-    workspaceId: string,
-    request: ChatWriteRequest,
-  ): Effect.Effect<CodingAgentChatWriteAnswerView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(chatWriteRequestSchema)(request));
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.map(
-      hostedAnswer(
-        askHosted(this.#hosted.messages.chatWrite, {
-          query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
-          body: admitted,
-        }),
-        MESSAGE_REFUSALS,
-      ),
-      // A join answers the joiner's member, which no write is answered with.
-      (answer) => ("self" in answer ? UNANSWERED : answer),
-    );
-  }
   /**
    * One image an agent's pull request's overview names, by the address
    * GitHub's rendering spelled, fetched under the account: its bytes in

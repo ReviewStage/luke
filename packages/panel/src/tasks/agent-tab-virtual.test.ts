@@ -258,6 +258,105 @@ test("⌘F finds words in a row the log has not drawn, scrolls the log to it, an
   assert.equal(litRow?.getAttribute("data-row-key"), "m-7");
 });
 
+test("a running turn of a thousand parts draws only the pieces near its view, and ⌘F lights a match in a piece it had not drawn", async () => {
+  // An orchestrator's turn is its whole run: one message, each of its steps a line of words.
+  const turn: CodingAgentMessage = {
+    id: "turn",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: Array.from({ length: 500 }, (_, step) => [
+      { type: "step-start" },
+      {
+        type: "text",
+        text: step === 7 ? "The lantern is lit in the seventh step." : `Step ${step} of the run.`,
+      },
+    ]).flat(),
+    startedAt: 1_000,
+  };
+  const { follower } = following({
+    ...page([message(0), turn]),
+    status: CODING_AGENT_STATUS.RUNNING,
+  });
+  const { container, box } = await drawTab(
+    codingAgentsControl({
+      agents: [{ ...AGENT, status: CODING_AGENT_STATUS.RUNNING }],
+      transcripts: follower,
+    }),
+    (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
+  );
+  const { writes } = layOut(box);
+  const log = () => box.textContent ?? "";
+  assert.match(log(), /Step 499 of the run\./u, "the turn's newest words are drawn");
+  assert.doesNotMatch(log(), /Step 0 of the run\./u, "its first are not");
+  assert.ok(drawnRows(container).length <= 20, `${drawnRows(container).length} rows are drawn`);
+
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("lantern");
+  await act(settled);
+
+  assert.equal(findTally(), "1 of 1");
+  assert.ok(writes.length > 0, "the log is scrolled");
+  const lit = [...(CSS.highlights.get("find-current") ?? [])] as Range[];
+  assert.equal(lit.length, 1, "one match is lit as the one the find is at");
+  const litRange = lit[0] ?? assert.fail("the lit match");
+  assert.equal(litRange.toString().toLowerCase(), "lantern");
+});
+
+test("⌘F counts a line the voice said over a long turn's first piece after that piece was cut", async () => {
+  // A finished turn the voice read aloud, which lines from elsewhere reached as it ran, each splitting its fold, so it is cut into pieces.
+  const turn: CodingAgentMessage = {
+    id: "turn",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: Array.from({ length: 40 }, (_, step) => [
+      { type: "step-start" },
+      { type: "text", text: `Step ${step} of the run.` },
+    ]).flat(),
+    startedAt: 1_000,
+    finishedAt: 1_500,
+  };
+  const reached = Array.from(
+    { length: 40 },
+    (_, step): CodingAgentMessage => ({
+      id: `reached-${step}`,
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: "text", text: `Check ${step} passed.` }],
+      arrivedIn: { journalId: "turn", afterStep: step + 1 },
+    }),
+  );
+  // A line the voice said on a call, reading the turn aloud, which the log draws ahead of it.
+  const said = (id: string, text: string): CodingAgentMessage => ({
+    id,
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "text", text }],
+    metadata: { author: "voice_model", channel: "voice", read_from: "turn" },
+    sentAt: 2_000,
+  });
+  const { follower, push } = following(
+    page([message(0), turn, ...reached, said("said-1", "The run is done.")]),
+  );
+  const { container } = await drawTab(
+    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
+  );
+  assert.ok(
+    drawnRows(container).some((key) => key.startsWith("turn/")),
+    "the turn is cut",
+  );
+  assert.ok(!drawnRows(container).includes("turn"), "its first piece is not drawn");
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("done");
+  await act(settled);
+  // A second line the voice said lands while the find stands open, reading the same turn.
+  await push(page([said("said-2", "The lantern is lit.")]));
+  typeFind("lantern");
+  await act(settled);
+
+  assert.equal(findTally(), "1 of 1");
+});
+
 test("⌘F counts a match in a closed call's answer far up the log, steps to it, and opens the fold on it", async () => {
   const held = messages(0, 400);
   held[7] = {

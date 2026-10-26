@@ -12,7 +12,7 @@ import { deploymentEve, deploymentEveForAccounts } from "./deployment-eve.js";
 
 /**
  * The one place a web function composes the deployment's caller at eve's
- * door, which a cookie request's `eveFor`, a chat notice, a GitHub wake, and
+ * door, which a cookie request's `eveFor`, a GitHub wake, and
  * an automation's run all reach eve through: a request eve receives from it
  * carries the deployment's own secret as its bearer and the account beside
  * it, never the cron's secret the same environment holds; a deployment

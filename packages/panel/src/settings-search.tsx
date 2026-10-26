@@ -36,6 +36,7 @@ import {
   IN_CONTEXT_SHORTCUTS,
   type InContextKey,
   inContextShown,
+  shortcutLabel,
   shownShortcutGroups,
   WRITING_ACTIONS_LISTED,
   WRITING_GROUP_TITLE,
@@ -404,9 +405,13 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     ...shownShortcutGroups(input.settings.experiments, input.capabilities).flatMap((group) => [
       ...group.commands.map((command) => ({
         id: command,
-        label: APP_SHORTCUTS[command].label,
+        label: shortcutLabel(command, input.settings.experiments),
         page: SETTINGS_VIEW.SHORTCUTS,
-        haystack: [APP_SHORTCUTS[command].label, WINDOW_SHORTCUT_WORDS, group.title],
+        haystack: [
+          shortcutLabel(command, input.settings.experiments),
+          WINDOW_SHORTCUT_WORDS,
+          group.title,
+        ],
       })),
       ...group.keys.map((key) => inContextEntry(key, group.title)),
     ]),

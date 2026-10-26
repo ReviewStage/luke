@@ -1,7 +1,7 @@
 /**
  * pull-request-links.ts -- the pull request a link draws, read once a minute per instance rather than once per link.
  *
- * A screen of plans and chat draws every pull request link as a chip, and
+ * A screen of plans and threads draws every pull request link as a chip, and
  * each chip asks `GET /api/github/repositories/pull-request` as it mounts,
  * so one desktop asks for the same pull request in bursts. Each ask read
  * the installation, minted or found a token, and read GitHub, and a burst

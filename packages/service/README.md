@@ -394,8 +394,8 @@ door holds the deployment to what its actor admits
 `CODER_DEPLOYMENT_TURNS` in `src/agents/coder-host/channel.ts`): a typed
 opening and line, which are an agent's Start, a message, an inbox answer, a
 manual automation run, a comment's hand-over to an agent it mentions
-(`src/tasks/comment-ask.ts`), a coding agent's own `start_agent`, and a
-chat message told to an agent (`src/agents/coder-host/chat-notify.ts`); a spoken ask, which a call hands the agent it speaks into;
+(`src/tasks/comment-ask.ts`), a coding agent's own `start_agent`, and
+another agent's `message_agent` (`src/agents/coder-host/agent-message.ts`); a spoken ask, which a call hands the agent it speaks into;
 a cancel, which is an agent's Stop, its Archive, and a task's archive; and a
 reset, which is how the two deletes, a task's and the account's, retire the
 eve sessions of what they delete (`src/agents/retire-sessions.ts`); each only
@@ -1408,7 +1408,7 @@ over the voice it holds.
 
 `experiments` is the third part: each experiment the account turned on or
 back off in Settings › Experimental, keyed by `@luke/settings`'s
-`EXPERIMENT`, as `{ "chat": true }`, and `{}` until it chooses one. It is
+`EXPERIMENT`, as `{ "browser": true }`, and `{}` until it chooses one. It is
 the server's to hold rather than the desktop's to sync: a write is a patch
 whose keys are merged over what stood (`jsonb ||` on the `experiments`
 column), so a Mac that knows fewer experiments never erases another's
@@ -2613,7 +2613,7 @@ tells an event rather than only on its 250 ms poll (the poll stays, for a
 stream refused or dropped); and nothing else: any other route or kind of
 turn carrying the secret is refused outright rather than passed to the
 account authenticator behind it. The table admits a typed message too,
-which a coding agent's own `start_agent` and a chat message told to an agent send, and which
+which a coding agent's own `start_agent` and `message_agent` send, and which
 a hosted route a browser reached on its session cookie alone carries for
 the member, a comment's hand-over to an agent it mentions among them
 (`src/tasks/comment-ask.ts`), minted the same way. The door admits that
