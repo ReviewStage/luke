@@ -140,7 +140,10 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
  * fails says so in its place with Retry, and a later one that fails over
  * the threads held says so in a line at the stream's foot with Retry. Older
  * threads are read as the reader nears the stream's top, the log keeping
- * their place as they land above (`Conversation`'s `onNearTop`).
+ * their place as they land above (`Conversation`'s `onNearTop`). A view of
+ * Mine or Needs me that shows none of the channel's threads says so with
+ * Show everyone, which turns the view to Everyone, since the view is kept
+ * for the whole window and the sliders are otherwise the only way out.
  */
 
 /**
@@ -152,9 +155,9 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
 const STREAM =
   "channel-stream relative flex min-h-0 min-w-0 flex-col in-data-[panel-open=true]:[--luke-toolbar-end-at:initial]";
 
-/** The posts' run, on the column's inset. */
+/** The posts' run, on the column's inset, at least the log's height, so an empty view's state has the room to stand in. */
 const STREAM_BODY =
-  "channel-stream-body flex flex-col gap-luke-4 px-column-inset pt-luke-8 pb-luke-16";
+  "channel-stream-body flex min-h-full flex-col gap-luke-4 px-column-inset pt-luke-8 pb-luke-16";
 
 /** One post: the unread dot's gutter and the post's words, on its own ground, the hover's fill, the chosen thread's, or the attention tint where it needs the reader. */
 const POST =
@@ -174,6 +177,9 @@ const UNREAD_WORD = "Unread";
 
 /** What the line before the first thread posted since the reader last looked says. */
 const NEW_LINE = "New";
+
+/** The way out of a view that shows none of the channel's threads, to every one of them. */
+const SHOW_EVERYONE = "Show everyone";
 
 /** No thread is read yet. */
 const NO_THREADS: readonly ChannelThread[] = [];
@@ -894,11 +900,17 @@ export function ChannelStream({
         >
           <ConversationContent className={STREAM_BODY}>
             {read.threads === undefined ? <ChannelStreamSkeleton /> : null}
-            {read.threads !== undefined && rows.length === 0 ? (
+            {read.threads === undefined || rows.length > 0 ? null : view ===
+              CHANNEL_VIEW.EVERYONE ? (
               <NoteLine look={NOTE_LINE_LOOK.CENTRED}>
                 {emptyStreamWords(channel.name, view)}
               </NoteLine>
-            ) : null}
+            ) : (
+              <EmptyState
+                title={emptyStreamWords(channel.name, view)}
+                action={{ label: SHOW_EVERYONE, onClick: () => onView(CHANNEL_VIEW.EVERYONE) }}
+              />
+            )}
             {rows.map((row) =>
               row.kind === STREAM_ROW.THREAD ? (
                 <ThreadPost

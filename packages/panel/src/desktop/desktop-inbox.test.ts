@@ -9666,6 +9666,20 @@ function chosenPostTitle(page: Element): string | undefined {
     ?.ariaLabel?.slice(5);
 }
 
+test("a channel's Needs me with nothing waiting on the reader offers Show everyone, whose press shows every thread", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("needs-me"));
+  answerChannels({ threads: () => Promise.resolve(threadsPage([noticeOf(THRESHOLD)])) });
+  const { page } = mount([], { channels: true });
+  await settle();
+  assert.deepEqual(postTitles(page), []);
+
+  act(() => buttonSaying("Show everyone").click());
+  await settle();
+  assert.deepEqual(postTitles(page), [THRESHOLD.title]);
+});
+
 test("K and J open the thread above and below the one open, through the threads the stream's view shows, the thread's bar counting where it stands; either opens the latest where none is open; and Escape closes the thread", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
