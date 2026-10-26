@@ -13,8 +13,8 @@ import { offeredTaskTools, runShowPageTool } from "../host.js";
  * (`packages/service/src/tasks/page-tool.ts`). The call reaches the store through the
  * host's door (`../host.ts`), as `post_thread` does, and a page named by
  * its path is read from the session's sandbox through the same door eve
- * hands every file tool, opened on first use. It is offered at each turn's start only to an agent on a plan
- * (`taskToolsOf`), since one on no plan has no side panel to show a page in.
+ * hands every file tool, opened on first use. It is offered at each turn's start where `taskToolsOf` allows it,
+ * which includes an agent on no task.
  */
 export default defineDynamic({
   events: {
