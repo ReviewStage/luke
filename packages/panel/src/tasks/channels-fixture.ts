@@ -13,7 +13,11 @@
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
 import type { Channel, ChannelThread } from "@luke/features/channel-wire";
-import type { CodingAgentInboxChanged } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxChanged,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
@@ -33,6 +37,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import {
   type AppInboxTask,
   type AppInboxTaskHolding,
+  type AppInboxTasklessItem,
   type AppStateSnapshot,
   RUN_PROFILE,
 } from "@luke/host/app-state";
@@ -97,6 +102,7 @@ const AGENT = {
   POLISH: fixtureId("b2000002", 6),
   INDEX: fixtureId("b2000002", 7),
   RELEASE: fixtureId("b2000002", 8),
+  STRAY: fixtureId("b2000002", 9),
 } as const;
 
 type Person = typeof DEAN | typeof CHARLES;
@@ -257,6 +263,19 @@ const TASKS: readonly TaskSeed[] = [
   },
 ];
 
+/** An agent no task holds and no automation started, which the Inbox lists under Other agents. */
+interface StraySeed {
+  readonly agentId: string;
+  readonly agentTitle: string;
+  readonly owner: Person;
+}
+
+const STRAY: StraySeed = {
+  agentId: AGENT.STRAY,
+  agentTitle: "Bump the Node image",
+  owner: DEAN,
+};
+
 /* ----- The threads ----- */
 
 function agentSaid(n: number, ago: number, text: string, ask?: InboxMessage["ask"]): InboxMessage {
@@ -288,14 +307,15 @@ function memberSaid(
 
 interface ThreadSeed {
   readonly item: InboxItem;
-  readonly taskId: string;
+  /** The task holding it; none for the stray agent's. */
+  readonly taskId: string | undefined;
   /** The channel it is posted to, by id. */
   readonly channelId: string;
 }
 
 function thread(
   n: number,
-  task: TaskSeed,
+  task: TaskSeed | StraySeed,
   channelId: string,
   title: string,
   messages: readonly InboxMessage[],
@@ -304,7 +324,7 @@ function thread(
   const first = messages[0]?.createdAt ?? LANDED;
   const last = messages.at(-1)?.createdAt ?? first;
   return {
-    taskId: task.id,
+    taskId: "id" in task ? task.id : undefined,
     channelId,
     item: {
       id: fixtureId("d4000004", n),
@@ -599,11 +619,30 @@ const THREADS: ThreadSeed[] = [
 ];
 
 /**
- * More of the week, so a channel shows what folds away and what is new: a
- * second open ask from the Inbox rows task beside its first, and threads
- * settled on earlier days.
+ * More of the week, so a channel shows what folds away and what is new: an
+ * open ask in #infra from an agent with no task, a second open ask from the
+ * Inbox rows task beside its first, and threads settled on earlier days.
  */
 THREADS.push(
+  thread(
+    21,
+    STRAY,
+    CHANNEL.INFRA,
+    "Bump the Node image to 24.11?",
+    [
+      agentSaid(
+        130,
+        45 * MINUTE,
+        "Node 24.11 fixes the `fetch` keep-alive leak our previews hit. The bump touches the Dockerfile and `.nvmrc` alone.",
+        {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "Approve" }, { label: "Request changes" }],
+          ...OPEN,
+        },
+      ),
+    ],
+    { startedBy: STRAY.owner, waitsOn: STRAY.owner },
+  ),
   thread(
     14,
     seed(TASK.ROWS),
@@ -761,6 +800,16 @@ function itemsOf(taskId: string): readonly InboxItem[] {
   return THREADS.filter((each) => each.taskId === taskId).map((each) => each.item);
 }
 
+/** The stray agent's threads as they stand now, as a follow of its own inbox reads them. */
+function strayItems(): readonly InboxItem[] {
+  return THREADS.filter((each) => each.item.agentId === STRAY.agentId).map((each) => each.item);
+}
+
+/** The agent's title a thread's post names it by, its task's agent's or the stray agent's. */
+function agentTitleOf(each: ThreadSeed): string {
+  return each.taskId === undefined ? STRAY.agentTitle : seed(each.taskId).agentTitle;
+}
+
 /** The member the window reads as, which the profile names as the fixture lands. */
 let READER: Person = DEAN;
 
@@ -796,7 +845,7 @@ function threadsOf(channelId: string): readonly ChannelThread[] {
     .map((each) => ({
       ...each.item,
       channelId,
-      agent: { title: seed(each.taskId).agentTitle, model: MODEL },
+      agent: { title: agentTitleOf(each), model: MODEL },
     }))
     .toSorted((a, b) => a.postedAt - b.postedAt);
 }
@@ -832,6 +881,26 @@ function waiting(): readonly AppInboxTask[] {
           },
         ];
   });
+}
+
+/** The stray agent's open threads, as main lists the items of agents with no task. */
+function taskless(): readonly AppInboxTasklessItem[] {
+  return strayItems()
+    .filter((each) => each.status === INBOX_STATUS.OPEN)
+    .map(({ id, agentId, title, postedAt }) => ({
+      id,
+      agentId,
+      title,
+      postedAt,
+      agentTitle: STRAY.agentTitle,
+      agentModel: MODEL,
+      automationId: null,
+      automationName: null,
+      repository: REPOSITORY,
+      workspaceId: FIXTURE_IDS.WORKSPACE,
+      startedBy: STRAY.owner.userId,
+      waitsOn: STRAY.owner.userId,
+    }));
 }
 
 const AGENTS: ReadonlyMap<string, CodingAgentSummary> = new Map(
@@ -947,7 +1016,7 @@ export function channelsAppState(state: AppStateSnapshot): AppStateSnapshot {
   return {
     ...state,
     account: accountOf(READER),
-    inbox: { ...state.inbox, waiting: waiting(), tasks: holdings() },
+    inbox: { ...state.inbox, waiting: waiting(), tasks: holdings(), taskless: taskless() },
     ...(state.settings === undefined ? undefined : { settings: stagedSettings(state.settings) }),
   };
 }
@@ -1009,10 +1078,32 @@ function changed(channelId: string, change: (channel: ChannelSeed) => ChannelSee
 }
 
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: ({ id }) => {
-    const pushed: CodingAgentInboxChanged["inbox"] = { items: itemsOf(id) };
+  [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: ({ kind, id }) => {
+    const pushed: CodingAgentInboxChanged["inbox"] = {
+      items: kind === INBOX_SCOPE_KIND.AGENT ? strayItems() : itemsOf(id),
+    };
     return pushedOnce(pushed);
   },
+  [ACT_KIND.CODING_AGENTS_PAGE]: ({ agentId }) =>
+    agentId === STRAY.agentId
+      ? {
+          agent: {
+            id: STRAY.agentId,
+            planId: null,
+            model: MODEL,
+            effort: "high",
+            title: STRAY.agentTitle,
+            createdAt: LANDED - HOUR,
+            status: CODING_AGENT_STATUS.RUNNING,
+            turnId: null,
+            runStartedAt: LANDED - HOUR,
+            startedBy: STRAY.owner,
+            automationId: null,
+            workspaceId: FIXTURE_IDS.WORKSPACE,
+            repository: REPOSITORY,
+          },
+        }
+      : { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },
   [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }) => {
     const agent = AGENTS.get(taskId);
     return { agents: agent === undefined ? [] : [agent] };
