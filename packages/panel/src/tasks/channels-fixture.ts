@@ -786,7 +786,11 @@ function channelsRead(): readonly Channel[] {
 /** A channel's threads, oldest posted first, as the service reads them. */
 function threadsOf(channelId: string): readonly ChannelThread[] {
   return THREADS.filter((each) => each.channelId === channelId)
-    .map((each) => ({ ...each.item, channelId }))
+    .map((each) => ({
+      ...each.item,
+      channelId,
+      agent: { title: seed(each.taskId).agentTitle, model: MODEL },
+    }))
     .toSorted((a, b) => a.postedAt - b.postedAt);
 }
 

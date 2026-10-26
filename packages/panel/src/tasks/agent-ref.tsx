@@ -1,5 +1,8 @@
+import type { ChannelThreadAgent } from "@luke/features/channel-wire";
 import {
   CODING_AGENT_KIND,
+  type CodingAgentKind,
+  type CodingAgentStatus,
   type CodingAgentSummary,
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
@@ -224,17 +227,29 @@ export function tasklessSubject(
   return { name, tile, read: () => reading };
 }
 
+/** An agent as a line read beside its thread names it: its task's row, or its channel thread; where it stands, where the line says so. */
+export type AgentLine = ChannelThreadAgent & {
+  readonly kind?: CodingAgentKind | undefined;
+  readonly status?: CodingAgentStatus | undefined;
+};
+
 /**
  * An agent named by id on the task whose agents `agents` reads, archived
- * or not, its card read from what its tab last held; where the list holds
- * no such agent, the name it goes by, and a card saying it is not found
- * once the list has been read, and nothing more before.
+ * or not, its card read from what its tab last held. Where the list holds
+ * no such agent, it is named as `line` names it, on its harness's mark
+ * wearing where it stands, at rest where the line says nothing of that;
+ * else by the name an agent no read names goes by. Its
+ * card says it is not found once the list has been read and no line names
+ * it, and nothing more before. Every place drawing an Inbox thread's agent
+ * names it through here, its pane and its channel post alike, so no two
+ * name one agent two ways.
  */
 export function agentSubject(
   agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests">,
   agentId: string,
   held: HeldTranscripts,
   chosen: boolean,
+  line?: AgentLine | undefined,
 ): AgentSubject {
   const agent =
     agents.agents?.find((each) => each.id === agentId) ??
@@ -249,18 +264,21 @@ export function agentSubject(
       writing: false,
       startedAt: undefined,
       movedAt: undefined,
-      state: agents.agents === undefined ? undefined : UNLISTED_WORDS,
+      state: agents.agents === undefined || line !== undefined ? undefined : UNLISTED_WORDS,
     }),
     choice: undefined,
     transcript: undefined,
   };
-  const name = TAB_WORDS.CODING_AGENT;
-  const tile: Actor = {
-    kind: ACTOR_KIND.AGENT,
-    name,
-    provider: undefined,
-    state: ACTOR_STATE.REST,
-  };
+  const name = line === undefined ? TAB_WORDS.CODING_AGENT : agentName(line, agents.models);
+  const tile: Actor =
+    line?.status === undefined
+      ? {
+          kind: ACTOR_KIND.AGENT,
+          name,
+          provider: line === undefined ? undefined : providerOf(line.model),
+          state: ACTOR_STATE.REST,
+        }
+      : agentActor({ model: line.model, status: line.status }, name);
   return { name, tile, read: () => reading };
 }
 

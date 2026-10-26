@@ -558,6 +558,57 @@ interface Asked {
   newTasks: number;
 }
 
+test("a channel's post names an untitled agent by the automation that started it, as its thread was read with it, where its task's row names the agent by its model alone", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  const untitled: TaskSummary = {
+    ...BILLING,
+    agents: {
+      ...(BILLING.agents ?? assert.fail("the task's row names its agent")),
+      agents: [
+        {
+          id: AGENT.id,
+          title: null,
+          model: AGENT.model,
+          effort: AGENT.effort,
+          status: AGENT.status,
+        },
+      ],
+    },
+  };
+  const previous = fakeActsAnswer();
+  const done = (value: unknown): Promise<FakeActAnswer> =>
+    Promise.resolve({ status: FAKE_ANSWER.DONE, value } as FakeActAnswer);
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.CHANNELS_LIST) return done({ channels: [GENERAL] });
+      // Note that no read of the open thread's agents holds it, as for a post on a task other than the open thread's.
+      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: [] });
+      if (request.kind === ACT_KIND.CHANNELS_THREADS) {
+        return done({
+          threads: [
+            {
+              ...THRESHOLD,
+              channelId: GENERAL.id,
+              agent: { title: null, model: AGENT.model, automationName: "Nightly triage" },
+            },
+          ],
+        });
+      }
+      return previous(request);
+    },
+  });
+  const { page } = mount([], { channels: true, standing: [untitled, INVITES] });
+  await settle();
+
+  const post =
+    page.querySelector<HTMLElement>(".channel-stream [data-channel-post]") ??
+    assert.fail("the post is drawn");
+  assert.match(post.textContent ?? "", /^Nightly triage/u);
+});
+
 /** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
 function mount(
   firstTaskless: readonly AppInboxTasklessItem[] = [],

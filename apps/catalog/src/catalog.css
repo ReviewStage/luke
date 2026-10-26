@@ -289,6 +289,16 @@ body {
   list-style: none;
 }
 
+/* The attention tint a post that needs the reader stands on, under the controls laid over it. */
+.catalog-tint {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12);
+  border-radius: var(--luke-radius-10);
+  background: var(--luke-color-attention-tint);
+}
+
 /* A column narrower than a phone, where long words have to wrap. */
 .catalog-narrow {
   display: flex;

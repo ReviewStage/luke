@@ -1,5 +1,4 @@
 import type { Channel, ChannelThread } from "@luke/features/channel-wire";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
   INBOX_MESSAGE_AUTHOR,
@@ -18,7 +17,9 @@ import {
   Button,
   CARD_PRESS_REACH,
   CardPress,
+  CONTROL_GROUND,
   Comment,
+  ControlGround,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
@@ -48,6 +49,7 @@ import {
 } from "../ai-elements/conversation.js";
 import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { usePerson } from "../member-directory.js";
+import { type AgentLine, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import {
   CHANNEL_VIEW,
   type ChannelView,
@@ -61,7 +63,6 @@ import {
   streamRows,
   viewedThreads,
 } from "./channels-model.js";
-import { agentActor } from "./coding-agent-model.js";
 import { AskControls } from "./inbox-ask-controls.js";
 import { VIEW_OPTIONS } from "./inbox-columns.js";
 import {
@@ -74,6 +75,7 @@ import {
 import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { useChannelThreads, useChannelView } from "./use-channels.js";
+import type { CodingAgentsControl } from "./use-coding-agents.js";
 
 /**
  * channel-stream.tsx -- one channel drawn as a stream of its threads, as Slack draws a channel, in the Inbox's place (STAG-547).
@@ -85,13 +87,15 @@ import { useChannelThreads, useChannelView } from "./use-channels.js";
  * is a post, oldest first, a divider before each day and the New line
  * before the first posted since the reader last looked: drawn as the
  * Inbox's thread draws a message (`Comment`), the writer's face, name, and
- * time, then the thread's title and its first message's words. A decision
+ * time, an agent named as the thread's pane names it (`agentSubject`), then
+ * the thread's title and its first message's words. A decision
  * still open offers its options under the post with the thread's own
  * controls, numbered for no keys, and one pick answers it there; steps and
  * a written answer offer one press that opens the thread. The replies line
  * under every post shows who replied, how many replies or Reply in thread,
  * and who the open ask waits on. A post that needs the reader stands on the
- * attention tint and nothing else marks it, cleared the moment it is
+ * attention tint and nothing else marks it, its ask's controls standing on
+ * the column's ground over it (`ControlGround`), cleared the moment it is
  * answered, since the window's own answers are laid over the read
  * (`inbox-settling.ts`). A press anywhere on a post opens its thread in the
  * side panel beside the stream, or in its place on a phone (`onOpen`).
@@ -214,35 +218,58 @@ function StreamViewOptions({
   );
 }
 
-/** A message's writer, a member as the directory draws them, or the thread's agent as its task lists it. */
-function useWriter(
-  message: InboxMessage | undefined,
-  item: InboxItem,
+/** The agents a post names its writer from: the open thread's, as its pane names them. */
+type StreamAgents = Pick<
+  CodingAgentsControl,
+  "agents" | "archived" | "models" | "me" | "pullRequests"
+>;
+
+/** What a post names its writers from: the open thread's agents, and the thread as the Inbox lists it, none until its holder is read. */
+interface PostDoors {
+  readonly agents: StreamAgents;
+  readonly listed: InboxListed | undefined;
+}
+
+/**
+ * What names a post's agent beside the open thread's agents: the line its
+ * thread was read with, which names it as the account's read does, its
+ * automation's name among it; and where it stands, from its task's row,
+ * which says so for a task's first few agents alone. Note that the row
+ * names no automation, so it names the agent only where the thread's line
+ * is missing.
+ */
+function threadAgentLine(
+  thread: ChannelThread,
   listed: InboxListed | undefined,
-) {
+): AgentLine | undefined {
+  const row =
+    listed?.holder.kind === INBOX_HOLDER.TASK
+      ? listed.holder.task.agents?.agents.find((each) => each.id === thread.agentId)
+      : undefined;
+  if (row === undefined) return thread.agent;
+  if (thread.agent === undefined) return row;
+  return { ...thread.agent, kind: row.kind, status: row.status };
+}
+
+/** A message's writer, a member as the directory draws them, or the thread's agent as its pane names it (`agentSubject`), by a line read beside it where the open thread's agents hold none of it. */
+function useWriter(message: InboxMessage | undefined, thread: ChannelThread, doors: PostDoors) {
   const member = usePerson(message?.member);
   if (message?.author !== INBOX_MESSAGE_AUTHOR.AGENT) return member;
-  const agent =
-    listed?.holder.kind === INBOX_HOLDER.TASK
-      ? listed.holder.task.agents?.agents.find((each) => each.id === item.agentId)
-      : undefined;
-  return agentActor(
-    agent ?? { model: "", status: CODING_AGENT_STATUS.RUNNING },
-    agent?.title ?? "Coding agent",
-  );
+  const line = threadAgentLine(thread, doors.listed);
+  return agentSubject(doors.agents, thread.agentId, NOTHING_HELD, false, line).tile;
 }
 
 /** A replier's face, a member's own or the thread's agent's. */
 function ReplierFace({
   message,
-  item,
-  listed,
+  thread,
+  doors,
 }: {
   message: InboxMessage;
-  item: InboxItem;
-  listed: InboxListed | undefined;
+  thread: ChannelThread;
+  doors: PostDoors;
 }): React.JSX.Element {
-  const author = commentAuthor(useWriter(message, item, listed));
+  const author = commentAuthor(useWriter(message, thread, doors));
   return (
     <Avatar
       size={AVATAR_SIZE.INLINE}
@@ -307,16 +334,15 @@ function PostAsk({
 /** One thread as a post in the stream. */
 function ThreadPost({
   item,
-  listed,
+  doors,
   chosen,
   readerId,
   now,
   onPick,
   onOpen,
 }: {
-  item: InboxItem;
-  /** The thread as the Inbox lists it, with what holds it; none until its holder is read. */
-  listed: InboxListed | undefined;
+  item: ChannelThread;
+  doors: PostDoors;
   chosen: boolean;
   readerId: string | undefined;
   now: number;
@@ -324,14 +350,15 @@ function ThreadPost({
   onOpen: () => void;
 }): React.JSX.Element {
   const first = item.thread?.[0];
-  const actor = useWriter(first, item, listed);
+  const actor = useWriter(first, item, doors);
   const replies = repliesLine(item, readerId);
+  const needs = threadNeedsReader(item, readerId);
   return (
     <div
       className={POST}
       data-channel-post=""
       data-chosen={chosen ? "" : undefined}
-      data-needs={threadNeedsReader(item, readerId) ? "" : undefined}
+      data-needs={needs ? "" : undefined}
     >
       <Comment
         author={commentAuthor(actor)}
@@ -348,10 +375,13 @@ function ThreadPost({
               <TranscriptWords text={first.text} asDocument />
             </div>
           )}
-          <PostAsk item={item} onPick={onPick} onOpen={onOpen} />
+          {/* Note that on the attention tint the ask's controls stand on the column's ground, so they read gray as in the thread. */}
+          <ControlGround ground={needs ? CONTROL_GROUND.OPAQUE : CONTROL_GROUND.CLEAR}>
+            <PostAsk item={item} onPick={onPick} onOpen={onOpen} />
+          </ControlGround>
           <div className={POST_LINE}>
             {replies.repliers.map((reply) => (
-              <ReplierFace key={reply.id} message={reply} item={item} listed={listed} />
+              <ReplierFace key={reply.id} message={reply} thread={item} doors={doors} />
             ))}
             <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={onOpen}>
               {replies.words}
@@ -376,6 +406,7 @@ export function ChannelStream({
   readerId,
   now,
   shown,
+  agents,
   listedOf,
   ownTask,
   onOpen,
@@ -391,6 +422,8 @@ export function ChannelStream({
   now: number;
   /** Whether the window shows the stream, which its menus close with. */
   shown: boolean;
+  /** The open thread's agents, as its pane names them, which every post naming one of them names it by. */
+  agents: StreamAgents;
   listedOf: (itemId: string) => InboxListed | undefined;
   ownTask: (thread: ChannelThread) => boolean;
   onOpen: (thread: ChannelThread) => void;
@@ -411,11 +444,15 @@ export function ChannelStream({
   look.current = onLook;
   useEffect(() => () => look.current(channel.id), [channel.id]);
   // Note that the window's own answers stand over the read, so a pick clears the tint the moment it is sent.
-  const settled = useSettledItems(read.threads ?? NO_THREADS);
-  const threads = useMemo(
-    () => settled.map((item): ChannelThread => ({ ...item, channelId: channel.id })),
-    [settled, channel.id],
-  );
+  const readThreads = read.threads ?? NO_THREADS;
+  const settled = useSettledItems(readThreads);
+  // Note that an answer's item carries no agent of its own, so each thread keeps the one it was read with.
+  const threads = useMemo(() => {
+    const byId = new Map(readThreads.map((thread) => [thread.id, thread]));
+    return settled.map(
+      (item): ChannelThread => ({ ...byId.get(item.id), ...item, channelId: channel.id }),
+    );
+  }, [readThreads, settled, channel.id]);
   const viewed = viewedThreads(threads, view, readerId, ownTask);
   const needsCount = needsReaderCount(threads, readerId);
   const rows = streamRows(viewed, { lookedAt, readerId, now });
@@ -468,7 +505,7 @@ export function ChannelStream({
                 <ThreadPost
                   key={row.thread.id}
                   item={row.thread}
-                  listed={listedOf(row.thread.id)}
+                  doors={{ agents, listed: listedOf(row.thread.id) }}
                   chosen={row.thread.id === chosenId}
                   readerId={readerId}
                   now={now}

@@ -129,10 +129,29 @@ export const channelThreadsQuerySchema = EffectSchema.Struct({
   before: EffectSchema.optionalKey(wireUuidSchema),
 });
 
-/** One thread as a channel carries it: the inbox item, and the channel it lives in. */
+/**
+ * The agent that posted a thread, as the account's read names one
+ * (`account-inbox-wire.ts`), which a post draws where no read of its
+ * task's agents the window holds names it: a channel holds every task's
+ * threads, and a task's row names only its first few agents.
+ */
+export const channelThreadAgentSchema = EffectSchema.Struct({
+  /** The name it goes by, Luke for a member's operator, else its title; null where it has neither. */
+  title: EffectSchema.NullOr(EffectSchema.String),
+  /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
+  model: EffectSchema.String,
+  /** The name of the automation whose run started it, which an untitled agent goes by; absent for one started by hand. */
+  automationName: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type ChannelThreadAgent = typeof channelThreadAgentSchema.Type;
+
+/** One thread as a channel carries it: the inbox item, the channel it lives in, and its agent. */
 export const channelThreadSchema = EffectSchema.Struct({
   ...inboxItemSchema.fields,
   channelId: wireUuidSchema,
+  /** Absent from a service before it, and where the agent's row is gone. */
+  agent: EffectSchema.optionalKey(channelThreadAgentSchema),
 });
 
 export type ChannelThread = typeof channelThreadSchema.Type;
