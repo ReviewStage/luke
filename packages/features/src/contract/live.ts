@@ -16,7 +16,8 @@
  * installations connected to them; and one workspace's people, named by
  * `?workspaceId=`, as its members and who its work names but left, and its
  * pending invitations, to an owner or an admin of it, with the origin each
- * accept link is built on. Each
+ * accept link is built on; and one workspace's channels, named by
+ * `?workspaceId=`, as its channels and where each one's threads stand. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. Each
@@ -33,6 +34,7 @@ import {
   automationsLiveAnswerSchema,
   automationWorkspaceRunsLiveAnswerSchema,
 } from "../automation-live.js";
+import { channelsLiveAnswerSchema } from "../channel-live.js";
 import {
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
@@ -114,6 +116,10 @@ const liveWorkspaceSchema = EffectSchema.Struct({
 });
 
 export const liveContract = {
+  channels: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_CHANNELS }))
+    .input(liveWorkspaceSchema)
+    .output(EffectSchema.flip(channelsLiveAnswerSchema)),
   inbox: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }))
     .input(liveReadSchema)

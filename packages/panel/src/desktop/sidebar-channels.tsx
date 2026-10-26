@@ -154,7 +154,7 @@ export function SidebarChannels({
       return (
         ask.kind === CHANNEL_ASK.NEW
           ? channels.onCreate(written, purpose.replace(/[\r\n]+/gu, " ").trim(), ask.project)
-          : channels.onRename(ask.channel.id, written)
+          : channels.onEdit(ask.channel.id, { name: written })
       ).then(answered);
     },
   );

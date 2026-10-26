@@ -49,6 +49,12 @@
  * each accept link is built on, which the desktop needs since it builds the
  * links itself.
  *
+ * `GET /api/live/channels?workspaceId=` answers one workspace's channels as
+ * two statements, its channels and where each one's threads stand
+ * (`inbox-store.ts`'s `channelsLiveStatements`), after the account is read
+ * as a member of it, so a workspace it is not in is not found, as its held
+ * read answers.
+ *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
  * transcript is read from, or one of its workers' with `&call=` naming the
  * delegation call (`transcript-live.ts`), after the agent is read as the
@@ -112,6 +118,7 @@ import {
 } from "../http/http-effect.js";
 import {
   accountInboxLiveStatements,
+  channelsLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
@@ -431,6 +438,16 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = workspaceMembersLiveStatements(context.userId, input.workspaceId);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    channels: signedIn.channels.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const member = yield* hostedStoreOrUnavailable(
+        isWorkspaceMember(context.userId, input.workspaceId),
+      );
+      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const statements = channelsLiveStatements(context.userId, input.workspaceId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
     }),

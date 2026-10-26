@@ -36,15 +36,25 @@ import {
   browserLiveMessageEventSchema,
 } from "@luke/features/browser-live-acts";
 import {
+  type ArchivedChannelsView,
+  archivedChannelsViewSchema,
   CHANNEL_CALL_FAILURE,
   type ChannelArchiveParams,
   type ChannelCreateParams,
+  type ChannelEditParams,
   type ChannelLookParams,
-  type ChannelRenameParams,
+  type ChannelMoveParams,
+  type ChannelMoveView,
+  type ChannelsArchivedParams,
+  type ChannelsChanged,
+  type ChannelsFollowParams,
   type ChannelsListParams,
   type ChannelsView,
   type ChannelThreadsParams,
   type ChannelThreadsView,
+  type ChannelUnarchiveParams,
+  channelMoveViewSchema,
+  channelsChangedSchema,
   channelsViewSchema,
   channelThreadsViewSchema,
 } from "@luke/features/channel-view";
@@ -753,14 +763,26 @@ export interface HostOperator {
   channelsList(params: ChannelsListParams): Effect.Effect<ChannelsView>;
   /** A channel made; the workspace's channels as they then stand, or why it was not made. */
   channelsCreate(params: ChannelCreateParams): Effect.Effect<ChannelsView>;
-  /** A channel renamed; the workspace's channels as they then stand, or why it was not renamed. */
-  channelsRename(params: ChannelRenameParams): Effect.Effect<ChannelsView>;
+  /** A channel's name, purpose, or both edited; the workspace's channels as they then stand, or why it was not edited. */
+  channelsEdit(params: ChannelEditParams): Effect.Effect<ChannelsView>;
   /** A channel archived; the workspace's channels as they then stand, or why it stands. */
   channelsArchive(params: ChannelArchiveParams): Effect.Effect<ChannelsView>;
+  /** An archived channel opened again; the workspace's channels as they then stand, or why it stays archived. */
+  channelsUnarchive(params: ChannelUnarchiveParams): Effect.Effect<ChannelsView>;
+  /** A workspace's archived channels, the latest archived first; or why there are none. */
+  channelsArchived(params: ChannelsArchivedParams): Effect.Effect<ArchivedChannelsView>;
   /** The reader's look at a channel stamped; the workspace's channels as they then stand. */
   channelsLook(params: ChannelLookParams): Effect.Effect<ChannelsView>;
-  /** A channel's latest threads the reader may read, oldest first; or why there are none. */
+  /** A page of a channel's threads the reader may read, oldest first; or why there are none. */
   channelsThreads(params: ChannelThreadsParams): Effect.Effect<ChannelThreadsView>;
+  /** A thread moved into another open channel of its workspace; the thread as it then stands, or why it did not move. */
+  channelsMove(params: ChannelMoveParams): Effect.Effect<ChannelMoveView>;
+  /** A workspace's channels followed from now until let go or signed out, heard through `onChannelsChanged`; following again starts over. */
+  channelsFollow(params: ChannelsFollowParams): Effect.Effect<void>;
+  /** A followed workspace's channels let go. */
+  channelsUnfollow(params: ChannelsFollowParams): Effect.Effect<void>;
+  /** Hears which of a followed workspace's channels moved, each time any does; answers the stop. */
+  onChannelsChanged(listener: (changed: ChannelsChanged) => void): () => void;
   /** The account's automations, or one task's or one workspace's; or why there are none. */
   automationList(params: AutomationListParams): Effect.Effect<AutomationListView>;
   /** An automation made; the automation as the service kept it, or why it was not made. */
@@ -2014,10 +2036,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CHANNELS_CREATE, params),
         answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
       ),
-    channelsRename: (params) =>
+    channelsEdit: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CHANNELS_RENAME, params),
+        client.call(GATEWAY_METHOD.CHANNELS_EDIT, params),
         answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
+      ),
+    channelsUnarchive: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHANNELS_UNARCHIVE, params),
+        answerOf(channelsViewSchema, CHANNEL_UNANSWERED),
+      ),
+    channelsArchived: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHANNELS_ARCHIVED, params),
+        answerOf(archivedChannelsViewSchema, CHANNEL_UNANSWERED),
       ),
     channelsArchive: (params) =>
       Effect.map(
@@ -2033,6 +2065,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CHANNELS_THREADS, params),
         answerOf(channelThreadsViewSchema, CHANNEL_UNANSWERED),
+      ),
+    channelsMove: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHANNELS_MOVE, params),
+        answerOf(channelMoveViewSchema, CHANNEL_UNANSWERED),
+      ),
+    channelsFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.CHANNELS_FOLLOW, { workspaceId: params.workspaceId })),
+    channelsUnfollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.CHANNELS_UNFOLLOW, { workspaceId: params.workspaceId })),
+    onChannelsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.CHANNELS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(channelsChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
       ),
     automationList: (params) =>
       Effect.map(

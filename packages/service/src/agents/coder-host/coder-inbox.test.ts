@@ -64,6 +64,10 @@ import type { InboxSandboxDoor } from "./inbox-image.js";
  * Synthetic accounts, tasks, and words throughout.
  */
 
+/** A channel's first page of threads the reader may read, oldest first. */
+const firstPage = (userId: string, channelId: string) =>
+  Effect.map(channelThreads(userId, channelId), (page) => Option.getOrThrow(page).threads);
+
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -271,7 +275,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         const posted = yield* post(agent, { ...QUEUE, channel: "#app", to: person(userId) });
         assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
         assert.deepEqual(
-          (yield* channelThreads(userId, app.id)).map((thread) => thread.key),
+          (yield* firstPage(userId, app.id)).map((thread) => thread.key),
           [QUEUE.key],
         );
 
