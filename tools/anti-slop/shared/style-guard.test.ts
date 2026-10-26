@@ -19,6 +19,7 @@ const THEME = `@theme inline {
 const NAMES = themeNames(THEME);
 const SHEET = "packages/ui/src/components/thing/thing.css";
 const MODULE = "packages/panel/src/thing.tsx";
+const SHELL_SHEET = "packages/panel/src/styles/shell.css";
 
 /** The rules a stylesheet breaks, in order. */
 function sheetRules(css: string, file = SHEET): readonly StyleRule[] {
@@ -203,6 +204,27 @@ describe("a stylesheet", () => {
     expect(sheetRules(capped)).toEqual([]);
   });
 
+  it("refuses a page rounding its own bar, and passes the sheet's one rule and a bar's parts", () => {
+    const pages = `.agent-page > .luke-pane-bar { border-radius: var(--sheet-radius) var(--sheet-radius) 0 0; }
+      .side-panel-keeps > * > :is(.luke-pane-bar, .luke-toolbar):first-child { border-top-left-radius: var(--sheet-radius); }
+      .inbox-view .luke-toolbar:not(.x) { border-top-right-radius: 0; }`;
+    expect(sheetRules(pages, SHELL_SHEET)).toEqual([
+      STYLE_RULE.BAR_CORNER,
+      STYLE_RULE.BAR_CORNER,
+      STYLE_RULE.BAR_CORNER,
+    ]);
+    const sheet = `.desktop-shell :is(.luke-pane-bar, .luke-toolbar):not(.x :not(.y) *) {
+        border-top-left-radius: var(--sheet-top-left-radius, var(--sheet-radius)); }
+      .luke-toolbar-heading, .a:not(.luke-pane-bar), .b:has(> .luke-toolbar) { border-radius: var(--luke-radius-6); }
+      .luke-pane-bar .luke-chip { border-radius: var(--luke-radius-6); }`;
+    expect(sheetRules(sheet, SHELL_SHEET)).toEqual([]);
+    expect(
+      sheetRules(
+        ".a .luke-toolbar { border-top-left-radius: var(--sheet-top-left-radius, var(--sheet-radius)); }",
+      ),
+    ).toEqual([STYLE_RULE.BAR_CORNER]);
+  });
+
   it("reads the spacing rule in the panel's sheets alone", () => {
     const css = ".a { padding: 8px; }";
     expect(sheetRules(css, "packages/panel/src/styles/desktop.css")).toEqual([STYLE_RULE.SPACING]);
@@ -297,6 +319,11 @@ describe("a module's class strings", () => {
   it("reads a class list whose arbitrary value holds a character no class name has", () => {
     const source = `const a = <nav className="flex rounded-md [&>*+*]:before:content-['·']" />;`;
     expect(classRules(source)).toEqual([STYLE_RULE.RADIUS]);
+  });
+
+  it("refuses a radius beside a bar's own class", () => {
+    const source = `const BAR = "luke-pane-bar flex rounded-t-menu bg-muted"; const CHIP = "luke-chip rounded-menu";`;
+    expect(classRules(source)).toEqual([STYLE_RULE.BAR_CORNER]);
   });
 
   it("is not read in a test", () => {
