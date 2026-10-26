@@ -1,5 +1,6 @@
 import { MOTION_DELAY_MS } from "@luke/brand";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
+import { onDrawnThemeChange } from "@luke/ui/appearance";
 import { LANDED, LANDED_ANIMATION, LANDED_ATTRIBUTE, land } from "@luke/ui/landed";
 import {
   CodeView,
@@ -1253,6 +1254,13 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
   let picked: FileLineRange | undefined;
   // The file's element, the one the selection is read in, once Pierre has drawn it.
   let drawnElement: HTMLElement | undefined;
+  // Note that the box the file scrolls in takes the theme's ground, because Pierre grounds only the file's own lines, and a file shorter than its tab would otherwise stand as a block on the tab's ground. It is read again as the appearance turns, which Pierre follows in its styles alone, drawing nothing anew.
+  const ground = () => {
+    if (drawnElement !== undefined) {
+      host.style.backgroundColor = getComputedStyle(drawnElement).backgroundColor;
+    }
+  };
+  releases.push(onDrawnThemeChange(ground));
   const dress = (element: HTMLElement, phase: PostRenderPhase) => {
     if (phase === "unmount") {
       if (drawnElement === element) drawnElement = undefined;
@@ -1265,8 +1273,7 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
       element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
       releases.push(adoptShadowStyles(element.shadowRoot, lookSheets().whole));
     }
-    // Note that the box the file scrolls in takes the theme's ground, because Pierre grounds only the file's own lines, and a file shorter than its tab would otherwise stand as a block on the tab's ground.
-    host.style.backgroundColor = getComputedStyle(element).backgroundColor;
+    ground();
     latest.onDrawn?.();
   };
   const pick = (range: SelectedLineRange | null) => {

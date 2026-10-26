@@ -58,7 +58,11 @@ const NOTE = "Seats are counted before the invite goes out";
 const roots: Root[] = [];
 
 beforeEach(() => {
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("dark") }));
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("dark"),
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
   // jsdom paints no highlights; the find's are kept as a browser keeps them.
   vi.stubGlobal("CSS", { highlights: new Map() });
   vi.stubGlobal("Highlight", Set);
