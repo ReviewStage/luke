@@ -32,7 +32,8 @@ const SLEEP_MAX_SECONDS = Duration.toSeconds(CODER.SLEEP_MAX);
 const SLEEP_DESCRIPTION =
   "Wait for the given number of seconds without running anything, then carry on. Use it before you check again on what " +
   "takes time to change: a command bash left running in the background, a pull request's checks, or a deploy. Wait about " +
-  "as long as the thing usually takes rather than checking every few seconds. Commands running in the background keep " +
+  "as long as the thing usually takes rather than checking every few seconds; for a pull request's checks, that is " +
+  "the longest one wait may be, since GitHub's message ends it once they finish. Commands running in the background keep " +
   "running while you wait. A message ends the wait early: the developer's, or GitHub's saying every check on your pull " +
   "request finished. One wait is at most " +
   `${SLEEP_MAX_SECONDS / 60} minutes; to wait longer, wait again.`;

@@ -69,7 +69,8 @@ export const SHOW_IMAGE_TOOL = {
   description:
     "Show the developer pictures from your sandbox in your transcript, such as screenshots of a UI " +
     "you changed, after a change to anything they can see. Take the screenshot first, for instance " +
-    "with Playwright (`npx playwright screenshot <url> <file>`, installing it where it is missing), " +
+    "with Playwright's `playwright screenshot <url> <file>`, installed in a cloud sandbox, or on the " +
+    "developer's Mac whatever the repository or the Mac has, " +
     "then name each file by its path with a one-line caption saying what it shows. Show the pictures " +
     "that belong together in one call, as one set: before and after, or each screen a change touches. " +
     "To show a flow rather than a screen, such as clicking through a form you built, record it as a " +
@@ -77,7 +78,7 @@ export const SHOW_IMAGE_TOOL = {
     "transcript plays it. " +
     `Each is a PNG, JPEG, or WebP, or a WebM video, of at most ${CONVERSATION_PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB. ` +
     "Never show a picture of a secret. A Markdown image in your reply shows nothing; this is the one " +
-    "way to show a picture. Answers `accepted` with each picture's id, or `rejected` and why nothing " +
+    "way to show a picture in your transcript. Answers `accepted` with each picture's id, or `rejected` and why nothing " +
     "was shown.",
   inputSchema: SHOW_IMAGE_INPUT,
 } as const;
