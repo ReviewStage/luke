@@ -191,6 +191,14 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
   /** The account's default model and effort for a coding agent, written to the service; the default as kept, or why it is unchanged. */
   CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
+  /** The account's hosts, as Settings lists them, read from the service now. */
+  HOSTS_LIST: "hosts.list",
+  /** One of the account's hosts removed; done, or why not. */
+  HOSTS_REMOVE: "hosts.remove",
+  /** An install token kept by its SHA-256 alone, the token itself staying in the window that minted it; its id and expiry, or why not. */
+  HOSTS_KEEP_INSTALL_TOKEN: "hosts.keepInstallToken",
+  /** One of the account's install tokens revoked; done, or why not. */
+  HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
   /** One task's coding agents with their status, read from the service now. */
   CODING_AGENTS_LIST: "codingAgents.list",
   /** A workspace's coding agents, newest started first, narrowed to one repository where one is named. */
