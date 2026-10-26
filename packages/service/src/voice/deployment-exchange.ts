@@ -27,7 +27,7 @@ import type { ExchangeAttachment } from "./live-exchange.js";
  * switch every hosted endpoint keeps, and the same outcome a store that
  * cannot be reached has. Nothing is read from the environment here; the
  * function hands the reads in, and a test hands in its own database and a
- * fake eve behind the same door. Its eve sends a spoken ask, as a typed turn
+ * fake eve behind the same door. Its eve sends a spoken ask, as an unheard turn
  * where no one hears it (`brain-ask.ts`'s `heard`), under the coding agents'
  * mount, into the agent the call names,
  * routed as every other message is (`routedSessions`): to eve, or to the

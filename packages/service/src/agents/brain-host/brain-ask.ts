@@ -71,12 +71,12 @@ const HOST_TURN_OF_ASK_ORIGIN = {
 
 /**
  * The kinds of turn an ask of the origin given may open, which the eve it is
- * handed to must send: its origin's, or a typed one for an ask no one hears
- * (`AskInput`'s `heard`).
+ * handed to must send: its origin's, or, for a spoken ask no one hears, an
+ * unheard one (`AskInput`'s `heard`).
  */
 type HostTurnOf<Origin extends AskOrigin> =
   | (typeof HOST_TURN_OF_ASK_ORIGIN)[Origin]
-  | typeof BRAIN_HOST_TURN.TYPED;
+  | typeof BRAIN_HOST_TURN.UNHEARD;
 
 /** Where an id stands: the ask it named, where it was an ask's id, and the turn eve started for it, where one has started. */
 type AskStanding =
@@ -174,10 +174,10 @@ export interface AskInput<Origin extends AskOrigin = AskOrigin> {
   readonly voice?: AskVoice;
   /**
    * Whether the developer hears the answer, which only a spoken ask may deny:
-   * the line a call hands over as it ends opens a typed turn, so the agent is
-   * neither told its words are heard nor runs the call's own tools on it,
-   * while the ask stays spoken, so the transcript's row is still its line.
-   * Absent, an ask opens its origin's turn.
+   * the line a call hands over as it ends opens an unheard turn
+   * (`BRAIN_HOST_TURN`), so the agent is neither told its words are heard nor
+   * runs the call's own tools on it, while its line is still the
+   * transcript's row. Absent, an ask opens its origin's turn.
    */
   readonly heard?: boolean;
   /** The asker's time zone, which the turn the ask opens reads the day in; none reads UTC. */
@@ -188,10 +188,10 @@ export interface AskInput<Origin extends AskOrigin = AskOrigin> {
  * What accepting an ask needs: the ask record built over the store's runner,
  * and eve as the caller reaches it, sending the kinds of turn `Turn` names.
  * The voice function's client, the deployment acting for the account, sends
- * a spoken ask, and a typed turn only for one no one hears (`AskInput`'s
+ * a spoken ask, as an unheard turn where no one hears it (`AskInput`'s
  * `heard`). The brain's door admits a typed ask from anything that holds the
  * deployment's secret, so no code path but the comment hand-over
- * (`tasks/comment-ask.ts`) sends one of the typed origin.
+ * (`tasks/comment-ask.ts`) sends one.
  */
 export interface AskSeams<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly asks: AskRecord;
@@ -274,7 +274,10 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* <
   // the line is taken (`native-events/`), so the turn it ran in is bound to it; eve is never handed it.
   const message = {
     conversationId,
-    turn: input.heard === false ? BRAIN_HOST_TURN.TYPED : HOST_TURN_OF_ASK_ORIGIN[origin],
+    turn:
+      input.heard === false && origin === ASK_ORIGIN.SPOKEN
+        ? BRAIN_HOST_TURN.UNHEARD
+        : HOST_TURN_OF_ASK_ORIGIN[origin],
     message: question,
     lineId: ask.id,
     ...(input.timeZone === undefined ? undefined : { timeZone: input.timeZone }),

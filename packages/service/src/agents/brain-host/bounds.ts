@@ -87,10 +87,17 @@ export const BRAIN_HOST_PRINCIPAL_TYPE = {
 /** The one principal id the deployment acts under; the account it acts for is its attribute, never its id. */
 export const BRAIN_HOST_DEPLOYMENT_PRINCIPAL = "luke-deployment";
 
-/** What kind of turn a request opens, as the header names it. */
+/**
+ * What kind of turn a request opens, as the header names it. An unheard turn
+ * is a spoken line whose answer no one hears: the developer's last line a
+ * call hands over once it has ended. It is recorded as the spoken line it
+ * is, so the transcript's row is its line, but the agent is neither told
+ * its words are heard nor runs the call's own tools on it.
+ */
 export const BRAIN_HOST_TURN = {
   TYPED: "typed",
   SPOKEN: "spoken",
+  UNHEARD: "unheard",
 } as const;
 
 export type BrainHostTurn = (typeof BRAIN_HOST_TURN)[keyof typeof BRAIN_HOST_TURN];
@@ -144,6 +151,11 @@ export const BRAIN_HOST_TURN_KIND = {
     receivedLine: RECEIVED_LINE.RELAY,
   },
   [BRAIN_HOST_TURN.SPOKEN]: {
+    origin: BRAIN_TURN_ORIGIN.SPOKEN,
+    trigger: BRAIN_TURN_TRIGGER.ASK,
+    receivedLine: RECEIVED_LINE.TRANSCRIPT,
+  },
+  [BRAIN_HOST_TURN.UNHEARD]: {
     origin: BRAIN_TURN_ORIGIN.SPOKEN,
     trigger: BRAIN_TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.TRANSCRIPT,

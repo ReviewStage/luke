@@ -326,7 +326,7 @@ it.live(
 );
 
 it.live(
-  "a line no one hears opens a typed turn while its ask stays spoken, so the transcript's row is still its line",
+  "a line no one hears opens an unheard turn while its ask stays spoken, so the transcript's row is still its line",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
@@ -338,7 +338,7 @@ it.live(
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       assert.deepEqual(
         f.eve.opened.map((message) => message.turn),
-        [BRAIN_HOST_TURN.TYPED],
+        [BRAIN_HOST_TURN.UNHEARD],
       );
       const recorded = yield* Effect.promise(() => asks.named(target.userId, accepted.runId));
       assert.equal(recorded?.origin, ASK_ORIGIN.SPOKEN);

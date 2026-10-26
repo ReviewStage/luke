@@ -66,8 +66,8 @@ export interface HostedLiveExchangeOptions {
   /**
    * eve as the deployment reaches it for this account: `eveSessions` with
    * the deployment's secret and this account, composed by the caller, so neither the secret nor eve's origin enters
-   * here and a test hands in a fake. It sends a spoken ask, as a typed turn
-   * where no one hears it (`brain-ask.ts`'s `heard`).
+   * here and a test hands in a fake. It sends a spoken ask, as an unheard
+   * turn where no one hears it (`brain-ask.ts`'s `heard`).
    */
   readonly eve: AgentSessions<BrainHostTurn>;
   /** Whether the call's agent is on a task, whose plan the developer's last unheard line is written into. */

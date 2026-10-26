@@ -33,7 +33,7 @@ import { upstreamSideband } from "./live-sideband.js";
 interface ExchangeAttachmentDeps {
   /** The store writer an agent's rows are written through, holding them to the tools it may call. */
   readonly writer: StoreWriter;
-  /** eve as the deployment reaches it for one account under one mount, for a spoken ask, as a typed turn where no one hears it, composed by the caller so no secret enters here. */
+  /** eve as the deployment reaches it for one account under one mount, for a spoken ask, as an unheard turn where no one hears it, composed by the caller so no secret enters here. */
   readonly eve: (accountId: string, mount: EveMount) => AgentSessions<BrainHostTurn>;
   readonly createId: () => string;
   /** Where a standing exchange's own reports go. */
