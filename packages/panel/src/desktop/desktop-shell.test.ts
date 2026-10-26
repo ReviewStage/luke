@@ -16,7 +16,7 @@ import {
   UPDATE_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
 } from "@luke/host/contract";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { EXPERIMENT, type ExperimentChoices, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -42,11 +42,7 @@ import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import {
-  DESKTOP_CAPABILITIES,
-  handCapabilities,
-  handState,
-} from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -1139,9 +1135,20 @@ function placed(place: Place) {
 }
 
 /** The shell standing in a place with a call in progress about another task, its card's presses sent as `App` sends them. */
-function CallShell({ place, folded }: { place: Place; folded: boolean }): React.JSX.Element {
+function CallShell({
+  place,
+  folded,
+  patch,
+}: {
+  place: Place;
+  folded: boolean;
+  /** What the tasks' state holds beyond the place's own. */
+  patch?: Partial<TasksControl>;
+}): React.JSX.Element {
   const { press } = useAct();
-  const { tab, tasks } = placed(place);
+  const placedIn = placed(place);
+  const tab = placedIn.tab;
+  const tasks = { ...placedIn.tasks, ...patch };
   // The card is handed down as the window's root hands it, past every page between.
   const call: CallCardInput = {
     card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
@@ -1207,13 +1214,13 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
  * (`pages-on-demand.ts`) already loaded, as each is once it has opened once,
  * so each stands within a settle.
  */
-async function handBridge(): Promise<void> {
+async function handBridge(experiments: ExperimentChoices = {}): Promise<void> {
   await Promise.all([
     import("./desktop-settings.js"),
     import("./desktop-version-history.js"),
     import("./person-page.js"),
   ]);
-  handState({});
+  handState(experiments);
   sentActs = [];
   const bridge = appBridge();
   fakeAppBridge({
@@ -1277,6 +1284,48 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
     [PLACE.SIDE_PANEL_FULL_SCREEN]: true,
     [PLACE.SETTINGS]: false,
     [PLACE.VERSION_HISTORY]: false,
+  });
+});
+
+test("the side panel's toggle stands for the Inbox's chosen item, and not over a channel's stream with no thread of it open unless a panel is left open beside it", async () => {
+  const control = tasksControl();
+  const chosen = {
+    inboxView: {
+      ...control.inboxView,
+      open: true,
+      chosen: { taskId: DOCUMENT_TASK.id, itemId: "inbox-item-1" },
+    },
+  };
+  const panelOpen = { ...chosen, sidePanel: { ...control.sidePanel, open: true } };
+  const toggled: Record<string, boolean> = {};
+  for (const [shown, experiments, patch] of [
+    ["the Inbox", {}, chosen],
+    ["a channel", experimentsOn(EXPERIMENT.CHANNELS), chosen],
+    ["a channel with a panel open", experimentsOn(EXPERIMENT.CHANNELS), panelOpen],
+  ] as const) {
+    await handBridge(experiments);
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    act(() =>
+      root?.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(CallShell, { place: PLACE.INBOX, folded: false, patch }),
+        ),
+      ),
+    );
+    await settle();
+    toggled[shown] = [...container.querySelectorAll("button")].some((button) =>
+      ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
+    );
+    act(() => root?.unmount());
+    container.remove();
+  }
+  assert.deepEqual(toggled, {
+    "the Inbox": true,
+    "a channel": false,
+    "a channel with a panel open": true,
   });
 });
 

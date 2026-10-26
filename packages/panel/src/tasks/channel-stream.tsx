@@ -103,9 +103,15 @@ import { useChannelThreads, useChannelView } from "./use-channels.js";
  * while they read it.
  */
 
-/** The stream's column, its log filling what its head leaves, a rule at its end where a thread stands beside it. */
+/**
+ * The stream's column, its log filling what its head leaves, a rule at its
+ * end where a thread stands beside it. Note that its bar ends where its
+ * posts do wherever the side panel's toggle stands over no edge of it, with
+ * a thread or the side panel beside it, rather than past the toggle or at
+ * the sheet's edge as the window would end it.
+ */
 const STREAM =
-  "channel-stream relative flex min-h-0 min-w-0 flex-col data-[beside]:border-r data-[beside]:border-border";
+  "channel-stream relative flex min-h-0 min-w-0 flex-col data-[beside]:border-r data-[beside]:border-border data-[beside]:[--luke-toolbar-end-at:initial] in-data-[panel-open=true]:[--luke-toolbar-end-at:initial]";
 
 /** The posts' run, on the column's inset. */
 const STREAM_BODY =
