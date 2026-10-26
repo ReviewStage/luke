@@ -675,7 +675,7 @@ export interface TasksControl {
   /**
    * Opens the place a Luke link names, of the Plans tab's: a task, its
    * section, version, page, call, or turn; an agent, on its task's tab or
-   * its own page; the Inbox, on an item; Automations, on one. A
+   * its own page; an Inbox item, in its task's Inbox tab, or the Inbox on one with no task; Automations, on one. A
    * place of a workspace the account lists by the link's slug is shown in
    * it. Whoever cannot read the place is told so where it would stand, by
    * the place's own read, which is checked against them.
@@ -697,6 +697,12 @@ export interface TasksControl {
   commentReveal:
     | { readonly planId: string; readonly thread: string; readonly ask: number }
     | undefined;
+  /** The last ask to open one of a task's Inbox items in its Inbox tab, as a link to it asks, under the task it was asked of; let go once the task takes it. */
+  inboxItemReveal:
+    | { readonly planId: string; readonly itemId: string; readonly ask: number }
+    | undefined;
+  /** The task took the ask, so a later visit to the task does not open the item again. */
+  onInboxItemRevealed: (ask: number) => void;
   /** Opens a task on its Inbox tab the same way, opening the tab where it was closed: what ⌘K's Inbox row asks. */
   onShowInbox: (taskId: string) => void;
   /** What waits on the developer across the account's tasks, as main's read last answered: each task with an open inbox item, and its items. */
@@ -1237,6 +1243,8 @@ export function useTasksTab(input: {
   const [sectionReveal, setSectionReveal] = useState<TasksControl["sectionReveal"]>(undefined);
   const [messageReveal, setMessageReveal] = useState<MessageReveal | undefined>(undefined);
   const [commentReveal, setCommentReveal] = useState<TasksControl["commentReveal"]>(undefined);
+  const [inboxItemReveal, setInboxItemReveal] =
+    useState<TasksControl["inboxItemReveal"]>(undefined);
   const messageAsks = useRef(0);
   const [threadReveal, setThreadReveal] = useState<ThreadReveal | undefined>(undefined);
   /** The asks to show a section made so far, so each is its own even after the last was let go. */
@@ -2919,13 +2927,21 @@ export function useTasksTab(input: {
         });
         return;
       }
-      case LINK_PLACE.INBOX_ITEM:
+      case LINK_PLACE.INBOX_ITEM: {
         // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
-        listLinked(
-          ("planId" in place
-            ? viewed.tasks.find((task) => task.id === place.planId)?.workspaceId
-            : undefined) ?? workspace,
-        );
+        const holder =
+          "planId" in place ? viewed.tasks.find((task) => task.id === place.planId) : undefined;
+        listLinked(holder?.workspaceId ?? workspace);
+        // An item of a task the account lists opens in that task's own Inbox tab, which opens it once its read holds it.
+        if (holder !== undefined) {
+          showPanelTab(holder.id, SIDE_PANEL_TAB.INBOX);
+          setInboxItemReveal((last) => ({
+            planId: holder.id,
+            itemId: place.itemId,
+            ask: (last?.ask ?? 0) + 1,
+          }));
+          return;
+        }
         // Note that a link names the thread and not its channel, which its item names once read (`useThreadChannel`).
         if (channelsOn) openChannelThread(place.itemId);
         standInFor({
@@ -2937,6 +2953,7 @@ export function useTasksTab(input: {
           listed: false,
         });
         return;
+      }
       // A channel's link opens its stream in the Inbox's place, on no thread; one archived or unknown says so there (`desktop-inbox.tsx`).
       case LINK_PLACE.CHANNEL: {
         const workspaceId = listLinked(workspace);
@@ -3487,6 +3504,10 @@ export function useTasksTab(input: {
     onThreadRevealed: (ask) => setThreadReveal((last) => (last?.ask === ask ? undefined : last)),
     sectionReveal,
     commentReveal,
+    inboxItemReveal,
+    // Only the ask taken is let go; a newer one stands until its own task takes it.
+    onInboxItemRevealed: (ask) =>
+      setInboxItemReveal((last) => (last?.ask === ask ? undefined : last)),
     // Only the ask shown is let go; a newer one stands until its own task shows it.
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
