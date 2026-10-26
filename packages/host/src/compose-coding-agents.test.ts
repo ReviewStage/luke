@@ -279,6 +279,10 @@ function fakeService() {
         asked.push(`default:${choice.model}:${choice.effort}`);
         return { choice };
       }),
+    hosts: () => Effect.succeed({ failure: "unanswered" }),
+    removeHost: () => Effect.succeed({ failure: "unanswered" }),
+    keepHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
+    revokeHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
     list: (taskId, includeArchived) =>
       Effect.sync(() => {
         asked.push(includeArchived === true ? `list:${taskId}:archived` : `list:${taskId}`);

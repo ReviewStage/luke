@@ -57,6 +57,9 @@ import {
   type CodingAgentTranscriptOlderParams,
   type CodingAgentTranscriptPage,
   type CodingAgentWorkspaceListParams,
+  type HostDoneAnswerView,
+  type HostInstallTokenAnswerView,
+  type HostsAnswerView,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -72,6 +75,10 @@ export interface AgentProceduresDependencies {
     codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
     codingAgentDefaultRead(): Effect.Effect<CodingAgentDefaultAnswer>;
     codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
+    hostsList(): Effect.Effect<HostsAnswerView>;
+    hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
+    hostsKeepInstallToken(tokenHash: string): Effect.Effect<HostInstallTokenAnswerView>;
+    hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
     codingAgentList(params: CodingAgentListParams): Effect.Effect<CodingAgentListAnswer>;
     codingAgentWorkspaceList(
       params: CodingAgentWorkspaceListParams,
@@ -249,6 +256,33 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.codingAgentDefaultWrite(input);
+    }),
+    [AGENT_ACT_KIND.HOSTS_LIST]: actPort[AGENT_ACT_KIND.HOSTS_LIST].effect(function* ({
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.hostsList();
+    }),
+    [AGENT_ACT_KIND.HOSTS_REMOVE]: actPort[AGENT_ACT_KIND.HOSTS_REMOVE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.hostsRemove(input.id);
+    }),
+    [AGENT_ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: actPort[
+      AGENT_ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.hostsKeepInstallToken(input.tokenHash);
+    }),
+    [AGENT_ACT_KIND.HOSTS_REVOKE_INSTALL_TOKEN]: actPort[
+      AGENT_ACT_KIND.HOSTS_REVOKE_INSTALL_TOKEN
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.hostsRevokeInstallToken(input.id);
     }),
     [AGENT_ACT_KIND.CODING_AGENTS_WORKSPACE_LIST]: actPort[
       AGENT_ACT_KIND.CODING_AGENTS_WORKSPACE_LIST

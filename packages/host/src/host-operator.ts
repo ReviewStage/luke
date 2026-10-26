@@ -153,6 +153,12 @@ import {
   type GitHubTokenAnswerView,
   type GitHubTokenSaveParams,
   githubTokenAnswerViewSchema,
+  type HostDoneAnswerView,
+  type HostInstallTokenAnswerView,
+  type HostsAnswerView,
+  hostDoneAnswerViewSchema,
+  hostInstallTokenAnswerViewSchema,
+  hostsAnswerViewSchema,
   type MemoriesAnswerView,
   type MemoriesReadParams,
   type MemoryForgetParams,
@@ -723,6 +729,14 @@ export interface HostOperator {
   codingAgentDefaultRead(): Effect.Effect<CodingAgentDefaultAnswer>;
   /** The default written; the choice as kept, or why it is unchanged. */
   codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
+  /** The account's hosts, as Settings lists them; or why there is no list. */
+  hostsList(): Effect.Effect<HostsAnswerView>;
+  /** One of the account's hosts removed; done, or why not. */
+  hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
+  /** An install token kept by its SHA-256 alone; its id and expiry, or why not. */
+  hostsKeepInstallToken(tokenHash: string): Effect.Effect<HostInstallTokenAnswerView>;
+  /** One of the account's install tokens revoked; done, or why not. */
+  hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
   /** One task's coding agents with their status; or why there is no list. */
   codingAgentList(params: CodingAgentListParams): Effect.Effect<CodingAgentListAnswer>;
   /** One workspace's coding agents, newest started first, on one repository where one is named; or why there is no list. */
@@ -1892,6 +1906,26 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             : { contextWindow: choice.contextWindow }),
         }),
         answerOf(codingAgentDefaultAnswerViewSchema, CODING_AGENT_UNANSWERED),
+      ),
+    hostsList: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_LIST),
+        answerOf(hostsAnswerViewSchema, CODING_AGENT_UNANSWERED),
+      ),
+    hostsRemove: (id) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_REMOVE, { id }),
+        answerOf(hostDoneAnswerViewSchema, CODING_AGENT_UNANSWERED),
+      ),
+    hostsKeepInstallToken: (tokenHash) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_KEEP_INSTALL_TOKEN, { tokenHash }),
+        answerOf(hostInstallTokenAnswerViewSchema, CODING_AGENT_UNANSWERED),
+      ),
+    hostsRevokeInstallToken: (id) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_REVOKE_INSTALL_TOKEN, { id }),
+        answerOf(hostDoneAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentWorkspaceList: (params) =>
       Effect.map(

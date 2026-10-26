@@ -128,6 +128,15 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_MODELS: "codingAgents.models",
   CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
   CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
+  /**
+   * The account's hosts as Settings › Agents › Hosts reads and changes
+   * them: listed, one removed, an install token kept by its hash alone (the
+   * window that minted the token keeps it and shows it once), and one revoked.
+   */
+  HOSTS_LIST: "hosts.list",
+  HOSTS_REMOVE: "hosts.remove",
+  HOSTS_KEEP_INSTALL_TOKEN: "hosts.keepInstallToken",
+  HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
   CODING_AGENTS_LIST: "codingAgents.list",
   /** One workspace's agents, newest started first: what an automation's Same agent is chosen from. */
   CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
