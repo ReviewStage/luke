@@ -49,7 +49,7 @@
   /* A row whose menu is open is ringed, the way Finder rings the row a
      right-click is about, so the menu is plainly about it. */
   .luke-list-row[data-menu-open="true"] {
-    box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+    box-shadow: inset 0 0 0 1px var(--luke-color-border-menu-open);
   }
 
   /* The open row is drawn in the work sheet's ground, lifted by a hairline

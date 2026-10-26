@@ -104,7 +104,9 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * smaller square a row's marks stand in at its end (a sidebar row's Pin,
  * Archive, or ⋯, a message's Copy), which its row reveals under the
  * pointer. A compact quiet one draws no ground under the pointer, because
- * the row beneath it is already lit; only its glyph brightens. A labelled
+ * the row beneath it is already lit; only its glyph brightens. One of the
+ * control's size that stands in a lit row, a row's ⋯, asks for the same
+ * (`lights`), so a row's ⋯ never fills at any density. A labelled
  * Button comes in the same two: `compact` is a row mark's height in the
  * caption's type, for a press that stands among words rather than
  * controls (a sidebar foot's Restart).
@@ -162,6 +164,14 @@ export const BUTTON_SIZE = {
 } as const;
 
 export type ButtonSize = (typeof BUTTON_SIZE)[keyof typeof BUTTON_SIZE];
+
+/** What a quiet glyph-alone button lights under the pointer, while its menu is open, and while a toggle is on: a fill under it, or its glyph alone. */
+export const BUTTON_LIGHT = {
+  FILL: "fill",
+  GLYPH: "glyph",
+} as const;
+
+export type ButtonLight = (typeof BUTTON_LIGHT)[keyof typeof BUTTON_LIGHT];
 
 /** Where a message's send stands, which decides its submit's glyph. */
 export const SUBMIT_STATE = {
@@ -709,6 +719,17 @@ function submitGlyph(state: SubmitState): React.JSX.Element {
   }
 }
 
+/** Whether a glyph-alone button of `variant` lights its glyph alone: a quiet one asked to, or a compact quiet one unasked, since the row it stands in is already lit. */
+function lightsGlyph(
+  variant: ButtonVariant | undefined,
+  size: ButtonSize | undefined,
+  lights: ButtonLight | undefined,
+): boolean {
+  if ((variant ?? BUTTON_VARIANT.QUIET) !== BUTTON_VARIANT.QUIET) return false;
+  if (lights !== undefined) return lights === BUTTON_LIGHT.GLYPH;
+  return size === BUTTON_SIZE.COMPACT;
+}
+
 /**
  * A glyph-alone button's glyph and size: its caller's own glyph at either
  * size, or a submit's, which its state decides, always at the control's.
@@ -733,6 +754,7 @@ export function IconButton({
   label,
   pressed,
   size,
+  lights,
   ...props
 }: ButtonBase &
   IconProps & {
@@ -740,6 +762,8 @@ export function IconButton({
     label: string;
     /** Whether a toggle stands on, which it is drawn and announced as. */
     pressed?: boolean | undefined;
+    /** What a quiet one lights: its glyph alone where it stands in a lit row, as a compact one does unasked, else a fill. */
+    lights?: ButtonLight | undefined;
   }): React.JSX.Element {
   const { landed, settle } = useLanded(props);
   const busy = props.busy === true;
@@ -764,6 +788,7 @@ export function IconButton({
       })}
       data-icon-only="true"
       data-size={size === BUTTON_SIZE.COMPACT ? BUTTON_SIZE.COMPACT : undefined}
+      data-lights={lightsGlyph(props.variant, size, lights) ? BUTTON_LIGHT.GLYPH : undefined}
       data-submit={submit}
       data-done={landed || undefined}
       aria-pressed={pressed}
