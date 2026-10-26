@@ -1,11 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "68f3fec5-56b5-4ad4-95e2-38bae3de0d81",
+  "id": "6506eb14-8661-4bbf-a7b7-2eefec3f1d64",
   "prevIds": [
-    "39b25fba-9861-4c1f-8310-56806b5f234c",
-    "52392ed5-8429-45d7-b2b4-8606f0d8e78f",
-    "86609488-8a96-4ff7-9f98-e511e96885af"
+    "4ca89213-a170-4778-b2b1-1e7fdc055980"
   ],
   "ddl": [
     {
@@ -149,36 +147,6 @@
     {
       "isRlsEnabled": false,
       "name": "channel_look",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "chat_channel",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "chat_member",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "chat_message",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "chat_read",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "workspace_chat",
       "entityType": "tables",
       "schema": "public"
     },
@@ -1091,19 +1059,6 @@
       "generated": null,
       "identity": null,
       "name": "task_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "attachment"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "chat_message_id",
       "entityType": "columns",
       "schema": "public",
       "table": "attachment"
@@ -4018,630 +3973,6 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "task_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "dm_a_member_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "dm_b_member_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_by_member_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "purpose",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "archived_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "agent_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "ordinal",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "0",
-      "generated": null,
-      "identity": null,
-      "name": "read_seq",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "notice_seq",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "notice_channel_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "joined_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "left_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "channel_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "seq",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "touched_seq",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "parent_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "author_member_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "blocks",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 1,
-      "default": "'{}'",
-      "generated": null,
-      "identity": null,
-      "name": "mentions",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "client_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "touched_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "ask",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "ask_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "ask_revision",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "ask_status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "answer",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "answer_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "answered_by_member_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "closed_reason",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "member_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_read"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "channel_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_read"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "read_seq",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_read"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_chat"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "1",
-      "generated": null,
-      "identity": null,
-      "name": "next_seq",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_chat"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "0",
-      "generated": null,
-      "identity": null,
-      "name": "revision",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_chat"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
       "table": "coding_agent"
     },
     {
@@ -6616,6 +5947,32 @@
       "generated": null,
       "identity": null,
       "name": "connected_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tools",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tools_listed_at",
       "entityType": "columns",
       "schema": "public",
       "table": "integration_connection"
@@ -11358,6 +10715,32 @@
       "table": "workspace_integration_connection"
     },
     {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tools",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_integration_connection"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tools_listed_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_integration_connection"
+    },
+    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -11516,27 +10899,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "chat_message_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": "\"chat_message_id\" is not null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "attachment_chat_message",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "attachment"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "inbox_item_id",
           "isExpression": false,
           "asc": true,
@@ -11657,7 +11019,7 @@
         }
       ],
       "isUnique": false,
-      "where": "(\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 0) and \"saved_at\" is null",
+      "where": "(\"task_id\" is not null and num_nonnulls(\"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 0) and \"saved_at\" is null",
       "with": "",
       "method": "btree",
       "concurrently": false,
@@ -12414,419 +11776,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "channel"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "name",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"name\" is not null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_channel_organization_name",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "dm_a_member_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "dm_b_member_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"kind\" = 'dm'",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_channel_organization_dm",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "task_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"kind\" = 'plan'",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_channel_task",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_channel_organization_created",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "kind",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "ordinal",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_member_organization_kind_ordinal",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"user_id\" is not null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_member_organization_user",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "agent_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"agent_id\" is not null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_member_agent",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "seq",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_message_organization_seq",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "channel_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "client_key",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_message_channel_client_key",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "channel_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "seq",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_message_channel_seq",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "parent_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "seq",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": "\"parent_id\" is not null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_message_parent_seq",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "touched_seq",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_message_organization_touched",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "author_member_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "ask_key",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"ask_key\" is not null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_message_author_ask_key",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "ask_status",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": "\"ask_key\" is not null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_message_organization_ask_status",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "channel_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_read_channel",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_read"
     },
     {
       "nameExplicit": true,
@@ -15335,23 +14284,6 @@
     {
       "nameExplicit": false,
       "columns": [
-        "chat_message_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "chat_message",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "attachment_chat_message_id_chat_message_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "attachment"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
         "inbox_item_id"
       ],
       "schemaTo": "public",
@@ -15926,295 +14858,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "channel_look"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_channel_organization_id_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "task_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "task",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_channel_plan_id_plan_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "dm_a_member_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "chat_member",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_channel_dm_a_member_id_chat_member_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "dm_b_member_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "chat_member",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_channel_dm_b_member_id_chat_member_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "created_by_member_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "chat_member",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "chat_channel_created_by_member_id_chat_member_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_member_organization_id_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_member_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "agent_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "coding_agent",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "chat_member_agent_id_coding_agent_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "notice_channel_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "chat_channel",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "chat_member_notice_channel_id_chat_channel_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_message_organization_id_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "channel_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "chat_channel",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_message_channel_id_chat_channel_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "parent_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "chat_message",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "chat_message_parent_id_chat_message_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "author_member_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "chat_member",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_message_author_member_id_chat_member_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "answered_by_member_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "chat_member",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "chat_message_answered_by_member_id_chat_member_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_message"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "member_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "chat_member",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_read_member_id_chat_member_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_read"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "channel_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "chat_channel",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_read_channel_id_chat_channel_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_read"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "workspace_chat_organization_id_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "workspace_chat"
     },
     {
       "nameExplicit": false,
@@ -18224,17 +16867,6 @@
     },
     {
       "columns": [
-        "member_id",
-        "channel_id"
-      ],
-      "nameExplicit": false,
-      "name": "chat_read_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "chat_read"
-    },
-    {
-      "columns": [
         "admin_id",
         "user_id"
       ],
@@ -18573,46 +17205,6 @@
       "name": "channel_pkey",
       "schema": "public",
       "table": "channel",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "chat_channel_pkey",
-      "schema": "public",
-      "table": "chat_channel",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "chat_member_pkey",
-      "schema": "public",
-      "table": "chat_member",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "chat_message_pkey",
-      "schema": "public",
-      "table": "chat_message",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "organization_id"
-      ],
-      "nameExplicit": false,
-      "name": "workspace_chat_pkey",
-      "schema": "public",
-      "table": "workspace_chat",
       "entityType": "pks"
     },
     {
@@ -19232,14 +17824,14 @@
       "entityType": "uniques"
     },
     {
-      "value": "(num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 1 or (\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 0)) and (\"inbox_message_id\" is null or \"inbox_item_id\" is not null)",
+      "value": "(num_nonnulls(\"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 1 or (\"task_id\" is not null and num_nonnulls(\"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 0)) and (\"inbox_message_id\" is null or \"inbox_item_id\" is not null)",
       "name": "attachment_one_owner",
       "entityType": "checks",
       "schema": "public",
       "table": "attachment"
     },
     {
-      "value": "(\"chat_message_id\" is null or octet_length(\"bytes\") <= 1500000 or (\"content_type\" = 'video/webm' and octet_length(\"bytes\") <= 4000000)) and (\"conversation_id\" is null or octet_length(\"bytes\") <= 4000000) and (not (\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 0) or octet_length(\"bytes\") <= 1500000 or (\"content_type\" = 'video/webm' and octet_length(\"bytes\") <= 4000000))",
+      "value": "(\"conversation_id\" is null or octet_length(\"bytes\") <= 4000000) and (not (\"task_id\" is not null and num_nonnulls(\"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 0) or octet_length(\"bytes\") <= 1500000 or (\"content_type\" = 'video/webm' and octet_length(\"bytes\") <= 4000000))",
       "name": "attachment_bytes_bound",
       "entityType": "checks",
       "schema": "public",
@@ -19279,27 +17871,6 @@
       "entityType": "checks",
       "schema": "public",
       "table": "channel"
-    },
-    {
-      "value": "(\"kind\" = 'dm') = (\"name\" is null)\n        and (\"kind\" = 'dm') = (\"dm_a_member_id\" is not null and \"dm_b_member_id\" is not null)\n        and (\"dm_a_member_id\" is null or \"dm_a_member_id\" < \"dm_b_member_id\")",
-      "name": "chat_channel_shape_of_kind",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "chat_channel"
-    },
-    {
-      "value": "(\"kind\" = 'human') = (\"user_id\" is not null)\n        and (\"agent_id\" is null or \"kind\" = 'agent')",
-      "name": "chat_member_id_of_kind",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "value": "(\"ask_key\" is null) = (\"ask\" is null)\n        and (\"ask_key\" is null) = (\"ask_revision\" is null)\n        and (\"ask_key\" is null) = (\"ask_status\" is null)",
-      "name": "chat_message_ask_whole",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "chat_message"
     },
     {
       "value": "(\"scope\" = 'personal' and \"owner_user_id\" is not null and \"organization_id\" is null) or (\"scope\" = 'workspace' and \"organization_id\" is not null and \"owner_user_id\" is null)",
