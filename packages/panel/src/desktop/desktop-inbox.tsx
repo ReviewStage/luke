@@ -565,7 +565,6 @@ function InboxShown({
                 className={streaming ? CHANNELS_VIEW : INBOX_VIEW}
                 ref={columns.ref}
                 data-columns={streaming ? undefined : columns.shown}
-                data-thread={threadBeside ? "" : undefined}
               >
                 {streaming ? (
                   channel === undefined ? (
