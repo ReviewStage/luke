@@ -9,9 +9,11 @@
 
 import {
   DEVICE_ARCH,
+  DEVICE_ISOLATION,
   DEVICE_KIND,
   DEVICE_PLATFORM,
   type DeviceArch,
+  type DeviceIsolation,
   type DevicePlatform,
   type DeviceSignedIn,
   deviceSignedInSchema,
@@ -44,20 +46,22 @@ const DeviceLayoutSchema = Schema.Struct({
   codexExecutable: Schema.NullOr(Schema.String),
 });
 
-/** A Mac's layout and which harnesses it is signed in to, as a local agent's launch reads them. */
+/** A Mac's layout, which harnesses it is signed in to, and how it runs its agents, as a local agent's launch reads them. */
 const DeviceStandingSchema = Schema.Struct({
   ...DeviceLayoutSchema.fields,
   signedIn: deviceSignedInSchema,
+  isolation: Schema.Literals(Object.values(DEVICE_ISOLATION)),
 });
 
 export type DeviceStanding = typeof DeviceStandingSchema.Type;
 
 type DeviceLayout = typeof DeviceLayoutSchema.Type;
 
-/** What a Mac registers with beside its id and name: its platform and architecture, its layout, its Codex where it checked one, and which harnesses it is signed in to where it says. */
+/** What a Mac registers with beside its id and name: its platform and architecture, how it runs its agents, its layout, its Codex where it checked one, and which harnesses it is signed in to where it says. */
 export type DeviceRegistration = Omit<DeviceLayout, "codexExecutable"> & {
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
+  readonly isolation: DeviceIsolation;
   readonly codexExecutable?: string | undefined;
   readonly signedIn?: DeviceSignedIn | undefined;
 };
@@ -78,6 +82,7 @@ const upsertDevice = SqlSchema.findAll({
     name,
     platform,
     arch,
+    isolation,
     home,
     claudeExecutable,
     codexExecutable,
@@ -95,6 +100,7 @@ const upsertDevice = SqlSchema.findAll({
           kind: DEVICE_KIND.DESKTOP,
           platform,
           arch,
+          isolation,
           home,
           claudeExecutable,
           codexExecutable,
@@ -107,6 +113,7 @@ const upsertDevice = SqlSchema.findAll({
             name,
             platform,
             arch,
+            isolation,
             home,
             claudeExecutable,
             codexExecutable,
@@ -185,6 +192,7 @@ const findLayout = SqlSchema.findOneOption({
           claudeExecutable: device.claudeExecutable,
           codexExecutable: device.codexExecutable,
           signedIn: device.signedIn,
+          isolation: device.isolation,
         })
         .from(device)
         .where(and(eq(device.id, id), eq(device.userId, userId))),
@@ -215,7 +223,7 @@ export function registerDevice(
   );
 }
 
-/** The account's Mac's home folder and bundled CLI, as it last registered them, and which harnesses it last said it is signed in to; nothing where the account holds no such Mac. */
+/** The account's Mac's home folder, bundled CLI, and isolation, as it last registered them, and which harnesses it last said it is signed in to; nothing where the account holds no such Mac. */
 export function deviceLayout(
   userId: string,
   id: string,

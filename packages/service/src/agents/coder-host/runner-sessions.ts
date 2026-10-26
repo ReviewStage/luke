@@ -184,7 +184,7 @@ export interface RunnerSessionsOptions {
   /** Luke's coder instructions for the agent, naming its checkout and installed skills where its machine keeps them, which the harness's config carries. */
   readonly instructions: (
     agent: CodingAgent,
-    place: Pick<MachineLayout, "checkoutPath" | "installedSkills">,
+    place: Pick<MachineLayout, "checkoutPath" | "installedSkills" | "isolation">,
   ) => Effect.Effect<string>;
   /** One past the last event the store applied of the conversation's runner, where a launch numbers its events from. */
   readonly nextSequence: (

@@ -1,18 +1,26 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Clock, Effect } from "effect";
+import { DEVICE_ISOLATION } from "@luke/features/device-agent-wire";
+import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { DEVICE_LAYOUT, getTestDB } from "../../testing/index.js";
-import { beatDevice, devicesNamed, devicesSeenSince, registerDevice } from "../device-store.js";
+import {
+  beatDevice,
+  deviceLayout,
+  devicesNamed,
+  devicesSeenSince,
+  registerDevice,
+} from "../device-store.js";
 
 /**
  * An account's Macs, over a real dialect: a Mac is registered, beaten, and
  * read by its own account alone, an id another account holds is never taken
- * over, a Mac that stopped beating is no longer read as there, and the
- * Macs a read's local agents name are read by their ids alone.
+ * over, a Mac that stopped beating is no longer read as there, a launch
+ * reads how the Mac last said it runs its agents, and the Macs a read's
+ * local agents name are read by their ids alone.
  * Synthetic accounts and Macs throughout.
  */
 
@@ -75,6 +83,34 @@ it.layer(getTestDB())("the device store", (it) => {
         freshRead.map((device) => device.id),
         [id],
       );
+    }),
+  );
+
+  it.effect("a launch reads the isolation the Mac last registered", () =>
+    Effect.gen(function* () {
+      const { owner } = yield* openAccounts;
+      const id = randomUUID();
+      const isolationNow = Effect.map(deviceLayout(owner, id), (layout) =>
+        Option.map(layout, (standing) => standing.isolation),
+      );
+
+      yield* registerDevice(owner, {
+        id,
+        name: "Studio",
+        ...DEVICE_LAYOUT,
+        isolation: DEVICE_ISOLATION.SANDBOX,
+      });
+      const sandboxed = yield* isolationNow;
+      yield* registerDevice(owner, {
+        id,
+        name: "Studio",
+        ...DEVICE_LAYOUT,
+        isolation: DEVICE_ISOLATION.BARE,
+      });
+      const bare = yield* isolationNow;
+
+      assert.deepEqual(sandboxed, Option.some(DEVICE_ISOLATION.SANDBOX));
+      assert.deepEqual(bare, Option.some(DEVICE_ISOLATION.BARE), "a register again moves it");
     }),
   );
 

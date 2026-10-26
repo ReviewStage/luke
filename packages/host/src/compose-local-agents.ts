@@ -842,6 +842,7 @@ export function composeLocalAgents(
             name: platform.deviceName,
             platform: platform.devicePlatform,
             arch: platform.deviceArch,
+            isolation: platform.deviceIsolation,
             home: home.value,
             claudeExecutable: had.value.claude,
             codexExecutable: Option.getOrUndefined(checked),

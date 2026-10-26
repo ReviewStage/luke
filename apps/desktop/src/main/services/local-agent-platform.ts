@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
+import { DEVICE_ARCH, DEVICE_ISOLATION, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import type { LocalAgentPlatformSeam } from "@luke/host/effect";
 import { agentWorktreeScript, cloneFolder, worktreesRoot } from "@luke/host/node";
 import { app } from "electron";
@@ -80,6 +80,8 @@ export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
     // Note that the app is built for Apple silicon alone (`package.json`'s `--mac --arm64`).
     devicePlatform: DEVICE_PLATFORM.DARWIN,
     deviceArch: DEVICE_ARCH.ARM64,
+    // Note that every agent runs directly on the Mac, since its launcher starts the runner there; no Mac sandbox exists yet.
+    deviceIsolation: DEVICE_ISOLATION.BARE,
     worktreeScript,
   };
   return packaged

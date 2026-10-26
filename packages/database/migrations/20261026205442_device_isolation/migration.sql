@@ -1,0 +1,1 @@
+ALTER TABLE "device" ADD COLUMN "isolation" text DEFAULT 'bare' NOT NULL;

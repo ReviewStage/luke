@@ -210,6 +210,7 @@ function deviceMachineOver(
         codexExecutable: device.value.codexExecutable ?? undefined,
         writableRoots: [folders.folder],
         signedIn: device.value.signedIn,
+        isolation: device.value.isolation,
       };
       return layout;
     });

@@ -8,6 +8,7 @@ import {
   type DeviceAgentLine,
   type DeviceAgentRequest,
   type DeviceArch,
+  type DeviceIsolation,
   type DevicePlatform,
   type DeviceSignedIn,
 } from "./device-agent-wire.js";
@@ -42,6 +43,7 @@ export interface DeviceAgentDevice {
   readonly name: string;
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
+  readonly isolation: DeviceIsolation;
   readonly home: string;
   readonly claudeExecutable: string;
   readonly codexExecutable?: string | undefined;

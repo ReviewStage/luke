@@ -1,8 +1,10 @@
-import type {
-  DeviceArch,
-  DeviceKind,
-  DevicePlatform,
-  DeviceSignedIn,
+import {
+  DEVICE_ISOLATION,
+  type DeviceArch,
+  type DeviceIsolation,
+  type DeviceKind,
+  type DevicePlatform,
+  type DeviceSignedIn,
 } from "@luke/features/device-agent-wire";
 import { index, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
@@ -12,8 +14,9 @@ import { user } from "./auth.js";
  * device.ts -- one of an account's devices that can run its local agents, and when it last said it was there.
  *
  * A device is the desktop app on a member's Mac today (`DEVICE_KIND`), and
- * says which platform and architecture it runs on. The desktop mints the id
- * once and keeps it, and registers it under the account it is signed in to;
+ * says which platform and architecture it runs on, and whether it runs each
+ * agent in a VM of its own or directly on the machine (`DEVICE_ISOLATION`).
+ * The desktop mints the id once and keeps it, and registers it under the account it is signed in to;
  * an id another account registered first is never moved onto this one. While the desktop runs local agents it beats
  * the row, so `last_seen_at` is what the service reads as the Mac being
  * there to take a new agent. It registers again on every start, so `home`,
@@ -40,6 +43,8 @@ export const device = pgTable(
     platform: text("platform").$type<DevicePlatform>().notNull(),
     /** The device's CPU architecture, as it last registered. */
     arch: text("arch").$type<DeviceArch>().notNull(),
+    /** How the device runs its agents, as it last registered (`DEVICE_ISOLATION`); a row from before the column runs them bare, as every Mac did. */
+    isolation: text("isolation").$type<DeviceIsolation>().notNull().default(DEVICE_ISOLATION.BARE),
     /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.luke/agents/<agent>`). */
     home: text("home").notNull(),
     /** The Claude Code CLI the desktop bundles, by its absolute path, which a local agent's launch names. */
