@@ -17,9 +17,7 @@ uninstall() {
   systemctl disable --now "$UNIT" >/dev/null 2>&1 || true
   if id "$HOST_USER" >/dev/null 2>&1; then
     uid="$(id -u "$HOST_USER")"
-    # Every agent's unit stopped, then the user's own systemd with lingering off.
-    runuser -u "$HOST_USER" -- env XDG_RUNTIME_DIR="/run/user/$uid" \
-      systemctl --user stop 'luke-agent-*.service' >/dev/null 2>&1 || true
+    # Note that lingering is turned off where an earlier build turned it on, since systemd keeps its record past the user.
     loginctl disable-linger "$HOST_USER" >/dev/null 2>&1 || true
     loginctl terminate-user "$HOST_USER" >/dev/null 2>&1 || true
     # Every process of the user's is waited out, and killed after ten seconds, before the user goes.

@@ -9,8 +9,8 @@
 # It downloads the release's tarball for the box's architecture and checks it
 # against the SHA-256 this script carries before anything of it is installed;
 # installs it to /opt/luke-host, owned by root; makes the luke-host user the
-# daemon and every agent run as, in the kvm group where /dev/kvm exists, with
-# lingering on so its own systemd runs from boot; enrolls the box under its
+# daemon and every agent's sandbox run as, in the kvm group where /dev/kvm
+# exists; enrolls the box under its
 # hostname, which writes the box's device secret readable by luke-host alone;
 # and installs and starts luke-host.service as that user, restarted only
 # when it crashes. Run again without --token, it upgrades in place and keeps
@@ -152,15 +152,6 @@ if [ -e /dev/kvm ] && getent group kvm >/dev/null 2>&1; then
   usermod -aG kvm "$HOST_USER"
   made="$made (in group kvm: /dev/kvm found)"
 fi
-loginctl enable-linger "$HOST_USER" || fail "Could not turn on lingering for $HOST_USER."
-uid="$(id -u "$HOST_USER")"
-# The user's own systemd, which every agent's unit runs under, starts with lingering on.
-waited=0
-while [ ! -S "/run/user/$uid/bus" ] && [ "$waited" -lt 30 ]; do
-  sleep 1
-  waited=$((waited + 1))
-done
-[ -S "/run/user/$uid/bus" ] || fail "The $HOST_USER user's systemd did not start (no /run/user/$uid/bus)."
 ok "$made"
 
 name="$(hostname -s 2>/dev/null || hostname)"
@@ -185,14 +176,13 @@ cat >"$UNIT_FILE" <<UNIT_EOF
 Description=Luke host
 Documentation=https://tryluke.dev
 Wants=network-online.target
-After=network-online.target user@$uid.service
+After=network-online.target
 
 [Service]
 Type=simple
 User=$HOST_USER
 Group=$HOST_USER
 WorkingDirectory=$HOST_HOME
-Environment=XDG_RUNTIME_DIR=/run/user/$uid
 ExecStart=$INSTALL_DIR/bin/luke-host run
 Restart=on-failure
 RestartSec=10
