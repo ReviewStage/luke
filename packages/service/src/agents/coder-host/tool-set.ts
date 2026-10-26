@@ -181,31 +181,27 @@ export function runCallTool(
     : { status: ACTION_RESULT_STATUS.REJECTED, reason: OFF_CALL_REASON[tool] };
 }
 
-/** The tools only an agent working in a repository is offered: the pull request the service opens for it, the two that write into its checkout, and `show_code`, which puts lines of it on the developer's screen. */
+/** The tools only an agent working in a repository is offered: the pull request the service opens for it, `apply_patch`, which edits its checkout, and `show_code`, which puts lines of it on the developer's screen. */
 export type RepositoryTool =
   | typeof CODER_TOOL.OPEN_PULL_REQUEST
-  | typeof CODER_TOOL.WRITE_FILE
   | typeof CODER_TOOL.APPLY_PATCH
   | typeof CODER_TOOL.SHOW_CODE;
 
 /**
  * The repository's tools an agent is offered, on every turn, typed or
  * spoken: all of them for one working in a repository, and none for one
- * with no repository, whose sandbox holds no checkout to write into or
- * show lines of and which has no branch to open a pull request from. Note that its shell and its reads stay, in the empty working folder
- * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), and that the
+ * with no repository, whose sandbox holds no checkout to patch or show
+ * lines of and which has no branch to open a pull request from. Note that
+ * its shell, its reads, and `write_file` stay, in the empty working folder
+ * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), where it
+ * writes the files its work makes, such as a page to show; and that the
  * instructions leave out the same words (`instructions.ts`).
  */
 export function repositoryToolsOf(
   agent: Pick<CodingAgent, "repository">,
 ): ReadonlySet<RepositoryTool> {
   if (agent.repository === null) return new Set();
-  return new Set([
-    CODER_TOOL.OPEN_PULL_REQUEST,
-    CODER_TOOL.WRITE_FILE,
-    CODER_TOOL.APPLY_PATCH,
-    CODER_TOOL.SHOW_CODE,
-  ]);
+  return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.APPLY_PATCH, CODER_TOOL.SHOW_CODE]);
 }
 
 /** The tools offered by what kind of agent it is: `list_open_asks` to an operator alone, and `delete_section` and `delete_automation` to every agent but an operator. */

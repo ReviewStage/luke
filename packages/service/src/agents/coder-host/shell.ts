@@ -202,7 +202,7 @@ const BASH_BASE = bash as ToolDefinition<BashToolInput, ShellOutput>;
 export function bashStartingIn(directory: string) {
   return defineTool<typeof SHELL_INPUT.Type, ShellOutput>({
     ...BASH_BASE,
-    description: `${bash.description} Every command starts in ${directory}, the repository's checkout, in a fresh shell, so a \`cd\` lasts only for the call it is in.`,
+    description: `${bash.description} Every command starts in ${directory}, your working folder, in a fresh shell, so a \`cd\` lasts only for the call it is in.`,
     inputSchema: emitJsonSchema(SHELL_INPUT),
     outputSchema: emitJsonSchema(SHELL_OUTPUT),
     execute: (input, ctx) => {
