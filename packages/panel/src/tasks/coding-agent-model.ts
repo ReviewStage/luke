@@ -443,6 +443,9 @@ const START_RETIRED = "This agent has ended. Start a new one.";
 /** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
 const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
 
+/** What a message to an agent whose host its starter removed says, wherever it is drawn: only a new agent goes on from here. */
+const HOST_REMOVED = "This host was removed. Continue in the cloud or add it again.";
+
 /** What a message that did not reach the agent says of itself, which a surface without Retry follows with Try again. */
 const MESSAGE_NOT_SENT = "The message could not be sent.";
 
@@ -543,6 +546,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+    case CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
     case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
     case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
@@ -972,6 +976,8 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
       return "The agent could not be started.";
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+    // Note that a Start names no device on main, so no Start is refused for a removed one; a continue's words read as a retired source's.
+    case CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED:
       return START_RETIRED;
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
@@ -1023,6 +1029,8 @@ export function messageFailureNote(
   }
   // Note that the box's note stands beside Continue in new agent, so it tells no one to continue.
   if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED)
+    return callFailure(HOST_REMOVED);
   // Note that an agent Luke's key paid for is refused whatever is connected now, so Settings mends nothing.
   if (
     refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING &&
@@ -1068,6 +1076,8 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
       return "Luke didn't hear back.";
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
       return MESSAGE_RETIRED;
+    case CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED:
+      return HOST_REMOVED;
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
       return `${SHARED_FAILURE_NOTE[failure]} Try again.`;
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
@@ -1088,9 +1098,12 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** Whether a refusal is for good, so the composer closes on it rather than offering Retry: the agent's session has ended. */
+/** Whether a refusal is for good, so the composer closes on it rather than offering Retry: the agent's session has ended, or the host it ran on was removed. */
 export function closesComposer(failure: CodingAgentCallFailure): boolean {
-  return failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED;
+  return (
+    failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED ||
+    failure === CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED
+  );
 }
 
 /**

@@ -1003,3 +1003,23 @@ test("messages still waiting to go as the agent refuses one for good are all kep
   );
   assert.equal(box.container.querySelector("output")?.dataset.unsent, "Fix tests\n\nUpdate docs");
 });
+
+test("a message refused because the agent's host was removed closes the box on those words, with no Retry", async () => {
+  const box = await answeredInTurn();
+  typeInComposer(box.container, "Fix tests");
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  await box.answer(0, { failure: CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED });
+
+  assert.ok(
+    box.container.textContent?.includes(
+      "This host was removed. Continue in the cloud or add it again.",
+    ),
+    "the host's removal is named",
+  );
+  assert.ok(
+    ![...box.container.querySelectorAll("button")].some((each) => each.textContent === "Retry"),
+    "no Retry, since no retry reaches a removed host",
+  );
+});

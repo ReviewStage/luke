@@ -357,5 +357,7 @@ export function failedCallRefusal(failed: {
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.IMAGE_PREPARING) {
     return HOSTED_REFUSAL.AGENT_IMAGE_PREPARING;
   }
+  if (failed.runtimeRefusal === RUNTIME_REFUSAL.DEVICE_REMOVED)
+    return HOSTED_REFUSAL.DEVICE_REMOVED;
   return HOSTED_REFUSAL.UNAVAILABLE;
 }

@@ -15,13 +15,15 @@ import {
   deviceAgentRequestsWaiting,
 } from "@luke/database/models/device-agent-store";
 import { registerDevice } from "@luke/database/models/device-store";
+import { removeHost } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { device } from "@luke/database/schemas/device";
 import { deviceAgentLine } from "@luke/database/schemas/device-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
-import { DEVICE_AGENT_REQUEST_KIND } from "@luke/features/device-agent-wire";
+import { DEVICE_AGENT_REQUEST_KIND, DEVICE_KIND } from "@luke/features/device-agent-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Fiber, Layer, Option, Redacted } from "effect";
@@ -29,6 +31,7 @@ import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { claimedDeviceAgentLine, settledDeviceAgentLine } from "../device-agent.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
+import { LaunchRefused } from "./agent-machine.js";
 import { deviceMachine } from "./device-machine.js";
 
 const RING = `1:${Buffer.alloc(32, 7).toString("base64")}`;
@@ -105,6 +108,33 @@ const untilAsked = (userId: string, deviceId: string) =>
 it.layer(Layer.merge(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT)))(
   "a local agent's machine",
   (it) => {
+    it.effect(
+      "an agent on a host its account removed is refused by name, and one on a Mac with no layout as before",
+      () =>
+        Effect.gen(function* () {
+          const { userId, deviceId, agent } = yield* openLocalAgent;
+          const db = yield* Database;
+          // The Mac the agent is pinned to is made a host and removed, as Settings › Hosts removes one.
+          yield* db.update(device).set({ kind: DEVICE_KIND.HOST }).where(eq(device.id, deviceId));
+          const machine = yield* deviceMachine;
+          const unregistered = yield* Effect.flip(
+            machine.layout({ ...agent, deviceId: randomUUID() }),
+          );
+          assert.equal(yield* removeHost(userId, deviceId), true);
+
+          const refused = yield* Effect.flip(machine.layout(agent));
+
+          assert.ok(refused instanceof LaunchRefused);
+          assert.equal(refused.deviceRemoved, true);
+          assert.ok(unregistered instanceof LaunchRefused);
+          assert.equal(
+            unregistered.deviceRemoved,
+            undefined,
+            "a device never removed is no removed host",
+          );
+        }),
+    );
+
     it.effect("a launch's secrets are sealed in its line and handed over open once", () =>
       Effect.gen(function* () {
         const opened = yield* openLocalAgent;

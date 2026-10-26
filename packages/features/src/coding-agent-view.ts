@@ -126,6 +126,8 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_NOT_READY: "agent-not-ready",
   /** The agent's session has ended for good, so no message reaches it; only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
+  /** The agent ran on a host its starter removed, so no message reaches it again; only a new agent goes on from here. */
+  DEVICE_REMOVED: "device-removed",
   /** The agent runs on its starter's own GitHub token, so only its starter messages it or starts an agent from it. */
   NOT_PERMITTED: "not-permitted",
   /** The agent's sandbox image is still being prepared; the same call under its key, a little later, is taken. */
