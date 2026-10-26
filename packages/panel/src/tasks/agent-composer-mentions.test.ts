@@ -1856,7 +1856,7 @@ function peopleListed(container: HTMLElement): [string, string, string | null][]
   );
 }
 
-test("an @ among the workspace's members offers its people, the reader first as You and the rest by name with their email, each wearing their mark, and a kind of their own narrowed to by @people:", async () => {
+test("an @ among the workspace's members offers its people, the reader first as You and the rest by name with their email, each wearing their mark, and a kind of their own narrowed to by @people:, a row marking the word that found it and hanging the person's card while the pointer rests on it", async () => {
   const { container } = await memberBox();
 
   typeInComposer(container, "See @");
@@ -1865,6 +1865,12 @@ test("an @ among the workspace's members offers its people, the reader first as 
   const kind = kindsListed(container).find(([name]) => name === "People");
   typeInComposer(container, " and @people:reyes");
   await settle();
+  const row = container.querySelector<HTMLElement>('.mention-menu [role="option"]');
+  assert.ok(row, "Dana is listed");
+  const marked = [...row.querySelectorAll(".luke-combobox-option-label mark")].map(
+    (mark) => mark.textContent,
+  );
+  restOn(row);
 
   assert.deepEqual(people, [
     ["Charles Pan", "You", ACTOR_KIND.PERSON],
@@ -1872,6 +1878,9 @@ test("an @ among the workspace's members offers its people, the reader first as 
   ]);
   assert.deepEqual(kind, ["People", "2 members"]);
   assert.deepEqual([crumb(container), listed(container)], ["People", ["Dana Reyes"]]);
+  assert.deepEqual(marked, ["Reyes"]);
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Dana Reyes");
 });
 
 test("a person picked from the @ list is drawn as their chip and sent as their page's link, which names them by their account's id alone", async () => {

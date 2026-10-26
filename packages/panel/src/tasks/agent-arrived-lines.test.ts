@@ -162,10 +162,10 @@ async function drawnTab(
 function drawnOrder(container: HTMLElement): readonly string[] {
   return [
     ...container.querySelectorAll(
-      ":is(.is-user, .is-chat), [data-turn-fold] > summary, [data-call-id]",
+      ":is(.is-user, .is-received), [data-turn-fold] > summary, [data-call-id]",
     ),
   ].map((element) => {
-    if (element.matches(".is-user, .is-chat"))
+    if (element.matches(".is-user, .is-received"))
       return `line: ${element.getAttribute("data-message-id")}`;
     if (element.matches("summary")) return `fold: ${element.textContent}`;
     return `call: ${element.getAttribute("data-call-id")}`;

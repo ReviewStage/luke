@@ -52,7 +52,7 @@ export interface NativeAgentSessionsOptions {
  * what its row names as an eve session's are (`host.ts`'s `prompt`): whether
  * its token reads the repository's CI, the co-author trailer where it writes
  * as its developer, the workspace its links are written under, and whether
- * its starter turned Chat on; each read that fails reads as eve's does.
+ * its starter turned Memory on; each read that fails reads as eve's does.
  */
 const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: CoderHarness) =>
   Effect.gen(function* () {

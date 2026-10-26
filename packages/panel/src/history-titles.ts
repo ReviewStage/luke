@@ -27,8 +27,8 @@ import type { TasksControl } from "./tasks/use-tasks-tab.js";
  * only while its task is open: the page by what the window's title calls it
  * (`window-title.ts`), and a task's step by the task, with the tabs its
  * column and side panel showed under it, "Fix token refresh · Code". An
- * Inbox item's step names the task the item is of. A Settings page or a
- * Chat place is named by its page alone.
+ * Inbox item's step names the task the item is of. A Settings page is
+ * named by its page alone.
  *
  * A step listed later is named again as what it names stands now
  * (`liveStepTitle`), by the ids it stood on: a task by the name the task
@@ -118,7 +118,6 @@ export type StepTitleTasks = Pick<
   | "agentView"
   | "personView"
   | "automationsView"
-  | "chatView"
   | "boardView"
   | "history"
 >;
@@ -148,7 +147,6 @@ export function stepTitle(
     return { label: tasks.personView.name ?? "Profile" };
   }
   if (tasks.automationsView.open) return { label: "Automations" };
-  if (tasks.chatView.open) return { label: "Chat" };
   if (tasks.boardView.open) return { label: "Tasks" };
   if (tasks.boundFor === undefined) return { label: "Welcome" };
   const name = taskName(tasks, tasks.boundFor);

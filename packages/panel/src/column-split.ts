@@ -1,8 +1,8 @@
 /**
- * column-split.ts -- whether a screen that lists things beside the one chosen, the Inbox, Chat, Settings, a version history, Admin, or an automation's setup and its runs, shows the two side by side or one at a time, by the room the screen itself has.
+ * column-split.ts -- whether a screen that lists things beside the one chosen, the Inbox, Settings, a version history, Admin, or an automation's setup and its runs, shows the two side by side or one at a time, by the room the screen itself has.
  *
  * The line is drawn by the screen's own width rather than the window's,
- * because the window's Inbox and Chat and a task's own Inbox tab stand in
+ * because the window's Inbox and a task's own Inbox tab stand in
  * columns of their own, beside a sidebar, a side panel, or neither, and a
  * screen that takes the whole window is only as wide as the window. A screen
  * that measures nothing is not laid out, and keeps the two columns it starts
@@ -18,8 +18,7 @@ import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
  * The widths, in CSS pixels, between which a screen shows one column or
  * two. Narrower than `ENTER`, its list at its least width (300) would leave
  * the item beside it less than the 560 a question, a code card, and its
- * options read in (`inbox-list.tsx`), as Chat's place keeps beside its rail
- * (`desktop-chat.tsx`); only wider than `LEAVE` does it split again, so a
+ * options read in (`inbox-list.tsx`); only wider than `LEAVE` does it split again, so a
  * screen dragged across the line does not split and join at every pixel.
  */
 const COLUMN_SPLIT = {

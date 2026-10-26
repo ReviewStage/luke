@@ -7,8 +7,8 @@
  * refused where nothing beside it is left to say so. Beside those it says
  * only what is rare enough to be worth the interruption, as Luke updated to
  * a new version (`update-toast.ts`), or what the voice says still stands;
- * what happened elsewhere, an agent's turn ended, an Inbox item posted, a
- * chat message waiting, or an automation's run that failed, is said by the
+ * what happened elsewhere, an agent's turn ended, an Inbox item posted, or
+ * an automation's run that failed, is said by the
  * window's own marks and counts instead. Each is a
  * card of its words, an optional second line under them, each cut at two
  * lines, and at most one action, such as Undo, at its end. Up to three stand at once, newest at the

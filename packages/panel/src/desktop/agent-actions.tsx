@@ -98,14 +98,11 @@ export function agentTranscriptRead(
   agentId: string,
   title: string,
   brief: CodingAgentBrief | undefined,
-  chatOn: boolean,
   quiet = false,
 ): TranscriptRead {
   return () =>
     readWholeTranscript(readTranscript, { agentId }).then((messages) =>
-      messages === undefined
-        ? undefined
-        : agentTranscript({ title, messages, brief, chatOn, quiet }),
+      messages === undefined ? undefined : agentTranscript({ title, messages, brief, quiet }),
     );
 }
 
@@ -232,7 +229,6 @@ export function useAgentActions(
     agent.id,
     label,
     agent.brief,
-    agents.chatOn,
     agent.kind === CODING_AGENT_KIND.OPERATOR,
   );
   return {

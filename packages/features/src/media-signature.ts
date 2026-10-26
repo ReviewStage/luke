@@ -9,10 +9,9 @@ import { startsLikeWebm, webmDimensions } from "./video-signature.js";
  * media-signature.ts -- what a shown or posted file's first bytes say it is: one of the three pictures, or a WebM an agent recorded, and the size it states.
  *
  * An agent may show the developer a recording of what it did wherever it
- * may show a picture: in its transcript (`show_image`), in the developer's
- * inbox, and in its task's chat. Each reads the file from the agent's
- * sandbox and sniffs it here, so the one rule for what a file is holds in
- * all three. A WebM's opening bytes say only that it is Matroska; its
+ * may show a picture: in its transcript (`show_image`), and in the
+ * developer's inbox. Each reads the file from the agent's sandbox and sniffs
+ * it here, so the one rule for what a file is holds in both. A WebM's opening bytes say only that it is Matroska; its
  * doctype and size are read off the whole file (`mediaDimensions`), and one
  * that states neither is no video a reader can hold the place of.
  */

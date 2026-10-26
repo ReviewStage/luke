@@ -11,7 +11,6 @@
  */
 
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "./board-vocabulary.js";
-import { CHAT_TOOL } from "./chat-wire.js";
 import {
   AGENT_MESSAGE_TOOL,
   CODING_AGENT_DELEGATE_TOOL,
@@ -132,8 +131,7 @@ export const CONNECTION_TOOL = {
  * task's coding agents, since named as `AGENT_TOOL`'s agent tools, the
  * four about the workspace's own issues, gone with them, the inbox's
  * post and read, since named for the channels a thread is posted to, and
- * the workspace's chat, whose threads moved to channels and whose direct
- * messages moved to `message_agent`.
+ * the four of the workspace's Chat, removed with it.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -158,11 +156,11 @@ export const RETIRED_TOOL = {
   // Renamed `post_thread` and `read_threads`, since a thread is posted to a channel.
   POST_TO_INBOX: "post_to_inbox",
   READ_INBOX: "read_inbox",
-  // The workspace's chat, retired for channels' threads and `message_agent`.
-  POST_CHAT: CHAT_TOOL.POST,
-  READ_CHAT: CHAT_TOOL.READ,
-  RESOLVE_ASK: CHAT_TOOL.RESOLVE,
-  EDIT_CHANNEL: CHAT_TOOL.EDIT_CHANNEL,
+  // The workspace's Chat, removed with it.
+  POST_CHAT: "post_chat",
+  READ_CHAT: "read_chat",
+  RESOLVE_ASK: "resolve_ask",
+  EDIT_CHANNEL: "edit_channel",
 } as const;
 
 /**

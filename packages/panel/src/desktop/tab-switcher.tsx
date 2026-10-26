@@ -63,7 +63,7 @@ import {
 } from "@luke/ui/tab-strip-model";
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
-import { type HouseIcon, InboxIcon, ListTodoIcon, MessagesSquareIcon, ZapIcon } from "lucide-react";
+import { type HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
@@ -123,7 +123,6 @@ const WORK_AREA = ".desktop-main";
 /** What a place's card wears, as the sidebar's row for it does. */
 const PLACE_LOOK = {
   [SWITCHER_PLACE.INBOX]: { icon: InboxIcon, label: TAB_WORDS.INBOX },
-  [SWITCHER_PLACE.CHAT]: { icon: MessagesSquareIcon, label: TAB_WORDS.CHAT },
   [SWITCHER_PLACE.BOARD]: { icon: ListTodoIcon, label: "Tasks" },
   [SWITCHER_PLACE.AUTOMATIONS]: { icon: ZapIcon, label: "Automations" },
 } as const satisfies Record<SwitcherPlace, { icon: typeof HouseIcon; label: string }>;
@@ -304,7 +303,6 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
   const column = mainTabs.tab;
   return shownStop({
     over: tab === PANEL_TAB.SETTINGS || tasks.history.open,
-    chat: tasks.chatView.open,
     inbox: tasks.inboxView.open,
     agentId: tasks.agentView.agentId,
     person:
@@ -670,9 +668,6 @@ function openPlace(tasks: TasksControl, place: SwitcherPlace): void {
   switch (place) {
     case SWITCHER_PLACE.INBOX:
       tasks.inboxView.onOpen();
-      return;
-    case SWITCHER_PLACE.CHAT:
-      tasks.chatView.onOpen();
       return;
     case SWITCHER_PLACE.BOARD:
       tasks.boardView.onOpen();

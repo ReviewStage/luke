@@ -1,7 +1,7 @@
 /**
  * toolbar.tsx -- the bar across the top of a workspace, which is also the window's drag handle: what leads it, the page's title and the tag after it, and the page's actions at its end; and the not-found state that keeps it.
  *
- * Inbox, Tasks, Chat, Automations, an agent's page, Version history, Admin,
+ * Inbox, Tasks, Automations, an agent's page, Version history, Admin,
  * an Inbox item, and the Automations list each stand under this one bar; a
  * document (a plan, Settings, a person, the automation editor) heads itself
  * in its page instead (`PageHeader`). The bar is one row at the window's bar

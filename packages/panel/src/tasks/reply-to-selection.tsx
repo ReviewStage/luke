@@ -40,9 +40,8 @@ import { rendererRuntime } from "../renderer-runtime.js";
  * its question's Markdown, its messages, why it took the item back, and
  * what its ask offers, an option's words, a step, a field's name, and
  * lays the quote into the item's box (`inbox-pane.tsx`,
- * `inbox-answer-box.tsx`). Chat offers it over every message's words and
- * an ask's, laying the quote into the box nearest them (`chat-pane.tsx`),
- * so the press hands on the words it was over beside the reply. Note that
+ * `inbox-answer-box.tsx`), so the press hands on the words it was over
+ * beside the reply. Note that
  * a selection reaching into a field, an input or an editor, is never
  * offered, because what it holds is the reader's own typing, not words to
  * answer.

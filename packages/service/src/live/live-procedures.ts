@@ -62,12 +62,6 @@
  * latest settled ones as one statement, their threads and files as two
  * more, after the plan or the agent is read as the account, so one it does
  * not reach is not found, as its held read answers.
- *
- * `GET /api/live/workspace-chat?workspaceId=` answers a workspace's chat as
- * the account's person reads it, one statement per part of the window's
- * read, after the account's own member of it is read: a workspace it is not
- * in, whose chat it has not joined, or with Chat off for it is not found.
- * Sealing writes nothing, so the desktop joins once before it follows.
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
@@ -75,7 +69,6 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement, readAutomation } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
-import { workspaceChatLiveStatements, workspaceChatStamp } from "@luke/database/models/chat-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
@@ -102,9 +95,7 @@ import { SqlClient } from "effect/sql";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import { reachedAgentById } from "../agents/agent-reach.js";
-import { joinedMember } from "../agents/coder-host/chat-page.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
-import { chatAccount, workspaceOf } from "../agents/workspace-chat.js";
 import {
   automationRunsLiveStatements,
   automationsLiveStatements,
@@ -416,17 +407,6 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const statements = memberAgentInboxLiveStatements(context.userId, agent.value.id);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
-    }),
-    workspaceChat: signedIn.workspaceChat.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const workspace = yield* workspaceOf(input.workspaceId);
-      const reader = yield* chatAccount(context.userId);
-      const self = yield* hostedStoreOrUnavailable(joinedMember(reader, workspace));
-      if (Option.isNone(self)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = workspaceChatLiveStatements(reader, self.value);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      const stamp = hostedStoreOrUnavailable(workspaceChatStamp(reader, self.value));
-      return yield* sealedParts(statements.value, input, stamp);
     }),
     sidebar: signedIn.sidebar.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

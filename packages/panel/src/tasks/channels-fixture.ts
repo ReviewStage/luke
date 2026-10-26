@@ -129,7 +129,7 @@ let CHANNELS: readonly ChannelSeed[] = [
   {
     id: CHANNEL.CHANNELS,
     name: "channels",
-    purpose: "Project: Chat rebuilt on the Inbox, archived when it ships",
+    purpose: "Project: threads read by topic, archived when it ships",
     project: true,
     createdAt: LANDED - 2 * DAY,
     createdBy: DEAN,
@@ -216,8 +216,8 @@ const TASKS: readonly TaskSeed[] = [
   {
     id: TASK.SEARCH,
     agentId: AGENT.SEARCH,
-    name: "Chat search",
-    agentTitle: "Search the chat",
+    name: "Thread search",
+    agentTitle: "Search the threads",
     owner: CHARLES,
     done: false,
     number: 541,
@@ -336,24 +336,24 @@ const THREADS: ThreadSeed[] = [
     1,
     seed(TASK.SCHEMA),
     CHANNEL.SERVICE,
-    "Chat search and Channels schema both change chat-store.ts",
+    "Thread search and Channels schema both change inbox-store.ts",
     [
       agentSaid(
         101,
         2 * MINUTE,
         [
-          "Charles's **Chat search** and this task both edit `postMessage` and `unreadFor` in [chat-store.ts](https://github.com/ReviewStage/luke/blob/HEAD/packages/database/src/models/chat-store.ts). The branches will conflict, and Chat search indexes the table Channels schema retires.",
+          "Charles's **Thread search** and this task both edit `postMessage` and `unreadFor` in [inbox-store.ts](https://github.com/ReviewStage/luke/blob/HEAD/packages/service/src/inbox/inbox-store.ts). The branches will conflict, and Thread search indexes the table Channels schema retires.",
           "",
           "Asking you both, since either task could wait.",
         ].join("\n"),
         {
           type: INBOX_ASK.DECIDE,
           options: [
-            { label: "Pause Chat search", detail: "It picks up on top of the new thread table." },
-            { label: "Land Chat search first", detail: "Channels schema rebases onto it." },
+            { label: "Pause Thread search", detail: "It picks up on top of the new thread table." },
+            { label: "Land Thread search first", detail: "Channels schema rebases onto it." },
             { label: "Carry on, rebase later" },
           ],
-          recommended: "Pause Chat search",
+          recommended: "Pause Thread search",
           ...OPEN,
         },
       ),
@@ -469,13 +469,13 @@ const THREADS: ThreadSeed[] = [
     7,
     seed(TASK.SEARCH),
     CHANNEL.SERVICE,
-    "Don't add columns to chat_message until the backfill lands",
+    "Don't add columns to inbox_message until the backfill lands",
     [
       memberSaid(
         108,
         CHARLES,
         20 * MINUTE,
-        "The batched backfill runs Thursday. Until then a migration on `chat_message` conflicts with it. Pinned until Friday, and told the three agents working in #service.",
+        "The batched backfill runs Thursday. Until then a migration on `inbox_message` conflicts with it. Pinned until Friday, and told the three agents working in #service.",
       ),
     ],
     { startedBy: CHARLES, waitsOn: CHARLES },
@@ -677,7 +677,7 @@ THREADS.push(
     18,
     seed(TASK.SEARCH),
     CHANNEL.SERVICE,
-    "Shipped: the chat_message backfill runs in batches",
+    "Shipped: the inbox_message backfill runs in batches",
     [
       agentSaid(
         123,

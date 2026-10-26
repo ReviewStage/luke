@@ -142,7 +142,7 @@ export function tellAct<Kind extends PortActKind>(
  * any other failure, an act's or a fault on the way to one, in the one fixed
  * sentence, never its own text.
  */
-export function actFailureWords(error: unknown): string {
+function actFailureWords(error: unknown): string {
   return error instanceof ActRefusal ? error.message : ACT_UNREACHED_WORDS;
 }
 

@@ -907,7 +907,7 @@ test("a link to someone who left whom only the former members read names opens t
 test("on a phone the page is headed by its way back's glyph, their name centred, and one ⋯ holding the sidebar's filter beside the page's own actions", async () => {
   const left: string[] = [];
   const { page } = mountWith({}, CHARLES.userId, undefined, MEMBERS.length, {
-    label: "Chat",
+    label: "Inbox",
     onPress: () => left.push("away"),
   });
   await settle();
@@ -917,7 +917,7 @@ test("on a phone the page is headed by its way back's glyph, their name centred,
     [...head.querySelectorAll("button")].map(
       (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
     ),
-    ["Chat", "Person actions"],
+    ["Inbox", "Person actions"],
     "one control a corner",
   );
   act(() => head.querySelector<HTMLButtonElement>('[aria-label="Person actions"]')?.click());
@@ -934,13 +934,13 @@ test("on a phone the page is headed by its way back's glyph, their name centred,
 test("on a phone a page for someone nobody names still leads with its way back", async () => {
   const left: string[] = [];
   const { page } = mountWith({}, "user-stranger", undefined, MEMBERS.length, {
-    label: "Chat",
+    label: "Inbox",
     onPress: () => left.push("away"),
   });
   await settle();
   assert.match(page.textContent ?? "", /Not found/u);
   const back = [...page.querySelectorAll<HTMLButtonElement>(".person-page-head button")].find(
-    (each) => each.textContent?.trim() === "Chat",
+    (each) => each.textContent?.trim() === "Inbox",
   );
   assert.ok(back, "the way back stands");
   act(() => back.click());

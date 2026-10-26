@@ -5,7 +5,6 @@ import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { askRecord } from "@luke/database/models/asks";
 import { readBoard } from "@luke/database/models/board-store";
-import { agentWorkspace } from "@luke/database/models/chat-store";
 import { fillChildTitle } from "@luke/database/models/child-titles";
 import {
   type CodingAgentBriefText,
@@ -575,9 +574,24 @@ function scriptedTitleModel(answers: readonly string[]) {
 
 const STEP_START = "step-start";
 
-/** A chat notice as the chat steers one in: another agent's words, which are no task of the developer's. */
-const CHAT_NOTICE =
-  "Chat · [@Invite emails](https://tryluke.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) in #teammate-invitations (m 41):\n\nThe invite table is mine, leave it.";
+/** Another agent's message as `message_agent` steers one in: its words, which are no task of the developer's. */
+const AGENT_MESSAGE =
+  "Message · [@Invite emails](https://tryluke.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) to you:\n\nThe invite table is mine, leave it.";
+
+/** The agent that sends `AGENT_MESSAGE`, as its line's row keeps it. */
+const MESSAGE_SENDING_AGENT = {
+  kind: MESSAGE_SENDER.AGENT,
+  agentId: "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+  name: "Invite emails",
+  model: "anthropic/claude-opus-5.5",
+} as const;
+
+/** What the row of `AGENT_MESSAGE` says wrote it. */
+const AGENT_MESSAGE_METADATA = {
+  author: MESSAGE_AUTHOR.AGENT,
+  channel: MESSAGE_CHANNEL.AGENT_MESSAGE,
+  from: "Invite emails",
+} as const;
 
 /** A second turn as eve emits it for a line it received while the agent was idle: the line, then a word of answer. */
 function answeredTurn(turnId: string, received: string): MessageStreamEvent[] {
@@ -765,7 +779,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             {
               text: "The invite emails are in.",
               clientKey: "from-an-agent",
-              sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
+              sender: MESSAGE_SENDING_AGENT,
             },
             Effect.succeed(true),
           );
@@ -1826,7 +1840,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "a chat notice steered into an agent is taken into the turn that received it as the chat's line, and the agent's title is named from the developer's words alone",
+      "another agent's message steered into an agent is taken into the turn that received it as that agent's line, and the agent's title is named from the developer's words alone",
       () =>
         Effect.gen(function* () {
           // A title model that names nothing as the turns relay, so the agent is still untitled when it is asked below.
@@ -1849,29 +1863,18 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             );
           yield* relayed("turn_0", codingTurn("turn_0", "turn.completed"));
           const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-          const notice = {
-            author: MESSAGE_AUTHOR.AGENT,
-            channel: MESSAGE_CHANNEL.CHAT,
-            chat_seq: 41,
-            from: "Invite emails",
-          } as const;
           const written = yield* writer.writeAwaitingLine(
             target,
             {
-              text: CHAT_NOTICE,
-              clientKey: "chat-notice-41",
-              sender: {
-                kind: MESSAGE_SENDER.AGENT,
-                agentId: randomUUID(),
-                name: "Invite emails",
-                model: agent.model,
-              },
-              metadata: notice,
+              text: AGENT_MESSAGE,
+              clientKey: "agent-message",
+              sender: MESSAGE_SENDING_AGENT,
+              metadata: AGENT_MESSAGE_METADATA,
             },
             Effect.succeed(true),
           );
           assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
-          yield* relayed("turn_1", answeredTurn("turn_1", CHAT_NOTICE));
+          yield* relayed("turn_1", answeredTurn("turn_1", AGENT_MESSAGE));
 
           const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
             Effect.provide(modelCatalogOf(CATALOG)),
@@ -1881,7 +1884,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           );
           assert.deepEqual(said, [
             { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
-            notice,
+            AGENT_MESSAGE_METADATA,
           ]);
 
           const model = titleModelAnswering("Teammate invitations by email");
@@ -1889,7 +1892,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
           assert.ok(asked.includes("Invite a teammate by email."));
           assert.ok(!asked.includes("the invite table is mine"));
-          // The agent's answer to the chat notice speaks to another member, so the title reads its answer to the developer.
+          // The agent's answer to the other agent's message speaks to that agent, so the title reads its answer to the developer.
           assert.ok(asked.includes("The guide is read; the plan fits the code."));
           assert.ok(!asked.includes("Understood."));
           const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
@@ -1898,7 +1901,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "a chat notice steered into the developer's own turn leaves that turn's answer to name the agent from",
+      "another agent's message steered into the developer's own turn leaves that turn's answer to name the agent from",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
@@ -1923,15 +1926,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           yield* writer.writeAwaitingLine(
             target,
             {
-              text: CHAT_NOTICE,
-              clientKey: "chat-notice-mid-turn",
-              sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
-              metadata: {
-                author: MESSAGE_AUTHOR.AGENT,
-                channel: MESSAGE_CHANNEL.CHAT,
-                chat_seq: 41,
-                from: "Invite emails",
-              },
+              text: AGENT_MESSAGE,
+              clientKey: "agent-message-mid-turn",
+              sender: MESSAGE_SENDING_AGENT,
+              metadata: AGENT_MESSAGE_METADATA,
             },
             Effect.succeed(true),
           );
@@ -1945,7 +1943,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "a title's recent window opening on notices steered into the developer's turn keeps that turn's answer",
+      "a title's recent window opening on agents' messages steered into the developer's turn keeps that turn's answer",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
@@ -1967,20 +1965,15 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const steeredAt = events.findIndex((event) => event.type === "reasoning.completed");
           yield* relayed(events.slice(0, steeredAt));
           const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-          // Eight notices steered in leave the developer's line before the recent window of eight.
+          // Eight messages steered in leave the developer's line before the recent window of eight.
           yield* Effect.forEach([1, 2, 3, 4, 5, 6, 7, 8], (at) =>
             writer.writeAwaitingLine(
               target,
               {
-                text: CHAT_NOTICE,
-                clientKey: `chat-notice-steered-${at}`,
-                sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
-                metadata: {
-                  author: MESSAGE_AUTHOR.AGENT,
-                  channel: MESSAGE_CHANNEL.CHAT,
-                  chat_seq: 40 + at,
-                  from: "Invite emails",
-                },
+                text: AGENT_MESSAGE,
+                clientKey: `agent-message-steered-${at}`,
+                sender: MESSAGE_SENDING_AGENT,
+                metadata: AGENT_MESSAGE_METADATA,
               },
               Effect.succeed(true),
             ),
@@ -1994,61 +1987,58 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
         }),
     );
 
-    it.effect("a title's recent window opening on a chat notice leaves the answer to it out", () =>
-      Effect.gen(function* () {
-        const host = yield* hostOverStore();
-        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
-        const state = memoryRelayState();
-        const prompt = yield* composedPrompt(host, admitted, agent);
-        const relayed = (turnId: string, events: readonly MessageStreamEvent[]) =>
-          Effect.forEach(events, (event) =>
-            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-            host.relay(
-              event,
-              admitted,
-              { id: sessionId, auth, turn: { id: turnId } } as never,
-              state,
-              { hash: prompt.hash },
-            ),
-          );
-        yield* relayed("turn_0", codingTurn("turn_0", "turn.completed"));
-        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-        // The second turn takes five notices in, the third one more, so the recent window of eight opens on a notice.
-        const notice = (at: number) =>
-          writer.writeAwaitingLine(
-            target,
-            {
-              text: CHAT_NOTICE,
-              clientKey: `chat-notice-${at}`,
-              sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
-              metadata: {
-                author: MESSAGE_AUTHOR.AGENT,
-                channel: MESSAGE_CHANNEL.CHAT,
-                chat_seq: 40 + at,
-                from: "Invite emails",
+    it.effect(
+      "a title's recent window opening on another agent's message leaves the answer to it out",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* hostOverStore();
+          const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+          const state = memoryRelayState();
+          const prompt = yield* composedPrompt(host, admitted, agent);
+          const relayed = (turnId: string, events: readonly MessageStreamEvent[]) =>
+            Effect.forEach(events, (event) =>
+              // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+              host.relay(
+                event,
+                admitted,
+                { id: sessionId, auth, turn: { id: turnId } } as never,
+                state,
+                { hash: prompt.hash },
+              ),
+            );
+          yield* relayed("turn_0", codingTurn("turn_0", "turn.completed"));
+          const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+          // The second turn takes five messages in, the third one more, so the recent window of eight opens on a message.
+          const notice = (at: number) =>
+            writer.writeAwaitingLine(
+              target,
+              {
+                text: AGENT_MESSAGE,
+                clientKey: `agent-message-${at}`,
+                sender: MESSAGE_SENDING_AGENT,
+                metadata: AGENT_MESSAGE_METADATA,
               },
-            },
-            Effect.succeed(true),
+              Effect.succeed(true),
+            );
+          yield* Effect.forEach([1, 2, 3, 4, 5], notice);
+          yield* relayed("turn_1", answeredTurn("turn_1", AGENT_MESSAGE));
+          yield* notice(6);
+          yield* relayed("turn_2", answeredTurn("turn_2", AGENT_MESSAGE));
+          const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
           );
-        yield* Effect.forEach([1, 2, 3, 4, 5], notice);
-        yield* relayed("turn_1", answeredTurn("turn_1", CHAT_NOTICE));
-        yield* notice(6);
-        yield* relayed("turn_2", answeredTurn("turn_2", CHAT_NOTICE));
-        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
-          Effect.provide(modelCatalogOf(CATALOG)),
-        );
-        assert.equal(page.messages.length, 10, JSON.stringify(page.messages.map((m) => m.role)));
+          assert.equal(page.messages.length, 10, JSON.stringify(page.messages.map((m) => m.role)));
 
-        const model = titleModelAnswering("Teammate invitations by email");
-        yield* titleCodingAgent(model, target, agent);
-        const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
-        assert.ok(asked.includes("Invite a teammate by email."), asked);
-        assert.ok(!asked.includes("Understood."), asked);
-      }),
+          const model = titleModelAnswering("Teammate invitations by email");
+          yield* titleCodingAgent(model, target, agent);
+          const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
+          assert.ok(asked.includes("Invite a teammate by email."), asked);
+          assert.ok(!asked.includes("Understood."), asked);
+        }),
     );
 
     it.effect(
-      "a title leaves out the answer to a turn a chat notice opened, though the notices it took in push that notice out of the recent window",
+      "a title leaves out the answer to a turn another agent's message opened, though the messages it took in push that message out of the recent window",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
@@ -2072,21 +2062,16 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             writer.writeAwaitingLine(
               target,
               {
-                text: CHAT_NOTICE,
-                clientKey: `chat-notice-opening-${at}`,
-                sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
-                metadata: {
-                  author: MESSAGE_AUTHOR.AGENT,
-                  channel: MESSAGE_CHANNEL.CHAT,
-                  chat_seq: 40 + at,
-                  from: "Invite emails",
-                },
+                text: AGENT_MESSAGE,
+                clientKey: `agent-message-opening-${at}`,
+                sender: MESSAGE_SENDING_AGENT,
+                metadata: AGENT_MESSAGE_METADATA,
               },
               Effect.succeed(true),
             );
-          // A notice opens the second turn, and the eight it takes in mid-run leave it before the recent window of eight.
+          // A message opens the second turn, and the eight it takes in mid-run leave it before the recent window of eight.
           yield* notice(0);
-          const events = answeredTurn("turn_1", CHAT_NOTICE);
+          const events = answeredTurn("turn_1", AGENT_MESSAGE);
           const steeredAt = events.findIndex((event) => event.type === "message.completed");
           yield* relayed("turn_1", events.slice(0, steeredAt));
           yield* Effect.forEach([1, 2, 3, 4, 5, 6, 7, 8], notice);
@@ -2112,7 +2097,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             auth,
             sessionId,
           } = yield* openAgent(host);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+          const workspace = agent.organizationId;
           const operator = yield* openOperator(host, userId, workspace);
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
@@ -2176,7 +2161,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             auth,
             sessionId,
           } = yield* openAgent(host);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+          const workspace = agent.organizationId;
           const operator = yield* openOperator(host, userId, workspace);
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
@@ -2280,7 +2265,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
         Effect.gen(function* () {
           const host = yield* hostOverStore();
           const { userId, agent } = yield* openAgent(host);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+          const workspace = agent.organizationId;
           const operator = yield* openOperator(host, userId, workspace);
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
@@ -2364,7 +2349,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             auth: coderAuth,
             sessionId: coderSession,
           } = yield* openAgent(host);
-          const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+          const workspace = agent.organizationId;
           const operator = yield* openOperator(host, userId, workspace);
           const kept = {
             tests: "The web server's store tests run on PGlite through test:store.",

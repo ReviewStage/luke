@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 /**
  * composer-body.tsx -- the words of a message box, and over them the files handed to it, as the sent message draws them.
  *
- * A message carries its files over its words: the transcript, the chat and
- * the Inbox draw a sent one's pictures and chips first and its words under
+ * A message carries its files over its words: the transcript and the Inbox
+ * draw a sent one's pictures and chips first and its words under
  * them. Every box a message is written in holds them the same way, so the
  * message reads as it will once sent: the files' row first, in a row that
  * wraps, then the field. The row comes first in the document too, so Tab

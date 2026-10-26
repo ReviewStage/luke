@@ -1,7 +1,7 @@
 import { Comment, type CommentAuthor, cn } from "@luke/ui";
 
 /**
- * inbox-comment.tsx -- one message of an Inbox thread as a comment, headed by who wrote it and when: the Inbox's thread draws every message so, and Chat draws an ask's answer so.
+ * inbox-comment.tsx -- one message of an Inbox thread as a comment, headed by who wrote it and when: the Inbox's thread draws every message so.
  */
 
 /** Which message of the thread a comment is: the agent's question, the developer's answer, the agent taking the item back, a member closing it without an answer, a message on the thread, or the reader's draft reply at its end. */

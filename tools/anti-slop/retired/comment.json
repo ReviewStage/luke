@@ -4,7 +4,6 @@
     { "class": "inbox-comment-head", "allow": ["packages/ui/src/components/comment/"] },
     { "class": "inbox-comment-name", "allow": ["packages/ui/src/components/comment/"] },
     { "class": "inbox-comment-when", "allow": ["packages/ui/src/components/comment/"] },
-    { "class": "chat-byline-name", "allow": ["packages/ui/src/components/comment/"] },
     { "class": "comment-head", "allow": ["packages/ui/src/components/comment/"] },
     { "class": "comment-head-end", "allow": ["packages/ui/src/components/comment/"] },
     { "class": "changes-comment-time", "allow": ["packages/ui/src/components/comment/"] },

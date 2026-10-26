@@ -498,7 +498,7 @@ test("where an account kept a draft for one place under its id and a later one u
 });
 
 test("the files attached to a draft while only the account's address was known stay with it once its identity learns its id", async () => {
-  const place = { kind: DRAFT_PLACE.CHAT, channelId: "channel-1" } as const;
+  const place = { kind: DRAFT_PLACE.EDIT, agentId: "agent-1", messageId: "message-1" } as const;
   const picture = { name: "login.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
   let held: DraftControl | undefined;
   function Box({ account }: { account: Identity }): null {
@@ -525,7 +525,7 @@ test("the files attached to a draft while only the account's address was known s
 });
 
 test("a window holds what a reload would lose while a draft holds files, and not once only its words are left", async () => {
-  const place = { kind: DRAFT_PLACE.CHAT, channelId: "channel-1" } as const;
+  const place = { kind: DRAFT_PLACE.EDIT, agentId: "agent-1", messageId: "message-1" } as const;
   const picture = { name: "login.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
   let held: DraftControl | undefined;
   function Box(): null {
@@ -586,7 +586,7 @@ test("an inbox answer's picture moves with it as the id lands before its words r
 });
 
 test("where the id's own later words win a place its address held a picture at, the picture stays with the words it was attached to rather than joining them", async () => {
-  const place = { kind: DRAFT_PLACE.CHAT, channelId: "channel-1" } as const;
+  const place = { kind: DRAFT_PLACE.EDIT, agentId: "agent-1", messageId: "message-1" } as const;
   const picture = { name: "old.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
   let held: DraftControl | undefined;
   function Box({ account }: { account: Identity }): null {

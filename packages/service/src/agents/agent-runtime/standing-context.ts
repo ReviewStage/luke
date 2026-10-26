@@ -5,7 +5,7 @@
  * turn, and on a typed one where its plan changed since its last turn
  * (`../coder-host/turn-context.ts`): the developer's own time, the task's
  * name, brief, and linked issues, its saved document, the agents' recent
- * notes on it, what the chat said, the sections the developer wrote, the
+ * notes on it, the sections the developer wrote, the
  * open comment threads, and the whiteboard. It is data, read again as each
  * turn opens and remembered by none, so a turn reads what was saved and
  * drawn since the last one rather than a stale copy.

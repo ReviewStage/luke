@@ -1,6 +1,7 @@
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
+  agentMessageWords,
   CODING_AGENT_BRIEF,
   CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
@@ -40,8 +41,10 @@ import {
   OneLine,
   STATUS_TONE,
   TaskStatusMark,
+  TEXT_ELEMENT,
   TEXT_LINK_LOOK,
   TEXT_TONE,
+  TEXT_VARIANT,
   Text,
   TextLink,
   useAnnounce,
@@ -85,7 +88,7 @@ import {
   FLOATING_OVER_LOG_CLASS,
 } from "../ai-elements/conversation.js";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
-import { CHAT_MESSAGE_CLASS, Message, MessageContent } from "../ai-elements/message.js";
+import { Message, MessageContent, RECEIVED_MESSAGE_CLASS } from "../ai-elements/message.js";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan.js";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
@@ -116,14 +119,13 @@ import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
 import { ArchivedComposerNote } from "./archived-note.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
-import { useChatOn } from "./chat-gate.js";
-import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice.js";
 import {
   AGENT_PART,
   type AgentPart,
   type AgentPartCut,
   agentLines,
   agentListCallIds,
+  agentMessageOf,
   agentName,
   agentPart,
   agentParts,
@@ -133,12 +135,10 @@ import {
   archivedByReading,
   CONTINUE_AGAIN_LABEL,
   CONTINUE_LABEL,
-  chatNoticeOf,
   continuedByIds,
   continuedByTitles,
   delegates,
   dockedTodos,
-  drawnNoticeOf,
   type EndLineParts,
   endLineOffersContinue,
   endLineParts,
@@ -429,53 +429,63 @@ export interface DelegationDoors {
   standings?: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined;
   /** The job of each worker by its task, which a stop's row names in the task's place; none where the transcript knows no task's job. */
   jobs?: WorkerJobs | undefined;
-  /** The chat a chat notice's card reads its message from and opens in; none where the window holds no chat. */
-  chat?: ChatNoticeDoors | undefined;
-  /** Whether the window offers Chat (`chat-gate.ts`), without which a chat notice is drawn as the plain line it is. */
-  chatOn?: boolean;
 }
 
 /**
  * The doors a transcript's rows read as the window draws them now: the
- * cards they hang and the chat a notice reads. The window hands both anew
- * on every draw, so they ride beside the messages rather than in them, and
- * a message kept as it was (`sameMessageDraw`) still hangs today's cards.
+ * cards they hang. The window hands them anew on every draw, so they ride
+ * beside the messages rather than in them, and a message kept as it was
+ * (`sameMessageDraw`) still hangs today's cards.
  */
-const LiveDoors = createContext<Pick<DelegationDoors, "cards" | "chat"> | undefined>(undefined);
+const LiveDoors = createContext<Pick<DelegationDoors, "cards"> | undefined>(undefined);
 
 /** The live doors where a transcript hands them, else what `doors` carries. */
 function useLiveDoors(
-  doors: Pick<DelegationDoors, "cards" | "chat"> | undefined,
-): Pick<DelegationDoors, "cards" | "chat"> | undefined {
+  doors: Pick<DelegationDoors, "cards"> | undefined,
+): Pick<DelegationDoors, "cards"> | undefined {
   return useContext(LiveDoors) ?? doors;
 }
 
-/** A chat notice's bubble, from its sender, at the column's left. */
-function NoticeRow({
-  message,
-  doors,
-}: {
-  message: CodingAgentMessage;
-  doors: ChatNoticeDoors | undefined;
-}): ReactNode {
-  const live = useLiveDoors({ chat: doors });
-  const notice = chatNoticeOf(message);
-  if (notice === undefined) return null;
-  // Another coding agent who posted is named by its own chip, which opens it, as its line's sender is.
+/**
+ * Another coding agent's message, sent with `message_agent`, as its
+ * sender's bubble at the column's left: its words as a person reads them,
+ * without the lines that are the agent's alone (`agentMessageWords`), then
+ * the sender by its own chip, which opens it, or by the name the line keeps
+ * where the sender is gone, when it arrived, and Copy and Copy link.
+ */
+function AgentMessageRow({ message }: { message: CodingAgentMessage }): ReactNode {
+  const sent = agentMessageOf(message);
+  if (sent === undefined) return null;
+  const text = messageWords(message);
+  const words = agentMessageWords(text) ?? text;
   const sender = lineSender(message.sentBy, undefined, undefined);
-  const from =
-    sender?.kind === ACTOR_KIND.AGENT && sender.agentId !== undefined ? (
-      <SendingAgent actor={sender} agentId={sender.agentId} />
-    ) : undefined;
   return (
-    <ChatNoticeCard
-      messageId={message.id}
-      notice={notice}
-      words={messageWords(message)}
-      from={from}
-      sentAt={message.sentAt}
-      doors={live?.chat}
-    />
+    <Message
+      from={MESSAGE_ROLE.ASSISTANT}
+      className={RECEIVED_MESSAGE_CLASS}
+      data-agent-message=""
+      data-message-id={message.id}
+    >
+      {words === "" ? null : (
+        <MessageContent>
+          <TranscriptWords text={words} />
+        </MessageContent>
+      )}
+      <MessageLine
+        align={MESSAGE_LINE_ALIGN.START}
+        sender={
+          sender?.kind === ACTOR_KIND.AGENT && sender.agentId !== undefined ? (
+            <SendingAgent actor={sender} agentId={sender.agentId} />
+          ) : (
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} truncate>
+              {sent.from}
+            </Text>
+          )
+        }
+        at={message.sentAt}
+        actions={<CopyMessageAction words={words} copyable={words !== ""} messageId={message.id} />}
+      />
+    </Message>
   );
 }
 
@@ -883,10 +893,7 @@ function AgentPartView({
       }
       if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
       // A call that failed keeps its row, because the row is where its error is read.
-      // A chat call opens Chat only while the window offers it; otherwise its row folds open as any call's does.
-      const called = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
-      const target =
-        called?.kind === TOOL_TARGET.CHAT && delegation?.chatOn !== true ? undefined : called;
+      const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
       const openTarget = delegation?.onOpenTarget;
       if (target !== undefined && openTarget !== undefined) {
         return (
@@ -1397,10 +1404,8 @@ export function AgentMessage({
       />
     );
   }
-  // A line a chat notice wrote is the sender's message, never the developer's bubble, while the window offers Chat, and another agent's message always.
-  if (drawnNoticeOf(message, delegation?.chatOn === true) !== undefined) {
-    return <NoticeRow message={message} doors={delegation?.chat} />;
-  }
+  // A line another agent sent is that agent's message, never the developer's bubble.
+  if (agentMessageOf(message) !== undefined) return <AgentMessageRow message={message} />;
   const named = sender === undefined ? null : <MessageSender actor={sender} />;
   if (message.role === MESSAGE_ROLE.USER) {
     const sentAt = message.sentAt;
@@ -1421,12 +1426,12 @@ export function AgentMessage({
         </Message>
       );
     }
-    // A line Luke, GitHub, or another agent sent is the other side's, so it stands at the left as a chat notice does.
+    // A line Luke, GitHub, or another agent sent is the other side's, so it stands at the left as another agent's message does.
     const received = receivedLine(message.sentBy);
     return (
       <Message
         from={received ? MESSAGE_ROLE.ASSISTANT : message.role}
-        className={received ? CHAT_MESSAGE_CLASS : undefined}
+        className={received ? RECEIVED_MESSAGE_CLASS : undefined}
         data-message-id={message.id}
         data-undelivered={marked ? "" : undefined}
       >
@@ -1693,8 +1698,8 @@ function sameEntries<V>(
 }
 
 /**
- * Whether two delegations' doors draw a message alike. The cards and the
- * chat are left out, because the window hands them anew on every draw and
+ * Whether two delegations' doors draw a message alike. The cards are left
+ * out, because the window hands them anew on every draw and
  * the rows read them live (`LiveDoors`); the presses are steadied by the
  * tab (`useSteady`), so a new one is a new door.
  */
@@ -1708,8 +1713,7 @@ function sameDoors(a: DelegationDoors | undefined, b: DelegationDoors | undefine
     a.onOpen === b.onOpen &&
     a.onOpenTarget === b.onOpenTarget &&
     a.standings === b.standings &&
-    a.jobs === b.jobs &&
-    a.chatOn === b.chatOn
+    a.jobs === b.jobs
   );
 }
 
@@ -2055,7 +2059,7 @@ function transcriptPlacing(
   const first = messages.find(
     (message) =>
       message.role === MESSAGE_ROLE.USER &&
-      chatNoticeOf(message) === undefined &&
+      agentMessageOf(message) === undefined &&
       !undelivered.has(message.id),
   );
   // An agent started from another opens on the brief as its source's did, then the replay's card, then the note.
@@ -2172,8 +2176,7 @@ function AgentTranscriptView({
   // Each line that reached a turn, with who sent it, kept from draw to draw while neither moved.
   const arrivals = useArrivals(placing.placed, readerId, members, former);
   const cards = delegation?.cards;
-  const chat = delegation?.chat;
-  const live = useMemo(() => ({ cards, chat }), [cards, chat]);
+  const live = useMemo(() => ({ cards }), [cards]);
   // Whether a call of a server's tool is held, which is all the accounts' names are read for.
   const callsServer = useMemo(
     () =>
@@ -2452,7 +2455,6 @@ function AgentTabView({
   onOpenSubagent,
   onOpenTarget,
   cards,
-  chat,
   openGitHub,
   onOpenApiKeys,
   keywords,
@@ -2507,8 +2509,6 @@ function AgentTabView({
   onOpenTarget?: DelegationDoors["onOpenTarget"];
   /** The cards its rows that open a tab hang; none where they hang their hints. */
   cards?: TranscriptCards | undefined;
-  /** The chat a chat notice's card reads and opens; none where the window holds none. */
-  chat?: ChatNoticeDoors | undefined;
   openGitHub: (url: string) => void;
   /** Turns to Settings › Agents at the provider's harness row, which a turn failed on a refused key offers. */
   onOpenApiKeys?: ((provider: ModelProvider | undefined) => void) | undefined;
@@ -2584,7 +2584,6 @@ function AgentTabView({
           },
     [composer.editing, onEdit, onCancelEdit, onSendEdit, onRevert, points, editor],
   );
-  const chatOn = useChatOn();
   // Note that a line on its way counts as work from the press, because the agent's status turns
   // running only once the service takes the line, which may take seconds.
   const lineGoing = composer.sent.some((line) => line.state === SENT_LINE_STATE.PENDING);
@@ -2691,8 +2690,6 @@ function AgentTabView({
                       onOpenTarget: openTarget,
                       cards,
                       standings: transcript.subagents,
-                      chat,
-                      chatOn,
                     }}
                     reading={transcript.reading || holding}
                     holding={holding}
@@ -2811,8 +2808,6 @@ interface AgentTabDoors {
   cards?: TranscriptCards | undefined;
   /** Opens the agent's pull request, its checks, description, and conversation, in a tab of the side panel's own. */
   onOpenPullRequest?: (() => void) | undefined;
-  /** The chat a chat notice's card reads its message from and opens in; none where the window holds none. */
-  chat?: ChatNoticeDoors | undefined;
   /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
   onHeld: (agentId: string, held: HeldTranscript) => void;
 }
@@ -2952,7 +2947,6 @@ function AgentTabBody({
   onOpenPullRequest,
   onOpenTarget,
   cards,
-  chat,
   run,
   call,
 }: Omit<AgentTabDoors, "onHeld"> & {
@@ -3093,7 +3087,6 @@ function AgentTabBody({
         onOpenSubagent={onOpenSubagent}
         onOpenTarget={onOpenTarget}
         cards={cards}
-        chat={chat}
         openGitHub={openGitHub}
         onOpenApiKeys={control.onOpenApiKeys}
         keywords={control.keywords}
@@ -3212,10 +3205,9 @@ export function AgentSubagentTab({
   const models = control.models;
   // The press is the same door from draw to draw, so a message kept as it was opens what the window opens now.
   const openTarget = useSteady(onOpenTarget);
-  const chatOn = useChatOn();
   const delegation = useMemo(
-    () => ({ models, onOpenTarget: openTarget, cards, chatOn }),
-    [models, openTarget, cards, chatOn],
+    () => ({ models, onOpenTarget: openTarget, cards }),
+    [models, openTarget, cards],
   );
   const origin = useMemo(() => (sender === undefined ? undefined : { sender }), [sender]);
   // As an agent's: dated by the page it was read from, with the worker's own title.

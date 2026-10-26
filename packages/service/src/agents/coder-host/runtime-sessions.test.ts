@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { memberOfSubject } from "@luke/database/models/chat-store";
 import {
   type CodingAgent,
   createCodingAgent,
@@ -27,7 +26,6 @@ import { messages } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
-import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
@@ -44,7 +42,6 @@ import { TestClock } from "effect/testing";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
-import { keptAfterResponse } from "../../http/after-response.js";
 import { credentialMissing, HOSTED_REFUSAL, type HostedRefusal } from "../../http/http-effect.js";
 import { type ModelChoiceRefused, modelCatalogOf } from "../../providers/model-catalog.js";
 import {
@@ -362,7 +359,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "every composition the entry points wrap eve in routes alike: a route's caller over a bearer or a cookie, the deployment for a GitHub wake, an automation, or a chat notice, and the agent doors' and the planner's router",
+      "every composition the entry points wrap eve in routes alike: a route's caller over a bearer or a cookie, the deployment for a GitHub wake, an automation, or another agent's message, and the agent doors' and the planner's router",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -413,7 +410,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
           }
 
-          // The deployment's own eve, over HTTP, as a GitHub wake, an automation, and a chat notice reach it.
+          // The deployment's own eve, over HTTP, as a GitHub wake, an automation, and another agent's message reach it.
           const posted: string[] = [];
           const deployment = yield* deploymentEveForAccounts<typeof BRAIN_HOST_TURN.TYPED>(
             "https://luke.test",
@@ -1167,40 +1164,6 @@ const startIn = (workspaceId: string, model: string, key = randomUUID()) => ({
 it.layer(Layer.merge(getTestDB(), GITHUB))(
   "a Start decides the runtime and the payer once",
   (it) => {
-    it.effect(
-      "a Start answers before its agent joins its workspace's chat, which it joins once the answer has left",
-      () =>
-        Effect.gen(function* () {
-          const { owner, workspaceId } = yield* openStarter(false);
-          yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
-          const { eve, native } = runtimes();
-          const kept = keptAfterResponse();
-          const started = yield* startCodingAgent(
-            routedSessions(eve.sessions, owner),
-            owner,
-            startIn(workspaceId, "anthropic/claude-opus-5.5"),
-          ).pipe(
-            Effect.provide(
-              Layer.mergeAll(
-                githubReaching(INSTALLATIONS).layer,
-                CATALOG,
-                environment(),
-                native,
-                kept.layer,
-              ),
-            ),
-          );
-          const seat = memberOfSubject(owner, workspaceId, {
-            kind: MEMBER_KIND.AGENT,
-            agentId: started.agent.id,
-          });
-
-          assert.ok(Option.isNone(yield* seat));
-          yield* kept.run;
-          assert.ok(Option.isSome(yield* seat));
-        }),
-    );
-
     it.effect(
       "an account with a setup-token starts a Claude agent on Claude Code paid by its plan; a GPT model, an account with no setup-token, or a function with no harness, none with an API key, is refused by name with the provider and leaves no agent, since Luke's key pays for no coding agent",
       () =>

@@ -27,7 +27,7 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref.js";
-import { CHAT_MESSAGE_CLASS, Message, MessageContent } from "../ai-elements/message.js";
+import { Message, MessageContent, RECEIVED_MESSAGE_CLASS } from "../ai-elements/message.js";
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -257,7 +257,7 @@ function LineStep({
   return (
     <Message
       from={received ? MESSAGE_ROLE.ASSISTANT : MESSAGE_ROLE.USER}
-      className={received ? CHAT_MESSAGE_CLASS : undefined}
+      className={received ? RECEIVED_MESSAGE_CLASS : undefined}
       data-replay-step={REPLAY_STEP_KIND.LINE}
     >
       <MessageContent>

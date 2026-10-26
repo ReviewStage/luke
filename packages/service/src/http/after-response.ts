@@ -2,7 +2,7 @@
  * after-response.ts -- work a request hands on to run once its answer has left.
  *
  * A request whose answer does not wait on some of its work, such as the
- * notices a chat post tells or an analytics event it counts, hands that work
+ * agents it wakes or an analytics event it counts, hands that work
  * here. Where the runtime provides `AfterResponse` (the web's, over Vercel's
  * `waitUntil`, `apps/web/server/runtime.ts`), the work runs past the answer
  * with every service the request had, and the instance is kept awake until

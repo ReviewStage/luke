@@ -22,7 +22,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * leave out, at any value, since when a group counts its rows is the
  * surface's choice, not this one's; where it stands is the surface's width
  * (`surface`): on a wide page, the Tasks list or the Board, always, and in a
- * narrow column, the Inbox's list or the chat rail, only while the group is
+ * narrow column, the Inbox's list or the channel list, only while the group is
  * folded or the head is hovered or has the keyboard, so an open group's head
  * keeps the room for its name. A count its caller gives a `shown` of its own,
  * the sidebar's, stands as given.

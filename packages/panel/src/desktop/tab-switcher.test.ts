@@ -680,7 +680,7 @@ test("a screen picked with its panel shut shuts the panel, and one with the pane
     doors(
       onTask(SIDE_PANEL_TAB.PLAN, told, {
         inboxView: { ...inboxOpen(), open: false },
-        chatView: { ...tasksControl().chatView, open: true },
+        boardView: { ...tasksControl().boardView, open: true },
       }),
     ),
   );

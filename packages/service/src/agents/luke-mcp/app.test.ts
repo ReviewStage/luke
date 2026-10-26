@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { listAgentBrowserTabs } from "@luke/database/models/agent-browser-tabs";
 import { writeDrawing, writeScene } from "@luke/database/models/board-store";
 import {
@@ -20,7 +19,6 @@ import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
-import { EXPERIMENT } from "@luke/settings";
 import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { webmBytes } from "@luke/wire/testing";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -691,8 +689,6 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         const agent = yield* agentWithBearer;
         const admitted = Option.getOrThrow(yield* admitRunnerBearer(agent.bearer));
         const seams = yield* lukeMcpDoorSeams.pipe(Effect.provide(yield* doorServices));
-        // Chat is on, so each chat tool reaches its own words rather than the one refusal of Chat off.
-        yield* writeAccountPreferences(agent.userId, { experiments: { [EXPERIMENT.CHAT]: true } });
         const client = yield* connected(fetch, agent.bearer);
 
         for (const [name, door] of Object.entries(DOOR_OF)) {

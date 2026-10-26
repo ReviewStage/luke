@@ -92,11 +92,10 @@ test("a dialog standing holds off the menu bar's Back and Forward, which run aga
   assert.deepEqual(moves, ["back"]);
 });
 
-/** A window whose keymap answers, offering the Inbox's J or Chat's, each press recorded, with a field to type in. */
-function KeyedWindow({ moves, chat }: { moves: string[]; chat: boolean }): ReactElement {
+/** A window whose keymap answers, offering the Inbox's J, each press recorded, with a field to type in. */
+function KeyedWindow({ moves }: { moves: string[] }): ReactElement {
   useAppKeymap(true);
-  useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, chat ? undefined : () => moves.push("inbox"));
-  useAppCommand(APP_COMMAND.NEXT_CHAT_CHANNEL, chat ? () => moves.push("chat") : undefined);
+  useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, () => moves.push("inbox"));
   return createElement("textarea", { "aria-label": "Message" });
 }
 
@@ -107,17 +106,12 @@ function pressJ(target: EventTarget): void {
   });
 }
 
-test("J runs whichever of the Inbox's and Chat's commands is offered, and nothing while the press is typing into a field", () => {
+test("J runs the Inbox's command, and nothing while the press is typing into a field", () => {
   const moves: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  const draw = (chat: boolean) =>
-    act(() => root.render(createElement(KeyedWindow, { moves, chat })));
-  draw(true);
+  act(() => root.render(createElement(KeyedWindow, { moves })));
   pressJ(document.body);
-  draw(false);
-  pressJ(document.body);
-  draw(true);
   pressJ(document.querySelector("textarea") ?? assert.fail("the field"));
-  assert.deepEqual(moves, ["chat", "inbox"]);
+  assert.deepEqual(moves, ["inbox"]);
 });

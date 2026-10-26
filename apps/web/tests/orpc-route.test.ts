@@ -172,7 +172,6 @@ test("the held message reads are reached at their public paths through the commi
   for (const path of [
     `/api/agents/${agent}/messages?after=0:0`,
     `/api/agents/${agent}/subagents/call-1/messages?after=0:0`,
-    `/api/workspaces/chat?workspaceId=${agent}&after=0`,
   ]) {
     const unsigned = await dispatched(new Request(`${ORIGIN}${path}`), routes);
     assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED, path);

@@ -2,12 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { MEMBER_KIND } from "@luke/features/chat-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentChatWriteAnswerView,
-  TRANSCRIPT_KIND,
-} from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE, TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
@@ -38,7 +33,6 @@ import {
   LIVE_SIGNED_OUT,
   type ScopeInboxLiveAnswer,
   type TranscriptNowAnswer,
-  type WorkspaceChatLiveAnswer,
 } from "@luke/features/live-wire";
 import type { MemorySummary } from "@luke/features/memory-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -83,17 +77,6 @@ const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
-const MEMBER_ID = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
-
-/** A workspace's chat as the service answers it: the reader alone, nothing posted yet. */
-const _CHAT = {
-  self: MEMBER_ID,
-  readSeq: 0,
-  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, name: "Ada", left: false }],
-  channels: [],
-  messages: [],
-  cursor: "1",
-};
 
 const AGENT: CodingAgentSummary = {
   id: AGENT_ID,
@@ -267,8 +250,6 @@ function fakeService() {
   let scope: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined;
   let cursor = CODING_AGENT_CURSOR_START;
   let transcript: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined;
-  let chatLive: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined;
-  let written: CodingAgentChatWriteAnswerView = { readSeq: 4 };
   let accountLive: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined;
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[] = [];
@@ -678,26 +659,6 @@ function fakeService() {
         asked.push(`account-inbox-live:${userId}${poll ? ":poll" : ""}`);
         return accountLive ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
-    chatPost: (workspaceId, write) =>
-      Effect.sync(() => {
-        asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
-        return written;
-      }),
-    chatJoin: (workspaceId) =>
-      Effect.sync(() => {
-        asked.push(`chat-join:${workspaceId}`);
-        return chatLive !== undefined && "failure" in chatLive ? chatLive : { self: MEMBER_ID };
-      }),
-    workspaceChatLive: (workspaceId, userId, poll) =>
-      Effect.sync(() => {
-        asked.push(`chat-live:${workspaceId}:${userId}${poll ? ":poll" : ""}`);
-        return chatLive ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
-      }),
-    chatAttachment: (workspaceId, messageId, attachmentId) =>
-      Effect.sync(() => {
-        asked.push(`chat-attachment:${workspaceId}:${messageId}:${attachmentId}`);
-        return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
-      }),
   };
   return {
     client,
@@ -707,14 +668,6 @@ function fakeService() {
       next: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined,
     ) => {
       transcript = next;
-    },
-    /** What the service answers a write to a workspace's chat. */
-    answerWrites: (next: CodingAgentChatWriteAnswerView) => {
-      written = next;
-    },
-    /** What the service seals for following a workspace's chat, or that the account is not in it; none answers unanswered. */
-    sealChat: (next: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined) => {
-      chatLive = next;
     },
     /** The pages the service answers read at once, in turn, or that it did not answer one. */
     pageNow: (...pages: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[]) => {
@@ -816,13 +769,6 @@ function subject(
       pinCommits: service.pinCommits,
       startCommits: service.startCommits,
       sealTranscript: service.sealTranscript,
-      sealChat: service.sealChat,
-      answerWrites: service.answerWrites,
-      /** Every workspace chat the host said changed, in order. */
-      chats: () =>
-        events.flatMap((event) =>
-          event.kind === GATEWAY_EVENT.CHAT_CHANGED ? [event.payload] : [],
-        ),
       pageNow: service.pageNow,
       holdPages: service.holdPages,
       pageNewest: service.pageNewest,
@@ -1183,22 +1129,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { marked: 2 },
     );
 
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, {
-        workspaceId: WORKSPACE_ID,
-        write: { readTo: 4 },
-      }),
-      { readSeq: 4 },
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_ATTACHMENT, {
-        workspaceId: WORKSPACE_ID,
-        messageId: "message-1",
-        attachmentId: ATTACHMENT_ID,
-      }),
-      { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
-    );
-
     assert.deepEqual(asked, [
       "models",
       "default",
@@ -1243,8 +1173,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,
       `inbox-read-all:${WORKSPACE_ID}`,
-      `chat-post:${WORKSPACE_ID}:{"readTo":4}`,
-      `chat-attachment:${WORKSPACE_ID}:message-1:${ATTACHMENT_ID}`,
     ]);
   }),
 );
@@ -2258,204 +2186,6 @@ const ITEM_ROW = {
   settledAt: null,
 };
 
-const SEALED_CHAT: WorkspaceChatLiveAnswer = {
-  url: "wss://realtime.example/v1",
-  queries: {
-    self: sealed("self"),
-    members: sealed("members"),
-    channels: sealed("channels"),
-    messages: sealed("messages"),
-    reads: sealed("reads"),
-  },
-};
-
-const CHANNEL_ID = "6bd39277-e38a-4415-9dc7-9cadbecdf0a7";
-
-/** A message as the messages part's row delivers it, at its place. */
-function messageRow(id: string, seq: number) {
-  return {
-    id,
-    seq,
-    touchedSeq: seq,
-    channelId: CHANNEL_ID,
-    parentId: null,
-    authorId: MEMBER_ID,
-    blocks: [{ type: "markdown", text: `Message ${seq}.` }],
-    mentions: [],
-    postedAt: NOW - 10 + seq,
-    ask: null,
-    askKey: null,
-    askRevision: null,
-    askStatus: null,
-    answer: null,
-    answeredBy: null,
-    closedReason: null,
-  };
-}
-
-/** Every part of the chat delivered, the messages given among them. */
-function deliverChat(
-  realtime: ReturnType<typeof fakeRealtime>,
-  messages: readonly ReturnType<typeof messageRow>[],
-) {
-  realtime.deliver("self", [{ self: MEMBER_ID, readSeq: 0 }]);
-  realtime.deliver("members", [
-    {
-      id: MEMBER_ID,
-      kind: MEMBER_KIND.HUMAN,
-      handle: "ada",
-      name: "Ada Lovelace",
-      userId: "user-ada",
-      agentId: null,
-      planId: null,
-      left: false,
-      ordinal: 1,
-      joinedAt: NOW - 100,
-    },
-  ]);
-  realtime.deliver("channels", [
-    {
-      id: CHANNEL_ID,
-      kind: "general",
-      name: "general",
-      planId: null,
-      dmAMemberId: null,
-      dmBMemberId: null,
-      archived: false,
-      purpose: null,
-      createdAt: NOW - 100,
-    },
-  ]);
-  realtime.deliver("reads", []);
-  realtime.deliver("messages", messages);
-}
-
-it.effect(
-  "a workspace's chat is followed over Realtime: joined once, every part subscribed, and each change told whole in the held read's order and never a sealed statement",
-  () =>
-    Effect.gen(function* () {
-      const { call, asked, sealChat, realtime, chats } = yield* subject();
-      sealChat(SEALED_CHAT);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
-      yield* settled;
-      // Sealed for the account signed in, which every renewal names too.
-      assert.deepEqual(asked, [`chat-join:${WORKSPACE_ID}`, `chat-live:${WORKSPACE_ID}:user-dana`]);
-      assert.deepEqual(realtime.subscribed(), [
-        "capability-channels",
-        "capability-members",
-        "capability-messages",
-        "capability-reads",
-        "capability-self",
-      ]);
-
-      const first = "7ce4a388-f49b-4526-8ed8-adbecdf0a1b8";
-      const second = "8df5b499-a5ac-4637-9fe9-becdf0a1b2c9";
-      deliverChat(realtime, [messageRow(second, 2), messageRow(first, 1)]);
-      yield* settled;
-      const told = chats();
-      assert.equal(told.length, 1);
-      const [only] = told;
-      assert.ok(isRecord(only) && only.workspaceId === WORKSPACE_ID && isRecord(only.chat));
-      assert.equal(only.chat.self, MEMBER_ID);
-      const messages = only.chat.messages;
-      assert.ok(Array.isArray(messages));
-      assert.deepEqual(
-        messages.map((message) => (isRecord(message) ? message.id : undefined)),
-        [first, second],
-      );
-      assert.ok(!JSON.stringify(told).includes("capability"));
-    }),
-);
-
-it.effect(
-  "a write to a followed chat is answered once its transaction reaches the chat, and a write that changed nothing, or to a chat not followed, at once",
-  () =>
-    Effect.gen(function* () {
-      const { call, sealChat, answerWrites, realtime } = yield* subject();
-      sealChat(SEALED_CHAT);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
-      yield* settled;
-      deliverChat(realtime, []);
-      yield* settled;
-      const write = (workspaceId: string, request: WireRecord) =>
-        Effect.forkChild(
-          call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, { workspaceId, write: request }),
-        );
-
-      answerWrites({ readSeq: 0, reads: [{ channelId: CHANNEL_ID, readSeq: 3 }], txid: "78" });
-      const read = yield* write(WORKSPACE_ID, { readTo: 3, channelId: CHANNEL_ID });
-      yield* settled;
-      assert.equal(read.pollUnsafe(), undefined, "the write waits for its transaction");
-      assert.deepEqual(realtime.awaitingTxids(), ["78"]);
-      realtime.arrive("78");
-      yield* settled;
-      assert.deepEqual(yield* Fiber.join(read), {
-        readSeq: 0,
-        reads: [{ channelId: CHANNEL_ID, readSeq: 3 }],
-        txid: "78",
-      });
-
-      // A read to where the cursor stands writes nothing, and another workspace's chat is not followed.
-      answerWrites({ readSeq: 0 });
-      yield* Fiber.join(yield* write(WORKSPACE_ID, { readTo: 3, channelId: CHANNEL_ID }));
-      answerWrites({ readSeq: 0, txid: "79" });
-      yield* Fiber.join(
-        yield* write("3c1e9d2b-7a4f-4e6b-8d0c-1f2a3b4c5d6e", { readTo: 3, channelId: CHANNEL_ID }),
-      );
-      assert.deepEqual(realtime.awaitingTxids(), []);
-    }),
-);
-
-it.effect(
-  "a workspace's chat the service seals nothing for is told unanswered and followed again after a pause, one the account is not in is told not found and let go, and letting go, a sign-out, or a closed gate ends the follow",
-  () =>
-    Effect.gen(function* () {
-      const unsealed = yield* subject();
-      yield* unsealed.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
-      yield* settled;
-      assert.deepEqual(unsealed.chats(), [
-        { workspaceId: WORKSPACE_ID, chat: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
-      ]);
-      unsealed.sealChat(SEALED_CHAT);
-      yield* TestClock.adjust("5 seconds");
-      yield* settled;
-      assert.deepEqual(unsealed.realtime.opened, [SEALED_CHAT.url]);
-
-      const outside = yield* subject();
-      outside.sealChat({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
-      yield* outside.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
-      yield* settled;
-      yield* TestClock.adjust("1 minute");
-      yield* settled;
-      assert.deepEqual(outside.asked, [`chat-join:${WORKSPACE_ID}`]);
-      assert.deepEqual(outside.chats(), [
-        { workspaceId: WORKSPACE_ID, chat: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } },
-      ]);
-
-      const live = yield* subject();
-      live.sealChat(SEALED_CHAT);
-      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
-      yield* settled;
-      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_UNFOLLOW, { workspaceId: WORKSPACE_ID });
-      yield* settled;
-      assert.deepEqual(live.realtime.closed, [SEALED_CHAT.url]);
-      assert.deepEqual(live.realtime.subscribed(), []);
-      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
-      yield* settled;
-      yield* live.reset;
-      yield* settled;
-      assert.deepEqual(live.realtime.closed, [SEALED_CHAT.url, SEALED_CHAT.url]);
-
-      const closed = yield* subject({ signedIn: false });
-      yield* closed.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
-      yield* settled;
-      assert.deepEqual(closed.asked, []);
-      assert.deepEqual(closed.chats(), [
-        { workspaceId: WORKSPACE_ID, chat: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
-      ]);
-    }),
-);
-
 const PLAN_SCOPE = { kind: "plan", id: TASK_ID } as const;
 
 /** Steps taken until the host has told `times` inboxes, since a row's digest is the platform's own promise. */
@@ -2583,15 +2313,7 @@ it.effect("a sign-out lets every followed inbox go", () =>
   }),
 );
 
-const ACCOUNT_PARTS = [
-  "items",
-  "planless",
-  "plans",
-  "automations",
-  "failedRuns",
-  "chatAsks",
-  "chatNotices",
-] as const;
+const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
 
 const SEALED_ACCOUNT: AccountInboxLiveAnswer = {
   url: "wss://realtime.example/v1",
@@ -2601,8 +2323,6 @@ const SEALED_ACCOUNT: AccountInboxLiveAnswer = {
     plans: sealed("plans"),
     automations: sealed("automations"),
     failedRuns: sealed("failedRuns"),
-    chatAsks: sealed("chatAsks"),
-    chatNotices: sealed("chatNotices"),
   },
 };
 
@@ -2649,7 +2369,6 @@ it.effect(
           planless: [],
           automations: [],
           failedRuns: [FAILED_RUN],
-          chat: [],
           cursor: "",
           readAt: NOW,
         },

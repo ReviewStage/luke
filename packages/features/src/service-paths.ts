@@ -109,8 +109,6 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_TASK_INBOX: "/api/live/task-inbox",
   /** One agent's inbox under `?id=`, sealed for following over Neon Realtime (GET), as a task's is. */
   LIVE_AGENT_INBOX: "/api/live/agent-inbox",
-  /** A workspace's chat under `?workspaceId=`, sealed for following over Neon Realtime (GET) as the account's person reads it, once they have joined it; or `not-found` or `unavailable`. */
-  LIVE_WORKSPACE_CHAT: "/api/live/workspace-chat",
   /** The task list sealed for following over Neon Realtime (GET): its tasks and every agent of them and with no task, or `unavailable`. `task-list-live.ts` declares the answer. */
   LIVE_TASKS: "/api/live/tasks",
   /** A workspace's automations under `?workspaceId=`, sealed for following over Neon Realtime (GET), or `unavailable`. `automation-live.ts` declares the answer. */
@@ -355,18 +353,6 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES_PHOTO_SET: "/api/workspaces/photo/set",
   /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
   WORKSPACES_MEMBERS: "/api/workspaces/members",
-  /**
-   * A workspace's chat as a person in it reads it past a cursor (GET), held
-   * open while nothing moved, the workspace and the cursor named in
-   * `chat-wire.ts`'s `CHAT_QUERY`, which declares the answer.
-   */
-  WORKSPACES_CHAT: "/api/workspaces/chat",
-  /**
-   * One picture a chat message carries, served as its bytes to a person in
-   * the workspace (GET), the workspace, the message, and the attachment
-   * named in `chat-wire.ts`'s `CHAT_ATTACHMENT_QUERY`.
-   */
-  WORKSPACES_CHAT_ATTACHMENT: "/api/workspaces/chat/attachment",
   /** The owner removes an admin or a member, and an admin a member (POST), answered with those who remain. */
   WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
   /** The owner makes another member an admin or an admin a member (POST), answered with the members as they then stand. */

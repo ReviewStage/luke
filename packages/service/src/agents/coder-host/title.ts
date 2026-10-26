@@ -34,7 +34,7 @@ import { CURSOR_START } from "./transcript.js";
  * its opening alone, and again as each of its first turns ends where none
  * stands yet. It is named from what the developer first said to
  * it, what they said last where that is another message, and what it last
- * answered where it has, each cut to an excerpt, as a chat is
+ * answered where it has, each cut to an excerpt, as a conversation is
  * named from its opening rather than from the plan it was started under:
  * an agent started from the plan said the plan first, so the plan is what
  * names it, and one started on a prompt of its own is named for that prompt.
@@ -51,7 +51,7 @@ import { CURSOR_START } from "./transcript.js";
  * agent's first `CODER.TITLE_TURNS` turns; a call that fails, times out, or
  * answers nothing writes nothing, and the tab shows the automation's name
  * meanwhile, where an automation's run started the agent, and the model's
- * otherwise. A line a chat notice steered in is no word of the
+ * otherwise. A line another agent's message steered in is no word of the
  * developer's, so it names nothing. A subagent, a coding agent's worker or a
  * planning worker, is named by the same call over the task it was handed alone, and its title
  * is filled on its child conversation (`child-titles.ts`). Nothing of the
@@ -186,12 +186,14 @@ function originWords(origin: StoredAutomationOrigin): string {
   return [...subject, origin.prompt.trim()].join("\n").slice(0, AGENT_TITLE.EXCERPT_CHARS);
 }
 
-/** A row of the developer's own words: a user row no chat notice wrote, and no note the brain wrote down for itself. */
+/** A row of the developer's own words: a user row no other agent's message wrote, and no note the brain wrote down for itself. */
 function saidByDeveloper(message: StoredUIMessage | undefined): boolean {
   if (message?.role !== MESSAGE_ROLE.USER) return false;
   if ("author" in message.metadata && message.metadata.author === MESSAGE_AUTHOR.BRAIN)
     return false;
-  return !("channel" in message.metadata && message.metadata.channel === MESSAGE_CHANNEL.CHAT);
+  return !(
+    "channel" in message.metadata && message.metadata.channel === MESSAGE_CHANNEL.AGENT_MESSAGE
+  );
 }
 
 /** What the line before an answer is known to be, in the window a title reads. */
@@ -209,10 +211,10 @@ type Heard = (typeof HEARD)[keyof typeof HEARD];
 /**
  * The agent's latest answer to the developer: one that follows a line of
  * the developer's since the answer before it, or, before any answer in the
- * window, one whose turn a chat notice did not open, since the line it
- * answers may lie before the window. Note that an answer a chat notice
- * alone prompted is left out, because it speaks to another member of the
- * chat, while one to a developer's line a notice was steered in after
+ * window, one whose turn another agent's message did not open, since the
+ * line it answers may lie before the window. Note that an answer another
+ * agent's message alone prompted is left out, because it speaks to that
+ * agent, while one to a developer's line a message was steered in after
  * still answers the developer.
  */
 function answerToDeveloper<
@@ -231,9 +233,9 @@ function answerToDeveloper<
 }
 
 /**
- * The turns among the answers a chat notice opened. Note that the line
- * that opened a turn is read by the turn's id rather than from the window,
- * because notices a turn took in mid-run can push it out of the window, and
+ * The turns among the answers another agent's message opened. Note that
+ * the line that opened a turn is read by the turn's id rather than from the
+ * window, because messages a turn took in mid-run can push it out of the window, and
  * a line taken in mid-run names no turn. Nothing where the read is refused,
  * so every answer stands.
  */

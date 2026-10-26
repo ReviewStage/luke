@@ -1267,6 +1267,48 @@ export function handedMentionsIn(
   return found;
 }
 
+/** A mention that names a member of a workspace: a person or an agent. */
+export type MemberMention = Extract<
+  Mention,
+  { readonly kind: typeof MENTION_KIND.PERSON | typeof MENTION_KIND.AGENT }
+>;
+
+/** Whether a mention names a member, which a file's, a task's, or a Luke's does not. */
+function namesMember(mention: Mention): mention is MemberMention {
+  return mention.kind === MENTION_KIND.PERSON || mention.kind === MENTION_KIND.AGENT;
+}
+
+/**
+ * The member words are, where they are a person's or an agent's mention
+ * link written whole, `[@Name](address)`, or its address alone; nothing for
+ * a link of any other kind, or words that are more than the one link.
+ */
+export function memberMentionOf(words: string): MemberMention | undefined {
+  const [link] = mentionLinksIn(words);
+  const whole = link !== undefined && link.start === 0 && link.end === words.length;
+  const mention = decodeMention(whole ? link.target : words, null);
+  return mention !== undefined && namesMember(mention) ? mention : undefined;
+}
+
+/**
+ * The words with each person or agent they name written as `@` and its name
+ * alone, whether by a mention link or by its address written bare, every
+ * other link left as written: what a line another agent sent mentions
+ * beside who sent it, whose link names the sender rather than pointing at it.
+ */
+export function withoutMemberLinks(text: string): string {
+  let out = "";
+  let at = 0;
+  // Note that every link is read, past the cap a message's mentions are handed under, so none is left to be handed.
+  for (const found of handedMentionsIn(text, null, text.length)) {
+    if (!namesMember(found.mention)) continue;
+    const name = linkMention(found.label, found.target, null)?.name ?? found.label;
+    out += `${text.slice(at, found.start)}@${name}`;
+    at = found.end;
+  }
+  return out + text.slice(at);
+}
+
 /**
  * Words with each Markdown link written as its name, as a place that draws
  * plain words says it, a notification or a list's title: a link naming a

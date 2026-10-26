@@ -5,7 +5,7 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * page-header.tsx -- a document's own header in the page: its title, the page's one `h1`, a line saying what it is, and the page's acts at the title's end.
  *
  * A document (the plan, Settings, a person, an automation being edited) is
- * named once, in the page, by this header; a workspace (Inbox, Tasks, Chat)
+ * named once, in the page, by this header; a workspace (Inbox, Tasks)
  * is named by the window's top bar instead and draws none. `DetailPage`,
  * `CollectionPage`, and `SettingsPage` each head themselves with it, so a
  * title opens, sizes, and wraps one way on every document, and a page never

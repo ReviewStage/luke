@@ -1,5 +1,5 @@
 /**
- * home-row.ts -- the parts of a row on Home, a person's page, the Inbox, and Chat's rail, as class names each draws its row's picture and metadata with.
+ * home-row.ts -- the parts of a row on Home, a person's page, and the Inbox, as class names each draws its row's picture and metadata with.
  *
  * A row's metadata is what the row is about, a teammate's face, the row's
  * mark, and its time, set apart by the line's own gap and centred on it.

@@ -2,7 +2,7 @@
  * sandbox-door.ts -- the door to a native agent's sandbox a tool of Luke's MCP server reads a file through.
  *
  * eve hands each of its tools the session's sandbox (`ctx.getSandbox()`),
- * through which `post_to_inbox`, `post_chat`, `edit_plan`, `show_image`, and
+ * through which `post_thread`, `edit_plan`, `show_image`, and
  * `show_page` read a file the agent names by its path. A native harness runs
  * in a sandbox eve never opened, so the same door is made here, over the
  * agent's machine (`../machine/agent-machine.ts`): the place its session

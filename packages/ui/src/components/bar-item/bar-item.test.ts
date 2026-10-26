@@ -45,7 +45,7 @@ test("the place shown is announced as the page, the rest are not", () => {
     createElement(BarItem, { icon: null, current: true, onPress: () => {}, children: "Tasks" }),
   );
   expect(shown.getAttribute("aria-current")).toBe("page");
-  const other = mount(createElement(BarItem, { icon: null, onPress: () => {}, children: "Chat" }));
+  const other = mount(createElement(BarItem, { icon: null, onPress: () => {}, children: "Board" }));
   expect(other.hasAttribute("aria-current")).toBe(false);
 });
 
@@ -101,9 +101,9 @@ test("a count is drawn on the glyph and said after the name with its noun, and s
       icon: null,
       count: { value: 0, noun: "need you" },
       onPress: () => {},
-      children: "Chat",
+      children: "Board",
     }),
   );
-  expect(spokenName(none)).toBe("Chat");
-  expect(none.textContent).toBe("Chat");
+  expect(spokenName(none)).toBe("Board");
+  expect(none.textContent).toBe("Board");
 });

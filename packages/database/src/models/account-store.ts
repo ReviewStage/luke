@@ -10,7 +10,6 @@ import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
   type AccountPreferences,
   accountPreferencesFromStored,
-  EXPERIMENT,
   type Experiment,
   type ExperimentChoices,
   experimentChoicesFrom,
@@ -230,18 +229,6 @@ export function accountExperimentOn(
     readAccountPreferences(userId),
     (row) => row !== undefined && experimentOn(row.experiments, experiment),
   );
-}
-
-/**
- * Whether Chat is on for the account: the one read every server-side gate of
- * Chat asks, for the account that owns the agent or the plan, before it
- * offers a chat tool, reads the chat into a turn, wakes Luke, or answers a
- * chat route. Off unless the account turned the experiment on.
- */
-export function chatEnabledFor(
-  userId: string,
-): Effect.Effect<boolean, StoreFailure, DatabaseServices> {
-  return accountExperimentOn(userId, EXPERIMENT.CHAT);
 }
 
 const findRole = SqlSchema.findOneOption({

@@ -12,7 +12,7 @@ import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import type { ArchivedByReading } from "./coding-agent-model.js";
 
 /**
- * archived-note.tsx -- what stands in a composer's place while what it writes to is archived: an agent, or a chat's topic.
+ * archived-note.tsx -- what stands in a composer's place while the agent it writes to is archived.
  *
  * An archived agent reads but takes no message until it is brought back, so
  * its composer says why rather than standing there as a dead control, with
@@ -43,14 +43,8 @@ export function ArchivedComposerNote({
   onUnarchive,
   stop,
   archivedBy,
-  words = ARCHIVED_NOTE_COPY.COMPOSER,
-  action = ARCHIVED_NOTE_COPY.UNARCHIVE,
 }: {
   onUnarchive: () => void | Promise<void>;
-  /** Why nothing is sent, where the box it stands in sends something other than a message, as an Inbox item's answer. */
-  words?: string;
-  /** What the press that brings it back says, where what is archived is no agent, as a chat's topic. */
-  action?: string;
   /** Who archived the agent and why, where the agent itself was archived and the service said. */
   archivedBy?: ArchivedByReading | undefined;
   /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
@@ -60,7 +54,7 @@ export function ArchivedComposerNote({
   const press = (which: ArchivedPress, run: () => void | Promise<void>) => {
     if (out !== undefined) return;
     const settles = run();
-    // Note that a press that answers at once, as a chat's, which asks first, has nothing to wait on.
+    // Note that a press that answers at once, as one that asks first does, has nothing to wait on.
     if (!(settles instanceof Promise)) return;
     setOut(which);
     settles.finally(() => setOut(undefined));
@@ -89,7 +83,7 @@ export function ArchivedComposerNote({
               busyLabel={ARCHIVED_NOTE_COPY.UNARCHIVING}
               onClick={() => press(ARCHIVED_PRESS.UNARCHIVE, onUnarchive)}
             >
-              {action}
+              {ARCHIVED_NOTE_COPY.UNARCHIVE}
             </Button>
           </>
         }
@@ -100,7 +94,7 @@ export function ArchivedComposerNote({
             {archivedBy.reason === undefined ? null : `: ${archivedBy.reason}`}
           </Text>
         )}
-        <Text tone={TEXT_TONE.MUTED}>{words}</Text>
+        <Text tone={TEXT_TONE.MUTED}>{ARCHIVED_NOTE_COPY.COMPOSER}</Text>
       </Banner>
     </div>
   );

@@ -2,7 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import { LINK_PLACE, linkOf, type ReadLink } from "@luke/features/link-grammar";
+import type { ReadLink } from "@luke/features/link-grammar";
 import type { ModelProvider } from "@luke/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -15,11 +15,11 @@ import {
 import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
 import { agentKeyLink, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { cssCustomProperties, STATUS_TONE } from "@luke/ui";
+import { cssCustomProperties } from "@luke/ui";
 import { callBarAgentId } from "@luke/ui/call-card-model";
 import { isComposingKey } from "@luke/ui/composing-key";
 import { useLinkOpener } from "@luke/ui/held-link";
-import { EXPERIMENT_OFF_LINK, LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
+import { LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
 import { forgetPictures } from "@luke/ui/picture-cache";
 import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -55,13 +55,11 @@ import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { installPressIntent } from "./press-intent.js";
-import { settingsPageOf } from "./settings/pages.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
-import { useChatOn } from "./tasks/chat-gate.js";
 import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
@@ -70,7 +68,7 @@ import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
-import { TOAST_HOLD, ToastHost, useToast } from "./toast.js";
+import { ToastHost } from "./toast.js";
 import { useUpdatedToast } from "./update-toast.js";
 import {
   APP_SETTINGS_VIEW,
@@ -432,8 +430,6 @@ function AppWindow(): React.JSX.Element {
   );
   useEffect(() => appBridge().onShowAgent(openAgent), [openAgent]);
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
-  const chatOn = useChatOn();
-  const toast = useToast();
   // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = tasks.tasks;
   // An Admin link opens while the account's access is still being read, the
@@ -445,25 +441,11 @@ function AppWindow(): React.JSX.Element {
   const openLukeLink = useSteadyDoor((link: ReadLink) => {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
-      chatOn,
       adminOn: adminOn || adminPending,
     });
     if (route.kind === LINK_ROUTE.NOT_PERMITTED) return;
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
-    } else if (route.kind === LINK_ROUTE.EXPERIMENT_OFF) {
-      // Note that the toast names the page the experiment is turned on in by its own name, as a link to it.
-      const { settings } = route;
-      toast({
-        words: EXPERIMENT_OFF_LINK,
-        tone: STATUS_TONE.DANGER,
-        hold: TOAST_HOLD.FAILED,
-        action: {
-          label: settingsPageOf(settings.page).title,
-          href: linkOf({ kind: LINK_PLACE.SETTINGS, page: settings.page }, link.workspace),
-          onPress: () => openSettings(settings),
-        },
-      });
     } else {
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);
@@ -487,7 +469,7 @@ function AppWindow(): React.JSX.Element {
     tasksTab: tab === PANEL_TAB.TASKS,
     documentPage: tasks.page === TASKS_PAGE.DOCUMENT,
     historyOpen: tasks.history.open,
-    inboxOpen: tasks.inboxView.open || tasks.chatView.open,
+    inboxOpen: tasks.inboxView.open,
     pageAgentId: tasks.agentView.agentId,
     sidePanelFullScreen: tasks.sidePanel.fullScreen,
     columnAgentId: columnTab !== undefined && isAgentTab(columnTab) ? columnTab.agent : undefined,
@@ -581,8 +563,6 @@ function AppWindow(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
       if (runAppCommand(APP_COMMAND.INBOX_LIST) || tasks.inboxView.open) return;
-      // Chat is the Inbox's like: a place standing alone steps back to the rail, and there the press stops rather than reaching the plan beneath.
-      if (runAppCommand(APP_COMMAND.CHAT_LIST) || tasks.chatView.open) return;
       if (runAppCommand(APP_COMMAND.EXIT_AGENT_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_PERSON_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
@@ -597,7 +577,7 @@ function AppWindow(): React.JSX.Element {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [signIn.cancelSignIn, signIn.signInWait, tasks.inboxView.open, tasks.chatView.open, tell]);
+  }, [signIn.cancelSignIn, signIn.signInWait, tasks.inboxView.open, tell]);
 
   // The window's shortcuts, from the keys and from the menu bar alike.
   useAppKeymap(true);

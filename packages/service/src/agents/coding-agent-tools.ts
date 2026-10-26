@@ -1,5 +1,4 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { ChatMemberSubject } from "@luke/database/models/chat-store";
 import {
   archiveIdleCodingAgent,
   awaitingLinesOfReached,
@@ -47,7 +46,6 @@ import {
   runtimeChoiceRefusalWords,
   runtimeModels,
 } from "@luke/features/agent-runtime-models";
-import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
@@ -201,9 +199,8 @@ import {
  * aloud, so his tail's entries are cut close and his words for the tool say
  * so; a coding agent reads its tail as text, to learn why an agent went
  * quiet, so each of its entries keeps more, and it may ask for a longer
- * tail, to a bound. One agent messages another in a direct message of
- * the workspace's chat (`coder-host/chat.ts`), which `message_agent` once
- * did here. A start takes the one path the Start button's does
+ * tail, to a bound. One agent messages another with `message_agent`
+ * (`coder-host/agent-message.ts`). A start takes the one path the Start button's does
  * (`coder-host/start.ts`), on the caller's own task or another of its workspace, under the
  * same key, so a call run again starts no second agent: the plan as the
  * agent's brief, or the prompt in its place, and the note the call carries
@@ -213,7 +210,7 @@ import {
  * lists is one a start takes, with its checkout cloned at the branch named
  * where one is, which GitHub must hold. An agent a
  * coding agent starts is told in that note which agent started it and how
- * to report back, in their task's chat or a direct message to it, and its choice leaves the member's default as it stood.
+ * to report back, with `message_agent`, and its choice leaves the member's default as it stood.
  * A start may name a new task instead, which is made as the member the
  * caller acts for would make it from the sidebar: in the caller's workspace,
  * owned by that member, with an empty plan, on the repository the caller
@@ -320,7 +317,7 @@ export const UPDATE_TASK_REFUSAL = {
     `${AGENT_TOOL.LIST_TASKS} names them.`,
   NOT_MEMBER:
     "Not run: that assignee is no member of the task's workspace, or names no person; name a " +
-    `member by the mention link read_chat or ${AGENT_TOOL.LIST_TASKS} hands you, or null for no one.`,
+    `member by the mention link ${AGENT_TOOL.LIST_TASKS} hands you, or null for no one.`,
   NOT_REACHABLE:
     "Not run: the GitHub installation connected to the workspace does not reach that " +
     "repository; name one it reaches, or null for none.",
@@ -588,8 +585,7 @@ const START_AGENT_INPUT = Schema.Struct({
       Schema.Array(wireUuidSchema).check(Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS)),
       "Pictures handed to the agent with its first message, which it sees as images: at most " +
         `${CODING_AGENT_BOUNDS.MAX_ATTACHMENTS} attachment ids, each a picture of your own ` +
-        `conversation, such as one ${AGENT_TOOL.SHOW_IMAGE} kept, or of a chat message you can ` +
-        `read; each at most ${megabytesOf(CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES)} and all of them ` +
+        `conversation, such as one ${AGENT_TOOL.SHOW_IMAGE} kept; each at most ${megabytesOf(CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES)} and all of them ` +
         `${megabytesOf(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES)} together, since a larger one is ` +
         "refused, never made smaller. Leave it out to hand none.",
     ),
@@ -1606,26 +1602,15 @@ function startFromRefusalWords(
 
 /**
  * Who hands pictures on in the caller's name: a coding agent its own
- * conversation's and its workspace's chat's as its chat member reads them;
- * Luke on a call, which keeps no conversation of its own here, the chat's as
- * the member on the call reads them.
+ * conversation's; Luke on a call, which keeps no conversation of its own
+ * here, none.
  */
-const forwarderOf = (caller: AgentCaller) =>
-  Effect.map(callerWorkspace(caller), (workspace): ImageForwarder => {
-    const userId = callerUserId(caller);
-    const reader: ChatMemberSubject =
-      caller.kind === AGENT_CALLER.AGENT
-        ? { kind: MEMBER_KIND.AGENT, agentId: caller.agent.id }
-        : { kind: MEMBER_KIND.HUMAN, userId };
-    return {
-      userId,
-      conversationId: caller.kind === AGENT_CALLER.AGENT ? caller.agent.conversationId : undefined,
-      chat: Option.match(workspace, {
-        onNone: () => undefined,
-        onSome: (organizationId) => ({ organizationId, reader }),
-      }),
-    };
-  });
+function forwarderOf(caller: AgentCaller): ImageForwarder {
+  return {
+    userId: callerUserId(caller),
+    conversationId: caller.kind === AGENT_CALLER.AGENT ? caller.agent.conversationId : undefined,
+  };
+}
 
 /** Why a start's input asks for nothing that can start, read before anything is: a source with a prompt or a branch, or a coding agent continuing itself. */
 function startInputRefusal(
@@ -1709,7 +1694,7 @@ export function runStartAgent(
       const images =
         asked.success.images === undefined
           ? Result.succeed([])
-          : yield* forwardedImages(yield* forwarderOf(caller), asked.success.images);
+          : yield* forwardedImages(forwarderOf(caller), asked.success.images);
       if (Result.isFailure(images)) {
         return agentToolRejected(`Not started: ${forwardedImageRefusalWords(images.failure)}`);
       }

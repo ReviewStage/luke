@@ -232,9 +232,8 @@ export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindT
  * section since folded into `update_agent` and `update_task`, and the close
  * of and reply on an inbox item since folded into `withdraw_ask` and
  * `post_to_inbox`, that post and its read, since named `post_thread` and
- * `read_threads`, and the workspace's chat, retired for channels' threads
- * and `message_agent`. A transcript written then names them, and reads
- * back under the same set.
+ * `read_threads`, and the four of the workspace's Chat, removed with it. A
+ * transcript written then names them, and reads back under the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",

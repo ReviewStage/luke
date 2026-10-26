@@ -48,8 +48,6 @@ export const RUN_PROFILE = {
   TASKS_WORK: "tasks-work",
   /** The same task beside its coding agent, opened at launch on its plan, whose words hold comment threads: one answered, one its agent started, one on a whole block, and one resolved. */
   TASKS_COMMENTS: "tasks-comments",
-  /** The tasks' list, opened at launch on the window's Chat over a synthetic chat. */
-  CHAT: "chat",
   /** A synthetic account signed in, its tasks holding Inbox items: an ask of each kind, a form, a notice with code, a long thread, an answered item, and a closed one. */
   INBOX: "inbox",
   /** Channels on, signed in as a member of a synthetic Luke workspace whose channels hold threads of every kind (`channels-fixture.ts`). */

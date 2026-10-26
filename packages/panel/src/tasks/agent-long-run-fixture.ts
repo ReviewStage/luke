@@ -7,7 +7,7 @@
  * opened by a teammate's line and answered by a journal of some fifty parts,
  * and a turn still under way that has done twenty rounds of the same work,
  * teammates' lines arriving between them, so the transcript holds about
- * three thousand entries. Among them stand hundreds of chat and Inbox calls,
+ * three thousand entries. Among them stand hundreds of message and Inbox calls,
  * sixty coding agents it started and twenty workers it delegated to,
  * hundreds of mention chips in long Markdown with tables and links, and
  * thirty sets of pictures, each a screenshot's size. After the first page,
@@ -104,24 +104,22 @@ function turnWords(turn: number): string {
   ].join("\n");
 }
 
-/** One of the run's calls, its `at`th of the turn: chat and Inbox calls most, then commands and reads. */
+/** One of the run's calls, its `at`th of the turn: message and Inbox calls most, then commands and reads. */
 function call(turn: number, at: number): WireRecord {
   const id = `long-run-${turn}-${at}`;
   switch (at % 7) {
     case 0:
       return toolPart(
-        "post_chat",
+        "message_agent",
         id,
-        { text: `pushed wave ${turn + 1}, ${at} of ${LONG_RUN.CALLS_PER_TURN} green` },
-        { status: "accepted", seq: turn * 100 + at, told: [], held: [] },
+        {
+          agentId: startedAgent(turn).id,
+          text: `pushed wave ${turn + 1}, ${at} of ${LONG_RUN.CALLS_PER_TURN} green`,
+        },
+        { status: "accepted" },
       );
     case 1:
-      return toolPart(
-        "read_chat",
-        id,
-        {},
-        { status: "accepted", members: [], channels: [], messages: [], asks: [] },
-      );
+      return toolPart("read_threads", id, {}, { status: "accepted", threads: [] });
     case 2:
       return toolPart(
         "post_to_inbox",
@@ -162,10 +160,10 @@ function call(turn: number, at: number): WireRecord {
       );
     default:
       return toolPart(
-        "post_chat",
+        "message_agent",
         id,
-        { text: `${agentMention(turn)} ci's red on lint, fixing`, replyTo: turn * 100 + at - 1 },
-        { status: "accepted", seq: turn * 100 + at, told: [], held: [] },
+        { agentId: startedAgent(turn).id, text: "ci's red on lint, fixing" },
+        { status: "accepted" },
       );
   }
 }
@@ -233,7 +231,7 @@ function turnParts(turn: number): WireRecord[] {
   ]).flat();
   return [
     { type: "step-start" },
-    { type: "reasoning", text: `Wave ${turn + 1} first: read the chat, then the queue.` },
+    { type: "reasoning", text: `Wave ${turn + 1} first: read the threads, then the queue.` },
     ...calls,
     startAgentPart(turn),
     ...(turn % 3 === 0 ? [delegatePart(turn)] : []),
@@ -242,7 +240,7 @@ function turnParts(turn: number): WireRecord[] {
   ];
 }
 
-/** The line that opened a turn: a teammate's chat, or the developer's own line naming what to do next. */
+/** The line that opened a turn: a teammate's, or the developer's own naming what to do next. */
 function turnLine(turn: number): CodingAgentMessage {
   const at = RUN_STARTED_AT + turn * 70 * MINUTE;
   return {

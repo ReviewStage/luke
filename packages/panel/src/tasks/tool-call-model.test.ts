@@ -937,48 +937,6 @@ test("a pause names how long it waits, and its answer how long it waited or that
   });
 });
 
-test("the chat calls read as theirs, a post by its words and a read by its channel, each member's mention link by the member's name, a resolve by the ask's key and a channel's edit by the channel, never as a tool this build does not know", () => {
-  const sam = "[@Sam](https://tryluke.dev/acme/person/sam)";
-  const calls = [
-    { tool: "post_chat", input: { text: `${sam} migration's in` } },
-    { tool: "read_chat", input: { channel: sam } },
-    { tool: "read_chat", input: {} },
-    { tool: "resolve_ask", input: { key: "branch-protection", reason: "Settled." } },
-    { tool: "edit_channel", input: { channel: "#launch", archived: true } },
-  ];
-
-  assert.deepEqual(
-    calls.map((call) => {
-      const view = toolCallView({ ...call, output: { status: "accepted" } });
-      return [view.kind, view.subject];
-    }),
-    [
-      [CALL_KIND.CHAT_POST, "Sam migration's in"],
-      [CALL_KIND.CHAT_READ, "Sam"],
-      [CALL_KIND.CHAT_READ, ""],
-      [CALL_KIND.CHAT_RESOLVE, "branch-protection"],
-      [CALL_KIND.CHAT_EDIT_CHANNEL, "#launch"],
-    ],
-  );
-});
-
-test("a post into the plan's own channel opens the plan's Chat tab, and a post elsewhere, a read, or a resolve opens nothing", () => {
-  const target = (tool: string, input: Record<string, string | number>) =>
-    toolTarget({ tool, callId: "call", input, output: { status: "accepted" } });
-  assert.deepEqual(target("post_chat", { text: "hi" }), { kind: TOOL_TARGET.CHAT });
-  assert.deepEqual(
-    [
-      target("post_chat", { text: "hi", to: "@sam" }),
-      target("post_chat", { text: "hi", to: "#launch" }),
-      target("post_chat", { text: "hi", replyTo: 4 }),
-      target("read_chat", {}),
-      target("read_chat", { channel: "@sam" }),
-      target("resolve_ask", { key: "invite", reason: "Settled." }),
-    ],
-    [undefined, undefined, undefined, undefined, undefined, undefined],
-  );
-});
-
 test("a post from version 5 is a row naming its thread's title, or its key where it names none, over its message's first line and its ask's kind with what it offers, never its input as JSON", () => {
   const view = toolCallView({
     tool: "post_to_inbox",

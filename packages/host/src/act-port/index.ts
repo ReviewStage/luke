@@ -19,8 +19,8 @@ import {
   type AutomationProceduresDependencies,
   automationProcedures,
 } from "./automation-procedures.js";
-import { type ChannelProceduresDependencies, channelProcedures } from "./channel-procedures.js";
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
+import { type ChannelProceduresDependencies, channelProcedures } from "./channel-procedures.js";
 import { type ChaptersProceduresDependencies, chaptersProcedures } from "./chapters-procedures.js";
 import {
   type InstalledSkillProceduresDependencies,
@@ -58,9 +58,9 @@ export { accountAskProcedures } from "./account-ask-procedures.js";
 export type { AccountProceduresDependencies } from "./account-procedures.js";
 export type { AgentProceduresDependencies } from "./agents-procedures.js";
 export type { AutomationProceduresDependencies } from "./automation-procedures.js";
-export type { ChannelProceduresDependencies } from "./channel-procedures.js";
 export { type ActPortContext, type ActSender, actPortFor } from "./base.js";
 export { browserLiveProcedures } from "./browser-live-procedures.js";
+export type { ChannelProceduresDependencies } from "./channel-procedures.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
 export { pushProcedures, WindowPushes } from "./push-procedures.js";
 export type {

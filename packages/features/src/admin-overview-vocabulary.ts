@@ -73,8 +73,6 @@ export const REACH_FEATURE = {
   INTEGRATIONS: "integrations",
   /** Owns an automation that fired and was not held back. */
   AUTOMATIONS: "automations",
-  /** Posted a message in a workspace's chat. */
-  CHAT: "chat",
 } as const;
 
 export type ReachFeature = (typeof REACH_FEATURE)[keyof typeof REACH_FEATURE];

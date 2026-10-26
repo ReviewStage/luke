@@ -87,8 +87,7 @@ export function agentCardReading(
   label: string,
   held: HeldTranscripts,
   chosen: boolean,
-  agents: Pick<CodingAgentsControl, "me" | "pullRequests"> &
-    Partial<Pick<CodingAgentsControl, "chatOn">>,
+  agents: Pick<CodingAgentsControl, "me" | "pullRequests">,
 ): () => CardReading {
   return () => {
     const { archivedAt } = agent;
@@ -110,7 +109,6 @@ export function agentCardReading(
           title: label,
           messages,
           brief: agent.brief,
-          chatOn: agents.chatOn === true,
           quiet: agent.kind === CODING_AGENT_KIND.OPERATOR,
         }),
       startedBy: teammateRef(agent.startedBy, agents.me),
@@ -159,8 +157,7 @@ export function lineSubject(
  */
 export function tasklessRowSubject(
   agent: TasklessAgent,
-  agents: Pick<CodingAgentsControl, "models" | "me" | "pullRequests"> &
-    Partial<Pick<CodingAgentsControl, "chatOn">>,
+  agents: Pick<CodingAgentsControl, "models" | "me" | "pullRequests">,
 ): AgentSubject {
   const { automationId, pullRequest, ...rest } = agent;
   const summary: CodingAgentSummary = automationId === null ? rest : { ...rest, automationId };
@@ -234,8 +231,7 @@ export function tasklessSubject(
  * once the list has been read, and nothing more before.
  */
 export function agentSubject(
-  agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests"> &
-    Partial<Pick<CodingAgentsControl, "chatOn">>,
+  agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests">,
   agentId: string,
   held: HeldTranscripts,
   chosen: boolean,

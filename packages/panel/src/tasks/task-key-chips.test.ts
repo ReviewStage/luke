@@ -21,8 +21,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 /**
  * task-key-chips.test.ts -- a listed task's key written among words
  * (`STAG-422`) is drawn as that task's chip, saying the key as written,
- * wherever words are drawn with chips: a transcript's, a chat message's, an
- * Inbox item's, and a plan's or a comment's. A key in code or a link, a
+ * wherever words are drawn with chips: a transcript's, an Inbox item's, and a plan's or a comment's. A key in code or a link, a
  * word shaped like a key that names no task, and a key two tasks share
  * stay words. Synthetic workspaces and tasks.
  */

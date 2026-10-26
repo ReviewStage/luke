@@ -1,7 +1,7 @@
 import type { Replay } from "@luke/features/agent-replay";
-import { chatNoticeWords } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
+  agentMessageWords,
   applyMessagesPage,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
@@ -25,9 +25,8 @@ import { blockSays, TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import {
   AGENT_PART,
   type AgentPart,
+  agentMessageOf,
   agentRows,
-  chatNoticeOf,
-  drawnNoticeOf,
   isDelegation,
   messageWords,
   placedMessages,
@@ -92,12 +91,11 @@ export type LatestActivity =
       readonly code: boolean;
     };
 
-/** Who a turn of the copy is, as its heading names them; a chat notice's and another agent's message's heading names its sender after the words. */
+/** Who a turn of the copy is, as its heading names them; another agent's message's heading names its sender after the words. */
 const SPEAKER = {
   DEVELOPER: "Developer",
   AGENT: "Agent",
   SUBAGENT: "Subagent",
-  CHAT: "Chat from",
   MESSAGE: "Message from",
 } as const;
 
@@ -159,21 +157,17 @@ type CopiedCall = Extract<CopiedBlock, { kind: typeof COPIED_BLOCK.CALL }>;
 
 interface CopiedTurn {
   readonly speaker: Speaker;
-  /** The name of the member a chat notice tells of a message from, which its heading names; none on any other turn. */
+  /** The name of the agent another agent's message is from, which its heading names; none on any other turn. */
   readonly from?: string;
   readonly blocks: readonly CopiedBlock[];
 }
 
-/** Whether a turn is words someone else handed the agent, the developer, a chat notice, or another agent's message, rather than the agent's own. */
+/** Whether a turn is words someone else handed the agent, the developer or another agent's message, rather than the agent's own. */
 function handedIn(turn: CopiedTurn): boolean {
-  return (
-    turn.speaker === SPEAKER.DEVELOPER ||
-    turn.speaker === SPEAKER.CHAT ||
-    turn.speaker === SPEAKER.MESSAGE
-  );
+  return turn.speaker === SPEAKER.DEVELOPER || turn.speaker === SPEAKER.MESSAGE;
 }
 
-/** A turn's heading: who said it, a chat notice's under its sender. */
+/** A turn's heading: who said it, another agent's message under its sender. */
 function headingOf(turn: CopiedTurn): string {
   return turn.from === undefined ? `## ${turn.speaker}` : `## ${turn.speaker} ${turn.from}`;
 }
@@ -278,18 +272,16 @@ export function drawnRowsWords(rows: readonly TurnRow<AgentPart>[]): string {
 
 /**
  * One of the developer's messages as a copy reads it: their words, as the
- * tab draws them, an inbox line without its item's key; and a notice the
- * tab draws as its sender's (`drawnNoticeOf`), as the message it tells of
- * under who said it, without the lines that are the agent's alone.
+ * tab draws them, an inbox line without its item's key; and another agent's
+ * message, which the tab draws as its sender's (`agentMessageOf`), under
+ * who sent it, without the lines that are the agent's alone.
  */
-function developerTurn(message: CodingAgentMessage, chatOn: boolean): CopiedTurn {
+function developerTurn(message: CodingAgentMessage): CopiedTurn {
   const words = messageWords(message);
-  const notice = drawnNoticeOf(message, chatOn);
-  if (notice !== undefined) {
-    const blocks = [{ kind: COPIED_BLOCK.WORDS, text: chatNoticeWords(words) }] as const;
-    // A message another agent sent holds no place in any chat, so it is copied as a message rather than as chat.
-    const speaker = notice.chat_seq === undefined ? SPEAKER.MESSAGE : SPEAKER.CHAT;
-    return { speaker, from: notice.from, blocks };
+  const sent = agentMessageOf(message);
+  if (sent !== undefined) {
+    const blocks = [{ kind: COPIED_BLOCK.WORDS, text: agentMessageWords(words) ?? words }] as const;
+    return { speaker: SPEAKER.MESSAGE, from: sent.from, blocks };
   }
   const blocks = [{ kind: COPIED_BLOCK.WORDS, text: inboxLineWords(words) }] as const;
   return { speaker: SPEAKER.DEVELOPER, blocks };
@@ -299,8 +291,8 @@ function developerTurn(message: CodingAgentMessage, chatOn: boolean): CopiedTurn
  * A coding agent's transcript, or one of its workers', as a copy reads it:
  * the first of the developer's messages is the brief, the plan or the prompt
  * the agent was handed as its tab draws it, and a worker's is the task its
- * agent's call carried; an agent started blank has none. The rest are turns: the developer's words, a chat
- * notice's under the member it tells of a message from, and the agent's
+ * agent's call carried; an agent started blank has none. The rest are turns: the developer's words,
+ * another agent's message under the agent it is from, and the agent's
  * rows as its tab draws them, a line that reached a turn while it ran
  * between the turn's work before and after it, as the tab draws it.
  */
@@ -310,19 +302,17 @@ export function agentTranscript(input: {
   brief: CodingAgentBrief | undefined;
   /** The task a worker was handed, where the transcript is a worker's rather than the agent's own. */
   task?: string | undefined;
-  /** Whether the window offers Chat, without which a chat notice is copied as the plain line it is drawn as. */
-  chatOn: boolean;
   /** Whether it is a member's operator's, whose heartbeat that found nothing is copied, as it is drawn, as no reply (`placedMessages`). */
   quiet?: boolean;
 }): CopiedTranscript {
-  const { title, brief, task, chatOn } = input;
+  const { title, brief, task } = input;
   const messages = task === undefined ? input.messages : workerLines(task, input.messages);
   // An agent started blank was handed nothing, so its first line is copied as a turn of the developer's.
   const first =
     brief === CODING_AGENT_BRIEF.BLANK && task === undefined
       ? undefined
       : messages.find(
-          (message) => message.role === MESSAGE_ROLE.USER && chatNoticeOf(message) === undefined,
+          (message) => message.role === MESSAGE_ROLE.USER && agentMessageOf(message) === undefined,
         );
   const label =
     task !== undefined
@@ -333,16 +323,16 @@ export function agentTranscript(input: {
   const speaker = task === undefined ? SPEAKER.AGENT : SPEAKER.SUBAGENT;
   // An agent started from another opens on its brief, the replay, and the note, each copied apart.
   const opening = first === undefined || task !== undefined ? undefined : replayOpening(first);
-  const note = opening?.note === undefined ? [] : [developerTurn(opening.note, chatOn)];
+  const note = opening?.note === undefined ? [] : [developerTurn(opening.note)];
   // A line that reached a turn while it ran is copied where the tab draws it, between the turn's work before and after it.
   const turns = placedMessages(messages, input.quiet === true).flatMap(
     ({ message, arrived }): CopiedTurn[] => {
       if (message === first) return [];
-      if (message.role === MESSAGE_ROLE.USER) return [developerTurn(message, chatOn)];
+      if (message.role === MESSAGE_ROLE.USER) return [developerTurn(message)];
       return turnStretches(agentRows(message, false, { arrived })).map((stretch) =>
         stretch.line === undefined
           ? { speaker, blocks: rowBlocks(stretch.rows).flatMap(agentBlock) }
-          : developerTurn(stretch.line, chatOn),
+          : developerTurn(stretch.line),
       );
     },
   );

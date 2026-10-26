@@ -118,27 +118,16 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     followAccountInbox: () => accountInboxOf(host),
     accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
     onInboxChanged: (inbox) => state.update({ inbox }),
-    chatOn: () =>
-      experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHAT),
     channelsOn: () =>
       experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHANNELS),
     report,
   });
-  // Chat or Channels turning moves what the badge counts with no answer moving, so it counts again.
+  // Channels turning moves what the badge counts with no answer moving, so it counts again.
   yield* Effect.forkScoped(
     Stream.runForEach(
-      Stream.map(state.changes, (document) => {
-        const experiments = document.settings?.experiments ?? NO_EXPERIMENTS;
-        return {
-          chat: experimentOn(experiments, EXPERIMENT.CHAT),
-          channels: experimentOn(experiments, EXPERIMENT.CHANNELS),
-        };
-      }).pipe(
-        Stream.changesWith(
-          (one, other) => one.chat === other.chat && one.channels === other.channels,
-        ),
-        Stream.drop(1),
-      ),
+      Stream.map(state.changes, (document) =>
+        experimentOn(document.settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHANNELS),
+      ).pipe(Stream.changes, Stream.drop(1)),
       () => Effect.sync(() => notices.recount()),
     ),
   );

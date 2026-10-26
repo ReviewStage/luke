@@ -219,7 +219,7 @@ async function drawnFor(
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  const drawn = [...container.querySelectorAll(".is-user, .is-chat")];
+  const drawn = [...container.querySelectorAll(".is-user, .is-received")];
   assert.equal(drawn.length, messages.length);
   return drawn;
 }

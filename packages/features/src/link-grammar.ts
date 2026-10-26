@@ -37,8 +37,6 @@ import { parsedUrl } from "./parsed-url.js";
  * - the Automations page, `/automations`, an automation,
  *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
  * - a page of Settings, `/settings[/<page>]`;
- * - Chat, `/chat`, and one of its channels, `/chat/<channelId>`, a topic,
- *   a task's channel, or a direct message alike;
  * - a person's page in the workspace, `/person/<userId>`, a member or
  *   someone who left, by the account id the service names them by;
  * - the Admin place, an admin's alone, which reads every workspace's
@@ -107,8 +105,6 @@ export const LINK_PLACE = {
   AUTOMATION_RUN: "automation-run",
   SETTINGS: "settings",
   PERSON: "person",
-  /** Chat, on For you, or on one of its channels by the id the service mints it. */
-  CHAT: "chat",
   /** The Admin place: its Overview, a section, an account's page, or a day's. */
   ADMIN: "admin",
 } as const;
@@ -155,7 +151,6 @@ const STEP = {
   RUN: "run",
   SETTINGS: "settings",
   PERSON: "person",
-  CHAT: "chat",
   ADMIN: "admin",
   USER: "user",
   DAY: "day",
@@ -379,16 +374,12 @@ const linkPlaceSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.PERSON), userId: idSchema }),
   EffectSchema.Struct({
-    kind: EffectSchema.Literal(LINK_PLACE.CHAT),
-    channelId: EffectSchema.optionalKey(idSchema),
-  }),
-  EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.SETTINGS),
     page: EffectSchema.optionalKey(
       EffectSchema.String.check(EffectSchema.isPattern(SETTINGS_PAGE)),
     ),
   }),
-  // One struct with every view optional, as Settings' and Chat's are, so a
+  // One struct with every view optional, as Settings' is, so a
   // section the schema does not know is refused rather than read as the
   // Overview by a struct naming none.
   EffectSchema.Struct({
@@ -545,11 +536,6 @@ function placeFields(steps: readonly string[]) {
       return id === undefined
         ? { kind: LINK_PLACE.SETTINGS }
         : { kind: LINK_PLACE.SETTINGS, page: id };
-    case STEP.CHAT:
-      if (rest.length > 0) return undefined;
-      return id === undefined
-        ? { kind: LINK_PLACE.CHAT }
-        : { kind: LINK_PLACE.CHAT, channelId: id };
     case STEP.ADMIN:
       return adminFields(id, rest);
     default:
@@ -628,8 +614,6 @@ function placePath(place: LinkPlace): readonly string[] {
       return [STEP.PERSON, place.userId];
     case LINK_PLACE.SETTINGS:
       return place.page === undefined ? [STEP.SETTINGS] : [STEP.SETTINGS, place.page];
-    case LINK_PLACE.CHAT:
-      return place.channelId === undefined ? [STEP.CHAT] : [STEP.CHAT, place.channelId];
     case LINK_PLACE.ADMIN:
       if (place.userId !== undefined) return [STEP.ADMIN, STEP.USER, place.userId];
       if (place.day !== undefined) return [STEP.ADMIN, STEP.DAY, place.day];

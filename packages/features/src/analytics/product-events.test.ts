@@ -55,7 +55,7 @@ test("nothing on the envelope survives except what the allowlist names", () => {
 
 test("an experiment's switch is counted by its key and on or off, and by nothing it does not list", () => {
   const toggled = {
-    [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: PRODUCT_EXPERIMENT.CHAT,
+    [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: PRODUCT_EXPERIMENT.BROWSER,
     [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: PRODUCT_SETTING_VALUE.ON,
   };
   assert.deepEqual(

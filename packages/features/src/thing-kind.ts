@@ -73,7 +73,6 @@ export const THING_KIND = {
   AUTOMATION_RUN: LINK_PLACE.AUTOMATION_RUN,
   SETTINGS: LINK_PLACE.SETTINGS,
   PERSON: MENTION_KIND.PERSON,
-  CHAT: LINK_PLACE.CHAT,
   ADMIN: LINK_PLACE.ADMIN,
   FILE: MENTION_KIND.FILE,
   FOLDER: MENTION_KIND.FOLDER,
@@ -250,7 +249,6 @@ export const THING_NAME: ThingNames = {
   },
   [THING_KIND.SETTINGS]: NO_LIVE_NAME,
   [THING_KIND.PERSON]: { live: true, held: (person, known) => known.people.get(person.userId) },
-  [THING_KIND.CHAT]: NO_LIVE_NAME,
   [THING_KIND.ADMIN]: NO_LIVE_NAME,
   [THING_KIND.FILE]: NO_LIVE_NAME,
   [THING_KIND.FOLDER]: NO_LIVE_NAME,
@@ -292,7 +290,6 @@ export const THING_WORD: { readonly [K in ThingKind]: string } = {
   [THING_KIND.AUTOMATION_RUN]: "automation run",
   [THING_KIND.SETTINGS]: "settings",
   [THING_KIND.PERSON]: TERM.MEMBER.one,
-  [THING_KIND.CHAT]: "channel",
   [THING_KIND.ADMIN]: "admin",
   [THING_KIND.FILE]: TERM.FILE.one,
   [THING_KIND.FOLDER]: "folder",
@@ -354,7 +351,6 @@ const PLACE_THING: { readonly [K in LinkPlaceKind]: (place: PlaceOf<K>) => Thing
   [LINK_PLACE.AUTOMATION]: asThing,
   [LINK_PLACE.AUTOMATION_RUN]: asThing,
   [LINK_PLACE.SETTINGS]: asThing,
-  [LINK_PLACE.CHAT]: asThing,
   [LINK_PLACE.ADMIN]: asThing,
 };
 

@@ -474,91 +474,6 @@ it.effect(
 );
 
 it.effect(
-  "reads a chat message's picture by the workspace, the message, and the attachment, as base64 under the type it was kept as, a type no picture is as unanswered, and a refusal as its failure",
-  () =>
-    Effect.gen(function* () {
-      const messageId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
-      const attachmentId = "6e3c9a1f-2b4d-4f70-8c8e-3d5f7b9c1e2a";
-      const servedAs = (type: string, status = 200) =>
-        recordingHttpClient(
-          () => new Response("%PDF", { status, headers: { "content-type": type } }),
-        );
-      const png = servedAs("image/png");
-      const read = (served: ReturnType<typeof servedAs>) =>
-        Effect.provide(
-          client().chatAttachment(WORKSPACE_ID, messageId, attachmentId),
-          served.layer,
-        );
-
-      assert.deepEqual(yield* read(png), { contentType: "image/png", base64: "JVBERg==" });
-      const [asked] = png.requests;
-      assert.equal(asked?.pathname, "/api/workspaces/chat/attachment");
-      assert.deepEqual(
-        [...(asked?.searchParams.entries() ?? [])],
-        [
-          ["workspaceId", WORKSPACE_ID],
-          ["messageId", messageId],
-          ["attachmentId", attachmentId],
-        ],
-      );
-      assert.deepEqual(yield* read(servedAs("application/pdf")), {
-        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
-      });
-      const refusing = recordingHttpClient(
-        () => new Response(JSON.stringify({ error: HOSTED_API_ERROR.NOT_FOUND }), { status: 404 }),
-      );
-      assert.deepEqual(yield* read(refusing), { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
-    }),
-);
-
-it.effect(
-  "writes to a workspace's chat with the write as sent, reads each refusal as its own failure, and sends no write the service would refuse by shape",
-  () =>
-    Effect.gen(function* () {
-      const write = { text: "Morning, @agent-2.", to: "#general", clientKey: "send-1" };
-      const api = fakeCloudApi({
-        "POST /api/workspaces/chat": { answer: () => ({ readSeq: 12 }) },
-      });
-
-      const read = yield* Effect.provide(
-        client().chatPost(WORKSPACE_ID, { readTo: 12 }),
-        api.layer,
-      );
-      const sent = yield* Effect.provide(client().chatPost(WORKSPACE_ID, write), api.layer);
-      const unsent = yield* Effect.provide(
-        client().chatPost(WORKSPACE_ID, { ...write, replyTo: 4 }),
-        api.layer,
-      );
-
-      assert.deepEqual(read, { readSeq: 12 });
-      assert.deepEqual(sent, { readSeq: 12 });
-      assert.deepEqual(unsent, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      assert.deepEqual(
-        api.requests().map((request) => [request.url, JSON.parse(request.body ?? "{}")]),
-        [
-          [`https://tryluke.dev/api/workspaces/chat?workspaceId=${WORKSPACE_ID}`, { readTo: 12 }],
-          [`https://tryluke.dev/api/workspaces/chat?workspaceId=${WORKSPACE_ID}`, write],
-        ],
-      );
-      for (const [error, failure] of [
-        [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_CALL_FAILURE.NOT_FOUND],
-      ] as const) {
-        const refusing = fakeCloudApi({
-          "POST /api/workspaces/chat": {
-            answer: () => ({ error }),
-            status: HTTP_STATUS.CONFLICT,
-          },
-        });
-        const refused = yield* Effect.provide(
-          client().chatPost(WORKSPACE_ID, write),
-          refusing.layer,
-        );
-        assert.deepEqual(refused, { failure }, error);
-      }
-    }),
-);
-
-it.effect(
   "a Start outlasts the usual deadline, since one from another agent copies its work first, and answers unanswered only past its own",
   () =>
     Effect.gen(function* () {
@@ -677,8 +592,6 @@ it.effect(
           plans: sealed,
           automations: sealed,
           failedRuns: sealed,
-          chatAsks: sealed,
-          chatNotices: sealed,
         },
       };
       const answering = (answer: JsonValue, status: number = HTTP_STATUS.OK) =>

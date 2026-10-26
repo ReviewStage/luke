@@ -4,11 +4,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
-import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentChatAnswerView,
-} from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -49,7 +45,6 @@ import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
-import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { PENDING_LIMIT } from "@luke/ui/pending-values";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -61,7 +56,6 @@ import {
   type VoiceCommand,
   type VoiceView,
 } from "@luke/voice/voice-view";
-import { AsyncIteratorClass } from "@orpc/client";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
@@ -117,7 +111,6 @@ import {
   useLeaveGuard,
   useTasksTab,
 } from "./use-tasks-tab.js";
-import { CHAT_READ_PAUSE } from "./use-workspace-chat.js";
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -700,14 +693,6 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-}
-
-/** Lets the pause a chat read waits on before it is told run out, and the read go. */
-async function readPauseRunsOut(): Promise<void> {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(Duration.toMillis(CHAT_READ_PAUSE));
-  });
-  await settle();
 }
 
 test("⇧⌘T opens the tabs closed again, the latest first, each in its strip at its place and a file's on the lines it showed, until none is left", async () => {
@@ -1366,32 +1351,6 @@ test("a Luke link to the Admin place opens it on its Overview, and one to a view
   assert.equal(tab.control().workspace?.id, listed);
 });
 
-test("a Luke link to a channel opens Chat on it in the workspace its slug names, and one to Chat opens it on For you, as its sidebar row does", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  const channelId = "7f3a4b5c-6d7e-4f8a-9b02-a3b4c5d6e7f8";
-  assert.equal(tab.control().workspace?.id, PERSONAL.id);
-
-  act(() =>
-    tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.CHAT, channelId } }),
-  );
-  const onChannel = {
-    workspace: tab.control().workspace?.id,
-    open: tab.control().chatView.open,
-    place: tab.control().chatView.place,
-    listed: tab.control().chatView.listed,
-  };
-  act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.CHAT } }));
-
-  assert.deepEqual(onChannel, {
-    workspace: ACME.id,
-    open: true,
-    place: { kind: CHAT_PLACE.CHANNEL, channelId },
-    listed: false,
-  });
-  assert.deepEqual(tab.control().chatView.place, FOR_YOU);
-  assert.equal(tab.control().chatView.listed, true);
-});
-
 test("a Luke link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   const listed = tab.control().workspace?.id;
@@ -1698,7 +1657,7 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so i
   assert.equal(tab.control().inboxShown, null);
 });
 
-test("in a narrow room the Inbox and Chat opened stand their lists over the item or channel last chosen, from elsewhere and from the item alike, where a wide room stands the item", () => {
+test("in a narrow room the Inbox opened stands its list over the item last chosen, from elsewhere and from the item alike, where a wide room stands the item", () => {
   for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
     const tab = mount({ shown: true, tasks: TWO_WORKSPACES, room });
     const narrow = room === SHELL_ROOM.NARROW;
@@ -1712,12 +1671,6 @@ test("in a narrow room the Inbox and Chat opened stand their lists over the item
     act(() => tab.control().inboxView.onListed(false));
     act(() => tab.control().inboxView.onOpen());
     assert.equal(tab.control().inboxView.listed, narrow, `${room}, from the item`);
-
-    const channel = { kind: CHAT_PLACE.CHANNEL, channelId: "c0ffee00-0000-4000-8000-000000000001" };
-    act(() => tab.control().chatView.onShow(channel));
-    act(() => tab.control().chatView.onOpen());
-    assert.equal(tab.control().chatView.listed, narrow, `${room}, Chat from its channel`);
-    assert.deepEqual(tab.control().chatView.place, channel);
   }
 });
 
@@ -2919,286 +2872,6 @@ test("a pin's place the service took follows the next list, even one a drag on a
   tab.stand({ tasks: listRead([{ ...pinned, pinPosition: "a2" }]) });
 
   assert.equal(position(), "a2");
-});
-
-test("a fixture run on the chat profile opens Chat at once and its staged chat lands there; a live run stages none", async () => {
-  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.CHAT });
-  assert.equal(fixture.control().chatView.open, true);
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(fixture.control().chatView.chat, "the staged chat landed");
-  });
-  const live = mount({ shown: true });
-  await settle();
-  assert.equal(live.control().chatView.open, false);
-  assert.equal(live.control().chatView.chat, undefined);
-});
-
-test("opening Chat on a place, as a chat notice's Open in chat does, asks first while a page stands its ask, as every other way out does", () => {
-  const tab = mount({ shown: true, tasks: listRead([listed()]) });
-  const asked: (() => void)[] = [];
-  act(() => {
-    tab.control().leaveGuard.stand((leave) => asked.push(leave));
-  });
-  act(() => tab.control().chatView.onShow(FOR_YOU));
-  assert.equal(tab.control().chatView.open, false, "nothing is left before Leave");
-  assert.equal(asked.length, 1);
-  act(() => asked[0]?.());
-  assert.equal(tab.control().chatView.open, true);
-});
-
-/** A chat's stream as the host opens one: each chat pushed is handed to the reader in turn. */
-function chatStream() {
-  const queued: CodingAgentChatAnswerView[] = [];
-  const waiting: ((read: IteratorResult<CodingAgentChatAnswerView, void>) => void)[] = [];
-  const iterator = new AsyncIteratorClass<CodingAgentChatAnswerView, void>(
-    () => {
-      const chat = queued.shift();
-      if (chat !== undefined) return Promise.resolve({ done: false, value: chat });
-      return new Promise((resolve) => waiting.push(resolve));
-    },
-    () => Promise.resolve(),
-  );
-  return {
-    /** The act's answer: the stream, opened. */
-    open: () => Promise.resolve(iterator),
-    push: (chat: CodingAgentChatAnswerView) => {
-      const reader = waiting.shift();
-      if (reader === undefined) queued.push(chat);
-      else reader({ done: false, value: chat });
-    },
-  };
-}
-
-test("a live run follows the listed workspace's chat only while the account has Chat on", async () => {
-  handState({});
-  const off = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
-  await settle();
-  assert.ok(
-    !off.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT_FOLLOW),
-    "Chat off follows no chat",
-  );
-  assert.equal(off.control().chatView.available, false);
-
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const on = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(
-      on.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT_FOLLOW),
-      "Chat on follows its chat",
-    );
-  });
-});
-
-test("a channel chosen in Chat is the listed workspace's, so another workspace listed puts Chat back on For you", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
-  act(() => tab.control().chatView.onOpen());
-  const channel = { kind: CHAT_PLACE.CHANNEL, channelId: "c0ffee00-0000-4000-8000-000000000001" };
-  act(() => tab.control().chatView.onChoose(channel));
-  assert.deepEqual(tab.control().chatView.place, channel);
-  act(() => tab.control().onChooseWorkspace(ACME.id));
-  assert.equal(tab.control().chatView.open, true, "Chat stays open");
-  assert.deepEqual(tab.control().chatView.place, FOR_YOU);
-});
-
-test("Chat opened stands on its rail, a place chosen or shown from elsewhere stands on that place, and the way back returns to the rail", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  const standing = () => [tab.control().chatView.place, tab.control().chatView.listed];
-  act(() => tab.control().chatView.onOpen());
-  assert.deepEqual(standing(), [FOR_YOU, true]);
-  const channel = { kind: CHAT_PLACE.CHANNEL, channelId: "c0ffee00-0000-4000-8000-000000000001" };
-  act(() => tab.control().chatView.onChoose(channel));
-  assert.deepEqual(standing(), [channel, false]);
-  act(() => tab.control().chatView.onList());
-  assert.deepEqual(standing(), [channel, true], "the rail stands with the place still chosen");
-  act(() => tab.control().chatView.onClose());
-  act(() => tab.control().chatView.onShow(channel));
-  assert.deepEqual(standing(), [channel, false]);
-});
-
-test("a chat notification's click, listing the workspace its message waits in and opening Chat in one press, stands on that workspace's Chat", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
-  act(() => {
-    tab.control().onChooseWorkspace(ACME.id);
-    tab.control().chatView.onOpen();
-  });
-  assert.equal(tab.control().workspace?.id, ACME.id);
-  assert.equal(tab.control().chatView.open, true);
-});
-
-test("the task's Chat, opened from ⌘K's Chat row, stands in the side panel and never in the column", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const on = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
-  await settle();
-  act(() => on.control().onShowChat(TASK.id));
-  assert.equal(on.control().sidePanel.tab, SIDE_PANEL_TAB.CHAT);
-  assert.equal(on.control().sidePanel.open, true);
-  assert.deepEqual(on.control().mainTabs.tabs, []);
-});
-
-test("the task's Chat tab on screen marks the task's plan channel read, as the window's Chat on that channel does", async () => {
-  vi.useFakeTimers();
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const me = "b1c2d3e4-0000-4000-8000-000000000001";
-  const channelId = "c0ffee00-0000-4000-8000-000000000002";
-  const answer = {
-    self: me,
-    readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
-    channels: [
-      { id: channelId, kind: CHANNEL_KIND.TASK, name: "invites", archived: false, planId: TASK.id },
-    ],
-    messages: [
-      {
-        id: "d0d0d0d0-0000-4000-8000-000000000003",
-        seq: 4,
-        touchedSeq: 4,
-        channelId,
-        authorId: "a0a0a0a0-0000-4000-8000-000000000004",
-        blocks: [],
-        mentions: [],
-        postedAt: 1,
-      },
-    ],
-    cursor: "",
-  };
-  const stream = chatStream();
-  stream.push(answer);
-  const tab = mount(
-    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
-    {
-      [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open,
-      [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
-    },
-    AtomRegistryModule.make(),
-  );
-  await settle();
-  act(() => tab.control().onShowChat(TASK.id));
-  await vi.waitFor(async () => {
-    await readPauseRunsOut();
-    const wrote = tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_CHAT_POST);
-    assert.deepEqual(
-      wrote.map((each) => each.payload),
-      [{ workspaceId: PERSONAL.id, write: { readTo: 4, channelId } }],
-    );
-  });
-});
-
-test("a channel hidden behind a narrow room's Chat rail is not marked read until it stands on screen again", async () => {
-  vi.useFakeTimers();
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const me = "b1c2d3e4-0000-4000-8000-000000000001";
-  const channelId = "c0ffee00-0000-4000-8000-000000000002";
-  /** The chat as one read answers it: the channel, holding one message at `seq`. */
-  const answerAt = (seq: number) => ({
-    self: me,
-    readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
-    channels: [{ id: channelId, kind: CHANNEL_KIND.GENERAL, name: "general", archived: false }],
-    messages: [
-      {
-        id: `d0d0d0d0-0000-4000-8000-00000000000${seq}`,
-        seq,
-        touchedSeq: seq,
-        channelId,
-        authorId: "a0a0a0a0-0000-4000-8000-000000000004",
-        blocks: [],
-        mentions: [],
-        postedAt: seq,
-      },
-    ],
-    cursor: "",
-  });
-  // The next push waits for the test to post a message, as the host pushes one when it lands.
-  const stream = chatStream();
-  stream.push(answerAt(4));
-  const tab = mount(
-    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] }, room: SHELL_ROOM.NARROW },
-    {
-      [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open,
-      [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
-    },
-    AtomRegistryModule.make(),
-  );
-  const place = { kind: CHAT_PLACE.CHANNEL, channelId };
-  const readTo = () =>
-    tab.payloads.flatMap((each) =>
-      each.kind === ACT_KIND.CODING_AGENTS_CHAT_POST ? [each.payload] : [],
-    );
-  const mark = (seq: number) => ({ workspaceId: PERSONAL.id, write: { readTo: seq, channelId } });
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(tab.control().chatView.chat, "the chat landed");
-  });
-  act(() => tab.control().chatView.onShow(place));
-  await readPauseRunsOut();
-  assert.deepEqual(readTo(), [mark(4)], "the channel on screen is read");
-
-  act(() => tab.control().chatView.onList());
-  stream.push(answerAt(5));
-  await readPauseRunsOut();
-  assert.deepEqual(readTo(), [mark(4)], "a message landing behind the rail stays unread");
-
-  act(() => tab.control().chatView.onChoose(place));
-  await readPauseRunsOut();
-  assert.deepEqual(readTo(), [mark(4), mark(5)]);
-});
-
-test("a channel link the chat held before it was opened does not hold stands until a later read: kept where that read holds it, back on For you where it does not", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const me = "b1c2d3e4-0000-4000-8000-000000000001";
-  const [held, fresh, gone] = [
-    "c0ffee00-0000-4000-8000-000000000001",
-    "c0ffee00-0000-4000-8000-000000000002",
-    "c0ffee00-0000-4000-8000-000000000003",
-  ];
-  /** The chat as one read answers it, holding `ids` as its channels. */
-  const answerOf = (cursor: number, ids: readonly string[]) => ({
-    self: me,
-    readSeq: 0,
-    members: [{ id: me, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false }],
-    channels: ids.map((id) => ({ id, kind: CHANNEL_KIND.TOPIC, name: id, archived: false })),
-    messages: [],
-    cursor: String(cursor),
-  });
-  // Each later push waits for the test, as the host pushes one when the chat changes.
-  const stream = chatStream();
-  stream.push(answerOf(1, [held]));
-  const tab = mount(
-    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
-    { [ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]: stream.open },
-    AtomRegistryModule.make(),
-  );
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(tab.control().chatView.chat, "the chat landed");
-  });
-  const linkTo = (channelId: string) =>
-    act(() =>
-      tab
-        .control()
-        .onOpenLink({ workspace: "personal", place: { kind: LINK_PLACE.CHAT, channelId } }),
-    );
-  const place = () => tab.control().chatView.place;
-
-  linkTo(fresh);
-  await settle();
-  assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: fresh }, "made since the read");
-  stream.push(answerOf(2, [held, fresh]));
-  await settle();
-  assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: fresh }, "and held by the next");
-
-  linkTo(gone);
-  await settle();
-  assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: gone });
-  stream.push(answerOf(3, [held, fresh]));
-  await vi.waitFor(async () => {
-    await settle();
-    assert.deepEqual(place(), FOR_YOU, "a read since that holds it not puts Chat on For you");
-  });
 });
 
 /** A start's agent, read back where it names one. */

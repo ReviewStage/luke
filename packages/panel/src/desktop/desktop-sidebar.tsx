@@ -74,7 +74,6 @@ import {
   FolderXIcon,
   InboxIcon,
   ListTodoIcon,
-  MessagesSquareIcon,
   ShieldUserIcon,
   ZapIcon,
 } from "@luke/ui/icons";
@@ -147,7 +146,6 @@ import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { shownChannel } from "../tasks/channels-model.js";
-import { useChatOn } from "../tasks/chat-gate.js";
 import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
 import type { InboxListing } from "../tasks/use-inbox-listing.js";
@@ -165,7 +163,7 @@ import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
-import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
+import { needsYouNoun, useInboxWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
@@ -1406,38 +1404,6 @@ function SidebarInboxRow({
   );
 }
 
-/**
- * Chat's row, under the Inbox's and drawn as it is: the glyph, its name, and
- * how many messages wait on the developer in For you at its end, in the
- * Inbox's even figures and its needs-you tone, since both count what waits on
- * the reader, nothing at none. A press opens the window's Chat
- * (`desktop-chat.tsx`), and the row is the place shown while it stands.
- */
-function SidebarChatRow({
-  waiting,
-  current,
-  onOpen,
-}: {
-  waiting: number;
-  current: boolean;
-  onOpen: () => void;
-}): React.JSX.Element {
-  return (
-    <NavItem
-      icon={<MessagesSquareIcon />}
-      current={current ? NAV_CURRENT.PAGE : undefined}
-      count={{
-        value: waiting,
-        noun: needsYouNoun(waiting),
-        tone: STATUS_TONE.ATTENTION,
-      }}
-      onClick={onOpen}
-    >
-      Chat
-    </NavItem>
-  );
-}
-
 /** What the sidebar is drawn with while it floats, or could. */
 interface FloatingSidebar extends HoverPane {
   /** Whether the sidebar is on screen: pinned, or floating over the work. */
@@ -1495,7 +1461,7 @@ function SidebarTasksRow({
 }
 
 /**
- * The Automations page's row, after Chat's and drawn as it is: the
+ * The Automations page's row, after the Tasks page's and drawn as it is: the
  * zap, its name, and its chord. A press opens the window's Automations page
  * (`automations-page.tsx`), and the row is the place shown while it stands.
  * While a run of the account's own automation failed to start since that
@@ -1728,8 +1694,7 @@ function useFirstUsableSpan(tasks: TasksControl): void {
  * and the Automations page's follow Search above the rule: the Inbox's
  * counts what waits on the developer and opens the window's Inbox, which is
  * also where the window rests with no task open (`resting-page.ts`), and
- * the Automations page's opens the window's Automations page; Chat's, where
- * a chat is read, counts what waits on the developer in Chat and opens it. The pinned tasks, and the side panel tabs
+ * the Automations page's opens the window's Automations page. The pinned tasks, and the side panel tabs
  * pinned to the sidebar, stand in the Pinned section while any are pinned,
  * newest pinned first, under a head that folds it, every row one line whose
  * hover card says the rest; whatever the list's view says, they stand as
@@ -1778,10 +1743,9 @@ function SidebarColumn({
   // The column's rows, Luke's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by.
   const roving = useRovingKeys<HTMLDivElement>();
   const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
-  // The window's Inbox, an agent's page, the Automations page, Chat, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
+  // The window's Inbox, an agent's page, the Automations page, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
-  const inChat = onTasks && tasks.chatView.open;
   const inBoard = onTasks && tasks.boardView.open;
   const inAdmin = onTasks && tasks.adminView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
@@ -1802,12 +1766,9 @@ function SidebarColumn({
   const standingIn =
     inInbox ||
     inAutomations ||
-    inChat ||
     inBoard ||
     inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
-  // Chat is an experiment: its row stands only while the account has it on.
-  const chatOn = useChatOn();
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   // With Channels on, the channels stand where the Inbox's row, the pins, and the task list stood, and a channel shows in the Inbox's place.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
@@ -1822,7 +1783,7 @@ function SidebarColumn({
       : undefined;
   // With the inbox-first sidebar on, the Inbox's items stand where the task list stood, under the pins, and the tasks are a page of their own.
   const listsInbox = inboxFirst && tasks.signedIn && inboxListing !== undefined;
-  const waiting = usePlacesWaiting(tasks);
+  const waiting = useInboxWaiting(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1864,10 +1825,6 @@ function SidebarColumn({
   const openAutomations = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.automationsView.onOpen();
-  };
-  const openChat = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.chatView.onOpen();
   };
   const openAdmin = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
@@ -2148,17 +2105,13 @@ function SidebarColumn({
         </NavItem>
         {listsInbox || channelsOn ? null : (
           <SidebarInboxRow
-            waiting={waiting.inbox}
+            waiting={waiting}
             current={inInbox}
             disabled={!tasks.signedIn}
             onOpen={chosen(openInbox)}
           />
         )}
         <SidebarTasksRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
-        {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
-        {chatOn && tasks.signedIn && tasks.chatView.available ? (
-          <SidebarChatRow waiting={waiting.chat} current={inChat} onOpen={chosen(openChat)} />
-        ) : null}
         <SidebarAutomationsRow
           current={inAutomations}
           failed={automationFailed}

@@ -290,8 +290,8 @@ function useFootWidth(card: RefObject<HTMLDivElement | null>): number | undefine
 /**
  * The room the composer's card stands in, a note under it, on the
  * transcript's own inset so the card and the column line up, with none above
- * it, since the log meets the card itself. A chat's, a new task's, and an
- * Inbox draft's box take the room in as their own sheets say.
+ * it, since the log meets the card itself. A new task's and an Inbox
+ * draft's box take the room in as their own sheets say.
  */
 export const COMPOSER_ROOM_CLASS =
   "agent-composer relative flex flex-col gap-control-gap px-luke-16 pt-0 pb-list-inset";

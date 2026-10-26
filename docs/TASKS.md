@@ -400,8 +400,8 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
   ("How agents show code" below), live during a call and read back when the
   task opens (`GET /api/plans/{id}/code`,
   `packages/service/src/tasks/task-work-store.ts`), so a restart or a switch
-  to another task and back loses none of it; `Comments`, the plan's
-  threads; and `Chat`, the task's chat channel. After them stand the workers
+  to another task and back loses none of it; and `Comments`, the plan's
+  threads. After them stand the workers
   opened from an agent's transcript, then files, pull requests, pages,
   terminals, and browsers, as the "+" lists them. The plan's versions open in
   the whole window ("History" below). The coding agents themselves have tabs

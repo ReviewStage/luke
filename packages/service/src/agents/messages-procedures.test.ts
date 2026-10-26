@@ -9,8 +9,7 @@
  * message has, as invalid; a body past its cap is too large; and a path
  * the router serves under another method is refused as such. The held
  * reads themselves, answered when something moves and let go at the hold,
- * are `workspace-chat.test.ts`'s and `coding-agents-app.test.ts`'s, over a
- * real dialect.
+ * are `coding-agents-app.test.ts`'s, over a real dialect.
  */
 
 import assert from "node:assert/strict";
@@ -87,16 +86,11 @@ it.effect(
       for (const path of [
         `${MESSAGES}?after=not-a-cursor`,
         `/api/agents/${AGENT_ID}/subagents/call-1/messages`,
-        "/api/workspaces/chat?after=-1",
       ]) {
         assert.deepEqual(yield* answer(path, { signedIn: false }), unauthenticated, path);
       }
       assert.deepEqual(
         yield* answer(MESSAGES, { method: "POST", signedIn: false, body: '{"text":7}' }),
-        unauthenticated,
-      );
-      assert.deepEqual(
-        yield* answer("/api/workspaces/chat", { method: "POST", signedIn: false, body: "{}" }),
         unauthenticated,
       );
     }),
@@ -146,14 +140,6 @@ it.effect(
       );
       assert.deepEqual(
         yield* answer(MESSAGES, { method: "POST", body: "{}", contentLength: 10_000_000 }),
-        refused(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
-      );
-      assert.deepEqual(
-        yield* answer("/api/workspaces/chat?workspaceId=w", {
-          method: "POST",
-          body: "{}",
-          contentLength: 10_000_000,
-        }),
         refused(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
       );
     }),

@@ -32,7 +32,7 @@ declare global {
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const PLACES = ["Inbox", "Tasks", "Chat", "Automations", "Settings"] as const;
+const PLACES = ["Inbox", "Tasks", "Board", "Automations", "Settings"] as const;
 
 const roots: Root[] = [];
 
@@ -171,17 +171,17 @@ test("⌘-click puts a row in the selection and takes it out again, without open
 });
 
 test("a chosen row is filled and described as selected; one not chosen is neither", () => {
-  const container = draw(createElement(Choosing, { chosen: ["Chat"] }));
-  const chat = button(container, "Chat");
-  expect(chat.getAttribute("aria-description")).toBe("Selected");
+  const container = draw(createElement(Choosing, { chosen: ["Board"] }));
+  const board = button(container, "Board");
+  expect(board.getAttribute("aria-description")).toBe("Selected");
   const inbox = button(container, "Inbox");
   expect(inbox.getAttribute("aria-description")).toBeNull();
 });
 
 test("a plain click opens its row as it always has, and leaves the selection as it stands", () => {
   const container = draw(createElement(Choosing, { chosen: ["Inbox"] }));
-  click(button(container, "Chat"));
-  expect(opened(container)).toBe("Chat");
+  click(button(container, "Board"));
+  expect(opened(container)).toBe("Board");
   expect(chosen(container)).toBe("Inbox");
 });
 
@@ -189,7 +189,7 @@ test("⇧-click chooses the run from the row last pressed, and a second ⇧-clic
   const container = draw(createElement(Choosing));
   click(button(container, "Tasks"));
   click(button(container, "Automations"), { shiftKey: true });
-  expect(chosen(container)).toBe("Automations,Chat,Tasks");
+  expect(chosen(container)).toBe("Automations,Board,Tasks");
   click(button(container, "Inbox"), { shiftKey: true });
   expect(chosen(container)).toBe("Inbox,Tasks");
   expect(opened(container)).toBe("Tasks");
@@ -198,17 +198,17 @@ test("⇧-click chooses the run from the row last pressed, and a second ⇧-clic
 test("⇧-click lays its run over what was chosen before the row it runs from", () => {
   const container = draw(createElement(Choosing));
   click(button(container, "Inbox"), { metaKey: true });
-  click(button(container, "Chat"), { metaKey: true });
+  click(button(container, "Board"), { metaKey: true });
   click(button(container, "Settings"), { shiftKey: true });
-  expect(chosen(container)).toBe("Automations,Chat,Inbox,Settings");
+  expect(chosen(container)).toBe("Automations,Board,Inbox,Settings");
 });
 
 test("an unavailable row is never chosen, though a run passes over it", () => {
-  const container = draw(createElement(Choosing, { off: ["Chat"] }));
+  const container = draw(createElement(Choosing, { off: ["Board"] }));
   click(button(container, "Inbox"), { metaKey: true });
   click(button(container, "Automations"), { shiftKey: true });
   expect(chosen(container)).toBe("Automations,Inbox,Tasks");
-  click(button(container, "Chat"), { metaKey: true });
+  click(button(container, "Board"), { metaKey: true });
   expect(chosen(container)).toBe("Automations,Inbox,Tasks");
 });
 
@@ -216,12 +216,12 @@ test("⌘A chooses every available row of the list", () => {
   const container = draw(createElement(Choosing, { off: ["Settings"] }));
   act(() => button(container, "Inbox").focus());
   expect(key("a", { metaKey: true })).toBe(true);
-  expect(chosen(container)).toBe("Automations,Chat,Inbox,Tasks");
+  expect(chosen(container)).toBe("Automations,Board,Inbox,Tasks");
 });
 
 test("Esc chooses none and goes no further; with none chosen it is left to what stands behind", () => {
   const heard = heardBehind();
-  const container = draw(createElement(Choosing, { chosen: ["Inbox", "Chat"] }));
+  const container = draw(createElement(Choosing, { chosen: ["Inbox", "Board"] }));
   act(() => button(container, "Inbox").focus());
   expect(key("Escape")).toBe(true);
   expect(chosen(container)).toBe("");
@@ -231,7 +231,7 @@ test("Esc chooses none and goes no further; with none chosen it is left to what 
 });
 
 test("⇧↓ and ⇧↑ grow and shrink the run from the row in hand, passing an unavailable row and stopping at the end", () => {
-  const container = draw(createElement(Choosing, { off: ["Chat"] }));
+  const container = draw(createElement(Choosing, { off: ["Board"] }));
   act(() => button(container, "Tasks").focus());
   key("ArrowDown", { shiftKey: true });
   expect(chosen(container)).toBe("Automations,Tasks");
@@ -270,9 +270,9 @@ test("a list not asked to choose rows opens its row on a ⌘-click, and leaves �
       ),
     }),
   );
-  click(button(container, "Chat"), { metaKey: true });
-  expect(pressed).toEqual(["Chat"]);
-  act(() => button(container, "Chat").focus());
+  click(button(container, "Board"), { metaKey: true });
+  expect(pressed).toEqual(["Board"]);
+  act(() => button(container, "Board").focus());
   expect(key("a", { metaKey: true })).toBe(false);
   expect(key("Escape")).toBe(false);
 });
@@ -379,9 +379,9 @@ test.each([
 test("a selection its owner clears while the focus stands elsewhere leaves the focus where it is", () => {
   const container = draw(createElement(Bar, { count: 2 }));
   act(() => button(container, "Mark done").focus());
-  act(() => button(container, "Chat").focus());
+  act(() => button(container, "Board").focus());
   act(() => button(container, "Clear selection").click());
-  expect(document.activeElement).toBe(button(container, "Chat"));
+  expect(document.activeElement).toBe(button(container, "Board"));
 });
 
 test("Esc in the bar chooses none, and goes no further", () => {
@@ -465,12 +465,12 @@ test("a region chooses its card presses across its lists: ⌘-click one, ⇧-cli
 
   click("Tasks", { metaKey: true });
   click("Automations", { shiftKey: true });
-  expect(chosen()).toBe("Tasks,Chat,Automations");
-  expect(card("Chat").getAttribute("aria-description")).toBe("Selected");
+  expect(chosen()).toBe("Tasks,Board,Automations");
+  expect(card("Board").getAttribute("aria-description")).toBe("Selected");
   expect(page.querySelector("[data-opened]")?.textContent).toBe("");
 
   act(() => {
-    card("Chat").dispatchEvent(
+    card("Board").dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
     );
   });

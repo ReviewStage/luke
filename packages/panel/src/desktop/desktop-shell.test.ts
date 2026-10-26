@@ -5,7 +5,6 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { RUN_PROFILE } from "@luke/host/app-state";
 import {
   ACCOUNT_ACT_KIND,
   AGENT_ACT_KIND,
@@ -38,8 +37,6 @@ import { CallCardContext, type CallCardInput, callControls } from "../call/call-
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { fixtureChat } from "../tasks/chat-fixture.js";
-import { loadTasksFixture } from "../tasks/tasks-fixture-loader.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -49,7 +46,6 @@ import {
   DESKTOP_CAPABILITIES,
   handCapabilities,
   handState,
-  stateWith,
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
@@ -867,9 +863,7 @@ function spokenName(item: HTMLElement): string {
   return heard.textContent ?? "";
 }
 
-test("on a phone the bar's Inbox and Chat wear the counts the drawer's rows show, named in the sidebar's words, and none at zero", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const chat = fixtureChat({ fixtureMode: true }, 0);
+test("on a phone the bar's Inbox wears the count the drawer's row shows, named in the sidebar's words, and none at zero", async () => {
   const listed = {
     tasks: [DOCUMENT_TASK],
     inbox: [],
@@ -878,41 +872,33 @@ test("on a phone the bar's Inbox and Chat wear the counts the drawer's rows show
   const page = await mountNarrow(
     {
       boardView: { ...tasksControl().boardView, open: true },
-      chatView: { ...tasksControl().chatView, available: true, chat },
       listed,
     },
     { overlay: SIDEBAR_OVERLAY.OPEN },
   );
   const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 need you");
-  const chatItem = barItems(page).find((item) => spokenName(item) === "Chat, 4 need you");
   assert.ok(inbox, "the bar's Inbox is named with its count");
-  assert.ok(chatItem, "the bar's Chat is named with its count");
   assert.match(inbox.textContent ?? "", /3/u, "the Inbox's count is drawn");
-  assert.match(chatItem.textContent ?? "", /4/u, "Chat's count is drawn");
   assert.match(
     placeRow(page, "Inbox")?.textContent ?? "",
     /^Inbox3 need you/u,
     "the drawer counts the same",
   );
-  assert.equal(chatRow(page)?.textContent, "Chat4 need you", "the drawer counts the same");
   // Note that the counts wear the needs-you tone the rows they count do, not a tally's ink.
   const toneOf = (row: HTMLElement | undefined) =>
     row?.querySelector(".luke-nav-item-count")?.getAttribute("data-tone");
   assert.equal(toneOf(placeRow(page, "Inbox")), STATUS_TONE.ATTENTION);
-  assert.equal(toneOf(chatRow(page)), STATUS_TONE.ATTENTION);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   const none = await mountNarrow({
     boardView: { ...tasksControl().boardView, open: true },
-    chatView: { ...tasksControl().chatView, available: true },
   });
   assert.deepEqual(
     barItems(none).map((item) => [spokenName(item), item.textContent]),
     [
       ["Inbox", "Inbox"],
       ["Tasks", "Tasks"],
-      ["Chat", "Chat"],
       ["More", "More"],
     ],
     "nothing waiting, nothing is drawn or said",
@@ -1235,7 +1221,7 @@ async function handBridge(): Promise<void> {
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
-    // A read of the account's automations, integrations, or its coding agents, their Inbox, or the chat, an account or settings act, a task kind, and the platform's updater, Browser tab, and window acts are refused.
+    // A read of the account's automations, integrations, or its coding agents, or their Inbox, an account or settings act, a task kind, and the platform's updater, Browser tab, and window acts are refused.
     if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });
@@ -1417,58 +1403,6 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, DOCUMENT_NAME);
 });
 
-/** The sidebar's Chat row, where one stands. */
-function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
-  return placeRow(page, "Chat");
-}
-
-test("the sidebar's Chat row stands only while the account has Chat on and a chat is available, counts what needs the developer in the Inbox's words, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  assert.equal(chatRow(mount(false)), undefined, "no chat is available");
-  act(() => root?.unmount());
-
-  let opened = 0;
-  const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
-  const page = mount(false, false, { chatView: view });
-  await settle();
-  const row = chatRow(page);
-  assert.equal(row?.textContent, "Chat4 need you");
-  assert.equal(row?.getAttribute("aria-current"), null);
-  act(() => row?.click());
-  assert.equal(opened, 1);
-  act(() => root?.unmount());
-
-  const open = mount(false, false, { chatView: { ...view, open: true } });
-  await settle();
-  assert.equal(chatRow(open)?.getAttribute("aria-current"), "page");
-  assert.equal(placeRow(open, "Inbox")?.getAttribute("aria-current"), null);
-  assert.ok(
-    open.querySelector(".desktop-main > .page-find > .chat-view"),
-    "Chat stands in the plan's place",
-  );
-});
-
-test("⌘K's Chat opens Chat only while the account has it on and a chat is available, and the row counts what waits in the needs-you tone its rows wear", async () => {
-  let opened = 0;
-  const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
-  handState({});
-  mount(false, false, { chatView: view });
-  await settle();
-  assert.equal(runAppCommand(APP_COMMAND.CHAT), false);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  handState(experimentsOn(EXPERIMENT.CHAT));
-  const page = mount(false, false, { chatView: view });
-  await settle();
-  assert.equal(runAppCommand(APP_COMMAND.CHAT), true);
-  assert.equal(opened, 1);
-  const count = chatRow(page)?.querySelector<HTMLElement>(".luke-nav-item-count");
-  assert.equal(count?.dataset.tone, STATUS_TONE.ATTENTION);
-});
-
 test("⌘K's Admin opens the Admin place for an admin alone, and is offered nothing for anyone else", async () => {
   let opened = 0;
   const adminView = { ...tasksControl().adminView, onOpen: () => (opened += 1) };
@@ -1500,47 +1434,6 @@ test("Admin stands in the plan's place beside the sidebar, its row marked, with 
     ),
     [],
   );
-});
-
-test("with Chat off for the account, its row stands nowhere, and Chat standing in the plan's place gives it back", async () => {
-  handState({});
-  const closed: string[] = [];
-  const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = {
-    ...tasksControl().chatView,
-    available: true,
-    chat,
-    onClose: () => closed.push("closed"),
-  };
-  const off = mount(false, false, { chatView: view });
-  await settle();
-  assert.equal(chatRow(off), undefined);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  const standing = mount(false, false, { chatView: { ...view, open: true } });
-  await settle();
-  assert.equal(standing.querySelector(".chat-view"), null, "Chat is not drawn");
-  assert.deepEqual(closed, ["closed"]);
-});
-
-test("a fixture run staged on Chat offers it with no account to turn its experiment on, where any other run does not", async () => {
-  const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, available: true, chat };
-  const run = { ...stateWith({}, {}).run, fixtureMode: true };
-  handState({}, { run: { ...run, profile: RUN_PROFILE.CHAT } });
-  // The window is drawn once the synthetic tasks have landed (`App`).
-  await loadTasksFixture();
-  const staged = mount(false, false, { chatView: view });
-  await settle();
-  assert.ok(chatRow(staged), "the chat profile's run offers Chat");
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  handState({}, { run: { ...run, profile: RUN_PROFILE.TASKS } });
-  const other = mount(false, false, { chatView: view });
-  await settle();
-  assert.equal(chatRow(other), undefined, "another fixture run does not");
 });
 
 /** The offline status in the title bar beside the traffic lights, if one stands. */

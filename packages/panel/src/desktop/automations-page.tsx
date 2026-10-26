@@ -971,7 +971,7 @@ function AutomationsPages({
   const back = () => view.onOpen({ kind: AUTOMATIONS_PAGE.LIST });
   const { place } = view;
   // A new page filled in from Code review's preset goes back to the list once its experiment is off, here or
-  // on another Mac, as Chat gives the task's place back; the window's leave guard asks first where it was written in.
+  // on another Mac; the window's leave guard asks first where it was written in.
   // Note that the way out is read through a ref, because the window rebuilds it on every render, and a draft
   // kept by Cancel is asked again only when the place or the experiment moves.
   const fromPreset = place.kind === AUTOMATIONS_PAGE.NEW && place.preset !== undefined;

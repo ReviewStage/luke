@@ -5,8 +5,6 @@ import {
   type CodingAgentAgentAnswer,
   type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
-  type CodingAgentChatAnswerView,
-  type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentDeleteAnswerView,
   type CodingAgentGitHubImageView,
@@ -32,9 +30,6 @@ import {
   type CodingAgentTranscriptOlderAnswer,
   type CodingAgentTranscriptPage,
   codingAgentArchiveParamsSchema,
-  codingAgentChatAttachmentParamsSchema,
-  codingAgentChatFollowParamsSchema,
-  codingAgentChatPostParamsSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
   codingAgentGitHubImageParamsSchema,
@@ -86,7 +81,6 @@ import {
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
-import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import {
   type ChaptersModelAnswerView,
   chaptersModelWriteParamsSchema,
@@ -104,12 +98,11 @@ import {
 import { Effect, Equal, FiberHandle, FiberMap, Option, RcMap, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
-import { followWorkspaceChat } from "./chat-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type InboxTxWaits, inboxTxWaits } from "./inbox-tx-waits.js";
-import { confirmWrite, type LiveClient, openRealtimeClient, type TxWait } from "./live-follow.js";
+import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import {
   followInbox,
@@ -128,12 +121,10 @@ import {
 import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
 
 /**
- * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, what waits across the account, and the workspace's chat, read and written.
+ * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, and what waits across the account.
  *
- * Nothing is held here but the transcripts' subscriptions, the followed
- * inboxes' (`scope-inbox-follow.ts`), heard as `INBOX_CHANGED` events, and
- * each followed workspace chat's (`chat-follow.ts`), heard as `CHAT_CHANGED`
- * events. The window holds the agents it draws and the cursor it reads
+ * Nothing is held here but the transcripts' subscriptions, and the followed
+ * inboxes' (`scope-inbox-follow.ts`), heard as `INBOX_CHANGED` events. The window holds the agents it draws and the cursor it reads
  * from, asks when a task opens, when it starts or stops an agent, and while
  * an agent's tab shows its running transcript, and every ask is one call of
  * the service answered whole. The transcript read is held open here while
@@ -215,10 +206,6 @@ export type CodingAgentClient = Pick<
   | "accountInboxLive"
   | "inboxAttachment"
   | "agentPicture"
-  | "chatPost"
-  | "chatJoin"
-  | "workspaceChatLive"
-  | "chatAttachment"
 >;
 
 export interface CodingAgentsDependencies {
@@ -310,7 +297,6 @@ export function composeCodingAgents(
       now: dependencies.kernel.now,
       txWaits,
     });
-    const chats = yield* FiberMap.make<string>();
     const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
     const accountFollow = yield* FiberHandle.make();
     return composed(
@@ -318,7 +304,6 @@ export function composeCodingAgents(
       http,
       { transcripts, followed, held },
       { inboxes, followed: inboxFollows, txWaits },
-      chats,
       { accounts, followed: accountFollow },
     );
   });
@@ -351,16 +336,12 @@ function composed(
   http: HttpClient.HttpClient,
   { transcripts, followed, held }: Transcripts,
   { inboxes, followed: inboxFollows, txWaits }: ScopeFollows,
-  /** Each workspace's chat main follows for its windows, one fiber each. */
-  chats: FiberMap.FiberMap<string>,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
 ): CodingAgentsComposer {
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
   const asked = askedOf(dependencies, http);
-  /** Each followed chat's wait for a write's transaction, by its workspace, while it is subscribed over Realtime. */
-  const chatTxWaits = new Map<string, TxWait>();
   const listed = dependencies.listed ?? (() => Effect.void);
 
   /** What this host holds of one transcript for the account signed in as the follow opens; nothing is held while nobody is. */
@@ -412,13 +393,6 @@ function composed(
       } = answer.agent;
       return { agent: { ...agent, status: CODING_AGENT_STATUS.RUNNING } };
     });
-
-  /** A workspace's chat sealed for the account a follow started for, as every renewal of it names; signed out where none was. */
-  const chatLiveFor =
-    (workspaceId: string, userId: string | undefined) => (poll: boolean, after?: string) =>
-      userId === undefined
-        ? Effect.succeed(LIVE_SIGNED_OUT)
-        : asked(client.workspaceChatLive(workspaceId, userId, poll, after));
 
   /** The agent's or worker's transcript a follow names, and the key its subscription and follow are held under. */
   const agentTranscriptOf = (
@@ -1045,71 +1019,6 @@ function composed(
         const answer = yield* confirmed(asked(client.markInboxRead(request)));
         return carried<CodingAgentInboxReadAllView>(answer);
       }),
-    [GATEWAY_METHOD.CODING_AGENTS_CHAT_POST]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId, write } = yield* readParams(
-          codingAgentChatPostParamsSchema,
-          params,
-          "writing to a workspace's chat names the workspace and one post, answer, resolve, or read",
-        );
-        const answer = yield* asked(client.chatPost(workspaceId, write));
-        // As Neon's mutations guide says: answered once the followed chat holds the write.
-        if (!("failure" in answer)) yield* confirmWrite(chatTxWaits.get(workspaceId), answer.txid);
-        return carried<CodingAgentChatWriteAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          codingAgentChatFollowParamsSchema,
-          params,
-          "following a workspace's chat names the workspace",
-        );
-        const tell = (chat: CodingAgentChatAnswerView) =>
-          Effect.sync(() =>
-            kernel.emit(GATEWAY_EVENT.CHAT_CHANGED, carried({ workspaceId, chat })),
-          );
-        let mine: TxWait | undefined;
-        const follow = gate()
-          ? followWorkspaceChat({
-              join: () => asked(client.chatJoin(workspaceId)),
-              live: chatLiveFor(workspaceId, dependencies.accountId()),
-              openLive: dependencies.openLive ?? openRealtimeClient,
-              now: kernel.now,
-              tell,
-              onTxWait: (wait) => {
-                // Note that only this follow's own wait is let go, never a newer follow's.
-                if (wait !== undefined) {
-                  mine = wait;
-                  chatTxWaits.set(workspaceId, wait);
-                } else if (chatTxWaits.get(workspaceId) === mine) {
-                  chatTxWaits.delete(workspaceId);
-                }
-              },
-            })
-          : tell(UNANSWERED);
-        yield* FiberMap.run(chats, workspaceId, follow);
-        return {};
-      }),
-    [GATEWAY_METHOD.CODING_AGENTS_CHAT_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          codingAgentChatFollowParamsSchema,
-          params,
-          "letting a workspace's chat go names the workspace",
-        );
-        yield* FiberMap.remove(chats, workspaceId);
-        return {};
-      }),
-    [GATEWAY_METHOD.CODING_AGENTS_CHAT_ATTACHMENT]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId, messageId, attachmentId } = yield* readParams(
-          codingAgentChatAttachmentParamsSchema,
-          params,
-          "reading a chat message's picture names the workspace, the message, and the attachment",
-        );
-        const answer = yield* asked(client.chatAttachment(workspaceId, messageId, attachmentId));
-        return carried<CodingAgentInboxAttachmentView>(answer);
-      }),
     [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW]: () =>
       Effect.gen(function* () {
         const tell = (answer: CodingAgentAccountInboxAnswerView) =>
@@ -1128,7 +1037,6 @@ function composed(
 
   const reset = Effect.gen(function* () {
     yield* FiberMap.clear(followed);
-    yield* FiberMap.clear(chats);
     yield* FiberMap.clear(inboxFollows);
     yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);

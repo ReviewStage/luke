@@ -12,7 +12,6 @@ import { accountPreference } from "../../schemas/preferences.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   accountExperimentOn,
-  chatEnabledFor,
   readAccountPreferences,
   readAccountRole,
   writeAccountPreferences,
@@ -104,26 +103,15 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openAccount;
-        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), false);
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.BROWSER), false);
         yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
-        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), false);
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
-        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), true);
-        assert.equal(yield* accountExperimentOn(yield* openAccount, EXPERIMENT.CHAT), false);
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: false } });
-        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), false);
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.BROWSER), false);
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.BROWSER]: true } });
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.BROWSER), true);
+        assert.equal(yield* accountExperimentOn(yield* openAccount, EXPERIMENT.BROWSER), false);
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.BROWSER]: false } });
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.BROWSER), false);
       }),
-  );
-
-  it.effect("Chat is off for an account until it turns the Chat experiment on", () =>
-    Effect.gen(function* () {
-      const userId = yield* openAccount;
-      assert.equal(yield* chatEnabledFor(userId), false);
-      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
-      assert.equal(yield* chatEnabledFor(userId), false);
-      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
-      assert.equal(yield* chatEnabledFor(userId), true);
-    }),
   );
 
   it.effect("one account's experiments are no other account's", () =>

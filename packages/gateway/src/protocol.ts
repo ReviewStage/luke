@@ -361,19 +361,6 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
   CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
-  /** A write to a workspace's chat as the account's own member: a post, an answer to an ask, a resolve, or how far it has read; what the write came to, or why there is no answer. */
-  CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
-  /**
-   * A workspace's chat followed from now until it is let go or the account
-   * signs out, over Neon Realtime: the account's person joins it once, and
-   * what it holds is heard as `CHAT_CHANGED` events, never answered;
-   * following again starts over.
-   */
-  CODING_AGENTS_CHAT_FOLLOW: "codingAgents.chatFollow",
-  /** A workspace's chat let go: no more `CHAT_CHANGED` events of it until it is followed again. */
-  CODING_AGENTS_CHAT_UNFOLLOW: "codingAgents.chatUnfollow",
-  /** One picture a chat message carries, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
   /** Where every one of the account's integrations stands, read from the service now. */
   INTEGRATIONS_STATUS: "integrations.status",
   /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
@@ -749,8 +736,6 @@ export const GATEWAY_EVENT = {
   BROWSER_LIVE_CLOSED: "browserLive.closed",
   /** A followed transcript's next page, or why there is none, each time it moves while it is followed. */
   TRANSCRIPT_CHANGED: "transcript.changed",
-  /** One followed workspace's chat, whole or why there is none, each time it changes while it is followed. */
-  CHAT_CHANGED: "chat.changed",
   /** A followed plan's pages as they now stand, each time they move while followed. */
   TASKS_PAGES_CHANGED: "tasks.pagesChanged",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */

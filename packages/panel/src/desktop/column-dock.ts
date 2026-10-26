@@ -5,23 +5,7 @@
 import { type RefObject, useLayoutEffect } from "react";
 
 /** What docks at a column's foot: an agent's to-do list, pull request row, and composer, and a call's video, whichever stand. */
-const DOCKED =
-  ".agent-todos-dock, .agent-published-dock, .agent-composer:not(.chat-composer), .agent-call-foot";
-
-/**
- * A chat's composer at its foot, never a thread's reply box, which scrolls
- * with the messages. It docks wherever it spans under what floats: in a
- * narrow room and in the side panel filling the window always, and beside
- * the work on the Chat page only where it reaches under the floating card,
- * as it does past a rail drawn narrower than the card. Over a rail as wide,
- * the card stands over the rail's rows and rises for nothing.
- */
-const CHAT_DOCKED = '.chat-composer[data-compact="false"]';
-
-/** Where the floating card stands across the window, or a span nothing meets where no card floats. */
-function cardSpan(card: Element | null): DOMRect {
-  return card === null ? DOMRect.fromRect({ x: -1, width: 0 }) : card.getBoundingClientRect();
-}
+const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer, .agent-call-foot";
 
 /** The length the dock's height is written in. */
 const COLUMN_DOCK = "--luke-column-dock";
@@ -104,16 +88,13 @@ function shownColumn(host: Element, selector: string): Element | null {
 }
 
 /** From the column's foot to the top of its highest docked part on screen, or nothing where none stands. */
-function dockHeight(column: Element, docked: string, card: DOMRect | undefined): number {
+function dockHeight(column: Element, docked: string): number {
   const span = column.getBoundingClientRect();
   const foot = span.bottom;
   let top = foot;
   for (const part of column.querySelectorAll(docked)) {
     const box = part.getBoundingClientRect();
     if (!seen(part, box, span)) continue;
-    // Where only the card reads the dock, a chat's composer beside it docks nothing.
-    const beside = card !== undefined && (box.left >= card.right || box.right <= card.left);
-    if (beside && part.matches(CHAT_DOCKED)) continue;
     top = Math.min(top, box.top);
   }
   return Math.max(0, foot - top);
@@ -265,9 +246,8 @@ function toastDockHeight(shell: Element, docked: string, stack: DOMRect, step: n
  * clear. The dock is written on the document's root, because the toasts,
  * which a phone stands above it too, are portalled out of the shell; the
  * card's height on the shell. The column is the task's, or an agent's page
- * standing in its place, or the Chat page in a narrow room, or the side
- * panel while it fills the window, where a chat's composer docks too
- * (`CHAT_DOCKED`); of those found, the first on screen, and of its docked
+ * standing in its place, or the side panel while it fills the window; of
+ * those found, the first on screen, and of its docked
  * parts, those on screen, so a pane or a panel on its way out lifts nothing.
  * On a phone, where a short screen leaves the card no room under the
  * column's bars at the card's full height, the card's video tile is handed
@@ -307,13 +287,8 @@ export function useColumnDock(
     const root = host.ownerDocument.documentElement;
     // Found afresh on every change under the shell, because a task still
     // loading draws its column only once its document lands.
-    const columnSelector = panelFull
-      ? ".side-panel"
-      : ".desktop-task-main, .agent-page, .chat-view";
-    const docked = `${DOCKED}, ${CHAT_DOCKED}`;
-    const toastDocked = `${docked}, ${TOAST_DOCKED}`;
-    // Beside the work only the card reads the dock, so a chat's composer docks only under it.
-    const besideCard = !panelFull && !narrow;
+    const columnSelector = panelFull ? ".side-panel" : ".desktop-task-main, .agent-page";
+    const toastDocked = `${DOCKED}, ${TOAST_DOCKED}`;
     let column = shownColumn(host, columnSelector);
     // What the observer follows, so a change that leaves them standing follows nothing anew.
     let followed: readonly Element[] = [];
@@ -321,8 +296,7 @@ export function useColumnDock(
     function write(): void {
       if (host === null) return;
       const card = host.querySelector(FLOATING_CARD);
-      const under = besideCard ? cardSpan(card) : undefined;
-      const dock = column === null ? undefined : dockHeight(column, docked, under);
+      const dock = column === null ? undefined : dockHeight(column, DOCKED);
       writeLength(root, COLUMN_DOCK, dock === undefined ? undefined : `${dock}px`);
       writeLength(
         host,
@@ -346,7 +320,7 @@ export function useColumnDock(
         (part) => !column?.contains(part),
       );
       const standing = [
-        ...(column === null ? [] : [column, ...column.querySelectorAll(docked)]),
+        ...(column === null ? [] : [column, ...column.querySelectorAll(DOCKED)]),
         ...elsewhere,
         ...(card === null ? [] : [card]),
         ...(stack === null ? [] : [stack]),

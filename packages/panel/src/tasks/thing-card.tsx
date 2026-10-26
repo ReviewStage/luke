@@ -175,7 +175,6 @@ export const THING_CARD: ThingCards = {
       fallback={at.own}
     />
   ),
-  [THING_KIND.CHAT]: OWN_CARD,
   [THING_KIND.ADMIN]: OWN_CARD,
   [THING_KIND.FILE]: (file, at) => (
     <FileCard

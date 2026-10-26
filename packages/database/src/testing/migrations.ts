@@ -33,22 +33,22 @@ export function undoneRename(statement: string): string {
   throw new Error(`the migration holds a statement that is no rename: ${statement}`);
 }
 
-/** The tables a later migration dropped, the attachments' old names among them (`20261021000416_attachment_views_drop`). */
+/** The tables a later migration dropped: the attachments' old names (`20261021000416_attachment_views_drop`) and Chat's (`drop_chat`). */
 const DROPPED_TABLES = [
   "chat_attachment",
   "inbox_attachment",
   "plan_attachment",
   "conversation_attachment",
+  "chat_member",
+  "chat_channel",
+  "chat_read",
+  "chat_message",
+  "workspace_chat",
 ] as const;
 
-/** The columns and indexes a later migration dropped, as an earlier statement names them: a planner member's task and its index (`20261021105816_per_task_luke_data_drop`). */
-const DROPPED_NAMES = [`"chat_member" RENAME COLUMN "plan_id"`, `"chat_member_plan"`] as const;
-
-/** An earlier migration's statements as a replay over today's schema can run them: every one naming a table since dropped, or an index or constraint named after one, or a column or index since dropped, left out. */
+/** An earlier migration's statements as a replay over today's schema can run them: every one naming a table since dropped, or an index or constraint named after one, left out. */
 export function replayable(statements: readonly string[]): readonly string[] {
-  return statements.filter(
-    (statement) =>
-      DROPPED_TABLES.every((table) => !statement.includes(`"${table}`)) &&
-      DROPPED_NAMES.every((name) => !statement.includes(name)),
+  return statements.filter((statement) =>
+    DROPPED_TABLES.every((table) => !statement.includes(`"${table}`)),
   );
 }

@@ -1,6 +1,6 @@
 /**
  * admin-overview-queries.ts -- the Overview's reads of tasks, plan revisions,
- * coding agents, pull requests, calls, the inbox, automations, and chat.
+ * coding agents, pull requests, calls, the inbox, and automations.
  *
  * Every read counts rows or reads a timestamp, a status, or an id; none names
  * a column that holds what an account typed, said, or ran. Every read joins
@@ -15,7 +15,6 @@ import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-v
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { member, session, user } from "@luke/database/schemas/auth";
 import { automationRun } from "@luke/database/schemas/automation";
-import { chatMember, chatMessage } from "@luke/database/schemas/chat";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { inboxItem } from "@luke/database/schemas/inbox";
@@ -34,7 +33,6 @@ import {
 } from "@luke/features/admin-overview-vocabulary";
 import type { AdminMetricsScope, AdminMetricsWindow } from "@luke/features/admin-wire";
 import { AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
-import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
@@ -316,17 +314,6 @@ function reachRows(since: Date) {
         and(
           ne(automationRun.status, AUTOMATION_RUN_STATUS.SKIPPED),
           gte(automationRun.firedAt, since),
-        ),
-      ),
-    queryBuilder
-      .select({ tag: tag(REACH_FEATURE.CHAT), userId: userIdOf(chatMember.userId) })
-      .from(chatMessage)
-      .innerJoin(chatMember, eq(chatMember.id, chatMessage.authorMemberId))
-      .where(
-        and(
-          eq(chatMember.kind, MEMBER_KIND.HUMAN),
-          isNotNull(chatMember.userId),
-          gte(chatMessage.createdAt, since),
         ),
       ),
   ).as("reach_row");

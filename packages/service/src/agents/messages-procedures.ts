@@ -1,18 +1,16 @@
 /**
  * messages-procedures.ts -- the held message reads, and the writes on the same paths, as the hosted oRPC router answers them.
  *
- * Three reads the desktop holds open while nothing it reads has moved: one
+ * Two reads the desktop holds open while nothing it reads has moved: one
  * agent's transcript (`GET /api/agents/{id}/messages`) and its worker's
  * (`GET /api/agents/{id}/subagents/{call}/messages`), held while the agent
- * or the worker runs (`coder-host/transcript.ts`); and a workspace's chat (`GET /api/workspaces/chat`), held
- * while nothing moved (`coder-host/chat-page.ts`). Each is a long-held JSON
+ * or the worker runs (`coder-host/transcript.ts`). Each is a long-held JSON
  * procedure, its hold the store's own, unchanged: the handler adds no
  * deadline of its own, and the hold ends when the store's does, answering
- * the page as it stands. Beside them, the two writes the same paths take: a
+ * the page as it stands. Beside them, the write the same path takes: a
  * message to an agent (`POST /api/agents/{id}/messages`), handed to its
  * session through the one steer path the voice brain's tool shares
- * (`coder-host/steer.ts`), and a write to the chat (`POST
- * /api/workspaces/chat`, `workspace-chat.ts`).
+ * (`coder-host/steer.ts`).
  *
  * Every row a read touches is one of a workspace the caller is a member of:
  * an agent or a task of any other workspace answers exactly as one that
@@ -97,12 +95,6 @@ import {
   transcriptNow,
   transcriptPast,
 } from "./coder-host/transcript.js";
-import {
-  joinWorkspaceChatAsPerson,
-  readWorkspaceChat,
-  workspaceOf,
-  writeWorkspaceChat,
-} from "./workspace-chat.js";
 
 /** oRPC's own code for an input its schema refused. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
@@ -503,19 +495,5 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
       return newestAnswer(newest, titles.get(conversationId) ?? null, readsCut(input.parts));
     }),
-
-    chat: signedIn.chat.effect(function* ({ input, context }) {
-      return yield* readWorkspaceChat(context.userId, input);
-    }),
-
-    chatWrite: hosted.messages
-      .use(accountMiddleware(seams.resolveUserId))
-      .chatWrite.effect(function* ({ input, context }) {
-        const workspaceId = yield* workspaceOf(input.query.workspaceId);
-        if ("join" in input.body) {
-          return yield* joinWorkspaceChatAsPerson(context.userId, workspaceId);
-        }
-        return yield* writeWorkspaceChat(seams, context.userId, workspaceId, input.body);
-      }),
   };
 }

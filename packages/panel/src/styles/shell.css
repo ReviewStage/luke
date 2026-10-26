@@ -153,7 +153,7 @@
    lights, as a browser's tab strip does, and its sheet starts under the
    row, holding the page alone: a page with tabs (a task, an agent's page,
    and the Inbox) and a page with a toolbar of its own alike (Tasks,
-   Automations, Home, Chat), so the window has one geometry. A page with tabs sets the side
+   Automations, Home), so the window has one geometry. A page with tabs sets the side
    panel beside it as a sheet of its own a gap away, on the panel's well,
    under its own row of tabs. The frame stays a gap round every sheet, the
    sidebar folded or not, since the row above it is the frame already. Note
@@ -332,31 +332,6 @@
   .desktop-task
   .inbox-view[data-columns="both"]
   .inbox-tasks::after {
-  position: absolute;
-  top: var(--desktop-bar-height);
-  right: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--luke-color-border);
-  content: "";
-  pointer-events: none;
-}
-
-/* Chat's rail is parted from its place inside the sheet, under the row,
-   as the Inbox's list is from its item. */
-:where(:root):not([data-luke-room="narrow"])
-  .desktop-shell
-  > .desktop-main
-  .chat-view:not([data-single="true"])
-  > .chat-rail {
-  border-right: 0;
-}
-
-:where(:root):not([data-luke-room="narrow"])
-  .desktop-shell
-  > .desktop-main
-  .chat-view:not([data-single="true"])
-  > .chat-rail::after {
   position: absolute;
   top: var(--desktop-bar-height);
   right: 0;

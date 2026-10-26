@@ -14,10 +14,6 @@ import {
 } from "@luke/database/core/query";
 import { agentAutomationNameSql, agentGivenNameSql } from "@luke/database/models/agent-name";
 import { automationReadableBy } from "@luke/database/models/automation-store";
-import {
-  type ChatWaitingLiveStatements,
-  chatWaitingLiveStatements,
-} from "@luke/database/models/chat-store";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
   AGENT_WORKSPACE,
@@ -1328,8 +1324,8 @@ const findAutomationsWithItems = SqlSchema.findAll({
     ),
 });
 
-/** The statements the account's read is subscribed to live: each part of its answer as a row of the wire's own shape, what waits in chat among them. */
-export interface AccountInboxLiveStatements extends ChatWaitingLiveStatements {
+/** The statements the account's read is subscribed to live: each part of its answer as a row of the wire's own shape. */
+export interface AccountInboxLiveStatements {
   readonly items: LiveStatement;
   readonly planless: LiveStatement;
   readonly plans: LiveStatement;
@@ -1340,8 +1336,7 @@ export interface AccountInboxLiveStatements extends ChatWaitingLiveStatements {
  * What waits on the developer across the account, written for Neon Realtime:
  * the same rows, joins, and rule of who may read them as `accountWaitingItems`,
  * `accountTasklessItems`, `accountInboxTasks`, and
- * `accountInboxAutomations`, each item unread or not for the account as they say it, and what waits in
- * chat as `chat-waiting.ts` reads it (`chatWaitingLiveStatements`), each
+ * `accountInboxAutomations`, each item unread or not for the account as they say it, each
  * column under the key `account-inbox-wire.ts` reads it by and each instant
  * in epoch milliseconds, so a row decodes as the held read's entry does. The order is the reader's to keep, since Realtime keeps none.
  * None where a statement names a value Realtime cannot carry.
@@ -1433,16 +1428,12 @@ export function accountInboxLiveStatements(
     )
     .where(and(isNull(inboxItem.taskId), itemReachableBy(userId)))
     .groupBy(automation.id);
-  return Option.zipWith(
-    Option.all({
-      items: liveStatementOf(items),
-      planless: liveStatementOf(planless),
-      plans: liveStatementOf(plans),
-      automations: liveStatementOf(automations),
-    }),
-    chatWaitingLiveStatements(userId),
-    (parts, chat) => ({ ...parts, ...chat }),
-  );
+  return Option.all({
+    items: liveStatementOf(items),
+    planless: liveStatementOf(planless),
+    plans: liveStatementOf(plans),
+    automations: liveStatementOf(automations),
+  });
 }
 
 /**

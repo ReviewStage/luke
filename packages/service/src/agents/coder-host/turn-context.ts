@@ -1,5 +1,5 @@
 /**
- * turn-context.ts -- what a coding agent's turn opens with as a message of its own: the call's words, the time, and the task and chat where they changed.
+ * turn-context.ts -- what a coding agent's turn opens with as a message of its own: the call's words, the time, and the task where it changed.
  *
  * The session's prompt (`instructions.ts`) is composed once, as the session
  * starts, and stands for its life, and every tool is offered on every turn
@@ -18,11 +18,10 @@
  * talk its plan through, since on a call the agent is who the developer
  * plans with. A later spoken turn says in a line that the words stand, and
  * a typed turn after spoken ones that they no longer do. Then the task as
- * it stands (`../agent-runtime/standing-context.ts`) and the chat the agent
- * has not read: the developer's time on every turn, the rest of the task
- * only where it changed since the session last handed it, and the chat only
- * where it holds what was not handed before, so the history grows by what
- * is new rather than by the same words every turn. An operator whose
+ * it stands (`../agent-runtime/standing-context.ts`): the developer's time
+ * on every turn, and the rest of the task only where it changed since the
+ * session last handed it, so the history grows by what is new rather than
+ * by the same words every turn. An operator whose
  * history nears eve's compaction is told once, at the next turn's open, to
  * keep what is durable before the summary folds it (`flushDue`), since eve
  * gives the model no step of its own ahead of a compaction.

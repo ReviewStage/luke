@@ -209,7 +209,6 @@ describe("⌃Tab", () => {
 describe("what is on screen", () => {
   const standing: WindowStanding = {
     over: false,
-    chat: false,
     inbox: false,
     agentId: undefined,
     person: undefined,

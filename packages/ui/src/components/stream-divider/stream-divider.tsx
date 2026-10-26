@@ -4,7 +4,7 @@ import { createElement, type ReactNode, type Ref } from "react";
  * stream-divider.tsx -- a line across a stream of messages that says where it stands: a day begins, or what is new to the reader begins.
  *
  * A day's divider (`DAY`) says the day in the muted ink between two
- * hairlines, as a chat's stream says Today or Yesterday. The New line
+ * hairlines, as a channel's stream says Today or Yesterday. The New line
  * (`NEW`) leads with its word in the accent's ink and runs an accent rule
  * to the stream's end, before the first message the reader has not seen.
  * It stands as a list's item (`as`) where the stream is a list, and takes a

@@ -1,34 +1,34 @@
 import { BarItem, EllipsisIcon, MENU_KEEPS_CLEAR } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
-import { InboxIcon, ListTodoIcon, MessagesSquareIcon } from "lucide-react";
+import { InboxIcon, ListTodoIcon } from "lucide-react";
 import { adminSection } from "../admin/routing.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { channelsWaiting } from "../tasks/channels-model.js";
 import { useChannels } from "../tasks/use-channels.js";
 import { automationsTab, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
+import { needsYouNoun, useInboxWaiting } from "./places-waiting.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
  * mobile-bar.tsx -- a phone's way between the window's places: a bar at the
- * screen's foot with the Inbox, the Tasks page, Chat where the account has
- * it, and More, which opens the sidebar's drawer for everything else.
+ * screen's foot with the Inbox, the Tasks page, and More, which opens the
+ * sidebar's drawer for everything else.
  *
  * It stands only in a narrow room and only on a place's list, the Inbox's,
- * the Tasks page, Chat's rail, Automations, or the window resting with no
- * task open, so a task, an agent's page, an item, or a channel being read
- * keeps the whole screen and is left by Back. Each press lands on its
- * place's list, not on the item or channel last read, since on a phone the
- * list is the place (`use-tasks-tab.ts`'s `onOpen`).
+ * the Tasks page, Automations, or the window resting with no task open, so
+ * a task, an agent's page, an item, or a channel being read keeps the whole
+ * screen and is left by Back. Each press lands on its place's list, not on
+ * the item or channel last read, since on a phone the list is the place
+ * (`use-tasks-tab.ts`'s `onOpen`).
  *
  * Settings, which stands over the places rather than among them, keeps the
  * bar on a phone too, its list and its pages alike: no place is the current
  * one there, and a press leaves Settings for the place pressed, More for the
  * drawer over the places (`leave`).
  *
- * The Inbox and Chat each count what waits on the developer there, the
- * count the drawer's rows show, read from the one reading they draw from
+ * The Inbox counts what waits on the developer there, the count the
+ * drawer's row shows, read from the one reading they draw from
  * (`places-waiting.ts`), so the two never disagree, and said in the
  * sidebar's words.
  *
@@ -49,14 +49,11 @@ export interface BarChannels {
 export function mobileBarShown(
   room: ShellRoom,
   tasks: TasksControl,
-  chatOn: boolean,
   channels: BarChannels | undefined,
 ): boolean {
   // Note that the open task's side panel is not asked: it is held behind every place, so it says nothing of the one on screen.
   if (room !== SHELL_ROOM.NARROW || !tasks.signedIn) return false;
-  const { inboxView, chatView, boardView, automationsView, adminView, agentView, personView } =
-    tasks;
-  if (chatView.open && chatOn) return chatView.listed;
+  const { inboxView, boardView, automationsView, adminView, agentView, personView } = tasks;
   // Note that a thread stands over a channel's stream only while its item is the one chosen, so a choice history went back past shows the stream.
   const chosen = inboxView.chosen;
   const itemStands =
@@ -74,14 +71,12 @@ export function mobileBarShown(
 /** The bar; see the module's head. */
 export function MobileBar({
   tasks,
-  chatOn,
   channelsOn,
   sidebar,
   onPressMore,
   leave,
 }: {
   tasks: TasksControl;
-  chatOn: boolean;
   /** Whether Channels stands in the Inbox's place. */
   channelsOn: boolean;
   /** The drawer the bar's More opens, whose float while open leaves every other item inert, as the work it covers is. */
@@ -91,13 +86,12 @@ export function MobileBar({
   /** Leaves what stands over the places (Settings) before a press opens one; none where the bar stands among them. */
   leave?: (() => void) | undefined;
 }): React.JSX.Element {
-  const { inboxView, chatView, boardView } = tasks;
+  const { inboxView, boardView } = tasks;
   const among = leave === undefined;
-  const inChat = among && chatView.open && chatOn;
-  const inInbox = among && !inChat && inboxView.open;
-  const inTasks = among && !inChat && !inInbox && boardView.open;
+  const inInbox = among && inboxView.open;
+  const inTasks = among && !inInbox && boardView.open;
   const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
-  const waiting = usePlacesWaiting(tasks);
+  const waiting = useInboxWaiting(tasks);
   // Note that a press leaves what stands over the places first, so the place it opens is the one on screen.
   const go = (open: () => void) => () => {
     leave?.();
@@ -126,7 +120,7 @@ export function MobileBar({
         <BarItem
           icon={<InboxIcon />}
           current={inInbox}
-          count={{ value: waiting.inbox, noun: needsYouNoun(waiting.inbox) }}
+          count={{ value: waiting, noun: needsYouNoun(waiting) }}
           inert={drawerOpen}
           onPress={go(inboxView.onOpen)}
         >
@@ -141,17 +135,6 @@ export function MobileBar({
       >
         Tasks
       </BarItem>
-      {!channelsOn && chatOn && chatView.available ? (
-        <BarItem
-          icon={<MessagesSquareIcon />}
-          current={inChat}
-          count={{ value: waiting.chat, noun: needsYouNoun(waiting.chat) }}
-          inert={drawerOpen}
-          onPress={go(chatView.onOpen)}
-        >
-          Chat
-        </BarItem>
-      ) : null}
       <BarItem
         icon={<EllipsisIcon />}
         current={false}

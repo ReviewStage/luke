@@ -30,6 +30,12 @@ import {
   automationViewSchema,
 } from "@luke/features/automation-view";
 import {
+  type BrowserLiveClosedEvent,
+  type BrowserLiveMessageEvent,
+  browserLiveClosedEventSchema,
+  browserLiveMessageEventSchema,
+} from "@luke/features/browser-live-acts";
+import {
   CHANNEL_CALL_FAILURE,
   type ChannelArchiveParams,
   type ChannelCreateParams,
@@ -43,12 +49,6 @@ import {
   channelThreadsViewSchema,
 } from "@luke/features/channel-view";
 import {
-  type BrowserLiveClosedEvent,
-  type BrowserLiveMessageEvent,
-  browserLiveClosedEventSchema,
-  browserLiveMessageEventSchema,
-} from "@luke/features/browser-live-acts";
-import {
   type ChatGptSignInAnswerView,
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -56,10 +56,6 @@ import {
   type CodingAgentArchiveParams,
   type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
-  type CodingAgentChatAttachmentParams,
-  type CodingAgentChatChanged,
-  type CodingAgentChatPostParams,
-  type CodingAgentChatWriteAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
   type CodingAgentDeleteAnswerView,
@@ -117,8 +113,6 @@ import {
   codingAgentAgentAnswerSchema,
   codingAgentCallsAnswerViewSchema,
   codingAgentChangesAnswerViewSchema,
-  codingAgentChatChangedSchema,
-  codingAgentChatWriteAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDeleteAnswerViewSchema,
   codingAgentGitHubImageViewSchema,
@@ -959,20 +953,6 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
   /** One part of a message of an agent's transcript or one of its workers', read whole under the account: what the page carried cut, or why there is none. */
   codingAgentPart(params: CodingAgentPartParams): Effect.Effect<CodingAgentPartView>;
-  /** A workspace's chat, followed from now until let go or signed out, heard through `onChatChanged`; following again starts over. */
-  codingAgentChatFollow(workspaceId: string): Effect.Effect<void>;
-  /** A workspace's chat let go: nothing more is heard of it until it is followed again. */
-  codingAgentChatUnfollow(workspaceId: string): Effect.Effect<void>;
-  /** A followed workspace's chat, whole or why there is none, each time it changes. */
-  onChatChanged(listener: (changed: CodingAgentChatChanged) => void): () => void;
-  /** A write to a workspace's chat as the account's own member; what it came to, or why there is no answer. */
-  codingAgentChatPost(
-    params: CodingAgentChatPostParams,
-  ): Effect.Effect<CodingAgentChatWriteAnswerView>;
-  /** One picture a chat message carries, read under the account: its bytes in base64 under its type, or why there is none. */
-  codingAgentChatAttachment(
-    params: CodingAgentChatAttachmentParams,
-  ): Effect.Effect<CodingAgentInboxAttachmentView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
@@ -2458,36 +2438,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PART, params),
         answerOf(codingAgentPartViewSchema, CODING_AGENT_UNANSWERED),
-      ),
-    codingAgentChatFollow: (workspaceId) =>
-      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId })),
-    codingAgentChatUnfollow: (workspaceId) =>
-      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_UNFOLLOW, { workspaceId })),
-    onChatChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CHAT_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(codingAgentChatChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
-        listener,
-      ),
-    codingAgentChatPost: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, {
-          workspaceId: params.workspaceId,
-          write: params.write,
-        }),
-        answerOf(codingAgentChatWriteAnswerViewSchema, CODING_AGENT_UNANSWERED),
-      ),
-    codingAgentChatAttachment: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_ATTACHMENT, {
-          workspaceId: params.workspaceId,
-          messageId: params.messageId,
-          attachmentId: params.attachmentId,
-        }),
-        answerOf(codingAgentInboxAttachmentViewSchema, CODING_AGENT_UNANSWERED),
       ),
     onSettingsChanged: (listener) =>
       on(

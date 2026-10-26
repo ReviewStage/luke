@@ -19,14 +19,6 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
-  CHAT_BOUNDS,
-  chatAnswerSchema,
-  chatJoinAnswerSchema,
-  chatJoinRequestSchema,
-  chatWriteAnswerSchema,
-  chatWriteRequestSchema,
-} from "../chat-wire.js";
-import {
   CODING_AGENT_BOUNDS,
   codingAgentMessageAnswerSchema,
   codingAgentMessageRequestSchema,
@@ -36,18 +28,11 @@ import {
   MAXIMUM_ATTACHMENTS_BODY_BYTES,
 } from "../coding-agent-wire.js";
 import { transcriptNowAnswerSchema } from "../live-wire.js";
-import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
 
 /** A message is its words, its files, and a key: the bound's characters at JSON's widest escape, the files, and room for the keys around them. */
 const MESSAGE_BODY_BYTES =
   6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 1_024;
-
-/** A chat write is at most a post's blocks at JSON's widest escape, its pictures as a message to an agent carries files, and room for the keys around them. */
-const CHAT_WRITE_BODY_BYTES =
-  6 * CHAT_BOUNDS.MAX_BLOCKS * CHAT_BOUNDS.MAX_MARKDOWN_CHARS +
-  MAXIMUM_ATTACHMENTS_BODY_BYTES +
-  4_096;
 
 /** The status a message handed to an agent is answered with: taken, its turn yet to read it. */
 const ACCEPTED = 202;
@@ -84,11 +69,6 @@ const newestQuery = { before: queryValue, parts: queryValue };
 const newestAnswerSchema = EffectSchema.Union([
   codingAgentNewestAnswerSchema,
   codingAgentOlderAnswerSchema,
-]);
-
-/** A workspace's chat, named in the query, with any key beside it taken as it comes. */
-const chatQuery = EffectSchema.StructWithRest(EffectSchema.Struct({ workspaceId: queryValue }), [
-  EffectSchema.Record(EffectSchema.String, EffectSchema.Unknown),
 ]);
 
 export const messagesContract = {
@@ -150,34 +130,4 @@ export const messagesContract = {
     )
     .input(EffectSchema.Struct({ ...byCall, ...byPart }))
     .output(EffectSchema.flip(codingAgentPartAnswerSchema)),
-  /** A workspace's chat past the cursor, held while nothing moved. */
-  chat: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES_CHAT }))
-    .input(EffectSchema.Struct({ workspaceId: queryValue, after: queryValue }))
-    .output(EffectSchema.flip(chatAnswerSchema)),
-  /**
-   * One write to a workspace's chat: a join, which makes the person's
-   * member and `#general` where they are not yet and answers their member,
-   * or a post, an answer, a resolve, or a read.
-   */
-  chatWrite: hostedProcedure
-    .meta(bodyCap(CHAT_WRITE_BODY_BYTES))
-    .meta(
-      openapi({
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.WORKSPACES_CHAT,
-        inputStructure: "detailed",
-      }),
-    )
-    .input(
-      exactInput(
-        EffectSchema.Struct({
-          params: EffectSchema.optionalKey(EffectSchema.Unknown),
-          query: chatQuery,
-          headers: EffectSchema.optionalKey(EffectSchema.Unknown),
-          body: EffectSchema.Union([chatJoinRequestSchema, chatWriteRequestSchema]),
-        }),
-      ),
-    )
-    .output(EffectSchema.flip(EffectSchema.Union([chatJoinAnswerSchema, chatWriteAnswerSchema]))),
 };

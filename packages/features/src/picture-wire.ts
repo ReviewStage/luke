@@ -50,7 +50,7 @@ export const PICTURE_BOUNDS = {
    * well under.
    */
   MAX_BYTES: 1_500_000,
-  /** The most bytes one video may hold, decoded: the bound the inbox and the chat keep a recording under. */
+  /** The most bytes one video may hold, decoded: the bound the inbox keeps a recording under. */
   MAX_VIDEO_BYTES: INBOX_BOUNDS.MAX_VIDEO_BYTES,
   /**
    * The most bytes one video sent as a `data:` URL may hold, decoded. Note

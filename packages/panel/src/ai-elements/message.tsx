@@ -74,12 +74,11 @@ export function Message({ className, from, ...props }: MessageProps): ReactNode 
 }
 
 /**
- * A turn the chat steered in, a teammate's or another agent's line
- * (`chat-notice.tsx`), at the column's left, the other side of the
- * conversation, its line under it starting at its left edge: the same
+ * A line the other side sent, Luke's, GitHub's, or another agent's, at the
+ * column's left, the other side of the conversation, its line under it starting at its left edge: the same
  * bubble as the developer's own, which stands at the right.
  */
-export const CHAT_MESSAGE_CLASS = "is-chat mr-auto max-w-bubble items-start";
+export const RECEIVED_MESSAGE_CLASS = "is-received mr-auto max-w-bubble items-start";
 
 export type MessageContentProps = HTMLAttributes<HTMLDivElement>;
 
@@ -89,11 +88,11 @@ export function MessageContent({ children, className, ...props }: MessageContent
     // A reply is reading text, so it keeps a reading leading rather than the
     // body role's. It clips past the keyboard's ring rather than at its edge,
     // so a fold, a tool line, or a chip it holds keeps its ring. The
-    // developer's turn and a chat notice raise it in a bubble.
+    // developer's turn and a received line raise it in a bubble.
     <div
       className={cn(
         "message-content min-w-0 max-w-full overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)] text-body leading-reading text-foreground",
-        "group-[:is(.is-user,.is-chat)]/message:w-fit group-[:is(.is-user,.is-chat)]/message:rounded-luke-14 group-[:is(.is-user,.is-chat)]/message:bg-fill-strong group-[:is(.is-user,.is-chat)]/message:px-list-inset group-[:is(.is-user,.is-chat)]/message:py-row-inset",
+        "group-[:is(.is-user,.is-received)]/message:w-fit group-[:is(.is-user,.is-received)]/message:rounded-luke-14 group-[:is(.is-user,.is-received)]/message:bg-fill-strong group-[:is(.is-user,.is-received)]/message:px-list-inset group-[:is(.is-user,.is-received)]/message:py-row-inset",
         className,
       )}
       {...props}

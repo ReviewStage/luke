@@ -313,7 +313,7 @@ test("an open pull request GitHub's merge queue holds says Queued and wears the 
   assert.ok(row?.textContent?.includes("Queued"));
 });
 
-/** The plan's page as Luke's chat draws it: in no repository. */
+/** The plan's page as a place off a task draws it: in no repository. */
 const NO_REPOSITORY: TaskMentionsValue = {
   ...PAGE,
   repository: null,

@@ -43,7 +43,7 @@ export function CopyMessageAction({
   forkable?: boolean;
   /** Where its fork cuts it, where it is a reply still being written; none where a fork keeps it whole. */
   forkCut?: ForkCut | undefined;
-  /** An action of the message's own set before Copy, as a chat notice's Open in Chat is. */
+  /** An action of the message's own set before Copy. */
   lead?: ReactNode;
   /** How its tab may offer to rewind to it: Edit on a line of the developer's, Revert to here on the agent's own; none where it offers neither. */
   rewind?: RewindAction | undefined;

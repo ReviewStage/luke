@@ -4,14 +4,7 @@ import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@luke/feat
 import type { Workspace } from "@luke/features/workspace-wire";
 import { DocumentIcon, ProviderMark } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
-import {
-  CalendarIcon,
-  GLYPH,
-  HashIcon,
-  MessageSquareIcon,
-  MessagesSquareIcon,
-  ShieldUserIcon,
-} from "@luke/ui/icons";
+import { CalendarIcon, GLYPH, HashIcon, MessageSquareIcon, ShieldUserIcon } from "@luke/ui/icons";
 import { fileName } from "@luke/voice/code-pane-model";
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
@@ -252,7 +245,6 @@ const THING_MARK: ThingMarks = {
   [THING_KIND.PERSON]: (person, at) => (
     <PersonMark userId={person.userId} name={at.name} workspace={at.workspace} />
   ),
-  [THING_KIND.CHAT]: () => <MessagesSquareIcon aria-hidden="true" />,
   [THING_KIND.ADMIN]: () => <ShieldUserIcon aria-hidden="true" />,
   [THING_KIND.FILE]: (file) => <FileTypeIcon name={fileName(file.path)} />,
   [THING_KIND.FOLDER]: () => <GLYPH.FOLDER />,

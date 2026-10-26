@@ -105,18 +105,20 @@ function draw(
 test("each experiment is a switch, on as the account chose, that writes the choice it is pressed to", async () => {
   const page = draw({
     entries: EXPERIMENTS,
-    experiments: experimentsOn(EXPERIMENT.CHAT),
+    experiments: experimentsOn(EXPERIMENT.BROWSER),
     signedIn: true,
   });
 
-  const chat = page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Chat"]');
-  assert.ok(chat, "Chat has a switch");
-  assert.equal(chat.getAttribute("aria-checked"), "true");
+  const browser = page.querySelector<HTMLButtonElement>(
+    '[role="switch"][aria-label="Browser tab"]',
+  );
+  assert.ok(browser, "the Browser tab has a switch");
+  assert.equal(browser.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
   assert.ok(page.textContent?.startsWith("Channels"));
 
-  await act(async () => chat.click());
-  assert.deepEqual(sent, [{ experiment: EXPERIMENT.CHAT, on: false }]);
+  await act(async () => browser.click());
+  assert.deepEqual(sent, [{ experiment: EXPERIMENT.BROWSER, on: false }]);
 });
 
 test("an experiment's Send feedback opens the dialog about that experiment", () => {
@@ -135,7 +137,6 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     EXPERIMENT.INBOX_FIRST,
     EXPERIMENT.CODE_REVIEW,
     EXPERIMENT.BROWSER,
-    EXPERIMENT.CHAT,
     EXPERIMENT.VIDEO_CALLS,
   ]);
 });
@@ -187,7 +188,6 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
     ["Inbox-first sidebar"],
     ["Code review"],
     ["Browser tab"],
-    ["Chat"],
     ["Video calls", "Avatar"],
   ]);
 

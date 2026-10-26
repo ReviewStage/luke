@@ -1,5 +1,4 @@
 import type {
-  AccountChatEntry,
   AccountInboxAnswer,
   AccountInboxAutomation,
   AccountInboxEntry,
@@ -20,11 +19,11 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * agent-notices.ts -- keeps where each coding agent stands and what waits across the account, for the window's marks and counts: the ledger of each agent's turn, fed by the plan list followed live, the follow of what waits, and the Dock's badge.
  *
  * Nothing here announces anything. An agent's turn ending, an Inbox item
- * posted, a chat message coming to wait, or an automation's run failing to
- * start is said by the window's own marks and counts, focused or behind, and
- * by no toast and no notification, since news the developer did not ask for
- * interrupts more than it tells: the agent's unseen dot, the Inbox's and
- * Chat's counts and the Dock's badge, and the Automations failed mark. The
+ * posted, or an automation's run failing to start is said by the window's
+ * own marks and counts, focused or behind, and by no toast and no
+ * notification, since news the developer did not ask for interrupts more
+ * than it tells: the agent's unseen dot, the Inbox's counts and the Dock's
+ * badge, and the Automations failed mark. The
  * one notification Luke posts is a command waiting on this Mac
  * (`client/client-notices.ts`), through the same doors.
  *
@@ -65,10 +64,8 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * agent. Of those, only the items of agents the account started wait on
  * it, since an agent runs on its starter's keys and asks its starter: each
  * answer is written whole as each task's open items of those, which the
- * sidebar counts, and the Dock's badge is their number, beside what waits in
- * chat (`chat`), an ask someone else posted, or a direct message or a
- * mention of the developer's, while Chat is on. While Channels is on the
- * badge counts only the open asks among them, which is every channel's
+ * sidebar counts, and the Dock's badge is their number. While Channels is
+ * on the badge counts only the open asks among them, which is every channel's
  * count of what waits on the developer summed, since a notice asks nobody
  * to act; every task holding any
  * member's item is listed for the Inbox. The same read carries the newest
@@ -114,7 +111,7 @@ export interface AgentNotice {
  */
 export interface AgentNoticeDoorsSurface {
   post(notice: AgentNotice): void;
-  /** How many inbox items and chat messages wait across the account, which the Dock's badge counts; none clears it. */
+  /** How many inbox items wait across the account, which the Dock's badge counts; none clears it. */
   badge(count: number): void;
 }
 
@@ -166,8 +163,6 @@ export interface AgentNoticesDependencies {
   accounts: Stream.Stream<string | undefined>;
   /** Where each task's waiting items, and every task holding an item, are written, for the window's Inbox. */
   onInboxChanged: (inbox: AppInboxSlice) => void;
-  /** Whether the window offers Chat, without which nothing waiting in chat is counted. */
-  chatOn: () => boolean;
   /** Whether the window offers Channels, under which the Dock counts the open asks that wait on the account, every channel's summed, and no notice. */
   channelsOn: () => boolean;
   report: (line: string) => void;
@@ -190,7 +185,7 @@ export interface AgentNotices {
   shown(agentId: string | null): void;
   /** The developer marked the agent as read by hand: its unseen dot goes, whichever page shows. */
   seen(agentId: string): void;
-  /** Chat or Channels turned on or off: the badge counts what last waited again, since no answer moves with an experiment. */
+  /** Channels turned on or off: the badge counts what last waited again, since no answer moves with an experiment. */
   recount(): void;
 }
 
@@ -282,7 +277,7 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
 /** What an answer of the inbox read carries that the window and the Dock are told of. */
 type InboxAnswered = Pick<
   AccountInboxAnswer,
-  "items" | "plans" | "planless" | "automations" | "failedRuns" | "chat"
+  "items" | "plans" | "planless" | "automations" | "failedRuns"
 >;
 
 /** Whether two answers say alike everything the window draws of each item of an agent with no task: its agent's title and model, the automation and repository standing in a task's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
@@ -414,11 +409,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       };
     }
 
-    /** What waits in chat that the window offers, none while Chat is off. */
-    function chatOf(answer: InboxAnswered): readonly AccountChatEntry[] {
-      return dependencies.chatOn() ? (answer.chat ?? []) : [];
-    }
-
     /** What waits in the inbox that the Dock counts: every item, or under Channels its open asks alone, each channel's count of what waits on the reader summed. */
     function countedOf(answer: InboxAnswered): number {
       const waiting = [...answer.items, ...(answer.planless ?? [])];
@@ -426,10 +416,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       return waiting.filter(asking).length;
     }
 
-    /** Writes what waits for the window, and its number, a task's items, an agent's with no task, and chat messages alike, the account's own alone, for the Dock. */
+    /** Writes what waits for the window, and its number, a task's items and an agent's with no task alike, the account's own alone, for the Dock. */
     function publishWaiting(answer: InboxAnswered, listed: readonly AccountTasklessEntry[]): void {
       dependencies.onInboxChanged(sliceOf(answer, listed));
-      doors.badge(countedOf(answer) + chatOf(answer).length);
+      doors.badge(countedOf(answer));
     }
 
     /**
@@ -637,8 +627,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       },
       seen,
       recount: () => {
-        if (waiting !== undefined)
-          doors.badge(countedOf(waiting.answer) + chatOf(waiting.answer).length);
+        if (waiting !== undefined) doors.badge(countedOf(waiting.answer));
       },
     };
 
