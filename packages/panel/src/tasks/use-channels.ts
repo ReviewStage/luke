@@ -1,5 +1,4 @@
 import {
-  type ArchivedChannelsView,
   CHANNEL_CALL_FAILURE,
   type ChannelCallFailure,
   type ChannelsView,
@@ -628,30 +627,38 @@ export function useChannelThreads(channelId: string | undefined): ChannelThreads
 
 /** A workspace's archived channels as last read, the latest archived first, and the door that reads them again. */
 export interface ArchivedChannelsControl {
-  /** The archived channels, none until first read. */
+  /** The archived channels as last read, none until first read; a read that fails keeps them. */
   readonly channels: readonly ArchivedChannel[] | undefined;
   /** Why the last read failed, none where it answered. */
   readonly failure: ChannelCallFailure | undefined;
   readonly onRefresh: () => void;
 }
 
-/** A workspace's archived channels, read as the surface opens, again on `onRefresh`, and whenever the follow says any channel moved, since an archive or an unarchive moves one. */
+/**
+ * A workspace's archived channels, read as the surface opens, again on
+ * `onRefresh`, and whenever the follow says any channel moved, since an
+ * archive or an unarchive moves one. Note that they are held for the
+ * window, a failed read keeping what was held, as the open channels are,
+ * so a stream showing an archived channel and the window's links and
+ * history naming it (`useShownChannel`) read the same list.
+ */
 export function useArchivedChannels(workspaceId: string | undefined): ArchivedChannelsControl {
   const { act } = useAct();
-  const [read, setRead] = useState<{
+  const archived = useSyncExternalStore(subscribe, heldArchivedNow, heldArchivedNow);
+  const [failed, setFailed] = useState<{
     readonly workspaceId: string;
-    readonly view: ArchivedChannelsView;
+    readonly failure: ChannelCallFailure | undefined;
   }>();
   const onRefresh = useCallback(() => {
     if (workspaceId === undefined) return;
     act(ACT_KIND.CHANNELS_ARCHIVED, { workspaceId }).then(
       (view) => {
-        setRead({ workspaceId, view });
-        if ("failure" in view) return;
+        if ("failure" in view) return setFailed({ workspaceId, failure: view.failure });
+        setFailed({ workspaceId, failure: undefined });
         heldArchived = new Map(heldArchived).set(workspaceId, view.channels);
         told();
       },
-      () => setRead({ workspaceId, view: { failure: CHANNEL_CALL_FAILURE.UNANSWERED } }),
+      () => setFailed({ workspaceId, failure: CHANNEL_CALL_FAILURE.UNANSWERED }),
     );
   }, [act, workspaceId]);
   useEffect(() => onRefresh(), [onRefresh]);
@@ -661,10 +668,9 @@ export function useArchivedChannels(workspaceId: string | undefined): ArchivedCh
       moveListeners.delete(onRefresh);
     };
   }, [onRefresh]);
-  const current = read?.workspaceId === workspaceId ? read?.view : undefined;
   return {
-    channels: current === undefined || "failure" in current ? undefined : current.channels,
-    failure: current !== undefined && "failure" in current ? current.failure : undefined,
+    channels: workspaceId === undefined ? undefined : archived.get(workspaceId),
+    failure: failed?.workspaceId === workspaceId ? failed?.failure : undefined,
     onRefresh,
   };
 }

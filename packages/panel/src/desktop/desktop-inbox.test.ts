@@ -9688,8 +9688,8 @@ function answerChannels(answers: {
   follow?: AsyncIterableIterator<unknown>;
   /** A channel made or archived, before the channels as they then stand are answered. */
   onWrite?: (write: AnyAct) => void;
-  /** The workspace's archived channels; the read is refused where none are given. */
-  archived?: readonly ArchivedChannel[];
+  /** The workspace's archived channels, or why their read fails; the read is refused where none are given. */
+  archived?: () => readonly ArchivedChannel[] | { readonly failure: string };
   /** Why the service refuses an unarchive, where it does. */
   unarchiveRefused?: string;
 }): void {
@@ -9722,7 +9722,8 @@ function answerChannels(answers: {
         return read.then((value) => ({ status: FAKE_ANSWER.DONE, value }) as FakeActAnswer);
       }
       if (request.kind === ACT_KIND.CHANNELS_ARCHIVED && answers.archived !== undefined) {
-        return done({ channels: answers.archived });
+        const archived = answers.archived();
+        return done("failure" in archived ? archived : { channels: archived });
       }
       if (request.kind === ACT_KIND.CHANNELS_FOLLOW && answers.follow !== undefined) {
         return done(answers.follow);
@@ -9836,7 +9837,7 @@ test("an archived channel chosen shows its threads to read, offering no ask and 
   };
   const unarchived: string[] = [];
   answerChannels({
-    archived: [old],
+    archived: () => [old],
     onWrite: (write) => {
       if (write.kind === ACT_KIND.CHANNELS_UNARCHIVE) unarchived.push(write.payload.channelId);
     },
@@ -9886,7 +9887,7 @@ test("an archived channel whose threads could not be read still says why its Una
     archivedAt: 2,
   };
   answerChannels({
-    archived: [old],
+    archived: () => [old],
     threads: () => Promise.resolve({ failure: "unanswered" }),
     unarchiveRefused: "name-taken",
   });
@@ -9908,6 +9909,40 @@ test("an archived channel whose threads could not be read still says why its Una
   );
   await settle();
   assert.match(stream.textContent ?? "", /Another channel already goes by that name\./u);
+  act(() => channelPlaceNow?.onChoose(GENERAL.id));
+});
+
+test("an archived channel shown stays shown when a later read of the archived channels fails", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  const old: ArchivedChannel = {
+    id: "c0ffee00-0000-4000-8000-0000000000ac",
+    name: "old-app",
+    purpose: "The apps, before the split",
+    project: false,
+    createdAt: 1,
+    archivedAt: 2,
+  };
+  let archivedReads = 0;
+  const follow = channelFollow();
+  answerChannels({
+    follow: follow.stream,
+    archived: () => {
+      archivedReads += 1;
+      return archivedReads === 1 ? [old] : { failure: "unanswered" };
+    },
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  act(() => channelPlaceNow?.onChoose(old.id));
+  await settle();
+  assert.ok(page.querySelector('section[aria-label="#old-app"]'), "the archived stream stands");
+
+  act(() => follow.push({ moved: [GENERAL.id] }));
+  await settle();
+  assert.ok(archivedReads > 1, "the archived channels were read again");
+  assert.ok(page.querySelector('section[aria-label="#old-app"]'), "a failed read kept it shown");
+  assert.equal(page.querySelector('section[aria-label="Channel not found"]'), null);
   act(() => channelPlaceNow?.onChoose(GENERAL.id));
 });
 
