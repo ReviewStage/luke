@@ -33,7 +33,8 @@
  * members give them, each falling back to what was kept as it stood, the
  * column's agent wearing its glyph as its tab drew it (`switcher-looks.ts`),
  * at work or failed as everywhere. With Channels on, the Inbox's card names
- * the channel its place shows, "#general", wearing the channel's glyph.
+ * what its place shows, wearing the channel's glyph: the channel, "#general",
+ * or "Channels" where a phone stands its list of channels.
  * Its preview is a still of the whole work area, taken once the window
  * settles on the screen and again as ⌃Tab leaves it: main takes a downscaled
  * picture of that part of the window (`window.capture`). A still is a picture
@@ -44,7 +45,6 @@
  */
 
 import { useAtomSet } from "@effect/atom-react";
-import type { Channel } from "@luke/features/channel-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -76,6 +76,7 @@ import { MemberDirectory, useMemberDirectory, usePerson } from "../member-direct
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { usePhoneRoom } from "../stage-room.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { shownChannel } from "../tasks/channels-model.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
@@ -134,6 +135,9 @@ const PLACE_LOOK = {
 
 /** What a task's card is called where the window lists no name for it. */
 const TASK_WORDS = "Task";
+
+/** What a phone's list of channels is called, as its bar names it (`channel-list.tsx`). */
+const CHANNELS_WORDS = "Channels";
 
 /** What a person's page is called where the name is not known. */
 const PERSON_WORDS = "Profile";
@@ -205,7 +209,7 @@ function cardLook(
   tasks: TasksControl,
   title: StepTitle | undefined,
   members: readonly WorkspaceMember[] | undefined,
-  channel: Channel | undefined,
+  channels: KindLook | undefined,
 ): CardLook {
   switch (stop.kind) {
     case STOP_KIND.TASK: {
@@ -233,9 +237,9 @@ function cardLook(
       };
     }
     case STOP_KIND.PLACE: {
-      // Note that with Channels on the Inbox's place is a channel's stream, so its card names the channel as the stream's bar does.
-      if (stop.place === SWITCHER_PLACE.INBOX && channel !== undefined) {
-        return { icon: <GLYPH.CHANNEL />, label: `#${channel.name}`, detail: undefined };
+      // Note that with Channels on the Inbox's place is what Channels shows, so its card is named for that.
+      if (stop.place === SWITCHER_PLACE.INBOX && channels !== undefined) {
+        return { ...channels, detail: undefined };
       }
       const { icon: Icon, label } = PLACE_LOOK[stop.place];
       return { icon: <Icon />, label, detail: undefined };
@@ -268,16 +272,23 @@ function cardLook(
 }
 
 /**
- * The channel the Inbox's place shows with Channels on, which its card goes
- * back to; none with Channels off, or before the window has read its
- * channels. Note that it reads the channels the window holds rather than
- * reading them again, as the phone's bar does.
+ * What the Inbox's place shows with Channels on, which its card goes back
+ * to: a phone's list of channels while it is asked for, as the place stands
+ * it (`desktop-inbox.tsx`), and a channel's stream otherwise; none with
+ * Channels off, or before the window has read its channels. Note that it
+ * reads the channels the window holds rather than reading them again, as
+ * the phone's bar does.
  */
-function useInboxChannel(tasks: TasksControl): Channel | undefined {
+function useChannelsLook(tasks: TasksControl): KindLook | undefined {
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const phone = usePhoneRoom();
   const { channels } = useChannels(channelsOn ? tasks.workspace?.id : undefined, false);
   const { channelId } = useChannelPlace();
-  return channels === undefined ? undefined : shownChannel(channels, channelId);
+  if (channelsOn && phone && tasks.inboxView.listed) {
+    return { icon: <GLYPH.CHANNEL />, label: CHANNELS_WORDS };
+  }
+  const channel = channels === undefined ? undefined : shownChannel(channels, channelId);
+  return channel === undefined ? undefined : { icon: <GLYPH.CHANNEL />, label: `#${channel.name}` };
 }
 
 /** One card of a stop, named against the workspace's members around it (`cardLook`). */
@@ -301,8 +312,8 @@ function StopCard({
   onPick: () => void;
 }): React.JSX.Element {
   const { members } = useMemberDirectory();
-  const channel = useInboxChannel(tasks);
-  const look = cardLook(stop, tasks, title, members, channel);
+  const channels = useChannelsLook(tasks);
+  const look = cardLook(stop, tasks, title, members, channels);
   return (
     <TabCard
       icon={look.icon}

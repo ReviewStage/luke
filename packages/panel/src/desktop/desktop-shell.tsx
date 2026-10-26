@@ -871,10 +871,11 @@ export function DesktopShell({
   const pagePerson = tasks.personView.userId;
   const automationsOpen = tasks.automationsView.open;
   const boardOpen = tasks.boardView.open;
-  // Note that with Channels on the Inbox's chosen item stands only while its thread is open, so a bare stream has no panel to toggle.
+  // Note that with Channels on the Inbox's chosen item stands only while its thread is open, so a bare stream has no panel to toggle, though a panel left open beside it keeps its way shut.
   const inboxChosen = tasks.inboxView.chosen;
   const inboxItemShown =
-    inboxChosen !== undefined && (!channelsOn || channelPlace.threadId === inboxChosen.itemId);
+    inboxChosen !== undefined &&
+    (!channelsOn || channelPlace.threadId === inboxChosen.itemId || tasks.sidePanel.open);
   // The Admin place is an admin's alone; while the account's access is still read it stands as it does while its chunk loads.
   const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
   // A phone's task is headed by a row of its own, whose ⋯ stands for the panel's toggle (`task-pane-switcher.tsx`).

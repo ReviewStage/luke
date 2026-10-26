@@ -1287,7 +1287,7 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
   });
 });
 
-test("the side panel's toggle stands for the Inbox's chosen item, and not over a channel's stream with no thread of it open", async () => {
+test("the side panel's toggle stands for the Inbox's chosen item, and not over a channel's stream with no thread of it open unless a panel is left open beside it", async () => {
   const control = tasksControl();
   const chosen = {
     inboxView: {
@@ -1296,10 +1296,12 @@ test("the side panel's toggle stands for the Inbox's chosen item, and not over a
       chosen: { taskId: DOCUMENT_TASK.id, itemId: "inbox-item-1" },
     },
   };
+  const panelOpen = { ...chosen, sidePanel: { ...control.sidePanel, open: true } };
   const toggled: Record<string, boolean> = {};
-  for (const [shown, experiments] of [
-    ["the Inbox", {}],
-    ["a channel", experimentsOn(EXPERIMENT.CHANNELS)],
+  for (const [shown, experiments, patch] of [
+    ["the Inbox", {}, chosen],
+    ["a channel", experimentsOn(EXPERIMENT.CHANNELS), chosen],
+    ["a channel with a panel open", experimentsOn(EXPERIMENT.CHANNELS), panelOpen],
   ] as const) {
     await handBridge(experiments);
     const container = document.createElement("div");
@@ -1309,7 +1311,7 @@ test("the side panel's toggle stands for the Inbox's chosen item, and not over a
       root?.render(
         onRegistry(
           AtomRegistry.make(),
-          createElement(CallShell, { place: PLACE.INBOX, folded: false, patch: chosen }),
+          createElement(CallShell, { place: PLACE.INBOX, folded: false, patch }),
         ),
       ),
     );
@@ -1320,7 +1322,11 @@ test("the side panel's toggle stands for the Inbox's chosen item, and not over a
     act(() => root?.unmount());
     container.remove();
   }
-  assert.deepEqual(toggled, { "the Inbox": true, "a channel": false });
+  assert.deepEqual(toggled, {
+    "the Inbox": true,
+    "a channel": false,
+    "a channel with a panel open": true,
+  });
 });
 
 test("⌘F opens a find over every page that stands in the window, and Settings keeps it for its own search", async () => {

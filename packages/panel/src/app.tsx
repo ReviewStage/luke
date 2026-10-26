@@ -774,13 +774,15 @@ function AppWindow(): React.JSX.Element {
                               })
                             }
                           />
-                          {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in. */}
-                          <TabSwitcher
-                            available={!accountGated}
-                            tab={tab}
-                            onTabChange={changeTab}
-                            tasks={tasks}
-                          />
+                          {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in; in the stage's room, which names a phone's places as it stands them. */}
+                          <ShellRoomContext.Provider value={room}>
+                            <TabSwitcher
+                              available={!accountGated}
+                              tab={tab}
+                              onTabChange={changeTab}
+                              tasks={tasks}
+                            />
+                          </ShellRoomContext.Provider>
                         </div>
                       </WindowVoice>
                     </ListedAutomations>

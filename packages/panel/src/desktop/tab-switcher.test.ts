@@ -19,6 +19,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB } from "../panel-tabs.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { useChannels } from "../tasks/use-channels.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
@@ -122,7 +124,7 @@ function onTask(
 }
 
 /** The switcher over a window, drawn again on each place the test moves the window to. */
-async function mounted() {
+async function mounted(room: ShellRoom = SHELL_ROOM.WIDE) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -133,12 +135,16 @@ async function mounted() {
       root.render(
         onRegistry(
           registry,
-          createElement(TabSwitcher, {
-            available: true,
-            tab: PANEL_TAB.TASKS,
-            onTabChange: () => undefined,
-            tasks,
-          }),
+          createElement(
+            ShellRoomContext.Provider,
+            { value: room },
+            createElement(TabSwitcher, {
+              available: true,
+              tab: PANEL_TAB.TASKS,
+              onTabChange: () => undefined,
+              tasks,
+            }),
+          ),
         ),
       ),
     );
@@ -402,7 +408,8 @@ function ChannelsRead({ workspaceId }: { workspaceId: string }): null {
   return null;
 }
 
-test("with Channels on, the Inbox's card names the channel its place shows", async () => {
+/** The cards' names with Channels on and the workspace's channels read, held over a task with the Inbox's place the stop behind, in `room`, the place standing a phone's list of channels where `listed`. */
+async function channelCardNames(room: ShellRoom, listed: boolean): Promise<string[]> {
   const base = stateWith({}, {});
   handState(experimentsOn(EXPERIMENT.CHANNELS), {
     run: { ...base.run, capabilities: DESKTOP_CAPABILITIES },
@@ -431,18 +438,31 @@ test("with Channels on, the Inbox's card names the channel its place shows", asy
     for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
   });
   const told = asked();
-  const window = await mounted();
-  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { workspace, inboxView: inboxOpen() }));
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, { workspace }));
+  const window = await mounted(room);
+  const inboxView = { ...tasksControl().inboxView, listed };
+  await window.draw(
+    onTask(SIDE_PANEL_TAB.PLAN, told, { workspace, inboxView: { ...inboxView, open: true } }),
+  );
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, { workspace, inboxView }));
 
   tab();
   tab(true);
-  const names = cards().map((card) => card.textContent ?? "");
+  return cards().map((card) => card.textContent ?? "");
+}
+
+test("with Channels on, the Inbox's card names the channel its place shows", async () => {
+  const names = await channelCardNames(SHELL_ROOM.WIDE, false);
   assert.ok(
     names.some((name) => name.includes("#general")),
     "the card names #general, the channel shown where none was chosen",
   );
   assert.ok(!names.some((name) => /Inbox/u.test(name)));
+});
+
+test("with Channels on, a phone standing its list of channels names the Inbox's card for the list, not a channel", async () => {
+  const names = await channelCardNames(SHELL_ROOM.NARROW, true);
+  assert.ok(names.includes("Channels"));
+  assert.ok(!names.some((name) => name.includes("#general")));
 });
 
 test("a card pressed while the cards show is gone to, a place through its own door", async () => {
