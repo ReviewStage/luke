@@ -20,7 +20,6 @@ import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { MESSAGE_AGENT_TOOL } from "./agent-message.js";
 import { CODER } from "./bounds.js";
 import { INBOX_TOOLS } from "./inbox.js";
-import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -280,7 +279,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     readFile: "your shell (`cat`, or `sed -n` for a range), or Codex's `view_image` for a picture",
     glob: "your shell (`rg --files`, or `ls`)",
     searchWeb: "Search the public web with Codex's own web search",
-    skills: `A word like \`/name\` in the developer's message names one of your skills, which Codex finds under the checkout's \`.agents/skills\`, or, for one your developer installed into Luke, under \`${NATIVE_SKILLS_PATH.INSTALLED}/${INSTALLED_SKILLS.SKILLS}\`: read that skill's \`SKILL.md\` before anything else, and follow what it says. Where neither has such a skill, read \`.agents/skills/<name>/SKILL.md\` or \`.claude/skills/<name>/SKILL.md\` on the default branch, and follow that instead.`,
+    skills: `A word like \`/name\` in the developer's message names one of your skills, which Codex lists with where each one's \`SKILL.md\` stands: the checkout's own, under \`.agents/skills\`, and the ones your developer installed into Luke. Read that skill's \`SKILL.md\` before anything else, and follow what it says. Where Codex lists no such skill, read \`.agents/skills/<name>/SKILL.md\` or \`.claude/skills/<name>/SKILL.md\` on the default branch, and follow that instead.`,
     browser: browserWords("your shell"),
     todos:
       "For work of more than a couple of steps, keep your to-dos with Codex's plan tool (`update_plan`), which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",
