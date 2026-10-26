@@ -13,6 +13,7 @@ import {
   type ChannelPlaceControl,
   listChannelWorkspace,
   openChannelThread,
+  standChannelPlace,
   useChannelPlace,
   useChannels,
   useThreadChannel,
@@ -48,6 +49,9 @@ const ACME_GENERAL = channelNamed("general", "a1000001-6d9f-4ab7-92df-0000000000
 const ACME_APP = channelNamed("app", "a1000001-6d9f-4ab7-92df-000000000002");
 const LABS_GENERAL = channelNamed("general", "b1000001-6d9f-4ab7-92df-000000000001");
 const LABS_DESIGN = channelNamed("design", "b1000001-6d9f-4ab7-92df-000000000002");
+const OPS = "workspace-ops";
+const OPS_GENERAL = channelNamed("general", "d1000001-6d9f-4ab7-92df-000000000001");
+const OPS_DESIGN = channelNamed("design", "d1000001-6d9f-4ab7-92df-000000000002");
 
 const roots: Root[] = [];
 
@@ -82,7 +86,12 @@ async function placeAfterRead(
 fakeActPort({
   [ACT_KIND.CHANNELS_LIST]: ({ workspaceId }) =>
     Promise.resolve({
-      channels: workspaceId === ACME ? [ACME_GENERAL, ACME_APP] : [LABS_GENERAL],
+      channels:
+        workspaceId === ACME
+          ? [ACME_GENERAL, ACME_APP]
+          : workspaceId === OPS
+            ? [OPS_GENERAL, OPS_DESIGN]
+            : [LABS_GENERAL],
     }),
 });
 
@@ -116,4 +125,18 @@ test("a thread opened by its item alone stands in the channel shown until its it
 
   assert.equal(place().channelId, ACME_APP.id);
   assert.equal(place().threadId, itemId);
+});
+
+test("a channel a link stands before its workspace's channels are read is kept as the workspace's last once they are, over the one kept before", async () => {
+  window.localStorage.setItem("luke.shownChannel", JSON.stringify({ [OPS]: OPS_GENERAL.id }));
+  listChannelWorkspace(OPS);
+  act(() => standChannelPlace(OPS_DESIGN.id, undefined));
+
+  const place = await placeAfterRead(OPS);
+
+  assert.equal(place().channelId, OPS_DESIGN.id);
+  assert.equal(
+    JSON.parse(window.localStorage.getItem("luke.shownChannel") ?? "{}")[OPS],
+    OPS_DESIGN.id,
+  );
 });
