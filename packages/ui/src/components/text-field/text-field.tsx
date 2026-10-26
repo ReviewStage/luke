@@ -63,6 +63,18 @@ export const TEXT_FIELD_SIZE = {
 
 export type TextFieldSize = (typeof TEXT_FIELD_SIZE)[keyof typeof TEXT_FIELD_SIZE];
 
+/**
+ * The ground a field's well is filled with: the input's own, or a card's,
+ * where it stands in one head with a card composer, as New thread's
+ * Subject over its message box does, so the head reads as one ground.
+ */
+export const TEXT_FIELD_GROUND = {
+  INPUT: "input",
+  CARD: "card",
+} as const;
+
+export type TextFieldGround = (typeof TEXT_FIELD_GROUND)[keyof typeof TEXT_FIELD_GROUND];
+
 /** The face a field's words are set in: the body's, or a fixed width for code, a cron or a path. */
 export const TEXT_FIELD_FONT = {
   BODY: "body",
@@ -125,6 +137,16 @@ const TEXT_FIELD_SIZE_CLASS = {
   [TEXT_FIELD_SIZE.COMPACT]:
     "h-control-compact rounded-control-compact border-border bg-well px-luke-6 text-caption leading-body text-ellipsis focus:border-muted-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
 } as const satisfies Record<TextFieldSize, string | undefined>;
+
+/**
+ * Each ground's classes over the size's: the input's, which the well wears
+ * already, or a card's at rest and holding the caret alike, as a card
+ * composer's ground does not change under the caret.
+ */
+const TEXT_FIELD_GROUND_CLASS = {
+  [TEXT_FIELD_GROUND.INPUT]: undefined,
+  [TEXT_FIELD_GROUND.CARD]: "bg-surface focus:bg-surface",
+} as const satisfies Record<TextFieldGround, string | undefined>;
 
 /**
  * A time is typed or stepped with the arrows, the engine's own clock hidden.
@@ -265,6 +287,7 @@ export function TextField({
   selectOnFocus = false,
   onEnter,
   size = TEXT_FIELD_SIZE.CONTROL,
+  ground = TEXT_FIELD_GROUND.INPUT,
   ref,
   ...props
 }: TextEntryProps &
@@ -279,6 +302,8 @@ export function TextField({
     onEnter?: (() => void) | undefined;
     /** How large it stands; a control where none is named. */
     size?: TextFieldSize | undefined;
+    /** The ground its well is filled with; the input's where none is named. */
+    ground?: TextFieldGround | undefined;
     ref?: Ref<HTMLInputElement> | undefined;
   }): React.JSX.Element {
   return (
@@ -286,6 +311,7 @@ export function TextField({
       ref={ref}
       className={cn(
         TEXT_FIELD_SIZE_CLASS[size],
+        TEXT_FIELD_GROUND_CLASS[ground],
         TEXT_FIELD_FONT_CLASS[props.font ?? TEXT_FIELD_FONT.BODY],
         props.type === TEXT_FIELD_TYPE.TIME && TIME_FIELD,
       )}

@@ -112,6 +112,20 @@ export const CHIP_CUT = {
 
 export type ChipCut = (typeof CHIP_CUT)[keyof typeof CHIP_CUT];
 
+/**
+ * Which of a chip's edges stands on the start of the line it is laid in: its
+ * box's, or, for an untoned toolbar chip, whose box shows only under the pointer,
+ * its mark's, the box hanging out past the line by its own start room and
+ * hairline, so the mark stands on the edge the words around it share, as a
+ * page head's "Link issue" under its title does.
+ */
+export const CHIP_EDGE = {
+  BOX: "box",
+  MARK: "mark",
+} as const;
+
+export type ChipEdge = (typeof CHIP_EDGE)[keyof typeof CHIP_EDGE];
+
 /** How many of its last characters a name cut in its middle keeps whole, at most. */
 const MIDDLE_KEPT = 12;
 
@@ -143,6 +157,8 @@ interface ChipFace {
   size?: ChipSize | undefined;
   /** Whether it draws its mark alone, its words read as its name and drawn nowhere. */
   iconOnly?: boolean | undefined;
+  /** Which of its edges stands on its line's start; its box's where none is named. */
+  edge?: ChipEdge | undefined;
 }
 
 /** A chip that is a button: its face, whether it ends in a menu's chevron, and its button's own attributes. */
@@ -183,7 +199,7 @@ export type ChipProps = ButtonChipProps | LinkChipProps | RemovableChipProps;
 
 /** What every chip draws: a control's box, its words at the label's type, and the group its parts answer. */
 const CHIP_BASE =
-  "luke-chip group/chip m-0 inline-flex max-w-full items-center border font-body no-underline whitespace-nowrap transition-[background-color,color] duration-(--luke-duration-hover) ease-plain";
+  "luke-chip group/chip m-0 inline-flex items-center border font-body no-underline whitespace-nowrap transition-[background-color,color] duration-(--luke-duration-hover) ease-plain";
 
 /**
  * Each look's face at rest and under the pointer, while its menu is open,
@@ -257,13 +273,21 @@ const FACE_BASE =
 
 /** What every chip draws, as one class list, worked out from its options. */
 function chipClasses(
-  { look, tone, width = CHIP_WIDTH.AUTO, size = CHIP_SIZE.CONTROL, iconOnly = false }: ChipFace,
+  {
+    look,
+    tone,
+    width = CHIP_WIDTH.AUTO,
+    size = CHIP_SIZE.CONTROL,
+    iconOnly = false,
+    edge = CHIP_EDGE.BOX,
+  }: ChipFace,
   removable: boolean,
   busy: boolean,
 ): string {
   const compact = size === CHIP_SIZE.COMPACT;
   const toned = tone !== undefined;
   const filterish = look === CHIP_LOOK.FILTER;
+  const hung = edge === CHIP_EDGE.MARK && look === CHIP_LOOK.TOOLBAR && !toned;
   const face = toned
     ? [
         TONED_FACE,
@@ -298,6 +322,8 @@ function chipClasses(
     // Note that a compact mark alone is a square of its own height spelled as a width, because Safari 26 sizes an `aspect-ratio` box's track through its `max-w-full` to nothing.
     compact && iconOnly ? "flex-none w-chip-compact" : "flex-initial",
     busy ? "cursor-progress" : removable ? "cursor-default" : "cursor-press",
+    // Note that only an untoned toolbar chip hangs, as a chip whose box shows at rest stands on it, and that one hung may stand as much wider than its line as it reaches past it.
+    hung ? "ms-chip-reach max-w-chip-reach-most" : "max-w-full",
   ]
     .filter((part) => part !== "")
     .join(" ");
@@ -377,6 +403,7 @@ function LinkChip({
   width,
   size,
   iconOnly,
+  edge,
   href,
   onClick,
   children,
@@ -385,7 +412,7 @@ function LinkChip({
   return (
     <a
       {...anchor}
-      className={chipClasses({ look, tone, width, size, iconOnly }, false, false)}
+      className={chipClasses({ look, tone, width, size, iconOnly, edge }, false, false)}
       {...faceAttributes({ look, tone, width, size, iconOnly })}
       href={href}
       onClick={pulseOnPress(onClick, PRESS_PULSE.FACE)}
@@ -401,12 +428,23 @@ function LinkChip({
 export function Chip(props: ChipProps): React.JSX.Element {
   if (props.onRemove !== undefined) return <RemovableChip {...props} />;
   if (props.href !== undefined) return <LinkChip {...props} />;
-  const { look, tone, width, size, iconOnly, chevron = false, busy, children, ...button } = props;
+  const {
+    look,
+    tone,
+    width,
+    size,
+    iconOnly,
+    edge,
+    chevron = false,
+    busy,
+    children,
+    ...button
+  } = props;
   return (
     <button
       type="button"
       {...button}
-      className={chipClasses({ look, tone, width, size, iconOnly }, false, busy === true)}
+      className={chipClasses({ look, tone, width, size, iconOnly, edge }, false, busy === true)}
       aria-busy={busy === true ? true : undefined}
       {...faceAttributes({ look, tone, width, size, iconOnly })}
       // Note that a busy chip's face is already moving, as its wait, so a press plays nothing over it.

@@ -10,6 +10,7 @@ import {
   type TaskIssueTag,
 } from "@luke/features/task-issue-wire";
 import {
+  CHIP_EDGE,
   CHIP_LOOK,
   CHIP_SIZE,
   CHIP_WIDTH,
@@ -388,6 +389,8 @@ export function TaskIssueLinks({
             {/* Note that the chip may stand anywhere along a row that wraps, so its menu hangs from whichever edge leaves it room. */}
             <IssuePickerChip
               trigger={LINKS_WORDS.LINK}
+              // Note that Link issue alone starts the row, its + on the edge the title and chips share, where after a chip it keeps its box clear of it.
+              triggerEdge={links.length === 0 ? CHIP_EDGE.MARK : CHIP_EDGE.BOX}
               align={POPOVER_ALIGN.START}
               linearIn={linearIn}
               githubIn={githubIn}

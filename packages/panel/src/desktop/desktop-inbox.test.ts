@@ -61,7 +61,7 @@ import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-s
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
-import { DocumentIcon } from "@luke/ui";
+import { DocumentIcon, PROFILE } from "@luke/ui";
 import { isTranscriptTab } from "@luke/ui/tab-strip-model";
 import type { TaskMark } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -104,10 +104,12 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
+import { pixelsOf } from "../testing/laid-length.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { playMotions } from "../testing/pane-motion.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -8809,6 +8811,58 @@ function threadDraft(pane: HTMLElement) {
     files: attachedNames(pane),
   };
 }
+
+/** The ground an element is filled with, as the tokens it names spell it where it stands. */
+function groundOf(element: Element): string {
+  const style = getComputedStyle(element);
+  let spelled = style.backgroundColor;
+  for (let named = /var\((--[\w-]+)\)/u.exec(spelled); named !== null; ) {
+    const [whole, property = ""] = named;
+    spelled = spelled.replace(whole, style.getPropertyValue(property).trim());
+    named = /var\((--[\w-]+)\)/u.exec(spelled);
+  }
+  return spelled;
+}
+
+test("a New thread's head reads as one on the desktop: Subject is filled with the message box's ground, and the box stands as far under Subject as Subject stands under To", async () => {
+  // Note that the desktop's palette is the one whose input well is darker than a card in the dark.
+  document.documentElement.dataset.lukeProfile = PROFILE.DESKTOP;
+  const sheets = layContainersAt({});
+  onTestFinished(() => {
+    sheets.remove();
+    delete document.documentElement.dataset.lukeProfile;
+  });
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
+  heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+  layOut(page, 700);
+  await settle();
+  const pane = await openNewThread(page);
+
+  const subject = subjectField(pane);
+  const frame = composerEditor(pane).closest("form") ?? assert.fail("the box is a form");
+  assert.equal(groundOf(subject), groundOf(frame), "Subject is filled with the box's ground");
+
+  // The room a row leaves around its control, half over it and half under it.
+  const room = (row: Element) =>
+    pixelsOf(row, getComputedStyle(row).minHeight) - pixelsOf(row, "var(--luke-control-height)");
+  const toRow =
+    pane.querySelector('[aria-label^="To: "]')?.closest(".inbox-compose-row") ??
+    assert.fail("To stands in a row");
+  const subjectRow =
+    subject.closest(".inbox-compose-row") ?? assert.fail("Subject stands in a row");
+  const box = frame.parentElement ?? assert.fail("the box stands in the form");
+  const boxStyle = getComputedStyle(box);
+  assert.equal(
+    room(subjectRow) / 2 +
+      pixelsOf(box, boxStyle.marginTop) +
+      pixelsOf(box, boxStyle.paddingTop || "0px"),
+    room(toRow) / 2 + room(subjectRow) / 2,
+    "the gap under Subject is the gap over it",
+  );
+});
 
 test("a New thread's To, Subject, words, and files outlast a row pressed meanwhile, and stand again as New thread opens once more", async () => {
   listedWorkspace = ACME;

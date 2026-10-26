@@ -9,6 +9,7 @@ import {
   TEXT_AREA_SUBMIT,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_FONT,
+  TEXT_FIELD_GROUND,
   TEXT_FIELD_SIZE,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
@@ -26,8 +27,9 @@ import { CatalogSection } from "../section";
  * written in place; a TextArea, standing and growing with its words, and busy
  * sending what ⌘Return submitted; a compact TextField in a bar, selecting its
  * address as the caret arrives; a bare TextArea growing without limit in a message box's card,
- * sent with Return; a TextField in a settings row, invalid while the row says
- * its error; and both in a narrow column.
+ * sent with Return; a TextField on a card's ground, as one stands over a card
+ * composer; a TextField in a settings row, invalid while the row says its error; and
+ * both in a narrow column.
  */
 
 /** A field the example holds the value of, as a caller would. */
@@ -249,6 +251,21 @@ function TextFields(): React.JSX.Element {
       <CatalogSection id="text-area-bare" title="Many lines, bare in a message box">
         <div className="catalog-column">
           <MessageBox />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="text-card-ground" title="On a card's ground">
+        <div className="catalog-column">
+          <Held start="">
+            {(value, onChange) => (
+              <TextField
+                label="Subject"
+                placeholder="Optional"
+                ground={TEXT_FIELD_GROUND.CARD}
+                value={value}
+                onChange={onChange}
+              />
+            )}
+          </Held>
         </div>
       </CatalogSection>
       <CatalogSection id="text-settings-row" title="In a settings row, invalid">

@@ -114,6 +114,8 @@ const FEEDBACK_DISPLAY = {
     "chip-inset",
     "chip-inset-wide",
     "chip-min-field",
+    "chip-reach",
+    "chip-reach-most",
     "chip-remove",
     "chip-remove-glyph",
     "chip-tight",

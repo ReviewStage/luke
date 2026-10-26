@@ -18,11 +18,13 @@ import type { WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { pixelsOf } from "../testing/laid-length.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -448,6 +450,37 @@ test("a task that links nothing in a workspace offering no issue to link draws n
   assert.deepEqual(
     [...offered.container.querySelectorAll("button")].map((each) => each.textContent),
     ["Link issue"],
+  );
+});
+
+test("Link issue alone starts its row with its + on the row's edge, which the title and the chips over it stand on, and after a chip keeps its whole box clear of it", async () => {
+  const sheets = layContainersAt({});
+  onTestFinished(() => sheets.remove());
+  // How far in from the start of its line a chip's mark stands: its start margin, its hairline, and its start room. Note that jsdom keeps a toolbar chip's room as the one length its `padding-inline` names for both sides.
+  const markInset = (chip: HTMLElement) => {
+    const style = getComputedStyle(chip);
+    return (
+      pixelsOf(chip, style.getPropertyValue("margin-inline-start") || "0px") +
+      pixelsOf(chip, style.borderLeftWidth || "0px") +
+      pixelsOf(chip, style.getPropertyValue("padding-inline") || "0px")
+    );
+  };
+  const linkIssue = (container: HTMLElement) =>
+    [...container.querySelectorAll<HTMLElement>("button")].find(
+      (each) => each.textContent === "Link issue",
+    ) ?? assert.fail("the row offers Link issue");
+
+  const alone = await mount({ links: [] });
+  assert.equal(markInset(linkIssue(alone.container)), 0, "the + stands on the row's edge");
+
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  document.body.innerHTML = "";
+  const after = await mount({ links: [SAFARI] });
+  assert.ok(
+    markInset(linkIssue(after.container)) > 0,
+    "after a chip, its box starts where it stands",
   );
 });
 

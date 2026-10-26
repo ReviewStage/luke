@@ -36,6 +36,7 @@ import {
   matchingRows,
   POPOVER_ALIGN,
   Spinner,
+  TEXT_FIELD_GROUND,
   TextField,
   TOOLBAR_INSET,
   Toolbar,
@@ -550,6 +551,8 @@ function ComposeCard({
                 "aria-invalid": undefined,
               }}
               placeholder={FIELD_WORDS.OPTIONAL}
+              // Note that the subject is filled with the message box's ground rather than the input's darker well, so To, Subject, and the box read as one head.
+              ground={TEXT_FIELD_GROUND.CARD}
               value={draft.title ?? ""}
               maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
               disabled={sending}

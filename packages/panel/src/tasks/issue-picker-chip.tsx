@@ -8,9 +8,11 @@ import { readFailedWords, readingWords } from "@luke/features/words";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
   Badge,
+  CHIP_EDGE,
   CHIP_LOOK,
   CHIP_WIDTH,
   Chip,
+  type ChipEdge,
   ChipName,
   ErrorState,
   type MenuRow,
@@ -389,6 +391,7 @@ export function IssuePickerChip({
   openRequest,
   align = POPOVER_ALIGN.START,
   trigger,
+  triggerEdge = CHIP_EDGE.BOX,
   onChoose,
   onChooseGitHub,
 }: {
@@ -411,6 +414,8 @@ export function IssuePickerChip({
   align?: PopoverAlign | undefined;
   /** The words of a quiet chip drawn in the issue chip's place, as a task page's "Link issue"; the issue chip where none are given. */
   trigger?: string | undefined;
+  /** Which of the quiet chip's edges stands on its row's start: its +, where it starts the row under a title; its box where none is named. */
+  triggerEdge?: ChipEdge | undefined;
   onChoose: (issue: LinearIssueSummary) => void;
   onChooseGitHub: (issue: GitHubIssuePick) => void;
 }): React.JSX.Element | null {
@@ -523,6 +528,7 @@ export function IssuePickerChip({
         <Chip
           ref={button}
           look={CHIP_LOOK.TOOLBAR}
+          edge={triggerEdge}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
