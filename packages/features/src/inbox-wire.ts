@@ -864,6 +864,47 @@ export const inboxItemSchema = EffectSchema.Struct({
 
 export type InboxItem = typeof inboxItemSchema.Type;
 
+/** A member an item names, as the service names them: who it waits on (`inboxWaitsOn`), or who started its agent. */
+export type InboxPerson = NonNullable<InboxItem["startedBy"]>;
+
+/** The message whose ask waits on an answer, and the ask; none where nothing waits. */
+export interface InboxAsking {
+  readonly message: InboxMessage;
+  readonly ask: InboxReadAsk;
+}
+
+/** The thread's open ask: the latest message whose ask stands open; none where none does. */
+export function openAskOf(thread: readonly InboxMessage[]): InboxAsking | undefined {
+  const message = thread.findLast((each) => each.ask?.status === INBOX_ASK_STATUS.OPEN);
+  return message?.ask === undefined ? undefined : { message, ask: message.ask };
+}
+
+/**
+ * The member an item waits on: the member its agent addressed it to, else
+ * its task's assignee, or its agent's starter where the task has nobody
+ * assigned or the agent works on no task, as the service resolves it
+ * (`inbox-store.ts`'s `WAITS_ON`); its starter from a service before it
+ * said; none where it names neither.
+ */
+export function inboxWaitsOn(item: InboxItem): InboxPerson | undefined {
+  return item.waitsOn ?? item.startedBy;
+}
+
+/** Whether a thread still asks someone something: open, and holding an ask open, as the service's `ASKING` reads it. */
+export function inboxAsksOpen(item: InboxItem): boolean {
+  return item.status === INBOX_STATUS.OPEN && openAskOf(item.thread ?? []) !== undefined;
+}
+
+/**
+ * Whether a thread needs the reader: its ask stands open and waits on them.
+ * The one reading of it, which a channel's count (`inbox-store.ts`'s
+ * `askingReader`) must agree with and its stream, Needs me, and the tint
+ * all draw from.
+ */
+export function threadNeedsReader(item: InboxItem, readerId: string | undefined): boolean {
+  return readerId !== undefined && inboxAsksOpen(item) && inboxWaitsOn(item)?.userId === readerId;
+}
+
 /** Where a reader of an inbox starts: before anything. */
 export const INBOX_CURSOR_START = "0";
 

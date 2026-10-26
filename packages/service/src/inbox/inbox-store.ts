@@ -2440,22 +2440,39 @@ const ChannelThreadRowSchema = Schema.Struct({
   channelId: Schema.String,
 });
 
-/** The latest posted threads of the channel the reader may read, as many as a read carries. */
+/** Whether the item holds an ask open that waits on the reader: what a channel's count counts and its stream always carries. */
+function askingReader(userId: string): SQL<boolean> {
+  return sql<boolean>`(${ASKING} and ${WAITS_ON} = ${userId})`;
+}
+
+/**
+ * The channel's threads the reader may read: the latest posted, as many as
+ * a read carries, and every one holding an ask open that waits on them
+ * (`askingReader`) however old, latest posted first. Note that the asks are
+ * read apart from the bound, because the channel's count counts every one
+ * of them and Needs me must show each thread it counts.
+ */
 const findChannelThreads = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, channelId: Schema.String }),
   Result: ChannelThreadRowSchema,
   execute: ({ userId, channelId }) =>
-    Database.use((db) =>
-      db
+    Database.use((db) => {
+      const inChannel = and(eq(inboxItem.channelId, channelId), itemReachableBy(userId));
+      const latest = queryBuilder
+        .select({ id: inboxItem.id })
+        .from(inboxItem)
+        .where(inChannel)
+        .orderBy(desc(inboxItem.postedAt), desc(inboxItem.id))
+        .limit(INBOX_BOUNDS.MAX_ITEMS_READ);
+      return db
         .select({ ...inboxColumns(userId), channelId: inboxItem.channelId })
         .from(inboxItem)
-        .where(and(eq(inboxItem.channelId, channelId), itemReachableBy(userId)))
-        .orderBy(desc(inboxItem.postedAt), desc(inboxItem.id))
-        .limit(INBOX_BOUNDS.MAX_ITEMS_READ),
-    ),
+        .where(and(inChannel, or(inArray(inboxItem.id, latest), askingReader(userId))))
+        .orderBy(desc(inboxItem.postedAt), desc(inboxItem.id));
+    }),
 });
 
-/** How many threads of each channel of the workspace hold an ask open that waits on the reader (`WAITS_ON`), among those they may read. */
+/** How many threads of each channel of the workspace hold an ask open that waits on the reader (`askingReader`), among those they may read. */
 const findChannelWaiting = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   Result: Schema.Struct({ channelId: Schema.String, waiting: Schema.Number }),
@@ -2467,8 +2484,7 @@ const findChannelWaiting = SqlSchema.findAll({
         .where(
           and(
             eq(inboxItem.organizationId, organizationId),
-            ASKING,
-            sql`${WAITS_ON} = ${userId}`,
+            askingReader(userId),
             itemReachableBy(userId),
           ),
         )
@@ -2478,9 +2494,10 @@ const findChannelWaiting = SqlSchema.findAll({
 
 /**
  * The channel's threads the reader may read, the latest posted
- * `MAX_ITEMS_READ` of them oldest first, as a channel's stream draws them,
- * each as the inbox carries it with the channel it lives in; none for a
- * channel of a workspace the account is not in.
+ * `MAX_ITEMS_READ` of them and every older one whose open ask waits on
+ * them, oldest first, as a channel's stream draws them, each as the inbox
+ * carries it with the channel it lives in; none for a channel of a
+ * workspace the account is not in.
  */
 export function channelThreads(
   userId: string,

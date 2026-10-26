@@ -24,6 +24,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
   type InboxMessage,
+  threadNeedsReader,
 } from "@luke/features/inbox-wire";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksView } from "@luke/features/tasks-view";
@@ -38,7 +39,6 @@ import {
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
 import { EXPERIMENT } from "@luke/settings";
-import { threadNeedsReader } from "./channels-model.js";
 
 const LANDED = Date.now();
 const MINUTE = 60_000;

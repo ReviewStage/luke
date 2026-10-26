@@ -1,3 +1,4 @@
+import type { InboxPerson } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { readFailedWords, TERM } from "@luke/features/words";
@@ -155,7 +156,6 @@ import {
   type InboxLineKind,
   type InboxListed,
   type InboxListView,
-  type InboxPerson,
   type InboxPersonGroup,
   type InboxShow,
   type InboxSort,

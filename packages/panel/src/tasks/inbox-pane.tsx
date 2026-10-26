@@ -12,6 +12,8 @@ import {
   type InboxItem,
   type InboxMessage,
   type InboxReadAsk,
+  inboxWaitsOn,
+  openAskOf,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, markdownLink } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
@@ -116,11 +118,9 @@ import {
   type InboxKnownAsk,
   inboxCommentFiles,
   inboxFileChips,
-  inboxWaitsOn,
   isUnread,
   itemWorkspaceId,
   knownAsk,
-  openAskOf,
   readersItem,
   sentStamp,
 } from "./inbox-model.js";

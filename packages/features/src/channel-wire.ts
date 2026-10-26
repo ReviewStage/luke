@@ -105,7 +105,7 @@ export const channelThreadSchema = EffectSchema.Struct({
 
 export type ChannelThread = typeof channelThreadSchema.Type;
 
-/** A channel's latest threads the reader may read, oldest posted first. */
+/** A channel's latest threads the reader may read, and every older one whose open ask waits on them, oldest posted first. */
 export const channelThreadsAnswerSchema = EffectSchema.Struct({
   threads: EffectSchema.Array(channelThreadSchema),
 });

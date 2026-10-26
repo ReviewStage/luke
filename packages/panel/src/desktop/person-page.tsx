@@ -4,6 +4,7 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
+import { inboxWaitsOn } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -69,7 +70,7 @@ import { stateEndMark } from "../state-glyph.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { HOME_ROW_CONTEXT, HOME_ROW_META, HOME_ROW_PICTURE } from "../tasks/home-row.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
-import { INBOX_HOLDER, type InboxListed, inboxWaitsOn, NEEDS_YOU } from "../tasks/inbox-model.js";
+import { INBOX_HOLDER, type InboxListed, NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark } from "../tasks/tab-look.js";
 import { readAgentById } from "../tasks/use-coding-agents.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";

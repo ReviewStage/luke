@@ -14,6 +14,7 @@ import {
   INBOX_ASK,
   INBOX_STATUS,
   type InboxItem,
+  inboxWaitsOn,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
@@ -68,7 +69,6 @@ import {
   inboxSettledStanding,
   inboxSettledWords,
   inboxShownTicks,
-  inboxWaitsOn,
   itemWorkspaceId,
   NEEDS_YOU,
   needsYou as needsYouOf,
