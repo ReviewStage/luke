@@ -109,7 +109,7 @@ const following = (githubFromLuke: boolean) =>
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash" })),
       Layer.succeed(Reporter, { report: (line) => reported.push(line) }),
       Layer.succeed(LocalAgentPlatform, {
-        launcher: LAUNCHER,
+        launch: ({ env }) => ({ command: LAUNCHER, args: [], env }),
         runnerBundle: "/opt/luke/agent-runner.mjs",
         runnerEnv: {},
         bundled: { node: TOOLS.node, claude: TOOLS.claude, gh: TOOLS.gh },
