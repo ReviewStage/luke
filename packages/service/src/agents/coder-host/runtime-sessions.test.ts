@@ -1473,7 +1473,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
 
           // The task decides: its owner's agent runs on the owner's device.
-          const owned = yield* start(owner, startOn(task.id, "anthropic/claude-opus-5.5"));
+          const ownedAsk = startOn(task.id, "anthropic/claude-opus-5.5");
+          const owned = yield* start(owner, ownedAsk);
           assert.ok(Result.isSuccess(owned));
           assert.deepEqual(
             yield* whereRuns(owned.success, owner),
@@ -1529,6 +1530,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.ok(Result.isFailure(refused));
           assert.deepEqual(refused.failure, localAgentRefused(LOCAL_AGENT_REFUSAL.MAC_AWAY));
           assert.ok(Option.isNone(yield* readCodingAgentByKey(owner, away.idempotencyKey)));
+
+          // A retry of a Start already made is answered with its agent, though its device is away now.
+          const retried = yield* start(owner, ownedAsk);
+          assert.ok(Result.isSuccess(retried));
+          assert.equal(retried.success.agent.id, owned.success.agent.id);
         }),
     );
 
