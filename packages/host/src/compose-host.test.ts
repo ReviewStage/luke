@@ -141,8 +141,10 @@ describe("the host's platform concerns", () => {
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
             Layer.succeed(SignInConsent, { open: loopbackConsent }),
             Layer.succeed(LocalAgentPlatform, {
-              runner: { program: "/usr/bin/false", args: [], env: {} },
-              claudeExecutable: "/usr/bin/false",
+              launcher: "/usr/bin/false",
+              runnerBundle: "/usr/bin/false",
+              runnerEnv: {},
+              bundled: {},
               deviceName: "Fixture Mac",
               worktreeScript: () => "exit 1",
             }),

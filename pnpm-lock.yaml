@@ -757,6 +757,9 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
+      '@luke/agent-runner':
+        specifier: workspace:*
+        version: link:../agent-runner
       '@luke/credentials':
         specifier: workspace:*
         version: link:../credentials

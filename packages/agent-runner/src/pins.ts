@@ -6,7 +6,10 @@
  * `codex-sessions.ts`) point the runner at the paths, the runner bundles
  * the same Agent SDK (this package's `package.json`), and Codex's
  * app-server protocol types are generated from the same Codex
- * (`scripts/generate-codex-protocol.mjs`). A bump moves them together. Erasable syntax
+ * (`scripts/generate-codex-protocol.mjs`). A bump moves them together. A local
+ * agent's Mac fetches its own builds of the same releases, each a
+ * `MacToolPin` checked by size, digest, and signature before it is kept
+ * (`@luke/host`'s `localAgentTool`). Erasable syntax
  * alone, so Node runs the generator over it as it stands.
  */
 
@@ -48,3 +51,65 @@ export const CODEX_PIN = {
   LINK: "/usr/local/bin/codex",
   HOME: `/home/${AGENT_USER}/.codex`,
 } as const;
+
+/**
+ * A binary a local agent's Mac fetches once and keeps (`@luke/host`'s
+ * `localAgentTool`), checked before anything in it is kept: an archive at a
+ * pinned address, its exact size and SHA-256, and what of it is kept. A bump
+ * moves every field together, its digest and size read off the release
+ * itself.
+ */
+export interface MacToolPin {
+  /** The folder it is kept under, beside the other tools. */
+  readonly NAME: string;
+  /** The folder under `NAME` this release is kept in. */
+  readonly VERSION: string;
+  /** The archive, a gzipped tar, by its https address. */
+  readonly ARCHIVE: string;
+  /** The archive's SHA-256, in hex: what decides whether anything of it is kept. */
+  readonly SHA256: string;
+  /** The archive's exact size; an answer past it is refused as it arrives. */
+  readonly BYTES: number;
+  /** The archive's folder the kept build is. */
+  readonly ROOT: string;
+  /** The paths under `ROOT` kept, their layout kept. */
+  readonly MEMBERS: readonly string[];
+  /** The executable, under the kept folder. */
+  readonly BINARY: string;
+  /**
+   * The Developer ID team the binary is signed by, as read off the pinned
+   * release, which macOS's own check must name before it is first run; none
+   * where the release is not signed, and its digest alone decides.
+   */
+  readonly TEAM?: string;
+}
+
+/** The Node a local agent's runner runs on, on a Mac: the release the runner's bundle targets (`node24`), signed by the Node.js Foundation. */
+export const NODE_MAC_PIN: MacToolPin = {
+  NAME: "node",
+  VERSION: "24.22.1",
+  ARCHIVE: "https://nodejs.org/dist/v24.22.1/node-v24.22.1-darwin-arm64.tar.gz",
+  SHA256: "89c682593d76cd44233fa53b1563264e7de9cbb189cad169135c5b4fadfbc0a7",
+  BYTES: 53_062_778,
+  ROOT: "node-v24.22.1-darwin-arm64",
+  MEMBERS: ["bin/node"],
+  BINARY: "bin/node",
+  TEAM: "HX7739G8FX",
+};
+
+/**
+ * Claude Code on a Mac: the macOS arm64 build of the very Agent SDK the
+ * runner pins (`CLAUDE_CODE_PIN.SDK_VERSION`), as npm keeps it, signed by
+ * Anthropic.
+ */
+export const CLAUDE_CODE_MAC_PIN: MacToolPin = {
+  NAME: "claude",
+  VERSION: CLAUDE_CODE_PIN.SDK_VERSION,
+  ARCHIVE: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-darwin-arm64/-/claude-agent-sdk-darwin-arm64-${CLAUDE_CODE_PIN.SDK_VERSION}.tgz`,
+  SHA256: "cdca064e1bbe6001c5d8bbefd636205379c79b8d05bf41a3a37fc1fde096a93d",
+  BYTES: 120_586_636,
+  ROOT: "package",
+  MEMBERS: ["claude"],
+  BINARY: "claude",
+  TEAM: "Q6L2SF6YDW",
+};

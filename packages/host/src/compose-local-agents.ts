@@ -1,3 +1,4 @@
+import { CLAUDE_CODE_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
 import type { HostedMacAgentClient, MacAgentClaimedLine } from "@luke/features";
 import {
   MAC_AGENT_LINE_KIND,
@@ -38,6 +39,7 @@ import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
+import { localAgentTool } from "./local-agent-tools.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -47,7 +49,10 @@ import type { RunMode } from "./run-mode.js";
  * id (`@luke/features/mac-agent-wire`, `contract/mac-agents.ts`): lines for
  * its runner and requests from its tools. The id is minted once per account
  * and kept in the host's state, and every time the gate opens, an app start
- * among them, the Mac registers it with its home folder, the Claude Code
+ * among them, the Mac first has what a runner runs on, Node and the Claude
+ * Code CLI, each its pinned release fetched and checked the first time
+ * (`local-agent-tools.ts`), once per opening, so a Mac offline is not asked
+ * again every turn; it then registers the device with its home folder, the Claude Code
  * CLI it bundles, and which harnesses it is signed in to by itself, then
  * beats every `BEAT_EVERY` while it follows. A local agent on a harness its
  * Mac is signed in to launches on that login, so its launch line carries no
@@ -180,6 +185,12 @@ interface Runner {
   readonly exited: Fiber.Fiber<void>;
 }
 
+/** What a runner runs on: the Node it is started under and the Claude Code CLI it drives, both absolute. */
+interface LocalAgentTools {
+  readonly node: string;
+  readonly claude: string;
+}
+
 type LocalAgentServices =
   | Environment
   | Reporter
@@ -196,7 +207,10 @@ export function composeLocalAgents(
     const { report } = yield* Reporter;
     const platform = yield* LocalAgentPlatform;
     const services = yield* Effect.context<
-      ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | HttpClient.HttpClient
+      | ChildProcessSpawner.ChildProcessSpawner
+      | FileSystem.FileSystem
+      | Path.Path
+      | HttpClient.HttpClient
     >();
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -266,6 +280,61 @@ export function composeLocalAgents(
         launches: current.launches.filter((launch) => launch.id !== id),
       }));
 
+    // -- the tools a runner runs on ------------------------------------------------
+
+    /** The Node and Claude Code CLI this Mac's runners run on, once had, and whether a fetch was tried since the gate last opened. */
+    const tools = yield* Ref.make(Option.none<LocalAgentTools>());
+    const fetchTried = yield* Ref.make(false);
+    const fetching = yield* Semaphore.make(1);
+
+    /**
+     * The Node and the Claude Code CLI this Mac's runners run on: the ones
+     * had already, where both still stand, or each had now through its pin
+     * (`localAgentTool`), the app's or the checkout's own copy first; none
+     * where either cannot be had. One at a time, so two asks never fetch the
+     * same release twice.
+     */
+    const toolsHad = fetching.withPermit(
+      Effect.gen(function* () {
+        const had = yield* Ref.get(tools);
+        if (Option.isSome(had)) {
+          const standing = yield* Effect.all(
+            [fileSystem.exists(had.value.node), fileSystem.exists(had.value.claude)],
+            { concurrency: 2 },
+          ).pipe(Effect.orElseSucceed(() => [false, false]));
+          if (standing.every((each) => each)) return had;
+        }
+        const [node, claude] = yield* Effect.all(
+          [
+            localAgentTool(kernel.stateRoot, NODE_MAC_PIN, platform.bundled.node),
+            localAgentTool(kernel.stateRoot, CLAUDE_CODE_MAC_PIN, platform.bundled.claude),
+          ],
+          { concurrency: 2 },
+        );
+        const both =
+          Option.isSome(node) && Option.isSome(claude)
+            ? Option.some({ node: node.value, claude: claude.value })
+            : Option.none<LocalAgentTools>();
+        yield* Ref.set(tools, both);
+        return both;
+      }),
+    );
+
+    /**
+     * The tools as the gate opens: had already, or fetched once per opening,
+     * and once per app start, since the app's first opening is one; a fetch
+     * that failed waits for the next, so a Mac offline is not asked again
+     * every turn.
+     */
+    const toolsForOpening = Effect.gen(function* () {
+      const had = yield* Ref.get(tools);
+      if (Option.isSome(had)) return yield* toolsHad;
+      if (yield* Ref.getAndSet(fetchTried, true)) return Option.none<LocalAgentTools>();
+      const fetched = yield* toolsHad;
+      if (Option.isNone(fetched)) report("the local agents' Node or Claude Code could not be had");
+      return fetched;
+    });
+
     // -- the gate --------------------------------------------------------------
 
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
@@ -324,10 +393,10 @@ export function composeLocalAgents(
      * anything else, a check that fails or outlasts `SIGN_IN_CHECK`, does not.
      * Nothing the CLI prints is kept but that one word.
      */
-    const claudeCodeSignedIn = (env: Readonly<Record<string, string>>) =>
+    const claudeCodeSignedIn = (claude: string, env: Readonly<Record<string, string>>) =>
       Effect.scoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make(platform.claudeExecutable, ["auth", "status"], {
+          const handle = yield* ChildProcess.make(claude, ["auth", "status"], {
             env,
             extendEnv: false,
             stdin: "ignore",
@@ -346,8 +415,11 @@ export function composeLocalAgents(
       );
 
     /** Which harnesses this Mac is signed in to by itself, each checked as its own CLI answers. */
-    const signedInNow = (env: Readonly<Record<string, string>>) =>
-      Effect.map(claudeCodeSignedIn(env), (claudeCode): MacSignedIn => ({ claudeCode }));
+    const signedInNow = (had: LocalAgentTools, env: Readonly<Record<string, string>>) =>
+      Effect.map(
+        claudeCodeSignedIn(had.claude, env),
+        (claudeCode): MacSignedIn => ({ claudeCode }),
+      );
 
     // -- one account's follow --------------------------------------------------
 
@@ -357,6 +429,7 @@ export function composeLocalAgents(
       deviceId: string,
       folder: string,
       shellVariables: Readonly<Record<string, string>>,
+      had: LocalAgentTools,
       checkedSignIn: MacSignedIn,
     ) =>
       Effect.gen(function* () {
@@ -430,14 +503,14 @@ export function composeLocalAgents(
             const stdin = yield* Queue.unbounded<string>();
             const encoder = new TextEncoder();
             const started = yield* ChildProcess.make(
-              platform.runner.program,
-              [...platform.runner.args],
+              platform.launcher,
+              [had.node, platform.runnerBundle],
               {
                 cwd: layout.checkoutPath,
                 env: {
                   ...shellVariables,
                   TMPDIR: temp,
-                  ...platform.runner.env,
+                  ...platform.runnerEnv,
                   ...secrets.env,
                 },
                 extendEnv: false,
@@ -656,7 +729,7 @@ export function composeLocalAgents(
               Object.values(signedIn).some((each) => each === true) &&
               sinceCheck >= Duration.toMillis(SIGN_IN_EVERY)
             ) {
-              signedIn = yield* signedInNow(shellVariables);
+              signedIn = yield* signedInNow(had, shellVariables);
               sinceCheck = 0;
               sinceBeat = Duration.toMillis(BEAT_EVERY);
             }
@@ -685,16 +758,21 @@ export function composeLocalAgents(
     const turn = Effect.gen(function* () {
       const userId = dependencies.accountId();
       if (!(yield* gateOpen) || userId === undefined || Option.isNone(home)) {
+        // A gate shut lets the next opening fetch the tools again, where they were not had.
+        yield* Ref.set(fetchTried, false);
         return yield* Effect.sleep(IDLE);
       }
+      // Note that the Mac registers only once it has what a runner runs on, so Start never offers a Mac that cannot run one.
+      const had = yield* toolsForOpening;
+      if (Option.isNone(had)) return yield* Effect.sleep(IDLE);
       const deviceId = yield* deviceOf(userId);
       const shellVariables = yield* shellEnvironment;
-      const signedIn = yield* signedInNow(shellVariables);
+      const signedIn = yield* signedInNow(had.value, shellVariables);
       const registered = yield* asked(
         client.register(deviceId, {
           name: platform.deviceName,
           home: home.value,
-          claudeExecutable: platform.claudeExecutable,
+          claudeExecutable: had.value.claude,
           signedIn,
         }),
       );
@@ -703,7 +781,9 @@ export function composeLocalAgents(
       for (const launch of left) {
         if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
       }
-      yield* Effect.scoped(follow(userId, deviceId, home.value, shellVariables, signedIn));
+      yield* Effect.scoped(
+        follow(userId, deviceId, home.value, shellVariables, had.value, signedIn),
+      );
     });
 
     const lifetime = Effect.gen(function* () {

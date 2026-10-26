@@ -119,23 +119,27 @@ export class SignInConsent extends Context.Service<SignInConsent, SignInConsentS
 
 /**
  * What a local agent's runner is started with on this Mac
- * (`compose-local-agents.ts`): the program and its arguments that run the
- * runner's bundle, and the environment they add, which the desktop chooses
- * by how it ships the bundle; the Claude Code CLI the bundle drives, an
- * absolute path the Mac registers; the name the Mac is offered under at
- * Start; and the script that makes an agent's worktree of Luke's shared
- * clone (`@luke/host/node`'s `agentWorktreeScript`). It arrives rather than
- * being built here, because each is the desktop's own, a path into its
- * bundle or a script `node:path` builds, and a host that built them could
- * not load in a browser. Only the local agents concern asks for it.
+ * (`compose-local-agents.ts`): the launcher every runner starts through,
+ * the runner's bundle, and what the start adds to its environment, which
+ * the desktop chooses by how it runs; the copies of Node and the Claude
+ * Code CLI the app or the checkout already has, where it has them, which
+ * stand in for the pinned releases the host otherwise fetches
+ * (`local-agent-tools.ts`); the name the Mac is offered under at Start; and
+ * the script that makes an agent's worktree of Luke's shared clone
+ * (`@luke/host/node`'s `agentWorktreeScript`). It arrives rather than being
+ * built here, because each is the desktop's own, a path into its bundle or
+ * a script `node:path` builds, and a host that built them could not load in
+ * a browser. Only the local agents concern asks for it.
  */
 export interface LocalAgentPlatformSeam {
-  readonly runner: {
-    readonly program: string;
-    readonly args: readonly string[];
-    readonly env: Readonly<Record<string, string>>;
+  /** The program every runner is started through, given the Node and the bundle to run. */
+  readonly launcher: string;
+  readonly runnerBundle: string;
+  readonly runnerEnv: Readonly<Record<string, string>>;
+  readonly bundled: {
+    readonly node?: string | undefined;
+    readonly claude?: string | undefined;
   };
-  readonly claudeExecutable: string;
   readonly deviceName: string;
   readonly worktreeScript: (input: {
     readonly home: string;

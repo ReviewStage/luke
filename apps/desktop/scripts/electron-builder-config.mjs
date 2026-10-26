@@ -115,12 +115,7 @@ export function createElectronBuilderConfig(env = process.env) {
       entitlements: packageAssets.entitlementsPath,
       entitlementsInherit: packageAssets.entitlementsPath,
       minimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
-      binaries: [
-        ...[...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map(macBinaryPath),
-        ...[AGENT_RUNNER_RESOURCES.node, AGENT_RUNNER_RESOURCES.claude].map((binary) =>
-          path.join("Contents", "Resources", AGENT_RUNNER_RESOURCES.directory, binary),
-        ),
-      ],
+      binaries: [...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map(macBinaryPath),
       // The app's own scheme, which a Luke link's "Open in Luke" page hands
       // the plan to (`src/main/services/window-service.ts`): written into the
       // bundle's CFBundleURLTypes, which macOS registers the app for.

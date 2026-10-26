@@ -21,30 +21,15 @@ export const NATIVE_HELPERS = [
 ];
 
 /**
- * What a local agent's runner runs on in a packaged build, under one folder
- * of the app's resources (`src/main/services/local-agent-platform.ts`): the
- * runner's bundle (`packages/agent-runner`), the Claude Code CLI its Agent
- * SDK drives, pinned to the cloud's (`@luke/agent-runner/pins`), and a Node
- * of its own, since the packaged app burns off running itself as Node. Each
- * binary is signed beside the helpers.
+ * The local agents' runner bundle (`packages/agent-runner`), shipped in the
+ * app's resources (`src/main/services/local-agent-platform.ts`). The Node it
+ * runs on and the Claude Code CLI it drives are not shipped: the host fetches
+ * each pinned release the first time a Mac turns local agents on
+ * (`@luke/host`'s `localAgentTool`, `@luke/agent-runner/pins`).
  */
 export const AGENT_RUNNER_RESOURCES = {
   directory: "agent-runner",
   bundle: "agent-runner.mjs",
-  claude: "claude",
-  node: "node",
-};
-
-/**
- * The Node the packaged runner runs on: the release the runner's bundle
- * targets (`node24`), its macOS arm64 archive from nodejs.org, and the
- * archive's SHA-256 from that release's `SHASUMS256.txt`, which a download is
- * checked against before anything in it is used. A bump moves all three.
- */
-export const RUNNER_NODE = {
-  version: "24.22.1",
-  archive: "node-v24.22.1-darwin-arm64.tar.gz",
-  sha256: "89c682593d76cd44233fa53b1563264e7de9cbb189cad169135c5b4fadfbc0a7",
 };
 
 /**
