@@ -36,7 +36,6 @@
  * which the agent reads as it reads any tool's answer.
  */
 
-import { randomUUID } from "node:crypto";
 import { readCodingAgentOfConversation } from "@luke/database/models/coding-agent-store";
 import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
@@ -73,6 +72,7 @@ import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
+import { lukeMcpCallKey } from "./call-key.js";
 import { lukeMcpDoorSeams } from "./door-seams.js";
 import type { AgentSandboxDoors } from "./sandbox-door.js";
 import {
@@ -138,8 +138,9 @@ const MCP_METHOD = {
   TOOLS_CALL: "tools/call",
 } as const;
 
-/** What a tool call answers where its door failed rather than refused, which names nothing of the failure. */
-const DOOR_FAILED = "Luke could not run this tool just now; try again in a moment.";
+/** What a tool call answers where its door failed rather than refused, which names nothing of the failure: the same input tried again within the window is keyed to this call (`call-key.ts`), so a start or a message it may have made is made once. */
+const DOOR_FAILED =
+  "Luke could not run this tool just now; try it again in a moment with the same input, which runs it once.";
 
 const IdSchema = Schema.Union([Schema.String, Schema.Number]);
 const ParamsSchema = Schema.Record(Schema.String, Schema.Unknown);
@@ -280,7 +281,7 @@ interface McpServer {
   ) => Effect.Effect<RpcAnswer, never, LukeMcpServices>;
 }
 
-/** One `tools/call` run through the tool's door as the admitted conversation, with a fresh id of its own. */
+/** One `tools/call` run through the tool's door as the admitted conversation, under the key its input is held (`call-key.ts`). */
 function callLukeTool(
   doors: LukeMcpDoors,
   admitted: AdmittedConversation,
@@ -301,7 +302,7 @@ function callLukeTool(
     const context = {
       sandbox: sandbox.files,
       repository: sandbox.repository,
-      callId: randomUUID(),
+      callKey: lukeMcpCallKey(admitted, name, input),
       seams,
     };
     return tool.run(admitted, input, context);

@@ -27,9 +27,11 @@
  *
  * Two things eve's tool files keep in the session's own state have none
  * here, since the server keeps no session: a call's id, which the agent
- * tools key a start or a message on, is minted for each call; and the
- * turn's count of plan notes, which each call starts from nothing, so that
- * cap holds per call. The list is narrowed per agent as eve narrows its
+ * tools key a start or a message on, is the key the store holds for the
+ * agent's conversation, the tool, and the input within a window
+ * (`call-key.ts`), so the call a harness retries after a timeout starts or
+ * sends once, as eve's run again does; and the turn's count of plan notes,
+ * which each call starts from nothing, so that cap holds per call. The list is narrowed per agent as eve narrows its
  * own (`offeredLukeMcpTool`), and a tool left out is still refused by its
  * door where a harness calls it anyway. A tool whose words differ by
  * workspace, `post_thread`'s naming its open channels, is described for
@@ -37,7 +39,7 @@
  * turn's start.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
@@ -150,11 +152,11 @@ export type LukeMcpServices =
 /** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`app.ts`). */
 type LukeMcpToolServices = LukeMcpServices | AgentBrowser;
 
-/** What a call carries beside its input: the doors to the agent's sandbox, where a tool reads a file the agent names by its path or `show_code` reads its checkout; a fresh id of its own; and the seams the doors that reach eve or the store's writer read. */
+/** What a call carries beside its input: the doors to the agent's sandbox, where a tool reads a file the agent names by its path or `show_code` reads its checkout; the key it runs under, read from the store by the tools that key a row on it (`call-key.ts`); and the seams the doors that reach eve or the store's writer read. */
 interface LukeMcpCallContext {
   readonly sandbox: InboxSandboxDoor;
   readonly repository: RepositorySandboxDoor;
-  readonly callId: string;
+  readonly callKey: Effect.Effect<string, StoreFailure, DatabaseServices>;
   readonly seams: AgentDoorSeams;
 }
 
@@ -221,10 +223,12 @@ function described(
   return [name, { ...tool, describe }];
 }
 
-/** A tool about the workspace's agents and tasks, run through their one door. */
+/** A tool about the workspace's agents and tasks, run through their one door under the call's key. */
 function agentTool(spec: ToolSpec & { readonly name: AgentToolCall["tool"] }) {
-  return entry(spec, (admitted, input, { seams, callId }) =>
-    runAgentTools(seams, admitted, { tool: spec.name, input, callId }),
+  return entry(spec, (admitted, input, { seams, callKey }) =>
+    Effect.flatMap(callKey, (callId) =>
+      runAgentTools(seams, admitted, { tool: spec.name, input, callId }),
+    ),
   );
 }
 

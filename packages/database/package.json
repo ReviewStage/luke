@@ -36,6 +36,7 @@
     "./models/mac-command-store": "./src/models/mac-command-store.js",
     "./models/mac-device-store": "./src/models/mac-device-store.js",
     "./models/memory-store": "./src/models/memory-store.js",
+    "./models/native-call-keys": "./src/models/native-call-keys.js",
     "./models/native-projection-store": "./src/models/native-projection-store.js",
     "./models/operator-notices": "./src/models/operator-notices.js",
     "./models/message-reads": "./src/models/message-reads.js",
