@@ -354,34 +354,52 @@ export const localAgentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(functio
 });
 
 /**
- * The Macs the account may start a local agent on, as Start offers them:
- * each of its Macs that beat within `THIS_MAC.FRESH`, the latest first,
- * with the providers a Start on it runs that the account can pay for
- * (`paidMacProviders`), or that its own harness login pays for, where the account has the `local-agents`
- * experiment on; none otherwise.
- * Note that Start offers every one by name rather than one as This Mac,
- * because the service cannot tell which Mac the asking window runs on, and
- * a web tab runs on none.
+ * The devices a task of the account's may run its agents on, as the menus
+ * offer them: each device it registered, the latest beat first, with its
+ * kind and last beat, so a device away now is offered but drawn away, and
+ * the providers an agent on it runs that the account can pay for
+ * (`paidMacProviders`), or that its own harness login pays for, where the
+ * account has the `local-agents` experiment on; none otherwise. Only one
+ * that beat within `THIS_MAC.FRESH` takes a task's Runs on or an agent
+ * (`freshOffer`).
+ * Note that every one is offered by name rather than one as This Mac,
+ * because the service cannot tell which device the asking window runs on,
+ * and a web tab runs on none.
  */
 export const macOffers = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
 ): Effect.fn.Return<readonly MacOffer[], StoreFailure, DatabaseServices> {
   if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return [];
-  const seen = yield* freshMacs(userId);
-  if (seen.length === 0) return [];
+  const registered = yield* devicesSeenSince(userId, new Date(0));
+  if (registered.length === 0) return [];
   const paid = yield* paidMacProviders(userId);
   // Note that a Mac signed in to a harness runs its models on that login, paid for or not.
-  return seen.map((device) => ({
+  return registered.map((device) => ({
     deviceId: device.id,
     name: device.name,
     providers: MAC_PROVIDERS.filter((provider) => macRunsProvider(device, provider, paid)),
+    kind: device.kind,
+    seenAt: device.lastSeenAt.getTime(),
   }));
+});
+
+/** The offer of the account's device `deviceId` names where it beat within `THIS_MAC.FRESH`; none for another account's, one never registered, or one away. */
+export const freshOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  deviceId: string | null | undefined,
+): Effect.fn.Return<MacOffer | undefined, StoreFailure, DatabaseServices> {
+  if (deviceId === null || deviceId === undefined) return undefined;
+  const now = yield* Clock.currentTimeMillis;
+  const since = now - Duration.toMillis(THIS_MAC.FRESH);
+  return (yield* macOffers(userId)).find(
+    (each) => each.deviceId === deviceId && (each.seenAt ?? 0) >= since,
+  );
 });
 
 /**
  * Where a new agent of the account's runs on the runtime given, as its
  * Start asks: a sandbox where it asks for none, or the Mac it names, where
- * that Mac is one Start offers the account (`macOffers`) and lists the
+ * that Mac is one the account is offered and there now (`freshOffer`) and lists the
  * provider the runtime runs; refused by name otherwise: a Mac that is
  * another account's or is not there as away, Codex on a Mac that runs none,
  * and a runtime with no harness.
@@ -401,7 +419,7 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (runtime !== CONVERSATION_RUNTIME.CLAUDE_CODE && runtime !== CONVERSATION_RUNTIME.CODEX) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });
   }
-  const offer = (yield* macOffers(userId)).find((each) => each.deviceId === asked.deviceId);
+  const offer = yield* freshOffer(userId, asked.deviceId);
   if (offer === undefined) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.MAC_AWAY });
   }

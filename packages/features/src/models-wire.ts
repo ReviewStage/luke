@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { CODING_AGENT_BOUNDS, contextWindowSchema } from "./coding-agent-wire.js";
+import { DEVICE_KIND } from "./device-agent-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -103,20 +104,25 @@ export const catalogModelSchema = EffectSchema.Struct({
 export type CatalogModel = typeof catalogModelSchema.Type;
 
 /**
- * One of the account's Macs a Start may run a local agent on, as Start
- * offers it: one that beat lately, by its id and name, and the model
- * providers a Start on that Mac runs, which Run on lists it for and the
- * service checks a Start against.
+ * One of the account's devices a task may run its agents on, as the menus
+ * offer it: by its id and name, the model providers an agent on it runs,
+ * which a task's Runs on lists it for and the service checks a Start
+ * against, what kind of device it is, and the epoch milliseconds it last
+ * beat, which a reader holds against its own clock (`macOnline`); only a
+ * device there now is taken. The kind and the beat are absent from a service
+ * older than them, which offered only the devices there now.
  */
 export const macOfferSchema = EffectSchema.Struct({
   deviceId: wireUuidSchema,
   name: EffectSchema.String,
   providers: EffectSchema.Array(modelProviderSchema),
+  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_KIND))),
+  seenAt: EffectSchema.optionalKey(countedNumber),
 });
 
 export type MacOffer = typeof macOfferSchema.Type;
 
-/** The models the service offers (GET), and the account's Macs a Start may run its agent on, each one that beat lately, where the account has the `local-agents` experiment on and any did; absent otherwise, and from a service older than it. */
+/** The models the service offers (GET), and the account's devices a task may run its agents on, there now or not, where the account has the `local-agents` experiment on and registered any; absent otherwise, and from a service older than it. */
 export const modelsAnswerSchema = EffectSchema.Struct({
   models: EffectSchema.Array(catalogModelSchema),
   macs: EffectSchema.optionalKey(EffectSchema.Array(macOfferSchema)),

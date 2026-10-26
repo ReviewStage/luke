@@ -1,5 +1,10 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_KIND,
+  CODING_AGENT_MACHINE,
+  type CodingAgentMachine,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { agentName } from "@luke/features/model-label";
@@ -16,6 +21,7 @@ import {
   type Task,
   type TaskOrigin,
   type TaskPriority,
+  type TaskRunsOn,
   type TaskStatus,
   type TaskSummary,
   taskPrioritySchema,
@@ -58,6 +64,7 @@ import { readPlanTemplate } from "./account-store.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ensureGeneralChannel } from "./channel-store.js";
 import { InstantColumnSchema } from "./columns.js";
+import { type Device, devicesNamed } from "./device-store.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
@@ -166,7 +173,26 @@ export interface StoredTask {
   readonly issueLinks: readonly TaskIssueLink[];
   /** The developer's own words about the task as they started it; nothing for a task started with none. */
   readonly brief: string | undefined;
+  /** Where the task's agents run, as its row holds it, which a Start on it resolves its machine from. */
+  readonly runsOn: TaskRunsOnWrite;
 }
+
+/**
+ * Where a task's agents run, as a write names it and its row holds it: a
+ * sandbox with no device, or a device by its id, which the caller confirmed
+ * is the writer's own before it wrote it; a device whose row is gone since
+ * reads as none.
+ */
+export interface TaskRunsOnWrite {
+  readonly machine: CodingAgentMachine;
+  readonly deviceId: string | null;
+}
+
+/** Where a task's agents run where nothing named it: a sandbox. */
+export const TASK_RUNS_IN_CLOUD: TaskRunsOnWrite = {
+  machine: CODING_AGENT_MACHINE.VERCEL,
+  deviceId: null,
+};
 
 /**
  * A plan to start: the workspace it starts in, its name where one is given,
@@ -194,6 +220,8 @@ export interface NewTask {
   readonly assigneeId?: string;
   /** Who made the task for its member, where they did not make it by hand: Luke on their call, or a coding agent by its id. */
   readonly origin?: TaskOrigin;
+  /** Where its agents run; a sandbox where none is named. */
+  readonly runsOn?: TaskRunsOnWrite;
 }
 
 /**
@@ -215,10 +243,15 @@ export interface TaskChanges {
   readonly priority?: TaskPriority;
   /** The member the task is assigned to, who must be a member of its workspace, or of the one it moves to; null for no one. */
   readonly assigneeId?: string | null;
+  /** Where its agents run from now on; an agent already started keeps where it runs. */
+  readonly runsOn?: TaskRunsOnWrite;
 }
 
 /** How a task's repository was reached, as a write takes it. */
 const GitHubAccessSchema = Schema.Literals(Object.values(GITHUB_ACCESS));
+
+/** Where a task's agents run, as its row holds it. */
+const MachineSchema = Schema.Literals(Object.values(CODING_AGENT_MACHINE));
 
 /** Who made a task, as its row holds it. */
 const TaskCreatorActorSchema = Schema.Literals([
@@ -247,6 +280,8 @@ const TASK_SUMMARY_COLUMNS = {
   creatorAgentId: task.creatorAgentId,
   repository: task.repository,
   githubAccess: task.githubAccess,
+  machine: task.machine,
+  deviceId: task.deviceId,
   completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -273,6 +308,8 @@ const TaskSummaryRowSchema = Schema.Struct({
   creatorAgentId: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   githubAccess: GitHubAccessSchema,
+  machine: MachineSchema,
+  deviceId: Schema.NullOr(Schema.String),
   completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -492,10 +529,11 @@ function storedTaskOf(
   issueLinks: TaskStoreEffect<readonly TaskIssueLink[]> = listTaskIssues(userId, row.id),
 ): TaskStoreEffect<StoredTask> {
   return Effect.gen(function* () {
+    const devices = yield* devicesOf([row]);
     const read = yield* Effect.all(
       {
         pin: findPin({ userId, taskId: row.id }),
-        names: readAccountNames(namedAccountsOf([row])),
+        names: readAccountNames(namedAccountsOf([row], devices)),
         written: Effect.flatMap(readSectionWriters(row.id, startedText(row)), (sectionWriters) =>
           Effect.map(agentLabelsOf(row, sectionWriters), (labels) => ({ sectionWriters, labels })),
         ),
@@ -505,7 +543,7 @@ function storedTaskOf(
       { concurrency: yield* readConcurrency },
     );
     const { sectionWriters, labels } = read.written;
-    const summary = summaryOf(row, Option.getOrNull(read.pin), read.names);
+    const summary = summaryOf(row, Option.getOrNull(read.pin), read.names, devices);
     const agentEdits = row.agentEdits.map((edit) => ({
       ...edit,
       label: labels.get(edit.agentId) ?? UNKNOWN_AGENT_LABEL,
@@ -529,6 +567,7 @@ function storedTaskOf(
       sectionWriters,
       issueLinks: read.issueLinks,
       brief: row.brief ?? undefined,
+      runsOn: { machine: row.machine, deviceId: row.deviceId },
     };
   });
 }
@@ -538,11 +577,55 @@ function taskOf(userId: string, row: TaskRow): TaskStoreEffect<Task> {
   return Effect.map(storedTaskOf(userId, row, Effect.succeed([])), (stored) => stored.task);
 }
 
-/** The accounts a line of the list names: each row's owner, and its assignee where it has one. */
-function namedAccountsOf(rows: readonly TaskSummaryRow[]): readonly string[] {
-  return rows.flatMap((row) =>
-    row.assigneeId === null ? [row.userId] : [row.userId, row.assigneeId],
+/** The accounts a line of the list names: each row's owner, its assignee where it has one, and the owner of the device it runs on. */
+function namedAccountsOf(
+  rows: readonly TaskSummaryRow[],
+  devices: ReadonlyMap<string, Device>,
+): readonly string[] {
+  return rows.flatMap((row) => {
+    const deviceOwner = row.deviceId === null ? undefined : devices.get(row.deviceId)?.userId;
+    return [row.userId, row.assigneeId, deviceOwner].filter(
+      (account): account is string => account !== null && account !== undefined,
+    );
+  });
+}
+
+/** The devices the rows run on, by id; a row in a sandbox names none. */
+function devicesOf(rows: readonly TaskSummaryRow[]): TaskStoreEffect<ReadonlyMap<string, Device>> {
+  return devicesNamed(
+    rows.flatMap((row) =>
+      row.machine === CODING_AGENT_MACHINE.VERCEL || row.deviceId === null ? [] : [row.deviceId],
+    ),
   );
+}
+
+/**
+ * Where a line's agents run, as the wire says it: nothing for a sandbox;
+ * for a device, its id, its owner named by `names`, and its name, kind, and
+ * last beat, each left out once the device's row is gone.
+ */
+function runsOnOf(
+  row: TaskSummaryRow,
+  names: ReadonlyMap<string, string>,
+  devices: ReadonlyMap<string, Device>,
+): { readonly runsOn?: TaskRunsOn } {
+  if (row.machine === CODING_AGENT_MACHINE.VERCEL) return {};
+  const found = row.deviceId === null ? undefined : devices.get(row.deviceId);
+  const owner = found === undefined ? undefined : names.get(found.userId);
+  return {
+    runsOn: {
+      machine: CODING_AGENT_MACHINE.DEVICE,
+      ...(found === undefined ? undefined : { deviceId: found.id }),
+      ...(found === undefined || owner === undefined
+        ? undefined
+        : { owner: { userId: found.userId, name: owner } }),
+      ...(found === undefined
+        ? undefined
+        : {
+            device: { name: found.name, kind: found.kind, seenAt: found.lastSeenAt.getTime() },
+          }),
+    },
+  };
 }
 
 /**
@@ -558,6 +641,7 @@ function summaryOf(
   row: TaskSummaryRow,
   pin: ReaderPin | null,
   names: ReadonlyMap<string, string>,
+  devices: ReadonlyMap<string, Device>,
 ): TaskSummary {
   const createdAt = row.createdAt.getTime();
   const owner = names.get(row.userId);
@@ -582,6 +666,7 @@ function summaryOf(
     ...(row.assigneeId === null || assignee === undefined
       ? undefined
       : { assignee: { userId: row.assigneeId, name: assignee } }),
+    ...runsOnOf(row, names, devices),
   };
 }
 
@@ -607,6 +692,8 @@ const TaskInsertSchema = Schema.Struct({
   creatorAgentId: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   githubAccess: GitHubAccessSchema,
+  machine: MachineSchema,
+  deviceId: Schema.NullOr(Schema.String),
   document: Schema.String,
   brief: Schema.NullOr(Schema.String),
   now: Schema.Date,
@@ -633,6 +720,8 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     creatorAgentId: write.creatorAgentId,
     repository: write.repository,
     githubAccess: write.githubAccess,
+    machine: write.machine,
+    deviceId: write.deviceId,
     document: write.document,
     brief: write.brief,
     createdAt: write.now,
@@ -807,6 +896,8 @@ const TaskColumnChangesSchema = Schema.Struct({
   completedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
   priority: Schema.optionalKey(taskPrioritySchema),
   assigneeId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  machine: Schema.optionalKey(MachineSchema),
+  deviceId: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
 type TaskColumnChanges = typeof TaskColumnChangesSchema.Type;
@@ -931,6 +1022,8 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       name: named.length > 0 ? named : UNTITLED_TASK_NAME,
       repository: started.repository ?? null,
       githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
+      machine: (started.runsOn ?? TASK_RUNS_IN_CLOUD).machine,
+      deviceId: (started.runsOn ?? TASK_RUNS_IN_CLOUD).deviceId,
       document: template ?? DEFAULT_PLAN_TEMPLATE,
       brief: brief.length > 0 ? brief : null,
       status: started.status ?? TASK_STATUS.TODO,
@@ -1041,7 +1134,8 @@ export function createTaskOnce(
 export function listTasks(userId: string): TaskStoreEffect<readonly TaskSummary[]> {
   return Effect.gen(function* () {
     const rows = yield* findTasks({ userId });
-    const names = yield* readAccountNames(namedAccountsOf(rows));
+    const devices = yield* devicesOf(rows);
+    const names = yield* readAccountNames(namedAccountsOf(rows, devices));
     const tags = yield* listTaskIssueTags(
       userId,
       rows.map((row) => row.id),
@@ -1051,6 +1145,7 @@ export function listTasks(userId: string): TaskStoreEffect<readonly TaskSummary[
         row,
         row.pinnedAt === null ? null : { pinnedAt: row.pinnedAt, pinPosition: row.pinPosition },
         names,
+        devices,
       );
       const issues = tags.get(row.id);
       return issues === undefined ? summary : { ...summary, issues };
@@ -1201,6 +1296,9 @@ function columnChangesOf(
       : { status: changes.status, completedAt: completedAtOf(changes.status, now) }),
     ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
     ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
+    ...(changes.runsOn === undefined
+      ? undefined
+      : { machine: changes.runsOn.machine, deviceId: changes.runsOn.deviceId }),
   };
 }
 
