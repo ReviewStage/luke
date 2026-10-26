@@ -440,7 +440,13 @@ export function Tabs({
  * own, with ⌘W on the chosen tab's alone. `contextMenu`
  * (`useMenu`'s) opens the tab's own actions from a right-click or a long
  * press, and `onMenu` opens them where it says from the keyboard's menu
- * keys.
+ * keys; `menu`, the menu they open while it is drawn, stands inside the tab.
+ * Note that it is drawn from the tab's own pill rather than beside it,
+ * because what a menu's portal leaves where it is mounted, its focus guards
+ * and the node that owns it for a reader, would otherwise stand in the
+ * strip's row as children of their own, and a chosen tab alone in its strip
+ * would no longer be its only child and would narrow to a shared one's
+ * width (tabs.css).
  */
 export function Tab({
   id,
@@ -461,6 +467,7 @@ export function Tab({
   onClose,
   contextMenu,
   onMenu,
+  menu,
 }: {
   /** The id the tab stands under, which the panel it shows names itself by (`aria-labelledby`). */
   id?: string | undefined;
@@ -489,6 +496,8 @@ export function Tab({
   onClose?: (() => void) | undefined;
   contextMenu?: ContextMenuProps | undefined;
   onMenu?: ((placement: MenuPlacement, opener: HTMLElement) => void) | undefined;
+  /** The tab's menu while drawn: `Menu`, opened by `contextMenu` or `onMenu`. */
+  menu?: ReactNode;
 }): React.JSX.Element {
   // Whether the label is cut short: a label renamed, or a lone tab giving
   // way to the toolbar beside it.
@@ -598,6 +607,7 @@ export function Tab({
           </Tooltip>
         </span>
       )}
+      {menu}
     </div>
   );
 }

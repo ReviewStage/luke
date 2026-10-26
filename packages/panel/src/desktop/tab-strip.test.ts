@@ -15,7 +15,8 @@ import { MenuTab, TabStrip } from "./tab-strip.js";
  * tab-strip.test.ts -- the window's strip, `@luke/ui`'s Tabs with the
  * window's hints and menus: a tab other than the chosen one names itself in
  * its hint; its menu moves it a place either way, under a finger's long press
- * and a mouse's right-click alike; and ⇧⌘→ moves the focused tab a place along. The plan's column and the side panel
+ * and a mouse's right-click alike, leaving the strip's row holding its tabs
+ * alone while it stands; and ⇧⌘→ moves the focused tab a place along. The plan's column and the side panel
  * draw this one strip, so this holds for both. The strip's own keys, drag,
  * and scroll are `@luke/ui`'s (`components/tabs/tabs.test.ts`). Synthetic
  * throughout.
@@ -141,6 +142,21 @@ test("with a mouse, a tab's menu offers Move left and Move right too, each with 
   assert.equal(menuItem("Move left").querySelector(".luke-menu-item-hint")?.textContent, "⇧⌘←");
   act(() => menuItem("Move right").click());
   assert.deepEqual(moves, [[1, 2]]);
+});
+
+test("a tab's menu standing open leaves the strip's row holding its tabs alone", async () => {
+  const tab = await menuStripTab("Plan");
+  const strip = tab.closest<HTMLElement>('[role="tablist"]') ?? assert.fail("a strip");
+
+  act(() => {
+    tab.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+
+  assert.deepEqual(menuWords(), ["Move right", "Close"]);
+  assert.deepEqual(
+    [...strip.children].map((each) => each.classList.contains("luke-tab")),
+    [true, true, true],
+  );
 });
 
 test("a tab other than the chosen one names itself in its hint, though its label may stand as its glyph alone", async () => {
