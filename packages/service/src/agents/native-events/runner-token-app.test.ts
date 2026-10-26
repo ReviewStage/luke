@@ -331,6 +331,20 @@ it.layer(getTestDB())("the runner's token route", (it) => {
       }),
   );
 
+  it.effect(
+    "hands a runner whose bearer happens to begin like a host's device secret its token",
+    () =>
+      Effect.gen(function* () {
+        const { ask } = yield* standing;
+        const agent = yield* codexOnPlan;
+        yield* signIn(agent.userId, 60);
+        const bearer = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${randomBytes(32).toString("base64url")}`;
+        yield* recordCodingAgentRunnerToken(agent.userId, agent.agentId, runnerTokenDigest(bearer));
+
+        assert.deepEqual((yield* ask(bearer)).body, { accessToken: "access-0" });
+      }),
+  );
+
   it.effect("brakes one agent that asks too often, and lets it ask again after the window", () =>
     Effect.gen(function* () {
       const { ask } = yield* standing;

@@ -193,12 +193,15 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const host = yield* hostCallerOf(request);
-  if (Option.isSome(host)) return yield* hostGithubToken(host.value, brake);
   const bearer = presentedBearer(request);
   if (bearer === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const admitted = yield* hostedStoreOrUnavailable(admitRunnerBearer(bearer));
-  if (Option.isNone(admitted)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  // Note that a runner's bearer is admitted first, so a runner reads as it always has, even one whose random bearer happens to begin like a device secret.
+  if (Option.isNone(admitted)) {
+    const host = yield* hostCallerOf(request);
+    if (Option.isSome(host)) return yield* hostGithubToken(host.value, brake);
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  }
   const { target } = admitted.value;
   const agent = yield* hostedStoreOrUnavailable(
     readCodingAgentHeaderOfConversation(target.userId, target.conversationId),
