@@ -39,25 +39,35 @@ describe("the readiness script", () => {
 });
 
 describe("the scroll script", () => {
-  /** A page whose body holds `html`, its boxes scrolled to `top`, and what a scroll of `role` by `by` answered there. */
+  /** A page whose body holds `html`, its boxes scrolled to `top`, what a scroll of `role` by `by` answered there, and each wheel the boxes heard with where their box stood then. */
   function scrolledWith(html: string, top: number, role: string, by: number) {
     const dom = new JSDOM(`<body>${html}</body>`, { runScripts: "outside-only" });
     const boxes = [...dom.window.document.querySelectorAll<HTMLElement>("[data-box]")];
-    for (const box of boxes) box.scrollTop = top;
+    const wheels: { deltaY: number; top: number }[] = [];
+    for (const box of boxes) {
+      box.scrollTop = top;
+      box.addEventListener("wheel", (event) => {
+        wheels.push({ deltaY: (event as WheelEvent).deltaY, top: box.scrollTop });
+      });
+    }
     const found = dom.window.eval(scrollScript(role, by)) as boolean;
-    return { found, tops: boxes.map((box) => box.scrollTop) };
+    return { found, tops: boxes.map((box) => box.scrollTop), wheels };
   }
 
-  it("scrolls the first box of the role back up by the step's pixels, and no other", () => {
+  it("scrolls the first box of the role back up by the step's pixels, and no other, the reader's wheel heard first", () => {
     const html = '<div data-box role="log"></div><div data-box role="log"></div>';
 
-    expect(scrolledWith(html, 900, "log", -600)).toEqual({ found: true, tops: [300, 900] });
+    expect(scrolledWith(html, 900, "log", -600)).toEqual({
+      found: true,
+      tops: [300, 900],
+      wheels: [{ deltaY: -600, top: 900 }],
+    });
   });
 
   it("answers that it found nothing where no box holds the role", () => {
     const html = '<div data-box role="region"></div>';
 
-    expect(scrolledWith(html, 900, "log", -600)).toEqual({ found: false, tops: [900] });
+    expect(scrolledWith(html, 900, "log", -600)).toEqual({ found: false, tops: [900], wheels: [] });
   });
 });
 
