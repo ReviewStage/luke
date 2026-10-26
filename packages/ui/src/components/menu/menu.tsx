@@ -14,6 +14,8 @@ import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import {
   DROPDOWN_MENU_ITEM,
+  DROPDOWN_MENU_ITEM_LIT,
+  DROPDOWN_MENU_RULE,
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -25,6 +27,8 @@ import {
 } from "../../shadcn/dropdown-menu.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import { visibleViewport } from "../../visible-viewport.js";
+import { BackButton, NO_BACK_KEY } from "../back-button/back-button.js";
+import { DIALOG_SIZE, Dialog } from "../dialog/dialog.js";
 import { OneLine } from "../one-line/one-line.js";
 import { ROVING_STOP, rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
 import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area.js";
@@ -75,6 +79,15 @@ import { useTouchHold } from "./touch-hold.js";
  * element carries rather than a Base UI context menu wrapped around it.
  * Each part keeps its `luke-menu*` name beside its classes, which the
  * panel's layer rule and the tests find it by.
+ *
+ * In a phone's layout, the narrow room the document's root says it stands
+ * in (`data-luke-room`, the panel's `shell-room.ts`), the same menu rises
+ * as a sheet from the window's foot instead (`MenuSheet`), whatever opened
+ * it and whether a finger or a mouse did: a dialog over the dimmed window,
+ * headed by what it acts on, its rows the menu's own at a finger's height,
+ * a submenu opened in its place with a way back, and its shortcuts left
+ * off. The room is read as the menu is hung, so one standing open stays
+ * what it opened as.
  */
 
 /** Which way from the point it hangs at a menu grows: rightward from it, or leftward to it. */
@@ -194,6 +207,18 @@ export interface MenuSubmenu {
 
 /** One line of a menu: an action, or a submenu of them. */
 export type MenuEntry = MenuAction | MenuSubmenu;
+
+/**
+ * What a menu acts on, as its thing's card reads: its mark, its name, and a
+ * line under it ("relay · In progress · AL-42"), which head a phone's sheet
+ * of the menu; a menu with none is headed by its own name.
+ */
+export interface MenuSubject {
+  /** The thing's mark, decoration beside its name. */
+  readonly mark?: React.ReactNode;
+  readonly name: string;
+  readonly detail?: string | undefined;
+}
 
 /** A menu standing open: where it hangs, and the control that opened it, which takes focus back. */
 export interface OpenMenu {
@@ -1030,6 +1055,30 @@ function Submenu({
   );
 }
 
+/** A menu's heading over its rows, muted and pressed by nothing: whose account it is about. */
+const MENU_HEADING =
+  "luke-menu-heading flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit]";
+
+/** A menu's footer under its rows, on the same terms: who made what it is about. */
+const MENU_FOOTER =
+  "luke-menu-footer flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit] text-muted-foreground";
+
+/** What a menu is told: its name, where it hangs, what it acts on, its rows, and its close. */
+interface MenuProps {
+  label: string;
+  /** Where it hangs, and whether it is on its way out (`useMenu`'s `drawn`). */
+  menu: DrawnMenu;
+  /** What it acts on, which heads it as a phone's sheet; its name heads it where none is given. */
+  subject?: MenuSubject | undefined;
+  heading?: React.ReactNode;
+  footer?: React.ReactNode;
+  groups: readonly (readonly MenuEntry[])[];
+  /** Whether it opens on its checked item, as a pop-up opens on its value, rather than on its first. */
+  openOnChecked?: boolean;
+  /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
+  onClose: (returnFocus: boolean) => void;
+}
+
 /**
  * The menu itself, Base UI's menu (`shadcn/dropdown-menu`) drawn over the
  * window at the point it hangs from, held inside what can be seen of it. A
@@ -1044,7 +1093,7 @@ function Submenu({
  * losing the keyboard or its size closes it where it stands, and a choice
  * closes it unless the item `stays`.
  */
-export function Menu({
+function FloatingMenu({
   label,
   menu,
   heading,
@@ -1052,18 +1101,7 @@ export function Menu({
   groups,
   openOnChecked = false,
   onClose,
-}: {
-  label: string;
-  /** Where it hangs, and whether it is on its way out (`useMenu`'s `drawn`). */
-  menu: DrawnMenu;
-  heading?: React.ReactNode;
-  footer?: React.ReactNode;
-  groups: readonly (readonly MenuEntry[])[];
-  /** Whether it opens on its checked item, as a pop-up opens on its value, rather than on its first. */
-  openOnChecked?: boolean;
-  /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
-  onClose: (returnFocus: boolean) => void;
-}): React.JSX.Element {
+}: MenuProps): React.JSX.Element {
   const { id, placement, opener, leaving, ref: hold } = menu;
   const element = useRef<HTMLDivElement | null>(null);
   // Note that the popup is held in state too, because Base UI's portal draws it a render after the menu's own.
@@ -1200,10 +1238,7 @@ export function Menu({
         <MenuRows>
           {heading === undefined ? null : (
             <>
-              <div
-                className="luke-menu-heading flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit]"
-                role="none"
-              >
+              <div className={MENU_HEADING} role="none">
                 {heading}
               </div>
               <DropdownMenuSeparator className="luke-menu-rule" />
@@ -1235,10 +1270,7 @@ export function Menu({
           {footer === undefined ? null : (
             <>
               <DropdownMenuSeparator className="luke-menu-rule" />
-              <div
-                className="luke-menu-footer flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit] text-muted-foreground"
-                role="none"
-              >
+              <div className={MENU_FOOTER} role="none">
                 {footer}
               </div>
             </>
@@ -1247,4 +1279,354 @@ export function Menu({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+/** The attribute the document's root wears the room it stands in, and the room a phone's layout is (the panel's `stage-room.ts`). */
+const ROOM_ATTRIBUTE = "data-luke-room";
+const NARROW_ROOM = "narrow";
+
+/** Whether the window stands in a phone's layout now, where a menu rises as a sheet. */
+function inNarrowRoom(): boolean {
+  return document.documentElement.getAttribute(ROOM_ATTRIBUTE) === NARROW_ROOM;
+}
+
+/**
+ * How a finger swiping a sheet down puts it away: let go past this share of
+ * its height, or flicked faster than this, in CSS pixels a millisecond.
+ */
+const SHEET_SWIPE = {
+  SHARE: 0.25,
+  FLICK: 0.5,
+} as const;
+
+/** A finger holding a sheet's head: which, where it last stood and when, how far down it has drawn the sheet, and how fast. */
+interface SheetDrag {
+  readonly pointerId: number;
+  readonly from: number;
+  at: number;
+  down: number;
+  speed: number;
+}
+
+/**
+ * A sheet swiped down by its head, following the finger and put away as
+ * it is let go past `SHEET_SWIPE`, or sprung back short of it. Only a
+ * finger swipes, and never from a button in the head, which keeps its own
+ * press. The sheet follows on its own `translate`, its transition off while
+ * held (`data-dragging`), so no render runs per move.
+ */
+function useSheetSwipe(onAway: () => void) {
+  const sheet = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<SheetDrag | null>(null);
+  const follow = (down: number, held: boolean) => {
+    const element = sheet.current;
+    if (element === null) return;
+    element.style.translate = down === 0 ? "" : `0 ${down}px`;
+    element.toggleAttribute("data-dragging", held);
+  };
+  const letGo = (event: React.PointerEvent<HTMLElement>, away: boolean) => {
+    const held = drag.current;
+    if (held === null || held.pointerId !== event.pointerId) return;
+    drag.current = null;
+    const height = sheet.current?.getBoundingClientRect().height ?? 0;
+    const far = held.down > height * SHEET_SWIPE.SHARE || held.speed > SHEET_SWIPE.FLICK;
+    // Note that a sheet put away sinks on from where the finger left it.
+    follow(away && far ? held.down : 0, false);
+    if (away && far) onAway();
+  };
+  const head = {
+    onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
+      if (event.pointerType !== "touch") return;
+      if (event.target instanceof Element && event.target.closest("button") !== null) return;
+      drag.current = {
+        pointerId: event.pointerId,
+        from: event.clientY,
+        at: event.timeStamp,
+        down: 0,
+        speed: 0,
+      };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    },
+    onPointerMove: (event: React.PointerEvent<HTMLElement>) => {
+      const held = drag.current;
+      if (held === null || held.pointerId !== event.pointerId) return;
+      const down = Math.max(0, event.clientY - held.from);
+      const elapsed = event.timeStamp - held.at;
+      if (elapsed > 0) held.speed = (down - held.down) / elapsed;
+      held.down = down;
+      held.at = event.timeStamp;
+      follow(down, true);
+    },
+    onPointerUp: (event: React.PointerEvent<HTMLElement>) => letGo(event, true),
+    onPointerCancel: (event: React.PointerEvent<HTMLElement>) => letGo(event, false),
+  };
+  return { sheet, head };
+}
+
+/** The item a sheet's page lands focus on: its checked one where it opens on that, else its first that applies now. */
+function startOf(list: HTMLElement, onChecked: boolean): HTMLElement | undefined {
+  const items = itemsOf(list);
+  const checked = onChecked
+    ? items.find((item) => item.getAttribute("aria-checked") === "true")
+    : undefined;
+  return checked ?? items[0];
+}
+
+/** The attribute a sheet's row that opens a submenu wears, naming it, so going back lands focus on it. */
+const SUBMENU_ATTRIBUTE = "data-submenu";
+
+/**
+ * One row of a sheet: the menu's own row (`DROPDOWN_MENU_ITEM`, lit as a
+ * menu's rows are), standing in no Base UI menu, so a plain button the
+ * sheet's keys walk. Its shortcut is left off, since a phone's layout has
+ * no keys to press it on; a row that opens a submenu ends in its chevron.
+ */
+function SheetItem({
+  action,
+  submenu,
+  onChoose,
+}: {
+  action: MenuAction;
+  /** The submenu it opens in the sheet's place, where it opens one. */
+  submenu?: string | undefined;
+  onChoose: () => void;
+}): React.JSX.Element {
+  const heard = action.detail === undefined ? undefined : `${action.label}, ${action.detail}`;
+  const shared = {
+    type: "button",
+    "aria-label": heard,
+    disabled: action.disabled,
+    className: cn("luke-menu-item", DROPDOWN_MENU_ITEM, DROPDOWN_MENU_ITEM_LIT),
+    "data-variant": action.danger ? "destructive" : undefined,
+    "data-danger": action.danger ? "true" : undefined,
+    "data-detail": secondLine(action) ? "true" : undefined,
+    [SUBMENU_ATTRIBUTE]: submenu,
+    ...rovingItem(),
+    onClick: pulseOnPress(onChoose, PRESS_PULSE.QUIET),
+    onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (submenu === undefined || event.key !== "ArrowRight") return;
+      event.preventDefault();
+      onChoose();
+    },
+  } as const;
+  const body = <ItemBody action={{ ...action, hint: undefined }} />;
+  // A setting says whether it is on as a menu's check does.
+  if (action.checked !== undefined) {
+    return (
+      <Carded action={action}>
+        <button {...shared} role="menuitemcheckbox" aria-checked={action.checked}>
+          {body}
+        </button>
+      </Carded>
+    );
+  }
+  return (
+    <Carded action={action}>
+      <button
+        {...shared}
+        role="menuitem"
+        aria-haspopup={submenu === undefined ? undefined : "menu"}
+      >
+        {body}
+      </button>
+    </Carded>
+  );
+}
+
+/** The rows of one page of a sheet: a menu's groups, ruled apart, each submenu a row that opens it in place. */
+function SheetRows({
+  groups,
+  onChoose,
+  onOpen,
+}: {
+  groups: readonly (readonly MenuEntry[])[];
+  onChoose: (action: MenuAction) => void;
+  onOpen: (submenu: MenuSubmenu) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      {groups.map((group, index) => (
+        <Fragment key={group[0]?.label}>
+          {index > 0 ? <hr className={cn("luke-menu-rule", DROPDOWN_MENU_RULE)} /> : null}
+          {group.map((entry) =>
+            "items" in entry ? (
+              <SheetItem
+                key={entry.label}
+                action={{ ...entry, opens: true, onSelect: () => undefined }}
+                submenu={entry.label}
+                onChoose={() => onOpen(entry)}
+              />
+            ) : (
+              <SheetItem key={entry.label} action={entry} onChoose={() => onChoose(entry)} />
+            ),
+          )}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+/**
+ * The menu as a phone's sheet: a dialog (`DIALOG_SIZE.SHEET`) risen from
+ * the window's foot over the dimmed window, the page under it unmoved. Its
+ * head names what it acts on (`subject`), else the menu itself, under a
+ * grip a finger swipes it down by; its rows are the menu's, its groups,
+ * glyphs, and red, at a finger's height and with no shortcuts, scrolling
+ * under the fixed head and fading where they are cut, its heading over
+ * them and its footer last. A submenu opens in the sheet's place, its head
+ * the submenu's with a way back (and Left), which lands focus back on its
+ * row. It holds the keyboard as a dialog does, the arrows walking its rows;
+ * Escape, a press on the dimmed window, a swipe down, or a choice puts it
+ * away, and the dialog hands focus back to what opened it once it is gone,
+ * unless the choice took focus somewhere of its own, as Rename does.
+ */
+function MenuSheet({
+  label,
+  menu,
+  subject,
+  heading,
+  footer,
+  groups,
+  openOnChecked = false,
+  onClose,
+}: MenuProps): React.JSX.Element {
+  const { id, opener, leaving, ref: hold } = menu;
+  const [page, setPage] = useState<MenuSubmenu | undefined>(undefined);
+  // The submenu just left, whose row takes focus back.
+  const backTo = useRef<string | undefined>(undefined);
+  // Opened again while it was leaving, the sheet stands on its first page, as one opened anew does.
+  const [wasLeaving, setWasLeaving] = useState(leaving);
+  if (wasLeaving !== leaving) {
+    setWasLeaving(leaving);
+    if (!leaving) setPage(undefined);
+  }
+  const roving = useRovingKeys<HTMLDivElement>({ stop: ROVING_STOP.NONE });
+  const [list, setList] = useState<HTMLDivElement | null>(null);
+  const start = useRef<HTMLElement | null>(null);
+  const nameId = useId();
+  const away = () => onClose(false);
+  const { sheet, head } = useSheetSwipe(away);
+  // Note that the dialog's card is what the menu's exit is waited on, since its fade is what plays as the sheet goes.
+  const listed = useCallback(
+    (node: HTMLDivElement | null) => {
+      setList(node);
+      roving.ref(node);
+      start.current = node === null ? null : (startOf(node, openOnChecked) ?? null);
+      hold(node?.closest<HTMLElement>(".luke-dialog") ?? null);
+    },
+    [roving.ref, hold, openOnChecked],
+  );
+  // Each page lands focus as it stands: the first page on its start, or on the row of the submenu just left.
+  useEffect(() => {
+    if (list === null || leaving) return;
+    const back =
+      page === undefined && backTo.current !== undefined
+        ? [...list.querySelectorAll<HTMLElement>(`[${SUBMENU_ATTRIBUTE}]`)].find(
+            (row) => row.getAttribute(SUBMENU_ATTRIBUTE) === backTo.current,
+          )
+        : undefined;
+    backTo.current = undefined;
+    (back ?? startOf(list, openOnChecked && page === undefined))?.focus({ preventScroll: true });
+  }, [list, page, leaving, openOnChecked]);
+
+  const back = () => {
+    backTo.current = page?.label;
+    setPage(undefined);
+  };
+  // Note that a value a filter toggles leaves the sheet standing, so several are chosen in one visit.
+  const choose = (action: MenuAction) => {
+    if (action.stays !== true) away();
+    action.onSelect();
+  };
+  const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (page !== undefined && event.key === "ArrowLeft") {
+      event.preventDefault();
+      back();
+      return;
+    }
+    roving.onKeyDown(event);
+  };
+  const title = subject?.name ?? label;
+  const name = page?.label ?? title;
+  const detail = page === undefined ? subject?.detail : title;
+  return (
+    <Dialog
+      open={!leaving}
+      size={DIALOG_SIZE.SHEET}
+      labelledBy={nameId}
+      invoker={opener}
+      initialFocus={start}
+      onDismiss={away}
+    >
+      <div ref={sheet} className="luke-menu-sheet">
+        <div className="luke-menu-sheet-head" {...head}>
+          <span className="luke-menu-sheet-grip" aria-hidden="true" />
+          <div className="luke-menu-sheet-title">
+            {page === undefined ? null : (
+              <span className="luke-menu-sheet-back">
+                <BackButton label={title} place={title} command={NO_BACK_KEY} onBack={back} />
+              </span>
+            )}
+            {page === undefined && subject?.mark !== undefined ? (
+              <span className="luke-menu-sheet-mark" aria-hidden="true">
+                {subject.mark}
+              </span>
+            ) : null}
+            <span className="luke-menu-sheet-words">
+              <span id={nameId} className="luke-menu-sheet-name">
+                <OneLine>{name}</OneLine>
+              </span>
+              {detail === undefined ? null : (
+                <span className="luke-menu-sheet-detail">
+                  <OneLine>{detail}</OneLine>
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+        <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+          <div
+            ref={listed}
+            id={id}
+            role="menu"
+            aria-label={page?.label ?? label}
+            className="luke-menu-sheet-rows"
+            data-roving={roving["data-roving"]}
+            onKeyDown={keyDown}
+            onFocus={roving.onFocus}
+          >
+            {page === undefined ? (
+              <>
+                {heading === undefined ? null : (
+                  <div className={MENU_HEADING} role="none">
+                    {heading}
+                  </div>
+                )}
+                <SheetRows groups={groups} onChoose={choose} onOpen={setPage} />
+                {footer === undefined ? null : (
+                  <div className={MENU_FOOTER} role="none">
+                    {footer}
+                  </div>
+                )}
+              </>
+            ) : (
+              <SheetRows groups={[page.items]} onChoose={choose} onOpen={setPage} />
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * A menu: hung at its point as a floating menu (`FloatingMenu`), or, in a
+ * phone's layout, risen as a sheet from the window's foot (`MenuSheet`).
+ * Note that the room is read once as the menu is hung, so a menu standing
+ * open never turns into the other as the window is resized.
+ */
+export function Menu(props: MenuProps): React.JSX.Element {
+  const { placement } = props.menu;
+  const sheet = useMemo(() => inNarrowRoom(), [placement]);
+  return sheet ? <MenuSheet {...props} /> : <FloatingMenu {...props} />;
 }

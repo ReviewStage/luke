@@ -29,7 +29,10 @@ import {
  * once, and its release makes no click; a touch that moves or lets go
  * first, and a mouse held down, open nothing. An item hangs its card beside
  * itself on rest, which leaves the menu its focus, its arrows, and a press on
- * the card.
+ * the card. In a phone's layout the same menu rises as a sheet, a dialog
+ * holding its rows, a submenu opening in its place with a way back, and
+ * Escape or a press on the dimmed window putting it away with focus handed
+ * back.
  */
 
 declare global {
@@ -48,6 +51,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  document.documentElement.removeAttribute("data-luke-room");
 });
 
 /** What a test's menu chose, in the order it chose it. */
@@ -975,4 +979,80 @@ test("a menu too tall for the room over a bar it keeps clear of stands above the
   });
   const top = Number.parseFloat((await hungAt())?.[1] ?? "");
   expect(top + 300).toBeLessThanOrEqual(740);
+});
+
+/** The window drawn in a phone's layout, as the panel's shell marks its root. */
+function inPhoneLayout(): void {
+  document.documentElement.setAttribute("data-luke-room", "narrow");
+}
+
+/** jsdom has no ResizeObserver; the way back's fold, which measures by one, is not what these tests read. */
+class StandInResizeObserver {
+  observe(): void {}
+  disconnect(): void {}
+}
+
+/** The sheet a menu stands as in a phone's layout, while it does. */
+function sheet(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="dialog"]');
+}
+
+test("in a phone's layout the menu rises as a sheet, a dialog named by the menu holding its rows; elsewhere it hangs as a floating menu", () => {
+  mount(createElement(Harness, { groups: taskGroups([]) }));
+  const more = button("More");
+  press(more);
+  expect(openMenu()).not.toBeNull();
+  expect(sheet()).toBeNull();
+  press(more);
+  inPhoneLayout();
+  press(more);
+  const standing = sheet() ?? expect.fail("the sheet stands");
+  expect(standing.getAttribute("aria-modal")).toBe("true");
+  const name = document.getElementById(standing.getAttribute("aria-labelledby") ?? "");
+  expect(name?.textContent).toBe("Plan actions");
+  expect(standing.contains(openMenu())).toBe(true);
+  expect(focused()).toBe("Rename");
+  key("ArrowDown");
+  expect(focused()).toBe("Archive");
+});
+
+test("in a sheet a submenu opens in its place with a way back, which lands on its row again, and a choice in it acts and puts the sheet away", () => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+  inPhoneLayout();
+  const chosen: Chosen = [];
+  mount(createElement(Harness, { groups: viewGroups(chosen) }));
+  const more = button("More");
+  press(more);
+  press(button("Order by"));
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+  expect(openMenu()).toBeNull();
+  expect(openMenu("Order by")).not.toBeNull();
+  expect(focused()).toBe("Last updated");
+  press(button("Plan actions"));
+  expect(openMenu("Order by")).toBeNull();
+  expect(openMenu()).not.toBeNull();
+  expect(focused()).toBe("Order by");
+  press(button("Group by"));
+  press(button("None"));
+  expect(chosen).toEqual(["None"]);
+  expect(sheet()).toBeNull();
+  expect(document.activeElement).toBe(more);
+});
+
+test("Escape or a press on the dimmed window puts a sheet away and hands focus back to what opened it", () => {
+  inPhoneLayout();
+  mount(createElement(Harness, { groups: taskGroups([]) }));
+  const more = button("More");
+  press(more);
+  key("Escape");
+  expect(sheet()).toBeNull();
+  expect(document.activeElement).toBe(more);
+  press(more);
+  const dimmed = sheet()?.parentElement ?? expect.fail("no dimmed window");
+  act(() => {
+    dimmed.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    dimmed.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  expect(sheet()).toBeNull();
+  expect(document.activeElement).toBe(more);
 });

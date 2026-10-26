@@ -2,8 +2,8 @@
    (`menu.tsx`, drawn in `../../shadcn/dropdown-menu.tsx`): the keyframes
    its entrance and exit run, which the window's other surfaces that open
    as a menu does run too; the hold a long press opens a menu by; the rows'
-   own way of marking focus; and what a finger is shown that a mouse is
-   not. */
+   own way of marking focus; what a finger is shown that a mouse is
+   not; and a phone's sheet of a menu (`MenuSheet`). */
 
 @layer components {
   /* Held, an element a long press opens a menu on shows the menu rather
@@ -72,6 +72,122 @@
   @keyframes luke-menu-leave {
     to {
       opacity: 0;
+    }
+  }
+
+  /* A phone's sheet of a menu: the menu's ground and edge, rounded only at
+     its top, standing on the window's foot clear of the home bar, risen in
+     on the pane's motion and sunk out on the exit's as its dialog's card
+     fades; the reduced-motion tokens hold both still. Its rows are the
+     menu's at a finger's height, and a finger dragging its head carries it
+     down (`useSheetSwipe`), springing back where it is let go short. */
+  .luke-menu-sheet {
+    --luke-menu-row-height: var(--luke-touch-target);
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0 var(--luke-menu-inset)
+      calc(var(--luke-menu-inset) + env(safe-area-inset-bottom, 0px));
+    border: 1px solid var(--luke-color-border-strong);
+    border-bottom: 0;
+    border-radius: var(--luke-dialog-radius) var(--luke-dialog-radius) 0 0;
+    background: var(--luke-color-overlay);
+    box-shadow: var(--luke-menu-shadow);
+    color: var(--luke-color-text);
+    animation: luke-menu-sheet-rise var(--luke-duration-pane) var(--luke-motion-pane);
+    transition: translate var(--luke-duration-fast) var(--luke-motion-exit);
+  }
+
+  .luke-menu-sheet[data-dragging] {
+    transition: none;
+  }
+
+  [data-ending-style] .luke-menu-sheet {
+    animation: luke-menu-sheet-sink var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  }
+
+  /* The head stays put over the rows that scroll under it, and is what a
+     finger drags, so the browser takes no scroll from it. */
+  .luke-menu-sheet-head {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    padding: var(--luke-space-6) calc(var(--luke-menu-inset) + var(--luke-row-inset))
+      var(--luke-space-8);
+    border-bottom: 1px solid var(--luke-color-border);
+    margin: 0 calc(-1 * var(--luke-menu-inset)) var(--luke-menu-inset);
+    touch-action: none;
+  }
+
+  .luke-menu-sheet-grip {
+    width: var(--luke-space-32);
+    height: var(--luke-space-4);
+    margin: 0 auto var(--luke-space-8);
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-border-strong);
+  }
+
+  .luke-menu-sheet-title {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    min-width: 0;
+    min-height: var(--luke-control-height);
+  }
+
+  /* The way back folds to its glyph, its words a reader's alone. */
+  .luke-menu-sheet-back {
+    --luke-fold: folded;
+    display: flex;
+    flex: none;
+  }
+
+  .luke-menu-sheet-mark {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+  }
+
+  /* A mark that draws nothing now, as a read row's unread gutter, takes no room. */
+  .luke-menu-sheet-mark:not(:has(svg, img, *:not(:empty))) {
+    display: none;
+  }
+
+  .luke-menu-sheet-words {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .luke-menu-sheet-name {
+    display: flex;
+    min-width: 0;
+    font-weight: var(--luke-weight-medium);
+  }
+
+  .luke-menu-sheet-detail {
+    display: flex;
+    min-width: 0;
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+  }
+
+  .luke-menu-sheet-rows {
+    display: flex;
+    flex-direction: column;
+  }
+
+  @keyframes luke-menu-sheet-rise {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes luke-menu-sheet-sink {
+    to {
+      transform: translateY(100%);
     }
   }
 }

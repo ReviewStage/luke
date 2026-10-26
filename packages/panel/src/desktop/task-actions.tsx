@@ -30,6 +30,7 @@ import {
 } from "@luke/ui";
 import { type AssigneeFace, accountActor, assigneeFace, creatorActor } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
+import { repositoryLabel } from "@luke/ui/task-list-model";
 import {
   DOCUMENT_REGION,
   RENAME_FAILED_NOTE,
@@ -76,6 +77,7 @@ import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
 import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME, TaskRowMark, taskCardOf } from "./task-card.js";
+import { taskSubject } from "./task-row-parts.js";
 
 /**
  * task-actions.tsx -- one task's actions, offered alike from the toolbar's ⋯ button and from a right-click on the task in the sidebar.
@@ -470,6 +472,14 @@ export function useTaskMenuItems(
     ),
   ];
   const footer = task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />;
+  const subject =
+    task === undefined
+      ? undefined
+      : taskSubject(
+          task,
+          task.repository === null ? undefined : repositoryLabel(task.repository, []),
+          undefined,
+        );
   const dialog = (
     <>
       <ConfirmDialog
@@ -482,7 +492,7 @@ export function useTaskMenuItems(
       {sections.dialog}
     </>
   );
-  return { deletion, markDone, groups, footer, dialog };
+  return { deletion, markDone, groups, footer, subject, dialog };
 }
 
 /**
@@ -497,7 +507,7 @@ export function useTaskMenu(
   name: string,
   doors: Parameters<typeof useTaskMenuItems>[3],
 ) {
-  const { deletion, markDone, groups, footer, dialog } = useTaskMenuItems(
+  const { deletion, markDone, groups, footer, subject, dialog } = useTaskMenuItems(
     tasks,
     taskId,
     name,
@@ -509,6 +519,7 @@ export function useTaskMenu(
       <ActionMenu
         label="Task actions"
         menu={drawn}
+        subject={subject}
         footer={footer}
         groups={[...(doors.lead?.(drawn.opener) ?? []), ...groups()]}
         onClose={close}

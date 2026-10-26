@@ -549,7 +549,17 @@ export function ListRow({
     [ref, linkAddress],
   );
   const titleId = useId();
-  const rowMenu = useRowMenu(menu, { disabled, opener: onPress ? pressElement : undefined });
+  // Note that a row's menu is headed, as a phone's sheet, by the row's own mark and words, where its owner names no subject and its title is plain: its description under it, else what it belongs to.
+  const named = plainWords(title);
+  const subject =
+    menu?.subject ??
+    (named === undefined
+      ? undefined
+      : { mark: leading, name: named, detail: plainWords(description) ?? lead?.label });
+  const rowMenu = useRowMenu(menu === undefined ? undefined : { ...menu, subject }, {
+    disabled,
+    opener: onPress ? pressElement : undefined,
+  });
   const offered = rowMenu.offered;
   const [titleMeasured, titleClipped] = useClipped(plainWords(title));
   useEffect(() => {

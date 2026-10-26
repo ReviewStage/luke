@@ -108,7 +108,8 @@ export type DialogRole = (typeof DIALOG_ROLE)[keyof typeof DIALOG_ROLE];
  * written, wider still for a composer card with chips at its foot, fitted
  * to a file shown edge to edge, or as large as the window allows, a file
  * shown edge to edge in a card a small margin from the window's edges, its
- * top clear of what the window draws over it.
+ * top clear of what the window draws over it; or a sheet standing on the
+ * window's foot, which draws its own ground, edge, and entrance.
  */
 export const DIALOG_SIZE = {
   CONFIRM: "confirm",
@@ -116,6 +117,8 @@ export const DIALOG_SIZE = {
   COMPOSER: "composer",
   MEDIA: "media",
   WINDOW: "window",
+  /** A sheet risen from the window's foot, as a phone's menu stands (`menu.tsx`'s `MenuSheet`): the window's width up to a wide card's, its look its content's own. */
+  SHEET: "sheet",
 } as const;
 
 export type DialogSize = (typeof DIALOG_SIZE)[keyof typeof DIALOG_SIZE];
@@ -171,6 +174,7 @@ const CARD_LOOK = [
   "room-narrow:data-[size=composer]:-ml-dialog-reach room-narrow:data-[size=composer]:-mr-dialog-reach room-narrow:data-[size=composer]:w-dialog-composer-reach room-narrow:data-[size=composer]:pt-card-inset-snug room-narrow:data-[size=composer]:pr-card-inset-snug room-narrow:data-[size=composer]:pb-card-inset-snug room-narrow:data-[size=composer]:pl-card-inset-snug",
   "data-[size=media]:w-auto data-[size=media]:min-w-dialog-media-min data-[size=media]:max-w-dialog-media-max data-[size=media]:gap-0 data-[size=media]:overflow-hidden data-[size=media]:p-0",
   "data-[size=window]:w-auto data-[size=window]:max-h-none data-[size=window]:max-w-none data-[size=window]:place-self-stretch data-[size=window]:gap-0 data-[size=window]:overflow-hidden data-[size=window]:p-0 data-[size=window]:mx-luke-12 data-[size=window]:mb-luke-12 data-[size=window]:mt-dialog-window-top @min-[1024px]/luke-dialog-room:data-[size=window]:mx-luke-16 @min-[1024px]/luke-dialog-room:data-[size=window]:mb-luke-16",
+  "data-[size=sheet]:w-dialog-wide data-[size=sheet]:gap-0 data-[size=sheet]:rounded-none data-[size=sheet]:border-0 data-[size=sheet]:bg-transparent data-[size=sheet]:p-0 data-[size=sheet]:shadow-none data-[size=sheet]:animate-none data-[size=sheet]:data-ending-style:animate-leave",
   "data-[expanding=true]:animate-none",
   "data-[dropping=true]:shadow-dialog-drop",
   "data-[nudge=true]:animate-dialog-nudge",
@@ -192,7 +196,7 @@ const CARD_LOOK = [
  * so its field yields to a short window (`desktop.css`) and its foot stays.
  */
 const MIDDLE =
-  "flex min-h-0 flex-1 flex-col gap-[inherit] overflow-x-hidden overflow-y-auto overscroll-contain [--luke-focus-ring-offset:var(--luke-focus-ring-inset)] data-[size=media]:contents data-[size=window]:contents data-[size=composer]:overflow-visible";
+  "flex min-h-0 flex-1 flex-col gap-[inherit] overflow-x-hidden overflow-y-auto overscroll-contain [--luke-focus-ring-offset:var(--luke-focus-ring-inset)] data-[size=media]:contents data-[size=window]:contents data-[size=sheet]:contents data-[size=composer]:overflow-visible";
 
 /** What marks a card's own veil, the room around a file shown in a card the window's size. */
 const VEIL_ATTRIBUTE = "data-dialog-veil";
@@ -208,6 +212,15 @@ export const DIALOG_VEIL = { [VEIL_ATTRIBUTE]: "" } as const;
 
 /** The dimmed window under a card the window's size, which keeps its own margins (`CARD_LOOK`). */
 const WINDOW_ROOM = "luke-dialog-backdrop p-0";
+
+/** The dimmed window under a sheet, which stands on its foot, centred across it, with no margin. */
+const SHEET_ROOM = "luke-dialog-backdrop items-end justify-items-center p-0";
+
+/** The dimmed window's room by the card's size. */
+function roomOf(size: DialogSize): string {
+  if (size === DIALOG_SIZE.WINDOW) return WINDOW_ROOM;
+  return size === DIALOG_SIZE.SHEET ? SHEET_ROOM : "luke-dialog-backdrop";
+}
 
 /** What a reader is told when a draft holds the card back. */
 const HELD_NOTICE = "Your draft is kept. Press Escape again to close.";
@@ -234,6 +247,8 @@ export type DialogProps = DialogName & {
   onDismiss: () => void;
   /** Where focus goes once the card is gone if what opened it has left the window meanwhile (`nextRowOrHead`); none leaves it where it fell. */
   restoreTo?: RestoreTo | undefined;
+  /** What opened the card, where focus may never have stood on it, as on a row a long press opened a menu on; whatever held focus as it opened where none is said. */
+  invoker?: HTMLElement | undefined;
   /** Its fade has run and it is gone, which an owner whose card holds state or reads data lets go of it on. */
   onExited?: (() => void) | undefined;
   /** The dialog's own keys, heard after Tab and Escape and never while an input method composes. */
@@ -373,7 +388,8 @@ function handBack(
 }
 
 /**
- * Remembers what held focus as the dialog opened, and where focus goes
+ * Remembers what held focus as the dialog opened, or what its owner says
+ * opened it (`invoker`), and where focus goes
  * should that be gone by the time the card is (`restoreTo`), and answers the
  * hand-back the dialog runs once its card is gone; an unmount hands it back
  * too, since a card its owner takes away has no exit of its own.
@@ -391,14 +407,15 @@ function useInvokerFocus(
   open: boolean,
   restoreTo: RestoreTo | undefined,
   card: React.RefObject<HTMLElement | null>,
+  opener: HTMLElement | undefined,
 ): () => void {
   const invoker = useRef<Opener | null>(null);
   useLayoutEffect(() => {
     if (!open || invoker.current !== null) return;
-    const element = document.activeElement;
+    const element = opener ?? document.activeElement;
     if (!(element instanceof HTMLElement)) return;
     invoker.current = { element, restore: restoreTo?.(element) };
-  }, [open, restoreTo]);
+  }, [open, restoreTo, opener]);
   // Note that an unmount looks again a microtask on, once the commit that
   // unmounts it has taken out what it takes, because a card drawn inside the
   // row its act took away unmounts with that row while the row still stands,
@@ -470,6 +487,7 @@ export function Dialog({
   initialFocus,
   onDismiss,
   restoreTo,
+  invoker,
   onExited,
   onKeyDown,
   dropTarget,
@@ -498,7 +516,7 @@ export function Dialog({
   }, [open]);
   useEffect(() => () => heldSaid.current(), []);
 
-  const handBackFocus = useInvokerFocus(open, restoreTo, card);
+  const handBackFocus = useInvokerFocus(open, restoreTo, card, invoker);
   const { foot, claimed, asker, setSlot } = useFootClaim();
   // A question standing at the foot holds the card as the card's own answers would.
   const still = busy || claimed?.busy === true;
@@ -628,7 +646,7 @@ export function Dialog({
           if (target.hasAttribute(VEIL_ATTRIBUTE)) dismiss();
         }}
         viewport={{
-          className: size === DIALOG_SIZE.WINDOW ? WINDOW_ROOM : "luke-dialog-backdrop",
+          className: roomOf(size),
           // Note that a press goes no further than the dialog, because the
           // surface that opened it is its parent in React's tree and may take
           // presses of its own.

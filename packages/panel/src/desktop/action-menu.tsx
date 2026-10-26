@@ -3,6 +3,7 @@ import {
   type DrawnMenu,
   type ListRowMenu,
   Menu,
+  type MenuSubject,
   type MenuAction as SharedMenuAction,
   type MenuEntry as SharedMenuEntry,
   Shortcut,
@@ -66,6 +67,8 @@ export function ActionMenu({
   label: string;
   /** Where it hangs, and whether it is on its way out (`useMenu`'s `drawn`). */
   menu: DrawnMenu;
+  /** What it acts on, which heads it as a phone's sheet. */
+  subject?: MenuSubject | undefined;
   heading?: React.ReactNode;
   footer?: React.ReactNode;
   groups: readonly (readonly MenuEntry[])[];

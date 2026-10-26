@@ -5,6 +5,7 @@ import {
   dropBelowStart,
   Menu,
   type MenuEntry,
+  type MenuSubject,
   opensMenu,
   useMenu,
   withContextMenu,
@@ -37,6 +38,8 @@ export interface ListRowMenu {
   readonly groups: readonly (readonly MenuEntry[])[];
   /** A muted line over the items, saying what they act on where the row's words do not. */
   readonly heading?: ReactNode;
+  /** What the row is, as its card reads, which heads its menu as a phone's sheet. */
+  readonly subject?: MenuSubject | undefined;
   /** A muted line under the items, as who made the thing. */
   readonly footer?: ReactNode;
   /** Whether the surface the row stands on is shown; its menu closes once it is not, and stands while it is where unsaid. */
@@ -122,6 +125,7 @@ export function useRowMenu(
       <Menu
         label={moreLabel(live.thing)}
         menu={state.drawn}
+        subject={live.subject}
         heading={live.heading}
         footer={live.footer}
         groups={details === undefined ? live.groups : withDetails(live.groups, details)}

@@ -18,6 +18,7 @@ import {
   type ChipLook,
   ChipName,
   dropBelowStart,
+  type MenuSubject,
   STATUS_TONE,
   TaskPriorityMark,
   TaskStatusMark,
@@ -85,6 +86,23 @@ const STANDING_PULL_REQUESTS = new Set<string>([PULL_REQUEST_STATE.OPEN, PULL_RE
 /** A task's status, Todo for one from a service before statuses. */
 export function statusOf(task: Pick<TaskSummary, "status">): TaskStatus {
   return task.status ?? TASK_STATUS.TODO;
+}
+
+/**
+ * A task as its menu is headed when it rises as a phone's sheet, the way
+ * its row and card read: its status's mark, its name, and under it its
+ * repository, its status, and its key, each where the row has one.
+ */
+export function taskSubject(
+  task: Pick<TaskSummary, "name" | "status">,
+  repository: string | undefined,
+  key: string | undefined,
+): MenuSubject {
+  const status = statusOf(task);
+  const detail = [repository, TASK_STATUS_WORDS[status], key].filter(
+    (part): part is string => part !== undefined,
+  );
+  return { mark: <TaskStatusMark status={status} />, name: task.name, detail: detail.join(" · ") };
 }
 
 /** What a standing chip reads of a task: its status, priority, and assignee. */
