@@ -32,7 +32,11 @@ import { todosView } from "./tool-call-model.js";
  * docked above the composer while it is worked (`taskTodos`), and in a
  * replay's card as the same call's row (`replay-card-model.ts`). The CLI's
  * own answer is the text the model read (`claude-code-moments.ts`), so each
- * is read by the words CLI 2.1.304 spells it in.
+ * is read by the words CLI 2.1.304 spells it in. A task first met by an
+ * update or a read, because the call that created it stands on a page not
+ * yet landed, or before a replay's cut, keeps its place by its number,
+ * which the CLI hands out in creation order, and is named by its number
+ * until a page or a read names it.
  *
  * The transcript's fold is kept by message, since every page keeps the
  * messages it did not touch (`keepIdentity`): a message whose fold began
@@ -63,6 +67,9 @@ const CREATED_ANSWER = /^Task #(\S+) created successfully: ([\s\S]*)$/;
 
 /** How the CLI answers a task updated; any other answer, such as a task not found, moved nothing. */
 const UPDATED_ANSWER = /^Updated task #\S+/;
+
+/** How the CLI answers a list that holds no task. */
+const NO_TASKS_ANSWER = "No tasks found";
 
 /** One line of the CLI's answer to a list: the task's id, its status, and its subject, with its owner and what blocks it after. */
 const LISTED_LINE = /^#(\S+) \[(\w+)\] (.*)$/;
@@ -102,6 +109,29 @@ function replaced(fold: TaskFold, at: number, task: FoldedTask): TaskFold {
   return fold.map((each, index) => (index === at ? task : each));
 }
 
+/** The words a task the fold never saw created is named by, until a page or a read names it: its number, as the CLI names it. */
+function unnamedTask(id: string): string {
+  return `Task #${id}`;
+}
+
+/** A task's number, which the CLI hands out in creation order; nothing for an id that is none. */
+function taskNumber(id: string | undefined): number | undefined {
+  return id !== undefined && /^\d+$/.test(id) ? Number(id) : undefined;
+}
+
+/** A task the fold never saw created added at its place among the tasks by its number, so the list keeps creation order; at the end where it has none. */
+function inserted(fold: TaskFold, task: FoldedTask): TaskFold {
+  const number = taskNumber(task.id);
+  const at =
+    number === undefined
+      ? -1
+      : fold.findIndex((each) => {
+          const other = taskNumber(each.id);
+          return other !== undefined && other > number;
+        });
+  return at < 0 ? [...fold, task] : [...fold.slice(0, at), task, ...fold.slice(at)];
+}
+
 /** A task created: added at the end, pending, by the subject the CLI answered or, while the call runs, the one asked; nothing where the call answered otherwise or named no subject yet. */
 function created(
   fold: TaskFold,
@@ -118,9 +148,10 @@ function created(
 /**
  * A task updated: its subject and status as the call asked, or taken out
  * where it asked `deleted`; nothing where the CLI answered that it moved
- * nothing. A task the fold never saw created, as one a subagent of the
- * session made, is added where the update names its subject, and passed
- * over otherwise, since the list could not name it.
+ * nothing. A task the fold never saw created, because the call that made
+ * it stands on a page not yet landed, before a replay's cut, or in a
+ * subagent's own session, is added at its place by its number, named by
+ * the subject the update gives it or by its number until something does.
  */
 function updated(
   fold: TaskFold,
@@ -137,8 +168,11 @@ function updated(
   const moved = taskStatus(status);
   const was = fold[at];
   if (was === undefined) {
-    if (subject === undefined || subject === "") return fold;
-    return [...fold, { id, content: subject, status: moved ?? CODING_AGENT_TODO_STATUS.PENDING }];
+    return inserted(fold, {
+      id,
+      content: subject === undefined || subject === "" ? unnamedTask(id) : subject,
+      status: moved ?? CODING_AGENT_TODO_STATUS.PENDING,
+    });
   }
   return replaced(fold, at, {
     id,
@@ -151,11 +185,13 @@ function updated(
  * The list as the CLI answered it, which is the list as the CLI holds it:
  * each task the fold knows moved to where the answer says it stands, in
  * the order it was created, one the fold never saw added after them, and
- * one the answer no longer lists taken out; the fold's where the answer
- * lists none it can read.
+ * one the answer no longer lists taken out, every one where the answer
+ * says the list holds none; the fold's where the answer lists none it can
+ * read.
  */
 function listed(fold: TaskFold, words: string | undefined): TaskFold {
   if (words === undefined) return fold;
+  if (words.trim() === NO_TASKS_ANSWER) return fold.length === 0 ? fold : NO_TASKS;
   const tasks = new Map(
     words.split("\n").flatMap((line): [string, FoldedTask][] => {
       const read = LISTED_LINE.exec(line);
@@ -189,7 +225,7 @@ function got(fold: TaskFold, words: string | undefined): TaskFold {
   if (was === undefined) {
     return content === ""
       ? fold
-      : [...fold, { id, content, status: status ?? CODING_AGENT_TODO_STATUS.PENDING }];
+      : inserted(fold, { id, content, status: status ?? CODING_AGENT_TODO_STATUS.PENDING });
   }
   return replaced(fold, at, {
     id,
