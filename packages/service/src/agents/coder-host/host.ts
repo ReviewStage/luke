@@ -109,6 +109,7 @@ import {
   checkOutAgentRepository,
   checkoutBranch,
   deepenAgentCheckout,
+  fetchAgentHistory,
   openWorkingFolder,
 } from "./checkout.js";
 import { contextWindowOf } from "./context.js";
@@ -121,7 +122,6 @@ import { type CoderModelSelection, coderModel } from "./model.js";
 import type { PlanEditResult } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import type { PullRequestToolResult } from "./pull-request.js";
-import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-image.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
@@ -313,6 +313,16 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     sandbox: RepositorySandbox,
   ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
+  /**
+   * The rest of the agent's shallow checkout's history fetched for a worker
+   * to read, on a write token set at the firewall, with no identity set and
+   * no deepen recorded (`checkout.ts`'s `fetchAgentHistory`); nothing where
+   * the checkout is already whole or the agent has no repository.
+   */
+  fetchHistory(
+    admitted: AdmittedConversation,
+    sandbox: RepositorySandbox,
+  ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
   /** Whether a deepen finished in the sandbox, so its credential may stand and be renewed; none ever did for an agent with no repository. */
   deepened(
     admitted: AdmittedConversation,
@@ -462,12 +472,6 @@ export interface CoderHost extends HostAdmission {
   /** Runs one `show_image` call (`show-image.ts`): the pictures read from the session's sandbox through the door given and kept beside the agent's transcript. */
   showImage(
     admitted: AdmittedConversation,
-    input: UnparsedWireValue,
-    sandbox: InboxSandboxDoor,
-  ): Effect.Effect<WireRecord, never, DatabaseServices>;
-  /** Runs one of a worker's `show_image` calls, its pictures kept beside the worker's own transcript, the child of the call that started it; nothing kept for a session that is no worker the account reaches. */
-  showDelegatedImage(
-    session: SessionContext["session"],
     input: UnparsedWireValue,
     sandbox: InboxSandboxDoor,
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
@@ -942,6 +946,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         hasRepository(agent) ? deepenAgentCheckout(admitted.target, agent, sandbox) : Effect.void,
       ),
 
+    fetchHistory: (admitted, sandbox) =>
+      Effect.flatMap(agentOrRefused(admitted), (agent) =>
+        hasRepository(agent) ? fetchAgentHistory(admitted.target, agent, sandbox) : Effect.void,
+      ),
+
     deepened: (admitted, sandbox) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
         hasRepository(agent)
@@ -1080,17 +1089,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     board: (admitted, tool, input) => runAgentBoard(admitted, tool, input),
 
     showImage: (admitted, input, sandbox) => runAgentShowImage(admitted, input, sandbox),
-
-    showDelegatedImage: (session, input, sandbox) =>
-      Effect.gen(function* () {
-        const found = yield* delegatedChildOf(session);
-        if (Option.isNone(found)) return showImageRejected(SHOW_IMAGE_REFUSAL.UNAVAILABLE);
-        const binding = { target: found.value.child, sandbox, checkout: CODER.CHECKOUT_PATH };
-        return yield* runShowImage(binding, input);
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(showImageRejected(SHOW_IMAGE_REFUSAL.UNAVAILABLE))),
-      ),
 
     agentTools: (admitted, call) => runAgentTools(seams, admitted, call),
 

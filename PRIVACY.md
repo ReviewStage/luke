@@ -70,9 +70,10 @@ tab stays open, and are never written to disk, logged, counted, or recorded.
 Closing the tab, or quitting Luke, hangs up the terminal and everything it
 started on it; the clone and the worktree stay until you delete them.
 
-**Commands agents run on your Mac.** Every coding agent, and the workers a
-coding agent hands work to, can each run any shell command on your Mac, as
-many at a time as you allow. This holds whenever Luke is open on the Mac and
+**Commands agents run on your Mac.** Every coding agent can run any shell
+command on your Mac, as many at a time as you allow; the workers a coding
+agent hands work to cannot, and run their own commands in the agent's
+sandbox with no network at all. This holds whenever Luke is open on the Mac and
 signed in to your account, and Settings › This Mac is not on Never. It has
 three modes: Ask every time, the default, where you see a prompt and can deny
 the command; Always allow, which runs it at once; and Never. The mode is kept
@@ -389,18 +390,18 @@ beside the agent's transcript the call is written to, which names the
 picture by an id rather than carrying it; a transcript keeps up to 200 MB of
 pictures. A larger picture, one past
 that, or one of another kind is not kept, and the record says only its kind
-and size. A coding agent or one of its workers can also show you pictures
+and size. A coding agent can also show you pictures
 from its sandbox, such as screenshots of a page it changed, up to twenty at a
 time with a line of its own words each, and among them a short video it
 recorded in its sandbox of what it did there, such as clicking through a form
 it built, as a WebM of up to 4 MB, which the transcript plays where it would
 draw a picture: our service reads each file from the sandbox and keeps it the
-same way, beside the agent's transcript or the worker's, and the model is told
+same way, beside the agent's transcript, and the model is told
 only that they were shown, never handed the pictures or the videos back. A
 video is what the agent's own screen showed while it recorded, so it can hold
 whatever that screen did; it is left out of the screen recording as the
 pictures are, and may be added to the task's plan (see "A plan's pictures").
-A coding agent's kept pictures, and its workers', are served only
+A coding agent's kept pictures are served only
 to Luke signed in as a member of the workspace who can read the agent. Kept
 pictures are readable by our own operators, like the transcript, and go
 when it does.
@@ -1370,8 +1371,8 @@ only when you press Send.
   conversation so far, any files you attached, and what it read of the
   repository, the web, your integrations, its skills, and your Mac; the
   provider keeps it under its own retention policy. The agent's workers can
-  read the checkout, the web, and your integrations, and run commands on your
-  Mac, but only the agent edits the checkout. The agent's transcript — its
+  read the checkout, the web, and your integrations, but only the agent edits
+  the checkout, and only the agent reaches your Mac. The agent's transcript — its
   words, reasoning summaries, and tool calls with their input (such as the few
   words it gives to describe a command) and output — is written to your
   account's conversation as described under "Your account". Archiving an agent

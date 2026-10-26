@@ -33,7 +33,7 @@ import {
   coderChannelInput,
 } from "./channel.js";
 import { INBOX_TOOLS } from "./inbox.js";
-import { CODER_HARNESS, coderInstructions } from "./instructions.js";
+import { CODER_HARNESS, coderInstructions, coderWorkerInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
 import { CODER_TOOL, taskToolsOf } from "./tool-set.js";
 
@@ -661,6 +661,34 @@ test("an agent whose credential reads its checks waits on them with sleep until 
     ],
     [true, false],
   );
+});
+
+test("a worker is offered neither the developer's Mac, the browser, nor show_image, and is told what it cannot do; one of an agent with no repository is told of a working folder and no checkout", () => {
+  for (const tool of [CODER_TOOL.RUN_ON_MAC, CODER_TOOL.BROWSER, CODER_TOOL.SHOW_IMAGE]) {
+    assert.deepEqual(
+      [toolsOf(AGENT_ROLE.CODER).has(tool), toolsOf(AGENT_ROLE.CODER_WORKER).has(tool)],
+      [true, false],
+      tool,
+    );
+  }
+  const inRepository = coderWorkerInstructions("Acme/Relay");
+  const inFolder = coderWorkerInstructions(null);
+  for (const words of [inRepository, inFolder]) {
+    assert.ok(words.includes("Your shell has no network"));
+    assert.ok(
+      words.includes(
+        "you cannot push, open a pull request, run a command on the developer's Mac, or drive a browser",
+      ),
+    );
+    assert.ok(!words.includes("run_on_mac") && !words.includes(`\`${CODER_TOOL.BROWSER}\``));
+  }
+  assert.ok(inRepository.includes(`checked out at \`${CODER.CHECKOUT_PATH}\``));
+  assert.ok(inRepository.includes("history is fetched for you"));
+  assert.ok(inFolder.includes(`working folder is \`${CODER.CHECKOUT_PATH}\``));
+  assert.ok(
+    !inFolder.includes("The agent's repository") && !inFolder.includes("history is fetched"),
+  );
+  assert.ok(inFolder.includes("there is no history to read"));
 });
 
 test("the model is shown the bound on one pause", () => {

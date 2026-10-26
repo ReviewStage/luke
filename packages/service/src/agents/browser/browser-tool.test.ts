@@ -37,7 +37,6 @@ import {
   BROWSER_TOOL_STATUS,
   type BrowserToolResult,
   browserModelOutput,
-  browserTranscriptOf,
   runBrowserTool,
   storedBrowserOutput,
 } from "./browser-tool.js";
@@ -877,45 +876,6 @@ it.layer(getTestDB())("the browser tool", (it) => {
             },
           ],
         });
-      }),
-  );
-
-  it.effect(
-    "a worker's screenshot is kept beside its own transcript, the child of the call that started it",
-    () =>
-      Effect.gen(function* () {
-        const { userId, conversationId } = yield* openConversation;
-        const transcript = browserTranscriptOf({ userId, conversationId }, "call-worker");
-        yield* Database.use((db) =>
-          db.insert(conversations).values({
-            id: transcript.conversationId,
-            userId,
-            kind: CONVERSATION_KIND.CODING_AGENT,
-            parentConversationId: conversationId,
-          }),
-        );
-        const { peer } = yield* browser([
-          { targetId: "tab-1", url: "https://shop.test/", title: "Shop" },
-        ]);
-
-        const result = ran(
-          yield* runBrowserTool(
-            {
-              browserSession: SESSION,
-              conversationId,
-              transcript,
-              openSandbox: async () => undefined,
-            },
-            unparsedWire({ actions: [{ action: BROWSER_AGENT_ACTION.SCREENSHOT, tab: "tab-1" }] }),
-          ).pipe(Effect.provide(agentBrowserTestLayer(peer, SESSION))),
-        );
-        const [step] = result.steps;
-        assert.ok(step !== undefined && "picture" in step);
-
-        assert.ok(
-          Option.isSome(yield* readConversationPicture(transcript.conversationId, step.picture.id)),
-        );
-        assert.ok(Option.isNone(yield* readConversationPicture(conversationId, step.picture.id)));
       }),
   );
 
