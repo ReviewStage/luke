@@ -26,7 +26,7 @@ import { CHANNEL_VIEW, type ChannelView } from "./channels-model.js";
  * the window comes back into view, and followed while any surface draws
  * them in view (`channels.follow`): each time the host tells that channels
  * moved, the channels are read again, and so is a channel's stream that
- * shows one of them, keeping the older pages it loaded. Which channel the
+ * shows one of them, as far back as the older pages it loaded reached. Which channel the
  * window shows, and whether a thread stands open beside it, is the
  * window's own while it runs; which view the stream shows, Mine by
  * default, is kept on this Mac as the Inbox's view choices are.
@@ -280,7 +280,7 @@ export interface ChannelThreadsControl {
   readonly failure: ChannelCallFailure | undefined;
   /** Whether an older page stands to be read. */
   readonly hasOlder: boolean;
-  /** Reads the latest page again, keeping the older pages read. */
+  /** Reads the latest page again, and the older pages read as far back as they reached. */
   readonly onRefresh: () => void;
   /** Reads the next older page, where one stands. */
   readonly onOlder: () => void;
@@ -336,23 +336,34 @@ export function useChannelThreads(channelId: string | undefined): ChannelThreads
       }),
     [],
   );
+  // How many older threads the stream holds, which a refresh reads back as far as.
+  const held = useRef(0);
+  held.current = read !== undefined && read.channelId === channelId ? read.earlier.length : 0;
   const onRefresh = useCallback(() => {
     if (channelId === undefined) return;
-    act(ACT_KIND.CHANNELS_THREADS, { channelId }).then(
-      (view) =>
-        fold(channelId, (was) =>
-          "failure" in view
-            ? { ...was, failure: view.failure }
-            : {
-                ...was,
-                latest: view.threads,
-                // Note that the latest page's cursor stands only until an older page was read, which holds its own.
-                older: was.earlier.length === 0 ? view.older : was.older,
-                failure: undefined,
-              },
-        ),
-      () => fold(channelId, (was) => ({ ...was, failure: CHANNEL_CALL_FAILURE.UNANSWERED })),
-    );
+    const depth = held.current;
+    const failed = (failure: ChannelCallFailure) => fold(channelId, (was) => ({ ...was, failure }));
+    // Note that the older pages held are read again too, so a thread moved out of one leaves the stream.
+    const reread = async () => {
+      const latest = await act(ACT_KIND.CHANNELS_THREADS, { channelId });
+      if ("failure" in latest) return failed(latest.failure);
+      let earlier: readonly ChannelThread[] = [];
+      let older = latest.older;
+      while (older !== undefined && earlier.length < depth) {
+        const page = await act(ACT_KIND.CHANNELS_THREADS, { channelId, before: older });
+        if ("failure" in page) return failed(page.failure);
+        earlier = [...page.threads, ...earlier];
+        older = page.older;
+      }
+      fold(channelId, () => ({
+        channelId,
+        earlier,
+        latest: latest.threads,
+        older,
+        failure: undefined,
+      }));
+    };
+    reread().catch(() => failed(CHANNEL_CALL_FAILURE.UNANSWERED));
   }, [act, channelId, fold]);
   const older = read?.channelId === channelId ? read?.older : undefined;
   const onOlder = useCallback(() => {

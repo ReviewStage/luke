@@ -293,20 +293,35 @@ const findOpenChannel = SqlSchema.findOneOption({
 });
 
 /**
- * The open channel's name, purpose, or both written, where no other open
- * channel of its workspace goes by the name; nothing where one does. Note
- * that an edit racing another to one name is refused by the open-name
+ * The open channel given the name, the purpose, or both the edit names,
+ * where no other open channel of its workspace goes by a name it names;
+ * nothing where one does. Note that only what the edit names is written, so
+ * two members editing one channel's name and its purpose at once keep both,
+ * and that an edit racing another to one name is refused by the open-name
  * unique index instead, and fails as the store does.
  */
 const updateEdit = SqlSchema.findOneOption({
-  Request: Schema.Struct({ channelId: Schema.String, name: Schema.String, purpose: Schema.String }),
+  Request: Schema.Struct({
+    channelId: Schema.String,
+    name: Schema.NullOr(Schema.String),
+    purpose: Schema.NullOr(Schema.String),
+  }),
   Result: ChannelRowSchema,
   execute: ({ channelId, name, purpose }) =>
     Database.use((db) =>
       db
         .update(channel)
-        .set({ name, purpose })
-        .where(and(eq(channel.id, channelId), isNull(channel.archivedAt), nameFree(name)))
+        .set({
+          ...(name === null ? undefined : { name }),
+          ...(purpose === null ? undefined : { purpose }),
+        })
+        .where(
+          and(
+            eq(channel.id, channelId),
+            isNull(channel.archivedAt),
+            name === null ? undefined : nameFree(name),
+          ),
+        )
         .returning(CHANNEL_COLUMNS),
     ),
 });
@@ -552,11 +567,16 @@ export function editChannel(
   return Effect.gen(function* () {
     const standing = yield* findOpenChannel({ userId, organizationId, channelId });
     if (Option.isNone(standing)) return Result.fail(CHANNEL_WRITE_REFUSAL.NOT_FOUND);
-    const name = edit.name ?? standing.value.name;
-    const purpose = edit.purpose ?? standing.value.purpose;
-    if (standing.value.name === GENERAL_CHANNEL.NAME && name !== GENERAL_CHANNEL.NAME) {
+    const { name = null, purpose = null } = edit;
+    if (
+      standing.value.name === GENERAL_CHANNEL.NAME &&
+      name !== null &&
+      name !== GENERAL_CHANNEL.NAME
+    ) {
       return Result.fail(CHANNEL_WRITE_REFUSAL.GENERAL);
     }
+    // Note that an edit naming nothing writes nothing, because an update with nothing to set is no statement.
+    if (name === null && purpose === null) return Result.succeed(channelRow(standing.value));
     const edited = yield* updateEdit({ channelId, name, purpose });
     if (Option.isNone(edited)) return Result.fail(CHANNEL_WRITE_REFUSAL.NAME_TAKEN);
     return Result.succeed(channelRow(edited.value));
