@@ -14,6 +14,8 @@ import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import type { Task } from "@luke/features/task-wire";
 import {
+  CALL_STANDING,
+  type CallStanding,
   callOpeningHistory,
   decodeLivePayload,
   developerSeedItem,
@@ -31,6 +33,7 @@ import {
 import { Effect, Option, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
 import { messageCredentialMissing } from "../agents/coder-host/agent-runtime-choice.js";
+import { memoryOnFor } from "../agents/memory-tools.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -44,7 +47,7 @@ import {
 } from "../core.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { type AgentCallHistory, agentCallHistory } from "./agent-history.js";
-import { backendToolsOf, CALL_BACKEND } from "./call-backend.js";
+import { backendToolsOf } from "./call-backend.js";
 import { LOG_EVENT } from "./log.js";
 import type { LiveUpstream } from "./openai.js";
 import { frameText, type VoiceSocket } from "./socket.js";
@@ -283,6 +286,16 @@ function newestWithin(lines: readonly EarlierCallLine[], tokens: number): string
 }
 
 /**
+ * Where the agent a call speaks into stands, as its role and opening are
+ * chosen by: on no task, at work on its task where it has run a turn or
+ * been typed to, and scoping its task otherwise.
+ */
+function callStandingOf(task: Task | undefined, agent: AgentCallHistory | undefined): CallStanding {
+  if (task === undefined) return CALL_STANDING.NO_TASK;
+  return agent === undefined ? CALL_STANDING.SCOPING : CALL_STANDING.AT_WORK;
+}
+
+/**
  * The input a call is created with, under the API's bounds: the plan's seed
  * first, for an agent on a task, then, for a call into an agent that has worked, the agent's own
  * work, then what was said on its earlier calls as one quoted transcript,
@@ -305,7 +318,7 @@ function startupInput(
   earlier: readonly EarlierCallLine[],
   agent: AgentCallHistory | undefined,
 ): readonly InitialItem[] {
-  const opening = callOpeningHistory();
+  const opening = callOpeningHistory(callStandingOf(task, agent));
   const openingRoom = LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens([opening]);
   if (input.length + 1 > LIVE_INPUT_BOUNDS.MESSAGES || seedItemTokens(input) > openingRoom) {
     return input;
@@ -511,10 +524,13 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const { agentId } = account.agent;
       const earlier = yield* record.earlierCalls({ agentId });
       const agentHistory = yield* agentCallHistory(account.agent.conversation);
+      // Note that Memory is the agent's starter's, as its turns read it, whoever is calling.
+      const memoryOn = yield* memoryOnFor(account.agent.conversation.userId);
       const config = liveSessionConfig({
         model: options.model,
         voice: frame.voice,
-        backendTools: backendToolsOf(CALL_BACKEND),
+        standing: callStandingOf(account.task, agentHistory),
+        backendTools: backendToolsOf(account.agent, memoryOn),
         input: startupInput(input, account.task, earlier, agentHistory),
         clientEvents: RENDERER_CLIENT_EVENTS,
         serverEvents: RENDERER_SERVER_EVENTS,

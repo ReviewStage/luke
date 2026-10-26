@@ -10,7 +10,7 @@ import type { MessageStreamEvent } from "eve/client";
 import { wireValidatedTool } from "../../core.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
-import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
+import { AGENT_TOOL, type AgentTool, toolsOf } from "../agent-runtime/tools.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 
 /**
@@ -240,6 +240,43 @@ export type MachineTool = typeof CODER_TOOL.BROWSER;
  */
 export function machineToolsOf(agent: Pick<CodingAgent, "machine">): ReadonlySet<MachineTool> {
   return agent.machine === CODING_AGENT_MACHINE.MAC ? new Set() : new Set([CODER_TOOL.BROWSER]);
+}
+
+/** What of an agent decides which tools eve offers it. */
+export type CoderOfferedTo = Pick<CodingAgent, "taskId" | "repository" | "kind" | "machine">;
+
+/** The coder's tools eve offers some agents and not others: each one some agent's task, repository, kind, machine, or Memory withholds. */
+const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
+  ...taskToolsOf({ taskId: "any" }),
+  ...repositoryToolsOf({ repository: "any" }),
+  ...kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }),
+  ...kindToolsOf({ kind: CODING_AGENT_KIND.CODER }),
+  ...machineToolsOf({ machine: CODING_AGENT_MACHINE.VERCEL }),
+  CODER_TOOL.REMEMBER,
+  CODER_TOOL.RECALL,
+]);
+
+/**
+ * Every tool eve offers the agent on a turn, in the registry's order: each
+ * coder's tool no agent is denied, and each narrowed one where its task,
+ * its repository, its kind, or where it runs offers it, and `remember` and `recall` where
+ * its starter has Memory on, the same rules eve's tool files read as each
+ * turn starts (`apps/dev/host.ts`'s `offeredTaskTools`, `offeredRepositoryTools`,
+ * `offeredKindTools`, and `memoryOffered`). Note that a call's voice is told
+ * these (`../../voice/call-backend.ts`), so a tool the agent would only be
+ * refused is never one the voice promises the developer.
+ */
+export function offeredCoderTools(agent: CoderOfferedTo, memoryOn: boolean): readonly AgentTool[] {
+  const offered: ReadonlySet<AgentTool> = new Set<AgentTool>([
+    ...taskToolsOf(agent),
+    ...repositoryToolsOf(agent),
+    ...kindToolsOf(agent),
+    ...machineToolsOf(agent),
+    ...(memoryOn ? [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL] : []),
+  ]);
+  return [...toolsOf(AGENT_ROLE.CODER)].filter(
+    (tool) => !NARROWED_CODER_TOOLS.has(tool) || offered.has(tool),
+  );
 }
 
 /**

@@ -10,8 +10,10 @@ import {
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@luke/features";
+import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import type { Task } from "@luke/features/task-wire";
 import {
+  CALL_STANDING,
   callOpeningHistory,
   type InitialItem,
   LIVE_DEFAULTS,
@@ -46,7 +48,7 @@ import {
   send,
   startFakeOpenAi,
 } from "../testing/voice-fakes.js";
-import { backendToolsOf, CALL_BACKEND } from "./call-backend.js";
+import { backendToolsOf } from "./call-backend.js";
 import type { LogEntry } from "./log.js";
 import {
   listening,
@@ -102,6 +104,9 @@ const TASK: Task = {
 const AGENT: HeldVoiceAgent = {
   agentId: "3b2a1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d",
   taskId: TASK.id,
+  repository: null,
+  kind: CODING_AGENT_KIND.CODER,
+  machine: CODING_AGENT_MACHINE.VERCEL,
   archived: false,
   runtime: CONVERSATION_RUNTIME.EVE,
   conversation: { userId: FAKE_USER_ID, conversationId: "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d" },
@@ -230,7 +235,7 @@ test("a long history of earlier calls is cut to leave room for the opening, whic
   assert.ok(isRecord(session) && Array.isArray(session.input));
   // SAFETY: the service builds `input` from `InitialItem`s alone, which the request carries as sent.
   const input = session.input as InitialItem[];
-  assert.deepEqual(input.at(-1), callOpeningHistory());
+  assert.deepEqual(input.at(-1), callOpeningHistory(CALL_STANDING.SCOPING));
   assert.ok(seedItemTokens(input) <= LIVE_INPUT_BOUNDS.TOKENS);
   assert.ok(input.length <= LIVE_INPUT_BOUNDS.MESSAGES);
 });
@@ -366,7 +371,10 @@ test("a session is authorized, counted, created, registered to its account, atta
   const session = create.body.session;
   assert.ok(isRecord(session));
   assert.deepEqual(create.body.transport, { type: LIVE_TRANSPORT_TYPE, sdp: SDP_OFFER });
-  assert.equal(session.instructions, sessionInstructions(backendToolsOf(CALL_BACKEND)));
+  assert.equal(
+    session.instructions,
+    sessionInstructions(CALL_STANDING.SCOPING, backendToolsOf(AGENT, false)),
+  );
   assert.deepEqual(session.delegation, { type: LIVE_DELEGATION_TARGET.CLIENT });
   assert.equal(session.store, false);
   assert.equal(session.model, LIVE_DEFAULTS.MODEL);
@@ -375,7 +383,7 @@ test("a session is authorized, counted, created, registered to its account, atta
   // call's opening comes last, so Luke speaks first with nothing appended once it starts.
   assert.ok(Array.isArray(session.input));
   assert.deepEqual(session.input.slice(1, -1), SEED);
-  assert.deepEqual(session.input.at(-1), callOpeningHistory());
+  assert.deepEqual(session.input.at(-1), callOpeningHistory(CALL_STANDING.SCOPING));
   assert.deepEqual(session.client, {
     data_channel: {
       allowed_client_events: RENDERER_CLIENT_EVENTS,
