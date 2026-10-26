@@ -6,10 +6,12 @@ import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   type CodingAgent,
   createCodingAgent,
+  readCodingAgent,
   readCodingAgentByKey,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
 import { registerDevice } from "@luke/database/models/device-store";
+import { removeHost } from "@luke/database/models/host-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
@@ -22,8 +24,9 @@ import {
   claimRuntimeSession,
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
-import { createTask } from "@luke/database/models/task-store";
+import { createTask, updateTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { device } from "@luke/database/schemas/device";
 import { messages } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
@@ -34,6 +37,7 @@ import {
   type CodingAgentPayer,
   LOCAL_AGENT_REFUSAL,
 } from "@luke/features/coding-agent-wire";
+import { DEVICE_KIND } from "@luke/features/device-agent-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -45,7 +49,7 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Effect, Layer, Option, Redacted, Result, Stream } from "effect";
+import { Duration, Effect, Layer, Option, Redacted, Result, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
@@ -78,7 +82,7 @@ import {
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
 import { deploymentEveForAccounts } from "../deployment-eve.js";
-import { macOffers } from "./agent-runtime-choice.js";
+import { macOffers, THIS_MAC } from "./agent-runtime-choice.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import { rewoundAgent } from "./rewind.js";
 import {
@@ -1169,6 +1173,14 @@ function assertCredentialMissing(
   assert.deepEqual(started.failure, credentialMissing(provider), name);
 }
 
+/** A Start on the task, on the model given at high effort. */
+const startOn = (taskId: string, model: string, key = randomUUID()) => ({
+  taskId,
+  prompt: "Fix the flaky test.",
+  idempotencyKey: key,
+  choice: { model, effort: "high" },
+});
+
 const startIn = (workspaceId: string, model: string, key = randomUUID()) => ({
   taskId: null,
   organizationId: workspaceId,
@@ -1252,7 +1264,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start on a Mac runs only for an account with the experiment on and the Mac it names among its own that beat lately, pinned to that Mac on the model's harness, paid for by that Mac's own login to it where it has one, a plan in Luke or none; Codex on a Mac with none checked, the experiment off, or that Mac not there is refused by name and leaves no agent",
+      "a Start on a task that runs on one of its starter's devices runs only with the experiment on and that device there lately, pinned to it on the model's harness, paid for by its own login to it where it has one, a plan in Luke or none; Codex on a device with none checked, the experiment off, or the device gone or away is refused by name and leaves no agent",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1316,7 +1328,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               refused: LOCAL_AGENT_REFUSAL.OFF,
             },
             {
-              name: "no Mac there",
+              name: "the task's device gone",
               on: true,
               mac: false,
               chatGpt: "none",
@@ -1324,10 +1336,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               refused: LOCAL_AGENT_REFUSAL.MAC_AWAY,
             },
             {
-              name: "a Mac there, but another named",
+              name: "the task's device registered, but away",
               on: true,
               mac: true,
-              named: randomUUID(),
+              away: true,
               chatGpt: "none",
               model: "anthropic/claude-opus-5.5",
               refused: LOCAL_AGENT_REFUSAL.MAC_AWAY,
@@ -1369,12 +1381,20 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 signedIn: { claudeCode: true },
               });
             }
+            // A device whose row is gone leaves the task naming none.
+            const task = yield* createTask(owner, {
+              organizationId: workspaceId,
+              name: "Invitations",
+              repository: `${RELAY.owner}/${RELAY.name}`,
+              runsOn: {
+                machine: CODING_AGENT_MACHINE.DEVICE,
+                deviceId: each.mac ? deviceId : null,
+              },
+            });
+            if ("away" in each)
+              yield* TestClock.adjust(Duration.sum(THIS_MAC.FRESH, Duration.seconds(1)));
             const { eve, native } = runtimes();
-            const ask = {
-              ...startIn(workspaceId, each.model),
-              machine: CODING_AGENT_MACHINE.DEVICE,
-              deviceId: "named" in each ? each.named : deviceId,
-            };
+            const ask = { ...startOn(task.id, each.model) };
             const started = yield* Effect.result(
               startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
                 Effect.provide(
@@ -1406,6 +1426,134 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
             assert.deepEqual([routing.runtime, routing.payer], each.runs, each.name);
           }
+        }),
+    );
+
+    it.effect(
+      "a Start runs where the agent it is started from runs, else where its task runs, else in the cloud; a teammate's agent on a task that runs on another member's device runs in the cloud and says why, in its answer and its first message; a device away is refused, never sent to the cloud",
+      () =>
+        Effect.gen(function* () {
+          const { owner, workspaceId } = yield* openStarter(true);
+          yield* writeAccountPreferences(owner, {
+            experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
+          });
+          const deviceId = randomUUID();
+          yield* registerDevice(owner, {
+            id: deviceId,
+            name: "Studio",
+            ...DEVICE_LAYOUT,
+            signedIn: {},
+          });
+          const teammate = yield* openGithubUser();
+          yield* joinWorkspace(workspaceId, teammate);
+          yield* saveApiKey(teammate, PROVIDER_KEY_PROVIDER.ANTHROPIC);
+          const onDevice = { machine: CODING_AGENT_MACHINE.DEVICE, deviceId };
+          const task = yield* createTask(owner, {
+            organizationId: workspaceId,
+            name: "Invitations",
+            repository: `${RELAY.owner}/${RELAY.name}`,
+            runsOn: onDevice,
+          });
+          const { eve, claudeCode, codex, native } = runtimes();
+          const layers = Layer.mergeAll(
+            githubReaching(INSTALLATIONS).layer,
+            CATALOG,
+            environment(),
+            native,
+          );
+          const start = (userId: string, ask: Parameters<typeof startCodingAgent>[2]) =>
+            Effect.result(
+              startCodingAgent(routedSessions(eve.sessions, userId), userId, ask).pipe(
+                Effect.provide(layers),
+              ),
+            );
+          const whereRuns = (
+            started: { readonly agent: { readonly id: string } },
+            userId: string,
+          ) =>
+            Effect.map(readCodingAgent(userId, started.agent.id), (agent) =>
+              Option.map(agent, (each) => [each.machine, each.deviceId ?? null]),
+            );
+
+          // The task decides: its owner's agent runs on the owner's device.
+          const ownedAsk = startOn(task.id, "anthropic/claude-opus-5.5");
+          const owned = yield* start(owner, ownedAsk);
+          assert.ok(Result.isSuccess(owned));
+          assert.deepEqual(
+            yield* whereRuns(owned.success, owner),
+            Option.some([CODING_AGENT_MACHINE.DEVICE, deviceId]),
+          );
+          assert.equal(owned.success.notice, undefined);
+
+          // A teammate's agent on it runs in the cloud, and its answer and first message say why.
+          const theirs = yield* start(teammate, startOn(task.id, "anthropic/claude-opus-5.5"));
+          assert.ok(Result.isSuccess(theirs));
+          assert.deepEqual(
+            yield* whereRuns(theirs.success, teammate),
+            Option.some([CODING_AGENT_MACHINE.VERCEL, null]),
+          );
+          const notice = theirs.success.notice ?? "";
+          assert.match(
+            notice,
+            /^Runs in the cloud: this task runs on Studio, which only .+'s agents use\.$/,
+          );
+          const handed = [...eve.messages, ...claudeCode.messages, ...codex.messages];
+          assert.ok(handed.some((each) => JSON.stringify(each.message).includes(notice)));
+
+          // A continue runs where its source runs, though the task now runs in the cloud.
+          yield* updateTask(owner, task.id, {
+            runsOn: { machine: CODING_AGENT_MACHINE.VERCEL, deviceId: null },
+          });
+          const continued = yield* start(owner, {
+            taskId: task.id,
+            prompt: undefined,
+            idempotencyKey: randomUUID(),
+            choice: undefined,
+            from: { agentId: owned.success.agent.id },
+          });
+          assert.ok(Result.isSuccess(continued));
+          assert.deepEqual(
+            yield* whereRuns(continued.success, owner),
+            Option.some([CODING_AGENT_MACHINE.DEVICE, deviceId]),
+          );
+
+          // A Start with no task runs in the cloud.
+          const planless = yield* start(owner, startIn(workspaceId, "anthropic/claude-opus-5.5"));
+          assert.ok(Result.isSuccess(planless));
+          assert.deepEqual(
+            yield* whereRuns(planless.success, owner),
+            Option.some([CODING_AGENT_MACHINE.VERCEL, null]),
+          );
+
+          // A device away is refused by name, and no agent is made.
+          yield* updateTask(owner, task.id, { runsOn: onDevice });
+          yield* TestClock.adjust(Duration.sum(THIS_MAC.FRESH, Duration.seconds(1)));
+          const away = startOn(task.id, "anthropic/claude-opus-5.5");
+          const refused = yield* start(owner, away);
+          assert.ok(Result.isFailure(refused));
+          assert.deepEqual(refused.failure, localAgentRefused(LOCAL_AGENT_REFUSAL.MAC_AWAY));
+          assert.ok(Option.isNone(yield* readCodingAgentByKey(owner, away.idempotencyKey)));
+
+          // A retry of a Start already made is answered with its agent, though its device is away now.
+          const retried = yield* start(owner, ownedAsk);
+          assert.ok(Result.isSuccess(retried));
+          assert.equal(retried.success.agent.id, owned.success.agent.id);
+
+          // A continue from an agent on a host its starter removed is refused by name, not as away, and no agent is made.
+          const db = yield* Database;
+          yield* db.update(device).set({ kind: DEVICE_KIND.HOST }).where(eq(device.id, deviceId));
+          assert.equal(yield* removeHost(owner, deviceId), true);
+          const fromRemoved = {
+            taskId: task.id,
+            prompt: undefined,
+            idempotencyKey: randomUUID(),
+            choice: undefined,
+            from: { agentId: owned.success.agent.id },
+          };
+          const removed = yield* start(owner, fromRemoved);
+          assert.ok(Result.isFailure(removed));
+          assert.deepEqual(removed.failure, HOSTED_REFUSAL.DEVICE_REMOVED);
+          assert.ok(Option.isNone(yield* readCodingAgentByKey(owner, fromRemoved.idempotencyKey)));
         }),
     );
 

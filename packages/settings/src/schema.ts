@@ -210,17 +210,20 @@ export const APP_SETTING_SCHEMA = {
    * `compose-local-agents.ts`): off by default, and drawn only while the
    * Local agents experiment is on, since the host follows nothing without
    * it. Read on every beat, so switching it off stops the runners at once.
+   * Note that it stands on Agents, where a task's Runs on is about, though
+   * this Mac keeps it; the field and its id are unmoved from This Mac, so a
+   * choice already made is kept.
    */
   localAgents: toggleSetting({
     field: "localAgents",
     id: APP_SETTING_ID.LOCAL_AGENTS,
     label: "Run agents on this Mac",
     detail:
-      "Coding agents you start on This Mac run here, in a worktree under ~/.luke, with your " +
-      "own tools and Git login. Their transcript and the files their tools read still reach Luke.",
+      "Coding agents on tasks that run on this Mac run here, in a worktree under ~/.luke, with " +
+      "your own tools and Git login. Their transcript and the files their tools read still reach Luke.",
     default: false,
-    page: SETTINGS_PAGE.THIS_MAC,
-    order: 3,
+    page: SETTINGS_PAGE.CODING_AGENTS,
+    order: 1,
     visible: localAgentsDrawn,
     // Nothing to run per write: the host reads the setting on every beat of its follow.
     sideEffect: SETTING_SIDE_EFFECT.NONE,

@@ -63,6 +63,11 @@ import {
   dictationTranscribeParamsSchema,
   type GitHubTokenAnswerView,
   githubTokenSaveParamsSchema,
+  type HostDoneAnswerView,
+  type HostInstallTokenAnswerView,
+  type HostsAnswerView,
+  hostIdParamsSchema,
+  hostInstallTokenParamsSchema,
   INBOX_SCOPE_KIND,
   type MemoriesAnswerView,
   memoriesReadParamsSchema,
@@ -149,6 +154,10 @@ export type CodingAgentClient = Pick<
   | "models"
   | "readDefault"
   | "writeDefault"
+  | "hosts"
+  | "removeHost"
+  | "keepHostInstallToken"
+  | "revokeHostInstallToken"
   | "list"
   | "listWorkspace"
   | "start"
@@ -424,6 +433,34 @@ function composed(
         );
         const answer = yield* asked(client.writeDefault(choice));
         return carried<CodingAgentDefaultAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.HOSTS_LIST]: () =>
+      Effect.map(asked(client.hosts()), (answer) => carried<HostsAnswerView>(answer)),
+    [GATEWAY_METHOD.HOSTS_REMOVE]: (params) =>
+      Effect.gen(function* () {
+        const { id } = yield* readParams(hostIdParamsSchema, params, "a remove names a host");
+        return carried<HostDoneAnswerView>(yield* asked(client.removeHost(id)));
+      }),
+    [GATEWAY_METHOD.HOSTS_KEEP_INSTALL_TOKEN]: (params) =>
+      Effect.gen(function* () {
+        // Note that only the token's hash crosses here: the window that minted the token keeps it.
+        const { tokenHash } = yield* readParams(
+          hostInstallTokenParamsSchema,
+          params,
+          "keeping an install token names its hash",
+        );
+        return carried<HostInstallTokenAnswerView>(
+          yield* asked(client.keepHostInstallToken(tokenHash)),
+        );
+      }),
+    [GATEWAY_METHOD.HOSTS_REVOKE_INSTALL_TOKEN]: (params) =>
+      Effect.gen(function* () {
+        const { id } = yield* readParams(
+          hostIdParamsSchema,
+          params,
+          "a revoke names an install token",
+        );
+        return carried<HostDoneAnswerView>(yield* asked(client.revokeHostInstallToken(id)));
       }),
     [GATEWAY_METHOD.PROVIDER_KEYS_READ]: () =>
       Effect.map(asked(client.readProviderKeys()), (answer) =>

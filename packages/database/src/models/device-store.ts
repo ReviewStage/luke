@@ -9,10 +9,12 @@
 
 import {
   DEVICE_ARCH,
+  DEVICE_CAPABILITY,
   DEVICE_ISOLATION,
   DEVICE_KIND,
   DEVICE_PLATFORM,
   type DeviceArch,
+  type DeviceCapability,
   type DeviceIsolation,
   type DevicePlatform,
   type DeviceSignedIn,
@@ -28,10 +30,12 @@ type DeviceEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 const DeviceKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
-/** One Mac as Start reads it: its id, its name, when it last beat, which harnesses it is signed in to, and the Codex it checked, where it has one. */
+/** One device as Start reads it: its id, the account it is, its name and kind, when it last beat, which harnesses it is signed in to, and the Codex it checked, where it has one. */
 const DeviceSchema = Schema.Struct({
   id: Schema.String,
+  userId: Schema.String,
   name: Schema.String,
+  kind: Schema.Literals(Object.values(DEVICE_KIND)),
   lastSeenAt: Schema.Date,
   signedIn: deviceSignedInSchema,
   codexExecutable: Schema.NullOr(Schema.String),
@@ -57,13 +61,14 @@ export type DeviceStanding = typeof DeviceStandingSchema.Type;
 
 type DeviceLayout = typeof DeviceLayoutSchema.Type;
 
-/** What a Mac registers with beside its id and name: its platform and architecture, how it runs its agents, its layout, its Codex where it checked one, and which harnesses it is signed in to where it says. */
+/** What a Mac registers with beside its id and name: its platform and architecture, how it runs its agents, its layout, its Codex where it checked one, which harnesses it is signed in to where it says, and what its follower takes beyond the first lines, none where it names none. */
 export type DeviceRegistration = Omit<DeviceLayout, "codexExecutable"> & {
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
   readonly isolation?: DeviceIsolation | undefined;
   readonly codexExecutable?: string | undefined;
   readonly signedIn?: DeviceSignedIn | undefined;
+  readonly capabilities?: readonly DeviceCapability[] | undefined;
 };
 
 const upsertDevice = SqlSchema.findAll({
@@ -73,6 +78,7 @@ const upsertDevice = SqlSchema.findAll({
     name: Schema.String,
     platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
     arch: Schema.Literals(Object.values(DEVICE_ARCH)),
+    capabilities: Schema.Array(Schema.Literals(Object.values(DEVICE_CAPABILITY))),
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -87,6 +93,7 @@ const upsertDevice = SqlSchema.findAll({
     claudeExecutable,
     codexExecutable,
     signedIn,
+    capabilities,
     now,
   }) =>
     Database.use((db) =>
@@ -105,6 +112,7 @@ const upsertDevice = SqlSchema.findAll({
           claudeExecutable,
           codexExecutable,
           signedIn,
+          capabilities: [...capabilities],
           lastSeenAt: now,
         })
         .onConflictDoUpdate({
@@ -118,6 +126,7 @@ const upsertDevice = SqlSchema.findAll({
             claudeExecutable,
             codexExecutable,
             signedIn,
+            capabilities: [...capabilities],
             lastSeenAt: now,
           },
           // Moved only where the account registering it is the one holding it.
@@ -152,7 +161,9 @@ const findSeen = SqlSchema.findAll({
       db
         .select({
           id: device.id,
+          userId: device.userId,
           name: device.name,
+          kind: device.kind,
           lastSeenAt: device.lastSeenAt,
           signedIn: device.signedIn,
           codexExecutable: device.codexExecutable,
@@ -179,7 +190,9 @@ const findNamed = SqlSchema.findAll({
       db
         .select({
           id: device.id,
+          userId: device.userId,
           name: device.name,
+          kind: device.kind,
           lastSeenAt: device.lastSeenAt,
           signedIn: device.signedIn,
           codexExecutable: device.codexExecutable,
@@ -234,6 +247,8 @@ export function registerDevice(
         // Likewise a register naming no isolation runs its agents bare, as every desktop from before the field does.
         isolation: registered.isolation ?? DEVICE_ISOLATION.BARE,
         signedIn: registered.signedIn ?? {},
+        // Note that a register naming none clears the last ones, as a desktop moved back to a build without them takes none.
+        capabilities: registered.capabilities ?? [],
         now,
       }),
       (rows) => rows.length > 0,

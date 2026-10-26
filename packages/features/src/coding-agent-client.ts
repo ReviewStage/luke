@@ -45,6 +45,9 @@ import {
   type GitHubTokenAnswerView,
   type GitHubTokenSaveParams,
   githubImageTypeSchema,
+  type HostDoneAnswerView,
+  type HostInstallTokenAnswerView,
+  type HostsAnswerView,
   type MemoriesAnswerView,
   type MemoriesReadParams,
   type MemoryForgetParams,
@@ -75,11 +78,16 @@ import {
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestOnWire,
+  type LocalAgentRefusal,
   type OperatorEnsureRequest,
   TRANSCRIPT_PARTS_QUERY,
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
-import { credentialMissingDataSchema, planLimitReachedDataSchema } from "./contract/errors.js";
+import {
+  credentialMissingDataSchema,
+  localAgentRefusedDataSchema,
+  planLimitReachedDataSchema,
+} from "./contract/errors.js";
 import { conversationMediaTypeSchema } from "./conversation-picture-wire.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
@@ -181,6 +189,7 @@ type Failed = {
   readonly unreached?: RepositoryUnreached;
   readonly resetsAt?: number;
   readonly provider?: ModelProvider;
+  readonly localAgentRefusal?: LocalAgentRefusal;
 };
 
 /** The refusals a call may answer with, by the service's own word for each. */
@@ -202,6 +211,8 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+  [HOSTED_API_ERROR.DEVICE_REMOVED]: CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED,
 } satisfies NamedRefusals;
 
 /** The refusals a memories read or forget can answer with: a workspace the account is not in, or a memory it may not forget. */
@@ -227,6 +238,7 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
   [HOSTED_API_ERROR.AGENT_RETIRED]: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED,
+  [HOSTED_API_ERROR.DEVICE_REMOVED]: CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
   [HOSTED_API_ERROR.NOT_PERMITTED]: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED,
@@ -309,6 +321,12 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
     const missing = Result.getOrUndefined(readServiceAnswer(credentialMissingDataSchema)(payload));
     return missing?.provider === undefined ? { failure } : { failure, provider: missing.provider };
   }
+  if (failure === CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
+    const refused = Result.getOrUndefined(readServiceAnswer(localAgentRefusedDataSchema)(payload));
+    return refused?.localAgentRefusal === undefined
+      ? { failure }
+      : { failure, localAgentRefusal: refused.localAgentRefusal };
+  }
   if (failure !== CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
   const reached = Result.getOrUndefined(readServiceAnswer(repositoryNotReachableSchema)(payload));
   return reached === undefined ? { failure } : { failure, unreached: reached.unreached };
@@ -384,11 +402,13 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
   const unreached = failed.data?.unreached;
   const resetsAt = failed.data?.resetsAt;
   const provider = failed.data?.provider;
+  const localAgentRefusal = failed.data?.localAgentRefusal;
   return {
     failure,
     ...(unreached === undefined ? undefined : { unreached }),
     ...(resetsAt === undefined ? undefined : { resetsAt }),
     ...(provider === undefined ? undefined : { provider }),
+    ...(localAgentRefusal === undefined ? undefined : { localAgentRefusal }),
   };
 }
 
@@ -455,6 +475,33 @@ export class HostedCodingAgentClient {
   /** The models a coding agent may run on, as the service offers them now. */
   models(): Effect.Effect<CodingAgentModelsAnswer, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.models.list, undefined), {});
+  }
+
+  /** The account's hosts, as Settings lists them. */
+  hosts(): Effect.Effect<HostsAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.hosts.list, undefined), ROW_REFUSALS);
+  }
+
+  /** One of the account's hosts removed, its secret refused at once. */
+  removeHost(id: string): Effect.Effect<HostDoneAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.hosts.remove, { id }), ROW_REFUSALS);
+  }
+
+  /** An install token kept by its SHA-256 alone; the token itself stays with the window that minted it. */
+  keepHostInstallToken(
+    tokenHash: string,
+  ): Effect.Effect<HostInstallTokenAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.hosts.keepInstallToken, { tokenHash }),
+      ROW_REFUSALS,
+    );
+  }
+
+  /** One of the account's install tokens revoked, so it enrolls no box again. */
+  revokeHostInstallToken(
+    id: string,
+  ): Effect.Effect<HostDoneAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.hosts.revokeInstallToken, { id }), ROW_REFUSALS);
   }
 
   /** The account's default model and effort, read off the preferences snapshot. */

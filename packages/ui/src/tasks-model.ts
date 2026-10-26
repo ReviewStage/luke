@@ -333,10 +333,15 @@ const LINEAR_START_FAILED_NOTE =
 /** What a start from one of the workspace's issues says when the issue is gone, or is another workspace's. */
 const ISSUE_START_FAILED_NOTE = "That issue is gone, or it belongs to another workspace.";
 
+/** What a start says when the device it named for the task's agents would not take them, where the page knows no more of why. */
+const DEVICE_START_FAILED_NOTE =
+  "That device can't take this task's agents right now. Choose another, or Cloud.";
+
 /** The sentence the page shows for a start the service refused, by its reason. */
 export function startFailureNote(failure: StartCallFailure): string {
   if (failure === TASK_CALL_FAILURE.LINEAR_UNAVAILABLE) return LINEAR_START_FAILED_NOTE;
   if (failure === TASK_CALL_FAILURE.NOT_FOUND) return ISSUE_START_FAILED_NOTE;
+  if (failure === TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED) return DEVICE_START_FAILED_NOTE;
   return repositoryFailureNote(failure);
 }
 

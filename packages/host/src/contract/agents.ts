@@ -54,6 +54,11 @@ import {
   codingAgentTranscriptOlderAnswerSchema,
   codingAgentTranscriptOlderParamsSchema,
   codingAgentWorkspaceListParamsSchema,
+  hostDoneAnswerViewSchema,
+  hostIdParamsSchema,
+  hostInstallTokenAnswerViewSchema,
+  hostInstallTokenParamsSchema,
+  hostsAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
@@ -89,6 +94,22 @@ export const agentActsContract = {
   )
     .input(exactInput(codingAgentDefaultWriteParamsSchema))
     .output(EffectSchema.flip(codingAgentDefaultAnswerViewSchema)),
+  [AGENT_ACT_KIND.HOSTS_LIST]: actProcedure("Could not read your hosts on this system.")
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.flip(hostsAnswerViewSchema)),
+  [AGENT_ACT_KIND.HOSTS_REMOVE]: actProcedure("Could not remove the host on this system.")
+    .input(exactInput(hostIdParamsSchema))
+    .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
+  [AGENT_ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: actProcedure(
+    "Could not make an install command on this system.",
+  )
+    .input(exactInput(hostInstallTokenParamsSchema))
+    .output(EffectSchema.flip(hostInstallTokenAnswerViewSchema)),
+  [AGENT_ACT_KIND.HOSTS_REVOKE_INSTALL_TOKEN]: actProcedure(
+    "Could not revoke the install command on this system.",
+  )
+    .input(exactInput(hostIdParamsSchema))
+    .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
   [AGENT_ACT_KIND.CODING_AGENTS_LIST]: actProcedure(
     "Could not read the task's agents on this system.",
   )

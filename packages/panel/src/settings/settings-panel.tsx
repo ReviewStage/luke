@@ -136,7 +136,9 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}
+      {view === SETTINGS_VIEW.CODING_AGENTS ? (
+        <CodingAgentsPage signedIn={signedIn} view={panelView} writes={writes} />
+      ) : null}
 
       {view === SETTINGS_VIEW.INTEGRATIONS ? (
         <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />

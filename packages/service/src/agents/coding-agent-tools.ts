@@ -56,6 +56,8 @@ import {
   type CodingAgentStatus,
   contextWindowSchema,
   disabledServersSchema,
+  LOCAL_AGENT_REFUSAL,
+  type LocalAgentRefusal,
   type NativeCodingAgentRuntime,
 } from "@luke/features/coding-agent-wire";
 import {
@@ -139,6 +141,7 @@ import {
 } from "./coder-host/status.js";
 import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { discardedOrLogged } from "./device-discard.js";
 import {
   STEWARD_ACT,
   type StewardAct,
@@ -406,6 +409,8 @@ export const START_CODING_AGENT_REFUSAL = {
     "Not started: no subscription or API key of its starter's pays for that model, and Luke's key pays for no coding agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
   API_KEY_UNREADABLE:
     "Not started: the API key that would pay for it is saved but cannot be read here; its starter saves it again in Settings › Agents.",
+  DEVICE_REMOVED:
+    "Not started: the host it would run on was removed. Continue it in the cloud, or ask the member to add the host again.",
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -454,7 +459,20 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, START_CODING_AGENT_REFUSAL.PLAN_INELIGIBLE],
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING, START_CODING_AGENT_REFUSAL.CREDENTIAL_MISSING],
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE, START_CODING_AGENT_REFUSAL.API_KEY_UNREADABLE],
+  [HOSTED_API_ERROR.DEVICE_REMOVED, START_CODING_AGENT_REFUSAL.DEVICE_REMOVED],
 ]);
+
+/** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for. */
+const LOCAL_AGENT_REFUSAL_WORDS = {
+  [LOCAL_AGENT_REFUSAL.OFF]:
+    "Not started: this task runs its agents on a device, and Local agents is off for the member you start for. Ask them to turn it on, or to change where the task runs.",
+  [LOCAL_AGENT_REFUSAL.MAC_AWAY]:
+    "Not started: the device this task runs its agents on is away, asleep or with Luke closed, so it cannot take an agent. Try again once it is back, or ask the member to change where the task runs.",
+  [LOCAL_AGENT_REFUSAL.CODEX]:
+    "Not started: the device this task runs its agents on has no Codex set up yet, so it cannot run this model. Start on a Claude model, or ask the member to change where the task runs.",
+  [LOCAL_AGENT_REFUSAL.NO_HARNESS]:
+    "Not started: the device this task runs its agents on cannot run this model. Start on another model, or ask the member to change where the task runs.",
+} as const satisfies Record<LocalAgentRefusal, string>;
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
 export const AGENT_CALLER = {
@@ -1291,6 +1309,9 @@ function withReset(words: string, refusal: HostedRefusal): string {
 
 /** A start's refusal in the model's words. */
 function startRefusalWords(refusal: HostedRefusal): string {
+  if (refusal.localAgentRefusal !== undefined) {
+    return LOCAL_AGENT_REFUSAL_WORDS[refusal.localAgentRefusal];
+  }
   return withReset(
     START_REFUSAL_WORDS.get(refusal.error) ?? START_CODING_AGENT_REFUSAL.UNAVAILABLE,
     refusal,
@@ -1764,6 +1785,8 @@ export function runStartAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: yield* startedReading(started.success.agent, yield* offeredModels, ownTask),
         ...earlierContinuations(landing?.success.continuedBy, started.success.agent.id),
+        // An agent sent to the cloud on a device's task says why, so the caller can tell its member.
+        ...(started.success.notice === undefined ? undefined : { notice: started.success.notice }),
       };
     }),
   );
@@ -1834,7 +1857,13 @@ const archiveChange = (
         idleForArchive,
       );
       if (outcome === IDLE_ARCHIVE.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
-      return outcome === IDLE_ARCHIVE.WORKING ? UPDATE_AGENT_REFUSAL.WORKING : undefined;
+      if (outcome === IDLE_ARCHIVE.WORKING) return UPDATE_AGENT_REFUSAL.WORKING;
+      // A local agent archived now is let go of on its device, as an archive by hand lets it go.
+      // Note that the agent's line is queued under its starter, whoever archived it.
+      if (outcome === IDLE_ARCHIVE.ARCHIVED) {
+        yield* discardedOrLogged({ id: agent.id, userId: agent.userId });
+      }
+      return undefined;
     }
     if (agent.archivedAt === null) return undefined;
     // An operator a Reset replaced stays archived while the fresh one stands.

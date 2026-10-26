@@ -35,11 +35,14 @@ import {
   type CodingAgentSummary,
   type CodingAgentUsage,
   type ContextWindow,
+  LOCAL_AGENT_REFUSAL,
+  type LocalAgentRefusal,
   OPERATOR_QUIET_REPLY,
   PART_CUT_FIELD,
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
+import { DEVICE_KIND, type DeviceKind } from "@luke/features/device-agent-wire";
 import {
   FAILURE_REASON,
   type Failure,
@@ -440,6 +443,9 @@ const START_RETIRED = "This agent has ended. Start a new one.";
 /** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
 const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
 
+/** What a message to an agent whose host its starter removed says, and a Start that would run there, wherever it is drawn: only the cloud or the host added again goes on from here. */
+const HOST_REMOVED = "This host was removed. Continue in the cloud or add it again.";
+
 /** What a message that did not reach the agent says of itself, which a surface without Retry follows with Try again. */
 const MESSAGE_NOT_SENT = "The message could not be sent.";
 
@@ -540,6 +546,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+    case CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED:
     case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
     case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
     case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
@@ -549,6 +556,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
     case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
     case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+    case CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -599,6 +607,50 @@ export interface RefusedCall {
   readonly unreached?: RepositoryUnreached | undefined;
   readonly resetsAt?: number | undefined;
   readonly provider?: ModelProvider | undefined;
+  readonly localAgentRefusal?: LocalAgentRefusal | undefined;
+}
+
+/** The device a task runs its agents on, as a refusal names it: its name, and its kind where the service said. */
+export interface RefusingDevice {
+  readonly name: string;
+  readonly kind?: DeviceKind | undefined;
+}
+
+/** What a device refusing a Start is called where its name is not known. */
+const UNNAMED_DEVICE = "Your device";
+
+/** The way out every device refusal ends on, since the cloud takes any agent. */
+const RUN_IN_CLOUD = "or set this task to run in the cloud";
+
+/** How a device that went quiet is brought back: a Mac's app opened, or a host's own Luke started. */
+const DEVICE_WAKE = {
+  [DEVICE_KIND.DESKTOP]: "Open Luke on it",
+  [DEVICE_KIND.HOST]: "Start Luke on that host",
+} as const satisfies Record<DeviceKind, string>;
+
+/**
+ * Why the device a task runs its agents on would not take a Start, as New
+ * task and an agent's Start alike say it, naming the device where the
+ * panel knows it and ending on the way out, the cloud. A refusal the
+ * service named no reason for says the device would not take it.
+ */
+export function localAgentRefusalWords(
+  refusal: LocalAgentRefusal | undefined,
+  device: RefusingDevice | undefined,
+): string {
+  const name = device?.name ?? UNNAMED_DEVICE;
+  switch (refusal) {
+    case LOCAL_AGENT_REFUSAL.OFF:
+      return `Local agents are off, so this agent can't start on ${name}. Turn them on in Settings › Experimental, ${RUN_IN_CLOUD}.`;
+    case LOCAL_AGENT_REFUSAL.MAC_AWAY:
+      return `${name} is offline, so this agent can't start there. ${DEVICE_WAKE[device?.kind ?? DEVICE_KIND.DESKTOP]}, ${RUN_IN_CLOUD}.`;
+    case LOCAL_AGENT_REFUSAL.CODEX:
+      return `${name} can't run Codex agents yet. Wait for its Codex download to finish, choose a Claude model, ${RUN_IN_CLOUD}.`;
+    case LOCAL_AGENT_REFUSAL.NO_HARNESS:
+      return `${name} can't run this model's agents. Choose a Claude or Codex model, ${RUN_IN_CLOUD}.`;
+    case undefined:
+      return `${name} couldn't take this agent. Try again, ${RUN_IN_CLOUD}.`;
+  }
 }
 
 /** What a missing credential keeps the developer from: starting an agent, or messaging one. */
@@ -773,10 +825,17 @@ function planRefusalWords(
   return undefined;
 }
 
-/** What a Start that did not start says beside the button, and what mends it. */
-export function startFailureNote(refused: RefusedCall, taskId: string | null): Failure {
+/** What a Start that did not start says beside the button, and what mends it, naming the task's device where it refused and the panel knows it. */
+export function startFailureNote(
+  refused: RefusedCall,
+  taskId: string | null,
+  device?: RefusingDevice,
+): Failure {
   if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
+  }
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
+    return callFailure(localAgentRefusalWords(refused.localAgentRefusal, device));
   }
   return (
     settingsFailure(refused, ACTION.START) ??
@@ -918,6 +977,8 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
       return "The agent could not be started.";
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
       return START_RETIRED;
+    case CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED:
+      return HOST_REMOVED;
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
@@ -934,6 +995,8 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
       return credentialMissingWords(undefined, ACTION.START);
     case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
       return keyUnreadableWords(ACTION.START);
+    case CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
+      return localAgentRefusalWords(undefined, undefined);
   }
 }
 
@@ -966,6 +1029,8 @@ export function messageFailureNote(
   }
   // Note that the box's note stands beside Continue in new agent, so it tells no one to continue.
   if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED)
+    return callFailure(HOST_REMOVED);
   // Note that an agent Luke's key paid for is refused whatever is connected now, so Settings mends nothing.
   if (
     refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING &&
@@ -1000,16 +1065,19 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
-    // A message names no repository, no model, and no clip, so none of these refusals is its own.
+    // A message names no repository, no model, no clip, and no device, which queues it while away, so none of these refusals is its own.
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
     case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+    case CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
       return `${MESSAGE_NOT_SENT} Try again.`;
     // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "Luke didn't hear back.";
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
       return MESSAGE_RETIRED;
+    case CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED:
+      return HOST_REMOVED;
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
       return `${SHARED_FAILURE_NOTE[failure]} Try again.`;
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
@@ -1030,9 +1098,12 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** Whether a refusal is for good, so the composer closes on it rather than offering Retry: the agent's session has ended. */
+/** Whether a refusal is for good, so the composer closes on it rather than offering Retry: the agent's session has ended, or the host it ran on was removed. */
 export function closesComposer(failure: CodingAgentCallFailure): boolean {
-  return failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED;
+  return (
+    failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED ||
+    failure === CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED
+  );
 }
 
 /**

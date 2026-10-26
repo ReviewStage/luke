@@ -6,7 +6,12 @@
  * taking a kernel that holds all of them.
  */
 import type { OpenConsent } from "@luke/credentials";
-import type { DeviceArch, DeviceIsolation, DevicePlatform } from "@luke/features/device-agent-wire";
+import type {
+  DeviceArch,
+  DeviceCapability,
+  DeviceIsolation,
+  DevicePlatform,
+} from "@luke/features/device-agent-wire";
 import type { OpenSocket } from "@luke/voice/live-socket";
 import { type ConfigProvider, Context, Layer, Logger, type Stream } from "effect";
 import type { AccountSourceSeam } from "../account-source.js";
@@ -173,6 +178,13 @@ export interface LocalAgentPlatformSeam {
   readonly deviceArch: DeviceArch;
   /** How the launcher runs each agent, which the device registers as: directly on the machine, or in a VM of its own. */
   readonly deviceIsolation: DeviceIsolation;
+  /**
+   * The lines beyond the first the device registers it takes
+   * (`DEVICE_CAPABILITY`). The follower takes every one, but a device names
+   * one only once every service it may reach knows the field, since one
+   * from before it refuses a register naming any.
+   */
+  readonly deviceCapabilities: readonly DeviceCapability[];
   readonly worktreeScript: (input: {
     readonly home: string;
     readonly repository: string;

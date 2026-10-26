@@ -1,3 +1,4 @@
+import type { MacOffer } from "@luke/features/models-wire";
 import {
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
@@ -12,6 +13,7 @@ import {
 import { noMatchWords, readFailedWords, TERM } from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
+import { EXPERIMENT } from "@luke/settings";
 import {
   CHIP_WIDTH,
   ErrorState,
@@ -33,9 +35,11 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
+import { useExperiment } from "../use-app-state.js";
+import { TaskRunsOnPicker } from "./runs-on.js";
 
 /**
- * task-standing.tsx -- a task's key over its name, and the chips under it that say and change where it stands and how much it matters.
+ * task-standing.tsx -- a task's key over its name, and the chips under it that say and change where it stands, how much it matters, and where its agents run.
  *
  * The key is the task's workspace prefix and its number (`ACME-42`), drawn
  * small in monospace above the title, as the task's own page names it. Under
@@ -43,7 +47,8 @@ import { Picker } from "../settings/picker-row.js";
  * (`picker-row.tsx`): the status, each of the five with its mark, the
  * priority, each with its bars, and the assignee, each member of the
  * workspace by face and name, the reader first, and No assignee on the
- * dashed unassigned mark. A pick is handed back for the page to send;
+ * dashed unassigned mark; and, while local agents are on, a fourth for
+ * where its agents run (`runs-on.tsx`). A pick is handed back for the page to send;
  * without a door to send it, as on an archived task, the chips only say.
  * A task from a service before statuses has no key and no chips.
  */
@@ -175,10 +180,13 @@ function TaskAssigneePicker({
   );
 }
 
-/** What the page hands the task's head: its workspace's name, which the key is drawn from, and the door a pick is sent through, none where the task takes no change. */
+/** What the page hands the task's head: its workspace's name, which the key is drawn from, the door a pick is sent through, none where the task takes no change, and the member's devices its Runs on offers, as the models answer last listed them. */
 export interface TaskStandingDoor {
   readonly workspaceName: string;
   readonly onSet?: ((standing: TaskStanding) => void) | undefined;
+  readonly devices?: readonly MacOffer[] | undefined;
+  /** Reads the devices again, as Runs on's menu opens. */
+  readonly readDevices?: (() => void) | undefined;
 }
 
 /**
@@ -273,16 +281,28 @@ function TaskStatusPicker({
   );
 }
 
-/** The task's status, priority, and assignee chips, under its title; nothing for a task from a service before them. */
+/**
+ * The task's status, priority, and assignee chips, under its title, and
+ * where its agents run while the Local agents experiment is on and the
+ * member has a device or the task runs on one; nothing for a task from a
+ * service before them.
+ */
 export function TaskStandingChips({
   task,
   onSet,
+  devices,
+  readDevices,
 }: {
   task: Task;
   onSet: ((standing: TaskStanding) => void) | undefined;
+  devices?: readonly MacOffer[] | undefined;
+  readDevices?: (() => void) | undefined;
 }): React.JSX.Element | null {
   const { status, priority } = task;
+  const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   if (status === undefined || priority === undefined) return null;
+  const runsOnDrawn =
+    localAgents && ((devices !== undefined && devices.length > 0) || task.runsOn !== undefined);
   return (
     <div className="plan-task-standing">
       <Inline gap={GAP.CONTROL}>
@@ -309,6 +329,14 @@ export function TaskStandingChips({
           assignee={task.assignee}
           onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
         />
+        {runsOnDrawn ? (
+          <TaskRunsOnPicker
+            runsOn={task.runsOn}
+            devices={devices ?? []}
+            onOpen={readDevices}
+            onPick={onSet === undefined ? undefined : (runsOn) => onSet({ runsOn })}
+          />
+        ) : null}
       </Inline>
     </div>
   );

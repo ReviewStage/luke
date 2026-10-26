@@ -91,6 +91,8 @@ export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
     deviceArch: DEVICE_ARCH.ARM64,
     // Note that every agent runs directly on the Mac, since its launcher starts the runner there; no Mac sandbox exists yet.
     deviceIsolation: DEVICE_ISOLATION.BARE,
+    // Note that This Mac names no capability until the service that knows the field has deployed, since one from before it refuses a register naming any.
+    deviceCapabilities: [],
     worktreeScript,
   };
   return packaged

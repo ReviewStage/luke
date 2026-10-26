@@ -8,6 +8,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { queueDeviceAgentLine } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
+import { enrollHost, mintHostInstallToken } from "@luke/database/models/host-store";
 import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
@@ -22,7 +23,12 @@ import {
   CODING_AGENT_PAYER,
   type CodingAgentPayer,
 } from "@luke/features/coding-agent-wire";
-import { DEVICE_AGENT_LINE_KIND } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_AGENT_LINE_KIND,
+  DEVICE_ARCH,
+  DEVICE_PLATFORM,
+} from "@luke/features/device-agent-wire";
+import { HOST_WIRE } from "@luke/features/host-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -34,8 +40,17 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
+import { HOST_VERSION, mintHostSecret } from "../../auth/device-secret.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
+import { GitHubApp } from "../../github/github-app.js";
+import { LINK_OUTCOME } from "../../github/github-installations.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../../http/http.js";
+import {
+  connectWorkspaceGitHub,
+  GITHUB_FIXTURE_INSTALLATION_TOKEN,
+  githubReaching,
+  type InstallationFixture,
+} from "../../testing/github-app-fake.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { RUNNER_TOKEN_BRAKE, RUNNER_TOKEN_PATH, runnerTokenApp } from "./runner-token-app.js";
 
@@ -46,8 +61,10 @@ import { RUNNER_TOKEN_BRAKE, RUNNER_TOKEN_PATH, runnerTokenApp } from "./runner-
  * bearer, renewed first where less than the margin is left of it; a missing,
  * unknown or retired bearer, or one whose agent is not on Codex on the plan,
  * is handed nothing; one agent asking too often is braked; a sign-in OpenAI
- * signed out is refused by name; and the token is never logged. Synthetic
- * accounts and tokens throughout.
+ * signed out is refused by name; and the token is never logged. A host, on
+ * its device secret, is handed an installation token for its own member's
+ * agent that runs on it, over a fake GitHub, and nothing for any other
+ * agent or caller. Synthetic accounts and tokens throughout.
  */
 
 const ORIGIN = "https://luke.test";
@@ -102,9 +119,14 @@ const standing = Effect.gen(function* () {
     fakeHttpClientLayer(openai.respond),
     Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
   );
-  const web = HttpRouter.toWebHandler(runnerTokenApp().pipe(HttpRouter.provideRequest(services)), {
-    disableLogger: true,
-  });
+  const web = HttpRouter.toWebHandler(
+    runnerTokenApp().pipe(
+      HttpRouter.provideRequest(Layer.merge(services, GitHubApp.layer(undefined))),
+    ),
+    {
+      disableLogger: true,
+    },
+  );
   yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
   const ask = (bearer: string | undefined, method = "POST") =>
     Effect.promise(async () => {
@@ -309,6 +331,20 @@ it.layer(getTestDB())("the runner's token route", (it) => {
       }),
   );
 
+  it.effect(
+    "hands a runner whose bearer happens to begin like a host's device secret its token",
+    () =>
+      Effect.gen(function* () {
+        const { ask } = yield* standing;
+        const agent = yield* codexOnPlan;
+        yield* signIn(agent.userId, 60);
+        const bearer = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${randomBytes(32).toString("base64url")}`;
+        yield* recordCodingAgentRunnerToken(agent.userId, agent.agentId, runnerTokenDigest(bearer));
+
+        assert.deepEqual((yield* ask(bearer)).body, { accessToken: "access-0" });
+      }),
+  );
+
   it.effect("brakes one agent that asks too often, and lets it ask again after the window", () =>
     Effect.gen(function* () {
       const { ask } = yield* standing;
@@ -352,5 +388,173 @@ it.layer(getTestDB())("the runner's token route", (it) => {
       assert.equal(refused.status, HOSTED_HTTP_STATUS.CONFLICT);
       assert.deepEqual(refused.body, signedOut);
     }),
+  );
+});
+
+const RELAY = { owner: "acme", name: "relay" } as const;
+/** The installation reaching the repository under the id given; each member connects their own, since one installation stands for one workspace. */
+const installationOf = (id: number): InstallationFixture => ({
+  id,
+  login: RELAY.owner,
+  repositories: [RELAY],
+});
+/** The installations the fake GitHub holds, one taken by each member a test opens, since the suite's store links each to one workspace for good. */
+const INSTALLATIONS = Array.from({ length: 8 }, (_, index) => installationOf(31 + index));
+let installationsTaken = 0;
+
+/** The route's group over the test's store, a GitHub on which the App reaches the repository, and a log the test reads, as a fetch a host or a desktop makes. */
+const hostStanding = Effect.gen(function* () {
+  const github = githubReaching(INSTALLATIONS);
+  const logged: string[] = [];
+  const services = Layer.mergeAll(
+    Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+    Layer.succeed(Database, yield* Database),
+    Layer.succeed(Clock.Clock, yield* Clock.Clock),
+    Layer.succeed(HostedEnvironment, ENVIRONMENT),
+    github.layer,
+    Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
+  );
+  const web = HttpRouter.toWebHandler(runnerTokenApp().pipe(HttpRouter.provideRequest(services)), {
+    disableLogger: true,
+  });
+  yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
+  const ask = (bearer: string, agentId: string) =>
+    Effect.promise(async () => {
+      const response = await web.handler(
+        new Request(`${ORIGIN}${RUNNER_TOKEN_PATH}`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${bearer}`,
+            [HOST_WIRE.VERSION_HEADER]: HOST_VERSION.FLOOR,
+          },
+          body: JSON.stringify({ agentId }),
+        }),
+      );
+      return {
+        status: response.status,
+        cache: response.headers.get("cache-control"),
+        body: await response.json(),
+      };
+    });
+  return { ask, logged };
+});
+
+/** A member whose task's workspace reaches the repository through an installation of its own. */
+const openMember = Effect.gen(function* () {
+  const installation = INSTALLATIONS[installationsTaken++];
+  assert.ok(installation !== undefined, "more members than installations");
+  const db = yield* Database;
+  const userId = `user-${randomUUID()}`;
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  const task = yield* startTask(userId, {
+    name: "Teammate invitations",
+    repository: `${RELAY.owner}/${RELAY.name}`,
+  });
+  assert.equal(yield* connectWorkspaceGitHub(task.workspaceId, installation), LINK_OUTCOME.LINKED);
+  return { userId, taskId: task.id };
+});
+
+/** A host enrolled under the member: its device id and its secret. */
+const enrolledHost = (userId: string) =>
+  Effect.gen(function* () {
+    const install = mintHostSecret(HOST_WIRE.INSTALL_TOKEN_PREFIX);
+    yield* mintHostInstallToken(userId, install.hash);
+    const secret = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
+    const deviceId = randomUUID();
+    const enrolled = yield* enrollHost(install.hash, {
+      id: deviceId,
+      name: "rack-1",
+      platform: DEVICE_PLATFORM.LINUX,
+      arch: DEVICE_ARCH.X64,
+      version: HOST_VERSION.FLOOR,
+      secretHash: secret.hash,
+    });
+    assert.ok("userId" in enrolled, "the host was not enrolled");
+    return { deviceId, secret: secret.secret };
+  });
+
+/** A Claude Code agent of the member's on the repository, run on the device given. */
+const agentOnDevice = (
+  member: { readonly userId: string; readonly taskId: string },
+  deviceId: string,
+) =>
+  Effect.gen(function* () {
+    const started = yield* createCodingAgent(member.userId, {
+      taskId: member.taskId,
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: `${RELAY.owner}/${RELAY.name}`,
+      planSnapshot: "# Teammate invitations\n",
+      prompt: null,
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+      payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+      machine: CODING_AGENT_MACHINE.DEVICE,
+      deviceId,
+    });
+    return Option.getOrThrow(started).agent.id;
+  });
+
+it.layer(getTestDB())("a host's GitHub token", (it) => {
+  it.effect(
+    "hands a host an installation token for its own member's agent that runs on it, uncached, and logs neither the token nor the secret",
+    () =>
+      Effect.gen(function* () {
+        const { ask, logged } = yield* hostStanding;
+        const member = yield* openMember;
+        const host = yield* enrolledHost(member.userId);
+        const agentId = yield* agentOnDevice(member, host.deviceId);
+
+        assert.deepEqual(yield* ask(host.secret, agentId), {
+          status: HOSTED_HTTP_STATUS.OK,
+          cache: "private, no-store",
+          body: { githubToken: GITHUB_FIXTURE_INSTALLATION_TOKEN },
+        });
+        const log = logged.join("\n");
+        for (const secret of [GITHUB_FIXTURE_INSTALLATION_TOKEN, host.secret]) {
+          assert.equal(log.includes(secret), false, "a secret in the log");
+        }
+      }),
+  );
+
+  it.effect(
+    "refuses another device's agent, another member's agent, and a caller that is no host",
+    () =>
+      Effect.gen(function* () {
+        const { ask } = yield* hostStanding;
+        const member = yield* openMember;
+        const host = yield* enrolledHost(member.userId);
+        const own = yield* agentOnDevice(member, host.deviceId);
+        const forbidden = {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          cache: null,
+          body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+        };
+
+        // The member's agent on another of their hosts, and on their desktop.
+        const otherHost = yield* enrolledHost(member.userId);
+        const onOtherHost = yield* agentOnDevice(member, otherHost.deviceId);
+        assert.deepEqual(yield* ask(host.secret, onOtherHost), forbidden);
+        const desktopId = randomUUID();
+        yield* registerDevice(member.userId, {
+          id: desktopId,
+          name: "Studio",
+          ...DEVICE_LAYOUT,
+          signedIn: { codex: false },
+        });
+        const onDesktop = yield* agentOnDevice(member, desktopId);
+        assert.deepEqual(yield* ask(host.secret, onDesktop), forbidden);
+
+        // Another member's agent on that member's own host.
+        const other = yield* openMember;
+        const theirHost = yield* enrolledHost(other.userId);
+        const theirs = yield* agentOnDevice(other, theirHost.deviceId);
+        assert.deepEqual(yield* ask(host.secret, theirs), forbidden);
+
+        // A desktop's sign-in, or any bearer that is no device secret, is no host, and no runner either.
+        const desktop = yield* ask("desktop-session-token", own);
+        assert.equal(desktop.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+        assert.deepEqual(desktop.body, { error: HOSTED_API_ERROR.INVALID_TOKEN });
+      }),
   );
 });

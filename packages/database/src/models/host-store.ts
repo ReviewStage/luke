@@ -17,10 +17,11 @@ import {
   type DeviceArch,
   type DevicePlatform,
 } from "@luke/features/device-agent-wire";
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { Data, DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
+import { codingAgent } from "../schemas/coding-agent.js";
 import { device } from "../schemas/device.js";
 import { hostInstallToken } from "../schemas/host-install-token.js";
 
@@ -197,6 +198,37 @@ const findStanding = SqlSchema.findAll({
     ),
 });
 
+const findHostAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, deviceId: Schema.String }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ userId, deviceId }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: codingAgent.conversationId })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.userId, userId), eq(codingAgent.deviceId, deviceId))),
+    ),
+});
+
+const findRemoved = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, id: Schema.String }),
+  Result: KeptSchema,
+  execute: ({ userId, id }) =>
+    Database.use((db) =>
+      db
+        .select({ id: device.id })
+        .from(device)
+        .where(
+          and(
+            eq(device.id, id),
+            eq(device.userId, userId),
+            eq(device.kind, DEVICE_KIND.HOST),
+            isNotNull(device.removedAt),
+          ),
+        ),
+    ),
+});
+
 const findBySecret = SqlSchema.findOneOption({
   Request: Schema.Struct({ secretHash: Schema.String }),
   Result: HostCallerSchema,
@@ -342,4 +374,19 @@ export function removeHost(userId: string, id: string): HostEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(stampRemoved({ userId, id, now }), (rows) => rows.length > 0),
   );
+}
+
+/** The conversations of the account's agents pinned to its device, whose runners a removed host can no longer settle. */
+export function hostAgentConversations(
+  userId: string,
+  deviceId: string,
+): HostEffect<readonly string[]> {
+  return Effect.map(findHostAgents({ userId, deviceId }), (rows) =>
+    rows.map((row) => row.conversationId),
+  );
+}
+
+/** Whether the account removed its host of the id given, so an agent pinned to it is refused by name rather than as unavailable. */
+export function hostRemoved(userId: string, id: string): HostEffect<boolean> {
+  return Effect.map(findRemoved({ userId, id }), (rows) => rows.length > 0);
 }

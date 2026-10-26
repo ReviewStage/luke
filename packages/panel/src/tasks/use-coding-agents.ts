@@ -22,7 +22,12 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
+import type {
+  CatalogModel,
+  MacOffer,
+  ModelChoice,
+  ModelProvider,
+} from "@luke/features/models-wire";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
@@ -61,6 +66,7 @@ import {
   DELETE_WORDS,
   openingLineOf,
   RENAME_FAILED,
+  type RefusingDevice,
   SERVERS_FAILED,
   type SentLine,
   START_FAILED_AWAY,
@@ -216,6 +222,10 @@ export interface CodingAgentsControl {
   models: readonly CatalogModel[] | undefined;
   /** Whether the last read of the models did not land, so the menu says so with Retry rather than reading for ever. */
   modelsFailed: boolean;
+  /** The member's devices a task's Runs on may name, as the last read of the models offered them; nothing where it offered none, or before the first read. */
+  macs: readonly MacOffer[] | undefined;
+  /** Says the words a start answered beside its agent, such as why it runs in the cloud on a task that runs on a teammate's device. */
+  onNotice: (notice: string) => void;
   /** Reads the models now, for a menu opening or the menu's Retry. */
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
@@ -786,6 +796,8 @@ export function useCodingAgents(input: {
   keywords?: readonly string[];
   /** Mints one press's key. */
   mintKey?: () => string;
+  /** The device the open task runs its agents on, which a refused Start names; none for the cloud. */
+  device?: RefusingDevice | undefined;
 }): CodingAgentsControl {
   const { taskId, agentId, repository } = input;
   const { act } = input.acts;
@@ -805,6 +817,7 @@ export function useCodingAgents(input: {
   const ours = (was: { taskId: string | undefined; agentId: string | undefined }) =>
     was.taskId === taskId && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
+  const [macs, setMacs] = useState<readonly MacOffer[] | undefined>(undefined);
   const [modelsFailed, setModelsFailed] = useState(false);
   const [starting, setStarting] = useState(false);
   // Where a Start from an agent and a draft stand: the open task, or the page's agent where no task
@@ -840,6 +853,14 @@ export function useCodingAgents(input: {
     (words: string) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
     [toast],
   );
+  // Note that a start's notice is said once, as it lands, since the agent's transcript says it too.
+  const onNotice = useCallback(
+    (words: string) => toast({ words, tone: STATUS_TONE.ATTENTION, hold: TOAST_HOLD.FAILED }),
+    [toast],
+  );
+  const tellNotice = (notice: string | undefined) => {
+    if (notice !== undefined) onNotice(notice);
+  };
   // Note that the acts and the opening are read through a ref, because the
   // tab hands new closures on every render and a read is owed to the task
   // opening, not to a render.
@@ -988,6 +1009,7 @@ export function useCodingAgents(input: {
         if ("failure" in answer) setModelsFailed(true);
         else {
           setModels(answer.models);
+          setMacs(answer.macs);
           setModelsFailed(false);
         }
       },
@@ -1074,10 +1096,11 @@ export function useCodingAgents(input: {
     if ("failure" in answer) {
       // Only a service that never answered is asked again under the same key.
       if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
-      return startFailureNote(answer, taskId);
+      return startFailureNote(answer, taskId, input.device);
     }
     pending.current = undefined;
     landed(taskId, answer.agent);
+    tellNotice(answer.notice);
     return undefined;
   };
 
@@ -1105,10 +1128,11 @@ export function useCodingAgents(input: {
       ...(disabledServers.length === 0 ? undefined : { disabledServers }),
       ...(choice === undefined ? undefined : choiceRequest(choice)),
     });
-    if ("failure" in answer) return { failure: startFailureNote(answer, taskId) };
+    if ("failure" in answer) return { failure: startFailureNote(answer, taskId, input.device) };
     withDraft(taskId, undefined);
     writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === held.id);
     landed(taskId, answer.agent);
+    tellNotice(answer.notice);
     return { agentId: answer.agent.id };
   };
 
@@ -1143,6 +1167,7 @@ export function useCodingAgents(input: {
     }
     continues.current.delete(sourceId);
     landed(startsOn, answer.agent);
+    tellNotice(answer.notice);
     return undefined;
   };
 
@@ -1392,10 +1417,11 @@ export function useCodingAgents(input: {
       ...(disabledServers.length === 0 ? undefined : { disabledServers }),
       ...(choice === undefined ? undefined : choiceRequest(choice)),
     });
-    if ("failure" in answer) return startFailureNote(answer, taskId);
+    if ("failure" in answer) return startFailureNote(answer, taskId, input.device);
     withDraft(taskId, undefined);
     writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draftId);
     landed(taskId, answer.agent);
+    tellNotice(answer.notice);
     return undefined;
   };
 
@@ -1423,6 +1449,7 @@ export function useCodingAgents(input: {
     withDraft(startsOn, undefined);
     writer.drop((kept) => kept.kind === DRAFT_PLACE.NEW_AGENT && kept.draftId === draftId);
     landed(startsOn, answer.agent);
+    tellNotice(answer.notice);
     return undefined;
   };
 
@@ -1886,6 +1913,8 @@ export function useCodingAgents(input: {
     onRetryList: readAgain,
     models,
     modelsFailed,
+    macs,
+    onNotice,
     readModels,
     readDefault,
     onUnarchive: undefined,

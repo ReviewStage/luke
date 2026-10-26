@@ -27,8 +27,9 @@
  * their order of commit and only the lease keeps two from interleaving
  * (`device-agent-store.ts`'s header). The other calls queue no line: the Mac
  * has no firewall Luke sets, so `setCredential` does nothing, and nothing
- * to stop, resume, or throw away, since its worktree is the developer's own
- * and a warm runner ends by itself at its idle cap, settling its line.
+ * to stop, resume, or throw away, since a warm runner ends by itself at its
+ * idle cap, settling its line; the agent's folder goes from its device only
+ * once the agent is archived (`../device-discard.ts`).
  *
  * Whether a runner runs is read off the agent's newest launch line, which
  * stands for the record a sandbox keeps in its tags: it runs while that
@@ -60,6 +61,7 @@ import {
   withdrawDeviceAgentRequest,
 } from "@luke/database/models/device-agent-store";
 import { deviceLayout, devicesSeenSince } from "@luke/database/models/device-store";
+import { hostRemoved } from "@luke/database/models/host-store";
 import { parseKeyRing, sealMacLaunchSecrets } from "@luke/database/models/provider-key-seal";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import {
@@ -198,7 +200,12 @@ function deviceMachineOver(
         return yield* new LaunchRefused({ reason: "no mac" });
       }
       const device = yield* stored(deviceLayout(userId, deviceId));
-      if (Option.isNone(device)) return yield* new LaunchRefused({ reason: "no mac" });
+      if (Option.isNone(device)) {
+        // Note that a removed host is refused by name, so the member is told it is gone rather than to try again.
+        return yield* (yield* stored(hostRemoved(userId, deviceId)))
+          ? new LaunchRefused({ reason: "host removed", deviceRemoved: true })
+          : new LaunchRefused({ reason: "no mac" });
+      }
       const folders = deviceAgentLayout(device.value.home, agentId);
       const layout: MachineLayout = {
         checkoutPath: folders.checkoutPath,

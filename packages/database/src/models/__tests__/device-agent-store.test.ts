@@ -6,6 +6,7 @@ import {
   DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
+  DEVICE_CAPABILITY,
   type DeviceAgentAnswer,
 } from "@luke/features/device-agent-wire";
 import { eq } from "drizzle-orm";
@@ -39,8 +40,9 @@ import { registerDevice } from "../device-store.js";
  * once with its secrets cleared in the claim, and settled once with its
  * runner's exit; a request is claimed once and answered once, its answer
  * read back as the Mac gave it; nothing is queued for, claimed by, or read
- * by another account; and the expiry withdraws old work but a runner still
- * at work. Synthetic accounts, agents, and Macs throughout.
+ * by another account; a discard line goes only to a Mac that registered it
+ * takes one; and the expiry withdraws old work but a runner still at work.
+ * Synthetic accounts, agents, and Macs throughout.
  */
 
 const SEALED = "sealed:v1:not-a-real-secret";
@@ -269,6 +271,29 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
       const { userId, agentId } = yield* openAccount(false);
 
       assert.deepEqual(yield* queueDeviceAgentLine(userId, launch(agentId)), Option.none());
+    }),
+  );
+
+  it.effect("a discard line is queued only for a Mac that registered it takes one", () =>
+    Effect.gen(function* () {
+      const { userId, deviceId, agentId } = yield* openAccount();
+      const discard = { agentId, kind: DEVICE_AGENT_LINE_KIND.DISCARD, payload: {} } as const;
+
+      const beforeCapability = yield* queueDeviceAgentLine(userId, discard);
+      yield* registerDevice(userId, {
+        id: deviceId,
+        name: "Studio",
+        ...DEVICE_LAYOUT,
+        capabilities: [DEVICE_CAPABILITY.DISCARD],
+      });
+      const afterCapability = yield* queueDeviceAgentLine(userId, discard);
+
+      assert.deepEqual(beforeCapability, Option.none(), "a Mac from before discard is queued none");
+      assert.equal(Option.isSome(afterCapability), true);
+      assert.deepEqual(
+        (yield* deviceAgentLinesWaiting(userId, deviceId)).map((line) => line.kind),
+        [DEVICE_AGENT_LINE_KIND.DISCARD],
+      );
     }),
   );
 

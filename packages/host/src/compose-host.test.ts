@@ -150,6 +150,7 @@ describe("the host's platform concerns", () => {
               devicePlatform: DEVICE_PLATFORM.DARWIN,
               deviceArch: DEVICE_ARCH.ARM64,
               deviceIsolation: DEVICE_ISOLATION.BARE,
+              deviceCapabilities: [],
               worktreeScript: () => "exit 1",
             }),
           ),

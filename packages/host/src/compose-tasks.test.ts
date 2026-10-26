@@ -1131,8 +1131,9 @@ function fakeService(tasks: Task[]): FakeService {
           : { task: renamed, txid: service.renameTxid };
       }),
     // The service sets the status, the priority, and the assignee named, naming the assignee by
-    // their account, and leaves the rest standing; null assigns the task to no one.
-    setStanding: (taskId, { assigneeId, ...standing }) =>
+    // their account, and leaves the rest standing; null assigns the task to no one. Where its
+    // agents run is the service's to resolve, so the fake leaves it out.
+    setStanding: (taskId, { assigneeId, runsOn: _runsOn, ...standing }) =>
       Effect.sync(() => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         if (found === undefined) return undefined;

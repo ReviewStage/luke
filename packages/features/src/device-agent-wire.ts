@@ -54,6 +54,8 @@ export const DEVICE_AGENT_LINE_KIND = {
   RETUNE: "retune",
   /** Files written under the agent's folder, before a later line names them, whether or not a runner runs. */
   FILES: "files",
+  /** Let the agent go: its runner stopped, and its folder, its worktree and everything it wrote there, removed from the device. */
+  DISCARD: "discard",
 } as const;
 
 export type DeviceAgentLineKind =
@@ -69,6 +71,26 @@ export const DEVICE_AGENT_REQUEST_KIND = {
 
 export type DeviceAgentRequestKind =
   (typeof DEVICE_AGENT_REQUEST_KIND)[keyof typeof DEVICE_AGENT_REQUEST_KIND];
+
+/**
+ * What a device's follower takes beyond the lines every follower has taken
+ * since the first, which it says on its register, so the service queues a
+ * device no line it would not know. A follower that predates a line kind
+ * fails its whole held read on one, so a line kind added after the first
+ * names the capability it needs (`DEVICE_AGENT_LINE_CAPABILITY`).
+ */
+export const DEVICE_CAPABILITY = {
+  /** It takes a discard line (`DEVICE_AGENT_LINE_KIND.DISCARD`). */
+  DISCARD: "discard",
+} as const;
+
+export type DeviceCapability = (typeof DEVICE_CAPABILITY)[keyof typeof DEVICE_CAPABILITY];
+
+/** The capability a device must have registered to be queued a line of the kind, for each kind that needs one. */
+export const DEVICE_AGENT_LINE_CAPABILITY: Partial<Record<DeviceAgentLineKind, DeviceCapability>> =
+  {
+    [DEVICE_AGENT_LINE_KIND.DISCARD]: DEVICE_CAPABILITY.DISCARD,
+  };
 
 /** What program a device runs local agents through. */
 export const DEVICE_KIND = {
@@ -245,7 +267,15 @@ export const deviceAgentLaunchSecretsSchema = EffectSchema.Struct({
 
 export type DeviceAgentLaunchSecrets = typeof deviceAgentLaunchSecretsSchema.Type;
 
-const lineKind = EffectSchema.Literals(Object.values(DEVICE_AGENT_LINE_KIND));
+/**
+ * A line's kind as the device reads it: one of `DEVICE_AGENT_LINE_KIND`, or
+ * a kind a newer service added, which the follower settles without acting
+ * on, so one line it does not know never fails the read of every line after.
+ */
+const lineKind = EffectSchema.Union([
+  EffectSchema.Literals(Object.values(DEVICE_AGENT_LINE_KIND)),
+  EffectSchema.String,
+]);
 
 const requestKind = EffectSchema.Literals(Object.values(DEVICE_AGENT_REQUEST_KIND));
 
@@ -313,7 +343,13 @@ const deviceField = { deviceId: wireUuidSchema };
  * (`@luke/agent-runner/pins`' `CODEX_MAC_PIN`), absent until it has one,
  * which harnesses it is signed in to, its platform and architecture, and
  * how it runs its agents, absent for one that runs them bare, as every
- * desktop from before the field does. A sandboxed device names each
+ * desktop from before the field does, and the capabilities its follower has
+ * (`DEVICE_CAPABILITY`), absent for none, as every desktop from before the
+ * field registers. The device sends each key only when it names something
+ * beyond the default, so a service from before it, which refuses a key it
+ * does not know, never sees it from a device that has none; a capability
+ * this service does not know is passed over rather than refused, so a newer
+ * device's list never fails its register. A sandboxed device names each
  * executable by its path where its agents run, inside the VM.
  */
 export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
@@ -326,6 +362,11 @@ export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
   claudeExecutable: macPath,
   codexExecutable: EffectSchema.optionalKey(macPath),
   signedIn: EffectSchema.optionalKey(deviceSignedInSchema),
+  capabilities: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.String.check(EffectSchema.isMaxLength(64))).check(
+      EffectSchema.isMaxLength(16),
+    ),
+  ),
 });
 
 /** A held read of lines or requests: the device alone. */

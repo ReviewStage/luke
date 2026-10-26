@@ -1,6 +1,7 @@
 import {
   DEVICE_ISOLATION,
   type DeviceArch,
+  type DeviceCapability,
   type DeviceIsolation,
   type DeviceKind,
   type DevicePlatform,
@@ -15,8 +16,9 @@ import { user } from "./auth.js";
  * device.ts -- one of an account's devices that can run its local agents, and when it last said it was there.
  *
  * A device is the desktop app on a member's Mac today (`DEVICE_KIND`), and
- * says which platform and architecture it runs on, and whether it runs each
- * agent in a VM of its own or directly on the machine (`DEVICE_ISOLATION`).
+ * says which platform and architecture it runs on, whether it runs each
+ * agent in a VM of its own or directly on the machine (`DEVICE_ISOLATION`),
+ * and which lines beyond the first its follower takes (`DEVICE_CAPABILITY`).
  * The desktop mints the id once and keeps it, and registers it under the account it is signed in to;
  * an id another account registered first is never moved onto this one. While the desktop runs local agents it beats
  * the row, so `last_seen_at` is what the service reads as the Mac being
@@ -73,6 +75,13 @@ export const device = pgTable(
      * the Mac's own login rather than the account's saved credential.
      */
     signedIn: jsonb("signed_in").$type<DeviceSignedIn>().notNull().default({}),
+    /**
+     * What the device's follower takes beyond the first lines, as it last
+     * registered (`DEVICE_CAPABILITY`): a line that needs one is queued only
+     * for a device that has it. Empty for a row from before the column, as
+     * every desktop then took none.
+     */
+    capabilities: text("capabilities").$type<DeviceCapability>().array().notNull().default([]),
     /** A host's device secret as its SHA-256 in hex, never the secret; null for a desktop, which calls on its sign-in, and for a removed host. */
     secretHash: text("secret_hash"),
     /** The daemon version a host last called with; null for a desktop. */

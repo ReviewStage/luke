@@ -25,6 +25,7 @@ import {
   codingAgentServersRequestSchema,
   codingAgentStartRequestFields,
   codingAgentSummarySchema,
+  localAgentRefusalSchema,
   operatorEnsureAnswerSchema,
   operatorEnsureRequestSchema,
 } from "./coding-agent-wire.js";
@@ -33,6 +34,13 @@ import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
+import {
+  hostDoneAnswerSchema,
+  hostIdRequestSchema,
+  hostInstallTokenAnswerSchema,
+  hostInstallTokenRequestSchema,
+  hostsAnswerSchema,
+} from "./host-wire.js";
 import {
   inboxAcknowledgeRequestSchema,
   inboxAnsweredSchema,
@@ -118,6 +126,8 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_NOT_READY: "agent-not-ready",
   /** The agent's session has ended for good, so no message reaches it; only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
+  /** The agent ran on a host its starter removed, so no message reaches it again; only a new agent goes on from here. */
+  DEVICE_REMOVED: "device-removed",
   /** The agent runs on its starter's own GitHub token, so only its starter messages it or starts an agent from it. */
   NOT_PERMITTED: "not-permitted",
   /** The agent's sandbox image is still being prepared; the same call under its key, a little later, is taken. */
@@ -138,6 +148,8 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_API_KEY_UNREADABLE: "agent-api-key-unreadable",
   /** A dictated clip is heard on the account's own OpenAI API key, and the account saved none. */
   OPENAI_KEY_MISSING: "openai-key-missing",
+  /** The task runs its agents on a device that would not take this one, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
+  LOCAL_AGENT_REFUSED: "local-agent-refused",
 } as const;
 
 export type CodingAgentCallFailure =
@@ -148,12 +160,13 @@ const failureSchema = EffectSchema.Literals(Object.values(CODING_AGENT_CALL_FAIL
 /** A failed call, as every answer below spells one. */
 const failed = EffectSchema.Struct({ failure: failureSchema });
 
-/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, and the provider whose credential is missing where it is that. */
+/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, the provider whose credential is missing where it is that, and why the task's device would not take the agent where it is that. */
 const failedReaching = EffectSchema.Struct({
   failure: failureSchema,
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
   provider: EffectSchema.optionalKey(modelProviderSchema),
+  localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
 });
 
 /** The models the service offers, as the window hears them: the list and the Mac a Start may run on where it offers one (`modelsAnswerSchema`), or why there is none. */
@@ -168,6 +181,30 @@ export const codingAgentDefaultAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentDefaultAnswer = typeof codingAgentDefaultAnswerViewSchema.Type;
+
+/** The account's hosts, as the window hears them read (`host-wire.ts`): the list and the install script's address, or why there is none. */
+export const hostsAnswerViewSchema = EffectSchema.Union([hostsAnswerSchema, failed]);
+
+export type HostsAnswerView = typeof hostsAnswerViewSchema.Type;
+
+/** An install token kept by its hash, as the window hears it: its id, expiry, and the install script's address, or why it was not kept. */
+export const hostInstallTokenAnswerViewSchema = EffectSchema.Union([
+  hostInstallTokenAnswerSchema,
+  failed,
+]);
+
+export type HostInstallTokenAnswerView = typeof hostInstallTokenAnswerViewSchema.Type;
+
+/** A host removed or an install token revoked, as the window hears it: done, or why not. */
+export const hostDoneAnswerViewSchema = EffectSchema.Union([hostDoneAnswerSchema, failed]);
+
+export type HostDoneAnswerView = typeof hostDoneAnswerViewSchema.Type;
+
+/** What keeping an install token names: the token's SHA-256 alone, since the window that minted it keeps the token. */
+export const hostInstallTokenParamsSchema = hostInstallTokenRequestSchema;
+
+/** What removing a host or revoking an install token names: its id. */
+export const hostIdParamsSchema = hostIdRequestSchema;
 
 /** The account's own provider keys, as the window hears them read, saved, or removed: the keys as they stand, or why there are none. */
 export const providerKeysAnswerViewSchema = EffectSchema.Union([providerKeysAnswerSchema, failed]);
@@ -330,6 +367,7 @@ export const codingAgentAgentAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     agent: codingAgentSummarySchema,
     txid: codingAgentAnswerSchema.fields.txid,
+    notice: codingAgentAnswerSchema.fields.notice,
   }),
   failedReaching,
 ]);

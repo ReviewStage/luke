@@ -1,10 +1,10 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "ad8fca6f-87bf-4379-a641-cc08ea29ada6",
+  "id": "dbe8e134-5ad7-40f7-8871-5f8846846e35",
   "prevIds": [
-    "645e6049-9630-4fbf-9a87-5071e30807dc",
-    "d858b6a1-dc90-4d1d-b87d-0f93ba25c45a"
+    "ae50af22-ca2d-4a45-b8c0-cc3c89652d39",
+    "d5c8b933-577d-455b-8693-a23f53178892"
   ],
   "ddl": [
     {
@@ -4738,6 +4738,19 @@
       "generated": null,
       "identity": null,
       "name": "signed_in",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "device"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 1,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "capabilities",
       "entityType": "columns",
       "schema": "public",
       "table": "device"
@@ -9735,6 +9748,32 @@
       "generated": null,
       "identity": null,
       "name": "brief",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'vercel'",
+      "generated": null,
+      "identity": null,
+      "name": "machine",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "device_id",
       "entityType": "columns",
       "schema": "public",
       "table": "task"
@@ -16811,6 +16850,23 @@
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "task_creator_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "task"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "device_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "device",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "task_device_id_device_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "task"

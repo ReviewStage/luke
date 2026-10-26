@@ -19,19 +19,36 @@
  * the plan's payer, to the same sandbox the same bearer already reaches
  * Luke's MCP server from. The token is never logged, and travels in the
  * answer's body alone, which no cache keeps.
+ *
+ * A host asks here too, on its device secret (`auth/device-secret.ts`'s
+ * `hostCallerOf`) rather than a runner's bearer, for a GitHub token for one
+ * of its agents (`@luke/features/host-wire`'s `hostGithubTokenRequestSchema`),
+ * since a host has no developer's git login. It is answered only for an
+ * agent of the host's own member that runs on that very host, and only an
+ * installation token the App mints for the agent's repository, on the terms
+ * the cloud's checkout mints its sandbox's (`coder-host/checkout.ts`'s
+ * `agentRepositoryToken`): good for an hour, cut to that one repository. A
+ * member's own classic token, which does not expire, never leaves for a
+ * host. The host signs the agent's own `gh` in with it and asks again well
+ * inside the hour; it is braked per agent with the Codex token.
  */
 
 import type { RunnerTokenAnswer } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
+  hasRepository,
+  readCodingAgent,
   readCodingAgentHeaderOfConversation,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
 import { latestDeviceAgentLaunch } from "@luke/database/models/device-agent-store";
 import { parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { deviceAgentLaunchPayloadSchema } from "@luke/features/device-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { type HostGithubTokenAnswer, hostGithubTokenRequestSchema } from "@luke/features/host-wire";
 import { HTTP_METHOD } from "@luke/wire";
 import { Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
@@ -41,7 +58,9 @@ import {
   type ChatGptAccess,
   refreshChatGptAccess,
 } from "../../accounts/chatgpt-credentials.js";
+import { type HostCaller, hostCallerOf } from "../../auth/device-secret.js";
 import { HostedEnvironment } from "../../environment.js";
+import type { GitHubApp } from "../../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -50,14 +69,18 @@ import {
   hostedNotFoundRoute,
   hostedRefusing,
   hostedStoreOrUnavailable,
+  parseJsonBytes,
+  readBodyBytesEffect,
 } from "../../http/http-effect.js";
 import { makeRateBrake, type RateBrake } from "../../http/rate-brake.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
+import { CODER_REFUSAL } from "../coder-host/bounds.js";
+import { agentRepositoryToken } from "../coder-host/checkout.js";
 import { CODEX_TOKEN_MARGIN } from "../coder-host/codex-sessions.js";
 import { admitRunnerBearer, presentedBearer } from "../luke-mcp/bearer.js";
 
-/** The path a runner's token command posts to. */
-export const RUNNER_TOKEN_PATH = "/api/agents/runner-token";
+/** The path a runner's token command, and a host asking for its agent's GitHub token, post to. */
+export const RUNNER_TOKEN_PATH = HOSTED_SERVICE_PATH.RUNNER_TOKEN;
 
 /**
  * How often one agent may ask: app-server asks every five minutes, and once
@@ -70,6 +93,9 @@ export const RUNNER_TOKEN_BRAKE = {
   maxTrackedUsers: 10_000,
 } as const;
 
+/** The most a host's ask for its agent's GitHub token may weigh: an agent's id, and room to spare. */
+const HOST_GITHUB_TOKEN_MAX_BODY_BYTES = 1_024;
+
 /** The refusal each way the sign-in can fail to answer a token, as a launch on it is refused. */
 const REFUSAL_OF_ACCESS = {
   [CHATGPT_ACCESS.NONE]: HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT,
@@ -81,6 +107,7 @@ const REFUSAL_OF_ACCESS = {
 } as const satisfies Record<Exclude<ChatGptAccess["outcome"], "ready">, HostedRefusal>;
 
 const decodeLaunchPayload = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
+const decodeGithubTokenRequest = Schema.decodeUnknownOption(hostGithubTokenRequestSchema);
 
 /**
  * Whether the agent's newest launch runs on its Mac's own sign-in, as its
@@ -101,13 +128,65 @@ const launchedOnMacLogin = (userId: string, agentId: string) =>
     ),
   );
 
-/** POST: the plan's access token, for the Codex agent on the plan the bearer stands for. */
+/**
+ * A GitHub token for the host's own agent named in the body: an
+ * installation token for the agent's repository, where the agent is its
+ * member's own, runs on this very host, and works in a repository the
+ * installation of its task's workspace reaches; refused otherwise.
+ */
+const hostGithubToken = /* @__PURE__ */ Effect.fn("web/hostGithubToken")(function* (
+  host: HostCaller,
+  brake: RateBrake,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | DatabaseServices | HttpClient.HttpClient | GitHubApp
+> {
+  const body = yield* parseJsonBytes(yield* readBodyBytesEffect(HOST_GITHUB_TOKEN_MAX_BODY_BYTES));
+  const asked = decodeGithubTokenRequest(body);
+  if (Option.isNone(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const found = yield* hostedStoreOrUnavailable(readCodingAgent(host.userId, asked.value.agentId));
+  // Note that a teammate's agent the member reaches in a shared workspace is refused, as is one
+  // that runs in the cloud or on another of the member's devices: a host acts for its own alone.
+  const agent = Option.filter(
+    found,
+    (row) =>
+      row.userId === host.userId &&
+      row.machine === CODING_AGENT_MACHINE.DEVICE &&
+      row.deviceId === host.deviceId,
+  );
+  if (Option.isNone(agent) || !hasRepository(agent.value)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  if (!(yield* brake.check(agent.value.id))) {
+    return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
+  }
+  const target = { userId: host.userId, conversationId: agent.value.conversationId };
+  const minted = yield* agentRepositoryToken(target, agent.value).pipe(
+    Effect.mapError((refused) =>
+      refused.reason === CODER_REFUSAL.NOT_REACHABLE
+        ? HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE
+        : HOSTED_REFUSAL.GITHUB_UNANSWERED,
+    ),
+  );
+  if (minted.access.kind !== GITHUB_ACCESS.APP) {
+    return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+  }
+  const answer: HostGithubTokenAnswer = { githubToken: Redacted.value(minted.token) };
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});
+
+/** POST: the plan's access token, for the Codex agent on the plan the bearer stands for; or, on a host's device secret, its agent's GitHub token. */
 const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")(function* (
   brake: RateBrake,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | DatabaseServices | HostedEnvironment | HttpClient.HttpClient
+  | HttpServerRequest.HttpServerRequest
+  | DatabaseServices
+  | HostedEnvironment
+  | HttpClient.HttpClient
+  | GitHubApp
 > {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.POST) {
@@ -117,7 +196,12 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   const bearer = presentedBearer(request);
   if (bearer === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const admitted = yield* hostedStoreOrUnavailable(admitRunnerBearer(bearer));
-  if (Option.isNone(admitted)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  // Note that a runner's bearer is admitted first, so a runner reads as it always has, even one whose random bearer happens to begin like a device secret.
+  if (Option.isNone(admitted)) {
+    const host = yield* hostCallerOf(request);
+    if (Option.isSome(host)) return yield* hostGithubToken(host.value, brake);
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  }
   const { target } = admitted.value;
   const agent = yield* hostedStoreOrUnavailable(
     readCodingAgentHeaderOfConversation(target.userId, target.conversationId),
@@ -162,7 +246,7 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
 
 /** The group: the one token path, braked per agent, and the hosted vocabulary's own refusal for any other. */
 export function runnerTokenApp(): WebRoutes<
-  DatabaseServices | HostedEnvironment | HttpClient.HttpClient
+  DatabaseServices | HostedEnvironment | HttpClient.HttpClient | GitHubApp
 > {
   const endpoint = runnerTokenEndpoint(makeRateBrake(RUNNER_TOKEN_BRAKE));
   return Layer.mergeAll(
