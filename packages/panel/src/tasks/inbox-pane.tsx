@@ -16,7 +16,6 @@ import {
   openAskOf,
 } from "@luke/features/inbox-wire";
 import { markdownLink } from "@luke/features/link-grammar";
-import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackButton,
@@ -59,7 +58,7 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import { isWireString } from "@luke/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActorLine, ActorRef, AutomationCard, commentAuthor } from "../actor-ref.js";
 import {
   Conversation,
@@ -72,13 +71,7 @@ import { PhoneHead } from "../desktop/phone-head.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
-import {
-  AgentActorRef,
-  AgentCard,
-  type AgentSubject,
-  agentSubject,
-  NOTHING_HELD,
-} from "./agent-ref.js";
+import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { InboxAnswerBox } from "./inbox-answer-box.js";
 import {
@@ -109,6 +102,13 @@ import type { FormTextDoors } from "./inbox-form-text.js";
 import { useInboxItemActions } from "./inbox-item-actions.js";
 import { HolderGlyph } from "./inbox-item-parts.js";
 import {
+  AgentName,
+  type ItemAgent,
+  ItemWords,
+  MessageWords,
+  useMessageWriter,
+} from "./inbox-message.js";
+import {
   answerOf,
   askNumberedPick,
   EMPTY_INBOX_DRAFT,
@@ -116,25 +116,19 @@ import {
   type InboxDraft,
   type InboxHolder,
   type InboxKnownAsk,
-  inboxCommentFiles,
-  inboxFileChips,
   itemWorkspaceId,
   knownAsk,
   readersItem,
   sentStamp,
 } from "./inbox-model.js";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager.js";
-import { InboxPicture, InboxPictures } from "./inbox-pictures.js";
 import { InboxStamp } from "./inbox-stamp.js";
-import { LoneLinkCards } from "./lone-link-card.js";
-import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { cardTitle } from "./tool-call-model.js";
 import { INERT_LINK_CLASS, TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { WordsWorkspace } from "./use-link-standing.js";
 import { opensAsLink } from "./use-open-link.js";
 import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from "./use-task-inbox.js";
 
@@ -209,9 +203,6 @@ import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from ".
 
 /** What the thread says under its item where the task's inbox could not be read. */
 const INBOX_FAILED_LINE = "The inbox could not be read.";
-
-/** What an answer says of the files whose read did not answer. */
-const FILES_FAILED_LINE = "Some files could not be read.";
 
 /** Where the way back from an item standing alone leads, as its hint names it. */
 const INBOX_PLACE = "inbox";
@@ -294,18 +285,6 @@ function useOptionNumbers(
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [numbered, pane]);
-}
-
-/** The item's agent as the pane names it, the catalog its card names the model from, and the press that opens its tab. */
-interface ItemAgent {
-  readonly subject: AgentSubject;
-  readonly models: readonly CatalogModel[] | undefined;
-  readonly onOpen: () => void;
-}
-
-/** The agent named in a line of the thread, whose tile its comment's face draws: its name, which hangs its card and opens its tab. */
-function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
-  return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} nameOnly />;
 }
 
 /** What the draft reply's head names the reader by, where nothing else names them. */
@@ -399,87 +378,6 @@ function PendingReply({
     </InboxComment>
   );
 }
-
-/** The files of one comment, the words they follow, and how their bytes are read. */
-interface CommentFilesProps {
-  itemId: string;
-  files: NonNullable<InboxMessage["files"]>;
-  /** The comment's words, whose own pictures stand where they name them; none where it wrote none. */
-  words: string | undefined;
-  images: TaskInboxControl["images"];
-  onImage: TaskInboxControl["onImage"];
-  onRetryImage: TaskInboxControl["onRetryImage"];
-}
-
-/**
- * The files a message on the thread carried, drawn over its words, as the agent's tab draws a sent message's and every
- * box holds them over what is typed. A picture its words
- * name already stands there, as an agent's do, so it is not drawn again;
- * every other picture is drawn as one in the words is, side by side where
- * several, the item's viewer walking it with the rest (`inbox-pictures.tsx`),
- * and any other file as the agent's tab draws a sent message's, its chip
- * (`attached-file-chips.tsx`). Each asks for its bytes as it is first
- * drawn, through the same read a picture in its words takes, and a chip
- * is drawn by its name alone until they land; where a file's read did not
- * answer, a line under the files says so with Retry, as a picture's does.
- */
-function CommentFiles({
-  itemId,
-  files,
-  words,
-  images,
-  onImage,
-  onRetryImage,
-}: CommentFilesProps): React.ReactNode {
-  const { pictures, others } = useMemo(
-    () => inboxCommentFiles(files, words, itemId),
-    [files, words, itemId],
-  );
-  useEffect(() => {
-    for (const file of others) {
-      if (!images.has(file.attachmentId)) onImage(itemId, file.attachmentId);
-    }
-  }, [others, images, itemId, onImage]);
-  const failed = others.filter((file) => {
-    const read = images.get(file.attachmentId);
-    return read !== undefined && "failed" in read;
-  });
-  return (
-    <>
-      {pictures.length === 0 ? null : (
-        <div
-          className="transcript-pictures flex items-start gap-block-gap"
-          data-inbox-file-pictures=""
-        >
-          {pictures.map((file) => (
-            <InboxPicture
-              key={file.attachmentId}
-              attachmentId={file.attachmentId}
-              alt={file.name}
-              caption={undefined}
-              name={file.name}
-            />
-          ))}
-        </div>
-      )}
-      {others.length === 0 ? null : <AttachedFileChips files={inboxFileChips(others, images)} />}
-      {failed.length === 0 ? null : (
-        <div data-inbox-files-failed="">
-          <ErrorState
-            onRetry={() => {
-              for (const file of failed) onRetryImage(file.attachmentId);
-            }}
-          >
-            {FILES_FAILED_LINE}
-          </ErrorState>
-        </div>
-      )}
-    </>
-  );
-}
-
-/** No files, one array so a comment that has none hands down the same one. */
-const NO_FILES: NonNullable<InboxMessage["files"]> = [];
 
 /** No messages, one array so an item nobody wrote on hands down the same one. */
 const NO_MESSAGES: readonly InboxMessage[] = [];
@@ -855,16 +753,15 @@ function ThreadMessage({
   control: TaskInboxControl;
   waitingOn: InboxItem["startedBy"];
 }): React.JSX.Element {
-  const member = usePerson(message.member);
-  const fromAgent = message.author === INBOX_MESSAGE_AUTHOR.AGENT;
+  const writer = useMessageWriter(message, by);
   const answers = message.answers;
   const answered = answers === undefined ? undefined : answeredAsk(thread, answers);
   return (
     <InboxComment
       kind={COMMENT.MESSAGE}
       messageId={message.id}
-      author={commentAuthor(fromAgent ? by.subject.tile : member)}
-      nameRef={fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} nameOnly />}
+      author={writer.author}
+      nameRef={writer.nameRef}
       at={message.createdAt}
       now={now}
     >
@@ -877,28 +774,7 @@ function ThreadMessage({
           <AnswerValues values={answers.values ?? []} texts={NO_TEXT_LABELS} />
         </>
       )}
-      <CommentFiles
-        itemId={item.id}
-        files={message.files ?? NO_FILES}
-        words={message.text}
-        images={control.images}
-        onImage={control.onImage}
-        onRetryImage={control.onRetryImage}
-      />
-      {message.text === "" ? null : (
-        <div
-          className="inbox-message-words m-0 leading-reading select-text"
-          data-inbox-message-text=""
-          // The agent's words alone may be replied to, as in its tab, never a member's.
-          {...(fromAgent ? { [REPLY_SCOPE]: "" } : {})}
-        >
-          {fromAgent ? (
-            <TranscriptWords text={message.text} asDocument />
-          ) : (
-            <SentWords text={message.text} asDocument />
-          )}
-        </div>
-      )}
+      <MessageWords itemId={item.id} message={message} images={control} />
       {message.ask === undefined ? null : (
         <AskBox
           item={item}
@@ -1351,7 +1227,6 @@ export function InboxPane({
   };
   // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
   const workspaceId = itemWorkspaceId(holder, item.agentId);
-  const cardDoors = useMemo(() => ({ code: doors.code }), [doors.code]);
   const onDraft = (next: InboxDraft) => control.onDraft(item, next);
   // The open ask's controls stand in the draft reply, over its note.
   const asking = openAskOf(thread);
@@ -1474,42 +1349,43 @@ export function InboxPane({
           <ConversationContent
             className={`inbox-board ${LOG_OVER_COMPOSER_CLASS} ph-no-capture flex flex-col pt-section-gap`}
           >
-            <WordsWorkspace value={workspaceId}>
-              {/* The item's words are drawn as documents: its own pictures read through the Inbox, and a link alone on its line as its card. */}
-              <InboxPictures itemId={item.id} control={control}>
-                <LoneLinkCards doors={cardDoors}>
-                  <Subject item={item} heading={setHeading} />
-                  <Stack
-                    as={LAYOUT_ELEMENT.OL}
-                    gap={GAP.NONE}
-                    className={INBOX_THREAD}
-                    aria-label="Messages"
-                  >
-                    {thread.map((message, at) => (
-                      <Fragment key={message.id}>
-                        <ThreadMessage
-                          item={item}
-                          message={message}
-                          thread={thread}
-                          by={by}
-                          now={now}
-                          control={control}
-                          waitingOn={waitingOn}
-                        />
-                        {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
-                        {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
-                          <EarlierMessages by={by} />
-                        ) : null}
-                      </Fragment>
-                    ))}
-                    {pending === undefined ? null : (
-                      <PendingReply readerId={readerId} reply={pending} now={now} />
-                    )}
-                    {draftReply}
-                  </Stack>
-                </LoneLinkCards>
-              </InboxPictures>
-            </WordsWorkspace>
+            {/* The item's words are drawn as documents: its own pictures read through the Inbox, and a link alone on its line as its card. */}
+            <ItemWords
+              itemId={item.id}
+              workspaceId={workspaceId}
+              images={control}
+              code={doors.code}
+            >
+              <Subject item={item} heading={setHeading} />
+              <Stack
+                as={LAYOUT_ELEMENT.OL}
+                gap={GAP.NONE}
+                className={INBOX_THREAD}
+                aria-label="Messages"
+              >
+                {thread.map((message, at) => (
+                  <Fragment key={message.id}>
+                    <ThreadMessage
+                      item={item}
+                      message={message}
+                      thread={thread}
+                      by={by}
+                      now={now}
+                      control={control}
+                      waitingOn={waitingOn}
+                    />
+                    {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
+                    {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
+                      <EarlierMessages by={by} />
+                    ) : null}
+                  </Fragment>
+                ))}
+                {pending === undefined ? null : (
+                  <PendingReply readerId={readerId} reply={pending} now={now} />
+                )}
+                {draftReply}
+              </Stack>
+            </ItemWords>
             {control.failed ? (
               <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>
             ) : null}

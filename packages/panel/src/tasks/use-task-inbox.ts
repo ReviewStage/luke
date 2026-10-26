@@ -290,6 +290,71 @@ function imagesNamed(
   return new Map([...images].filter(([attachmentId]) => named.has(attachmentId)));
 }
 
+/** An Inbox's pictures as read: each held by its attachment, and how one is asked for and asked for again. */
+export type InboxImageReads = Pick<TaskInboxControl, "images" | "onImage" | "onRetryImage">;
+
+/**
+ * The pictures items draw, each read once as it is first drawn and held by
+ * its attachment, for the task's Inbox and for a channel's stream, which
+ * posts threads of many tasks. What `scope` reads is let go when it changes,
+ * a picture no item among `items` names any longer is let go too, and one
+ * landing after its scope moved on, or, while `drawn`, for an attachment no
+ * item names, is kept for nobody. Note that one landing while not `drawn` is
+ * kept, because the Inbox's pane draws the item from its list's read then,
+ * and nothing would ask for the picture again.
+ */
+export function useInboxImageReads(input: {
+  read: InboxImageReader;
+  scope: string | undefined;
+  items: readonly InboxItem[];
+  drawn: boolean;
+}): InboxImageReads {
+  const { scope, items, drawn } = input;
+  const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
+  // The reads out now, by attachment, so an item drawn again while its read is out asks once.
+  const reading = useRef(new Set<string>());
+  const named = useMemo(() => attachmentsNamed(items), [items]);
+  const latest = useRef({ read: input.read, scope, drawn, named });
+  latest.current = { read: input.read, scope, drawn, named };
+  useEffect(() => {
+    setImages((standing) => imagesNamed(standing, named));
+  }, [named]);
+  const onImage = useCallback(
+    (itemId: string, attachmentId: string) => {
+      if (images.has(attachmentId) || reading.current.has(attachmentId)) return;
+      reading.current.add(attachmentId);
+      const askedOn = scope;
+      latest.current
+        .read({ itemId, attachmentId })
+        .catch((): CodingAgentInboxAttachmentView => UNANSWERED)
+        .then((answer) => {
+          reading.current.delete(attachmentId);
+          const image: InboxImage =
+            "failure" in answer
+              ? { failed: true }
+              : { url: `data:${answer.contentType};base64,${answer.base64}` };
+          const now = latest.current;
+          const kept = now.scope === askedOn && (!now.drawn || now.named.has(attachmentId));
+          setImages((standing) => (kept ? new Map(standing).set(attachmentId, image) : standing));
+        });
+    },
+    [images, scope],
+  );
+  // Another scope's images are its own: what this one asked for is let go with it.
+  useEffect(() => {
+    setImages(new Map());
+    reading.current.clear();
+  }, [scope]);
+  const onRetryImage = useCallback((attachmentId: string) => {
+    setImages((standing) => {
+      const next = new Map(standing);
+      next.delete(attachmentId);
+      return next;
+    });
+  }, []);
+  return { images, onImage, onRetryImage };
+}
+
 /** Where an item's card keeps its draft: the item, whatever its revision or status, so a message landing on it never moves the words being written. */
 function draftPlace(item: InboxItem, taskId: string | null): InboxPlace {
   return { kind: DRAFT_PLACE.INBOX, planId: taskId, agentId: item.agentId, itemId: item.id };
@@ -382,18 +447,13 @@ export function useTaskInbox(input: {
   const [held, setHeld] = useState<Held>(() => fresh(taskId));
   if (held.taskId !== taskId) setHeld(fresh(taskId));
   useInboxArrivals(held, input.onScreen === true);
-  const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
-  // The reads out now, by attachment, so an item drawn again while its read is out asks once.
-  const reading = useRef(new Set<string>());
-  // The attachments the items name now, so a picture an item no longer names is let go, and one
-  // landing for it while this hook's read is what the pane draws is not kept.
-  const named = useMemo(() => attachmentsNamed(held.items), [held.items]);
-  // Note that a read that failed is drawn no longer, since the Inbox falls back to its list's read.
-  const namedNow = useRef({ drawn: held.read && !held.failed, named });
-  namedNow.current = { drawn: held.read && !held.failed, named };
-  useEffect(() => {
-    setImages((standing) => imagesNamed(standing, named));
-  }, [named]);
+  // Note that a read that failed is drawn no longer, since the Inbox falls back to its list's read, whose pictures this hook's reads still hold.
+  const { images, onImage, onRetryImage } = useInboxImageReads({
+    read: input.agents.readInboxImage,
+    scope: taskId,
+    items: held.items,
+    drawn: held.read && !held.failed,
+  });
   const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
   const [pendingReplies, setPendingReplies] = useState<ReadonlyMap<string, PendingInboxReply>>(
     new Map(),
@@ -617,44 +677,6 @@ export function useTaskInbox(input: {
     for (const agentId of unknown) asked.current.add(agentId);
     latest.current.onRetryList();
   }, [held.items, ids]);
-  // An image is read once, as a card first asks for it, and held under its attachment.
-  const onImage = useCallback(
-    (itemId: string, attachmentId: string) => {
-      if (images.has(attachmentId) || reading.current.has(attachmentId)) return;
-      reading.current.add(attachmentId);
-      const askedOn = taskId;
-      latest.current
-        .readInboxImage({ itemId, attachmentId })
-        .catch((): CodingAgentInboxAttachmentView => UNANSWERED)
-        .then((answer) => {
-          reading.current.delete(attachmentId);
-          const image: InboxImage =
-            "failure" in answer
-              ? { failed: true }
-              : { url: `data:${answer.contentType};base64,${answer.base64}` };
-          // An image landing after the window moved to another task, or after this hook's drawn read let
-          // its item's block go, is kept for nobody. Note that one landing while that read is not drawn,
-          // before it lands or after it failed, is kept, because the Inbox's pane draws the item from its
-          // list's read then, and nothing would ask for the picture again.
-          const { drawn, named: namedThen } = namedNow.current;
-          const kept = latest.current.taskId === askedOn && (!drawn || namedThen.has(attachmentId));
-          setImages((standing) => (kept ? new Map(standing).set(attachmentId, image) : standing));
-        });
-    },
-    [images, taskId],
-  );
-  // Another task's images are its own: what this one asked for is let go with its items.
-  useEffect(() => {
-    setImages(new Map());
-    reading.current.clear();
-  }, [taskId]);
-  const onRetryImage = useCallback((attachmentId: string) => {
-    setImages((standing) => {
-      const next = new Map(standing);
-      next.delete(attachmentId);
-      return next;
-    });
-  }, []);
 
   // The board draws the window's own answers and messages over the read until it holds them.
   const settled = useSettledItems(held.items);
