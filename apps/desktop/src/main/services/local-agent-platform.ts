@@ -89,6 +89,8 @@ export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
     // Note that the app is built for Apple silicon alone (`package.json`'s `--mac --arm64`).
     devicePlatform: DEVICE_PLATFORM.DARWIN,
     deviceArch: DEVICE_ARCH.ARM64,
+    // Note that This Mac names no capability until the service that knows the field has deployed, since one from before it refuses a register naming any.
+    deviceCapabilities: [],
     worktreeScript,
   };
   return packaged

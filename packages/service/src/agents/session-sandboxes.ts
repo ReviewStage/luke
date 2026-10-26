@@ -23,7 +23,8 @@
  * A delete Vercel did not confirm leaves the session queued, stamped, behind
  * the rest. An agent's archive stops its sandbox rather than deleting it, in
  * the background (`stoppedInBackground`), so an unarchive still resumes from
- * the snapshot. Nothing here reads a sandbox's files or a word of any account:
+ * the snapshot; a local agent's archive queues its device a discard line
+ * there too (`device-discard.ts`). Nothing here reads a sandbox's files or a word of any account:
  * what is asked of Vercel is a tag and a name, and what is logged of a
  * failure is its status.
  *
@@ -43,6 +44,7 @@ import {
 } from "@luke/database/models/session-sandbox-cleanup";
 import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
+import { discardedOrLogged } from "./device-discard.js";
 import { capSandboxTimeout, keepAliveExtension } from "./sandbox-keep-alive.js";
 import { boundSnapshotRetention } from "./sandbox-retention.js";
 import {
@@ -209,7 +211,8 @@ const stoppedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
  * archive never fails on it. A stop that fails or runs past its bound is
  * logged and left: the turn's own end stops a sandbox a turn ran
  * (`agent-runtime/sandbox.ts`), so what is left running here is one a
- * terminal held.
+ * terminal held. A local agent among them is let go of on its device beside
+ * the stops, its runner stopped and its folder removed (`device-discard.ts`).
  */
 export const stoppedInBackground = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: SandboxStopReach,
@@ -243,7 +246,16 @@ export const stoppedInBackground = /* @__PURE__ */ Effect.fnUntraced(function* (
       ),
     );
   yield* reach.keepAwake(
-    Effect.forEach(stops, stopOne, { concurrency: ARCHIVE_STOP.CONCURRENCY, discard: true }),
+    Effect.all(
+      [
+        Effect.forEach(stops, stopOne, { concurrency: ARCHIVE_STOP.CONCURRENCY, discard: true }),
+        Effect.forEach(agents, discardedOrLogged, {
+          concurrency: ARCHIVE_STOP.CONCURRENCY,
+          discard: true,
+        }),
+      ],
+      { concurrency: 2, discard: true },
+    ),
   );
 });
 

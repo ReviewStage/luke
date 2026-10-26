@@ -139,6 +139,7 @@ import {
 } from "./coder-host/status.js";
 import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { discardedOrLogged } from "./device-discard.js";
 import {
   STEWARD_ACT,
   type StewardAct,
@@ -1834,7 +1835,10 @@ const archiveChange = (
         idleForArchive,
       );
       if (outcome === IDLE_ARCHIVE.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
-      return outcome === IDLE_ARCHIVE.WORKING ? UPDATE_AGENT_REFUSAL.WORKING : undefined;
+      if (outcome === IDLE_ARCHIVE.WORKING) return UPDATE_AGENT_REFUSAL.WORKING;
+      // A local agent archived now is let go of on its device, as an archive by hand lets it go.
+      if (outcome === IDLE_ARCHIVE.ARCHIVED) yield* discardedOrLogged({ id: agent.id, userId });
+      return undefined;
     }
     if (agent.archivedAt === null) return undefined;
     // An operator a Reset replaced stays archived while the fresh one stands.

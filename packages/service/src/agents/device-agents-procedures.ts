@@ -8,7 +8,8 @@
  * account has the `local-agents` experiment off, and every one but the
  * register where the account holds no such Mac (`agents/device-agent.ts`); a
  * register under an id another account holds writes nothing and answers
- * not found too. A held read answers what waits for that Mac
+ * not found too, and a register keeps only the capabilities this service
+ * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused. A held read answers what waits for that Mac
  * (`GET /api/device-agents/lines`, `GET /api/device-agents/requests`), a claim
  * takes one row by its id, a launch line's secrets with it, and a settle or
  * an answer keeps what the Mac said of a row it claimed.
@@ -20,6 +21,7 @@ import {
   claimDeviceAgentRequest,
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
+import { DEVICE_CAPABILITY } from "@luke/features/device-agent-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect, Option } from "effect";
 import {
@@ -66,9 +68,14 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       ) {
         return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       }
-      const { deviceId, ...device } = input;
+      const { deviceId, capabilities, ...device } = input;
+      const known = Object.values(DEVICE_CAPABILITY).filter((capability) =>
+        capabilities?.includes(capability),
+      );
       return yield* keptOrNotFound(
-        yield* hostedStoreOrUnavailable(registerDevice(userId, { id: deviceId, ...device })),
+        yield* hostedStoreOrUnavailable(
+          registerDevice(userId, { id: deviceId, ...device, capabilities: known }),
+        ),
       );
     }),
     beat: deviceAgents.beat.effect(function* ({ context, input }) {

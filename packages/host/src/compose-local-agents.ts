@@ -77,9 +77,9 @@ import type { RunMode } from "./run-mode.js";
  * runner's exit code once it exits. A message or retune line is written to
  * the running runner's stdin; a files line writes its files under the
  * agent's folder; a stop line ends the runner's group; a discard line ends
- * it and removes the agent's folder with everything in it. A launch whose
- * worktree could not be made is settled with the script's failure, and the
- * runner never starts.
+ * it and removes the agent's folder with everything in it; a line of a kind
+ * it does not know is settled untouched. A launch whose worktree could not
+ * be made is settled with the script's failure, and the runner never starts.
  *
  * Every launch this Mac claimed is kept in the host's state by its line's
  * id, no secret beside it, until its runner's exit settles it. A launch
@@ -671,7 +671,13 @@ export function composeLocalAgents(
             ),
           );
 
-        /** One line of the agent's, delivered: a runner started, written to, or stopped, files written, or the agent let go of; every line but a launch settled at once. */
+        /**
+         * One line of the agent's, delivered: a runner started, written to,
+         * or stopped, files written, or the agent let go of; every line but a
+         * launch settled at once. A kind this follower does not know, one a
+         * newer service added, is settled without being acted on, so it never
+         * holds back the agent's later lines.
+         */
         const delivered = (
           agentId: string,
           claimed: DeviceAgentClaimedLine,
@@ -863,7 +869,7 @@ export function composeLocalAgents(
       const deviceId = yield* deviceOf(userId);
       const shellVariables = yield* shellEnvironment;
       const signedIn = yield* signedInNow(had.value, shellVariables);
-      /** The Mac registered, with the Codex it checked where it has one, and its sign-ins given. */
+      /** The Mac registered, with the Codex it checked where it has one, its sign-ins given, and the lines beyond the first it takes. */
       const registration = (said: DeviceSignedIn) =>
         Effect.flatMap(Ref.get(codex), (checked) =>
           client.register(deviceId, {
@@ -874,6 +880,7 @@ export function composeLocalAgents(
             claudeExecutable: had.value.claude,
             codexExecutable: Option.getOrUndefined(checked),
             signedIn: said,
+            capabilities: platform.deviceCapabilities,
           }),
         );
       const registered = yield* asked(registration(signedIn));

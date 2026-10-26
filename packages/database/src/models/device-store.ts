@@ -9,9 +9,11 @@
 
 import {
   DEVICE_ARCH,
+  DEVICE_CAPABILITY,
   DEVICE_KIND,
   DEVICE_PLATFORM,
   type DeviceArch,
+  type DeviceCapability,
   type DevicePlatform,
   type DeviceSignedIn,
   deviceSignedInSchema,
@@ -54,12 +56,13 @@ export type DeviceStanding = typeof DeviceStandingSchema.Type;
 
 type DeviceLayout = typeof DeviceLayoutSchema.Type;
 
-/** What a Mac registers with beside its id and name: its platform and architecture, its layout, its Codex where it checked one, and which harnesses it is signed in to where it says. */
+/** What a Mac registers with beside its id and name: its platform and architecture, its layout, its Codex where it checked one, which harnesses it is signed in to where it says, and what its follower takes beyond the first lines, none where it names none. */
 export type DeviceRegistration = Omit<DeviceLayout, "codexExecutable"> & {
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
   readonly codexExecutable?: string | undefined;
   readonly signedIn?: DeviceSignedIn | undefined;
+  readonly capabilities?: readonly DeviceCapability[] | undefined;
 };
 
 const upsertDevice = SqlSchema.findAll({
@@ -69,6 +72,7 @@ const upsertDevice = SqlSchema.findAll({
     name: Schema.String,
     platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
     arch: Schema.Literals(Object.values(DEVICE_ARCH)),
+    capabilities: Schema.Array(Schema.Literals(Object.values(DEVICE_CAPABILITY))),
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -82,6 +86,7 @@ const upsertDevice = SqlSchema.findAll({
     claudeExecutable,
     codexExecutable,
     signedIn,
+    capabilities,
     now,
   }) =>
     Database.use((db) =>
@@ -99,6 +104,7 @@ const upsertDevice = SqlSchema.findAll({
           claudeExecutable,
           codexExecutable,
           signedIn,
+          capabilities: [...capabilities],
           lastSeenAt: now,
         })
         .onConflictDoUpdate({
@@ -111,6 +117,7 @@ const upsertDevice = SqlSchema.findAll({
             claudeExecutable,
             codexExecutable,
             signedIn,
+            capabilities: [...capabilities],
             lastSeenAt: now,
           },
           // Moved only where the account registering it is the one holding it.
@@ -208,6 +215,8 @@ export function registerDevice(
         // Note that a register naming no Codex clears the last one, since the Mac checks it on every start.
         codexExecutable: registered.codexExecutable ?? null,
         signedIn: registered.signedIn ?? {},
+        // Note that a register naming none clears the last ones, as a desktop moved back to a build without them takes none.
+        capabilities: registered.capabilities ?? [],
         now,
       }),
       (rows) => rows.length > 0,

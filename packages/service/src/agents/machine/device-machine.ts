@@ -27,8 +27,9 @@
  * their order of commit and only the lease keeps two from interleaving
  * (`device-agent-store.ts`'s header). The other calls queue no line: the Mac
  * has no firewall Luke sets, so `setCredential` does nothing, and nothing
- * to stop, resume, or throw away, since its worktree is the developer's own
- * and a warm runner ends by itself at its idle cap, settling its line.
+ * to stop, resume, or throw away, since a warm runner ends by itself at its
+ * idle cap, settling its line; the agent's folder goes from its device only
+ * once the agent is archived (`../device-discard.ts`).
  *
  * Whether a runner runs is read off the agent's newest launch line, which
  * stands for the record a sandbox keeps in its tags: it runs while that
