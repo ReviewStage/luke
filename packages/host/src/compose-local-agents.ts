@@ -638,6 +638,7 @@ export function composeLocalAgents(
                   cwd: folder,
                   stdin: "ignore",
                   stderr: "ignore",
+                  forceKillAfter: KILL_GRACE,
                 });
                 const printed = yield* Stream.mkString(Stream.decodeText(handle.stdout));
                 if (Number(yield* handle.exitCode) !== 0) return Option.some(UNSAVED_UNKNOWN);
@@ -917,6 +918,7 @@ export function composeLocalAgents(
             name: platform.deviceName,
             platform: platform.devicePlatform,
             arch: platform.deviceArch,
+            isolation: platform.deviceIsolation,
             home: home.value,
             claudeExecutable: had.value.claude,
             codexExecutable: Option.getOrUndefined(checked),

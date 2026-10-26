@@ -156,6 +156,7 @@ const SANDBOX_LAYOUT: MachineLayout = {
   codexExecutable: undefined,
   writableRoots: [],
   signedIn: {},
+  isolation: undefined,
 };
 
 /** What a sandbox Luke opens is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */

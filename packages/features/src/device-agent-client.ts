@@ -3,12 +3,14 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
 import {
   DEVICE_AGENT_REQUEST_KIND,
+  DEVICE_ISOLATION,
   type DeviceAgentAnswer,
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLine,
   type DeviceAgentRequest,
   type DeviceArch,
   type DeviceCapability,
+  type DeviceIsolation,
   type DevicePlatform,
   type DeviceSignedIn,
 } from "./device-agent-wire.js";
@@ -43,6 +45,7 @@ export interface DeviceAgentDevice {
   readonly name: string;
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
+  readonly isolation: DeviceIsolation;
   readonly home: string;
   readonly claudeExecutable: string;
   readonly codexExecutable?: string | undefined;
@@ -72,14 +75,16 @@ export class HostedDeviceAgentClient {
     deviceId: string,
     device: DeviceAgentDevice,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    const { codexExecutable, capabilities, ...rest } = device;
+    const { codexExecutable, capabilities, isolation, ...rest } = device;
     // Note that a Mac with no Codex checked names none, which the service reads as no Codex,
     // and one with no capability names no list, which a service from before the field refuses.
+    // Likewise a device running bare names no isolation, so a service from before the field still takes its register.
     const input = {
       deviceId,
       ...rest,
       ...(codexExecutable === undefined ? undefined : { codexExecutable }),
       ...(capabilities.length === 0 ? undefined : { capabilities }),
+      ...(isolation === DEVICE_ISOLATION.BARE ? undefined : { isolation }),
     };
     return askHosted(this.#hosted.deviceAgents.register, input).pipe(
       Effect.as(true),

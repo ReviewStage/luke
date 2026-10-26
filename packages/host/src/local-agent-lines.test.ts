@@ -16,6 +16,7 @@ import { fixedBearer, HOSTED_SERVICE_PATH, HostedDeviceAgentClient } from "@luke
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
+  DEVICE_ISOLATION,
   DEVICE_PLATFORM,
   type DeviceAgentLine,
   deviceAgentLayout,
@@ -122,6 +123,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
         deviceName: "rack-1",
         devicePlatform: DEVICE_PLATFORM.LINUX,
         deviceArch: DEVICE_ARCH.X64,
+        deviceIsolation: DEVICE_ISOLATION.BARE,
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
         unsavedWorkScript: unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,

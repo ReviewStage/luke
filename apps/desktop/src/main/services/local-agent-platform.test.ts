@@ -1,3 +1,7 @@
+/**
+ * local-agent-platform.test.ts -- what This Mac registers as a device: it takes a discard line and names the check that keeps a worktree holding unsaved work.
+ */
+
 import assert from "node:assert/strict";
 import { DEVICE_CAPABILITY } from "@luke/features/device-agent-wire";
 import { afterEach, beforeEach, describe, it, vi } from "vitest";

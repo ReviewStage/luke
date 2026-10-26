@@ -102,6 +102,22 @@ export const DEVICE_KIND = {
 
 export type DeviceKind = (typeof DEVICE_KIND)[keyof typeof DEVICE_KIND];
 
+/**
+ * How a device runs its local agents. A sandboxed agent runs in a Linux
+ * microVM of its own, booted from Luke's sandbox image, with its folder
+ * mounted in at the same absolute path it has on the device, so every path
+ * the service hands out (`deviceAgentLayout`) stands in both modes; it
+ * reaches none of the device's own tools, services, or logins.
+ */
+export const DEVICE_ISOLATION = {
+  /** Each agent in a microVM of its own. */
+  SANDBOX: "sandbox",
+  /** Each agent directly on the device, with its installed tools and its own logins. */
+  BARE: "bare",
+} as const;
+
+export type DeviceIsolation = (typeof DEVICE_ISOLATION)[keyof typeof DEVICE_ISOLATION];
+
 /** A device's operating system, as Node's `process.platform` names it. */
 export const DEVICE_PLATFORM = {
   DARWIN: "darwin",
@@ -301,6 +317,8 @@ export const deviceAgentCommandArgsSchema = EffectSchema.Struct({
  * login on the Mac, never the credential: a local agent on a harness its Mac
  * is signed in to launches on that login rather than the plan or key the
  * account saved in Luke. A key absent is a harness the Mac did not check.
+ * A sandboxed device says none, since its agents cannot reach its logins,
+ * so each launches on the account's saved credential.
  */
 export const deviceSignedInSchema = EffectSchema.Struct({
   /** Claude Code's own login on the Mac, as `claude auth status` answers it for the CLI the Mac bundles. */
@@ -324,18 +342,22 @@ const deviceField = { deviceId: wireUuidSchema };
  * bundles, both absolute, the Codex binary it checked against the pin
  * (`@luke/agent-runner/pins`' `CODEX_MAC_PIN`), absent until it has one,
  * which harnesses it is signed in to, its platform and architecture, and
- * the capabilities its follower has (`DEVICE_CAPABILITY`), absent for none,
- * as every desktop from before the field registers. The device sends the
- * key only when it names one, so a service from before it, which refuses a
- * key it does not know, never sees it from a device that has none; a
- * capability this service does not know is passed over rather than refused,
- * so a newer device's list never fails its register.
+ * how it runs its agents, absent for one that runs them bare, as every
+ * desktop from before the field does, and the capabilities its follower has
+ * (`DEVICE_CAPABILITY`), absent for none, as every desktop from before the
+ * field registers. The device sends each key only when it names something
+ * beyond the default, so a service from before it, which refuses a key it
+ * does not know, never sees it from a device that has none; a capability
+ * this service does not know is passed over rather than refused, so a newer
+ * device's list never fails its register. A sandboxed device names each
+ * executable by its path where its agents run, inside the VM.
  */
 export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
   ...deviceField,
   name: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(200)),
   platform: EffectSchema.Literals(Object.values(DEVICE_PLATFORM)),
   arch: EffectSchema.Literals(Object.values(DEVICE_ARCH)),
+  isolation: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_ISOLATION))),
   home: macPath,
   claudeExecutable: macPath,
   codexExecutable: EffectSchema.optionalKey(macPath),
