@@ -24,7 +24,8 @@ import {
  * toolbar's way back is a button named by its words; and a path that does
  * not fit its bar folds its first crumbs into one "…" that opens a menu of
  * them, each leading where its crumb did, the last crumb standing, and one
- * that fits folds nothing.
+ * that fits folds nothing; and a path measures its fold again, folding or
+ * unfolding, when its crumbs change width after it is drawn.
  */
 
 declare global {
@@ -35,20 +36,36 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: nothing is laid out here. */
+/** What each standing ResizeObserver calls back with, so a test can say that something was resized. */
+const resizeWatchers = new Set<() => void>();
+
+/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: nothing is laid out here, and a resize is what a test says. */
 class StandInResizeObserver {
+  private readonly resized: () => void;
+  constructor(resized: () => void) {
+    this.resized = resized;
+    resizeWatchers.add(resized);
+  }
   observe(): void {}
   unobserve(): void {}
-  disconnect(): void {}
+  disconnect(): void {
+    resizeWatchers.delete(this.resized);
+  }
 }
+
+/** The page's font set, which jsdom lacks, so a test can say that the fonts finished loading. */
+const fonts = new EventTarget();
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+  Object.defineProperty(document, "fonts", { configurable: true, value: fonts });
 });
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  Reflect.deleteProperty(document, "fonts");
+  crumbWidth = 100;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -184,15 +201,18 @@ test("a toolbar's way back is a button named by its words, answering a press", (
   expect(container.querySelector("[aria-current='page']")?.textContent).toBe("REL-1");
 });
 
+/** How wide each crumb is laid out, which a test may change once the path is drawn, as a web font arriving late does. */
+let crumbWidth = 100;
+
 /**
- * Lays the path out at a hundred pixels a crumb in a bar `room` wide, which
- * jsdom does not: a path is as wide as the crumbs it draws.
+ * Lays the path out at `crumbWidth` pixels a crumb in a bar `room` wide,
+ * which jsdom does not: a path is as wide as the crumbs it draws.
  */
 function layOut(room: number): void {
   vi.spyOn(HTMLOListElement.prototype, "scrollWidth", "get").mockImplementation(function (
     this: HTMLOListElement,
   ) {
-    return this.children.length * 100;
+    return this.children.length * crumbWidth;
   });
   vi.spyOn(HTMLOListElement.prototype, "clientWidth", "get").mockReturnValue(room);
 }
@@ -244,3 +264,35 @@ test("the … of a folded path opens a menu of the crumbs it stands for, each le
   act(() => (rows[1] as HTMLElement).click());
   expect(opened).toEqual(["agent"]);
 });
+
+test.each([
+  [
+    "a crumb is resized",
+    () => {
+      for (const resized of resizeWatchers) resized();
+    },
+  ],
+  [
+    "the page's fonts finish loading",
+    () => {
+      fonts.dispatchEvent(new Event("loadingdone"));
+    },
+  ],
+])(
+  "a path measures its fold again when its crumbs change width after it is drawn: %s",
+  (_, settle) => {
+    layOut(350);
+    const container = draw({ label: "Path", crumbs: THREE_CRUMBS });
+    const drawn = () => [...container.querySelectorAll("ol > li")].map((item) => item.textContent);
+    crumbWidth = 150;
+    act(settle);
+    expect(drawn()).toEqual(["…", "What the expired invite page says"]);
+    crumbWidth = 100;
+    act(settle);
+    expect(drawn()).toEqual([
+      "Teammate invitations",
+      "Build teammate invitations",
+      "What the expired invite page says",
+    ]);
+  },
+);

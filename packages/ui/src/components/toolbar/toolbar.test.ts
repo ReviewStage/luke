@@ -15,7 +15,8 @@ import { NOT_FOUND_THING, NotFound, Toolbar, type ToolbarProps } from "./toolbar
  * place a press back to it and the page's own name last, words that are no
  * press, said to be the current page; a bar that would cut the page's name
  * under the readable floor stands it on a row of its own, and above the
- * floor keeps one row; and a place that is not found keeps its bar above
+ * floor keeps one row, reading its title again once the page's fonts
+ * load; and a place that is not found keeps its bar above
  * the words saying so.
  */
 
@@ -224,4 +225,33 @@ test("a bar that would cut the page's name under the readable floor stands it on
     undefined,
     "135px of a 188px name reads, so it fades on one row",
   );
+});
+
+test("a bar reads its title again once the page's fonts finish loading, which widen its words in a bar that keeps its width", () => {
+  const fonts = new EventTarget();
+  Object.defineProperty(document, "fonts", { configurable: true, value: fonts });
+  const lay = (whole: number) =>
+    layTitle({
+      room: ".luke-toolbar-heading",
+      words: ".luke-toolbar-title",
+      roomWidth: 96,
+      whole,
+      floor: 120,
+    });
+  let laid = lay(90);
+  try {
+    const banner = bar({ title: "New thread", wrapHeading: true });
+    assert.equal(banner.dataset.wrapped, undefined, "a 90px name stands whole in 96px");
+    laid.restore();
+    laid = lay(116);
+    act(() => fonts.dispatchEvent(new Event("loadingdone")));
+    assert.equal(
+      banner.dataset.wrapped,
+      "true",
+      "96px of the 116px it now needs is under the floor",
+    );
+  } finally {
+    laid.restore();
+    Reflect.deleteProperty(document, "fonts");
+  }
 });
