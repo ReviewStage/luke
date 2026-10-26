@@ -93,12 +93,54 @@ test("Mine lists the reader's own threads and Needs me only the open asks waitin
   const ownTask = thread("own-task", NOON, [said("m3", undefined)]);
   const wroteIn = thread("wrote-in", NOON, [said("m4", undefined), said("m5", ME)]);
   const matesAsk = thread("mates-ask", NOON, [agentAsks("m6", true)]);
-  const all = [asksMe, answeredMine, ownTask, wroteIn, matesAsk];
+  // A notice waiting on a nod, an ask withdrawn, and one standing on a thread no longer open ask nothing of anyone.
+  const noticeForMe = thread("notice", NOON, [said("m7", undefined)], { waitsOn: ME });
+  const doForMe = thread(
+    "do",
+    NOON,
+    [
+      {
+        ...said("m8", undefined),
+        ask: { type: INBOX_ASK.DO, steps: [], status: INBOX_ASK_STATUS.OPEN },
+      },
+    ],
+    { waitsOn: ME },
+  );
+  const withdrawn = thread(
+    "withdrawn",
+    NOON,
+    [
+      {
+        ...agentAsks("m9", true),
+        ask: {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "This" }],
+          status: INBOX_ASK_STATUS.WITHDRAWN,
+        },
+      },
+    ],
+    { waitsOn: ME, status: INBOX_STATUS.CLOSED },
+  );
+  const settledOverAsk = thread("settled-over-ask", NOON, [agentAsks("m10", true)], {
+    waitsOn: ME,
+    status: INBOX_STATUS.ANSWERED,
+  });
+  const all = [
+    asksMe,
+    answeredMine,
+    ownTask,
+    wroteIn,
+    matesAsk,
+    noticeForMe,
+    doForMe,
+    withdrawn,
+    settledOverAsk,
+  ];
   const ids = (view: (typeof CHANNEL_VIEW)[keyof typeof CHANNEL_VIEW]) =>
     viewedThreads(all, view, ME.userId, (each) => each.id === "own-task").map(({ id }) => id);
 
-  assert.deepEqual(ids(CHANNEL_VIEW.MINE), ["asks-me", "own-task", "wrote-in"]);
-  assert.deepEqual(ids(CHANNEL_VIEW.NEEDS_ME), ["asks-me"]);
+  assert.deepEqual(ids(CHANNEL_VIEW.MINE), ["asks-me", "own-task", "wrote-in", "do"]);
+  assert.deepEqual(ids(CHANNEL_VIEW.NEEDS_ME), ["asks-me", "do"]);
   assert.deepEqual(
     ids(CHANNEL_VIEW.EVERYONE),
     all.map(({ id }) => id),

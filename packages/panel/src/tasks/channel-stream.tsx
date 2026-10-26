@@ -6,6 +6,8 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxMessage,
+  openAskOf,
+  threadNeedsReader,
 } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -57,7 +59,6 @@ import {
   repliesLine,
   STREAM_ROW,
   streamRows,
-  threadNeedsReader,
   viewedThreads,
 } from "./channels-model.js";
 import { agentActor } from "./coding-agent-model.js";
@@ -69,7 +70,6 @@ import {
   type InboxListed,
   inboxThreadSend,
   knownAsk,
-  openAskOf,
 } from "./inbox-model.js";
 import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
 import { TranscriptWords } from "./transcript-blocks.js";

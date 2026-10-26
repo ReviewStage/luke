@@ -48,6 +48,7 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
+  threadNeedsReader,
 } from "@luke/features/inbox-wire";
 import {
   accountInboxLiveRowSchemas,
@@ -1934,6 +1935,87 @@ it.layer(getTestDB())("a thread's channel", (it) => {
       }),
   );
 
+  it.effect(
+    "a channel's count of what waits on each reader is the threads Needs me shows them, however many newer threads stand over the asks, and whoever they wait on",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        yield* updateTask(owner, agent.taskId ?? "", { assigneeId: null });
+        const app = yield* channelIn(owner, workspaceId, "app");
+        const inApp = (key: string, write: Partial<InboxThreadPost> = SETTINGS) =>
+          post(agent, { ...SETTINGS, ...write, key, channelId: app });
+        // The asks and their neighbours, posted first, so every one is older than the read's bound.
+        yield* inApp("do");
+        yield* inApp("decide", {
+          ask: { type: INBOX_ASK.DECIDE, options: [{ label: "iad1" }, { label: "sfo1" }] },
+        });
+        yield* inApp("for-teammate", { addresseeId: teammate });
+        yield* post(agent, { ...NOTICE, channelId: app });
+        yield* inApp("withdrawn");
+        yield* closeInboxItem(agent, "withdrawn", "Found the setting.");
+        const settledOver = yield* inApp("settled-over-ask");
+        yield* Database.use((db) =>
+          db
+            .update(inboxItem)
+            .set({ status: INBOX_STATUS.ANSWERED })
+            .where(eq(inboxItem.id, settledOver.id)),
+        );
+        // More notices than a read carries, all posted since.
+        const at = (step: number) => new Date(Date.parse("2026-10-21T12:00:00Z") + step * 1_000);
+        yield* Database.use((db) =>
+          db.insert(inboxItem).values(
+            Array.from({ length: INBOX_BOUNDS.MAX_ITEMS_READ + 1 }, (_, step) => ({
+              userId: owner,
+              taskId: agent.taskId,
+              organizationId: workspaceId,
+              agentId: agent.agentId,
+              channelId: app,
+              key: `newer-${step}`,
+              revision: 1,
+              version: INBOX_WIRE_VERSION,
+              title: `Newer ${step}`,
+              needsReply: false,
+              status: INBOX_STATUS.OPEN,
+              postedAt: at(step),
+              updatedAt: at(step),
+            })),
+          ),
+        );
+        const standing = (readerId: string) =>
+          Effect.gen(function* () {
+            const threads = yield* channelThreads(readerId, app);
+            return {
+              counted: (yield* channelWaitingCounts(readerId, workspaceId)).get(app) ?? 0,
+              needsMe: threads
+                .filter((thread) => threadNeedsReader(thread, readerId))
+                .map((thread) => thread.key)
+                .toSorted(),
+            };
+          });
+
+        const unassigned = { owner: yield* standing(owner), teammate: yield* standing(teammate) };
+        yield* updateTask(owner, agent.taskId ?? "", { assigneeId: teammate });
+        const assigned = { owner: yield* standing(owner), teammate: yield* standing(teammate) };
+
+        assert.deepEqual(unassigned, {
+          owner: { counted: 2, needsMe: ["decide", "do"] },
+          teammate: { counted: 1, needsMe: ["for-teammate"] },
+        });
+        assert.deepEqual(assigned, {
+          owner: { counted: 0, needsMe: [] },
+          teammate: { counted: 3, needsMe: ["decide", "do", "for-teammate"] },
+        });
+        assert.equal(
+          (yield* channelThreads(owner, app)).length,
+          INBOX_BOUNDS.MAX_ITEMS_READ,
+          "the latest a read carries, and no thread asking nobody past them",
+        );
+      }),
+  );
+
   it.effect("an account outside the workspace reads none of a channel's threads or counts", () =>
     Effect.gen(function* () {
       const { agent, workspaceId } = yield* openAgentIn;
@@ -1941,10 +2023,19 @@ it.layer(getTestDB())("a thread's channel", (it) => {
       yield* openWorkspace(outsider);
       const app = yield* channelIn(agent.userId, workspaceId, "app");
       const item = yield* post(agent, { ...SETTINGS, channelId: app, addresseeId: agent.userId });
+      yield* TestClock.adjust(Duration.seconds(1));
+      const theirs = yield* post(agent, { ...SETTINGS, key: "theirs", channelId: app });
+      // An ask that names the outsider, as one addressed to a member who has since left would.
+      yield* Database.use((db) =>
+        db.update(inboxItem).set({ addresseeId: outsider }).where(eq(inboxItem.id, theirs.id)),
+      );
 
       assert.deepEqual(
         (yield* channelThreads(agent.userId, app)).map((thread) => [thread.id, thread.channelId]),
-        [[item.id, app]],
+        [
+          [item.id, app],
+          [theirs.id, app],
+        ],
       );
       assert.deepEqual(yield* channelThreads(outsider, app), []);
       assert.deepEqual([...(yield* channelWaitingCounts(outsider, workspaceId))], []);

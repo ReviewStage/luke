@@ -23,6 +23,7 @@ import {
   INBOX_STATUS,
   type InboxAnswers,
   type InboxAsk,
+  type InboxAsking,
   type InboxChoice,
   type InboxCodeBlock,
   type InboxFieldValue,
@@ -30,12 +31,15 @@ import {
   type InboxFormValue,
   type InboxItem,
   type InboxMessage,
+  type InboxPerson,
   type InboxReadAsk,
   type InboxReply,
   type InboxReplyKind,
   type InboxResponse,
   inboxAnswersRefusal,
   inboxReplyRefusal,
+  inboxWaitsOn,
+  openAskOf,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
@@ -418,18 +422,6 @@ export type InboxDoAsk = Extract<InboxKnownAsk, { type: typeof INBOX_ASK.DO }>;
 /** Whether an ask read off the wire is one this build knows, which its type decides. */
 export function knownAsk(ask: InboxReadAsk): ask is InboxKnownAsk {
   return Object.values<string>(INBOX_ASK).includes(ask.type);
-}
-
-/** The message whose ask waits on an answer, and the ask; none where nothing waits. */
-export interface InboxAsking {
-  readonly message: InboxMessage;
-  readonly ask: InboxReadAsk;
-}
-
-/** The thread's open ask: the latest message whose ask stands open; none where none does. */
-export function openAskOf(thread: readonly InboxMessage[]): InboxAsking | undefined {
-  const message = thread.findLast((each) => each.ask?.status === INBOX_ASK_STATUS.OPEN);
-  return message?.ask === undefined ? undefined : { message, ask: message.ask };
 }
 
 /**
@@ -1402,9 +1394,6 @@ export interface InboxListed {
   readonly item: InboxItem;
 }
 
-/** A member an item names, as the service names them: who it waits on (`inboxWaitsOn`), or who started its agent. */
-export type InboxPerson = NonNullable<InboxItem["startedBy"]>;
-
 /** One person's items, by whoever they wait on (`inboxWaitsOn`); the reader's own where `person` is none. */
 export interface InboxPersonGroup {
   /** What the group is folded by, apart from any plan's or automation's key. */
@@ -1439,16 +1428,6 @@ export type InboxListView = { readonly readerId: string | undefined } & (
       readonly groups: readonly InboxStatusGroup[];
     }
 );
-
-/**
- * The member an item waits on: its task's assignee, or its agent's starter
- * where the task has nobody assigned or the agent works on no task, as the
- * service resolves it; its starter from a service before it said; none where
- * it names neither.
- */
-export function inboxWaitsOn(item: InboxItem): InboxPerson | undefined {
-  return item.waitsOn ?? item.startedBy;
-}
 
 /**
  * Whether an item is the reader's: it waits on them (`inboxWaitsOn`), or on

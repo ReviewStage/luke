@@ -1,6 +1,11 @@
 import type { Channel, ChannelThread } from "@luke/features/channel-wire";
-import { INBOX_STATUS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
-import { inboxWaitsOn, openAskOf } from "./inbox-model.js";
+import {
+  type InboxItem,
+  type InboxMessage,
+  inboxAsksOpen,
+  inboxWaitsOn,
+  threadNeedsReader,
+} from "@luke/features/inbox-wire";
 
 /**
  * channels-model.ts -- a workspace's channels as the sidebar lists them and one channel's threads as its stream draws them (STAG-547).
@@ -84,26 +89,12 @@ function dayWords(at: number, now: number): string {
   });
 }
 
-/** Whether a thread still asks someone something. */
-function asksOpen(item: InboxItem): boolean {
-  return item.status === INBOX_STATUS.OPEN && openAskOf(item.thread ?? []) !== undefined;
-}
-
-/** Whether a thread needs the reader: its ask stands open and waits on them. */
-export function threadNeedsReader(item: InboxItem, readerId: string | undefined): boolean {
-  return readerId !== undefined && asksOpen(item) && inboxWaitsOn(item)?.userId === readerId;
-}
-
 /**
  * Whether a thread is the reader's own, as Mine lists it: of a task of
  * theirs (`ownTask`) or an agent they started, asking them, or one they
  * wrote in.
  */
-function threadIsMine(
-  item: InboxItem,
-  readerId: string | undefined,
-  ownTask: boolean,
-): boolean {
+function threadIsMine(item: InboxItem, readerId: string | undefined, ownTask: boolean): boolean {
   if (readerId === undefined) return false;
   if (ownTask || item.startedBy?.userId === readerId) return true;
   if (threadNeedsReader(item, readerId)) return true;
@@ -208,7 +199,7 @@ export function repliesLine(item: InboxItem, readerId: string | undefined): Repl
     replies.length === 0
       ? "Reply in thread"
       : `${replies.length} ${replies.length === 1 ? "reply" : "replies"}`;
-  const waitsOn = asksOpen(item) ? inboxWaitsOn(item) : undefined;
+  const waitsOn = inboxAsksOpen(item) ? inboxWaitsOn(item) : undefined;
   const waiting =
     waitsOn === undefined
       ? undefined
