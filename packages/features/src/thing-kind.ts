@@ -68,7 +68,7 @@ export const THING_KIND = {
   MESSAGE: LINK_PLACE.MESSAGE,
   INBOX: LINK_PLACE.INBOX,
   INBOX_ITEM: LINK_PLACE.INBOX_ITEM,
-  CHANNEL: LINK_PLACE.CHANNEL,
+  CHANNEL: MENTION_KIND.CHANNEL,
   AUTOMATIONS: LINK_PLACE.AUTOMATIONS,
   AUTOMATION: LINK_PLACE.AUTOMATION,
   AUTOMATION_RUN: LINK_PLACE.AUTOMATION_RUN,
@@ -95,7 +95,8 @@ type SharedPlaceKind =
   | typeof LINK_PLACE.SECTION
   | typeof LINK_PLACE.PAGE
   | typeof LINK_PLACE.AGENT
-  | typeof LINK_PLACE.PERSON;
+  | typeof LINK_PLACE.PERSON
+  | typeof LINK_PLACE.CHANNEL;
 
 /**
  * A thing, by the ids that name it and nothing of its words: as a mention
@@ -239,7 +240,13 @@ export const THING_NAME: ThingNames = {
   },
   [THING_KIND.INBOX]: NO_LIVE_NAME,
   [THING_KIND.INBOX_ITEM]: { live: true, held: (item, known) => known.inboxItems.get(item.itemId) },
-  [THING_KIND.CHANNEL]: NO_LIVE_NAME,
+  [THING_KIND.CHANNEL]: {
+    live: true,
+    held: (channel, known) => {
+      const name = known.channels?.get(channel.channelId);
+      return name === undefined ? undefined : `#${name}`;
+    },
+  },
   [THING_KIND.AUTOMATIONS]: NO_LIVE_NAME,
   [THING_KIND.AUTOMATION]: {
     live: false,
@@ -350,7 +357,7 @@ const PLACE_THING: { readonly [K in LinkPlaceKind]: (place: PlaceOf<K>) => Thing
   [LINK_PLACE.MESSAGE]: asThing,
   [LINK_PLACE.INBOX]: asThing,
   [LINK_PLACE.INBOX_ITEM]: asThing,
-  [LINK_PLACE.CHANNEL]: asThing,
+  [LINK_PLACE.CHANNEL]: (place) => ({ kind: THING_KIND.CHANNEL, channelId: place.channelId }),
   [LINK_PLACE.AUTOMATIONS]: asThing,
   [LINK_PLACE.AUTOMATION]: asThing,
   [LINK_PLACE.AUTOMATION_RUN]: asThing,

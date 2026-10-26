@@ -33,6 +33,8 @@ export interface KnownNames {
   readonly inboxItems: ReadonlyMap<string, string>;
   readonly people: ReadonlyMap<string, string>;
   readonly automations: ReadonlyMap<string, string>;
+  /** The channels of the workspaces the window holds channels of, each by its name without its `#`; none where it holds none. */
+  readonly channels?: ReadonlyMap<string, string> | undefined;
 }
 
 /** What a chip says of a place: its name, and the task it stands under where that is known and is not the place itself. */

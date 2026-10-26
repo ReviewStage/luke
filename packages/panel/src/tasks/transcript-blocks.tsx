@@ -167,7 +167,7 @@ import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   TranscriptMarkdownSource,
 } from "./transcript-markdown.js";
-import { useTaskKeyTargets } from "./use-known-names.js";
+import { useWordTargets } from "./use-known-names.js";
 import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { type CutBody, WHOLE_PART } from "./whole-parts.js";
 import { WorkingTime } from "./working-time.js";
@@ -501,7 +501,7 @@ let keySetsSeen = 0;
  * Note that a transcript is drawn again under it, because its library reads
  * each block of words once and does not read it again for a change of
  * steps alone, so words drawn before the tasks were listed would never
- * chip a key; the set changes only as a key does (`useTaskKeyTargets`).
+ * chip a key; the set changes only as a key does (`useWordTargets`).
  */
 function keySerial(targets: ReadonlyMap<string, string>): number {
   const held = keySerials.get(targets);
@@ -833,7 +833,7 @@ export function TranscriptWords({
   /** Whether the words are still being written, as a running turn's newest are. */
   streaming?: boolean | undefined;
 }): ReactNode {
-  const keyTargets = useTaskKeyTargets();
+  const keyTargets = useWordTargets();
   const remarkPlugins = useMemo(
     () => remarkPluginsFor(typed, asDocument, keyTargets),
     [typed, asDocument, keyTargets],

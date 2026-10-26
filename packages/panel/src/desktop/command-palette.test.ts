@@ -2870,6 +2870,45 @@ test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no
   );
 });
 
+test("with Channels on, ⌘K's Channels lists the workspace's channels by name and purpose, and one chosen opens its stream; with Channels off it draws no Channels filter", async () => {
+  const app = {
+    id: "a1000001-0000-4000-8000-000000000002",
+    name: "app",
+    purpose: "The desktop and web app",
+    project: false,
+    createdAt: 1,
+    waiting: 0,
+  };
+  fakeActPort({ [ACT_KIND.CHANNELS_LIST]: () => Promise.resolve({ channels: [app] }) });
+  handState({});
+  await paletteUnderState(tasksControl({ workspace: ACME }));
+  await settle();
+  const offWithout = filterOptions().every((option) => option.textContent !== "Channels");
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  document.body.innerHTML = "";
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  const opened: string[] = [];
+  const base = tasksControl({ workspace: ACME });
+  await paletteUnderState(
+    tasksControl({
+      workspace: ACME,
+      inboxView: { ...base.inboxView, onOpenChannel: (channelId) => opened.push(channelId) },
+    }),
+  );
+  await settle();
+  chooseFilter("Channels");
+  await settle();
+
+  assert.ok(offWithout, "no Channels filter stands with Channels off");
+  assert.deepEqual(rows(), ["#app · The desktop and web app"]);
+  press("#app · The desktop and web app");
+  await settle();
+  assert.deepEqual(opened, [app.id]);
+  handState({});
+});
+
 /** The agent asking the Inbox's questions below, as its task's list sums it up. */
 const ASKER = {
   id: "5b0e1d2c-0000-4000-8000-0000000000a1",

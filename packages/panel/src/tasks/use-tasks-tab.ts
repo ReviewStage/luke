@@ -128,7 +128,7 @@ import type { MicrophoneStatus } from "@luke/voice/audio";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { VOICE_COMMAND, type VoiceCallAbout } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type ActHandle, toastActFailure } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
@@ -175,6 +175,7 @@ import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import {
   chooseChannel,
+  listChannelWorkspace,
   openChannelThread,
   standChannelPlace,
   useChannelPlace,
@@ -1364,11 +1365,16 @@ export function useTasksTab(input: {
   const chooseListed = useCallback(
     (workspaceId: string) => {
       workspaceChoices.current += 1;
+      listChannelWorkspace(workspaceId);
       listWorkspace(workspaceId);
     },
     [listWorkspace],
   );
   const listedWorkspace = workspace.chosen;
+  // Note that a workspace listed by any other way, as the account's workspaces change, moves the channel place before the window paints.
+  useLayoutEffect(() => {
+    if (listedWorkspace !== undefined) listChannelWorkspace(listedWorkspace.id);
+  }, [listedWorkspace]);
   // A person's page is theirs in the workspace it opened in, so another listed in its
   // place, chosen or fallen back to as the account's workspaces change, closes it.
   if (standIn?.kind === STAND_IN.PERSON && standIn.workspaceId !== listedWorkspace?.id) {

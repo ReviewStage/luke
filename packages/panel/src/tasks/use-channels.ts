@@ -10,10 +10,17 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { STATUS_TONE } from "@luke/ui";
 import { Schema } from "effect";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { askAct, useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
-import { readKept, writeKept } from "../kept-storage.js";
 import { TOAST_HOLD, type ToastNotice, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
@@ -60,6 +67,9 @@ const NOTHING_HELD: HeldChannels = { channels: undefined, failed: false };
 /** Each workspace's channels as last read, by its id. */
 const held = new Map<string, HeldChannels>();
 
+/** Each workspace's channels read, by its id, a new map whenever a read is held, which a reader of every workspace's channels draws again by. */
+let heldChannels: ReadonlyMap<string, readonly Channel[]> = new Map();
+
 /** The window's surfaces drawing any workspace's channels, told of each change. */
 const listeners = new Set<() => void>();
 
@@ -81,6 +91,9 @@ interface ChannelPlace {
 }
 
 let place: ChannelPlace = { channelId: undefined, threadId: undefined };
+
+/** The workspace the window lists, whose channels the place names; none until the window lists one. */
+let placeWorkspace: string | undefined;
 
 /** What a refused write says, by why it was refused. */
 const REFUSAL_WORDS = {
@@ -119,12 +132,7 @@ function told(): void {
   for (const listener of listeners) listener();
 }
 
-/**
- * Holds a workspace's channels as an answer says, a failure keeping what
- * was held. Note that the first read with no channel chosen yet, as at
- * launch, shows the channel last shown in the workspace where it still
- * stands among them, so an archived or unknown one leaves #general standing in.
- */
+/** Holds a workspace's channels as an answer says, a failure keeping what was held. */
 function hold(workspaceId: string, view: ChannelsView | undefined): void {
   const was = held.get(workspaceId) ?? NOTHING_HELD;
   held.set(
@@ -133,24 +141,24 @@ function hold(workspaceId: string, view: ChannelsView | undefined): void {
       ? { channels: was.channels, failed: true }
       : { channels: view.channels, failed: false },
   );
-  if (view !== undefined && !("failure" in view) && place.channelId === undefined) {
-    const kept = readKept(KEPT_CHANNEL.name, KEPT_CHANNEL.schema, NOTHING_KEPT)[workspaceId];
-    if (view.channels.some((channel) => channel.id === kept)) {
-      place = { channelId: kept, threadId: undefined };
-    }
-  }
+  heldChannels = new Map(
+    [...held].flatMap(([id, each]) => (each.channels === undefined ? [] : [[id, each.channels]])),
+  );
   told();
 }
 
-/** Keeps a channel shown as its workspace's last, where the window holds the workspace it is of. */
-function keepShown(channelId: string): void {
-  const workspaceId = [...held].find(([, each]) =>
-    each.channels?.some((channel) => channel.id === channelId),
-  )?.[0];
-  if (workspaceId === undefined) return;
-  const kept = readKept(KEPT_CHANNEL.name, KEPT_CHANNEL.schema, NOTHING_KEPT);
-  if (kept[workspaceId] === channelId) return;
-  writeKept(KEPT_CHANNEL.name, KEPT_CHANNEL.schema, { ...kept, [workspaceId]: channelId });
+/**
+ * Tells the place the workspace the window lists. Another workspace
+ * listed in place of the one the place stood in shows none of the last
+ * one's channels, its own last shown standing in once its channels are
+ * read (`useChannels`); the first workspace listed keeps the place as a
+ * link chose it.
+ */
+export function listChannelWorkspace(workspaceId: string): void {
+  if (placeWorkspace === workspaceId) return;
+  const was = placeWorkspace;
+  placeWorkspace = workspaceId;
+  if (was !== undefined) moveTo({ channelId: undefined, threadId: undefined });
 }
 
 /** Reads a workspace's channels again and holds the answer. */
@@ -195,11 +203,10 @@ function holdFollow(workspaceId: string): () => void {
   };
 }
 
-/** Moves the window's place, telling every surface drawing it, and keeps the channel it shows. */
+/** Moves the window's place, telling every surface drawing it. */
 function moveTo(next: ChannelPlace): void {
   if (next.channelId === place.channelId && next.threadId === place.threadId) return;
   place = next;
-  if (next.channelId !== undefined) keepShown(next.channelId);
   told();
 }
 
@@ -272,13 +279,37 @@ export interface ChannelsControl {
   readonly onLook: (channelId: string) => void;
 }
 
-/** A workspace's channels as the window holds them, read as the first surface holding them is drawn and as `shown` comes back, and followed while it is. */
+/**
+ * A workspace's channels as the window holds them, read as the first
+ * surface holding them is drawn and as `shown` comes back, and followed
+ * while it is. Note that where it is the workspace the window lists, the
+ * channel it shows is kept as the workspace's last once it stands among
+ * them, and with none chosen, as at launch or on another workspace
+ * listed, the one kept is shown where it still stands among them, before
+ * the window paints, so an archived or unknown one leaves #general standing in.
+ */
 export function useChannels(workspaceId: string | undefined, shown: boolean): ChannelsControl {
   const { act } = useAct();
   const toast = useToast();
   const standing = useSyncExternalStore(subscribe, () =>
     workspaceId === undefined ? NOTHING_HELD : (held.get(workspaceId) ?? NOTHING_HELD),
   );
+  const [kept, , changeKept] = useKept(KEPT_CHANNEL, NOTHING_KEPT);
+  const { channelId: chosen } = useSyncExternalStore(subscribe, () => place);
+  const listed = placeWorkspace === undefined || placeWorkspace === workspaceId;
+  useLayoutEffect(() => {
+    const { channels } = standing;
+    if (workspaceId === undefined || !listed || channels === undefined) return;
+    if (chosen === undefined) {
+      const last = kept[workspaceId];
+      if (channels.some((channel) => channel.id === last)) {
+        moveTo({ channelId: last, threadId: undefined });
+      }
+      return;
+    }
+    if (!channels.some((channel) => channel.id === chosen)) return;
+    changeKept((was) => (was[workspaceId] === chosen ? was : { ...was, [workspaceId]: chosen }));
+  }, [workspaceId, listed, standing, chosen, kept, changeKept]);
   const onRefresh = useCallback(() => {
     if (workspaceId !== undefined) readChannels(workspaceId);
   }, [workspaceId]);
@@ -392,6 +423,11 @@ export function useThreadChannel(
   useEffect(() => {
     if (misplaced) moveTo({ channelId, threadId: id });
   }, [misplaced, channelId, id]);
+}
+
+/** Every workspace's channels the window holds, by the workspace's id, which it reads nothing to learn. */
+export function useHeldChannels(): ReadonlyMap<string, readonly Channel[]> {
+  return useSyncExternalStore(subscribe, () => heldChannels);
 }
 
 /** What the Inbox's place shows with Channels on: the channel its stream shows, and the thread opened in it, by its item's id. */

@@ -14,7 +14,7 @@ import { isWireString } from "@luke/wire";
 import type { Element, ElementContent, Root, RootContent, Text } from "hast";
 import { createContext, memo, type ReactNode, useContext, useMemo } from "react";
 import { PlanDiagram } from "./plan-diagram.js";
-import { useTaskKeyTargets } from "./tasks/use-known-names.js";
+import { useWordTargets } from "./tasks/use-known-names.js";
 import { TextLink } from "./text-link.js";
 
 const SAFE_LINK = /^https?:\/\//i;
@@ -685,7 +685,7 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   /** Whether the words were just landed on, lit once as every place landed on is. */
   landed?: boolean | undefined;
 }): React.JSX.Element {
-  const keyTargets = useTaskKeyTargets();
+  const keyTargets = useWordTargets();
   const rehypePlugins = useMemo(() => {
     const plugins: MarkdownSteps = [];
     if (edit !== undefined) plugins.push(markdownStep(drawEdit, edit, words));

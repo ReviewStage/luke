@@ -5,8 +5,10 @@ import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/cod
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { experimentsOn } from "@luke/settings/testing";
 import { type HistoryAdapter, type HistorySnapshot, memoryHistory } from "@luke/ui/history-adapter";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -28,6 +30,14 @@ import {
 } from "./navigation-history.js";
 import { PANEL_TAB } from "./panel-tabs.js";
 import { SHELL_ROOM } from "./shell-room.js";
+import {
+  type ChannelPlaceControl,
+  chooseChannel,
+  listChannelWorkspace,
+  openChannelThread,
+  useChannelPlace,
+  useChannels,
+} from "./tasks/use-channels.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -1158,3 +1168,90 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
     ["agent-c"],
   );
 });
+
+/** What reads a workspace's channels as the sidebar does, so the window holds them, and its channel place as a surface drawing it reads it. */
+async function channelsRead(workspaceId: string): Promise<() => ChannelPlaceControl> {
+  let seen: ChannelPlaceControl | undefined;
+  const Reader = () => {
+    useChannels(workspaceId, true);
+    seen = useChannelPlace();
+    return null;
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Reader))));
+  await settle();
+  return () => seen ?? assert.fail("the channel place is read");
+}
+
+test("with Channels on, a channel chosen and a thread opened in it are each a step, named and linked by the channel, which Back goes back through, closing the thread", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  const workspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const general = { id: "a1000001-0000-4000-8000-000000000001", name: "general" };
+  const app = { id: "a1000001-0000-4000-8000-000000000002", name: "app" };
+  fakeActPort({
+    [ACT_KIND.CHANNELS_LIST]: () =>
+      Promise.resolve({
+        channels: [general, app].map((each) => ({
+          ...each,
+          purpose: "",
+          project: false,
+          createdAt: 1,
+          waiting: 0,
+        })),
+      }),
+  });
+  listChannelWorkspace(workspace.id);
+  const place = await channelsRead(workspace.id);
+  const item = { itemId: "item-1", taskId: TASK_ID };
+  const onInbox = (chosen: typeof item | undefined) => {
+    const base = tasksControl();
+    return tasksControl({
+      workspace,
+      workspaces: [workspace],
+      inboxView: {
+        ...base.inboxView,
+        open: true,
+        chosen,
+        onOpen: () => undefined,
+        onChoose: () => undefined,
+      },
+    });
+  };
+  const window = mount(onInbox(undefined), memoryHistory(), stepTitleOf);
+  await settle();
+  press();
+  act(() => chooseChannel(app.id));
+  press();
+  act(() => openChannelThread(item.itemId, app.id));
+  window.stand(onInbox(item));
+
+  assert.deepEqual(window.addresses(), [
+    `/acme/channel/${general.id}`,
+    `/acme/channel/${app.id}`,
+    `/acme/plan/${TASK_ID}/inbox/item-1`,
+  ]);
+  assert.deepEqual(
+    window.history().steps.back.map((step) => step.title?.label),
+    ["#app", "#general"],
+  );
+  act(() => window.history().onBack());
+  assert.deepEqual(
+    { channelId: place().channelId, threadId: place().threadId },
+    { channelId: app.id, threadId: undefined },
+  );
+  act(() => window.history().onBack());
+  assert.equal(place().channelId, general.id);
+  handState({});
+});
+
+/** Each step named as the window's root names the one it stands on. */
+function stepTitleOf(tasks: TasksControl): StepTitle | undefined {
+  return stepTitle(PANEL_TAB.TASKS, tasks);
+}

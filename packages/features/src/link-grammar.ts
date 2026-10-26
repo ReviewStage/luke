@@ -661,11 +661,6 @@ export function channelPlace(channelId: string): LinkPlace {
   return { kind: LINK_PLACE.CHANNEL, channelId };
 }
 
-/** A channel's link under its workspace, by slug, or by id where the slug is not yet known. */
-export function channelLinkOf(channelId: string, workspace: string): string {
-  return linkOf(channelPlace(channelId), workspace);
-}
-
 /**
  * The place a link names and the workspace it was written under, by the
  * web's scheme or the desktop's, on Luke's home or a host it once had;

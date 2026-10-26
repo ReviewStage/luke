@@ -103,6 +103,7 @@ import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
+import { type ChannelPlaceControl, useChannelPlace } from "./use-channels.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -1286,6 +1287,63 @@ test("a Luke link to an Inbox item opens it in its task's workspace, and one to 
     automationId,
   });
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
+});
+
+/** The window's channel place as a surface drawing it reads it now. */
+function channelPlaceNow(): () => ChannelPlaceControl {
+  let seen: ChannelPlaceControl | undefined;
+  const Reader = () => {
+    seen = useChannelPlace();
+    return null;
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(createElement(Reader)));
+  return () => seen ?? assert.fail("the channel place is read");
+}
+
+test("with Channels on, a channel's link opens its stream in the Inbox's place, and a thread's link, or an item opened from another surface, opens as the thread in its channel", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
+  await settle();
+  const place = channelPlaceNow();
+  const app = "a1000001-6d9f-4ab7-92df-000000000002";
+  const design = "a1000001-6d9f-4ab7-92df-000000000003";
+  const linked = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+  const opened = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.CHANNEL, channelId: app },
+    }),
+  );
+  const channel = {
+    open: tab.control().inboxView.open,
+    listed: tab.control().inboxView.listed,
+    channelId: place().channelId,
+    threadId: place().threadId,
+  };
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.INBOX_ITEM, planId: "alerts", itemId: linked },
+    }),
+  );
+  const thread = { channelId: place().channelId, threadId: place().threadId };
+  act(() => tab.control().inboxView.onOpenItem({ taskId: "alerts", itemId: opened }, design));
+
+  assert.deepEqual(channel, { open: true, listed: false, channelId: app, threadId: undefined });
+  assert.deepEqual(thread, { channelId: app, threadId: linked });
+  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "alerts", itemId: opened });
+  assert.deepEqual(
+    { channelId: place().channelId, threadId: place().threadId },
+    {
+      channelId: design,
+      threadId: opened,
+    },
+  );
+  handState({});
 });
 
 test("a Luke link to an automation's run opens its editor naming the run, which its runs mark", () => {
