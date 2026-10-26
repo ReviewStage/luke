@@ -107,7 +107,7 @@ Only where the settings say to fix what you find: check out the pull request's b
 
 ## 7. Say what you did
 
-End with one short message: the review's address, the findings at each severity, and the threads you resolved. Post to the inbox only if you could not review, for example because the repository could not be checked out.`;
+End with one short message: the review's address, the findings at each severity, and the threads you resolved. Post a thread only if you could not review, for example because the repository could not be checked out.`;
 
 /** The heading of the settings block the code review prompt opens with, which the editor's Code review settings read and write. */
 const CODE_REVIEW_SETTINGS_HEADING = "Code review settings:";

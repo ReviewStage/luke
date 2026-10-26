@@ -89,14 +89,14 @@ export const DESK_LEAD =
 
 /** Why `list_open_asks` answered nothing, in words the model can act on. */
 export const LIST_OPEN_ASKS_REFUSAL = {
-  NOT_OPERATOR: `Not run: only your member's operator reads their whole inbox; ${AGENT_TOOL.READ_THREADS} reads your own threads.`,
+  NOT_OPERATOR: `Not run: only your member's operator reads every thread waiting on them; ${AGENT_TOOL.READ_THREADS} reads your own threads.`,
 } as const;
 
 /** `list_open_asks`, as the operator is offered it: it takes nothing. */
 export const LIST_OPEN_ASKS_TOOL = {
   name: AGENT_TOOL.LIST_OPEN_ASKS,
   description:
-    "List every thread waiting on the developer in their inbox, across all of their own agents in this workspace, " +
+    "List every thread waiting on the developer, across all of their own agents in this workspace, " +
     "yours among them, and none of a teammate's: each with its key, its title, the agent that posted it (its id, " +
     "name, and mention) and its task (null for none), the kind of ask that waits (decide, do, or answer; null for a " +
     "post that only waits to be read) and its words, the latest changed first and at most " +
@@ -118,7 +118,7 @@ const DESK_HEADING = {
   RUNNING: "Running",
   FAILED: "Failed",
   PULL_REQUESTS: "Pull requests awaiting them",
-  ASKS: "Waiting on them in their inbox",
+  ASKS: "Threads waiting on them",
   NOTICES: "New since your last turn",
 } as const;
 
@@ -128,7 +128,7 @@ const NOTICE_WORDS = {
   [OPERATOR_NOTICE_KIND.TURN_FAILED]: "a turn failed",
   [OPERATOR_NOTICE_KIND.PR_MERGED]: "its pull request merged",
   [OPERATOR_NOTICE_KIND.PR_CLOSED]: "its pull request closed unmerged",
-  [OPERATOR_NOTICE_KIND.INBOX_ASK]: "it asked them in their inbox",
+  [OPERATOR_NOTICE_KIND.INBOX_ASK]: "it asked them in a thread",
 } as const satisfies Record<OperatorNoticeKind, string>;
 
 /** An agent's mention under the workspace's step, under its task where it has one. */
@@ -172,7 +172,7 @@ function deskText(sections: readonly DeskSection[]): string {
   const held = sections.filter((section) => section.rows.length > 0);
   const body =
     held.length === 0
-      ? "Nothing stands: none of their agents runs or failed, no pull request awaits them, and nothing waits in their inbox."
+      ? "Nothing stands: none of their agents runs or failed, no pull request awaits them, and no thread waits on them."
       : held.map(sectionText).join("\n\n");
   return `${DESK_LEAD}\n${body}`;
 }

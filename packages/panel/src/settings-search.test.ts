@@ -273,7 +273,9 @@ test("Escape and the keys that answer in place are found on the Keyboard shortcu
       .flatMap((group) => group.items.map((entry) => entry.label));
 
   assert.deepEqual(shortcutsFound("exit"), ["Close what's open, or step back"]);
-  assert.deepEqual(shortcutsFound("inbox option"), ["Choose an inbox option by its number"]);
+  assert.deepEqual(shortcutsFound("option by its number"), [
+    "Choose an ask's option by its number",
+  ]);
   assert.ok(shortcutsFound("link").includes("Link selected words"));
 });
 

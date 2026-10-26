@@ -641,6 +641,19 @@ test("⌘K says a place it opens as Go to the place, and the menus' own words st
   assert.ok(!rows().includes("Inbox"), "the place is never said bare, as a verb would be");
 });
 
+test("with Channels on, ⌘K says the Inbox's place as Go to channels, as the menus name what it shows", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  const places = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(places);
+  act(() => places.render(createElement(OffersPlaces)));
+  await paletteUnderState(tasksControl());
+  chooseFilter("Commands");
+
+  assert.ok(rows().includes("Go to channels"));
+  assert.ok(!rows().includes("Go to inbox"));
+  handState({});
+});
+
 test("the field asks to search Luke under All, and the kind under its filter", () => {
   openPalette();
   assert.equal(field().placeholder, "Search Luke");
@@ -2859,14 +2872,14 @@ test("⌘K offers no Ask Luke and ensures nothing while the account has the oper
   );
 });
 
-test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no issues of its own", async () => {
+test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no issues of its own, and its Inbox filter finds threads under Channels", async () => {
   handState(experimentsOn(...Object.values(EXPERIMENT)));
   await paletteUnderState(tasksControl({ workspace: ACME }));
   await settle();
 
   assert.deepEqual(
     filterOptions().map((option) => option.textContent),
-    ["All", "Tasks", "This task", "Inbox", "Channels", "People", "Files", "Commands", "Settings"],
+    ["All", "Tasks", "This task", "Threads", "Channels", "People", "Files", "Commands", "Settings"],
   );
 });
 

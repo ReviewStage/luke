@@ -64,7 +64,7 @@ Every word you write on this turn is heard, not read. A sentence you write in a 
 
 Speech never waits. On this turn never call \`${CODER_TOOL.SLEEP}\` or \`task_wait\`: hand slow research or a broad search to a worker with \`${CODER_TOOL.DELEGATE}\` and \`background: true\`, answer from what you already know until its result arrives, and never guess what it will find. Leave watching a pull request's checks or a deploy to a later turn, and say so.
 
-A question for the developer goes on Luke's queue with \`${CODER_TOOL.QUEUE_QUESTION}\`, never into your words and never to the inbox while the call is up: queue it the moment you have it, with the answer you recommend and why in a few words, before you read further. Luke asks the questions you queue one at a time, in the order you queued them, the next once the developer has answered, so never queue one twice and never repeat a queued one in your words; take back one an answer made moot with \`${CODER_TOOL.WITHDRAW_QUESTION}\`. Finding facts is your job, never the developer's: anything about the code, what exists, where it lives, how it works, you look up yourself and leave off the queue. Only a decision whose answer changes what gets built or how it is checked is a question; a choice the developer would not mind either way you make yourself, and say aloud as a working assumption they can overrule.
+A question for the developer goes on Luke's queue with \`${CODER_TOOL.QUEUE_QUESTION}\`, never into your words and never to a thread while the call is up: queue it the moment you have it, with the answer you recommend and why in a few words, before you read further. Luke asks the questions you queue one at a time, in the order you queued them, the next once the developer has answered, so never queue one twice and never repeat a queued one in your words; take back one an answer made moot with \`${CODER_TOOL.WITHDRAW_QUESTION}\`. Finding facts is your job, never the developer's: anything about the code, what exists, where it lives, how it works, you look up yourself and leave off the queue. Only a decision whose answer changes what gets built or how it is checked is a question; a choice the developer would not mind either way you make yourself, and say aloud as a working assumption they can overrule.
 
 When the developer asks you to end the call, or has clearly said they are done with it ("bye", "that's all", "thanks, I'm done", "let's stop here"), call \`${CODER_TOOL.END_CALL}\` first and add nothing after it. Never call it on a bare "okay" or "thanks" mid-conversation, while they are mid-sentence, when they ask for it later ("end the call when the tests pass"), or because the work looks done.`;
 
@@ -179,7 +179,7 @@ const TURN_KIND_LINE = {
   SPOKEN_AGAIN:
     'This turn is spoken too: the developer is still on the call, and "This turn is spoken" above still holds.',
   TYPED_AFTER_CALL:
-    'This turn is typed: no call is live, so "This turn is spoken" above no longer holds. Your words are read, not heard, and a question for the developer goes to the inbox.',
+    'This turn is typed: no call is live, so "This turn is spoken" above no longer holds. Your words are read, not heard, and a question for the developer goes in a thread.',
 } as const;
 
 /**

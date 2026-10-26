@@ -274,8 +274,8 @@ function cardLook(
 /**
  * What the Inbox's place shows with Channels on, which its card goes back
  * to: a phone's list of channels while it is asked for, as the place stands
- * it (`desktop-inbox.tsx`), and a channel's stream otherwise; none with
- * Channels off, or before the window has read its channels. Note that it
+ * it (`desktop-inbox.tsx`), and a channel's stream otherwise, or Channels
+ * before the window has read its channels; none with Channels off. Note that it
  * reads the channels the window holds rather than reading them again, as
  * the phone's bar does.
  */
@@ -284,13 +284,12 @@ function useChannelsLook(tasks: TasksControl): KindLook | undefined {
   const phone = usePhoneRoom();
   const { channels } = useChannels(channelsOn ? tasks.workspace?.id : undefined, false);
   const { channelId } = useChannelPlace();
-  if (channelsOn && phone && tasks.inboxView.listed) {
-    return { icon: <GLYPH.CHANNEL />, label: CHANNELS_WORDS };
-  }
+  if (!channelsOn) return undefined;
   const shown = channelShown(channels, channelId);
-  return shown.kind === CHANNEL_SHOWN.CHANNEL
+  // Note that until a channel names it, as before the channels are read, the place is Channels, never the Inbox it stands in for.
+  return !(phone && tasks.inboxView.listed) && shown.kind === CHANNEL_SHOWN.CHANNEL
     ? { icon: <GLYPH.CHANNEL />, label: `#${shown.channel.name}` }
-    : undefined;
+    : { icon: <GLYPH.CHANNEL />, label: CHANNELS_WORDS };
 }
 
 /** One card of a stop, named against the workspace's members around it (`cardLook`). */
@@ -473,7 +472,8 @@ export function TabSwitcher({
 
   // The window's stops follow where it stands, each render, and what Back's list calls the stop standing.
   const now = standingOf(tab, tasks);
-  const title = stepTitle(tab, tasks);
+  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const title = stepTitle(tab, tasks, false, channelsOn);
   useEffect(() => {
     const before = shown.current;
     shown.current = now;

@@ -12,7 +12,12 @@ import {
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
-import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
+import {
+  APP_SETTING_SCHEMA,
+  EXPERIMENT,
+  type Experiment,
+  type HostCapability,
+} from "@luke/settings";
 import { agentKeyLink, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties } from "@luke/ui";
@@ -77,6 +82,7 @@ import {
   useAdminAccess,
   useAdminAccessPending,
   useAppSlice,
+  useExperiment,
   useExperimentChoices,
   VOICE_AVAILABLE,
 } from "./use-app-state.js";
@@ -391,6 +397,7 @@ function AppWindow(): React.JSX.Element {
   linkWorkspace.current = settingsWorkspace.link;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
   const experiments = useExperimentChoices();
+  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const shownView = shownSettingsView(
     settingsPlace.view,
     run?.capabilities ?? NO_CAPABILITIES,
@@ -479,7 +486,7 @@ function AppWindow(): React.JSX.Element {
   const history = useWindowHistory({
     known: run !== undefined && !accountGated,
     link: copyLink.standing,
-    title: stepTitle(tab, tasks, room === SHELL_ROOM.NARROW),
+    title: stepTitle(tab, tasks, room === SHELL_ROOM.NARROW, channelsOn),
     tab,
     onTabChange: changeTab,
     settingsView: shownView,

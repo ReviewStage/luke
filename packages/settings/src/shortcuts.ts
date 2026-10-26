@@ -555,24 +555,33 @@ export const APP_SHORTCUTS = {
     label: "Exit version history",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
-  [APP_COMMAND.INBOX]: { label: "Inbox", chord: { key: SHORTCUT_KEY.I, shift: true } },
+  // Note that with Channels on the Inbox's place shows a channel's stream, its thread opening beside it, and these name what they reach there.
+  [APP_COMMAND.INBOX]: {
+    label: "Inbox",
+    chord: { key: SHORTCUT_KEY.I, shift: true },
+    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Channels" },
+  },
   // Note that the Tasks page takes ⇧⌘B, for the Board it once was alone, because ⇧⌘T reopens a closed tab.
   [APP_COMMAND.TASKS]: { label: "Tasks", chord: { key: SHORTCUT_KEY.B, shift: true } },
   [APP_COMMAND.INBOX_LIST]: {
     label: "Back to inbox list",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Close thread" },
   },
   [APP_COMMAND.PREVIOUS_INBOX_ITEM]: {
     label: "Previous inbox item",
     chord: { key: SHORTCUT_KEY.K, plain: true },
+    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Previous thread" },
   },
   [APP_COMMAND.NEXT_INBOX_ITEM]: {
     label: "Next inbox item",
     chord: { key: SHORTCUT_KEY.J, plain: true },
+    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Next thread" },
   },
   [APP_COMMAND.TOGGLE_INBOX_ITEM_READ]: {
     label: "Mark inbox item as read or unread",
     chord: { key: SHORTCUT_KEY.U, plain: true },
+    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Mark thread as read or unread" },
   },
   [APP_COMMAND.REPLY_TO_SELECTION]: {
     label: "Reply to selection",
@@ -701,7 +710,7 @@ export const IN_CONTEXT_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
   [IN_CONTEXT_KEY.INBOX_OPTION]: {
-    label: "Choose an inbox option by its number",
+    label: "Choose an ask's option by its number",
     chord: { key: SHORTCUT_KEY.ONE, plain: true },
     through: { key: SHORTCUT_KEY.NINE, plain: true },
   },

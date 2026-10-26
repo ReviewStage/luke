@@ -812,7 +812,7 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
     `When the developer asks you in this conversation to merge or close a pull request, tell the agent that owns it to do it, with \`${CODER_TOOL.MESSAGE_AGENT}\``,
     "and messaging the developer's own agents. To reach a teammate's agent, ask the developer.",
     "Never delete anything.",
-    "Never answer an inbox ask for the developer",
+    "Never answer a thread's ask for the developer",
     "Never change Settings, keys, or integrations.",
     "Never act on a teammate's agent beyond reading it:",
     "Report each action you took unasked as a line of its own in your reply",

@@ -85,6 +85,7 @@ import {
   PALETTE_COMMANDS,
   SHORTCUT_KEY,
   type ShortcutChord,
+  shortcutLabel,
 } from "@luke/settings/shortcuts";
 import {
   CHOICE_BAR_FOCUS,
@@ -253,11 +254,26 @@ const FILTER_LABEL = {
   [PALETTE_FILTER.SETTINGS]: "Settings",
 } as const satisfies Record<PaletteFilter, string>;
 
+/** What a filter is called while an experiment that changes what it finds is on, as the Inbox's items are channels' threads while Channels is. */
+const FILTER_RENAMED: Partial<Record<PaletteFilter, { experiment: Experiment; label: string }>> = {
+  [PALETTE_FILTER.INBOX]: { experiment: EXPERIMENT.CHANNELS, label: "Threads" },
+};
+
+/** Each filter's name for the account's experiments: its renamed one while that experiment is on, its own otherwise. */
+function filterLabels(experiments: ExperimentChoices): Record<PaletteFilter, string> {
+  const labels: Record<PaletteFilter, string> = { ...FILTER_LABEL };
+  for (const each of PALETTE_FILTERS) {
+    const renamed = FILTER_RENAMED[each];
+    if (renamed !== undefined && experimentOn(experiments, renamed.experiment)) {
+      labels[each] = renamed.label;
+    }
+  }
+  return labels;
+}
+
 /** What the search field asks for: Luke under All, and the kind, as it stands mid-sentence, under its filter. */
-function filterPlaceholder(filter: PaletteFilter): string {
-  return filter === PALETTE_FILTER.ALL
-    ? "Search Luke"
-    : `Search ${FILTER_LABEL[filter].toLowerCase()}`;
+function filterPlaceholder(filter: PaletteFilter, labels: Record<PaletteFilter, string>): string {
+  return filter === PALETTE_FILTER.ALL ? "Search Luke" : `Search ${labels[filter].toLowerCase()}`;
 }
 
 /** How many rows a kind lists: its best few under All, and as many as are worth reading under its own filter. */
@@ -316,9 +332,11 @@ const READING_LINE = readingWords(`the repository's ${TERM.FILE.many}`);
 const TASKS_READING_LINE = readingWords(`your ${TERM.TASK.many}`);
 const TASKS_FAILED_LINE = readFailedWords(`your ${TERM.TASK.many}`);
 
-/** What the Inbox filter says while its items are first read, and where a read did not land. */
+/** What the Inbox filter says while its items are first read, and where a read did not land; with Channels on, the filter finds threads. */
 const INBOX_READING_LINE = readingWords("your inbox");
 const INBOX_FAILED_LINE = "Your inbox could not be read.";
+const THREADS_READING_LINE = readingWords("your threads");
+const THREADS_FAILED_LINE = readFailedWords("your threads");
 
 /** How many characters of an item's words a row says on either side of the word that found it. */
 const SNIPPET_REACH = 40;
@@ -615,11 +633,20 @@ function peopleNotice(
     : { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE };
 }
 
-/** What the Inbox filter says while its items have not been pushed, or a push did not land; nothing once every one is. */
-function inboxNotice(search: InboxSearch): PaletteNotice | undefined {
-  if (search.reading) return { kind: PALETTE_NOTICE.READING, line: INBOX_READING_LINE };
+/** What the Inbox filter says while its items have not been pushed, or a push did not land, of threads with Channels on; nothing once every one is. */
+function inboxNotice(search: InboxSearch, channelsOn: boolean): PaletteNotice | undefined {
+  if (search.reading) {
+    return {
+      kind: PALETTE_NOTICE.READING,
+      line: channelsOn ? THREADS_READING_LINE : INBOX_READING_LINE,
+    };
+  }
   return search.failed
-    ? { kind: PALETTE_NOTICE.FAILED, line: INBOX_FAILED_LINE, onRetry: search.onRetry }
+    ? {
+        kind: PALETTE_NOTICE.FAILED,
+        line: channelsOn ? THREADS_FAILED_LINE : INBOX_FAILED_LINE,
+        onRetry: search.onRetry,
+      }
     : undefined;
 }
 
@@ -1145,11 +1172,17 @@ const WINDOW_COMMANDS = LISTED_COMMANDS.filter(
   (command) => !PLACE_COMMANDS.has(command) && !OPEN_THING_ALL.has(command),
 );
 
+/** What a command is called for the account's experiments, as the menu bar and the Keyboard shortcuts page call it (`shortcutLabel`). */
+function commandLabel(command: AppCommand, experiments: ExperimentChoices): string {
+  return isKeyedCommand(command) ? shortcutLabel(command, experiments) : appCommandLabel(command);
+}
+
 /** What a command's row says: a place as "Go to" it, and else the words its menu item or its shortcut says. */
-function actionLabel(command: AppCommand): string {
-  if (PLACE_COMMANDS.has(command)) return `Go to ${appCommandLabel(command).toLowerCase()}`;
+function actionLabel(command: AppCommand, experiments: ExperimentChoices): string {
+  const label = commandLabel(command, experiments);
+  if (PLACE_COMMANDS.has(command)) return `Go to ${label.toLowerCase()}`;
   const item = panelCommandOf(command);
-  return item === undefined ? appCommandLabel(command) : commandWords(item, COMMAND_PLACE.PALETTE);
+  return item === undefined ? label : commandWords(item, COMMAND_PLACE.PALETTE);
 }
 
 /**
@@ -1162,6 +1195,7 @@ function actionLabel(command: AppCommand): string {
 function actionRows(
   commands: readonly AppCommand[],
   run: (command: AppCommand) => void,
+  experiments: ExperimentChoices,
 ): readonly PaletteRow[] {
   return commands
     .filter(
@@ -1173,7 +1207,7 @@ function actionRows(
         appCommandOffered(command),
     )
     .map((command) => {
-      const label = actionLabel(command);
+      const label = actionLabel(command, experiments);
       return {
         icon: panelCommandOf(command)?.icon ?? null,
         label,
@@ -1634,10 +1668,12 @@ function revealChecked(band: HTMLElement): void {
  */
 function PaletteFilters({
   filters,
+  labels,
   filter,
   onFilter,
 }: {
   filters: readonly PaletteFilter[];
+  labels: Record<PaletteFilter, string>;
   filter: PaletteFilter;
   onFilter: (filter: PaletteFilter) => void;
 }): React.JSX.Element {
@@ -1649,7 +1685,7 @@ function PaletteFilters({
     <div ref={band}>
       <ChoiceBar
         label="Filter"
-        items={filters.map((each) => ({ value: each, label: FILTER_LABEL[each] }))}
+        items={filters.map((each) => ({ value: each, label: labels[each] }))}
         value={filter}
         onChange={onFilter}
         look={CHOICE_BAR_LOOK.FILL}
@@ -1753,6 +1789,7 @@ export function CommandPalette({
   const [open, setOpen] = useState(false);
   const experiments = useExperimentChoices();
   const filters = filtersOn(experiments);
+  const labels = filterLabels(experiments);
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   const [query, setQuery] = useState("");
@@ -2044,7 +2081,7 @@ export function CommandPalette({
     [PALETTE_FILTER.COMMANDS]: () => [
       [
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
-        ...actionRows(OPEN_THING_COMMANDS, runCommand),
+        ...actionRows(OPEN_THING_COMMANDS, runCommand, experiments),
         ...readMarkRows(tasks, reads, choose),
         ...agentReadMarkRows(listedTasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
@@ -2052,10 +2089,10 @@ export function CommandPalette({
         ...taskCommandRows(tasks, reads, renameOffer, choose),
         ...agentArchiveRows(openAgent, askArchive, choose),
         ...panelTabRows(tasks, onTasks),
-        ...actionRows(OPEN_THING_SHOW_COMMANDS, runCommand),
-        ...actionRows(OPEN_THING_LAST_COMMANDS, runCommand),
-        ...actionRows(GO_TO_COMMANDS, runCommand),
-        ...actionRows(WINDOW_COMMANDS, runCommand),
+        ...actionRows(OPEN_THING_SHOW_COMMANDS, runCommand, experiments),
+        ...actionRows(OPEN_THING_LAST_COMMANDS, runCommand, experiments),
+        ...actionRows(GO_TO_COMMANDS, runCommand, experiments),
+        ...actionRows(WINDOW_COMMANDS, runCommand, experiments),
       ].map((row) => ({ ...row, loose: true })),
     ],
     [PALETTE_FILTER.SETTINGS]: () => [
@@ -2082,7 +2119,10 @@ export function CommandPalette({
   const noticeOf = {
     [PALETTE_FILTER.TASKS]: () => tasksNotice(tasks),
     [PALETTE_FILTER.THIS_TASK]: () => undefined,
-    [PALETTE_FILTER.INBOX]: () => (inboxAsked ? inboxNotice(inboxSearch) : undefined),
+    [PALETTE_FILTER.INBOX]: () =>
+      inboxAsked
+        ? inboxNotice(inboxSearch, experimentOn(experiments, EXPERIMENT.CHANNELS))
+        : undefined,
     [PALETTE_FILTER.CHANNELS]: () => undefined,
     [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
     [PALETTE_FILTER.FILES]: () =>
@@ -2129,7 +2169,7 @@ export function CommandPalette({
         : []),
       ...sections.map((section) => ({
         id: section.kind,
-        label: FILTER_LABEL[section.kind],
+        label: labels[section.kind],
         items: items(section.rows),
         note: noteOf(section),
       })),
@@ -2151,7 +2191,7 @@ export function CommandPalette({
         open={open}
         onOpenChange={setOpen}
         label="Command palette"
-        placeholder={filterPlaceholder(filter)}
+        placeholder={filterPlaceholder(filter, labels)}
         groups={stood.current}
         filter={COMMAND_FILTER.NONE}
         query={query}
@@ -2160,7 +2200,14 @@ export function CommandPalette({
         onSelectedChange={setSelected}
         // Note that a listing cut short is said where nothing matches too, since what was sought may lie past the cut.
         empty={cut ? `${NOTHING_MATCHES}. ${TRUNCATED_LINE}` : NOTHING_MATCHES}
-        band={<PaletteFilters filters={filters} filter={filter} onFilter={changeFilter} />}
+        band={
+          <PaletteFilters
+            filters={filters}
+            labels={labels}
+            filter={filter}
+            onFilter={changeFilter}
+          />
+        }
         foot={<PaletteFooter typed={query !== ""} runs={runs} />}
         onKeyDown={keyDown}
         inputRef={keystrokes}

@@ -581,17 +581,20 @@ function usePlaceCommands(
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever task its item is
- * from; the Automations page in the listed workspace; the task on screen in its own workspace, or alone while that is not
+ * from, which is Channels while that experiment shows channels in its place; the Automations page in the listed workspace; the task on screen in its own workspace, or alone while that is not
  * read; else the listed workspace.
  */
 function titleSubject(
   tab: PanelTab,
   tasks: TasksControl,
   shownTask: Task | undefined,
+  channelsOn: boolean,
 ): Parameters<typeof useWindowTitle>[0] {
   const { signedIn } = tasks;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
-  if (tasks.inboxView.open) return { signedIn, subject: "Inbox", workspace: tasks.workspace };
+  if (tasks.inboxView.open) {
+    return { signedIn, subject: channelsOn ? "Channels" : "Inbox", workspace: tasks.workspace };
+  }
   if (tasks.agentView.agentId !== undefined) {
     return { signedIn, subject: "Agent", workspace: tasks.workspace };
   }
@@ -717,7 +720,7 @@ export function DesktopShell({
   // Note that with Channels on the sidebar lists channels and the Inbox's page is a channel's stream.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const channelPlace = useChannelPlace();
-  useWindowTitle(titleSubject(tab, tasks, shownTask));
+  useWindowTitle(titleSubject(tab, tasks, shownTask, channelsOn));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = useTaskLooks(shownTask, tasks.me);
   // An agent with no plan is looked at as its page is on screen, as the plan is.

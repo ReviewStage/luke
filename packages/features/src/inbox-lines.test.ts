@@ -21,22 +21,26 @@ const ITEM = { key: "acting-for.v2", title: 'Ship "Billing agent for Dean"?' };
 test("a member's close reads back to the developer as the item's title and that it was closed without an answer, without its key", () => {
   assert.equal(
     inboxLineWords(inboxClosedMessage(ITEM)),
-    'Inbox closed on "Ship "Billing agent for Dean"?": Closed without an answer.',
+    'Thread closed on "Ship "Billing agent for Dean"?": Closed without an answer.',
   );
 });
 
-test("an inbox answer and a thread message read back without the item's key, their title and words kept, and any other line as it is", () => {
+test("an answer and a thread message read back without the item's key, their title and words kept, one written as the Inbox's led as a thread's, and any other line as it is", () => {
   const answer = inboxAnswerMessage(ITEM, {
     reply: INBOX_REPLY.DECLINED,
     note: "Too much for now.",
   });
   assert.equal(
     inboxLineWords(answer),
-    'Inbox answer on "Ship "Billing agent for Dean"?": Declined.\n\nToo much for now.',
+    'Thread answer on "Ship "Billing agent for Dean"?": Declined.\n\nToo much for now.',
   );
   assert.equal(
     inboxLineWords(inboxThreadMessage(ITEM, "Which PRs first?")),
-    'Inbox message on "Ship "Billing agent for Dean"?":\n\nWhich PRs first?',
+    'Thread message on "Ship "Billing agent for Dean"?":\n\nWhich PRs first?',
+  );
+  assert.equal(
+    inboxLineWords('Inbox answer on "Ship it?" (key ship.v1): Approved.'),
+    'Thread answer on "Ship it?": Approved.',
   );
   const typed = 'I wrote (key notes) on "this" myself.';
   assert.equal(inboxLineWords(typed), typed);
@@ -46,12 +50,12 @@ test("an answer to a to-do tells the agent which steps were ticked, and steps ti
   const todo = { steps: ["Open **Settings**.", "Add the key.", "Redeploy."], ticked: [0, 2] };
   assert.equal(
     inboxAnswerMessage(ITEM, { reply: INBOX_REPLY.ANSWERED }, todo),
-    'Inbox answer on "Ship "Billing agent for Dean"?" (key acting-for.v2): Ticked 2 of 3 steps.' +
+    'Thread answer on "Ship "Billing agent for Dean"?" (key acting-for.v2): Ticked 2 of 3 steps.' +
       "\n\n- [x] Open **Settings**.\n- [ ] Add the key.\n- [x] Redeploy.",
   );
   assert.equal(
     inboxAnswerMessage(ITEM, { reply: INBOX_REPLY.NOT_DONE, note: "No access." }, todo),
-    'Inbox answer on "Ship "Billing agent for Dean"?" (key acting-for.v2): Not done.' +
+    'Thread answer on "Ship "Billing agent for Dean"?" (key acting-for.v2): Not done.' +
       "\n\n- [x] Open **Settings**.\n- [ ] Add the key.\n- [x] Redeploy.\n\nNo access.",
   );
 });

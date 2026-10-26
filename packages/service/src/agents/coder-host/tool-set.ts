@@ -160,7 +160,7 @@ export type CallTool =
  */
 const OFF_CALL_REASON = {
   [CODER_TOOL.QUEUE_QUESTION]:
-    "No call is live, so no one hears a queued question: post it to the developer's inbox instead.",
+    "No call is live, so no one hears a queued question: post it to the developer in a thread instead.",
   [CODER_TOOL.WITHDRAW_QUESTION]: "No call is live, so no question waits on one.",
   [CODER_TOOL.END_CALL]: "No call is live to end.",
 } as const satisfies Record<CallTool, string>;

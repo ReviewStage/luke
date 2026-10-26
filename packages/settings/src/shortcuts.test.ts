@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "vitest";
 import { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
+import { EXPERIMENT } from "./experiments.js";
 import {
   APP_COMMAND,
   APP_SHORTCUT_GROUPS,
@@ -24,6 +25,7 @@ import {
   shortcutAccelerator,
   shortcutAria,
   shortcutGlyphs,
+  shortcutLabel,
   shortcutMatches,
   shortcutShown,
   shownShortcutGroups,
@@ -123,6 +125,33 @@ test("no Chapters key is a Files changed key, whose list hears a press first and
     assert.equal(chaptersKeyFor(press), key, `${key} answers its own chord`);
     assert.equal(filesChangedKeyFor(press), undefined, `${key} is left to Chapters`);
   }
+});
+
+test("with Channels on, the Inbox's commands are named for the channels and threads they reach, and with it off for the Inbox", () => {
+  const inbox = [
+    APP_COMMAND.INBOX,
+    APP_COMMAND.INBOX_LIST,
+    APP_COMMAND.PREVIOUS_INBOX_ITEM,
+    APP_COMMAND.NEXT_INBOX_ITEM,
+    APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
+  ] as const;
+  const named = (on: boolean) =>
+    inbox.map((command) => shortcutLabel(command, { [EXPERIMENT.CHANNELS]: on }));
+
+  assert.deepEqual(named(true), [
+    "Channels",
+    "Close thread",
+    "Previous thread",
+    "Next thread",
+    "Mark thread as read or unread",
+  ]);
+  assert.deepEqual(named(false), [
+    "Inbox",
+    "Back to inbox list",
+    "Previous inbox item",
+    "Next inbox item",
+    "Mark inbox item as read or unread",
+  ]);
 });
 
 test("⇧⌘A, Archive's chord, runs Mark done, which still answers to the id the menu bar sent for Archive", () => {
