@@ -13,6 +13,10 @@
  * (`../schemas/device-agent.ts`). The secrets are opaque here: the service
  * seals them before the queue and opens them after the claim.
  *
+ * A line of a kind that needs a capability (`DEVICE_AGENT_LINE_CAPABILITY`)
+ * is queued only where the agent's Mac registered it, since a follower that
+ * predates the kind fails its whole held read on one.
+ *
  * Every line queued for one agent is queued under that agent's runner
  * lease (`./coding-agent-runner-lease.ts`), as every write to a cloud
  * runner is. That is what keeps an agent's lines committed in the order of
@@ -22,8 +26,10 @@
 
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import {
+  DEVICE_AGENT_LINE_CAPABILITY,
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
+  DEVICE_CAPABILITY,
   type DeviceAgentAnswer,
   type DeviceAgentLineKind,
   type DeviceAgentObject,
@@ -31,7 +37,7 @@ import {
   deviceAgentAnswerSchema,
   deviceAgentObjectSchema,
 } from "@luke/features/device-agent-wire";
-import { and, asc, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, arrayContains, asc, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -182,7 +188,9 @@ const findPin = SqlSchema.findOneOption({
       db
         .select(PIN_COLUMNS)
         .from(codingAgent)
-        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE))),
+        .where(
+          and(eq(codingAgent.id, agentId), eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE)),
+        ),
     ),
 });
 
@@ -250,10 +258,12 @@ const insertLine = SqlSchema.findAll({
     kind: LineKindSchema,
     payload: deviceAgentObjectSchema,
     sealedSecrets: Schema.NullOr(Schema.String),
+    /** The capability the Mac must have registered for the line to be queued, none for a kind every Mac takes. */
+    capability: Schema.UndefinedOr(Schema.Literals(Object.values(DEVICE_CAPABILITY))),
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String, seq: Schema.Number }),
-  execute: ({ id, userId, agentId, kind, payload, sealedSecrets, now }) =>
+  execute: ({ id, userId, agentId, kind, payload, sealedSecrets, capability, now }) =>
     Database.use((db) =>
       db
         .insert(deviceAgentLine)
@@ -271,7 +281,14 @@ const insertLine = SqlSchema.findAll({
             })
             .from(codingAgent)
             .innerJoin(device, eq(device.id, codingAgent.deviceId))
-            .where(pinnedAgent(userId, agentId)),
+            .where(
+              capability === undefined
+                ? pinnedAgent(userId, agentId)
+                : and(
+                    pinnedAgent(userId, agentId),
+                    arrayContains(device.capabilities, [capability]),
+                  ),
+            ),
         )
         .returning({ id: deviceAgentLine.id, seq: deviceAgentLine.seq }),
     ),
@@ -556,7 +573,8 @@ const deleteExpiredRequests = SqlSchema.void({
  * the next place in the order every line is queued in, with the sealed
  * secrets a launch line carries, its caller holding the agent's runner
  * lease; its id and place, or none where the account holds no such agent
- * running on a Mac of its own.
+ * running on a Mac of its own, or the Mac never registered the capability
+ * the line's kind needs.
  */
 export function queueDeviceAgentLine(
   userId: string,
@@ -578,6 +596,7 @@ export function queueDeviceAgentLine(
         kind: line.kind,
         payload: line.payload,
         sealedSecrets: line.sealedSecrets ?? null,
+        capability: DEVICE_AGENT_LINE_CAPABILITY[line.kind],
         now,
       }),
       (rows) => Option.fromNullishOr(rows[0]),

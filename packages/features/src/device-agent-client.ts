@@ -8,6 +8,7 @@ import {
   type DeviceAgentLine,
   type DeviceAgentRequest,
   type DeviceArch,
+  type DeviceCapability,
   type DevicePlatform,
   type DeviceSignedIn,
 } from "./device-agent-wire.js";
@@ -37,7 +38,7 @@ export interface DeviceAgentClaimedLine {
   readonly secrets?: DeviceAgentLaunchSecrets | undefined;
 }
 
-/** What a Mac registers as: its name, its platform and architecture, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, and which harnesses it is signed in to. */
+/** What a Mac registers as: its name, its platform and architecture, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, which harnesses it is signed in to, and the lines beyond the first it takes. */
 export interface DeviceAgentDevice {
   readonly name: string;
   readonly platform: DevicePlatform;
@@ -46,6 +47,7 @@ export interface DeviceAgentDevice {
   readonly claudeExecutable: string;
   readonly codexExecutable?: string | undefined;
   readonly signedIn: DeviceSignedIn;
+  readonly capabilities: readonly DeviceCapability[];
 }
 
 export interface HostedDeviceAgentClientOptions {
@@ -70,12 +72,14 @@ export class HostedDeviceAgentClient {
     deviceId: string,
     device: DeviceAgentDevice,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    const { codexExecutable, ...rest } = device;
-    // Note that a Mac with no Codex checked names none, which the service reads as no Codex.
+    const { codexExecutable, capabilities, ...rest } = device;
+    // Note that a Mac with no Codex checked names none, which the service reads as no Codex,
+    // and one with no capability names no list, which a service from before the field refuses.
     const input = {
       deviceId,
       ...rest,
       ...(codexExecutable === undefined ? undefined : { codexExecutable }),
+      ...(capabilities.length === 0 ? undefined : { capabilities }),
     };
     return askHosted(this.#hosted.deviceAgents.register, input).pipe(
       Effect.as(true),

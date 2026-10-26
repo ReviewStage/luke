@@ -26,6 +26,7 @@ import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@luke/features/codi
 import { Effect } from "effect";
 import type { StartServices } from "../agents/coder-host/start.js";
 import { codingAgentStatusOf } from "../agents/coder-host/status.js";
+import { discardedOrLogged } from "../agents/device-discard.js";
 import { type EveForAccount, executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
 
 /**
@@ -154,7 +155,13 @@ const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
           agent.codingAgentId,
           agent.conversationSeq,
         ));
-      if (archived || agent.archivedAt !== null || ENDED_UNWELL.has(status)) {
+      // A local agent archived is let go of on its device, as an archive by hand lets it go, and
+      // its run stays unsettled until the discard is queued, so a later sweep asks again.
+      const discarded =
+        archived || agent.archivedAt !== null
+          ? yield* discardedOrLogged({ id: agent.codingAgentId, userId: agent.userId })
+          : true;
+      if (discarded && (archived || agent.archivedAt !== null || ENDED_UNWELL.has(status))) {
         yield* settleRunArchive(agent.runId);
       }
       return archived;

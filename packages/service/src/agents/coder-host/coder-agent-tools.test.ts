@@ -19,6 +19,8 @@ import {
   recordCodingAgentPublished,
 } from "@luke/database/models/coding-agent-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import { deviceAgentLinesWaiting } from "@luke/database/models/device-agent-store";
+import { registerDevice } from "@luke/database/models/device-store";
 import { linkIntegrationInstallation } from "@luke/database/models/integration-installation-store";
 import { listMemories } from "@luke/database/models/memory-store";
 import { writePage } from "@luke/database/models/plan-pages";
@@ -43,6 +45,7 @@ import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import {
+  DEVICE_LAYOUT,
   joinWorkspace,
   leaveWorkspace,
   linearIssueLink,
@@ -60,11 +63,13 @@ import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_FAILURE,
   CODING_AGENT_KIND,
+  CODING_AGENT_MACHINE,
   CODING_AGENT_PAYER,
   CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { DEVICE_AGENT_LINE_KIND, DEVICE_CAPABILITY } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ASK } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -2025,6 +2030,38 @@ test("update_agent archives a teammate's idle agent on another task for the call
   assert.deepEqual([(await row()).archivedAt, (await row()).archivedBy], [null, null]);
   assert.equal((await row()).title, "Billing");
   assert.equal(archivedAs(await archive({ archived: false }, "call-4")), false);
+});
+
+test("update_agent's archive of a teammate's agent on its starter's device queues that device a discard line", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const { teammates } = agents;
+  const deviceId = randomUUID();
+  await database.run(
+    Effect.gen(function* () {
+      yield* registerDevice(teammates.userId, {
+        id: deviceId,
+        name: "Studio",
+        ...DEVICE_LAYOUT,
+        capabilities: [DEVICE_CAPABILITY.DISCARD],
+      });
+      const db = yield* Database;
+      yield* db
+        .update(codingAgent)
+        .set({ machine: CODING_AGENT_MACHINE.DEVICE, deviceId })
+        .where(eq(codingAgent.id, teammates.id));
+    }),
+  );
+  await turnOn(teammates, true);
+
+  await call(CODER_TOOL.UPDATE_AGENT, { agentId: teammates.id, archived: true });
+
+  const waiting = await database.run(deviceAgentLinesWaiting(teammates.userId, deviceId));
+  assert.deepEqual(
+    waiting.map((line) => [line.agentId, line.kind]),
+    [[teammates.id, DEVICE_AGENT_LINE_KIND.DISCARD]],
+  );
 });
 
 test("update_agent archives no agent still working, nor the caller itself, an agent of another workspace its starter is also in, or a stranger's, and an archive refused writes nothing else asked beside it", async () => {

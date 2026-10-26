@@ -38,7 +38,11 @@ import { Result } from "effect";
 import { defineMcpClientConnection, type McpClientConnectionDefinition } from "eve/connections";
 import type { SessionAuth } from "eve/context";
 import type { IntegrationTokenAnswer } from "./integration-token.js";
-import { INTEGRATION, type IntegrationDefinition, integrationInstructions } from "./integrations.js";
+import {
+  INTEGRATION,
+  type IntegrationDefinition,
+  integrationInstructions,
+} from "./integrations.js";
 
 /** How an agent's edge reads one account's token for one session: its own admission, run where the edge runs effects. */
 export type IntegrationTokenRead = (

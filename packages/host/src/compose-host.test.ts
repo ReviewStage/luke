@@ -149,6 +149,7 @@ describe("the host's platform concerns", () => {
               deviceName: "Fixture Mac",
               devicePlatform: DEVICE_PLATFORM.DARWIN,
               deviceArch: DEVICE_ARCH.ARM64,
+              deviceCapabilities: [],
               worktreeScript: () => "exit 1",
             }),
           ),
