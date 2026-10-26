@@ -153,9 +153,10 @@ export type CodingAgentAuthor = (typeof CODING_AGENT_AUTHOR)[keyof typeof CODING
 /**
  * Who pays for a coding agent's model calls, recorded as the agent starts
  * and never moved after: the starter's Claude plan or ChatGPT plan, which
- * run the provider's own harness, the starter's own API key, or Luke's key.
- * A plan that runs out pauses the agent rather than falling through to
- * another payer.
+ * run the provider's own harness, the starter's own API key, or Luke's key;
+ * or, for a local agent, its Mac's own login to the harness. A plan that
+ * runs out pauses the agent rather than falling through to another payer; a
+ * Mac signed out since falls back to the account's saved credential.
  */
 export const CODING_AGENT_PAYER = {
   // Note that the stored spelling says "plan", the subscription's own word, not a task's document.
@@ -163,6 +164,8 @@ export const CODING_AGENT_PAYER = {
   CHATGPT_SUBSCRIPTION: "chatgpt_plan",
   API_KEY: "api_key",
   LUKE: "luke",
+  /** A local agent's own Mac, by its harness's login there (`macSignedInSchema`), with the account's saved credential as the fallback. */
+  MAC_SIGN_IN: "mac_sign_in",
 } as const;
 
 export type CodingAgentPayer = (typeof CODING_AGENT_PAYER)[keyof typeof CODING_AGENT_PAYER];

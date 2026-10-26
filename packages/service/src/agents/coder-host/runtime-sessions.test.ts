@@ -1249,7 +1249,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start on a Mac runs only for an account with the experiment on and the Mac it names among its own that beat lately, pinned to that Mac on Claude Code; Codex, the experiment off, or that Mac not there is refused by name and leaves no agent",
+      "a Start on a Mac runs only for an account with the experiment on and the Mac it names among its own that beat lately, pinned to that Mac on Claude Code, paid for by that Mac's own Claude Code login where it has one, a plan in Luke or none; Codex, the experiment off, or that Mac not there is refused by name and leaves no agent",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1257,6 +1257,25 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               name: "on, a Mac there, Claude",
               on: true,
               mac: true,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: undefined,
+            },
+            {
+              name: "no plan saved in Luke, the Mac signed in to Claude Code",
+              on: true,
+              mac: true,
+              plan: false,
+              signedIn: true,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: undefined,
+            },
+            {
+              name: "another Mac of the account signed in to Claude Code, the named one not",
+              on: true,
+              mac: true,
+              otherSignedIn: true,
               chatGpt: "none",
               model: "anthropic/claude-opus-5.5",
               refused: undefined,
@@ -1296,7 +1315,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
           ] as const;
           for (const each of cases) {
-            const { owner, workspaceId } = yield* openStarter(true, each.chatGpt);
+            const plan = !("plan" in each) || each.plan;
+            const signedIn = "signedIn" in each && each.signedIn;
+            const { owner, workspaceId } = yield* openStarter(plan, each.chatGpt);
             if (each.on) {
               yield* writeAccountPreferences(owner, {
                 experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
@@ -1308,6 +1329,16 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 id: deviceId,
                 name: "Studio",
                 ...MAC_DEVICE_LAYOUT,
+                signedIn: { claudeCode: signedIn },
+              });
+            }
+            if ("otherSignedIn" in each) {
+              // Note that the other Mac registers last, so it is the account's latest to beat.
+              yield* registerMacDevice(owner, {
+                id: randomUUID(),
+                name: "Laptop",
+                ...MAC_DEVICE_LAYOUT,
+                signedIn: { claudeCode: true },
               });
             }
             const { eve, native } = runtimes();
@@ -1340,6 +1371,17 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             assert.deepEqual(
               Option.map(made, (agent) => [agent.machine, agent.deviceId]),
               Option.some([CODING_AGENT_MACHINE.MAC, deviceId]),
+              each.name,
+            );
+            const routing = Option.getOrThrow(
+              yield* readCodingAgentRouting(owner, started.success.agent.id),
+            );
+            assert.deepEqual(
+              [routing.runtime, routing.payer],
+              [
+                "claude_code",
+                signedIn ? CODING_AGENT_PAYER.MAC_SIGN_IN : CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+              ],
               each.name,
             );
           }

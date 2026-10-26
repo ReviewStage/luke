@@ -13,6 +13,7 @@ import { Schema as EffectSchema } from "effect";
 import {
   MAC_AGENT_BOUNDS,
   macAgentAnswerRequestSchema,
+  macAgentBeatRequestSchema,
   macAgentClaimRequestSchema,
   macAgentDeviceRequestSchema,
   macAgentDoneAnswerSchema,
@@ -41,7 +42,7 @@ export const macAgentsContract = {
   beat: hostedProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.MAC_AGENT_PRESENCE }))
-    .input(exactInput(macAgentDeviceRequestSchema))
+    .input(exactInput(macAgentBeatRequestSchema))
     .output(EffectSchema.flip(macAgentDoneAnswerSchema)),
   lines: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.MAC_AGENT_LINES }))

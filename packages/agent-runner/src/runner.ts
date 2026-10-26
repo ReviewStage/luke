@@ -27,6 +27,8 @@
  */
 
 import { randomUUID, type UUID } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type {
   HookCallback,
   McpSdkServerConfigWithInstance,
@@ -54,9 +56,13 @@ import { ClaudeCode, type ClaudeCodeSession, type ClaudeCodeShape } from "./clau
 import { runCodex } from "./codex.js";
 import { type EventSink, makeEventSink } from "./events.js";
 import {
+  gitCommonDir,
   installedSkillsPath,
   type LaunchContext,
   type LaunchOutcome,
+  MAC_CLONES,
+  MAC_TOOLCHAIN_CACHES,
+  ON_MAC,
   RunnerFailed,
   type RunnerSelf,
 } from "./launch.js";
@@ -100,6 +106,20 @@ const DENIED_VARIABLES = [
   "ANTHROPIC_AUTH_TOKEN",
   "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
 ] as const;
+
+/**
+ * Where Claude Code's sandbox lets a command the agent runs on a Mac write,
+ * beside the worktree and the temp folder it keeps writable: the toolchain
+ * caches, as home-relative paths the sandbox expands, and the shared clone's
+ * Git folder the worktree commits to.
+ */
+function macWritable(cwd: string): readonly string[] {
+  const common = gitCommonDir(cwd, join(homedir(), MAC_CLONES));
+  return [
+    ...MAC_TOOLCHAIN_CACHES.map((folder) => `~/${folder}`),
+    ...(common === undefined ? [] : [common]),
+  ];
+}
 
 const CLAUDE_EFFORTS: ReadonlySet<string> = new Set(Object.values(EFFORT));
 
@@ -186,9 +206,13 @@ function queryOptions(
       // Note that the sandbox's VM masks /proc/kcore and /proc/keys, so the
       // kernel refuses bubblewrap a fresh /proc and every command failed; the
       // host /proc is bound instead, where another process's environ, the
-      // CLI's and its token included, is still refused, as under Codex.
-      enableWeakerNestedSandbox: true,
+      // CLI's and its token included, is still refused, as under Codex. A Mac's
+      // Seatbelt has no /proc to bind.
+      ...(ON_MAC ? {} : { enableWeakerNestedSandbox: true }),
+      // Note that the list is no strict allowlist, so under `bypassPermissions` a host past it is
+      // still reached, which leaves a Mac's network open as the developer's own shell has it.
       network: { allowedDomains: [...config.allowedDomains] },
+      ...(ON_MAC ? { filesystem: { allowWrite: [...macWritable(config.cwd)] } } : {}),
       credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
     },
     hooks: { Stop: [{ hooks: [onStop] }] },

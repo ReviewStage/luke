@@ -29,10 +29,11 @@ import {
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
 import { type CodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
+import { macDeviceLayout } from "@luke/database/models/mac-device-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -66,6 +67,9 @@ const ALLOWED_DOMAINS = [
   "pypi.org",
   "files.pythonhosted.org",
 ] as const;
+
+/** A launch on its Mac's own Claude Code login: no credential of the account's in its environment. */
+const MAC_LOGIN: { readonly env: Readonly<Record<string, string>> } = { env: {} };
 
 /** The effort the CLI takes for the agent's own, where it names one of the SDK's. */
 function effortOf(effort: string): Effort | undefined {
@@ -108,11 +112,51 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
     return row;
   });
 
-  /** Whether the agent was started on its starter's own Anthropic API key rather than the plan, as recorded as it started. */
-  const onApiKey = (agent: CodingAgent) =>
+  /** Who pays for the agent, as recorded as it started; none for an agent from before payers were. */
+  const payerOf = (agent: CodingAgent) =>
     Effect.map(readCodingAgentRouting(userId, agent.id), (routing) =>
-      Option.exists(routing, (row) => row.payer === CODING_AGENT_PAYER.API_KEY),
+      Option.getOrUndefined(Option.flatMapNullishOr(routing, (row) => row.payer)),
     );
+
+  /**
+   * Whether the agent runs on its starter's Mac and that Mac last said it is
+   * signed in to Claude Code itself (`mac_device.signed_in`), so its launch
+   * carries no credential of the account's and the CLI there falls back to
+   * its own Keychain login (https://code.claude.com/docs/en/authentication,
+   * "Authentication precedence", 7), its config folder left as the
+   * developer's, which that login is kept under.
+   */
+  const onMacLogin = (agent: CodingAgent) =>
+    agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null
+      ? Effect.succeed(false)
+      : Effect.map(macDeviceLayout(userId, agent.deviceId), (device) =>
+          Option.exists(device, (standing) => standing.signedIn.claudeCode === true),
+        );
+
+  /**
+   * Where the account's saved credential pays for the agent: its own API key
+   * for an agent started on it; for one started on its Mac's login, signed
+   * out since, the plan where Settings lets it pay for agents, the account's
+   * key otherwise, and the plan's refusal where it keeps neither; the plan
+   * for every other.
+   */
+  const savedPayer = (agent: CodingAgent) =>
+    Effect.gen(function* () {
+      const payer = yield* payerOf(agent);
+      if (payer === CODING_AGENT_PAYER.API_KEY) return CODING_AGENT_PAYER.API_KEY;
+      if (payer !== CODING_AGENT_PAYER.MAC_SIGN_IN) return CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
+      const anthropic = (rows: readonly { readonly provider: string }[]) =>
+        rows.some((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
+      // Note that the plan pays only where Settings lets it pay for agents, as Start decides (`providerRuntimeChoice`).
+      const plans = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN);
+      if (anthropic(plans.filter((row) => row.forAgents))) {
+        return CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
+      }
+      // Note that an account that saved neither is refused in the plan's words, as signed out, which its Mac now is.
+      return anthropic(yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY))
+        ? CODING_AGENT_PAYER.API_KEY
+        : CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
+    });
 
   /** The deployment's ring, which every sealed credential opens under. */
   const keyRing = Effect.gen(function* () {
@@ -219,9 +263,11 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
   const ahead = (agent: CodingAgent) => {
     const effort = effortOf(agent.effort);
     const model = providerModelOf(agent.model);
-    const asked = Effect.flatMap(onApiKey(agent), (keyed) =>
-      keyed ? Effect.void : Effect.asVoid(standingPlan),
-    );
+    const asked = Effect.gen(function* () {
+      if (yield* onMacLogin(agent)) return;
+      if ((yield* savedPayer(agent)) === CODING_AGENT_PAYER.API_KEY) return;
+      yield* standingPlan;
+    });
     return Effect.as(asked, {
       lines: [
         {
@@ -238,7 +284,12 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
     runtime: SERVER_AGENT_HARNESS.CLAUDE_CODE,
     sessionPrefix: NATIVE_SESSION_PREFIX[CONVERSATION_RUNTIME.CLAUDE_CODE],
     launch: (agent) =>
-      Effect.flatMap(onApiKey(agent), (keyed) => (keyed ? apiKeyCredential : planCredential)),
+      Effect.gen(function* () {
+        if (yield* onMacLogin(agent)) return MAC_LOGIN;
+        return yield* (yield* savedPayer(agent)) === CODING_AGENT_PAYER.API_KEY
+          ? apiKeyCredential
+          : planCredential;
+      }),
     config,
     // Note that Claude Code reads a checkout's skills from `.claude/skills` alone.
     skillRoots: [SKILL_ROOT.CLAUDE],

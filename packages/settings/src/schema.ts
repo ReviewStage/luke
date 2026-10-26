@@ -129,6 +129,11 @@ const videoCallsDrawn = (view: SettingsVisibility): boolean =>
 const desktopAppDrawn = (view: SettingsVisibility): boolean =>
   view.capabilities.includes(HOST_CAPABILITY.DESKTOP_APP);
 
+/** A host that runs local agents, with the account's Local agents experiment on. */
+const localAgentsDrawn = (view: SettingsVisibility): boolean =>
+  view.capabilities.includes(HOST_CAPABILITY.LOCAL_AGENTS) &&
+  experimentOn(view.settings.experiments, EXPERIMENT.LOCAL_AGENTS);
+
 /** Signed in: a choice the account carries is drawn only while there is an account to carry it. */
 const accountDrawn = (view: SettingsVisibility): boolean => view.accountDrawn;
 
@@ -198,6 +203,26 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.THIS_MAC,
     order: 2,
     // Nothing to run per write: the host reads the setting before each read for commands and as each command is about to run.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  /*
+   * Whether this Mac runs the account's local agents (`@luke/host`'s
+   * `compose-local-agents.ts`): off by default, and drawn only while the
+   * Local agents experiment is on, since the host follows nothing without
+   * it. Read on every beat, so switching it off stops the runners at once.
+   */
+  localAgents: toggleSetting({
+    field: "localAgents",
+    id: APP_SETTING_ID.LOCAL_AGENTS,
+    label: "Run agents on this Mac",
+    detail:
+      "Coding agents you start on This Mac run here, in a worktree under ~/.luke, with your " +
+      "own tools and Git login. Their transcript and the files their tools read still reach Luke.",
+    default: false,
+    page: SETTINGS_PAGE.THIS_MAC,
+    order: 3,
+    visible: localAgentsDrawn,
+    // Nothing to run per write: the host reads the setting on every beat of its follow.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   voice: choiceSetting({

@@ -41,6 +41,7 @@ import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_KIND,
+  CODING_AGENT_MACHINE,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
   type CodingAgentKind,
@@ -107,6 +108,7 @@ import {
   agentMachineChoice,
   agentRuntimeChoice,
   LocalAgentRefused,
+  localAgentRuntimeChoice,
   markedUnconnected,
 } from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
@@ -956,14 +958,27 @@ export const startCredentialStands = (userId: string, model: string) =>
 /**
  * The runtime a new agent's conversation is recorded on, with its payer,
  * by the account's routing (`agentRuntimeChoice`): the credential Settings
- * chose, a blank Start, one a Call opens a call into (`call`), a continue
+ * chose, or for a local agent its Mac's own login where it has one
+ * (`localAgentRuntimeChoice`), a blank Start, one a Call opens a call into (`call`), a continue
  * and a fork alike, since a call reaches a native harness's agent as it
  * reaches eve's (`voice/deployment-exchange.ts`). Where no credential of
  * the account's pays, the Start is refused by name, the provider beside
  * it, and nothing is written.
  */
-function startRuntimeOf(userId: string, model: string, keys: AccountKeyRows) {
-  return Effect.catch(agentRuntimeChoice(userId, model, keys), (failure) =>
+function startRuntimeOf(
+  userId: string,
+  model: string,
+  keys: AccountKeyRows,
+  asked: {
+    readonly machine?: CodingAgentMachine | undefined;
+    readonly deviceId?: string | undefined;
+  },
+) {
+  const chosen =
+    asked.machine === CODING_AGENT_MACHINE.MAC
+      ? localAgentRuntimeChoice(userId, model, asked.deviceId, keys)
+      : agentRuntimeChoice(userId, model, keys);
+  return Effect.catch(chosen, (failure) =>
     failure instanceof AgentCredentialMissing
       ? Effect.fail(credentialMissing(failure.provider))
       : hostedStoreOrUnavailable(Effect.fail(failure)),
@@ -1133,7 +1148,10 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const continued = from !== undefined && from.told.messageId === undefined;
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   // The runtime and the payer are decided as the agent is made, by the starter's account and model, and never change.
-  const runtime = yield* startRuntimeOf(userId, choice.model, keys);
+  const runtime = yield* startRuntimeOf(userId, choice.model, keys, {
+    machine: ask.machine,
+    deviceId: ask.deviceId,
+  });
   const placed = yield* startMachineOf(
     userId,
     { machine: ask.machine, deviceId: ask.deviceId },

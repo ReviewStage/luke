@@ -19,7 +19,9 @@ import { wireUuidSchema } from "./service-wire.js";
  * update; it beats its presence while it runs local agents, which is what
  * offers This Mac at Start; it holds a read for its lines and one for its
  * requests, each answered as soon as one waits, claims each by its id, and
- * settles a line or answers a request. Claiming a launch line hands its
+ * settles a line or answers a request. Its register and its beats say which
+ * harnesses the Mac is signed in to itself (`macSignedInSchema`), which a
+ * local agent's launch prefers to the account's saved credential. Claiming a launch line hands its
  * secrets over once (`macAgentLaunchSecretsSchema`): the service opens them
  * from the row's seal and clears the row's copy in the same claim. Every
  * call answers nothing to an account with the `local-agents` experiment off.
@@ -231,19 +233,39 @@ export const macAgentCommandArgsSchema = EffectSchema.Struct({
   env: EffectSchema.optionalKey(EffectSchema.Record(EffectSchema.String, EffectSchema.String)),
 });
 
+/**
+ * Which harnesses the Mac is signed in to by itself, by the harness's own
+ * login on the Mac, never the credential: a local agent on a harness its Mac
+ * is signed in to launches on that login rather than the plan or key the
+ * account saved in Luke. A key absent is a harness the Mac did not check.
+ */
+export const macSignedInSchema = EffectSchema.Struct({
+  /** Claude Code's own login on the Mac, as `claude auth status` answers it for the CLI the Mac bundles. */
+  claudeCode: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+export type MacSignedIn = typeof macSignedInSchema.Type;
+
 /** The device a call names, by the id the desktop minted once. */
 const deviceField = { deviceId: wireUuidSchema };
 
-/** A register: the Mac's id, its name, its home folder, and the CLI it bundles, both absolute. */
+/** A register: the Mac's id, its name, its home folder, and the CLI it bundles, both absolute, and which harnesses it is signed in to. */
 export const macAgentRegisterRequestSchema = EffectSchema.Struct({
   ...deviceField,
   name: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(200)),
   home: macPath,
   claudeExecutable: macPath,
+  signedIn: EffectSchema.optionalKey(macSignedInSchema),
 });
 
-/** A beat, or a held read of lines or requests: the device alone. */
+/** A held read of lines or requests: the device alone. */
 export const macAgentDeviceRequestSchema = EffectSchema.Struct(deviceField);
+
+/** A beat: the device, and which harnesses it is signed in to now, where it checked. */
+export const macAgentBeatRequestSchema = EffectSchema.Struct({
+  ...deviceField,
+  signedIn: EffectSchema.optionalKey(macSignedInSchema),
+});
 
 /** One line or request claimed by its id. */
 export const macAgentClaimRequestSchema = EffectSchema.Struct({

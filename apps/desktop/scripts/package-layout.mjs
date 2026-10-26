@@ -16,7 +16,21 @@ export const NATIVE_HELPERS = [
     frameworks: ["CoreAudio", "IOKit"],
   },
   { source: "OutputVolume.swift", binary: "mac-output-volume", frameworks: ["CoreAudio"] },
+  // A local agent's runner started so it answers for its own privacy decisions, not Luke's.
+  { source: "AgentLauncher.swift", binary: "luke-agent-launcher", frameworks: [] },
 ];
+
+/**
+ * The local agents' runner bundle (`packages/agent-runner`), shipped in the
+ * app's resources (`src/main/services/local-agent-platform.ts`). The Node it
+ * runs on and the Claude Code CLI it drives are not shipped: the host fetches
+ * each pinned release the first time a Mac turns local agents on
+ * (`@luke/host`'s `localAgentTool`, `@luke/agent-runner/pins`).
+ */
+export const AGENT_RUNNER_RESOURCES = {
+  directory: "agent-runner",
+  bundle: "agent-runner.mjs",
+};
 
 /**
  * macOS 26's Liquid Glass, laid behind the panel window

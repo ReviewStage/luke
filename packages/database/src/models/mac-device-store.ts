@@ -7,6 +7,7 @@
  * desktop cannot take over a Mac by naming its id (`../schemas/mac-device.ts`).
  */
 
+import { type MacSignedIn, macSignedInSchema } from "@luke/features/mac-agent-wire";
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { DateTime, Effect, type Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -17,11 +18,12 @@ type MacDeviceEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 const DeviceKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
-/** One Mac as Start reads it: its id, its name, and when it last beat. */
+/** One Mac as Start reads it: its id, its name, when it last beat, and which harnesses it is signed in to. */
 const MacDeviceSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   lastSeenAt: Schema.Date,
+  signedIn: macSignedInSchema,
 });
 
 export type MacDevice = typeof MacDeviceSchema.Type;
@@ -29,24 +31,32 @@ export type MacDevice = typeof MacDeviceSchema.Type;
 /** Where a Mac keeps what its local agents need: its home folder and the CLI it bundles. */
 const DeviceLayoutSchema = Schema.Struct({ home: Schema.String, claudeExecutable: Schema.String });
 
+/** A Mac's layout and which harnesses it is signed in to, as a local agent's launch reads them. */
+const DeviceStandingSchema = Schema.Struct({
+  ...DeviceLayoutSchema.fields,
+  signedIn: macSignedInSchema,
+});
+
+export type MacDeviceStanding = typeof DeviceStandingSchema.Type;
+
 export type MacDeviceLayout = typeof DeviceLayoutSchema.Type;
 
 const upsertDevice = SqlSchema.findAll({
   Request: Schema.Struct({
     ...DeviceKeySchema.fields,
-    ...DeviceLayoutSchema.fields,
+    ...DeviceStandingSchema.fields,
     name: Schema.String,
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, id, name, home, claudeExecutable, now }) =>
+  execute: ({ userId, id, name, home, claudeExecutable, signedIn, now }) =>
     Database.use((db) =>
       db
         .insert(macDevice)
-        .values({ id, userId, name, home, claudeExecutable, lastSeenAt: now })
+        .values({ id, userId, name, home, claudeExecutable, signedIn, lastSeenAt: now })
         .onConflictDoUpdate({
           target: macDevice.id,
-          set: { name, home, claudeExecutable, lastSeenAt: now },
+          set: { name, home, claudeExecutable, signedIn, lastSeenAt: now },
           // Moved only where the account registering it is the one holding it.
           setWhere: eq(macDevice.userId, userId),
         })
@@ -55,13 +65,17 @@ const upsertDevice = SqlSchema.findAll({
 });
 
 const touchDevice = SqlSchema.findAll({
-  Request: Schema.Struct({ ...DeviceKeySchema.fields, now: Schema.Date }),
+  Request: Schema.Struct({
+    ...DeviceKeySchema.fields,
+    now: Schema.Date,
+    signedIn: Schema.UndefinedOr(macSignedInSchema),
+  }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, id, now }) =>
+  execute: ({ userId, id, now, signedIn }) =>
     Database.use((db) =>
       db
         .update(macDevice)
-        .set({ lastSeenAt: now })
+        .set(signedIn === undefined ? { lastSeenAt: now } : { lastSeenAt: now, signedIn })
         .where(and(eq(macDevice.id, id), eq(macDevice.userId, userId)))
         .returning({ id: macDevice.id }),
     ),
@@ -73,7 +87,12 @@ const findSeen = SqlSchema.findAll({
   execute: ({ userId, since }) =>
     Database.use((db) =>
       db
-        .select({ id: macDevice.id, name: macDevice.name, lastSeenAt: macDevice.lastSeenAt })
+        .select({
+          id: macDevice.id,
+          name: macDevice.name,
+          lastSeenAt: macDevice.lastSeenAt,
+          signedIn: macDevice.signedIn,
+        })
         .from(macDevice)
         .where(and(eq(macDevice.userId, userId), gte(macDevice.lastSeenAt, since)))
         .orderBy(desc(macDevice.lastSeenAt)),
@@ -86,7 +105,12 @@ const findNamed = SqlSchema.findAll({
   execute: ({ ids }) =>
     Database.use((db) =>
       db
-        .select({ id: macDevice.id, name: macDevice.name, lastSeenAt: macDevice.lastSeenAt })
+        .select({
+          id: macDevice.id,
+          name: macDevice.name,
+          lastSeenAt: macDevice.lastSeenAt,
+          signedIn: macDevice.signedIn,
+        })
         .from(macDevice)
         .where(inArray(macDevice.id, [...ids])),
     ),
@@ -94,11 +118,15 @@ const findNamed = SqlSchema.findAll({
 
 const findLayout = SqlSchema.findOneOption({
   Request: DeviceKeySchema,
-  Result: DeviceLayoutSchema,
+  Result: DeviceStandingSchema,
   execute: ({ userId, id }) =>
     Database.use((db) =>
       db
-        .select({ home: macDevice.home, claudeExecutable: macDevice.claudeExecutable })
+        .select({
+          home: macDevice.home,
+          claudeExecutable: macDevice.claudeExecutable,
+          signedIn: macDevice.signedIn,
+        })
         .from(macDevice)
         .where(and(eq(macDevice.id, id), eq(macDevice.userId, userId))),
     ),
@@ -111,25 +139,34 @@ const findLayout = SqlSchema.findOneOption({
  */
 export function registerMacDevice(
   userId: string,
-  device: { readonly id: string; readonly name: string } & MacDeviceLayout,
+  device: { readonly id: string; readonly name: string } & MacDeviceLayout & {
+      readonly signedIn?: MacSignedIn | undefined;
+    },
 ): MacDeviceEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(upsertDevice({ userId, ...device, now }), (rows) => rows.length > 0),
+    Effect.map(
+      upsertDevice({ userId, ...device, signedIn: device.signedIn ?? {}, now }),
+      (rows) => rows.length > 0,
+    ),
   );
 }
 
-/** The account's Mac's home folder and bundled CLI, as it last registered them; nothing where the account holds no such Mac. */
+/** The account's Mac's home folder and bundled CLI, as it last registered them, and which harnesses it last said it is signed in to; nothing where the account holds no such Mac. */
 export function macDeviceLayout(
   userId: string,
   id: string,
-): MacDeviceEffect<Option.Option<MacDeviceLayout>> {
+): MacDeviceEffect<Option.Option<MacDeviceStanding>> {
   return findLayout({ userId, id });
 }
 
-/** Records that the account's Mac is there now; false where the account holds no such Mac. */
-export function beatMacDevice(userId: string, id: string): MacDeviceEffect<boolean> {
+/** Records that the account's Mac is there now, and which harnesses it is signed in to where it says; false where the account holds no such Mac. */
+export function beatMacDevice(
+  userId: string,
+  id: string,
+  signedIn?: MacSignedIn,
+): MacDeviceEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(touchDevice({ userId, id, now }), (rows) => rows.length > 0),
+    Effect.map(touchDevice({ userId, id, now, signedIn }), (rows) => rows.length > 0),
   );
 }
 

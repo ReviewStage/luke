@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
+    "@luke/agent-runner": "workspace:*",
     "@luke/credentials": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/gateway": "workspace:*",

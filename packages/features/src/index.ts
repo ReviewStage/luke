@@ -119,6 +119,13 @@ export {
   webSocketOrigin,
 } from "./live-contract.js";
 export {
+  HostedMacAgentClient,
+  type HostedMacAgentClientOptions,
+  MAC_AGENT_NOT_CLAIMED,
+  type MacAgentClaimedLine,
+  type MacAgentDevice,
+} from "./mac-agent-client.js";
+export {
   HostedMacCommandClient,
   type HostedMacCommandClientOptions,
   MAC_COMMAND_NOT_CLAIMED,

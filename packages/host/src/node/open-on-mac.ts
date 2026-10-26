@@ -138,6 +138,51 @@ const SWEEP = [
   "}",
 ];
 
+/**
+ * `opened`, which takes the shared clone's lock, runs `brought_in` under it,
+ * and lets go however it ends, and `cloned`, which makes the clone the first
+ * time, over HTTPS and over SSH where that fails, checking nothing out. Every
+ * Luke install shares the clone, so the whole of bringing a branch in, its
+ * clone, fetch, worktree and config, is done under the lock. A script defines
+ * `brought_in`, and sets `clone`, `https`, and `ssh`, before it calls `opened`.
+ */
+const SHARED_CLONE = [
+  "opened() {",
+  '  mkdir -p "$(dirname "$clone")" || return 1',
+  '  lock="$clone.lock"',
+  "  waited=0",
+  '  until mkdir "$lock" 2>/dev/null; do',
+  '    holder="$(cat "$lock/pid" 2>/dev/null)"',
+  // Note that a lock is taken over only from a holder that is gone, or from one that never wrote its id in half a minute; never from one alive, however long it takes.
+  '    if [ -n "$holder" ]; then',
+  // Note that the id is read again once its holder is found gone, since a holder lets go as it ends, and another open may have taken the lock since the first read; only a lock still naming the one gone is deleted.
+  '      if ! kill -0 "$holder" 2>/dev/null; then',
+  '        [ "$(cat "$lock/pid" 2>/dev/null)" = "$holder" ] && rm -rf "$lock"',
+  "        continue",
+  "      fi",
+  "      waited=0",
+  '    elif [ "$waited" -ge 30 ]; then',
+  '      rm -rf "$lock"',
+  "      continue",
+  "    fi",
+  "    sleep 1",
+  "    waited=$((waited + 1))",
+  "  done",
+  '  echo "$$" > "$lock/pid"',
+  "  brought_in",
+  "  ended=$?",
+  '  rm -rf "$lock"',
+  '  return "$ended"',
+  "}",
+  "cloned() {",
+  '  [ -e "$clone/.git" ] && return 0',
+  '  echo "▸ Cloning ${https%.git}"',
+  '  rm -rf "$clone"',
+  '  git clone --no-checkout --filter=blob:none "$https" "$clone" ||',
+  '    { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; }',
+  "}",
+];
+
 /** The script, its values quoted, that brings the branch into a worktree of Luke's clone and runs the command there, where there is one; it ends with the command. */
 export function openOnMacScript(input: {
   /** The repository as `owner/name`, cloned from GitHub the first time. */
@@ -200,41 +245,9 @@ export function openOnMacScript(input: {
     `pull=${input.pullRequest == null ? "''" : shellQuoted(String(Math.trunc(input.pullRequest)))}`,
     `pull_head=${input.pullRequestHead === true ? "1" : "''"}`,
     // Note that every step returns on failure by hand: `set -e` is ignored in a function called from an `||` list, as this one is.
-    // Note that every Luke install shares the clone, so the whole of bringing a branch in, its clone, fetch, worktree and config, is done under a lock, released however it ends.
-    "opened() {",
-    '  mkdir -p "$(dirname "$clone")" || return 1',
-    '  lock="$clone.lock"',
-    "  waited=0",
-    '  until mkdir "$lock" 2>/dev/null; do',
-    '    holder="$(cat "$lock/pid" 2>/dev/null)"',
-    // Note that a lock is taken over only from a holder that is gone, or from one that never wrote its id in half a minute; never from one alive, however long it takes.
-    '    if [ -n "$holder" ]; then',
-    // Note that the id is read again once its holder is found gone, since a holder lets go as it ends, and another open may have taken the lock since the first read; only a lock still naming the one gone is deleted.
-    '      if ! kill -0 "$holder" 2>/dev/null; then',
-    '        [ "$(cat "$lock/pid" 2>/dev/null)" = "$holder" ] && rm -rf "$lock"',
-    "        continue",
-    "      fi",
-    "      waited=0",
-    '    elif [ "$waited" -ge 30 ]; then',
-    '      rm -rf "$lock"',
-    "      continue",
-    "    fi",
-    "    sleep 1",
-    "    waited=$((waited + 1))",
-    "  done",
-    '  echo "$$" > "$lock/pid"',
-    "  brought_in",
-    "  ended=$?",
-    '  rm -rf "$lock"',
-    '  return "$ended"',
-    "}",
+    ...SHARED_CLONE,
     "brought_in() {",
-    '  if [ ! -e "$clone/.git" ]; then',
-    '    echo "▸ Cloning ${https%.git}"',
-    '    rm -rf "$clone"',
-    '    git clone --no-checkout --filter=blob:none "$https" "$clone" ||',
-    '      { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; } || return 1',
-    "  fi",
+    "  cloned || return 1",
     '  cd "$clone" || return 1',
     // Note that a run asked for a pull request by its number takes that pull request's own head, which GitHub keeps for good, before any branch by name, because a branch of the same name pushed since would be another's.
     '  if [ -n "$pull_head" ] && [ -n "$pull" ]; then',
@@ -334,6 +347,68 @@ export function openOnMacScript(input: {
           // Note that the command takes the script's place, so its exit is the run's, and Stop reaches it as the terminal's own.
           'exec "${SHELL:-/bin/zsh}" -l -c "$command"',
         ]),
+    "",
+  ].join("\n");
+}
+
+/**
+ * The script, its values quoted, that makes a local agent's worktree
+ * (`@luke/host`'s `compose-local-agents.ts`): a worktree of Luke's own clone
+ * of the repository, the clone Open on this Mac shares, made under the same
+ * lock with the developer's own Git login, at the head of the branch the
+ * agent starts from, or of GitHub's default branch where it names none. The
+ * worktree is detached rather than on that branch, so two agents starting
+ * from one branch, or the developer's own worktree of it, never hold it
+ * twice; the agent makes its own branch there. A worktree already made is
+ * left as it stands, since it holds the agent's work. It ends with its
+ * failure where a step fails, having said which.
+ */
+export function agentWorktreeScript(input: {
+  /** The repository as `owner/name`, cloned from GitHub the first time. */
+  readonly repository: string;
+  readonly clone: string;
+  readonly worktree: string;
+  /** The branch the agent starts from; none for GitHub's default branch. */
+  readonly branch: string | null;
+  /** Where the repository is cloned from, by protocol; GitHub's own unless a test names its own. */
+  readonly remotes?: { readonly https: string; readonly ssh: string } | undefined;
+}): string {
+  const remotes = input.remotes ?? {
+    https: `https://github.com/${input.repository}.git`,
+    ssh: `git@github.com:${input.repository}.git`,
+  };
+  return [
+    // An app opened from the Dock has a bare PATH; the login shell's is the one the developer's Git and tools live on.
+    'PATH="$("${SHELL:-/bin/zsh}" -l -c \'printf %s "$PATH"\' 2>/dev/null || printf %s "$PATH")"',
+    "export PATH",
+    `clone=${shellQuoted(input.clone)}`,
+    `worktree=${shellQuoted(input.worktree)}`,
+    `branch=${shellQuoted(input.branch ?? "")}`,
+    `https=${shellQuoted(remotes.https)}`,
+    `ssh=${shellQuoted(remotes.ssh)}`,
+    ...SHARED_CLONE,
+    "brought_in() {",
+    "  cloned || return 1",
+    '  cd "$clone" || return 1',
+    '  if [ -n "$branch" ]; then',
+    '    git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch" || return 1',
+    '    fetched="refs/remotes/origin/$branch"',
+    "  else",
+    // Note that the default branch is fetched by GitHub's own HEAD into a ref of its own, never FETCH_HEAD, which another open of the shared clone may write over.
+    '    git fetch origin "+HEAD:refs/luke/default-head" || return 1',
+    '    fetched="refs/luke/default-head"',
+    "  fi",
+    '  head="$(git rev-parse --verify --quiet "$fetched^{commit}")" || return 1',
+    '  mkdir -p "$(dirname "$worktree")" || return 1',
+    // Note that a worktree folder deleted by hand is still registered, which would refuse it being made again.
+    "  git worktree prune --expire now || return 1",
+    '  git worktree add --quiet --detach "$worktree" "$head"',
+    "}",
+    '[ -e "$worktree/.git" ] && exit 0',
+    "if ! ( opened ); then",
+    '  echo "▸ Could not make the agent\'s worktree of ${branch:-the default branch}." >&2',
+    "  exit 1",
+    "fi",
     "",
   ].join("\n");
 }

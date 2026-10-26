@@ -140,8 +140,8 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         assert.equal(yield* storedSecrets(queued.id), null, "the claim cleared the secrets");
         assert.deepEqual(yield* macAgentLinesWaiting(userId, deviceId), []);
         assert.deepEqual(settledBeforeExit, Option.none());
-        assert.equal(settled, true);
-        assert.equal(settledAgain, false, "the first settle stands");
+        assert.equal(Option.isSome(settled), true);
+        assert.equal(Option.isNone(settledAgain), true, "the first settle stands");
         assert.deepEqual(
           yield* macAgentLineSettlement(userId, queued.id),
           Option.some({ exitCode: 137 }),
@@ -242,7 +242,7 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         assert.deepEqual(lineClaimedByOther, Option.none());
         assert.deepEqual(lineClaimedOnOwnersMac, Option.none());
         assert.deepEqual(requestClaimedByOther, Option.none());
-        assert.equal(settledByOther, false);
+        assert.equal(Option.isNone(settledByOther), true);
         assert.equal(answeredByOther, false);
         assert.deepEqual(yield* macAgentRequestAnswer(other.userId, requestId), Option.none());
         assert.deepEqual(
@@ -360,7 +360,7 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
       );
       assert.deepEqual(yield* macAgentRequestsWaiting(userId, deviceId), []);
       assert.equal(
-        yield* settleMacAgentLine(userId, deviceId, running.id, 0),
+        Option.isSome(yield* settleMacAgentLine(userId, deviceId, running.id, 0)),
         true,
         "the running launch line is still there to settle",
       );

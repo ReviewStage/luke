@@ -1,4 +1,5 @@
-import { index, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import type { MacSignedIn } from "@luke/features/mac-agent-wire";
+import { index, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -30,6 +31,12 @@ export const macDevice = pgTable(
     home: text("home").notNull(),
     /** The Claude Code CLI the desktop bundles, by its absolute path, which a local agent's launch names. */
     claudeExecutable: text("claude_executable").notNull(),
+    /**
+     * Which harnesses the Mac is signed in to by itself, as its register and
+     * beats last said, never the credential: a local agent on one launches on
+     * the Mac's own login rather than the account's saved credential.
+     */
+    signedIn: jsonb("signed_in").$type<MacSignedIn>().notNull().default({}),
     createdAt: createdAt(),
     /** When the desktop last beat, or registered, the Mac. */
     lastSeenAt: timestamptz("last_seen_at").notNull(),

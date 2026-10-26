@@ -1,5 +1,5 @@
 /**
- * mac-machine.test.ts -- a local agent's machine over a real dialect: its launch's secrets sealed in the row and handed over open once, and a read that waits for its Mac's answer or is unavailable while the Mac is away.
+ * mac-machine.test.ts -- a local agent's machine over a real dialect: its launch's secrets sealed in the row and handed over open once, a read that waits for its Mac's answer or is unavailable while the Mac is away, and a turn whose runner the Mac settled as gone settled lost.
  *
  * Synthetic accounts, agents, Macs, bearers, and keys throughout.
  */
@@ -8,24 +8,26 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createCodingAgent, latestTurnsOfReached } from "@luke/database/models/coding-agent-store";
 import {
   answerMacAgentRequest,
   claimMacAgentRequest,
   macAgentRequestsWaiting,
 } from "@luke/database/models/mac-agent-store";
 import { registerMacDevice } from "@luke/database/models/mac-device-store";
+import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { macAgentLine } from "@luke/database/schemas/mac-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "@luke/database/testing";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { MAC_AGENT_REQUEST_KIND } from "@luke/features/mac-agent-wire";
+import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Fiber, Layer, Option, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
-import { claimedMacAgentLine } from "../mac-agent.js";
+import { claimedMacAgentLine, settledMacAgentLine } from "../mac-agent.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 import { macMachine } from "./mac-machine.js";
 
@@ -163,6 +165,42 @@ it.layer(Layer.merge(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT))
           "nothing was asked of it",
         );
       }),
+    );
+
+    it.effect(
+      "a turn under way is settled lost once its Mac settles the newest launch, and only then",
+      () =>
+        Effect.gen(function* () {
+          const opened = yield* openLocalAgent;
+          const { userId, deviceId, agent } = opened;
+          const older = yield* launched(opened);
+          const newer = yield* launched(opened);
+          yield* claimedMacAgentLine(userId, deviceId, older.handle.command);
+          yield* claimedMacAgentLine(userId, deviceId, newer.handle.command);
+          const writer = yield* storeWriter({ tools: {} });
+          const turnId = randomUUID();
+          yield* writer.enqueueTurn(
+            { userId, conversationId: agent.conversationId },
+            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+          );
+          const statusNow = Effect.map(
+            latestTurnsOfReached([agent.conversationId]),
+            (turns) => turns.get(agent.conversationId)?.status,
+          );
+
+          yield* settledMacAgentLine(userId, deviceId, older.handle.command);
+          const afterOlder = yield* statusNow;
+          yield* settledMacAgentLine(userId, deviceId, newer.handle.command);
+          const askedAgain = yield* settledMacAgentLine(userId, deviceId, newer.handle.command);
+
+          assert.equal(askedAgain, true, "a settle the Mac asks again is answered as settled");
+          assert.equal(
+            afterOlder,
+            TURN_STATUS.QUEUED,
+            "a launch a newer one replaced settles nothing",
+          );
+          assert.equal(yield* statusNow, TURN_STATUS.FAILED);
+        }),
     );
   },
 );

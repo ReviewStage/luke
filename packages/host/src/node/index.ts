@@ -11,7 +11,13 @@ export {
   openMacTerminals,
   startMacTerminal,
 } from "./mac-terminal.js";
-export { cloneFolder, openOnMacScript, worktreeFolder, worktreesRoot } from "./open-on-mac.js";
+export {
+  agentWorktreeScript,
+  cloneFolder,
+  openOnMacScript,
+  worktreeFolder,
+  worktreesRoot,
+} from "./open-on-mac.js";
 export { reportToStderr, tolerateClosedStderr } from "./stderr-report.js";
 export { openTerminalSocketOverWs } from "./terminal-socket-over-ws.js";
 export { openVoiceSocketOverWs } from "./voice-socket-over-ws.js";

@@ -130,6 +130,24 @@ const MacAgentLaunchSchema = Schema.Struct({
 
 export type MacAgentLaunch = typeof MacAgentLaunchSchema.Type;
 
+/** A line as its settle answers it: the agent it is for, and its kind. */
+const MacAgentSettledLineSchema = Schema.Struct({
+  agentId: Schema.String,
+  kind: LineKindSchema,
+});
+
+export type MacAgentSettledLine = typeof MacAgentSettledLineSchema.Type;
+
+/** A line as it stands: whether its Mac settled it and with what exit, and the agent, the Mac, and the kind it is. */
+const MacAgentLineStandingSchema = Schema.Struct({
+  ...MacAgentSettledLineSchema.fields,
+  settled: Schema.Boolean,
+  exitCode: Schema.NullOr(Schema.Number),
+  deviceId: Schema.String,
+});
+
+export type MacAgentLineStanding = typeof MacAgentLineStandingSchema.Type;
+
 /** The columns a pin reads off an agent. */
 const PIN_COLUMNS = {
   userId: codingAgent.userId,
@@ -208,13 +226,16 @@ const findLatestLaunch = SqlSchema.findOneOption({
 
 const findLineStanding = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, id: Schema.String }),
-  Result: Schema.Struct({ settled: Schema.Boolean, exitCode: Schema.NullOr(Schema.Number) }),
+  Result: MacAgentLineStandingSchema,
   execute: ({ userId, id }) =>
     Database.use((db) =>
       db
         .select({
           settled: sql<boolean>`${macAgentLine.settledAt} is not null`,
           exitCode: macAgentLine.exitCode,
+          agentId: macAgentLine.agentId,
+          deviceId: macAgentLine.deviceId,
+          kind: macAgentLine.kind,
         })
         .from(macAgentLine)
         .where(and(eq(macAgentLine.id, id), eq(macAgentLine.userId, userId))),
@@ -318,7 +339,7 @@ const writeLineSettled = SqlSchema.findAll({
     exitCode: Schema.NullOr(Schema.Number),
     now: Schema.Date,
   }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: MacAgentSettledLineSchema,
   execute: ({ userId, deviceId, id, exitCode, now }) =>
     Database.use((db) =>
       db
@@ -333,7 +354,7 @@ const writeLineSettled = SqlSchema.findAll({
             isNull(macAgentLine.settledAt),
           ),
         )
-        .returning({ id: macAgentLine.id }),
+        .returning({ agentId: macAgentLine.agentId, kind: macAgentLine.kind }),
     ),
 });
 
@@ -587,11 +608,11 @@ export function latestMacAgentLaunch(
   return findLatestLaunch({ userId, agentId });
 }
 
-/** Whether the account's line was settled, and with what exit; nothing where no such line stands. */
+/** Whether the account's line was settled and with what exit, and whose it is; nothing where no such line stands. */
 export function macAgentLineStanding(
   userId: string,
   id: string,
-): MacAgentEffect<Option.Option<{ readonly settled: boolean; readonly exitCode: number | null }>> {
+): MacAgentEffect<Option.Option<MacAgentLineStanding>> {
   return findLineStanding({ userId, id });
 }
 
@@ -618,19 +639,19 @@ export function claimMacAgentLine(
 
 /**
  * Settles a line the account's Mac claimed, with its runner's exit code
- * where it is a launch line whose runner exited; false where that Mac
- * holds no such line claimed and unsettled.
+ * where it is a launch line whose runner exited, answering the line's agent
+ * and kind; none where that Mac holds no such line claimed and unsettled.
  */
 export function settleMacAgentLine(
   userId: string,
   deviceId: string,
   id: string,
   exitCode?: number,
-): MacAgentEffect<boolean> {
+): MacAgentEffect<Option.Option<MacAgentSettledLine>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(
       writeLineSettled({ userId, deviceId, id, exitCode: exitCode ?? null, now }),
-      (rows) => rows.length > 0,
+      (rows) => Option.fromNullishOr(rows[0]),
     ),
   );
 }

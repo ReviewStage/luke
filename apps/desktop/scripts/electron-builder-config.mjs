@@ -16,7 +16,12 @@ import {
   resolveSigningMode,
   SIGNING_MODE,
 } from "./package-config.mjs";
-import { LIQUID_GLASS_ADDON, NATIVE_HELPERS, packagedAppPath } from "./package-layout.mjs";
+import {
+  AGENT_RUNNER_RESOURCES,
+  LIQUID_GLASS_ADDON,
+  NATIVE_HELPERS,
+  packagedAppPath,
+} from "./package-layout.mjs";
 import { builderReleaseArtifactDirectory, RELEASE_VOLUME_NAME } from "./release-config.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -85,6 +90,7 @@ export function createElectronBuilderConfig(env = process.env) {
         from: helperPath,
         to: path.basename(helperPath),
       })),
+      { from: packageAssets.agentRunnerPath, to: AGENT_RUNNER_RESOURCES.directory },
       {
         from: packageAssets.licensePath,
         to: path.basename(packageAssets.licensePath),
