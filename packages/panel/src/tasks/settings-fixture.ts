@@ -78,8 +78,23 @@ const ACCOUNT: AccountSnapshot = {
 /** An admin of Luke, read, so Admin stands rather than waiting on the read. */
 const ADMIN_ACCESS = { admin: true } as const;
 
-/** The experiments the staged pages stand behind: Memory's page, and the Code review automation the Automations page suggests. */
-const STAGED_EXPERIMENTS = { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.CODE_REVIEW]: true } as const;
+/** The experiments the staged pages stand behind: Memory's page, the Code review automation the Automations page suggests, and the Hosts group on Agents. */
+const STAGED_EXPERIMENTS = {
+  [EXPERIMENT.MEMORY]: true,
+  [EXPERIMENT.CODE_REVIEW]: true,
+  [EXPERIMENT.LOCAL_AGENTS]: true,
+} as const;
+
+/** The staged hosts and install token, by id. */
+const FIXTURE_HOST = {
+  ONLINE: "7d3c2a10-0000-4000-8000-000000000001",
+  OLD: "7d3c2a10-0000-4000-8000-000000000002",
+  OFFLINE: "7d3c2a10-0000-4000-8000-000000000003",
+  TOKEN: "7d3c2a10-0000-4000-8000-000000000004",
+} as const;
+
+/** Where the staged install commands fetch their script. */
+const STAGED_INSTALL_SCRIPT = "https://luke.test/install.sh";
 
 /** The page each Settings profile opens on, and the workspace it shows where that is not the sidebar's first. */
 const SETTINGS_LINKS: ReadonlyMap<string, SettingsLink> = new Map<string, SettingsLink>([
@@ -568,6 +583,38 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
   }),
   [ACT_KIND.CHAPTERS_MODEL_READ]: () => ({ model: CHAPTERS_MODEL.SONNET }),
+  // Note that a kept install token is answered without one, since the window mints the token and only its hash travels.
+  [ACT_KIND.HOSTS_LIST]: () => ({
+    hosts: [
+      {
+        id: FIXTURE_HOST.ONLINE,
+        name: "fra-01",
+        seenAt: NOW,
+        version: "0.1.0",
+        upgradeNeeded: false,
+      },
+      {
+        id: FIXTURE_HOST.OLD,
+        name: "sgp-01",
+        seenAt: NOW,
+        version: "0.0.9",
+        upgradeNeeded: true,
+      },
+      {
+        id: FIXTURE_HOST.OFFLINE,
+        name: "sfo-02",
+        seenAt: NOW - 3 * HOUR,
+        version: "0.1.0",
+        upgradeNeeded: false,
+      },
+    ],
+    installScriptUrl: STAGED_INSTALL_SCRIPT,
+  }),
+  [ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: () => ({
+    id: FIXTURE_HOST.TOKEN,
+    expiresAt: NOW + 24 * HOUR,
+    installScriptUrl: STAGED_INSTALL_SCRIPT,
+  }),
   [ACT_KIND.INTEGRATIONS_STATUS]: () => ({
     integrations: integrationStatuses(),
     accounts: INTEGRATION_ACCOUNTS,

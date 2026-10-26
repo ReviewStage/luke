@@ -45,6 +45,9 @@ import {
   type GitHubTokenAnswerView,
   type GitHubTokenSaveParams,
   githubImageTypeSchema,
+  type HostDoneAnswerView,
+  type HostInstallTokenAnswerView,
+  type HostsAnswerView,
   type MemoriesAnswerView,
   type MemoriesReadParams,
   type MemoryForgetParams,
@@ -455,6 +458,33 @@ export class HostedCodingAgentClient {
   /** The models a coding agent may run on, as the service offers them now. */
   models(): Effect.Effect<CodingAgentModelsAnswer, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.models.list, undefined), {});
+  }
+
+  /** The account's hosts, as Settings lists them. */
+  hosts(): Effect.Effect<HostsAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.hosts.list, undefined), ROW_REFUSALS);
+  }
+
+  /** One of the account's hosts removed, its secret refused at once. */
+  removeHost(id: string): Effect.Effect<HostDoneAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.hosts.remove, { id }), ROW_REFUSALS);
+  }
+
+  /** An install token kept by its SHA-256 alone; the token itself stays with the window that minted it. */
+  keepHostInstallToken(
+    tokenHash: string,
+  ): Effect.Effect<HostInstallTokenAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.hosts.keepInstallToken, { tokenHash }),
+      ROW_REFUSALS,
+    );
+  }
+
+  /** One of the account's install tokens revoked, so it enrolls no box again. */
+  revokeHostInstallToken(
+    id: string,
+  ): Effect.Effect<HostDoneAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.hosts.revokeInstallToken, { id }), ROW_REFUSALS);
   }
 
   /** The account's default model and effort, read off the preferences snapshot. */
