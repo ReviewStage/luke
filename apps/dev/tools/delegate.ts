@@ -17,11 +17,10 @@ import { makeDelegation } from "../host.js";
  * (`../subagents/worker/agent.ts`), so the model sees this tool alone, with
  * the model and effort beside the task that eve's own subagent tool has no
  * room for. The call answers with a receipt at once and the worker's answer
- * reaches the model as a task result, so the turn stays open while it works.
- * Whether the agent waits for it is the model's to say (`background`): the
- * tool's words have it call `task_wait` unless it set the flag, which is what
- * a foreground delegation is in eve's terms. A developer's message during
- * the wait reaches the agent at once and no longer stops the worker, since a
+ * reaches the model as a task result, so the turn stays open while it works,
+ * and the agent need not call `task_wait` for it, as eve's own words for
+ * that tool say. A developer's message while the worker runs reaches the
+ * agent at once and no longer stops the worker, since a
  * task is not interrupted by a new message. A call with the task's id sends
  * the worker more, into the same session, whose child conversation stays
  * the starting call's. The pair is checked and recorded in a step, since
@@ -43,7 +42,6 @@ interface DelegateInput {
   readonly task: string;
   readonly model?: string;
   readonly effort?: string;
-  readonly background?: boolean;
 }
 
 /** What the step answers: the pair recorded, or why the ask was refused. */

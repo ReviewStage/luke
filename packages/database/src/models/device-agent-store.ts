@@ -1,5 +1,5 @@
 /**
- * mac-agent-store.ts -- the lines and requests the service queues for a local agent's Mac, claimed, settled, answered, and withdrawn.
+ * device-agent-store.ts -- the lines and requests the service queues for a local agent's Mac, claimed, settled, answered, and withdrawn.
  *
  * Every function is an effect over the ambient `SqlClient`, keyed by the
  * account, so no account queues for, claims, settles, or reads another's
@@ -10,7 +10,7 @@
  * answered once, after it was claimed. A launch line's sealed secrets are
  * read by its claim alone, which clears them in the same statement, so a
  * second claim, a listing, or a read after it finds none
- * (`../schemas/mac-agent.ts`). The secrets are opaque here: the service
+ * (`../schemas/device-agent.ts`). The secrets are opaque here: the service
  * seals them before the queue and opens them after the claim.
  *
  * Every line queued for one agent is queued under that agent's runner
@@ -22,30 +22,30 @@
 
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import {
-  MAC_AGENT_LINE_KIND,
-  MAC_AGENT_REQUEST_KIND,
-  type MacAgentAnswer,
-  type MacAgentLineKind,
-  type MacAgentObject,
-  type MacAgentRequestKind,
-  macAgentAnswerSchema,
-  macAgentObjectSchema,
-} from "@luke/features/mac-agent-wire";
+  DEVICE_AGENT_LINE_KIND,
+  DEVICE_AGENT_REQUEST_KIND,
+  type DeviceAgentAnswer,
+  type DeviceAgentLineKind,
+  type DeviceAgentObject,
+  type DeviceAgentRequestKind,
+  deviceAgentAnswerSchema,
+  deviceAgentObjectSchema,
+} from "@luke/features/device-agent-wire";
 import { and, asc, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
-import { macAgentLine, macAgentRequest } from "../schemas/mac-agent.js";
-import { macDevice } from "../schemas/mac-device.js";
+import { device } from "../schemas/device.js";
+import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
 import { conversations } from "../schemas/storage.js";
 
-type MacAgentEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
+type DeviceAgentEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
-const LineKindSchema = Schema.Literals(Object.values(MAC_AGENT_LINE_KIND));
+const LineKindSchema = Schema.Literals(Object.values(DEVICE_AGENT_LINE_KIND));
 
-const RequestKindSchema = Schema.Literals(Object.values(MAC_AGENT_REQUEST_KIND));
+const RequestKindSchema = Schema.Literals(Object.values(DEVICE_AGENT_REQUEST_KIND));
 
 const DeviceRowKeySchema = Schema.Struct({
   userId: Schema.String,
@@ -59,10 +59,10 @@ const WaitingLineSchema = Schema.Struct({
   agentId: Schema.String,
   seq: Schema.Number,
   kind: LineKindSchema,
-  payload: macAgentObjectSchema,
+  payload: deviceAgentObjectSchema,
 });
 
-export type MacAgentWaitingLine = typeof WaitingLineSchema.Type;
+export type DeviceAgentWaitingLine = typeof WaitingLineSchema.Type;
 
 /** A line as its claim hands it over: with its sealed secrets, which no one reads after. */
 const ClaimedLineSchema = Schema.Struct({
@@ -70,17 +70,17 @@ const ClaimedLineSchema = Schema.Struct({
   sealedSecrets: Schema.NullOr(Schema.String),
 });
 
-export type MacAgentClaimedLine = typeof ClaimedLineSchema.Type;
+export type DeviceAgentClaimedLine = typeof ClaimedLineSchema.Type;
 
 /** A request as a Mac lists and claims it. */
 const WaitingRequestSchema = Schema.Struct({
   id: Schema.String,
   agentId: Schema.String,
   kind: RequestKindSchema,
-  args: macAgentObjectSchema,
+  args: deviceAgentObjectSchema,
 });
 
-export type MacAgentWaitingRequest = typeof WaitingRequestSchema.Type;
+export type DeviceAgentWaitingRequest = typeof WaitingRequestSchema.Type;
 
 /** A settled request's answer columns as the row holds them. */
 const AnswerRowSchema = Schema.Struct({
@@ -91,10 +91,10 @@ const AnswerRowSchema = Schema.Struct({
   stderr: Schema.NullOr(Schema.String),
 });
 
-const decodeAnswer = Schema.decodeUnknownEffect(macAgentAnswerSchema);
+const decodeAnswer = Schema.decodeUnknownEffect(deviceAgentAnswerSchema);
 
 /** The line as it stood before its claim, read beside the update for the secrets the update clears. */
-const lineBefore = alias(macAgentLine, "line_before");
+const lineBefore = alias(deviceAgentLine, "line_before");
 
 /**
  * The agent of the account, running on a Mac, joined to the Mac it is
@@ -105,48 +105,48 @@ function pinnedAgent(userId: string, agentId: string) {
   return and(
     eq(codingAgent.id, agentId),
     eq(codingAgent.userId, userId),
-    eq(codingAgent.machine, CODING_AGENT_MACHINE.MAC),
-    eq(macDevice.userId, userId),
+    eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE),
+    eq(device.userId, userId),
   );
 }
 
 /** A local agent as its machine finds it: its starter, and the Mac it is pinned to, none once that Mac is gone. */
-const MacAgentPinSchema = Schema.Struct({
+const DeviceAgentPinSchema = Schema.Struct({
   userId: Schema.String,
   agentId: Schema.String,
   deviceId: Schema.NullOr(Schema.String),
 });
 
-export type MacAgentPin = typeof MacAgentPinSchema.Type;
+export type DeviceAgentPin = typeof DeviceAgentPinSchema.Type;
 
 /** An agent's newest launch line as its machine reads it: whether its Mac settled it, with what exit, and whether a stop line followed it. */
-const MacAgentLaunchSchema = Schema.Struct({
+const DeviceAgentLaunchSchema = Schema.Struct({
   id: Schema.String,
-  payload: macAgentObjectSchema,
+  payload: deviceAgentObjectSchema,
   settled: Schema.Boolean,
   exitCode: Schema.NullOr(Schema.Number),
   stopped: Schema.Boolean,
 });
 
-export type MacAgentLaunch = typeof MacAgentLaunchSchema.Type;
+export type DeviceAgentLaunch = typeof DeviceAgentLaunchSchema.Type;
 
 /** A line as its settle answers it: the agent it is for, and its kind. */
-const MacAgentSettledLineSchema = Schema.Struct({
+const DeviceAgentSettledLineSchema = Schema.Struct({
   agentId: Schema.String,
   kind: LineKindSchema,
 });
 
-export type MacAgentSettledLine = typeof MacAgentSettledLineSchema.Type;
+export type DeviceAgentSettledLine = typeof DeviceAgentSettledLineSchema.Type;
 
 /** A line as it stands: whether its Mac settled it and with what exit, and the agent, the Mac, and the kind it is. */
-const MacAgentLineStandingSchema = Schema.Struct({
-  ...MacAgentSettledLineSchema.fields,
+const DeviceAgentLineStandingSchema = Schema.Struct({
+  ...DeviceAgentSettledLineSchema.fields,
   settled: Schema.Boolean,
   exitCode: Schema.NullOr(Schema.Number),
   deviceId: Schema.String,
 });
 
-export type MacAgentLineStanding = typeof MacAgentLineStandingSchema.Type;
+export type DeviceAgentLineStanding = typeof DeviceAgentLineStandingSchema.Type;
 
 /** The columns a pin reads off an agent. */
 const PIN_COLUMNS = {
@@ -157,7 +157,7 @@ const PIN_COLUMNS = {
 
 const findPinOfSession = SqlSchema.findOneOption({
   Request: Schema.Struct({ runtimeSessionId: Schema.String }),
-  Result: MacAgentPinSchema,
+  Result: DeviceAgentPinSchema,
   execute: ({ runtimeSessionId }) =>
     Database.use((db) =>
       db
@@ -167,7 +167,7 @@ const findPinOfSession = SqlSchema.findOneOption({
         .where(
           and(
             eq(conversations.runtimeSessionId, runtimeSessionId),
-            eq(codingAgent.machine, CODING_AGENT_MACHINE.MAC),
+            eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE),
           ),
         )
         .limit(1),
@@ -176,69 +176,69 @@ const findPinOfSession = SqlSchema.findOneOption({
 
 const findPin = SqlSchema.findOneOption({
   Request: Schema.Struct({ agentId: Schema.String }),
-  Result: MacAgentPinSchema,
+  Result: DeviceAgentPinSchema,
   execute: ({ agentId }) =>
     Database.use((db) =>
       db
         .select(PIN_COLUMNS)
         .from(codingAgent)
-        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.machine, CODING_AGENT_MACHINE.MAC))),
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE))),
     ),
 });
 
 /** A stop line queued for the agent after its launch line. */
-const stopLine = alias(macAgentLine, "stop_line");
+const stopLine = alias(deviceAgentLine, "stop_line");
 
 const findLatestLaunch = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
-  Result: MacAgentLaunchSchema,
+  Result: DeviceAgentLaunchSchema,
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
         .select({
-          id: macAgentLine.id,
-          payload: macAgentLine.payload,
-          settled: sql<boolean>`${macAgentLine.settledAt} is not null`,
-          exitCode: macAgentLine.exitCode,
+          id: deviceAgentLine.id,
+          payload: deviceAgentLine.payload,
+          settled: sql<boolean>`${deviceAgentLine.settledAt} is not null`,
+          exitCode: deviceAgentLine.exitCode,
           stopped: sql<boolean>`exists (${db
             .select({ one: sql`1` })
             .from(stopLine)
             .where(
               and(
-                eq(stopLine.agentId, macAgentLine.agentId),
-                eq(stopLine.kind, MAC_AGENT_LINE_KIND.STOP),
-                gt(stopLine.seq, macAgentLine.seq),
+                eq(stopLine.agentId, deviceAgentLine.agentId),
+                eq(stopLine.kind, DEVICE_AGENT_LINE_KIND.STOP),
+                gt(stopLine.seq, deviceAgentLine.seq),
               ),
             )})`,
         })
-        .from(macAgentLine)
+        .from(deviceAgentLine)
         .where(
           and(
-            eq(macAgentLine.userId, userId),
-            eq(macAgentLine.agentId, agentId),
-            eq(macAgentLine.kind, MAC_AGENT_LINE_KIND.LAUNCH),
+            eq(deviceAgentLine.userId, userId),
+            eq(deviceAgentLine.agentId, agentId),
+            eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
           ),
         )
-        .orderBy(desc(macAgentLine.seq))
+        .orderBy(desc(deviceAgentLine.seq))
         .limit(1),
     ),
 });
 
 const findLineStanding = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, id: Schema.String }),
-  Result: MacAgentLineStandingSchema,
+  Result: DeviceAgentLineStandingSchema,
   execute: ({ userId, id }) =>
     Database.use((db) =>
       db
         .select({
-          settled: sql<boolean>`${macAgentLine.settledAt} is not null`,
-          exitCode: macAgentLine.exitCode,
-          agentId: macAgentLine.agentId,
-          deviceId: macAgentLine.deviceId,
-          kind: macAgentLine.kind,
+          settled: sql<boolean>`${deviceAgentLine.settledAt} is not null`,
+          exitCode: deviceAgentLine.exitCode,
+          agentId: deviceAgentLine.agentId,
+          deviceId: deviceAgentLine.deviceId,
+          kind: deviceAgentLine.kind,
         })
-        .from(macAgentLine)
-        .where(and(eq(macAgentLine.id, id), eq(macAgentLine.userId, userId))),
+        .from(deviceAgentLine)
+        .where(and(eq(deviceAgentLine.id, id), eq(deviceAgentLine.userId, userId))),
     ),
 });
 
@@ -248,7 +248,7 @@ const insertLine = SqlSchema.findAll({
     userId: Schema.String,
     agentId: Schema.String,
     kind: LineKindSchema,
-    payload: macAgentObjectSchema,
+    payload: deviceAgentObjectSchema,
     sealedSecrets: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
@@ -256,24 +256,24 @@ const insertLine = SqlSchema.findAll({
   execute: ({ id, userId, agentId, kind, payload, sealedSecrets, now }) =>
     Database.use((db) =>
       db
-        .insert(macAgentLine)
+        .insert(deviceAgentLine)
         .select((qb) =>
           qb
             .select({
               id: sql<string>`coalesce(${id ?? null}::uuid, gen_random_uuid())`.as("id"),
               agentId: sql<string>`${codingAgent.id}`.as("agent_id"),
               userId: sql<string>`${codingAgent.userId}`.as("user_id"),
-              deviceId: sql<string>`${macDevice.id}`.as("device_id"),
-              kind: sql<MacAgentLineKind>`${kind}`.as("kind"),
-              payload: sql<MacAgentObject>`${JSON.stringify(payload)}::jsonb`.as("payload"),
+              deviceId: sql<string>`${device.id}`.as("device_id"),
+              kind: sql<DeviceAgentLineKind>`${kind}`.as("kind"),
+              payload: sql<DeviceAgentObject>`${JSON.stringify(payload)}::jsonb`.as("payload"),
               sealedSecrets: sql<string | null>`${sealedSecrets}::text`.as("sealed_secrets"),
               createdAt: sql<Date>`${now}::timestamptz`.as("created_at"),
             })
             .from(codingAgent)
-            .innerJoin(macDevice, eq(macDevice.id, codingAgent.deviceId))
+            .innerJoin(device, eq(device.id, codingAgent.deviceId))
             .where(pinnedAgent(userId, agentId)),
         )
-        .returning({ id: macAgentLine.id, seq: macAgentLine.seq }),
+        .returning({ id: deviceAgentLine.id, seq: deviceAgentLine.seq }),
     ),
 });
 
@@ -284,21 +284,21 @@ const findWaitingLines = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          id: macAgentLine.id,
-          agentId: macAgentLine.agentId,
-          seq: macAgentLine.seq,
-          kind: macAgentLine.kind,
-          payload: macAgentLine.payload,
+          id: deviceAgentLine.id,
+          agentId: deviceAgentLine.agentId,
+          seq: deviceAgentLine.seq,
+          kind: deviceAgentLine.kind,
+          payload: deviceAgentLine.payload,
         })
-        .from(macAgentLine)
+        .from(deviceAgentLine)
         .where(
           and(
-            eq(macAgentLine.userId, userId),
-            eq(macAgentLine.deviceId, deviceId),
-            isNull(macAgentLine.claimedAt),
+            eq(deviceAgentLine.userId, userId),
+            eq(deviceAgentLine.deviceId, deviceId),
+            isNull(deviceAgentLine.claimedAt),
           ),
         )
-        .orderBy(asc(macAgentLine.seq)),
+        .orderBy(asc(deviceAgentLine.seq)),
     ),
 });
 
@@ -308,24 +308,24 @@ const claimLine = SqlSchema.findOneOption({
   execute: ({ userId, deviceId, id, now }) =>
     Database.use((db) =>
       db
-        .update(macAgentLine)
+        .update(deviceAgentLine)
         .set({ claimedAt: now, sealedSecrets: null })
         .from(lineBefore)
         .where(
           and(
-            eq(lineBefore.id, macAgentLine.id),
-            eq(macAgentLine.id, id),
-            eq(macAgentLine.userId, userId),
-            eq(macAgentLine.deviceId, deviceId),
-            isNull(macAgentLine.claimedAt),
+            eq(lineBefore.id, deviceAgentLine.id),
+            eq(deviceAgentLine.id, id),
+            eq(deviceAgentLine.userId, userId),
+            eq(deviceAgentLine.deviceId, deviceId),
+            isNull(deviceAgentLine.claimedAt),
           ),
         )
         .returning({
-          id: macAgentLine.id,
-          agentId: macAgentLine.agentId,
-          seq: macAgentLine.seq,
-          kind: macAgentLine.kind,
-          payload: macAgentLine.payload,
+          id: deviceAgentLine.id,
+          agentId: deviceAgentLine.agentId,
+          seq: deviceAgentLine.seq,
+          kind: deviceAgentLine.kind,
+          payload: deviceAgentLine.payload,
           // Note that we read the secrets off the row as it stood, because
           // `returning` reads the updated row, whose secrets are cleared.
           sealedSecrets: lineBefore.sealedSecrets,
@@ -339,22 +339,22 @@ const writeLineSettled = SqlSchema.findAll({
     exitCode: Schema.NullOr(Schema.Number),
     now: Schema.Date,
   }),
-  Result: MacAgentSettledLineSchema,
+  Result: DeviceAgentSettledLineSchema,
   execute: ({ userId, deviceId, id, exitCode, now }) =>
     Database.use((db) =>
       db
-        .update(macAgentLine)
+        .update(deviceAgentLine)
         .set({ settledAt: now, exitCode })
         .where(
           and(
-            eq(macAgentLine.id, id),
-            eq(macAgentLine.userId, userId),
-            eq(macAgentLine.deviceId, deviceId),
-            isNotNull(macAgentLine.claimedAt),
-            isNull(macAgentLine.settledAt),
+            eq(deviceAgentLine.id, id),
+            eq(deviceAgentLine.userId, userId),
+            eq(deviceAgentLine.deviceId, deviceId),
+            isNotNull(deviceAgentLine.claimedAt),
+            isNull(deviceAgentLine.settledAt),
           ),
         )
-        .returning({ agentId: macAgentLine.agentId, kind: macAgentLine.kind }),
+        .returning({ agentId: deviceAgentLine.agentId, kind: deviceAgentLine.kind }),
     ),
 });
 
@@ -364,13 +364,13 @@ const findLineSettled = SqlSchema.findOneOption({
   execute: ({ userId, id }) =>
     Database.use((db) =>
       db
-        .select({ exitCode: macAgentLine.exitCode })
-        .from(macAgentLine)
+        .select({ exitCode: deviceAgentLine.exitCode })
+        .from(deviceAgentLine)
         .where(
           and(
-            eq(macAgentLine.id, id),
-            eq(macAgentLine.userId, userId),
-            isNotNull(macAgentLine.settledAt),
+            eq(deviceAgentLine.id, id),
+            eq(deviceAgentLine.userId, userId),
+            isNotNull(deviceAgentLine.settledAt),
           ),
         ),
     ),
@@ -382,39 +382,39 @@ const insertRequest = SqlSchema.findAll({
     id: Schema.String,
     agentId: Schema.String,
     kind: RequestKindSchema,
-    args: macAgentObjectSchema,
+    args: deviceAgentObjectSchema,
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, id, agentId, kind, args, now }) =>
     Database.use((db) =>
       db
-        .insert(macAgentRequest)
+        .insert(deviceAgentRequest)
         .select((qb) =>
           qb
             .select({
               id: sql<string>`${id}::uuid`.as("id"),
               agentId: sql<string>`${codingAgent.id}`.as("agent_id"),
               userId: sql<string>`${codingAgent.userId}`.as("user_id"),
-              deviceId: sql<string>`${macDevice.id}`.as("device_id"),
-              kind: sql<MacAgentRequestKind>`${kind}`.as("kind"),
-              args: sql<MacAgentObject>`${JSON.stringify(args)}::jsonb`.as("args"),
+              deviceId: sql<string>`${device.id}`.as("device_id"),
+              kind: sql<DeviceAgentRequestKind>`${kind}`.as("kind"),
+              args: sql<DeviceAgentObject>`${JSON.stringify(args)}::jsonb`.as("args"),
               createdAt: sql<Date>`${now}::timestamptz`.as("created_at"),
             })
             .from(codingAgent)
-            .innerJoin(macDevice, eq(macDevice.id, codingAgent.deviceId))
+            .innerJoin(device, eq(device.id, codingAgent.deviceId))
             .where(pinnedAgent(userId, agentId)),
         )
-        .returning({ id: macAgentRequest.id }),
+        .returning({ id: deviceAgentRequest.id }),
     ),
 });
 
 /** A request waiting for the account's Mac given. */
 function requestWaiting(userId: string, deviceId: string) {
   return and(
-    eq(macAgentRequest.userId, userId),
-    eq(macAgentRequest.deviceId, deviceId),
-    isNull(macAgentRequest.claimedAt),
+    eq(deviceAgentRequest.userId, userId),
+    eq(deviceAgentRequest.deviceId, deviceId),
+    isNull(deviceAgentRequest.claimedAt),
   );
 }
 
@@ -425,14 +425,14 @@ const findWaitingRequests = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          id: macAgentRequest.id,
-          agentId: macAgentRequest.agentId,
-          kind: macAgentRequest.kind,
-          args: macAgentRequest.args,
+          id: deviceAgentRequest.id,
+          agentId: deviceAgentRequest.agentId,
+          kind: deviceAgentRequest.kind,
+          args: deviceAgentRequest.args,
         })
-        .from(macAgentRequest)
+        .from(deviceAgentRequest)
         .where(requestWaiting(userId, deviceId))
-        .orderBy(asc(macAgentRequest.createdAt)),
+        .orderBy(asc(deviceAgentRequest.createdAt)),
     ),
 });
 
@@ -442,14 +442,14 @@ const claimRequest = SqlSchema.findOneOption({
   execute: ({ userId, deviceId, id, now }) =>
     Database.use((db) =>
       db
-        .update(macAgentRequest)
+        .update(deviceAgentRequest)
         .set({ claimedAt: now })
-        .where(and(eq(macAgentRequest.id, id), requestWaiting(userId, deviceId)))
+        .where(and(eq(deviceAgentRequest.id, id), requestWaiting(userId, deviceId)))
         .returning({
-          id: macAgentRequest.id,
-          agentId: macAgentRequest.agentId,
-          kind: macAgentRequest.kind,
-          args: macAgentRequest.args,
+          id: deviceAgentRequest.id,
+          agentId: deviceAgentRequest.agentId,
+          kind: deviceAgentRequest.kind,
+          args: deviceAgentRequest.args,
         }),
     ),
 });
@@ -457,16 +457,16 @@ const claimRequest = SqlSchema.findOneOption({
 const writeAnswer = SqlSchema.findAll({
   Request: Schema.Struct({
     ...DeviceRowKeySchema.fields,
-    answer: macAgentAnswerSchema,
+    answer: deviceAgentAnswerSchema,
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, deviceId, id, answer, now }) =>
     Database.use((db) =>
       db
-        .update(macAgentRequest)
+        .update(deviceAgentRequest)
         .set(
-          answer.kind === MAC_AGENT_REQUEST_KIND.READ_FILE
+          answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
             ? { settledAt: now, bytes: answer.bytes }
             : {
                 settledAt: now,
@@ -477,16 +477,16 @@ const writeAnswer = SqlSchema.findAll({
         )
         .where(
           and(
-            eq(macAgentRequest.id, id),
-            eq(macAgentRequest.userId, userId),
-            eq(macAgentRequest.deviceId, deviceId),
+            eq(deviceAgentRequest.id, id),
+            eq(deviceAgentRequest.userId, userId),
+            eq(deviceAgentRequest.deviceId, deviceId),
             // An answer of one kind never settles a request of the other.
-            eq(macAgentRequest.kind, answer.kind),
-            isNotNull(macAgentRequest.claimedAt),
-            isNull(macAgentRequest.settledAt),
+            eq(deviceAgentRequest.kind, answer.kind),
+            isNotNull(deviceAgentRequest.claimedAt),
+            isNull(deviceAgentRequest.settledAt),
           ),
         )
-        .returning({ id: macAgentRequest.id }),
+        .returning({ id: deviceAgentRequest.id }),
     ),
 });
 
@@ -497,18 +497,18 @@ const findAnswer = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select({
-          kind: macAgentRequest.kind,
-          bytes: macAgentRequest.bytes,
-          exitCode: macAgentRequest.exitCode,
-          stdout: macAgentRequest.stdout,
-          stderr: macAgentRequest.stderr,
+          kind: deviceAgentRequest.kind,
+          bytes: deviceAgentRequest.bytes,
+          exitCode: deviceAgentRequest.exitCode,
+          stdout: deviceAgentRequest.stdout,
+          stderr: deviceAgentRequest.stderr,
         })
-        .from(macAgentRequest)
+        .from(deviceAgentRequest)
         .where(
           and(
-            eq(macAgentRequest.id, id),
-            eq(macAgentRequest.userId, userId),
-            isNotNull(macAgentRequest.settledAt),
+            eq(deviceAgentRequest.id, id),
+            eq(deviceAgentRequest.userId, userId),
+            isNotNull(deviceAgentRequest.settledAt),
           ),
         ),
     ),
@@ -519,8 +519,8 @@ const deleteRequest = SqlSchema.void({
   execute: ({ userId, id }) =>
     Database.use((db) =>
       db
-        .delete(macAgentRequest)
-        .where(and(eq(macAgentRequest.id, id), eq(macAgentRequest.userId, userId))),
+        .delete(deviceAgentRequest)
+        .where(and(eq(deviceAgentRequest.id, id), eq(deviceAgentRequest.userId, userId))),
     ),
 });
 
@@ -528,12 +528,12 @@ const deleteExpiredLines = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, before: Schema.Date }),
   execute: ({ userId, before }) =>
     Database.use((db) =>
-      db.delete(macAgentLine).where(
+      db.delete(deviceAgentLine).where(
         and(
-          eq(macAgentLine.userId, userId),
-          lt(macAgentLine.createdAt, before),
+          eq(deviceAgentLine.userId, userId),
+          lt(deviceAgentLine.createdAt, before),
           // A line claimed and not yet settled is a runner still at work, whose exit is still to come.
-          or(isNull(macAgentLine.claimedAt), isNotNull(macAgentLine.settledAt)),
+          or(isNull(deviceAgentLine.claimedAt), isNotNull(deviceAgentLine.settledAt)),
         ),
       ),
     ),
@@ -544,8 +544,10 @@ const deleteExpiredRequests = SqlSchema.void({
   execute: ({ userId, before }) =>
     Database.use((db) =>
       db
-        .delete(macAgentRequest)
-        .where(and(eq(macAgentRequest.userId, userId), lt(macAgentRequest.createdAt, before))),
+        .delete(deviceAgentRequest)
+        .where(
+          and(eq(deviceAgentRequest.userId, userId), lt(deviceAgentRequest.createdAt, before)),
+        ),
     ),
 });
 
@@ -556,17 +558,17 @@ const deleteExpiredRequests = SqlSchema.void({
  * lease; its id and place, or none where the account holds no such agent
  * running on a Mac of its own.
  */
-export function queueMacAgentLine(
+export function queueDeviceAgentLine(
   userId: string,
   line: {
     /** The id its caller minted, so it can name the line before it is queued; a fresh one where none is named. */
     readonly id?: string;
     readonly agentId: string;
-    readonly kind: MacAgentLineKind;
-    readonly payload: MacAgentObject;
+    readonly kind: DeviceAgentLineKind;
+    readonly payload: DeviceAgentObject;
     readonly sealedSecrets?: string;
   },
-): MacAgentEffect<Option.Option<{ readonly id: string; readonly seq: number }>> {
+): DeviceAgentEffect<Option.Option<{ readonly id: string; readonly seq: number }>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(
       insertLine({
@@ -589,38 +591,38 @@ export function queueMacAgentLine(
  * account in hand, because a machine is asked by the session alone; only
  * for a session id the service minted, which answers nothing a member wrote.
  */
-export function macAgentOfSession(
+export function deviceAgentOfSession(
   runtimeSessionId: string,
-): MacAgentEffect<Option.Option<MacAgentPin>> {
+): DeviceAgentEffect<Option.Option<DeviceAgentPin>> {
   return findPinOfSession({ runtimeSessionId });
 }
 
 /** The local agent under the id, its starter and its Mac; nothing for an agent in a sandbox. Read with no account in hand, as above, only for an id a machine's place carries. */
-export function macAgentPin(agentId: string): MacAgentEffect<Option.Option<MacAgentPin>> {
+export function deviceAgentPin(agentId: string): DeviceAgentEffect<Option.Option<DeviceAgentPin>> {
   return findPin({ agentId });
 }
 
 /** The account's agent's newest launch line, as its machine reads whether its runner runs; nothing where none stands. */
-export function latestMacAgentLaunch(
+export function latestDeviceAgentLaunch(
   userId: string,
   agentId: string,
-): MacAgentEffect<Option.Option<MacAgentLaunch>> {
+): DeviceAgentEffect<Option.Option<DeviceAgentLaunch>> {
   return findLatestLaunch({ userId, agentId });
 }
 
 /** Whether the account's line was settled and with what exit, and whose it is; nothing where no such line stands. */
-export function macAgentLineStanding(
+export function deviceAgentLineStanding(
   userId: string,
   id: string,
-): MacAgentEffect<Option.Option<MacAgentLineStanding>> {
+): DeviceAgentEffect<Option.Option<DeviceAgentLineStanding>> {
   return findLineStanding({ userId, id });
 }
 
 /** The lines waiting for the account's Mac, in the order they were queued, without their secrets. */
-export function macAgentLinesWaiting(
+export function deviceAgentLinesWaiting(
   userId: string,
   deviceId: string,
-): MacAgentEffect<readonly MacAgentWaitingLine[]> {
+): DeviceAgentEffect<readonly DeviceAgentWaitingLine[]> {
   return findWaitingLines({ userId, deviceId });
 }
 
@@ -629,11 +631,11 @@ export function macAgentLinesWaiting(
  * and clearing them in the same statement; none where it is not that Mac's,
  * another claim took it first, or the expiry withdrew it.
  */
-export function claimMacAgentLine(
+export function claimDeviceAgentLine(
   userId: string,
   deviceId: string,
   id: string,
-): MacAgentEffect<Option.Option<MacAgentClaimedLine>> {
+): DeviceAgentEffect<Option.Option<DeviceAgentClaimedLine>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => claimLine({ userId, deviceId, id, now }));
 }
 
@@ -642,12 +644,12 @@ export function claimMacAgentLine(
  * where it is a launch line whose runner exited, answering the line's agent
  * and kind; none where that Mac holds no such line claimed and unsettled.
  */
-export function settleMacAgentLine(
+export function settleDeviceAgentLine(
   userId: string,
   deviceId: string,
   id: string,
   exitCode?: number,
-): MacAgentEffect<Option.Option<MacAgentSettledLine>> {
+): DeviceAgentEffect<Option.Option<DeviceAgentSettledLine>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(
       writeLineSettled({ userId, deviceId, id, exitCode: exitCode ?? null, now }),
@@ -657,10 +659,10 @@ export function settleMacAgentLine(
 }
 
 /** A line's exit code once its Mac settled it, null for one settled with none; nothing while it waits or runs. */
-export function macAgentLineSettlement(
+export function deviceAgentLineSettlement(
   userId: string,
   id: string,
-): MacAgentEffect<Option.Option<{ readonly exitCode: number | null }>> {
+): DeviceAgentEffect<Option.Option<{ readonly exitCode: number | null }>> {
   return findLineSettled({ userId, id });
 }
 
@@ -669,34 +671,34 @@ export function macAgentLineSettlement(
  * under the id its caller minted; false where the account holds no such
  * agent running on a Mac of its own.
  */
-export function queueMacAgentRequest(
+export function queueDeviceAgentRequest(
   userId: string,
   request: {
     readonly id: string;
     readonly agentId: string;
-    readonly kind: MacAgentRequestKind;
-    readonly args: MacAgentObject;
+    readonly kind: DeviceAgentRequestKind;
+    readonly args: DeviceAgentObject;
   },
-): MacAgentEffect<boolean> {
+): DeviceAgentEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(insertRequest({ userId, ...request, now }), (rows) => rows.length > 0),
   );
 }
 
 /** The requests waiting for the account's Mac, oldest first. */
-export function macAgentRequestsWaiting(
+export function deviceAgentRequestsWaiting(
   userId: string,
   deviceId: string,
-): MacAgentEffect<readonly MacAgentWaitingRequest[]> {
+): DeviceAgentEffect<readonly DeviceAgentWaitingRequest[]> {
   return findWaitingRequests({ userId, deviceId });
 }
 
 /** Claims one request for the account's Mac; none where it is not that Mac's, another claim took it first, or it was withdrawn. */
-export function claimMacAgentRequest(
+export function claimDeviceAgentRequest(
   userId: string,
   deviceId: string,
   id: string,
-): MacAgentEffect<Option.Option<MacAgentWaitingRequest>> {
+): DeviceAgentEffect<Option.Option<DeviceAgentWaitingRequest>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => claimRequest({ userId, deviceId, id, now }));
 }
 
@@ -706,29 +708,29 @@ export function claimMacAgentRequest(
  * the other kind. An answer past the bound fails its decode and writes
  * nothing.
  */
-export function answerMacAgentRequest(
+export function answerDeviceAgentRequest(
   userId: string,
   deviceId: string,
   id: string,
-  answer: MacAgentAnswer,
-): MacAgentEffect<boolean> {
+  answer: DeviceAgentAnswer,
+): DeviceAgentEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(writeAnswer({ userId, deviceId, id, answer, now }), (rows) => rows.length > 0),
   );
 }
 
 /** A request's answer once its Mac answered it; nothing while it waits or runs. */
-export function macAgentRequestAnswer(
+export function deviceAgentRequestAnswer(
   userId: string,
   id: string,
-): MacAgentEffect<Option.Option<MacAgentAnswer>> {
+): DeviceAgentEffect<Option.Option<DeviceAgentAnswer>> {
   return Effect.flatMap(findAnswer({ userId, id }), (row) =>
     Option.match(row, {
       onNone: () => Effect.succeed(Option.none()),
       onSome: (answer) =>
         Effect.map(
           decodeAnswer(
-            answer.kind === MAC_AGENT_REQUEST_KIND.READ_FILE
+            answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
               ? { kind: answer.kind, bytes: answer.bytes }
               : {
                   kind: answer.kind,
@@ -744,7 +746,7 @@ export function macAgentRequestAnswer(
 }
 
 /** Withdraws a request, answered or not, once its caller stops waiting on it. */
-export function withdrawMacAgentRequest(userId: string, id: string): MacAgentEffect<void> {
+export function withdrawDeviceAgentRequest(userId: string, id: string): DeviceAgentEffect<void> {
   return deleteRequest({ userId, id });
 }
 
@@ -753,7 +755,10 @@ export function withdrawMacAgentRequest(userId: string, id: string): MacAgentEff
  * given: every request, and every line but one claimed and not yet
  * settled, whose runner is still at work and whose exit is still to come.
  */
-export function withdrawExpiredMacAgentRows(userId: string, before: Date): MacAgentEffect<void> {
+export function withdrawExpiredDeviceAgentRows(
+  userId: string,
+  before: Date,
+): DeviceAgentEffect<void> {
   return Effect.andThen(
     deleteExpiredLines({ userId, before }),
     deleteExpiredRequests({ userId, before }),

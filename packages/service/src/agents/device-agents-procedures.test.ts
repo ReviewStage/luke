@@ -1,5 +1,5 @@
 /**
- * mac-agents-procedures.test.ts -- a local agent's Mac through its routes, over a real dialect: an account with the experiment off is answered nothing, and no account follows, claims, or beats another account's Mac.
+ * device-agents-procedures.test.ts -- a local agent's Mac through its routes, over a real dialect: an account with the experiment off is answered nothing, and no account follows, claims, or beats another account's Mac.
  *
  * Synthetic accounts, bearers, and Macs throughout.
  */
@@ -9,23 +9,23 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { macDevicesSeenSince } from "@luke/database/models/mac-device-store";
+import { devicesSeenSince } from "@luke/database/models/device-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB, MAC_DEVICE_LAYOUT } from "@luke/database/testing";
+import { DEVICE_LAYOUT, getTestDB } from "@luke/database/testing";
 import { EXPERIMENT } from "@luke/settings";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
-import { macAgentsProcedures } from "./mac-agents-procedures.js";
+import { deviceAgentsProcedures } from "./device-agents-procedures.js";
 
 const ORIGIN = "https://luke.test";
 const PATH = {
-  DEVICES: "/api/mac-agents/devices",
-  PRESENCE: "/api/mac-agents/presence",
-  LINES: "/api/mac-agents/lines",
-  LINE_CLAIM: "/api/mac-agents/lines/claim",
+  DEVICES: "/api/device-agents/devices",
+  PRESENCE: "/api/device-agents/presence",
+  LINES: "/api/device-agents/lines",
+  LINE_CLAIM: "/api/device-agents/lines/claim",
 } as const;
 
 /** One request of the Mac's, on the bearer of the account given, its body as JSON or its device in the query. */
@@ -56,7 +56,7 @@ const statusOf = (incoming: Request) =>
     );
     const context = yield* Effect.context<SqlClient.SqlClient>().pipe(Effect.provide(services));
     const handle = hostedFetch({
-      macAgents: macAgentsProcedures({
+      deviceAgents: deviceAgentsProcedures({
         resolveUserId: (asked) =>
           Effect.succeed(
             Option.fromNullishOr(
@@ -85,7 +85,7 @@ const account = (on: boolean) =>
 
 /** A register of a Mac under the id given. */
 function registered(deviceId: string) {
-  return { deviceId, name: "Studio", ...MAC_DEVICE_LAYOUT };
+  return { deviceId, name: "Studio", ...DEVICE_LAYOUT };
 }
 
 it.layer(getTestDB())("a local agent's Mac", (it) => {
@@ -99,7 +99,7 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
 
       assert.equal(register, HOSTED_HTTP_STATUS.NOT_FOUND);
       assert.equal(lines, HOSTED_HTTP_STATUS.NOT_FOUND);
-      assert.deepEqual(yield* macDevicesSeenSince(off, new Date(0)), []);
+      assert.deepEqual(yield* devicesSeenSince(off, new Date(0)), []);
     }),
   );
 

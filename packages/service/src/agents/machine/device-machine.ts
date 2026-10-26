@@ -1,18 +1,18 @@
 /**
- * mac-machine.ts -- the agent machine over the starter's Mac: the runner launched there by a line the Mac follows, its stdin written as more lines, and Luke's doors read through requests the Mac answers.
+ * device-machine.ts -- the agent machine over the starter's Mac: the runner launched there by a line the Mac follows, its stdin written as more lines, and Luke's doors read through requests the Mac answers.
  *
  * A local agent (`coding_agent.machine` is `mac`) runs its runner on the
  * Mac it is pinned to (`coding_agent.device_id`), which follows the rows the
- * service queues for it (`@luke/database/models/mac-agent-store`, the wire
- * in `@luke/features/mac-agent-wire`) and answers through its procedures
- * (`../mac-agents-procedures.ts`). Nothing here reaches the Mac directly:
+ * service queues for it (`@luke/database/models/device-agent-store`, the wire
+ * in `@luke/features/device-agent-wire`) and answers through its procedures
+ * (`../device-agents-procedures.ts`). Nothing here reaches the Mac directly:
  * every call is a row, and the Mac's word is a row it settled or answered.
  *
  * `layout` and `open` answer at once, from the agent and the home folder its
  * Mac registered, with no round trip: the agent's folder in that home holds
  * its worktree, which the Mac makes as it takes the launch line, the files
  * a message carries, and the skills its member installed into Luke
- * (`macAgentLayout`). `launchRunner` queues the launch line, its runner's
+ * (`deviceAgentLayout`). `launchRunner` queues the launch line, its runner's
  * environment and first lines sealed together under the deployment's key
  * ring (`sealMacLaunchSecrets`) and opened again only by the Mac's claim,
  * which clears the row's copy. `writeLine`, `writeFiles`, and `kill` queue a
@@ -25,7 +25,7 @@
  * every caller of `launchRunner`, `writeLine`, `writeFiles`, and `kill`
  * holds (`../coder-host/runner-sessions.ts`), because the lines' order is
  * their order of commit and only the lease keeps two from interleaving
- * (`mac-agent-store.ts`'s header). The other calls queue no line: the Mac
+ * (`device-agent-store.ts`'s header). The other calls queue no line: the Mac
  * has no firewall Luke sets, so `setCredential` does nothing, and nothing
  * to stop, resume, or throw away, since its worktree is the developer's own
  * and a warm runner ends by itself at its idle cap, settling its line.
@@ -49,31 +49,31 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import {
-  latestMacAgentLaunch,
-  type MacAgentPin,
-  macAgentLineStanding,
-  macAgentOfSession,
-  macAgentPin,
-  macAgentRequestAnswer,
-  queueMacAgentLine,
-  queueMacAgentRequest,
-  withdrawMacAgentRequest,
-} from "@luke/database/models/mac-agent-store";
-import { macDeviceLayout, macDevicesSeenSince } from "@luke/database/models/mac-device-store";
+  type DeviceAgentPin,
+  deviceAgentLineStanding,
+  deviceAgentOfSession,
+  deviceAgentPin,
+  deviceAgentRequestAnswer,
+  latestDeviceAgentLaunch,
+  queueDeviceAgentLine,
+  queueDeviceAgentRequest,
+  withdrawDeviceAgentRequest,
+} from "@luke/database/models/device-agent-store";
+import { deviceLayout, devicesSeenSince } from "@luke/database/models/device-store";
 import { parseKeyRing, sealMacLaunchSecrets } from "@luke/database/models/provider-key-seal";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import {
-  MAC_AGENT_BOUNDS,
-  MAC_AGENT_LINE_KIND,
-  MAC_AGENT_REQUEST_KIND,
-  type MacAgentAnswer,
-  type MacAgentLaunchPayload,
-  type MacAgentObject,
-  macAgentFilesPayloadSchema,
-  macAgentLaunchPayloadSchema,
-  macAgentLaunchSecretsSchema,
-  macAgentLayout,
-} from "@luke/features/mac-agent-wire";
+  DEVICE_AGENT_BOUNDS,
+  DEVICE_AGENT_LINE_KIND,
+  DEVICE_AGENT_REQUEST_KIND,
+  type DeviceAgentAnswer,
+  type DeviceAgentLaunchPayload,
+  type DeviceAgentObject,
+  deviceAgentFilesPayloadSchema,
+  deviceAgentLaunchPayloadSchema,
+  deviceAgentLaunchSecretsSchema,
+  deviceAgentLayout,
+} from "@luke/features/device-agent-wire";
 import {
   Brand,
   Clock,
@@ -127,7 +127,7 @@ export const MAC_MACHINE = {
  * the router asks first (`agent-machines.ts`). Its open and its launch reach
  * none of the services a sandbox's do, only the store it was made over.
  */
-export interface MacMachineService extends AgentMachineService {
+export interface DeviceMachineService extends AgentMachineService {
   readonly owns: (session: string) => Effect.Effect<boolean, SandboxUnavailable>;
   readonly open: <A, E, R, B, EB, RB>(
     ask: MachineOpen<B, EB, RB>,
@@ -146,13 +146,13 @@ export interface MacMachineService extends AgentMachineService {
 const runningOfAgent = Brand.nominal<MachineRunning>();
 const nameOfAgent = Brand.nominal<MachineName>();
 
-const encodeFilesPayload = Schema.encodeSync(macAgentFilesPayloadSchema);
-const encodeLaunchPayload = Schema.encodeSync(macAgentLaunchPayloadSchema);
-const encodeSecrets = Schema.encodeSync(Schema.fromJsonString(macAgentLaunchSecretsSchema));
+const encodeFilesPayload = Schema.encodeSync(deviceAgentFilesPayloadSchema);
+const encodeLaunchPayload = Schema.encodeSync(deviceAgentLaunchPayloadSchema);
+const encodeSecrets = Schema.encodeSync(Schema.fromJsonString(deviceAgentLaunchSecretsSchema));
 
 /** A local agent's place on its Mac, under Luke's session given: the agent itself, since it has one place. */
 function macPlace(session: string, agentId: string): MachinePlace {
-  return { machine: CODING_AGENT_MACHINE.MAC, session, running: runningOfAgent(agentId) };
+  return { machine: CODING_AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
 }
 
 /** A failure the store or the seal answered, as a machine's own: unavailable, with no words of the cause. */
@@ -161,9 +161,9 @@ function unavailable(): SandboxUnavailable {
 }
 
 /** A line's payload as the row holds it: a JSON object. */
-function objectOf(value: object): MacAgentObject {
+function objectOf(value: object): DeviceAgentObject {
   // SAFETY: every payload is a struct's encoded form, a JSON object of string keys.
-  return value as MacAgentObject;
+  return value as DeviceAgentObject;
 }
 
 /**
@@ -171,10 +171,10 @@ function objectOf(value: object): MacAgentObject {
  * given and its launches sealed under the deployment's key ring, where the
  * services carry one.
  */
-function macMachineOver(
+function deviceMachineOver(
   context: Context.Context<DatabaseServices>,
   environment: Option.Option<typeof HostedEnvironment.Service>,
-): MacMachineService {
+): DeviceMachineService {
   /** One store call on the services given, a failure of it unavailable. */
   const stored = <A, E>(effect: Effect.Effect<A, E, DatabaseServices>) =>
     effect.pipe(
@@ -184,12 +184,12 @@ function macMachineOver(
 
   /** The local agent a place names, by its id. */
   const pinOfPlace = (place: MachinePlace) =>
-    Effect.flatMap(stored(macAgentPin(place.running)), (pin) =>
+    Effect.flatMap(stored(deviceAgentPin(place.running)), (pin) =>
       Option.isSome(pin) ? Effect.succeed(pin.value) : Effect.fail(unavailable()),
     );
 
   /** The local agent running in the session, where one does. */
-  const pinOfSession = (session: string) => stored(macAgentOfSession(session));
+  const pinOfSession = (session: string) => stored(deviceAgentOfSession(session));
 
   /** Where the agent's things stand on its Mac, from the home folder that Mac registered; refused where it is pinned to no Mac of its starter's. */
   const layoutOf = (userId: string, agentId: string, deviceId: string | null | undefined) =>
@@ -197,9 +197,9 @@ function macMachineOver(
       if (deviceId === null || deviceId === undefined) {
         return yield* new LaunchRefused({ reason: "no mac" });
       }
-      const device = yield* stored(macDeviceLayout(userId, deviceId));
+      const device = yield* stored(deviceLayout(userId, deviceId));
       if (Option.isNone(device)) return yield* new LaunchRefused({ reason: "no mac" });
-      const folders = macAgentLayout(device.value.home, agentId);
+      const folders = deviceAgentLayout(device.value.home, agentId);
       const layout: MachineLayout = {
         checkoutPath: folders.checkoutPath,
         installedSkills: folders.installedSkills,
@@ -216,33 +216,33 @@ function macMachineOver(
 
   /** One line queued for the agent; unavailable where the store holds no such agent on a Mac. */
   const queued = (
-    pin: MacAgentPin,
+    pin: DeviceAgentPin,
     line: {
       readonly id?: string;
-      readonly kind: (typeof MAC_AGENT_LINE_KIND)[keyof typeof MAC_AGENT_LINE_KIND];
-      readonly payload: MacAgentObject;
+      readonly kind: (typeof DEVICE_AGENT_LINE_KIND)[keyof typeof DEVICE_AGENT_LINE_KIND];
+      readonly payload: DeviceAgentObject;
       readonly sealedSecrets?: string;
     },
   ) =>
     Effect.flatMap(
-      stored(queueMacAgentLine(pin.userId, { agentId: pin.agentId, ...line })),
+      stored(queueDeviceAgentLine(pin.userId, { agentId: pin.agentId, ...line })),
       (row) => (Option.isSome(row) ? Effect.void : Effect.fail(unavailable())),
     );
 
   /** Whether the runner a handle names has ended: its launch line settled, or gone. */
-  const runnerEnded = (pin: MacAgentPin, handle: RunnerHandle) =>
+  const runnerEnded = (pin: DeviceAgentPin, handle: RunnerHandle) =>
     Effect.map(
-      stored(macAgentLineStanding(pin.userId, handle.command)),
+      stored(deviceAgentLineStanding(pin.userId, handle.command)),
       (standing) => Option.isNone(standing) || standing.value.settled,
     );
 
   /** Whether the agent's Mac has beaten lately. */
-  const present = (pin: MacAgentPin) =>
+  const present = (pin: DeviceAgentPin) =>
     Effect.gen(function* () {
       if (pin.deviceId === null) return false;
       const now = yield* Clock.currentTimeMillis;
       const since = new Date(now - Duration.toMillis(MAC_MACHINE.PRESENCE));
-      const seen = yield* stored(macDevicesSeenSince(pin.userId, since));
+      const seen = yield* stored(devicesSeenSince(pin.userId, since));
       return seen.some((device) => device.id === pin.deviceId);
     });
 
@@ -253,8 +253,8 @@ function macMachineOver(
    */
   const asked = (
     session: string,
-    kind: (typeof MAC_AGENT_REQUEST_KIND)[keyof typeof MAC_AGENT_REQUEST_KIND],
-    args: MacAgentObject,
+    kind: (typeof DEVICE_AGENT_REQUEST_KIND)[keyof typeof DEVICE_AGENT_REQUEST_KIND],
+    args: DeviceAgentObject,
   ) =>
     Effect.gen(function* () {
       const pin = yield* pinOfSession(session);
@@ -262,23 +262,23 @@ function macMachineOver(
       const { userId, agentId } = pin.value;
       const id = randomUUID();
       const answer = yield* Effect.gen(function* () {
-        if (!(yield* stored(queueMacAgentRequest(userId, { id, agentId, kind, args })))) {
-          return Option.none<MacAgentAnswer>();
+        if (!(yield* stored(queueDeviceAgentRequest(userId, { id, agentId, kind, args })))) {
+          return Option.none<DeviceAgentAnswer>();
         }
-        return yield* stored(macAgentRequestAnswer(userId, id)).pipe(
+        return yield* stored(deviceAgentRequestAnswer(userId, id)).pipe(
           Effect.repeat({ schedule: Schedule.spaced(MAC_MACHINE.POLL), until: Option.isSome }),
           Effect.timeoutOption(MAC_MACHINE.ANSWER_WAIT),
           Effect.map(Option.flatten),
         );
-      }).pipe(Effect.ensuring(Effect.ignore(stored(withdrawMacAgentRequest(userId, id)))));
+      }).pipe(Effect.ensuring(Effect.ignore(stored(withdrawDeviceAgentRequest(userId, id)))));
       if (Option.isNone(answer) || answer.value.kind !== kind) return yield* unavailable();
       return answer.value;
     });
 
   /** The runner's exit as its launch line was settled: its code, gone where it settled with none or the line is gone, null while it runs. */
-  const exitOf = (pin: MacAgentPin, handle: RunnerHandle) =>
+  const exitOf = (pin: DeviceAgentPin, handle: RunnerHandle) =>
     Effect.map(
-      stored(macAgentLineStanding(pin.userId, handle.command)),
+      stored(deviceAgentLineStanding(pin.userId, handle.command)),
       (standing): CommandExit => {
         if (Option.isNone(standing)) return COMMAND_GONE;
         if (!standing.value.settled) return null;
@@ -325,10 +325,12 @@ function macMachineOver(
         const pin = yield* pinOfSession(session);
         if (Option.isNone(pin)) return [];
         const { userId, agentId } = pin.value;
-        const launch = yield* stored(latestMacAgentLaunch(userId, agentId));
+        const launch = yield* stored(latestDeviceAgentLaunch(userId, agentId));
         const place = macPlace(session, agentId);
         const payload = Option.flatMap(launch, (line) =>
-          Option.getSuccess(Schema.decodeUnknownResult(macAgentLaunchPayloadSchema)(line.payload)),
+          Option.getSuccess(
+            Schema.decodeUnknownResult(deviceAgentLaunchPayloadSchema)(line.payload),
+          ),
         );
         const mark = Option.map(payload, (read) => ({
           firstSequence: read.firstSequence,
@@ -342,7 +344,7 @@ function macMachineOver(
             ? { handle: { ...place, command: launch.value.id }, mark: mark.value }
             : undefined;
         const found: FoundPlace = {
-          machine: CODING_AGENT_MACHINE.MAC,
+          machine: CODING_AGENT_MACHINE.DEVICE,
           session,
           agentId,
           name: nameOfAgent(agentId),
@@ -361,9 +363,9 @@ function macMachineOver(
       Effect.gen(function* () {
         if (record.kind === RUNNER_RECORD.RUNNING) return;
         const pin = yield* pinOfPlace(macPlace(place.session, place.agentId));
-        const launch = yield* stored(latestMacAgentLaunch(pin.userId, pin.agentId));
+        const launch = yield* stored(latestDeviceAgentLaunch(pin.userId, pin.agentId));
         if (Option.isNone(launch) || launch.value.settled || launch.value.stopped) return;
-        yield* queued(pin, { kind: MAC_AGENT_LINE_KIND.STOP, payload: {} });
+        yield* queued(pin, { kind: DEVICE_AGENT_LINE_KIND.STOP, payload: {} });
       }),
 
     setCredential: () => Effect.void,
@@ -380,7 +382,7 @@ function macMachineOver(
     writeFiles: (place, files: readonly SandboxFile[]) =>
       Effect.flatMap(pinOfPlace(place), (pin) =>
         queued(pin, {
-          kind: MAC_AGENT_LINE_KIND.FILES,
+          kind: DEVICE_AGENT_LINE_KIND.FILES,
           payload: objectOf(
             encodeFilesPayload({
               files: files.map((file) => ({
@@ -413,7 +415,7 @@ function macMachineOver(
             { userId: pin.userId, agentId: pin.agentId },
             Redacted.make(encodeSecrets({ env: launch.env, stdin: lines })),
           );
-          const payload: MacAgentLaunchPayload = {
+          const payload: DeviceAgentLaunchPayload = {
             checkoutPath: layout.checkoutPath,
             repository: agent.value.repository,
             startBranch: agent.value.startBranch,
@@ -423,7 +425,7 @@ function macMachineOver(
           };
           yield* queued(pin, {
             id,
-            kind: MAC_AGENT_LINE_KIND.LAUNCH,
+            kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
             payload: objectOf(encodeLaunchPayload(payload)),
             sealedSecrets,
           });
@@ -437,7 +439,7 @@ function macMachineOver(
         if (yield* runnerEnded(pin, handle)) {
           return yield* new SandboxUnavailable({ status: NOT_FOUND_STATUS });
         }
-        yield* queued(pin, { kind: MAC_AGENT_LINE_KIND.MESSAGE, payload: { text } });
+        yield* queued(pin, { kind: DEVICE_AGENT_LINE_KIND.MESSAGE, payload: { text } });
       }),
 
     runnerExit: (handle, within = MAC_MACHINE.EXIT_WAIT) =>
@@ -457,17 +459,17 @@ function macMachineOver(
       Effect.gen(function* () {
         const pin = yield* pinOfPlace(handle);
         if (yield* runnerEnded(pin, handle)) return;
-        yield* queued(pin, { kind: MAC_AGENT_LINE_KIND.STOP, payload: {} });
+        yield* queued(pin, { kind: DEVICE_AGENT_LINE_KIND.STOP, payload: {} });
       }),
 
     readFile: (session, path, bound) =>
       Effect.map(
-        asked(session, MAC_AGENT_REQUEST_KIND.READ_FILE, {
+        asked(session, DEVICE_AGENT_REQUEST_KIND.READ_FILE, {
           path,
-          maxBytes: Math.min(bound, MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES) + 1,
+          maxBytes: Math.min(bound, DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES) + 1,
         }),
         (answer) =>
-          answer.kind === MAC_AGENT_REQUEST_KIND.READ_FILE && answer.bytes !== null
+          answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE && answer.bytes !== null
             ? answer.bytes
             : undefined,
       ),
@@ -476,12 +478,12 @@ function macMachineOver(
     // repository's command names the folder its sandbox keeps the checkout in.
     runRepositoryCommand: (session, command) =>
       Effect.flatMap(
-        asked(session, MAC_AGENT_REQUEST_KIND.RUN_COMMAND, {
+        asked(session, DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND, {
           command: command.command,
           ...(command.env === undefined ? {} : { env: command.env }),
         }),
         (answer): Effect.Effect<CommandRun, SandboxUnavailable> =>
-          answer.kind === MAC_AGENT_REQUEST_KIND.RUN_COMMAND
+          answer.kind === DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND
             ? Effect.succeed({
                 exitCode: answer.exitCode,
                 stdout: answer.stdout,
@@ -493,10 +495,9 @@ function macMachineOver(
 }
 
 /** The machine over the account's Macs, on the calling fiber's store and, where it has one, the deployment's key ring. */
-export const macMachine: Effect.Effect<MacMachineService, never, DatabaseServices> = Effect.gen(
-  function* () {
+export const deviceMachine: Effect.Effect<DeviceMachineService, never, DatabaseServices> =
+  Effect.gen(function* () {
     const context = yield* Effect.context<DatabaseServices>();
     const environment = yield* Effect.serviceOption(HostedEnvironment);
-    return macMachineOver(context, environment);
-  },
-);
+    return deviceMachineOver(context, environment);
+  });

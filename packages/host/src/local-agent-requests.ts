@@ -1,12 +1,12 @@
 import {
-  MAC_AGENT_BOUNDS,
-  MAC_AGENT_REQUEST_KIND,
-  type MacAgentAnswer,
-  type MacAgentLayout,
-  type MacAgentRequest,
-  macAgentCommandArgsSchema,
-  macAgentReadArgsSchema,
-} from "@luke/features/mac-agent-wire";
+  DEVICE_AGENT_BOUNDS,
+  DEVICE_AGENT_REQUEST_KIND,
+  type DeviceAgentAnswer,
+  type DeviceAgentLayout,
+  type DeviceAgentRequest,
+  deviceAgentCommandArgsSchema,
+  deviceAgentReadArgsSchema,
+} from "@luke/features/device-agent-wire";
 import { Duration, Effect, Fiber, Option, Ref, Schema, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
@@ -15,7 +15,7 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * local-agent-requests.ts -- what a local agent's tools ask of this Mac, answered only inside the agent's own folder: a file read, or a command run in its worktree as `show_code` runs one.
  *
  * The service asks for a path it built under the agent's folder
- * (`macAgentLayout`), but a path is only words: a `..`, or a symlink the
+ * (`deviceAgentLayout`), but a path is only words: a `..`, or a symlink the
  * agent made in its worktree, could name any file the developer can read.
  * So every target is resolved to its real path first, every symlink
  * followed, and answered only where that real path stands inside the real
@@ -26,7 +26,7 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * and is refused the same way.
  *
  * A read answers at most the bytes asked for, and never more than one past
- * `MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES`, so the caller still sees a file
+ * `DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES`, so the caller still sees a file
  * larger than its bound. A command runs in bash in the worktree, as the
  * leader of a process group of its own, under the developer's own variables
  * the caller hands on and the ones the request names, never the rest of the
@@ -50,10 +50,10 @@ const LOCAL_AGENT_COMMAND = {
 const OUTSIDE = "Not run: the agent's worktree is not inside its folder on this Mac.";
 
 /** The most bytes an output keeps, short of the bound by the widest character a cut could leave half of, which decodes as a three-byte replacement. */
-const KEPT_OUTPUT_BYTES = MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES - 4;
+const KEPT_OUTPUT_BYTES = DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES - 4;
 
-const decodeReadArgs = Schema.decodeUnknownOption(macAgentReadArgsSchema);
-const decodeCommandArgs = Schema.decodeUnknownOption(macAgentCommandArgsSchema);
+const decodeReadArgs = Schema.decodeUnknownOption(deviceAgentReadArgsSchema);
+const decodeCommandArgs = Schema.decodeUnknownOption(deviceAgentCommandArgsSchema);
 
 /** Whether `path`, already real, stands at or under `root`, already real. */
 function within(root: string, path: string): boolean {
@@ -67,7 +67,7 @@ function within(root: string, path: string): boolean {
  * the target resolves outside.
  */
 const confinedPath = (
-  layout: Pick<MacAgentLayout, "folder">,
+  layout: Pick<DeviceAgentLayout, "folder">,
   target: string,
 ): Effect.Effect<Option.Option<string>, never, FileSystem.FileSystem> =>
   Effect.gen(function* () {
@@ -93,17 +93,20 @@ const readBounded = (path: string, bound: number) =>
   }).pipe(Effect.orElseSucceed(() => null));
 
 /** A read asked: the bytes of the file it names, inside the agent's folder; no bytes for anything else. */
-const answeredRead = (layout: MacAgentLayout, args: unknown) =>
+const answeredRead = (layout: DeviceAgentLayout, args: unknown) =>
   Effect.gen(function* () {
     const read = decodeReadArgs(args);
-    const answer = (bytes: Uint8Array | null): MacAgentAnswer => ({
-      kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
+    const answer = (bytes: Uint8Array | null): DeviceAgentAnswer => ({
+      kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
       bytes,
     });
     if (Option.isNone(read)) return answer(null);
     const path = yield* confinedPath(layout, read.value.path);
     if (Option.isNone(path)) return answer(null);
-    const bound = Math.max(0, Math.min(read.value.maxBytes, MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES + 1));
+    const bound = Math.max(
+      0,
+      Math.min(read.value.maxBytes, DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES + 1),
+    );
     return answer(yield* readBounded(path.value, bound));
   });
 
@@ -154,8 +157,8 @@ const ranCommand = (checkout: string, command: string, env: Readonly<Record<stri
       yield* Effect.ignore(
         Effect.timeoutOption(Fiber.join(drains), LOCAL_AGENT_COMMAND.DRAIN_GRACE),
       );
-      const answer: MacAgentAnswer = {
-        kind: MAC_AGENT_REQUEST_KIND.RUN_COMMAND,
+      const answer: DeviceAgentAnswer = {
+        kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
         exitCode: Option.match(exited, {
           onNone: () => LOCAL_AGENT_COMMAND.NOT_RUN,
           onSome: (code) => Number(code),
@@ -169,13 +172,13 @@ const ranCommand = (checkout: string, command: string, env: Readonly<Record<stri
 
 /** A command asked: run in the agent's worktree where it stands inside the agent's folder; refused otherwise. */
 const answeredCommand = (
-  layout: MacAgentLayout,
+  layout: DeviceAgentLayout,
   args: unknown,
   base: Readonly<Record<string, string>>,
 ) =>
   Effect.gen(function* () {
-    const refused = (why: string): MacAgentAnswer => ({
-      kind: MAC_AGENT_REQUEST_KIND.RUN_COMMAND,
+    const refused = (why: string): DeviceAgentAnswer => ({
+      kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
       exitCode: LOCAL_AGENT_COMMAND.NOT_RUN,
       stdout: "",
       stderr: why,
@@ -192,14 +195,14 @@ const answeredCommand = (
 
 /** What one request of a local agent's tools answers, inside the agent's folder given, a command under the variables `env` hands on. */
 export const answeredLocalAgentRequest = (
-  layout: MacAgentLayout,
-  request: Pick<MacAgentRequest, "kind" | "args">,
+  layout: DeviceAgentLayout,
+  request: Pick<DeviceAgentRequest, "kind" | "args">,
   env: Readonly<Record<string, string>>,
 ): Effect.Effect<
-  MacAgentAnswer,
+  DeviceAgentAnswer,
   never,
   FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
 > =>
-  request.kind === MAC_AGENT_REQUEST_KIND.READ_FILE
+  request.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
     ? answeredRead(layout, request.args)
     : answeredCommand(layout, request.args, env);

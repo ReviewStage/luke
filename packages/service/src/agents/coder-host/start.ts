@@ -11,7 +11,7 @@ import {
   readCodingAgentByKey,
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
-import { macDevicesNamed } from "@luke/database/models/mac-device-store";
+import { devicesNamed } from "@luke/database/models/device-store";
 import { listAccountProviderKeyRows } from "@luke/database/models/provider-key-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
 import {
@@ -975,7 +975,7 @@ function startRuntimeOf(
   },
 ) {
   const chosen =
-    asked.machine === CODING_AGENT_MACHINE.MAC
+    asked.machine === CODING_AGENT_MACHINE.DEVICE
       ? localAgentRuntimeChoice(userId, model, asked.deviceId, keys)
       : agentRuntimeChoice(userId, model, keys);
   return Effect.catch(chosen, (failure) =>
@@ -1353,7 +1353,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
       [
         readAccountNames(summaryAccounts(agent)),
         nativeRuntimesOfReached([agent.conversationId]),
-        macDevicesNamed(summaryDevices([agent])),
+        devicesNamed(summaryDevices([agent])),
       ],
       { concurrency: 3 },
     ),

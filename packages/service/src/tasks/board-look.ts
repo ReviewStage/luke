@@ -61,7 +61,9 @@ export const LOOK_AT_BOARD_TOOL = {
     "See the task's whiteboard as the developer sees it: an image of the whole board, your " +
     "latest drawing and what they drew. Call it after draw_on_board, and check that every " +
     "label is whole, nothing overlaps, and no arrow crosses a shape it does not join; then fix " +
-    "what you see by drawing again. Answers the image, or `not-looked` and why.",
+    "what you see by drawing again. Answers the image, or `not-looked` and why: it sees the " +
+    "board only while the developer has it open on their Mac, and otherwise waits a few " +
+    "seconds and refuses.",
   inputSchema: Schema.Struct({}),
 } as const;
 

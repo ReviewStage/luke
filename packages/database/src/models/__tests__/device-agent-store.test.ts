@@ -3,34 +3,34 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import {
-  MAC_AGENT_BOUNDS,
-  MAC_AGENT_LINE_KIND,
-  MAC_AGENT_REQUEST_KIND,
-  type MacAgentAnswer,
-} from "@luke/features/mac-agent-wire";
+  DEVICE_AGENT_BOUNDS,
+  DEVICE_AGENT_LINE_KIND,
+  DEVICE_AGENT_REQUEST_KIND,
+  type DeviceAgentAnswer,
+} from "@luke/features/device-agent-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { macAgentLine } from "../../schemas/mac-agent.js";
-import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "../../testing/index.js";
+import { deviceAgentLine } from "../../schemas/device-agent.js";
+import { DEVICE_LAYOUT, getTestDB, startTask } from "../../testing/index.js";
 import { createCodingAgent } from "../coding-agent-store.js";
 import {
-  answerMacAgentRequest,
-  claimMacAgentLine,
-  claimMacAgentRequest,
-  macAgentLineSettlement,
-  macAgentLinesWaiting,
-  macAgentRequestAnswer,
-  macAgentRequestsWaiting,
-  queueMacAgentLine,
-  queueMacAgentRequest,
-  settleMacAgentLine,
-  withdrawExpiredMacAgentRows,
-} from "../mac-agent-store.js";
-import { registerMacDevice } from "../mac-device-store.js";
+  answerDeviceAgentRequest,
+  claimDeviceAgentLine,
+  claimDeviceAgentRequest,
+  deviceAgentLineSettlement,
+  deviceAgentLinesWaiting,
+  deviceAgentRequestAnswer,
+  deviceAgentRequestsWaiting,
+  queueDeviceAgentLine,
+  queueDeviceAgentRequest,
+  settleDeviceAgentLine,
+  withdrawExpiredDeviceAgentRows,
+} from "../device-agent-store.js";
+import { registerDevice } from "../device-store.js";
 
 /**
  * The work queued for a local agent's Mac, over a real dialect: a line is
@@ -45,8 +45,8 @@ import { registerMacDevice } from "../mac-device-store.js";
 
 const SEALED = "sealed:v1:not-a-real-secret";
 
-const COMMAND_ANSWER: MacAgentAnswer = {
-  kind: MAC_AGENT_REQUEST_KIND.RUN_COMMAND,
+const COMMAND_ANSWER: DeviceAgentAnswer = {
+  kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
   exitCode: 0,
   stdout: "line one\n",
   stderr: "",
@@ -59,7 +59,7 @@ const openAccount = (onMac = true) =>
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     const deviceId = randomUUID();
-    yield* registerMacDevice(userId, { id: deviceId, name: "Studio", ...MAC_DEVICE_LAYOUT });
+    yield* registerDevice(userId, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
     const task = yield* startTask(userId, { name: "Invitations" });
     const started = yield* createCodingAgent(userId, {
       taskId: task.id,
@@ -74,7 +74,7 @@ const openAccount = (onMac = true) =>
     if (onMac) {
       yield* db
         .update(codingAgent)
-        .set({ machine: CODING_AGENT_MACHINE.MAC, deviceId })
+        .set({ machine: CODING_AGENT_MACHINE.DEVICE, deviceId })
         .where(eq(codingAgent.id, agentId));
     }
     return { userId, deviceId, agentId };
@@ -83,13 +83,13 @@ const openAccount = (onMac = true) =>
 const launch = (agentId: string) =>
   ({
     agentId,
-    kind: MAC_AGENT_LINE_KIND.LAUNCH,
+    kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
     payload: { config: { model: "anthropic/claude-opus-5.5" } },
     sealedSecrets: SEALED,
   }) as const;
 
 const message = (agentId: string, text: string) =>
-  ({ agentId, kind: MAC_AGENT_LINE_KIND.MESSAGE, payload: { text } }) as const;
+  ({ agentId, kind: DEVICE_AGENT_LINE_KIND.MESSAGE, payload: { text } }) as const;
 
 /** Five minutes past the clock's reading now, which the layer's clock carries from test to test. */
 const fiveMinutesOn = Effect.map(
@@ -102,9 +102,9 @@ const storedSecrets = (id: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const [row] = yield* db
-      .select({ sealedSecrets: macAgentLine.sealedSecrets })
-      .from(macAgentLine)
-      .where(eq(macAgentLine.id, id));
+      .select({ sealedSecrets: deviceAgentLine.sealedSecrets })
+      .from(deviceAgentLine)
+      .where(eq(deviceAgentLine.id, id));
     return row?.sealedSecrets;
   });
 
@@ -114,19 +114,19 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
     () =>
       Effect.gen(function* () {
         const { userId, deviceId, agentId } = yield* openAccount();
-        const queued = Option.getOrThrow(yield* queueMacAgentLine(userId, launch(agentId)));
+        const queued = Option.getOrThrow(yield* queueDeviceAgentLine(userId, launch(agentId)));
 
-        const waiting = yield* macAgentLinesWaiting(userId, deviceId);
+        const waiting = yield* deviceAgentLinesWaiting(userId, deviceId);
         const claims = yield* Effect.all(
           [
-            claimMacAgentLine(userId, deviceId, queued.id),
-            claimMacAgentLine(userId, deviceId, queued.id),
+            claimDeviceAgentLine(userId, deviceId, queued.id),
+            claimDeviceAgentLine(userId, deviceId, queued.id),
           ],
           { concurrency: "unbounded" },
         );
-        const settledBeforeExit = yield* macAgentLineSettlement(userId, queued.id);
-        const settled = yield* settleMacAgentLine(userId, deviceId, queued.id, 137);
-        const settledAgain = yield* settleMacAgentLine(userId, deviceId, queued.id, 0);
+        const settledBeforeExit = yield* deviceAgentLineSettlement(userId, queued.id);
+        const settled = yield* settleDeviceAgentLine(userId, deviceId, queued.id, 137);
+        const settledAgain = yield* settleDeviceAgentLine(userId, deviceId, queued.id, 0);
 
         assert.deepEqual(
           waiting.map((line) => Object.keys(line).includes("sealedSecrets")),
@@ -138,12 +138,12 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
           [Option.some(SEALED), Option.none()],
         );
         assert.equal(yield* storedSecrets(queued.id), null, "the claim cleared the secrets");
-        assert.deepEqual(yield* macAgentLinesWaiting(userId, deviceId), []);
+        assert.deepEqual(yield* deviceAgentLinesWaiting(userId, deviceId), []);
         assert.deepEqual(settledBeforeExit, Option.none());
         assert.equal(Option.isSome(settled), true);
         assert.equal(Option.isNone(settledAgain), true, "the first settle stands");
         assert.deepEqual(
-          yield* macAgentLineSettlement(userId, queued.id),
+          yield* deviceAgentLineSettlement(userId, queued.id),
           Option.some({ exitCode: 137 }),
         );
       }),
@@ -152,18 +152,18 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
   it.effect("an agent's lines are read in the order they were queued", () =>
     Effect.gen(function* () {
       const { userId, deviceId, agentId } = yield* openAccount();
-      yield* queueMacAgentLine(userId, launch(agentId));
-      yield* queueMacAgentLine(userId, message(agentId, "first"));
-      yield* queueMacAgentLine(userId, message(agentId, "second"));
+      yield* queueDeviceAgentLine(userId, launch(agentId));
+      yield* queueDeviceAgentLine(userId, message(agentId, "first"));
+      yield* queueDeviceAgentLine(userId, message(agentId, "second"));
 
-      const waiting = yield* macAgentLinesWaiting(userId, deviceId);
+      const waiting = yield* deviceAgentLinesWaiting(userId, deviceId);
 
       assert.deepEqual(
         waiting.map((line) => [line.kind, line.payload.text]),
         [
-          [MAC_AGENT_LINE_KIND.LAUNCH, undefined],
-          [MAC_AGENT_LINE_KIND.MESSAGE, "first"],
-          [MAC_AGENT_LINE_KIND.MESSAGE, "second"],
+          [DEVICE_AGENT_LINE_KIND.LAUNCH, undefined],
+          [DEVICE_AGENT_LINE_KIND.MESSAGE, "first"],
+          [DEVICE_AGENT_LINE_KIND.MESSAGE, "second"],
         ],
       );
     }),
@@ -172,15 +172,15 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
   it.effect("an agent's next line follows its last even once expiry withdrew every line", () =>
     Effect.gen(function* () {
       const { userId, deviceId, agentId } = yield* openAccount();
-      const first = Option.getOrThrow(yield* queueMacAgentLine(userId, launch(agentId)));
+      const first = Option.getOrThrow(yield* queueDeviceAgentLine(userId, launch(agentId)));
       const cutoff = yield* fiveMinutesOn;
       yield* TestClock.adjust("10 minutes");
-      yield* withdrawExpiredMacAgentRows(userId, cutoff);
+      yield* withdrawExpiredDeviceAgentRows(userId, cutoff);
 
-      const next = Option.getOrThrow(yield* queueMacAgentLine(userId, message(agentId, "back")));
+      const next = Option.getOrThrow(yield* queueDeviceAgentLine(userId, message(agentId, "back")));
 
       assert.deepEqual(
-        (yield* macAgentLinesWaiting(userId, deviceId)).map((line) => line.id),
+        (yield* deviceAgentLinesWaiting(userId, deviceId)).map((line) => line.id),
         [next.id],
       );
       assert.ok(next.seq > first.seq, "a withdrawn line's place is never handed out again");
@@ -194,46 +194,58 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         const owner = yield* openAccount();
         const other = yield* openAccount();
         const line = Option.getOrThrow(
-          yield* queueMacAgentLine(owner.userId, launch(owner.agentId)),
+          yield* queueDeviceAgentLine(owner.userId, launch(owner.agentId)),
         );
         const requestId = randomUUID();
-        yield* queueMacAgentRequest(owner.userId, {
+        yield* queueDeviceAgentRequest(owner.userId, {
           id: requestId,
           agentId: owner.agentId,
-          kind: MAC_AGENT_REQUEST_KIND.RUN_COMMAND,
+          kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
           args: { command: "git status" },
         });
 
-        const queuedByOther = yield* queueMacAgentLine(other.userId, message(owner.agentId, "hi"));
-        const requestedByOther = yield* queueMacAgentRequest(other.userId, {
+        const queuedByOther = yield* queueDeviceAgentLine(
+          other.userId,
+          message(owner.agentId, "hi"),
+        );
+        const requestedByOther = yield* queueDeviceAgentRequest(other.userId, {
           id: randomUUID(),
           agentId: owner.agentId,
-          kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
+          kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
           args: { path: "/etc/hosts" },
         });
-        const linesOnOwnersMac = yield* macAgentLinesWaiting(other.userId, owner.deviceId);
-        const requestsOnOwnersMac = yield* macAgentRequestsWaiting(other.userId, owner.deviceId);
-        const lineClaimedByOther = yield* claimMacAgentLine(other.userId, other.deviceId, line.id);
-        const lineClaimedOnOwnersMac = yield* claimMacAgentLine(
+        const linesOnOwnersMac = yield* deviceAgentLinesWaiting(other.userId, owner.deviceId);
+        const requestsOnOwnersMac = yield* deviceAgentRequestsWaiting(other.userId, owner.deviceId);
+        const lineClaimedByOther = yield* claimDeviceAgentLine(
+          other.userId,
+          other.deviceId,
+          line.id,
+        );
+        const lineClaimedOnOwnersMac = yield* claimDeviceAgentLine(
           other.userId,
           owner.deviceId,
           line.id,
         );
-        const requestClaimedByOther = yield* claimMacAgentRequest(
+        const requestClaimedByOther = yield* claimDeviceAgentRequest(
           other.userId,
           owner.deviceId,
           requestId,
         );
-        yield* claimMacAgentLine(owner.userId, owner.deviceId, line.id);
-        yield* claimMacAgentRequest(owner.userId, owner.deviceId, requestId);
-        const settledByOther = yield* settleMacAgentLine(other.userId, owner.deviceId, line.id, 0);
-        const answeredByOther = yield* answerMacAgentRequest(
+        yield* claimDeviceAgentLine(owner.userId, owner.deviceId, line.id);
+        yield* claimDeviceAgentRequest(owner.userId, owner.deviceId, requestId);
+        const settledByOther = yield* settleDeviceAgentLine(
+          other.userId,
+          owner.deviceId,
+          line.id,
+          0,
+        );
+        const answeredByOther = yield* answerDeviceAgentRequest(
           other.userId,
           owner.deviceId,
           requestId,
           COMMAND_ANSWER,
         );
-        yield* answerMacAgentRequest(owner.userId, owner.deviceId, requestId, COMMAND_ANSWER);
+        yield* answerDeviceAgentRequest(owner.userId, owner.deviceId, requestId, COMMAND_ANSWER);
 
         assert.deepEqual(queuedByOther, Option.none());
         assert.equal(requestedByOther, false);
@@ -244,9 +256,9 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         assert.deepEqual(requestClaimedByOther, Option.none());
         assert.equal(Option.isNone(settledByOther), true);
         assert.equal(answeredByOther, false);
-        assert.deepEqual(yield* macAgentRequestAnswer(other.userId, requestId), Option.none());
+        assert.deepEqual(yield* deviceAgentRequestAnswer(other.userId, requestId), Option.none());
         assert.deepEqual(
-          yield* macAgentRequestAnswer(owner.userId, requestId),
+          yield* deviceAgentRequestAnswer(owner.userId, requestId),
           Option.some(COMMAND_ANSWER),
         );
       }),
@@ -256,7 +268,7 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
     Effect.gen(function* () {
       const { userId, agentId } = yield* openAccount(false);
 
-      assert.deepEqual(yield* queueMacAgentLine(userId, launch(agentId)), Option.none());
+      assert.deepEqual(yield* queueDeviceAgentLine(userId, launch(agentId)), Option.none());
     }),
   );
 
@@ -267,31 +279,31 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         const { userId, deviceId, agentId } = yield* openAccount();
         const id = randomUUID();
         const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-        yield* queueMacAgentRequest(userId, {
+        yield* queueDeviceAgentRequest(userId, {
           id,
           agentId,
-          kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
+          kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
           args: { path: "shot.png" },
         });
 
-        const answeredUnclaimed = yield* answerMacAgentRequest(userId, deviceId, id, {
-          kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
+        const answeredUnclaimed = yield* answerDeviceAgentRequest(userId, deviceId, id, {
+          kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
           bytes,
         });
-        const claimed = yield* claimMacAgentRequest(userId, deviceId, id);
-        const claimedAgain = yield* claimMacAgentRequest(userId, deviceId, id);
-        const answeredAsCommand = yield* answerMacAgentRequest(
+        const claimed = yield* claimDeviceAgentRequest(userId, deviceId, id);
+        const claimedAgain = yield* claimDeviceAgentRequest(userId, deviceId, id);
+        const answeredAsCommand = yield* answerDeviceAgentRequest(
           userId,
           deviceId,
           id,
           COMMAND_ANSWER,
         );
-        const answered = yield* answerMacAgentRequest(userId, deviceId, id, {
-          kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
+        const answered = yield* answerDeviceAgentRequest(userId, deviceId, id, {
+          kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
           bytes,
         });
-        const answeredAgain = yield* answerMacAgentRequest(userId, deviceId, id, {
-          kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
+        const answeredAgain = yield* answerDeviceAgentRequest(userId, deviceId, id, {
+          kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
           bytes: null,
         });
 
@@ -305,8 +317,8 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         assert.equal(answered, true);
         assert.equal(answeredAgain, false, "the first answer stands");
         assert.deepEqual(
-          yield* macAgentRequestAnswer(userId, id),
-          Option.some({ kind: MAC_AGENT_REQUEST_KIND.READ_FILE, bytes }),
+          yield* deviceAgentRequestAnswer(userId, id),
+          Option.some({ kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE, bytes }),
         );
       }),
   );
@@ -315,23 +327,23 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
     Effect.gen(function* () {
       const { userId, deviceId, agentId } = yield* openAccount();
       // Note that the command's output is under the bound in characters, three bytes each.
-      const oversized: readonly MacAgentAnswer[] = [
+      const oversized: readonly DeviceAgentAnswer[] = [
         {
-          kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
-          bytes: new Uint8Array(MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES + 2),
+          kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+          bytes: new Uint8Array(DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES + 2),
         },
-        { ...COMMAND_ANSWER, stdout: "€".repeat(MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES / 2) },
+        { ...COMMAND_ANSWER, stdout: "€".repeat(DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES / 2) },
       ];
 
       for (const answer of oversized) {
         const id = randomUUID();
-        yield* queueMacAgentRequest(userId, { id, agentId, kind: answer.kind, args: {} });
-        yield* claimMacAgentRequest(userId, deviceId, id);
+        yield* queueDeviceAgentRequest(userId, { id, agentId, kind: answer.kind, args: {} });
+        yield* claimDeviceAgentRequest(userId, deviceId, id);
 
-        const answered = yield* Effect.exit(answerMacAgentRequest(userId, deviceId, id, answer));
+        const answered = yield* Effect.exit(answerDeviceAgentRequest(userId, deviceId, id, answer));
 
         assert.equal(answered._tag, "Failure", answer.kind);
-        assert.deepEqual(yield* macAgentRequestAnswer(userId, id), Option.none());
+        assert.deepEqual(yield* deviceAgentRequestAnswer(userId, id), Option.none());
       }
     }),
   );
@@ -340,27 +352,27 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
     Effect.gen(function* () {
       const { userId, deviceId, agentId } = yield* openAccount();
       const cutoff = yield* fiveMinutesOn;
-      const running = Option.getOrThrow(yield* queueMacAgentLine(userId, launch(agentId)));
-      yield* claimMacAgentLine(userId, deviceId, running.id);
-      yield* queueMacAgentLine(userId, message(agentId, "never taken"));
-      yield* queueMacAgentRequest(userId, {
+      const running = Option.getOrThrow(yield* queueDeviceAgentLine(userId, launch(agentId)));
+      yield* claimDeviceAgentLine(userId, deviceId, running.id);
+      yield* queueDeviceAgentLine(userId, message(agentId, "never taken"));
+      yield* queueDeviceAgentRequest(userId, {
         id: randomUUID(),
         agentId,
-        kind: MAC_AGENT_REQUEST_KIND.RUN_COMMAND,
+        kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
         args: { command: "ls" },
       });
       yield* TestClock.adjust("10 minutes");
-      const fresh = Option.getOrThrow(yield* queueMacAgentLine(userId, message(agentId, "new")));
+      const fresh = Option.getOrThrow(yield* queueDeviceAgentLine(userId, message(agentId, "new")));
 
-      yield* withdrawExpiredMacAgentRows(userId, cutoff);
+      yield* withdrawExpiredDeviceAgentRows(userId, cutoff);
 
       assert.deepEqual(
-        (yield* macAgentLinesWaiting(userId, deviceId)).map((line) => line.id),
+        (yield* deviceAgentLinesWaiting(userId, deviceId)).map((line) => line.id),
         [fresh.id],
       );
-      assert.deepEqual(yield* macAgentRequestsWaiting(userId, deviceId), []);
+      assert.deepEqual(yield* deviceAgentRequestsWaiting(userId, deviceId), []);
       assert.equal(
-        Option.isSome(yield* settleMacAgentLine(userId, deviceId, running.id, 0)),
+        Option.isSome(yield* settleDeviceAgentLine(userId, deviceId, running.id, 0)),
         true,
         "the running launch line is still there to settle",
       );

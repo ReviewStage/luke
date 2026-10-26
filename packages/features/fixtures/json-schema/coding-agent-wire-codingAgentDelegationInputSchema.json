@@ -2,16 +2,20 @@
   "type": "object",
   "properties": {
     "task": {
-      "type": "string"
+      "type": "string",
+      "description": "The worker's whole job in Markdown, since it knows nothing else: the goal in one sentence first, then the context it needs, what to inspect, what to return, and any constraints."
     },
     "model": {
-      "type": "string"
+      "type": "string",
+      "description": "The id of the model the worker runs on, from Luke's catalog; your own where left out."
     },
     "effort": {
-      "type": "string"
+      "type": "string",
+      "description": "The reasoning effort the worker runs at, one the model lists; your own where left out."
     },
     "background": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Ignored: the worker's answer reaches you on its own either way."
     }
   },
   "required": [

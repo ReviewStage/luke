@@ -1,5 +1,5 @@
 import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
-import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
+import { describeWire, readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
@@ -164,7 +164,7 @@ export const CODING_AGENT_PAYER = {
   CHATGPT_SUBSCRIPTION: "chatgpt_plan",
   API_KEY: "api_key",
   LUKE: "luke",
-  /** A local agent's own Mac, by its harness's login there (`macSignedInSchema`), with the account's saved credential as the fallback. */
+  /** A local agent's own Mac, by its harness's login there (`deviceSignedInSchema`), with the account's saved credential as the fallback. */
   MAC_SIGN_IN: "mac_sign_in",
 } as const;
 
@@ -207,12 +207,12 @@ export type CodingAgentKind = (typeof CODING_AGENT_KIND)[keyof typeof CODING_AGE
 
 /**
  * Where an agent's runner and checkout live: a Vercel Sandbox, as every
- * agent from before the column does, or the starter's own Mac, which takes
- * its work as rows it follows (`@luke/features/mac-agent-wire`).
+ * agent from before the column does, or one of the starter's devices, which
+ * takes its work as rows it follows (`@luke/features/device-agent-wire`).
  */
 export const CODING_AGENT_MACHINE = {
   VERCEL: "vercel",
-  MAC: "mac",
+  DEVICE: "device",
 } as const;
 
 export type CodingAgentMachine = (typeof CODING_AGENT_MACHINE)[keyof typeof CODING_AGENT_MACHINE];
@@ -737,8 +737,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   title: EffectSchema.NullOr(EffectSchema.String),
   /** What kind of agent it is, said only of a member's operator, which the panel draws as Luke in a row of his own; absent for a coder, and from a service before operators. */
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
-  /** Where its runner runs, said only of a local agent on its starter's Mac; absent for one in a sandbox, and from a service older than it. */
-  machine: EffectSchema.optionalKey(EffectSchema.Literal(CODING_AGENT_MACHINE.MAC)),
+  /** Where its runner runs, said only of a local agent on its starter's device; absent for one in a sandbox, and from a service older than it. */
+  machine: EffectSchema.optionalKey(EffectSchema.Literal(CODING_AGENT_MACHINE.DEVICE)),
   /**
    * The Mac a local agent runs on, by its own name, and the epoch
    * milliseconds it last beat, which a reader holds against its own clock
@@ -1752,11 +1752,30 @@ export const codingAgentCallIdSchema = trimmedText(CODING_AGENT_BOUNDS.MAX_CALL_
  * each absent where the agent left it to its own.
  */
 export const codingAgentDelegationInputSchema = EffectSchema.Struct({
-  task: EffectSchema.String,
-  model: EffectSchema.optionalKey(EffectSchema.String),
-  effort: EffectSchema.optionalKey(EffectSchema.String),
-  /** Whether the agent keeps working while the worker runs rather than waiting for its answer; waiting where unset. */
-  background: EffectSchema.optionalKey(EffectSchema.Boolean),
+  task: describeWire(
+    EffectSchema.String,
+    "The worker's whole job in Markdown, since it knows nothing else: the goal in one sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
+  ),
+  model: EffectSchema.optionalKey(
+    describeWire(
+      EffectSchema.String,
+      "The id of the model the worker runs on, from Luke's catalog; your own where left out.",
+    ),
+  ),
+  effort: EffectSchema.optionalKey(
+    describeWire(
+      EffectSchema.String,
+      "The reasoning effort the worker runs at, one the model lists; your own where left out.",
+    ),
+  ),
+  // Note that we still accept the field nothing reads, because a session keeps the prompt it
+  // started under for its life, and an older one tells its agent to set it.
+  background: EffectSchema.optionalKey(
+    describeWire(
+      EffectSchema.Boolean,
+      "Ignored: the worker's answer reaches you on its own either way.",
+    ),
+  ),
 });
 
 /** What a settled delegation's tool part carries as its output: the model and effort the worker ran on, and its answer. */

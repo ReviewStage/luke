@@ -1,17 +1,17 @@
 import { CLAUDE_CODE_MAC_PIN, CODEX_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
-import type { HostedMacAgentClient, MacAgentClaimedLine } from "@luke/features";
+import type { DeviceAgentClaimedLine, HostedDeviceAgentClient } from "@luke/features";
 import {
-  MAC_AGENT_LINE_KIND,
-  type MacAgentLaunchSecrets,
-  type MacAgentLayout,
-  type MacAgentLine,
-  type MacAgentRequest,
-  type MacSignedIn,
-  macAgentFilesPayloadSchema,
-  macAgentLaunchPayloadSchema,
-  macAgentLayout,
-  macAgentStdinPayloadSchema,
-} from "@luke/features/mac-agent-wire";
+  DEVICE_AGENT_LINE_KIND,
+  type DeviceAgentLaunchSecrets,
+  type DeviceAgentLayout,
+  type DeviceAgentLine,
+  type DeviceAgentRequest,
+  type DeviceSignedIn,
+  deviceAgentFilesPayloadSchema,
+  deviceAgentLaunchPayloadSchema,
+  deviceAgentLayout,
+  deviceAgentStdinPayloadSchema,
+} from "@luke/features/device-agent-wire";
 import {
   Config,
   Duration,
@@ -38,8 +38,8 @@ import type { Composer } from "./composer.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
-import { answeredLocalAgentRequest } from "./local-agent-requests.js";
 import { localCodexSignedIn } from "./local-agent-codex.js";
+import { answeredLocalAgentRequest } from "./local-agent-requests.js";
 import { localAgentTool } from "./local-agent-tools.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -47,7 +47,7 @@ import type { RunMode } from "./run-mode.js";
  * compose-local-agents.ts -- runs on this Mac the coding agents the account starts on This Mac: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as the Local agents experiment and Settings › This Mac's Run agents on this Mac are both on.
  *
  * The service writes a local agent's work as rows under this Mac's device
- * id (`@luke/features/mac-agent-wire`, `contract/mac-agents.ts`): lines for
+ * id (`@luke/features/device-agent-wire`, `contract/device-agents.ts`): lines for
  * its runner and requests from its tools. The id is minted once per account
  * and kept in the host's state, and every time the gate opens, an app start
  * among them, the Mac first has what a runner runs on, Node and the Claude
@@ -69,7 +69,7 @@ import type { RunMode } from "./run-mode.js";
  * handed to the agent they name, whose worker takes them one at a time, so
  * an agent's lines are delivered strictly in order while agents go on side
  * by side. A launch makes the agent's worktree under its folder
- * (`macAgentLayout`) where it has none, through the platform's script over
+ * (`deviceAgentLayout`) where it has none, through the platform's script over
  * Luke's shared clone and the developer's own Git login, and starts the
  * runner as the leader of a process group of its own, with the claim's
  * secrets in its environment and nowhere else, never a file, an argument,
@@ -148,16 +148,16 @@ const NO_STATE: LocalAgentState = { devices: {}, launches: [] };
 
 const decodeState = Schema.decodeUnknownOption(Schema.fromJsonString(LocalAgentStateSchema));
 const encodeState = Schema.encodeSync(Schema.fromJsonString(LocalAgentStateSchema));
-const decodeLaunch = Schema.decodeUnknownOption(macAgentLaunchPayloadSchema);
-const decodeStdin = Schema.decodeUnknownOption(macAgentStdinPayloadSchema);
-const decodeFiles = Schema.decodeUnknownOption(macAgentFilesPayloadSchema);
+const decodeLaunch = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
+const decodeStdin = Schema.decodeUnknownOption(deviceAgentStdinPayloadSchema);
+const decodeFiles = Schema.decodeUnknownOption(deviceAgentFilesPayloadSchema);
 const decodeAuthStatus = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ authMethod: Schema.String })),
 );
 
 /** The service's side of local agents, as this concern asks it. */
 type LocalAgentClient = Pick<
-  HostedMacAgentClient,
+  HostedDeviceAgentClient,
   | "register"
   | "beat"
   | "lines"
@@ -460,7 +460,7 @@ export function composeLocalAgents(
       Effect.gen(function* () {
         const claudeCode = yield* claudeCodeSignedIn(had.claude, env);
         const said = yield* codexSignedIn(env);
-        const signedIn: MacSignedIn = Option.match(said, {
+        const signedIn: DeviceSignedIn = Option.match(said, {
           onNone: () => ({ claudeCode }),
           onSome: (each) => ({ claudeCode, codex: each }),
         });
@@ -476,12 +476,14 @@ export function composeLocalAgents(
       folder: string,
       shellVariables: Readonly<Record<string, string>>,
       had: LocalAgentTools,
-      checkedSignIn: MacSignedIn,
-      registered: (signedIn: MacSignedIn) => Effect.Effect<boolean, never, HttpClient.HttpClient>,
+      checkedSignIn: DeviceSignedIn,
+      registered: (
+        signedIn: DeviceSignedIn,
+      ) => Effect.Effect<boolean, never, HttpClient.HttpClient>,
     ) =>
       Effect.gen(function* () {
         const workers = yield* FiberMap.make<string>();
-        const mailboxes = new Map<string, Queue.Queue<MacAgentClaimedLine>>();
+        const mailboxes = new Map<string, Queue.Queue<DeviceAgentClaimedLine>>();
         const runners = new Map<string, Runner>();
         const answering = yield* FiberSet.make();
 
@@ -490,7 +492,7 @@ export function composeLocalAgents(
 
         /** The agent's worktree made where it has none: a folder for an agent with no repository, and Luke's shared clone's worktree otherwise. */
         const madeWorktree = (
-          layout: MacAgentLayout,
+          layout: DeviceAgentLayout,
           repository: string | null,
           branch: string | null,
         ) =>
@@ -523,12 +525,12 @@ export function composeLocalAgents(
         /** The runner started for a launch line, its first lines written, and its exit settling the line; the line settled as not started where it cannot be. */
         const launched = (
           agentId: string,
-          line: MacAgentLine,
-          secrets: MacAgentLaunchSecrets | undefined,
+          line: DeviceAgentLine,
+          secrets: DeviceAgentLaunchSecrets | undefined,
           agentScope: Scope.Scope,
         ) =>
           Effect.gen(function* () {
-            const layout = macAgentLayout(folder, agentId);
+            const layout = deviceAgentLayout(folder, agentId);
             const payload = decodeLaunch(line.payload);
             // Note that a launch naming a worktree outside the agent's own folder is never made.
             if (
@@ -557,29 +559,33 @@ export function composeLocalAgents(
             const runnerScope = yield* Scope.fork(agentScope);
             const stdin = yield* Queue.unbounded<string>();
             const encoder = new TextEncoder();
-            const started = yield* ChildProcess.make(
-              platform.launcher,
-              [had.node, platform.runnerBundle],
-              {
-                cwd: layout.checkoutPath,
-                env: {
-                  ...shellVariables,
-                  TMPDIR: temp,
-                  ...platform.runnerEnv,
-                  ...secrets.env,
-                },
-                extendEnv: false,
-                // Note that stdin stays open past the first lines, since every later line of the agent's is written to it.
-                stdin: {
-                  stream: Stream.fromQueue(stdin).pipe(Stream.map((text) => encoder.encode(text))),
-                  endOnDone: false,
-                },
-                // Note that nothing the runner prints is kept, since a credential must never reach a log.
-                stdout: "ignore",
-                stderr: "ignore",
-                forceKillAfter: KILL_GRACE,
+            const command = platform.launch({
+              agentId,
+              folder: layout.folder,
+              checkout: layout.checkoutPath,
+              node: had.node,
+              bundle: platform.runnerBundle,
+              env: {
+                ...shellVariables,
+                TMPDIR: temp,
+                ...platform.runnerEnv,
+                ...secrets.env,
               },
-            ).pipe(Scope.provide(runnerScope), Effect.option);
+            });
+            const started = yield* ChildProcess.make(command.command, [...command.args], {
+              cwd: layout.checkoutPath,
+              env: command.env,
+              extendEnv: false,
+              // Note that stdin stays open past the first lines, since every later line of the agent's is written to it.
+              stdin: {
+                stream: Stream.fromQueue(stdin).pipe(Stream.map((text) => encoder.encode(text))),
+                endOnDone: false,
+              },
+              // Note that nothing the runner prints is kept, since a credential must never reach a log.
+              stdout: "ignore",
+              stderr: "ignore",
+              forceKillAfter: KILL_GRACE,
+            }).pipe(Scope.provide(runnerScope), Effect.option);
             if (Option.isNone(started)) {
               yield* Scope.close(runnerScope, Exit.void);
               return yield* settle(line.id, NOT_STARTED);
@@ -622,7 +628,7 @@ export function composeLocalAgents(
           Effect.gen(function* () {
             const files = decodeFiles(payload);
             if (Option.isNone(files)) return;
-            const layout = macAgentLayout(folder, agentId);
+            const layout = deviceAgentLayout(folder, agentId);
             for (const file of files.value.files) {
               const target = path.normalize(file.path);
               if (!target.startsWith(`${layout.folder}/`)) continue;
@@ -647,18 +653,18 @@ export function composeLocalAgents(
         /** One line of the agent's, delivered: a runner started, written to, or stopped, or files written; every line but a launch settled at once. */
         const delivered = (
           agentId: string,
-          claimed: MacAgentClaimedLine,
+          claimed: DeviceAgentClaimedLine,
           agentScope: Scope.Scope,
         ) =>
           Effect.gen(function* () {
             const { line } = claimed;
             switch (line.kind) {
-              case MAC_AGENT_LINE_KIND.LAUNCH:
+              case DEVICE_AGENT_LINE_KIND.LAUNCH:
                 // Note that a launch replaces the runner it finds, which is ended and its line settled first.
                 yield* stopped(agentId);
                 return yield* launched(agentId, line, claimed.secrets, agentScope);
-              case MAC_AGENT_LINE_KIND.MESSAGE:
-              case MAC_AGENT_LINE_KIND.RETUNE: {
+              case DEVICE_AGENT_LINE_KIND.MESSAGE:
+              case DEVICE_AGENT_LINE_KIND.RETUNE: {
                 const text = decodeStdin(line.payload);
                 const runner = runners.get(agentId);
                 if (Option.isSome(text) && runner !== undefined) {
@@ -666,10 +672,10 @@ export function composeLocalAgents(
                 }
                 break;
               }
-              case MAC_AGENT_LINE_KIND.FILES:
+              case DEVICE_AGENT_LINE_KIND.FILES:
                 yield* wroteFiles(agentId, line.payload);
                 break;
-              case MAC_AGENT_LINE_KIND.STOP:
+              case DEVICE_AGENT_LINE_KIND.STOP:
                 yield* stopped(agentId);
                 break;
             }
@@ -681,7 +687,7 @@ export function composeLocalAgents(
           Effect.gen(function* () {
             const kept = mailboxes.get(agentId);
             if (kept !== undefined) return kept;
-            const mailbox = yield* Queue.unbounded<MacAgentClaimedLine>();
+            const mailbox = yield* Queue.unbounded<DeviceAgentClaimedLine>();
             mailboxes.set(agentId, mailbox);
             const worker = Effect.scoped(
               Effect.gen(function* () {
@@ -734,7 +740,7 @@ export function composeLocalAgents(
         );
 
         /** One request claimed and answered on a fiber of its own. */
-        const answered = (request: MacAgentRequest) =>
+        const answered = (request: DeviceAgentRequest) =>
           Effect.gen(function* () {
             const claimed = yield* asked(client.claimRequest(deviceId, request.id)).pipe(
               Effect.repeat({
@@ -744,7 +750,7 @@ export function composeLocalAgents(
               }),
             );
             if (claimed === undefined || !("agentId" in claimed)) return;
-            const layout = macAgentLayout(folder, claimed.agentId);
+            const layout = deviceAgentLayout(folder, claimed.agentId);
             const env = {
               ...shellVariables,
               TMPDIR: path.join(layout.folder, TEMP_FOLDER),
@@ -834,10 +840,12 @@ export function composeLocalAgents(
       const shellVariables = yield* shellEnvironment;
       const signedIn = yield* signedInNow(had.value, shellVariables);
       /** The Mac registered, with the Codex it checked where it has one, and its sign-ins given. */
-      const registration = (said: MacSignedIn) =>
+      const registration = (said: DeviceSignedIn) =>
         Effect.flatMap(Ref.get(codex), (checked) =>
           client.register(deviceId, {
             name: platform.deviceName,
+            platform: platform.devicePlatform,
+            arch: platform.deviceArch,
             home: home.value,
             claudeExecutable: had.value.claude,
             codexExecutable: Option.getOrUndefined(checked),

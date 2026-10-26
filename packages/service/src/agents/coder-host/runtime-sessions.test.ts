@@ -9,7 +9,7 @@ import {
   readCodingAgentByKey,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
-import { registerMacDevice } from "@luke/database/models/mac-device-store";
+import { registerDevice } from "@luke/database/models/device-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
@@ -26,7 +26,7 @@ import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { messages } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, MAC_DEVICE_LAYOUT, openWorkspace } from "@luke/database/testing";
+import { DEVICE_LAYOUT, getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_MACHINE,
@@ -1352,27 +1352,27 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             }
             const deviceId = randomUUID();
             if (each.mac) {
-              yield* registerMacDevice(owner, {
+              yield* registerDevice(owner, {
                 id: deviceId,
                 name: "Studio",
-                ...MAC_DEVICE_LAYOUT,
+                ...DEVICE_LAYOUT,
                 ...("codex" in each ? { codexExecutable: CODEX_EXECUTABLE } : undefined),
                 signedIn,
               });
             }
             if ("otherSignedIn" in each) {
               // Note that the other Mac registers last, so it is the account's latest to beat.
-              yield* registerMacDevice(owner, {
+              yield* registerDevice(owner, {
                 id: randomUUID(),
                 name: "Laptop",
-                ...MAC_DEVICE_LAYOUT,
+                ...DEVICE_LAYOUT,
                 signedIn: { claudeCode: true },
               });
             }
             const { eve, native } = runtimes();
             const ask = {
               ...startIn(workspaceId, each.model),
-              machine: CODING_AGENT_MACHINE.MAC,
+              machine: CODING_AGENT_MACHINE.DEVICE,
               deviceId: "named" in each ? each.named : deviceId,
             };
             const started = yield* Effect.result(
@@ -1398,7 +1398,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             assert.ok(Result.isSuccess(started), each.name);
             assert.deepEqual(
               Option.map(made, (agent) => [agent.machine, agent.deviceId]),
-              Option.some([CODING_AGENT_MACHINE.MAC, deviceId]),
+              Option.some([CODING_AGENT_MACHINE.DEVICE, deviceId]),
               each.name,
             );
             const routing = Option.getOrThrow(
@@ -1460,10 +1460,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             yield* writeAccountPreferences(owner, {
               experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
             });
-            yield* registerMacDevice(owner, {
+            yield* registerDevice(owner, {
               id: randomUUID(),
               name: "Studio",
-              ...MAC_DEVICE_LAYOUT,
+              ...DEVICE_LAYOUT,
               ...(each.codex ? { codexExecutable: CODEX_EXECUTABLE } : undefined),
               signedIn: each.signedIn,
             });
