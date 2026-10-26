@@ -116,7 +116,13 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.equal(browser.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
   assert.ok(page.textContent?.startsWith("Local agents"));
-  assert.ok(page.textContent?.startsWith("Channels"));
+  assert.deepEqual(
+    [...page.querySelectorAll('[role="switch"]')]
+      .slice(0, 2)
+      .map((each) => each.getAttribute("aria-label")),
+    ["Local agents", "Channels"],
+    "Channels stands second, after the newest",
+  );
 
   await act(async () => browser.click());
   assert.deepEqual(sent, [{ experiment: EXPERIMENT.BROWSER, on: false }]);
