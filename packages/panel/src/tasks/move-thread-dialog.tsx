@@ -22,9 +22,11 @@ import { useFormDialog } from "../desktop/use-form-dialog.js";
  * picked as it opens. It is the move's confirmation, so its act is the move
  * itself, at the foot of a `Dialog` that picks a channel rather than a
  * `ConfirmDialog`, which only asks yes or no. The question goes with its
- * thread and its surface (`useConfirmDialog`): a move landed puts it away
- * and the stream reads its threads again, and a refused one keeps it up
- * saying why under the list.
+ * thread and its surface (`useConfirmDialog`): a thread that leaves the
+ * stream while it is asked, moved or gone by someone else's hand, takes the
+ * question with it, so a stale card never moves it a second time; a move
+ * landed puts it away and the stream reads its threads again, and a refused
+ * one keeps it up saying why under the list.
  */
 
 /** One thread's Move to channel as a stream holds it. */
@@ -43,12 +45,15 @@ interface MoveThreadDoor {
 export function useMoveThreadDialog({
   channels,
   from,
+  threads,
   shown,
   onMove,
   onMoved,
 }: {
   channels: readonly Channel[];
   from: string;
+  /** The threads the stream holds now, which a thread asked about must stay among for its question to stand. */
+  threads: readonly ChannelThread[];
   /** Whether the stream is in sight, which the question goes with. */
   shown: boolean;
   /** Moves a thread into another open channel; what refused it, or none where it moved. */
@@ -61,7 +66,13 @@ export function useMoveThreadDialog({
   const others = channels.filter((channel) => channel.id !== from);
   const chosen = others.find((channel) => channel.id === picked) ?? others[0];
   const confirm = useConfirmDialog(
-    { subject: moving !== undefined && chosen !== undefined, surfaceOpen: shown },
+    {
+      subject:
+        moving !== undefined &&
+        chosen !== undefined &&
+        threads.some((thread) => thread.id === moving.id),
+      surfaceOpen: shown,
+    },
     () => {
       if (moving === undefined || chosen === undefined) {
         return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });

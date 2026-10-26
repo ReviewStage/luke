@@ -793,6 +793,7 @@ export function ChannelStream({
   const move = useMoveThreadDialog({
     channels: menuDoors.channels,
     from: channel.id,
+    threads: read.threads ?? NO_THREADS,
     shown,
     onMove: menuDoors.onMove,
     onMoved: onRefresh,
