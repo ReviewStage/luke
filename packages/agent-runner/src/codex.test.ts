@@ -358,10 +358,10 @@ it.effect(
         "thread/start",
       ]);
       const overrides = (process?.args ?? []).filter((_, index, args) => args[index - 1] === "-c");
-      // No provider of Luke's: Codex's own, on the login it keeps and refreshes itself.
+      // No provider of Luke's: OpenAI's built-in one, over any of the developer's, on the login Codex keeps and refreshes itself.
       assert.deepEqual(
         overrides.filter((each) => each.startsWith("model_provider")),
-        [],
+        ['model_provider="openai"'],
       );
       assert.ok(!(process?.args ?? []).join(" ").includes(TOKEN_URL));
       const roots = [join(clone, ".git"), folder];

@@ -265,6 +265,9 @@ interface TokenCommand {
 /** The service tier a fast version runs on: Codex's documented `fast`, which it sends as the API's `priority`. */
 const FAST_TIER = "fast";
 
+/** Codex's built-in OpenAI provider, which runs on Codex's own sign-in (https://learn.chatgpt.com/docs/auth). */
+const OPENAI_PROVIDER = "openai";
+
 /**
  * OpenAI's API as an API key pays for it: the same endpoint, its key read
  * from the launch's environment through the provider's documented `env_key`
@@ -293,11 +296,12 @@ type CodexAuth =
 /**
  * How Luke's provider is handed its token: from the runner's token command
  * on the plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API
- * key; and its own name. None on the Mac's own sign-in, which runs OpenAI's
- * own provider on Codex's login.
+ * key; and its own name. On the Mac's own sign-in, OpenAI's built-in
+ * provider alone, which runs on Codex's login.
  */
 function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
-  if (auth.kind === CODEX_AUTH.OWN_LOGIN) return [];
+  // Note that the developer's own config.toml is read too, so OpenAI's built-in provider is named over any of theirs.
+  if (auth.kind === CODEX_AUTH.OWN_LOGIN) return [["model_provider", toml(OPENAI_PROVIDER)]];
   const named = auth.kind === CODEX_AUTH.API_KEY ? API_KEY_PROVIDER : CHATGPT_PROVIDER;
   const provider = `model_providers.${named.ID}`;
   const credential: (readonly [string, string])[] =
