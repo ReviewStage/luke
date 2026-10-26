@@ -522,6 +522,16 @@ waits in our database for your Mac. To run Codex, the app downloads OpenAI's
 Codex from npm once, the release our sandboxes run, and keeps it in Luke's own
 folder on your Mac only once it matches the checksum Luke pins.
 
+**A local agent on a host.** A host is your own Linux server that you add
+to Luke to run your agents, as This Mac does. It has no git login of yours, so
+for each agent on it that works in a repository, our service hands the host a
+short-lived GitHub token over HTTPS. It is a Luke GitHub App installation
+token cut to that one repository, good for an hour and renewed every 50
+minutes. Your own saved GitHub token is never sent. The host keeps the token on
+that box for as long as the agent runs, in a `gh` sign-in inside the agent's
+own folder, and the agent's `git` and `gh` read it from there. The token is
+never logged and never written to the conversation's record.
+
 **A coding agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, a coding agent your Claude plan pays for runs on
 Anthropic's Claude Code, and so does a Claude coding agent your own Anthropic
