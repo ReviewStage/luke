@@ -25,7 +25,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
  * channel pressed; its "+" asks for a channel to make once the channels are
  * read, and while they are read it stands placeholders and no "+"; a long
  * press offers the channel's menu, whose Mark as read stamps the reader's
- * look, and #general's offers no Archive.
+ * look and whose Edit asks for the channel's name and purpose, and
+ * #general's offers no Archive.
  */
 
 function channel(
@@ -81,6 +82,7 @@ test("the list names each channel with its purpose and count, projects after the
         shown: true,
         onOpen: (channelId) => opened.push(channelId),
         onNew: () => opened.push("new"),
+        onEdit: () => assert.fail("nothing is edited here"),
       }),
     ),
   );
@@ -124,6 +126,7 @@ test("while the channels are read the list stands placeholders under a + that ma
         shown: true,
         onOpen: () => undefined,
         onNew: () => assert.fail("nothing is made before the channels are read"),
+        onEdit: () => assert.fail("nothing is edited before the channels are read"),
       }),
     ),
   );
@@ -134,8 +137,9 @@ test("while the channels are read the list stands placeholders under a + that ma
   act(() => root.unmount());
 });
 
-test("a row's menu copies its link and marks it read, and #general's offers no Archive", () => {
+test("a row's menu copies its link, marks it read, and edits it, and #general's offers no Archive", () => {
   const looks: string[] = [];
+  const edits: string[] = [];
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
   act(() =>
@@ -157,6 +161,7 @@ test("a row's menu copies its link and marks it read, and #general's offers no A
             shown: true,
             onOpen: () => undefined,
             onNew: () => undefined,
+            onEdit: (edited) => edits.push(edited.id),
           }),
         ),
       ),
@@ -179,11 +184,14 @@ test("a row's menu copies its link and marks it read, and #general's offers no A
   };
 
   const app = menuOf("app");
-  assert.deepEqual(app.labels, ["Copy link", "Mark as read", "Archive…"]);
+  assert.deepEqual(app.labels, ["Copy link", "Mark as read", "Edit…", "Archive…"]);
   app.press("Mark as read");
   assert.deepEqual(looks, ["c-app"]);
 
-  assert.deepEqual(menuOf("general").labels, ["Copy link", "Mark as read"]);
+  const general = menuOf("general");
+  assert.deepEqual(general.labels, ["Copy link", "Mark as read", "Edit…"]);
+  general.press("Edit…");
+  assert.deepEqual(edits, ["c-general"]);
   act(() => root.unmount());
   host.remove();
 });

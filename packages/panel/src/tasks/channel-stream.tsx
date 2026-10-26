@@ -8,6 +8,7 @@ import {
   openAskOf,
   threadNeedsReader,
 } from "@luke/features/inbox-wire";
+import { agoText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -25,6 +26,7 @@ import {
   ControlGround,
   EmptyState,
   ERROR_STATE_PLACEMENT,
+  ErrorLine,
   ErrorState,
   IconButton,
   MoreButton,
@@ -431,6 +433,50 @@ export function ChannelStreamSkeleton(): React.JSX.Element {
   );
 }
 
+/** What heads a stream: an open channel, or an archived one, read as one. */
+export type StreamChannel = Pick<Channel, "id" | "name" | "purpose" | "lookedAt">;
+
+/** An archived channel's stream: when it was archived, and the door that opens it again; what refused it, or none where it opened. */
+export interface ArchivedStream {
+  readonly archivedAt: number;
+  readonly onUnarchive: () => Promise<string | undefined>;
+}
+
+/** What an archived stream's head and foot say. */
+const ARCHIVED_WORDS = {
+  UNARCHIVE: "Unarchive",
+  UNARCHIVING: "Unarchiving",
+} as const;
+
+/** An archived stream's Unarchive, at its head's end, and what refused it, under its posts. */
+function useUnarchive(archived: ArchivedStream | undefined) {
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  if (archived === undefined) return { button: null, refusal: undefined };
+  const press = () => {
+    setBusy(true);
+    setRefusal(undefined);
+    archived.onUnarchive().then((refused) => {
+      setBusy(false);
+      setRefusal(refused);
+    });
+  };
+  return {
+    button: (
+      <Button
+        size={BUTTON_SIZE.COMPACT}
+        variant={BUTTON_VARIANT.OUTLINE}
+        busy={busy}
+        busyLabel={ARCHIVED_WORDS.UNARCHIVING}
+        onClick={press}
+      >
+        {ARCHIVED_WORDS.UNARCHIVE}
+      </Button>
+    ),
+    refusal,
+  };
+}
+
 /** What a post's ⋯ acts through, as the stream's owner hands them down. */
 export interface PostMenuDoors {
   /** Marks the thread read or unread. */
@@ -552,7 +598,8 @@ function ThreadPost({
   shown: boolean;
   menuDoors: PostMenuDoors;
   onAskMove: ((thread: ChannelThread) => void) | undefined;
-  onPick: (item: InboxItem, label: string) => void;
+  /** Answers a decision from the post; none where the stream is read-only, which offers its asks nowhere. */
+  onPick: ((item: InboxItem, label: string) => void) | undefined;
   onOpen: () => void;
 }): React.JSX.Element {
   const first = item.thread?.[0];
@@ -599,7 +646,7 @@ function ThreadPost({
           )}
           {/* Note that on the attention tint the ask's controls stand on the column's ground, so they read gray as in the thread. */}
           <ControlGround ground={needs ? CONTROL_GROUND.OPAQUE : CONTROL_GROUND.CLEAR}>
-            <PostAsk item={item} onPick={onPick} onOpen={onOpen} />
+            {onPick === undefined ? null : <PostAsk item={item} onPick={onPick} onOpen={onOpen} />}
           </ControlGround>
           <div className={POST_LINE}>
             {replies.repliers.map((reply) => (
@@ -750,11 +797,12 @@ export function ChannelStream({
   agents,
   listedOf,
   menuDoors,
+  archived,
   onOpen,
   onLook,
   onAnswered,
 }: {
-  channel: Channel;
+  channel: StreamChannel;
   /** The channel's stream as its holder reads it (`useChannelStream`). */
   stream: ChannelStreamRead;
   /** The thread open in the side panel beside the stream, where one is. */
@@ -770,6 +818,8 @@ export function ChannelStream({
   listedOf: (itemId: string) => InboxListed | undefined;
   /** What each post's ⋯ acts through. */
   menuDoors: PostMenuDoors;
+  /** Where the channel is archived, which draws its threads to read alone: no ask answered from a post and no thread moved, and Unarchive at its head. */
+  archived?: ArchivedStream | undefined;
   onOpen: (thread: ChannelThread) => void;
   /** Stamps the reader's look at the channel, as they leave it. */
   onLook: (channelId: string) => void;
@@ -790,6 +840,7 @@ export function ChannelStream({
   const above = useNeedsAbove(log, `${channel.id}:${view}:${viewed.length}:${needsCount}`);
   useChosenInView(log, chosenId);
   const { onRefresh } = read;
+  const unarchive = useUnarchive(archived);
   const move = useMoveThreadDialog({
     channels: menuDoors.channels,
     from: channel.id,
@@ -825,7 +876,10 @@ export function ChannelStream({
         detail={channel.purpose}
         end={TOOLBAR_INSET.COLUMN}
         actions={
-          <StreamViewOptions view={view} needsCount={needsCount} shown={shown} onView={onView} />
+          <>
+            {unarchive.button}
+            <StreamViewOptions view={view} needsCount={needsCount} shown={shown} onView={onView} />
+          </>
         }
       />
       {read.threads === undefined && read.failure !== undefined ? (
@@ -856,8 +910,8 @@ export function ChannelStream({
                   now={now}
                   shown={shown}
                   menuDoors={menuDoors}
-                  onAskMove={move.ask}
-                  onPick={pick}
+                  onAskMove={archived === undefined ? move.ask : undefined}
+                  onPick={archived === undefined ? pick : undefined}
                   onOpen={() => onOpen(row.thread)}
                 />
               ) : row.kind === STREAM_ROW.DAY ? (
@@ -870,6 +924,12 @@ export function ChannelStream({
                 </StreamDivider>
               ),
             )}
+            {archived === undefined || read.threads === undefined ? null : (
+              <NoteLine look={NOTE_LINE_LOOK.CENTRED}>
+                {`#${channel.name} was archived ${agoText(archived.archivedAt, now)}. Its threads stay here to read.`}
+              </NoteLine>
+            )}
+            <ErrorLine>{unarchive.refusal}</ErrorLine>
             {/* Note that a refresh failing over the threads held keeps them, and says so under the newest. */}
             {read.threads !== undefined && read.failure !== undefined ? (
               <ErrorState

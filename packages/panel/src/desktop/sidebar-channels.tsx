@@ -31,7 +31,7 @@ import { useChannelDialog } from "./channel-dialog.js";
 import { needsYouNoun } from "./places-waiting.js";
 
 /**
- * sidebar-channels.tsx -- the sidebar's Channels and Projects sections while Channels is on: every open channel of the workspace, and the questions that make, rename, and archive one (STAG-547).
+ * sidebar-channels.tsx -- the sidebar's Channels and Projects sections while Channels is on: every open channel of the workspace, and the questions that make, edit, and archive one (STAG-547).
  *
  * Each section heads its rows with a "+" that makes a channel there, a
  * project's under Projects, and opens it once made, and beside it Browse
@@ -45,9 +45,9 @@ import { needsYouNoun } from "./places-waiting.js";
  * read, each section stands a few rows' blocks in its rows' place
  * (`SidebarChannelRowsSkeleton`), and where that read failed, the Channels
  * section says so with Retry. A right-click offers the channel's menu
- * (`channel-menu.tsx`): Copy link and Mark as read on every channel, and
- * Rename and Archive on any but #general, which no member may rename or
- * archive. Making and renaming ask through `channel-dialog.tsx`; archiving
+ * (`channel-menu.tsx`): Copy link, Mark as read, and Edit on every channel,
+ * #general's name staying as it is, and Archive on any but #general, which
+ * is never archived. Making and editing ask through `channel-dialog.tsx`; archiving
  * the channel shown moves the window to #general (`use-channels.ts`).
  * Every answer waits on the service, and a refusal stands in the card
  * until what was asked changes.
@@ -141,7 +141,7 @@ export function SidebarChannels({
   onOpen: (channelId: string) => void;
 }): React.JSX.Element {
   const asking = useChannelDialog({ workspaceId, channels, shown, onMade: onOpen });
-  const menu = useChannelMenu({ workspaceId, channels, shown, onRename: asking.askRename });
+  const menu = useChannelMenu({ workspaceId, channels, shown, onEdit: asking.askEdit });
   const archived = useArchivedChannelsDialog({ workspaceId, channels, shown, onOpen });
   const listed = channels.channels;
   const places = (section: ChannelSectionLook) => {

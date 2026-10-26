@@ -22,7 +22,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
  * sidebar-channels.test.ts -- the sidebar's channels: a row posted in since
  * the reader looked stands in the unread weight, and a section's Browse
  * archived channels lists that section's archived channels, each opened
- * again by its Unarchive, or opened to read by a press.
+ * again by its Unarchive, or opened to read by a press; and Edit asks for a
+ * channel's name and purpose, #general's name locked, sending what changed.
  *
  * The service is a script at the act boundary; synthetic channels throughout.
  */
@@ -47,10 +48,13 @@ function archived(id: string, name: string, project: boolean): ArchivedChannel {
 
 /** Every channel unarchived, in order. */
 let unarchived: string[] = [];
+/** Every edit asked, in order. */
+let edits: { channelId: string; edit: { name?: string; purpose?: string } }[] = [];
 let root: Root | undefined;
 
 beforeEach(() => {
   unarchived = [];
+  edits = [];
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.CHANNELS_ARCHIVED) {
@@ -78,7 +82,10 @@ function mount(channels: readonly Channel[], opened: string[]): HTMLElement {
     failed: false,
     onRefresh: () => undefined,
     onCreate: () => Promise.resolve({ refused: "Not asked" }),
-    onEdit: unasked,
+    onEdit: (channelId, edit) => {
+      edits.push({ channelId, edit });
+      return Promise.resolve(undefined);
+    },
     onArchive: unasked,
     onUnarchive: (channelId) => {
       unarchived.push(channelId);
@@ -168,4 +175,42 @@ test("Browse archived channels lists the section's archived channels, Unarchive 
     ).click(),
   );
   assert.deepEqual(opened, ["c-old"]);
+});
+
+test("Edit on #general fills in its purpose, keeps its name locked, and sends only the purpose changed", async () => {
+  const sidebar = mount([channel("c-general", "general")], []);
+  const row =
+    [...sidebar.querySelectorAll<HTMLElement>("button")].find((each) =>
+      each.textContent?.startsWith("general"),
+    ) ?? assert.fail("#general is listed");
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 4, clientY: 4 }));
+  });
+  act(() =>
+    (
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (item) => item.textContent === "Edit…",
+      ) ?? assert.fail("the menu offers Edit")
+    ).click(),
+  );
+  const dialog = document.querySelector('[role="dialog"]') ?? assert.fail("the dialog stands");
+  const [name, purpose] = [...dialog.querySelectorAll<HTMLInputElement>("input")];
+  assert.ok(name !== undefined && purpose !== undefined, "the dialog asks for both");
+  assert.equal(name.value, "general");
+  assert.equal(name.disabled, true, "#general's name is locked");
+  assert.equal(purpose.value, "What goes in #general");
+  assert.equal(button("Save").disabled, true, "nothing changed yet");
+
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      purpose,
+      "Anything that cuts across",
+    );
+    purpose.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => button("Save").click());
+  await settle();
+  assert.deepEqual(edits, [
+    { channelId: "c-general", edit: { purpose: "Anything that cuts across" } },
+  ]);
 });

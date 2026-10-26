@@ -227,6 +227,16 @@ test("the stream opens on the channel chosen while it stands, on #general where 
   assert.deepEqual(channelShown(undefined, "c-app"), { kind: CHANNEL_SHOWN.NONE });
 });
 
+test("a channel chosen among the archived ones is shown to read, and one neither open nor archived is gone", () => {
+  const general = channelOf("c-general", "general");
+  const old = { ...channelOf("c-old", "old-app"), archivedAt: NOON };
+  assert.deepEqual(channelShown([general], "c-old", [old]), {
+    kind: CHANNEL_SHOWN.ARCHIVED,
+    channel: old,
+  });
+  assert.deepEqual(channelShown([general], "c-unknown", [old]), { kind: CHANNEL_SHOWN.MISSING });
+});
+
 test("the channels are walked in the sidebar's order, the standing then the projects', wrapping round", () => {
   // Note that the service's order mixes a project's channel among the standing ones.
   const channels = [

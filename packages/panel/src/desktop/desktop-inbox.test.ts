@@ -8,7 +8,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import type { Channel } from "@luke/features/channel-wire";
+import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnsweredView,
@@ -9688,6 +9688,8 @@ function answerChannels(answers: {
   follow?: AsyncIterableIterator<unknown>;
   /** A channel made or archived, before the channels as they then stand are answered. */
   onWrite?: (write: AnyAct) => void;
+  /** The workspace's archived channels; the read is refused where none are given. */
+  archived?: readonly ArchivedChannel[];
 }): void {
   const previous = fakeActsAnswer();
   const done = (value: unknown): Promise<FakeActAnswer> =>
@@ -9701,7 +9703,8 @@ function answerChannels(answers: {
       if (
         request.kind === ACT_KIND.CHANNELS_LOOK ||
         request.kind === ACT_KIND.CHANNELS_CREATE ||
-        request.kind === ACT_KIND.CHANNELS_ARCHIVE
+        request.kind === ACT_KIND.CHANNELS_ARCHIVE ||
+        request.kind === ACT_KIND.CHANNELS_UNARCHIVE
       ) {
         answers.onWrite?.(request);
         return done({ channels: answers.channels?.() ?? [GENERAL] });
@@ -9709,6 +9712,9 @@ function answerChannels(answers: {
       if (request.kind === ACT_KIND.CHANNELS_THREADS) {
         const read = answers.threads?.(request.payload.before) ?? Promise.resolve(threadsPage());
         return read.then((value) => ({ status: FAKE_ANSWER.DONE, value }) as FakeActAnswer);
+      }
+      if (request.kind === ACT_KIND.CHANNELS_ARCHIVED && answers.archived !== undefined) {
+        return done({ channels: answers.archived });
       }
       if (request.kind === ACT_KIND.CHANNELS_FOLLOW && answers.follow !== undefined) {
         return done(answers.follow);
@@ -9806,6 +9812,58 @@ test("a channel archived or unknown says so in the stream's place, with the way 
   );
   await settle();
   assert.ok(page.querySelector('section[aria-label="#general"]'), "#general's stream stands");
+});
+
+test("an archived channel chosen shows its threads to read, offering no ask and no move, and Unarchive opens it again", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  const old: ArchivedChannel = {
+    id: "c0ffee00-0000-4000-8000-0000000000aa",
+    name: "old-app",
+    purpose: "The apps, before the split",
+    project: false,
+    createdAt: 1,
+    archivedAt: 2,
+  };
+  const unarchived: string[] = [];
+  answerChannels({
+    archived: [old],
+    onWrite: (write) => {
+      if (write.kind === ACT_KIND.CHANNELS_UNARCHIVE) unarchived.push(write.payload.channelId);
+    },
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  act(() => channelPlaceNow?.onChoose(old.id));
+  await settle();
+  const stream =
+    page.querySelector<HTMLElement>('section[aria-label="#old-app"]') ??
+    assert.fail("the archived channel's stream stands");
+  assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title]);
+  assert.equal(stream.querySelector(".channel-post-ask"), null, "no ask is answered from a post");
+  assert.match(stream.textContent ?? "", /#old-app was archived/u);
+
+  act(() =>
+    (
+      stream.querySelector<HTMLElement>('button[aria-label="Thread actions"]') ??
+      assert.fail("a post has its ⋯")
+    ).click(),
+  );
+  assert.ok(!menuWords().includes("Move to channel…"), "no thread is moved out of it");
+  act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+
+  act(() =>
+    (
+      [...stream.querySelectorAll<HTMLButtonElement>("button")].find(
+        (each) => each.textContent === "Unarchive",
+      ) ?? assert.fail("the stream offers Unarchive")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(unarchived, [old.id]);
+  // Note that the window's channel place outlives the test, so it goes back to #general for the next.
+  act(() => channelPlaceNow?.onChoose(GENERAL.id));
 });
 
 test("a thread opened in a channel's stream that is gone says so beside the stream, with the way back to it", async () => {

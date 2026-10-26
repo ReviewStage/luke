@@ -15,8 +15,9 @@ import type { ChannelsControl } from "./use-channels.js";
  *
  * The menu offers Copy link, the channel's own link (`channelPlace`); Mark
  * as read, which stamps the reader's look at it now and stands unavailable
- * while nothing in it is unread; and, on any channel but #general, which no
- * member renames or archives, Rename and Archive. Archiving asks first, in
+ * while nothing in it is unread; Edit, which asks for its name and purpose,
+ * #general's purpose alone, since no member renames it; and, on any channel
+ * but #general, which is never archived, Archive. Archiving asks first, in
  * the accent, since it can be undone but reaches everyone in the workspace
  * (`packages/panel/AGENTS.md`'s Confirms); the question goes with its
  * workspace, its channel, and its surface, and a refusal stands in the card.
@@ -24,7 +25,7 @@ import type { ChannelsControl } from "./use-channels.js";
 
 /** What a channel's menu says of each act. */
 const CHANNEL_MENU_WORDS = {
-  RENAME: "Rename…",
+  EDIT: "Edit…",
   ARCHIVE: "Archive…",
 } as const;
 
@@ -34,18 +35,18 @@ interface ChannelMenu {
   readonly dialog: React.JSX.Element;
 }
 
-/** The menu of every channel a surface lists; `onRename` is where the surface asks for a new name, none where it asks for none. */
+/** The menu of every channel a surface lists; `onEdit` is where the surface asks for a channel's name and purpose (`channel-dialog.tsx`). */
 export function useChannelMenu({
   workspaceId,
   channels,
   shown,
-  onRename,
+  onEdit,
 }: {
   workspaceId: string | undefined;
   channels: ChannelsControl;
   /** Whether the surface is in sight, which the question goes with. */
   shown: boolean;
-  onRename: ((channel: Channel) => void) | undefined;
+  onEdit: (channel: Channel) => void;
 }): ChannelMenu {
   const copyLinkItem = useCopyLinkItem();
   const [doomed, setDoomed] = useState<{ channel: Channel; workspaceId: string | undefined }>();
@@ -69,18 +70,14 @@ export function useChannelMenu({
       ...commandAction(PANEL_COMMAND.MARK_READ, () => channels.onLook(channel.id), false),
       disabled: !channelUnread(channel),
     };
-    const editable = channelEditable(channel);
-    const manage: MenuAction[] = editable
+    const edit: MenuAction = {
+      label: CHANNEL_MENU_WORDS.EDIT,
+      icon: <GLYPH.RENAME />,
+      onSelect: () => onEdit(channel),
+    };
+    const manage: MenuAction[] = channelEditable(channel)
       ? [
-          ...(onRename === undefined
-            ? []
-            : [
-                {
-                  label: CHANNEL_MENU_WORDS.RENAME,
-                  icon: <GLYPH.RENAME />,
-                  onSelect: () => onRename(channel),
-                },
-              ]),
+          edit,
           {
             label: CHANNEL_MENU_WORDS.ARCHIVE,
             icon: <GLYPH.ARCHIVE />,
@@ -90,7 +87,7 @@ export function useChannelMenu({
             },
           },
         ]
-      : [];
+      : [edit];
     return [[...(copyLink === undefined ? [] : [copyLink]), read], manage].filter(
       (group) => group.length > 0,
     );

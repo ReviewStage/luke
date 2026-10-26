@@ -174,6 +174,7 @@ export function ChannelList({
   shown,
   onOpen,
   onNew,
+  onEdit,
 }: {
   workspaceId: string | undefined;
   channels: ChannelsControl;
@@ -182,8 +183,10 @@ export function ChannelList({
   onOpen: (channelId: string) => void;
   /** Asks for a channel to make. */
   onNew: () => void;
+  /** Asks for a channel's name and purpose. */
+  onEdit: (channel: Channel) => void;
 }): React.JSX.Element {
-  const menu = useChannelMenu({ workspaceId, channels: control, shown, onRename: undefined });
+  const menu = useChannelMenu({ workspaceId, channels: control, shown, onEdit });
   const { channels, failed } = control;
   if (channels === undefined && !failed) return <ChannelListSkeleton />;
   return (
