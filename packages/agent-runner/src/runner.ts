@@ -30,6 +30,7 @@ import { randomUUID, type UUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
+  AgentDefinition,
   HookCallback,
   McpSdkServerConfigWithInstance,
   Options,
@@ -69,6 +70,8 @@ import {
 import { openMcpRelay } from "./mcp-relay.js";
 import { ProcessTable } from "./processes.js";
 import {
+  CLAUDE_CODE_TOOLS,
+  CLAUDE_CODE_WORKER,
   type ClaudeCodeConfig,
   EFFORT,
   type Effort,
@@ -106,6 +109,21 @@ const DENIED_VARIABLES = [
   "ANTHROPIC_AUTH_TOKEN",
   "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
 ] as const;
+
+/**
+ * The worker the agent hands a scoped job to (`CLAUDE_CODE_WORKER`): its
+ * own model's, without the tools that write a file, start another worker,
+ * or act through Luke, and told it never commits or pushes, which Bash
+ * alone could still do.
+ */
+const WORKER: AgentDefinition = {
+  description:
+    "A read-only worker for one scoped job, such as a broad search, a comparison of approaches, or an investigation: it reads the checkout and the web and answers, and never edits, commits, or pushes.",
+  prompt:
+    "You are a read-only worker for a coding agent. Do the one job you were handed and answer with what it asks for. You are read-only in the checkout: never write, edit, move, or delete a file, never commit or push, and never change anything elsewhere, such as on GitHub; run only commands that read.",
+  model: "inherit",
+  disallowedTools: ["Edit", "Write", "NotebookEdit", "Agent", `mcp__${MCP_SERVER}`],
+};
 
 /**
  * Where Claude Code's sandbox lets a command the agent runs on a Mac write,
@@ -191,6 +209,9 @@ function queryOptions(
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     includePartialMessages: true,
+    allowedTools: [...CLAUDE_CODE_TOOLS.ADDED],
+    disallowedTools: [...CLAUDE_CODE_TOOLS.DENIED],
+    agents: { [CLAUDE_CODE_WORKER]: WORKER },
     // The CLI's environment is the runner's own, less the bearer, which only
     // the runner uses; Node leaves an undefined one unset.
     env: { ...env, [RUNNER_ENV.BEARER]: undefined },
