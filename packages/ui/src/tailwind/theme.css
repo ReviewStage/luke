@@ -212,6 +212,8 @@
   --radius-control-compact: calc(var(--luke-control-radius) - var(--luke-space-2));
   --radius-inline-edit: calc(var(--luke-radius-6) - 1px);
   --shadow-selected-edge: inset 0 0 0 1px var(--luke-color-border-selected);
+  /* A row's ring while its menu stands open (`--luke-color-border-menu-open`). */
+  --shadow-menu-open-edge: inset 0 0 0 1px var(--luke-color-border-menu-open);
   --ease-plain: var(--luke-motion-exit);
   /* A field turning wrong shakes once; an arriving part fades in, a clear
      grows in and shrinks out, an error drops into its line, and a count

@@ -68,6 +68,8 @@ test("pressing the ⋯ drops its menu and says so, and pressing it again closes 
   expect(more().getAttribute("aria-expanded")).toBe("false");
   act(() => more().click());
   expect(more().getAttribute("aria-expanded")).toBe("true");
+  // Note that a header's ⋯ fills while its menu is open, as a row's never does (`useRowMenu`).
+  expect(more().dataset.lights).toBeUndefined();
   expect(document.querySelector('[role="menu"]')?.getAttribute("aria-label")).toBe(
     "Automation actions",
   );

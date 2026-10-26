@@ -1,6 +1,6 @@
 import type { MouseEvent, Ref } from "react";
 import { GLYPH } from "../../icons/glyph-registry.js";
-import { type ButtonSize, IconButton } from "../button/button.js";
+import { type ButtonLight, type ButtonSize, IconButton } from "../button/button.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
@@ -13,7 +13,10 @@ import { Tooltip } from "../tooltip/hint.js";
  * spreads on it, which opens and closes the menu and says whether it
  * stands open. A row's ⋯ is `ListRow`'s `menu`, which draws this button
  * with the same menu on a right-click and the menu key; this one is for a
- * header's or a toolbar's ⋯, where no row stands.
+ * header's or a toolbar's ⋯, where no row stands. A row's ⋯ lights its
+ * glyph alone at every size, under the pointer and while its menu is open,
+ * because the row is already lit and ringed (`useRowMenu`); a header's or a
+ * toolbar's fills as any quiet button does.
  */
 
 /** The name of a thing's ⋯ and of the menu it drops: "Task" makes "Task actions". */
@@ -25,6 +28,7 @@ export function moreLabel(thing: string): string {
 export function MoreButton({
   thing,
   size,
+  lights,
   disabled,
   tabbable,
   ref,
@@ -36,6 +40,8 @@ export function MoreButton({
   /** What it acts on, as a sentence opens with it: "Task", "Repository". */
   thing: string;
   size?: ButtonSize | undefined;
+  /** What it lights while its menu is open: its glyph alone in a row, which is already lit. */
+  lights?: ButtonLight | undefined;
   /** Whether its menu is unavailable now, as a thing being deleted offers none. */
   disabled?: boolean | undefined;
   /** Whether it is a Tab stop; false leaves it to the pointer, where a neighbour holds the one stop. */
@@ -57,6 +63,7 @@ export function MoreButton({
         icon={<GLYPH.MORE />}
         label={label}
         {...(size === undefined ? {} : { size })}
+        lights={lights}
         disabled={disabled}
         tabbable={tabbable}
         onClick={onClick}
