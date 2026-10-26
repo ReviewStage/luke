@@ -1,1 +1,1 @@
-ALTER TABLE "device" ADD COLUMN "isolation" text DEFAULT 'bare' NOT NULL;
+ALTER TABLE "device" ADD COLUMN IF NOT EXISTS "isolation" text DEFAULT 'bare' NOT NULL;
