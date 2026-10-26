@@ -1,6 +1,8 @@
 /**
  * device-agents.ts -- a local agent's Mac (`device-agent-wire.ts`): it registers and beats, holds a read for its lines and one for its requests, claims each, and settles a line or answers a request.
  *
+ * A host enrolls first (`../host-wire.ts`), trading an install token for
+ * its device secret, and calls every other procedure on that secret.
  * Every procedure names the Mac's device id, in the query of a held read
  * and in the body of every other call. The outputs are the wire schemas
  * flipped, so oRPC's output check encodes the handler's value into the
@@ -24,6 +26,7 @@ import {
   deviceAgentRequestsAnswerSchema,
   deviceAgentSettleRequestSchema,
 } from "../device-agent-wire.js";
+import { hostEnrollAnswerSchema, hostEnrollRequestSchema } from "../host-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 
@@ -35,6 +38,11 @@ const ANSWER_BODY_BYTES =
   Math.ceil((DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES * 2 * 4) / 3) + 64 * 1_024;
 
 export const deviceAgentsContract = {
+  enroll: hostedProcedure
+    .meta(bodyCap(SMALL_BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_ENROLL }))
+    .input(exactInput(hostEnrollRequestSchema))
+    .output(EffectSchema.flip(hostEnrollAnswerSchema)),
   register: hostedProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES }))

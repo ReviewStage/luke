@@ -38,6 +38,7 @@ import {
   type DeviceAgentsProcedureSeams,
   deviceAgentsProcedures,
 } from "../agents/device-agents-procedures.js";
+import { type HostsProcedureSeams, hostsProcedures } from "../agents/hosts-procedures.js";
 import {
   type MacCommandsProcedureSeams,
   macCommandsProcedures,
@@ -115,6 +116,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   EventsProcedureSeams &
   GitHubProcedureSeams &
   GitHubTokenProcedureSeams &
+  HostsProcedureSeams &
   InboxProcedureSeams &
   InstalledSkillsProcedureSeams &
   IntegrationsProcedureSeams &
@@ -152,6 +154,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     events: eventsProcedures(seams),
     github: githubProcedures(seams),
     githubToken: githubTokenProcedures(seams),
+    hosts: hostsProcedures(seams),
     inbox: inboxProcedures(seams),
     installedSkills: installedSkillsProcedures(seams),
     integrations: integrationsProcedures(seams),
