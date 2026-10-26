@@ -1,4 +1,5 @@
 import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
+import { CODING_AGENT_MACHINE, type CodingAgentMachine } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import {
@@ -23,6 +24,7 @@ import {
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
+import { device } from "./device.js";
 
 /**
  * task.ts -- a named task and its plan, its one current document.
@@ -111,6 +113,23 @@ export const task = pgTable(
      * with none. Kept as written, like the document.
      */
     brief: text("brief"),
+    /**
+     * Where the task's coding agents run (`CODING_AGENT_MACHINE`): a sandbox,
+     * every task from before the column among them, or the device
+     * `device_id` names. It decides where each agent started on the task
+     * afterwards runs, and an agent keeps where it started.
+     */
+    machine: text("machine")
+      .$type<CodingAgentMachine>()
+      .notNull()
+      .default(CODING_AGENT_MACHINE.VERCEL),
+    /**
+     * The device a task that runs on one names, one of the member's who set
+     * it, whose agents alone run there; null for a task in the cloud, and
+     * once that device's row is gone, where a start on the task is refused
+     * until it is set again.
+     */
+    deviceId: uuid("device_id").references(() => device.id, { onDelete: "set null" }),
     /**
      * @deprecated A pin is its reader's own now, in `plan_pin`
      * (`plan-pin.ts`), and nothing writes or reads this. It was the
