@@ -15,7 +15,7 @@ import { ModelMenu } from "./model-menu.js";
 /**
  * model-menu.test.ts -- a model no subscription or API key of the account's
  * pays for is never a dead row: its pick lands on its harness's row in
- * Settings › Agents rather than choosing it, and where the Start button's
+ * Settings › Agents rather than choosing it, and where an automation's
  * choice is such a model, as a new account's Claude default is on an OpenAI
  * key alone, the menu says it cannot run and offers the same Connect; a
  * running agent's chip, which its starter's credentials pay for, says
@@ -68,7 +68,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** What owns the menu: the Start button, whose choice a new agent starts on, or a running agent's chip, which shows its plan. */
+/** What owns the menu: an automation, whose choice a new agent starts on, or a running agent's chip, which shows its plan. */
 const OWNER = { START: "start", CHIP: "chip" } as const;
 
 type Owner = (typeof OWNER)[keyof typeof OWNER];

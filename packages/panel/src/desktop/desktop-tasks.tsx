@@ -108,7 +108,6 @@ import {
   useColumnFocus,
   useSidePanelDrawing,
 } from "./side-panel.js";
-import { StartAgentButton } from "./start-agent-button.js";
 import { useStrandedTaskBanner } from "./stranded-task-banner.js";
 import { useTabViews } from "./strip-tabs.js";
 import { tabCard } from "./tab-card.js";
@@ -1329,7 +1328,6 @@ function PlanDocument({
                                   onChoose={chooseRepository}
                                   openRequest={menuRequest}
                                 />
-                                <StartAgentButton control={agents} />
                                 {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. A phone's is its header's. */}
                                 {switched ? null : taskMenu}
                               </Fragment>
