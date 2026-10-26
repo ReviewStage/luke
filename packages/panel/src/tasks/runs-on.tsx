@@ -92,18 +92,22 @@ export function useNewTaskRunsOn(
   devices: readonly MacOffer[] | undefined,
 ): readonly [MacOffer | undefined, (deviceId: string | undefined) => void] {
   const [kept, keep] = useKept(KEPT.PICK, CLOUD_ROW);
-  // Whether this card fell back to Cloud, which it holds until a pick, so a device coming back mid-compose never moves it.
-  const [fellBack, setFellBack] = useState(false);
+  // The kept device this card fell back to Cloud from, which it holds until another is kept, here or in
+  // another card, so that device coming back mid-compose never moves it.
+  const [fellBackFrom, setFellBackFrom] = useState<string | undefined>(undefined);
   const now = useSecond();
   const picked = devices?.find((each) => each.deviceId === kept);
   const usable = picked !== undefined && offerOnline(picked, now);
   // Note that a list not yet read judges nothing, so the kept device stands once it arrives online.
-  if (!fellBack && !usable && kept !== CLOUD_ROW && devices !== undefined) setFellBack(true);
+  if (fellBackFrom === undefined && !usable && kept !== CLOUD_ROW && devices !== undefined) {
+    setFellBackFrom(kept);
+  }
+  const held = fellBackFrom !== undefined && fellBackFrom === kept;
   const choose = (deviceId: string | undefined) => {
-    setFellBack(false);
+    setFellBackFrom(undefined);
     keep(deviceId ?? CLOUD_ROW);
   };
-  return [usable && !fellBack ? picked : undefined, choose];
+  return [usable && !held ? picked : undefined, choose];
 }
 
 /** What a start sends of New task's pick: the device it names, or the cloud. */

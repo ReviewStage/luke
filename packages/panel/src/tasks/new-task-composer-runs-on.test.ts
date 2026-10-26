@@ -26,7 +26,8 @@ import { NewTaskComposer } from "./new-task-composer.js";
  * new-task-composer-runs-on.test.ts -- New task's Runs on, with local agents
  * on and two of the member's devices offered, one offline: the task starts on
  * the device picked, by its id, and the offline one cannot be picked; and a
- * card that fell back to Cloud stays there when the device comes back. Note
+ * card that fell back to Cloud stays there when the device comes back, but
+ * takes a device picked in another card. Note
  * that it stands in a file of its own, because a window reads its document
  * once, and the gate reads the experiment off that document. Synthetic
  * throughout.
@@ -68,8 +69,8 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The member's devices: the Studio, online unless said, and the build host, offline. */
-function devicesWith(studioSeenAt = Date.now()): readonly MacOffer[] {
+/** The member's devices: the Studio, online unless said, and the build host, offline unless said. */
+function devicesWith(studioSeenAt = Date.now(), builderSeenAt = 0): readonly MacOffer[] {
   return [
     {
       deviceId: STUDIO,
@@ -83,7 +84,7 @@ function devicesWith(studioSeenAt = Date.now()): readonly MacOffer[] {
       name: "Build host",
       providers: [MODEL_PROVIDER.ANTHROPIC],
       kind: DEVICE_KIND.HOST,
-      seenAt: 0,
+      seenAt: builderSeenAt,
     },
   ];
 }
@@ -164,4 +165,21 @@ test("a card that fell back to Cloud for an offline last pick stays on Cloud onc
   await settle();
 
   assert.deepEqual(starts, [{ machine: CODING_AGENT_MACHINE.VERCEL }]);
+});
+
+test("a device picked in another card reaches a card that fell back to Cloud", async () => {
+  window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
+  const offered = { devices: devicesWith(0, Date.now()) };
+  const welcome = await mount(offered);
+  const dialog = await mount(offered);
+  act(() =>
+    dialog.container.querySelector<HTMLButtonElement>('button[aria-label^="Runs on"]')?.click(),
+  );
+  await settle();
+  act(() => row("Build host").click());
+  await settle();
+  pressInComposer(welcome.container, "Enter", { metaKey: true });
+  await settle();
+
+  assert.deepEqual(welcome.starts, [{ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: BUILDER }]);
 });
