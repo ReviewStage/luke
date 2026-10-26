@@ -1,6 +1,6 @@
-import { CONTEXT_WINDOW, type MacOffer } from "@luke/features/coding-agent-wire";
+import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { remedyLabel } from "@luke/features/failure-remedy";
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import type { CatalogModel, MacOffer, ModelChoice } from "@luke/features/models-wire";
 import { readingWords } from "@luke/features/words";
 import {
   ErrorState,

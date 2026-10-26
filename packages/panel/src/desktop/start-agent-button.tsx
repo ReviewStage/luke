@@ -1,5 +1,5 @@
 import { FAILURE_REASON, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
-import { MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+import type { MacOffer, ModelChoice, ModelProvider } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
   ERROR_STATE_PLACEMENT,
@@ -31,8 +31,8 @@ import { useExperiment } from "../use-app-state.js";
  * of the account's Macs, the menu's Run on picks Cloud or one of them by
  * its name, the cloud by default, and a Start on a Mac says its name on
  * hover after the model and asks the service to run the agent there, by
- * the Mac's id; a model of another provider than Anthropic's stands at
- * Cloud, since a Mac runs Claude Code alone. The models and the default are read as the
+ * the Mac's id. Run on lists only the Macs that run the chosen model's
+ * provider, as each offer lists them, and stands at Cloud where none does. The models and the default are read as the
  * button mounts and again as the menu opens, so the menu shows the catalog
  * as it stands and the default as Settings last wrote it. A
  * task with no repository has nothing for an agent to check out, so Start
@@ -45,8 +45,17 @@ import { useExperiment } from "../use-app-state.js";
  * `SplitButton`.
  */
 
-/** Why Run on stands at Cloud for a model a Mac cannot run. */
-const MAC_RUNS_CLAUDE = "Agents on a Mac run Claude models only.";
+/** Why Run on stands at Cloud for a model no Mac of the reader's runs. */
+const NO_MAC_RUNS_MODEL = "No Mac of yours can run this model's agents yet.";
+
+/** The Macs offered that run a model of `provider`: each one where the provider is not read yet. */
+function macsRunning(
+  macs: readonly MacOffer[] | undefined,
+  provider: ModelProvider | undefined,
+): readonly MacOffer[] {
+  if (macs === undefined) return [];
+  return provider === undefined ? macs : macs.filter((each) => each.providers.includes(provider));
+}
 
 export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
   const { start } = control;
@@ -93,12 +102,12 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     localAgents && control.macs !== undefined && control.macs.length > 0 ? control.macs : undefined;
   // A default effort the model no longer lists falls to the model's first.
   const chosen = settledChoice(models, picked ?? choice);
-  // A Mac runs Claude Code alone, so a model of another provider's stands at Cloud.
+  // Each Mac runs the providers it lists, so Run on offers only those that run the model chosen,
+  // and stands at Cloud where none does.
   const provider = models?.find((each) => each.id === chosen?.model)?.provider;
-  const macUnavailable =
-    provider === undefined || provider === MODEL_PROVIDER.ANTHROPIC ? undefined : MAC_RUNS_CLAUDE;
-  const mac =
-    macUnavailable === undefined ? macs?.find((each) => each.deviceId === runOn) : undefined;
+  const running = macsRunning(macs, provider);
+  const macUnavailable = macs !== undefined && running.length === 0 ? NO_MAC_RUNS_MODEL : undefined;
+  const mac = running.find((each) => each.deviceId === runOn);
   const unavailable = !start.available;
 
   const press = () => {
@@ -185,7 +194,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
             macs === undefined
               ? undefined
               : {
-                  macs,
+                  macs: running,
                   deviceId: mac?.deviceId,
                   onChoose: setRunOn,
                   unavailable: macUnavailable,
@@ -193,11 +202,10 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           }
           onChoose={(next) => {
             setPicked(next);
-            // A model a Mac cannot run lets go of the Mac picked, so a later Claude pick starts in the cloud.
+            // A model the Mac picked cannot run lets go of it, so a later pick it runs starts in the cloud.
             const nextProvider = models?.find((each) => each.id === next.model)?.provider;
-            if (nextProvider !== undefined && nextProvider !== MODEL_PROVIDER.ANTHROPIC) {
-              setRunOn(undefined);
-            }
+            const kept = macsRunning(macs, nextProvider).some((each) => each.deviceId === runOn);
+            if (!kept) setRunOn(undefined);
           }}
           onClose={close}
           onLeave={(left) => {

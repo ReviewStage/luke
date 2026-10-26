@@ -56,9 +56,8 @@ import {
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
   MAC_PRESENCE,
-  type MacOffer,
 } from "@luke/features/coding-agent-wire";
-import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
+import { type MacOffer, MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -238,10 +237,47 @@ export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* providerRuntimeChoice(userId, provider, yield* keyRowsOf(userId, rows));
 });
 
+/** The model providers a Mac may run a Start of: Claude Code's alone, since a Mac runs no Codex yet. */
+const MAC_PROVIDERS: readonly ModelProvider[] = [MODEL_PROVIDER.ANTHROPIC];
+
+/** The provider whose models a native runtime runs, which the Mac a Start names must list. */
+const RUNTIME_PROVIDER = {
+  [CONVERSATION_RUNTIME.CLAUDE_CODE]: MODEL_PROVIDER.ANTHROPIC,
+  [CONVERSATION_RUNTIME.CODEX]: MODEL_PROVIDER.OPENAI,
+} as const;
+
+/** The native runtime that runs a provider's models: the harness a Mac launches for it. */
+const RUNTIME_OF = {
+  [MODEL_PROVIDER.ANTHROPIC]: CONVERSATION_RUNTIME.CLAUDE_CODE,
+  [MODEL_PROVIDER.OPENAI]: CONVERSATION_RUNTIME.CODEX,
+} as const satisfies Record<ModelProvider, ConversationRuntime>;
+
+/**
+ * The providers a Start on any of the account's Macs runs, as the account
+ * can pay for them: each of `MAC_PROVIDERS` whose model a Start of the
+ * account's would run on that provider's own harness, on a plan or a key
+ * it keeps in Luke, and none it cannot pay for.
+ */
+const paidMacProviders = Effect.fnUntraced(function* (
+  userId: string,
+): Effect.fn.Return<readonly ModelProvider[], StoreFailure, DatabaseServices> {
+  const rows = yield* keyRowsOf(userId, undefined);
+  const paid: ModelProvider[] = [];
+  for (const provider of MAC_PROVIDERS) {
+    const choice = yield* Effect.result(providerRuntimeChoice(userId, provider, rows));
+    if (Result.isSuccess(choice) && choice.success.runtime === RUNTIME_OF[provider]) {
+      paid.push(provider);
+    }
+  }
+  return paid;
+});
+
 /**
  * The Macs the account may start a local agent on, as Start offers them:
  * each of its Macs that beat within `THIS_MAC.FRESH`, the latest first,
- * where the account has the `local-agents` experiment on; none otherwise.
+ * with the providers a Start on it runs that the account can pay for
+ * (`paidMacProviders`), where the account has the `local-agents`
+ * experiment on; none otherwise.
  * Note that Start offers every one by name rather than one as This Mac,
  * because the service cannot tell which Mac the asking window runs on, and
  * a web tab runs on none.
@@ -255,15 +291,18 @@ export const macOffers = /* @__PURE__ */ Effect.fnUntraced(function* (
     userId,
     new Date(now - Duration.toMillis(THIS_MAC.FRESH)),
   );
-  return seen.map((device) => ({ deviceId: device.id, name: device.name }));
+  if (seen.length === 0) return [];
+  const providers = yield* paidMacProviders(userId);
+  return seen.map((device) => ({ deviceId: device.id, name: device.name, providers }));
 });
 
 /**
  * Where a new agent of the account's runs on the runtime given, as its
  * Start asks: a sandbox where it asks for none, or the Mac it names, where
- * that Mac is one Start offers the account (`macOffers`) and the runtime is
- * Claude Code's; refused by name otherwise, Codex among it, and a Mac that
- * is another account's or is not there is refused as away.
+ * that Mac is one Start offers the account (`macOffers`) and lists the
+ * provider the runtime runs; refused by name otherwise: a Mac that is
+ * another account's or is not there as away, Codex on a Mac that runs none,
+ * and a runtime with no harness.
  */
 export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -277,15 +316,16 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.OFF });
   }
-  if (runtime === CONVERSATION_RUNTIME.CODEX) {
-    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.CODEX });
-  }
-  if (runtime !== CONVERSATION_RUNTIME.CLAUDE_CODE) {
+  if (runtime !== CONVERSATION_RUNTIME.CLAUDE_CODE && runtime !== CONVERSATION_RUNTIME.CODEX) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });
   }
   const offer = (yield* macOffers(userId)).find((each) => each.deviceId === asked.deviceId);
   if (offer === undefined) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.MAC_AWAY });
+  }
+  // Note that a Mac runs only the providers it lists, so Codex on one that lists none of OpenAI's is refused by name.
+  if (!offer.providers.includes(RUNTIME_PROVIDER[runtime])) {
+    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.CODEX });
   }
   return { machine: CODING_AGENT_MACHINE.MAC, deviceId: offer.deviceId };
 });

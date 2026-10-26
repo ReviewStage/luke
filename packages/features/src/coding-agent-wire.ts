@@ -240,14 +240,6 @@ export function macOnline(seenAt: number, now: number): boolean {
   return seenAt >= now - MAC_PRESENCE.FRESH_MS;
 }
 
-/** One of the account's Macs a Start may run a local agent on, as Start offers it: one that beat lately, by its id and name. */
-export const macOfferSchema = EffectSchema.Struct({
-  deviceId: wireUuidSchema,
-  name: EffectSchema.String,
-});
-
-export type MacOffer = typeof macOfferSchema.Type;
-
 /**
  * The whole of what an operator answers a heartbeat that found nothing for
  * its member: a turn whose reply is exactly this, and nothing more, is a
@@ -521,7 +513,7 @@ export const codingAgentStartRequestFields = {
   call: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Where the agent runs: one of the starter's Macs, the one `deviceId` names; a sandbox where absent. */
   machine: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_MACHINE))),
-  /** The Mac a Start on a Mac runs on, one Start offered (`macOfferSchema`), which the service checks is the starter's and there before it pins the agent to it. */
+  /** The Mac a Start on a Mac runs on, one Start offered (`@luke/features/models-wire`'s `macOfferSchema`), which the service checks is the starter's and there before it pins the agent to it. */
   deviceId: EffectSchema.optionalKey(wireUuidSchema),
 };
 

@@ -78,6 +78,7 @@ import {
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
 import { deploymentEveForAccounts } from "../deployment-eve.js";
+import { macOffers } from "./agent-runtime-choice.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import { rewoundAgent } from "./rewind.js";
 import {
@@ -1340,6 +1341,32 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               Option.map(made, (agent) => [agent.machine, agent.deviceId]),
               Option.some([CODING_AGENT_MACHINE.MAC, deviceId]),
               each.name,
+            );
+          }
+        }),
+    );
+
+    it.effect(
+      "a Mac is offered as running Claude's models only to an account that pays for Claude Code in Luke, and as running none otherwise",
+      () =>
+        Effect.gen(function* () {
+          for (const plan of [true, false]) {
+            const { owner } = yield* openStarter(plan);
+            yield* writeAccountPreferences(owner, {
+              experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
+            });
+            yield* registerMacDevice(owner, {
+              id: randomUUID(),
+              name: "Studio",
+              ...MAC_DEVICE_LAYOUT,
+            });
+            const offers = yield* macOffers(owner).pipe(
+              Effect.provide(Layer.mergeAll(environment(), runtimes().native)),
+            );
+            assert.deepEqual(
+              offers.map((offer) => [offer.name, offer.providers]),
+              [["Studio", plan ? [MODEL_PROVIDER.ANTHROPIC] : []]],
+              plan ? "a Claude plan" : "no Claude credential",
             );
           }
         }),

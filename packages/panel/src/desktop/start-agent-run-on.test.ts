@@ -95,8 +95,8 @@ test("a press starts in the cloud until Run on picks a Mac, and on the Mac picke
   const control = codingAgentsControl({
     models: MODELS,
     macs: [
-      { deviceId: STUDIO, name: "Studio" },
-      { deviceId: LAPTOP, name: "Laptop" },
+      { deviceId: STUDIO, name: "Studio", providers: [MODEL_PROVIDER.ANTHROPIC] },
+      { deviceId: LAPTOP, name: "Laptop", providers: [MODEL_PROVIDER.ANTHROPIC] },
     ],
     readDefault: () => Promise.resolve({ choice: { model: MODELS[0]?.id ?? "", effort: "high" } }),
     start: {
@@ -127,7 +127,7 @@ test("a Mac picked is let go once a model no Mac runs is chosen, so choosing Cla
   const started: (string | undefined)[] = [];
   const control = codingAgentsControl({
     models: MODELS,
-    macs: [{ deviceId: LAPTOP, name: "Laptop" }],
+    macs: [{ deviceId: LAPTOP, name: "Laptop", providers: [MODEL_PROVIDER.ANTHROPIC] }],
     readDefault: () => Promise.resolve({ choice: { model: MODELS[0]?.id ?? "", effort: "high" } }),
     start: {
       available: true,

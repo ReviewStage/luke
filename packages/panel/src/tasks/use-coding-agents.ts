@@ -21,10 +21,14 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentSummary,
   hasWordsOrFiles,
-  type MacOffer,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
+import type {
+  CatalogModel,
+  MacOffer,
+  ModelChoice,
+  ModelProvider,
+} from "@luke/features/models-wire";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
