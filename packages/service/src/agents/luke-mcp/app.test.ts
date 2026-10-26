@@ -15,6 +15,7 @@ import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
+import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
@@ -322,6 +323,9 @@ const SERVED_TOOLS = [
   "post_thread",
   "read_threads",
   "withdraw_ask",
+  "create_channel",
+  "update_channel",
+  "move_thread",
   "open_pull_request",
   "edit_plan",
   "look_at_picture",
@@ -389,6 +393,11 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
     runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox: NO_SANDBOX }),
   read_threads: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
   withdraw_ask: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
+  create_channel: (admitted, input) =>
+    runAgentInbox(admitted, { tool: CHANNEL_TOOL.CREATE, input }),
+  update_channel: (admitted, input) =>
+    runAgentInbox(admitted, { tool: CHANNEL_TOOL.UPDATE, input }),
+  move_thread: (admitted, input) => runAgentInbox(admitted, { tool: CHANNEL_TOOL.MOVE, input }),
   open_pull_request: (admitted, input) => runAgentOpenPullRequest(admitted, input),
   edit_plan: (admitted, input) => runAgentEditPlan(admitted, input, 0, NO_SANDBOX),
   look_at_picture: (admitted, input) => runAgentLookAtPicture(admitted, input),

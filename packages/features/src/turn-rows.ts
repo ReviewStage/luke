@@ -67,6 +67,12 @@ export const CALL_KIND = {
   INBOX_REPLY: "inbox-reply",
   /** An ask on one of the agent's inbox threads taken back with why (`withdraw_ask`), its row naming the thread's key. */
   INBOX_WITHDRAW: "inbox-withdraw",
+  /** A channel made in the workspace (`create_channel`), its row naming it. */
+  CREATE_CHANNEL: "create-channel",
+  /** A channel renamed, given a purpose, archived, or unarchived (`update_channel`), its row naming it. */
+  UPDATE_CHANNEL: "update-channel",
+  /** A thread moved into another channel (`move_thread`), its row naming the channel. */
+  MOVE_THREAD: "move-thread",
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
@@ -168,6 +174,9 @@ export const CALL_WORDS = {
   [CALL_KIND.INBOX_READ]: { verb: "Read your inbox", code: false },
   [CALL_KIND.INBOX_REPLY]: { verb: "Replied in your inbox:", code: false },
   [CALL_KIND.INBOX_WITHDRAW]: { verb: "Withdrew an ask in your inbox:", code: false },
+  [CALL_KIND.CREATE_CHANNEL]: { verb: "Made the channel", code: false },
+  [CALL_KIND.UPDATE_CHANNEL]: { verb: "Changed the channel", code: false },
+  [CALL_KIND.MOVE_THREAD]: { verb: "Moved a thread to", code: false },
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
   [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped subagent", code: false },

@@ -24,12 +24,9 @@ import {
   coderHost,
   describeFailure,
   type InboxCall,
+  type ThreadToolResult,
 } from "@luke/service/agents/coder-host/host";
-import {
-  INBOX_TOOLS,
-  type InboxToolResult,
-  inboxRejected,
-} from "@luke/service/agents/coder-host/inbox";
+import { INBOX_TOOLS, inboxRejected } from "@luke/service/agents/coder-host/inbox";
 import { postThreadWords } from "@luke/service/agents/coder-host/inbox-door";
 import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
 import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
@@ -390,12 +387,12 @@ export function threadWords(auth: SessionAuth, sessionId: string): Promise<strin
   );
 }
 
-/** One call of the agent's thread tools run under its session, for the tool, which runs here rather than at an edge of its own. */
+/** One call of the agent's thread and channel tools run under its session, for the tool, which runs here rather than at an edge of its own. */
 export function runInboxTool(
   auth: SessionAuth,
   sessionId: string,
   call: InboxCall,
-): Promise<InboxToolResult> {
+): Promise<ThreadToolResult> {
   return admitted(auth, sessionId, inboxRejected, (session) => host.inbox(session, call));
 }
 

@@ -1,7 +1,8 @@
 import { Schema as EffectSchema } from "effect";
-import { inboxItemSchema } from "./inbox-wire.js";
+import { INBOX_BOUNDS, inboxItemSchema } from "./inbox-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 import { workspaceIdSchema } from "./task-wire.js";
+import { filledText } from "./text-schema.js";
 
 /**
  * channel-wire.ts -- a workspace's channels, the topic areas its inbox threads live in, as the panel and the service read them.
@@ -164,3 +165,47 @@ export type ChannelMoveRequest = typeof channelMoveRequestSchema.Type;
 export const channelMoveAnswerSchema = EffectSchema.Struct({ thread: channelThreadSchema });
 
 export type ChannelMoveAnswer = typeof channelMoveAnswerSchema.Type;
+
+/**
+ * The tools a coding agent keeps its workspace's channels with, as a member
+ * does, by the names their tool parts carry in its transcript: it makes a
+ * channel, edits, archives, or unarchives one, and moves a thread it may
+ * read into an open one. Note that `edit_channel`, a retired Chat tool's
+ * name (`agent-tools.ts`'s `RETIRED_TOOL`), is not reused.
+ */
+export const CHANNEL_TOOL = {
+  /** Makes an open channel of the agent's workspace. */
+  CREATE: "create_channel",
+  /** Renames a channel, edits its purpose, or archives or unarchives it. */
+  UPDATE: "update_channel",
+  /** Moves a thread the agent may read into an open channel. */
+  MOVE: "move_thread",
+} as const;
+
+/** A channel an agent makes: its name and purpose, held to a member's own, and whether it is one project's, which it is not where the call says nothing. The model is shown this schema. */
+export const channelCreateInputSchema = EffectSchema.Struct({
+  name: channelNameSchema,
+  purpose: channelPurposeSchema,
+  project: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+/**
+ * A channel an agent changes, open or archived, by its name, `#` or not,
+ * read by the service rather than held to a grammar here, as a post's
+ * channel is: its new name, its new purpose, and whether it is archived,
+ * what the call leaves out standing. The model is shown this schema.
+ */
+export const channelUpdateInputSchema = EffectSchema.Struct({
+  channel: filledText(INBOX_BOUNDS.MAX_CHANNEL_CHARS),
+  name: EffectSchema.optionalKey(channelNameSchema),
+  purpose: EffectSchema.optionalKey(channelPurposeSchema),
+  archived: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+export type ChannelUpdateInput = typeof channelUpdateInputSchema.Type;
+
+/** A thread an agent moves: by its own key, or by the id its thread read answers, into the open channel its name names, `#` or not. The model is shown this schema. */
+export const threadMoveInputSchema = EffectSchema.Struct({
+  thread: filledText(INBOX_BOUNDS.MAX_KEY_CHARS),
+  channel: filledText(INBOX_BOUNDS.MAX_CHANNEL_CHARS),
+});

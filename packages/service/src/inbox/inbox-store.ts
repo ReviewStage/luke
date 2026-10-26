@@ -2687,6 +2687,18 @@ export function moveChannelThread(
   });
 }
 
+/** The id of the agent's own thread under the key, open or settled, which an agent names one it moves by; nothing where it has none under it, or its starter may read it no longer. */
+export function agentThreadId(
+  agent: Pick<InboxAgent, "userId" | "agentId">,
+  key: string,
+): InboxStoreEffect<Option.Option<string>> {
+  const { userId, agentId } = agent;
+  return Effect.map(
+    findAgentItem({ userId, agentId, key }),
+    Option.map((item) => item.id),
+  );
+}
+
 /** The statements a workspace's channels are followed by live: its channels, and where each one's threads stand. */
 export interface ChannelsLiveStatements {
   readonly channels: LiveStatement;

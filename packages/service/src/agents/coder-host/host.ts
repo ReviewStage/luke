@@ -114,8 +114,7 @@ import {
 import { contextWindowOf } from "./context.js";
 import { agentStepOf } from "./context-estimate.js";
 import { type DelegationAsk, delegationChoice, recordDelegation } from "./delegation.js";
-import type { InboxToolResult } from "./inbox.js";
-import { type InboxCall, runAgentInbox } from "./inbox-door.js";
+import { type InboxCall, runAgentInbox, type ThreadToolResult } from "./inbox-door.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { agentCoderInstructions, CODER_HARNESS } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
@@ -379,11 +378,11 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
   ): Effect.Effect<PullRequestToolResult, never, CheckoutServices>;
-  /** Runs one of the agent's inbox tools (`inbox.ts`): a post, a close, or a read of its own items. */
+  /** Runs one of the agent's thread and channel tools (`inbox.ts`): a post, a close, a read of its own items, a channel made or changed, or a thread moved. */
   inbox(
     admitted: AdmittedConversation,
     call: InboxCall,
-  ): Effect.Effect<InboxToolResult, never, DatabaseServices>;
+  ): Effect.Effect<ThreadToolResult, never, DatabaseServices>;
   /** The kind of turn the current request opened, as its header named it; nothing for one that named none. */
   turnKind(auth: SessionAuth): BrainHostTurn | undefined;
   /**
@@ -506,7 +505,7 @@ export interface CoderHost extends HostAdmission {
 }
 
 export type { AgentToolCall, BoardTool } from "./agent-doors.js";
-export type { InboxCall } from "./inbox-door.js";
+export type { InboxCall, ThreadToolResult } from "./inbox-door.js";
 
 /** The newest turns read to find the agent's previous one: the turn opening, where the relay queued it already, and the one before. */
 const PREVIOUS_TURN_READ = 2;
