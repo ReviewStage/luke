@@ -14,7 +14,7 @@ import {
   createChannel,
   ensureGeneralChannel,
 } from "@luke/database/models/channel-store";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createCodingAgent, renameCodingAgent } from "@luke/database/models/coding-agent-store";
 import { updateTask } from "@luke/database/models/task-store";
 import { organization, user } from "@luke/database/schemas/auth";
 import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
@@ -2024,30 +2024,38 @@ it.layer(getTestDB())("a thread's channel", (it) => {
       }),
   );
 
-  it.effect("an account outside the workspace reads none of a channel's threads or counts", () =>
-    Effect.gen(function* () {
-      const { agent, workspaceId } = yield* openAgentIn;
-      const outsider = yield* openUser;
-      yield* openWorkspace(outsider);
-      const app = yield* channelIn(agent.userId, workspaceId, "app");
-      const item = yield* post(agent, { ...SETTINGS, channelId: app, addresseeId: agent.userId });
-      yield* TestClock.adjust(Duration.seconds(1));
-      const theirs = yield* post(agent, { ...SETTINGS, key: "theirs", channelId: app });
-      // An ask that names the outsider, as one addressed to a member who has since left would.
-      yield* Database.use((db) =>
-        db.update(inboxItem).set({ addresseeId: outsider }).where(eq(inboxItem.id, theirs.id)),
-      );
+  it.effect(
+    "a channel's thread names the agent that posted it as its post draws it, and an account outside the workspace reads none of a channel's threads or counts",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        yield* renameCodingAgent(agent.userId, agent.agentId, "Teammate invitations");
+        const app = yield* channelIn(agent.userId, workspaceId, "app");
+        const item = yield* post(agent, { ...SETTINGS, channelId: app, addresseeId: agent.userId });
+        yield* TestClock.adjust(Duration.seconds(1));
+        const theirs = yield* post(agent, { ...SETTINGS, key: "theirs", channelId: app });
+        // An ask that names the outsider, as one addressed to a member who has since left would.
+        yield* Database.use((db) =>
+          db.update(inboxItem).set({ addresseeId: outsider }).where(eq(inboxItem.id, theirs.id)),
+        );
 
-      assert.deepEqual(
-        (yield* firstPage(agent.userId, app)).map((thread) => [thread.id, thread.channelId]),
-        [
-          [item.id, app],
-          [theirs.id, app],
-        ],
-      );
-      assert.deepEqual(yield* firstPage(outsider, app), []);
-      assert.deepEqual([...(yield* channelWaitingCounts(outsider, workspaceId))], []);
-    }),
+        const NAMED = { title: "Teammate invitations", model: "anthropic/claude-opus-5.5" };
+        assert.deepEqual(
+          (yield* firstPage(agent.userId, app)).map((thread) => [
+            thread.id,
+            thread.channelId,
+            thread.agent,
+          ]),
+          [
+            [item.id, app, NAMED],
+            [theirs.id, app, NAMED],
+          ],
+        );
+        assert.deepEqual(yield* firstPage(outsider, app), []);
+        assert.deepEqual([...(yield* channelWaitingCounts(outsider, workspaceId))], []);
+      }),
   );
 
   it.effect(

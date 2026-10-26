@@ -407,7 +407,7 @@ function InboxShown({
       heldIds,
     );
   }, [taskId, taskAgents, heldIds, onTaskAgents]);
-  // A channel's thread as the Inbox lists it, with what holds it, so its post names its agent and the pane reads it through its holder.
+  // A channel's thread as the Inbox lists it, with what holds it, so its post says where its agent stands and the pane reads it through its holder.
   const listedById = new Map(
     standing.flatMap(({ holder, items }) =>
       items.map((item) => [item.id, { holder, item }] as const),
@@ -591,6 +591,7 @@ function InboxShown({
                       readerId={tasks.me}
                       now={now}
                       shown={tasks.shown}
+                      agents={named}
                       listedOf={listedOf}
                       ownTask={ownTask}
                       onOpen={openThread}

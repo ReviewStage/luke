@@ -141,7 +141,7 @@ const LIST_LOOK = {
  * where a utility would outrank it.
  */
 const ROW =
-  "luke-choice flex items-center gap-3 min-w-0 m-0 py-row-inset px-list-inset [border:0] rounded-control outline-offset-[calc(-1*var(--luke-focus-ring-width))] font-ui text-body text-left cursor-press transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit";
+  "luke-choice flex items-center gap-3 min-w-0 m-0 py-row-inset px-list-inset [border:0] rounded-control outline-offset-[calc(-1*var(--luke-focus-ring-width))] font-ui text-body text-left cursor-press transition-[--luke-choice-fill,background-color] duration-(--luke-duration-hover) ease-motion-exit";
 
 /**
  * Each look's own row. A pill's corners are half its one-line height
