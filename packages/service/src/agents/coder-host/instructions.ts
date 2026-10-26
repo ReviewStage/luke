@@ -167,8 +167,10 @@ interface ToolWords {
   readonly glob: string;
   /** How the public web is searched and a page read, up to what the search is for. */
   readonly searchWeb: string;
-  /** How a skill the developer names is loaded. */
+  /** How a skill the developer names is loaded, of the repository's or the ones the member installed. */
   readonly skills: string;
+  /** How a skill the developer names is loaded with no repository, where the member's installed ones are all it is offered. */
+  readonly installedSkills: string;
   /** What it is told of a browser the developer can watch, a tool of Luke's every harness is offered. */
   readonly browser: string;
   /** How the agent keeps its to-dos. */
@@ -186,7 +188,6 @@ const NATIVE_INTEGRATION_WORDS = `The services the developer connected, such as 
 
 `;
 
-/** The repository named in the examples of an agent with none of its own. */
 /**
  * What a coding agent is told of `browser`, the Chromium in its own sandbox
  * whose tabs the developer watches and may take over: for what the
@@ -220,13 +221,14 @@ function browserWords(shell: string): string {
 const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
   [CODER_HARNESS.EVE]: {
     checkout: `Every \`bash\` command already starts in the checkout, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, \`grep\`, and \`apply_patch\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. The checkout opens one commit deep, so a turn that only reads the code starts fast: your first write, and the first \`bash\` command that is more than a plain read, such as any \`git\` or \`gh\` command or a script, fetches the rest of its history before it runs.`,
-    sandbox: `Every \`bash\` command starts in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in, in a fresh shell; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from it, and an absolute path is taken as written.`,
+    sandbox: `Every \`bash\` command starts in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in, in a fresh shell; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from it, and an absolute path is taken as written.`,
     serve:
       "Start the app with `bash`, which keeps a server running in the background while your turn lasts",
     readFile: "`read_file`",
     glob: "`glob`",
     searchWeb: `Search the public web with \`${CODER_TOOL.WEB_SEARCH}\` and read a page it found with \`${CODER_TOOL.READ_WEB_PAGE}\``,
-    skills: `A word like \`/name\` in the developer's message names one of the repository's skills, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers. The list is the repository's skills as your session began, so where \`${CODER_TOOL.LOAD_SKILL}\` knows no such skill, fetch the default branch and read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on it, and follow that instead.`,
+    skills: `A word like \`/name\` in the developer's message names one of your skills, listed under Available skills: the repository's, or one your developer installed into Luke. Call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers. The list is your skills as your session began, so where \`${CODER_TOOL.LOAD_SKILL}\` knows no such skill, it may be one the repository added since: fetch the default branch and read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on it, and follow that instead.`,
+    installedSkills: `A word like \`/name\` in the developer's message names one of the skills your developer installed into Luke, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers.`,
     browser: browserWords("`bash`"),
     todos: `For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.`,
     checks: { readable: CHECKS_WORDS.readable, rest: CHECKS_WORDS.rest },
@@ -243,6 +245,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     glob: "Glob",
     searchWeb: "Search the public web with WebSearch and read a page with WebFetch",
     skills: `A word like \`/name\` in the developer's message names one of your skills: the repository's, or one your developer installed into Luke, which Claude Code lists as \`${INSTALLED_SKILLS.PLUGIN}:<name>\`. Load it with Claude Code's Skill tool before anything else, and follow what it answers. Where it knows no such skill, read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on the default branch, and follow that instead.`,
+    installedSkills: `A word like \`/name\` in the developer's message names one of the skills your developer installed into Luke, which Claude Code lists as \`${INSTALLED_SKILLS.PLUGIN}:<name>\`. Load it with Claude Code's Skill tool before anything else, and follow what it answers.`,
     browser: browserWords("Bash"),
     todos:
       "For work of more than a couple of steps, keep your to-dos with TodoWrite, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",
@@ -263,6 +266,9 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     glob: "your shell (`rg --files`, or `ls`)",
     searchWeb: "Search the public web with Codex's own web search",
     skills: `A word like \`/name\` in the developer's message names one of your skills, which Codex finds under the checkout's \`.agents/skills\`, or, for one your developer installed into Luke, under \`${NATIVE_SKILLS_PATH.INSTALLED}/${INSTALLED_SKILLS.SKILLS}\`: read that skill's \`SKILL.md\` before anything else, and follow what it says. Where neither has such a skill, read \`.agents/skills/<name>/SKILL.md\` or \`.claude/skills/<name>/SKILL.md\` on the default branch, and follow that instead.`,
+    // Note that no path is named, because a local agent's Mac keeps the installed skills in a folder of its own, which Codex lists beside each skill.
+    installedSkills:
+      "A word like `/name` in the developer's message names one of the skills your developer installed into Luke, which Codex lists among your skills: read that skill's `SKILL.md` before anything else, and follow what it says.",
     browser: browserWords("your shell"),
     todos:
       "For work of more than a couple of steps, keep your to-dos with Codex's plan tool (`update_plan`), which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",
@@ -403,11 +409,16 @@ ${read}${EDIT_PLAN_WORDS}`,
  * named by the mention the tool that made or listed it answered, so no
  * address is spelled by hand. An MCP server is named by its connection's
  * mention, and a skill as `/name`, since Luke draws both as chips. A name
- * Luke shows as a label is written in sentence case, with no period.
+ * Luke shows as a label is written in sentence case, with no period. An
+ * agent with no repository is told of no file of one, and its pull request
+ * example names an example repository.
  */
-function namingWords(repository: string, taskLink: string | null): string {
-  const file = `https://github.com/${repository}/blob/HEAD/apps/web/session-store.ts`;
-  const lines = `https://github.com/${repository}/blob/<commit>/apps/web/session-store.ts#L3-L5`;
+function namingWords(repository: string | null, taskLink: string | null): string {
+  const files =
+    repository === null
+      ? ""
+      : `
+- A file of your repository: \`[@session-store.ts](https://github.com/${repository}/blob/HEAD/apps/web/session-store.ts)\`; a folder the same way with \`tree\` for \`blob\`; lines at a commit already on GitHub: \`[@session-store.ts:3–5](https://github.com/${repository}/blob/<commit>/apps/web/session-store.ts#L3-L5)\`.`;
   const inboxItem =
     taskLink === null
       ? "https://tryluke.dev/acme/agent/<agent-id>/inbox/<item-id>"
@@ -419,9 +430,8 @@ function namingWords(repository: string, taskLink: string | null): string {
       : `
 - Your task's plan, whose link is \`${taskLink}\`: \`[@<the task's name>](${taskLink})\`, and one of its sections by its heading's anchor, the heading as GitHub spells an anchor (lower case, spaces as hyphens, punctuation dropped): \`[@Rollout](${taskLink}#rollout)\`.
 - A page shown on the task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](${taskLink}/page/<page-id>)\`.`;
-  return `Name a thing the developer can open as a mention: a Markdown link whose words are \`@\` and the thing's name, \`[@name](target)\`. Luke draws it as the thing's chip, which opens it, wherever you write it: in a message, a thread, or the plan. Keep a mention in the plan exactly as it stands when you edit around it. Copy a target a tool answered rather than spelling one:
-- A file of your repository: \`[@session-store.ts](${file})\`; a folder the same way with \`tree\` for \`blob\`; lines at a commit already on GitHub: \`[@session-store.ts:3–5](${lines})\`.
-- A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`.${ownTask}
+  return `Name a thing the developer can open as a mention: a Markdown link whose words are \`@\` and the thing's name, \`[@name](target)\`. Luke draws it as the thing's chip, which opens it, wherever you write it: in a message, a thread, or the plan. Keep a mention in the plan exactly as it stands when you edit around it. Copy a target a tool answered rather than spelling one:${files}
+- A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository ?? EXAMPLE_REPOSITORY}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`.${ownTask}
 - Another coding agent, or another task, by the \`mention\` \`${CODER_TOOL.LIST_AGENTS}\`, \`${CODER_TOOL.START_AGENT}\`, or \`${CODER_TOOL.LIST_TASKS}\` answered: \`[@Wire the desktop](https://tryluke.dev/acme/plan/<task-id>/agent/<agent-id>)\`.
 - One of your threads, by the \`mention\` each of your thread tools answered for it: \`[@Review the invite flow](${inboxItem})\`.
 - A date, which opens nothing, by its day, or its time with the offset it is at, and a range by both ends joined by a slash, its words the date in full: \`[@Oct 20, 2026](luke://date/2026-10-20)\`, \`[@Oct 20, 2026, 3:00 PM PDT](luke://date/2026-10-20T15:00-07:00)\`, \`[@Oct 20, 2026 → Oct 24, 2026](luke://date/2026-10-20/2026-10-24)\`.
@@ -485,7 +495,7 @@ interface WorkWords {
   readonly work: string;
   /** How it searches the public web. */
   readonly search: string;
-  /** The repository's skills, ending on a blank line; empty for an agent with no repository, which is offered none. */
+  /** How a skill is loaded: the repository's and the installed ones, or the installed ones alone with no repository; ending on a blank line. */
   readonly skills: string;
   /** What a link the developer pointed at names, up to a task's link. */
   readonly links: string;
@@ -493,6 +503,7 @@ interface WorkWords {
   readonly worker: { readonly reads: string; readonly readOnly: string };
 }
 
+/** The repository named in the examples of an agent with none of its own. */
 const EXAMPLE_REPOSITORY = "acme/app";
 
 /**
@@ -630,7 +641,9 @@ Where the ${words.brief} is unclear, say so plainly in your final message rather
     search: `${tools.searchWeb} when a fact lies outside what you were handed, such as a library's documentation. A query leaves for the public web, so never put private names or words into one.
 
 ${tools.integrations}`,
-    skills: "",
+    skills: `${tools.installedSkills}
+
+`,
     links: `A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at.`,
     worker: {
       reads: "a worker that reads the same sandbox, what you wrote in it included;",
@@ -677,7 +690,9 @@ You run one conversation with the developer that goes on for weeks and is never 
     search: `${tools.searchWeb} when a fact lies outside what you were handed, such as a library's documentation. A query leaves for the public web, so never put private names or words into one.
 
 ${tools.integrations}`,
-    skills: "",
+    skills: `${tools.installedSkills}
+
+`,
     links:
       "A link in the developer's message whose label starts with `@`, such as `[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)`, is something they pointed you at.",
     worker: {
@@ -843,7 +858,7 @@ ${memoryWords(memoryOn, operator)}## What your messages are
 
 Your messages are read by the developer in Luke's own window as a transcript, beside your tool calls. Lead with the outcome. Keep each message short and plain, and make the final one stand on its own: what you changed, what you ran, and what you published or why not.
 
-${namingWords(repository ?? EXAMPLE_REPOSITORY, taskLink)}
+${namingWords(repository, taskLink)}
 
 Never print a credential, a token, or the contents of an environment file, in a message, a commit, or a pull request.`;
 }

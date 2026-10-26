@@ -1074,7 +1074,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             "## The checkout",
             CODER_TOOL.OPEN_PULL_REQUEST,
             CODER_TOOL.APPLY_PATCH,
-            CODER_TOOL.WRITE_FILE,
             "Co-authored-by",
             "gh pr checks",
           ]) {
@@ -1094,18 +1093,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "an agent with a repository is offered its pull request, the tools that write into its checkout, and show_code",
+      "an agent with a repository is offered its pull request, apply_patch, and show_code",
       () =>
         Effect.gen(function* () {
           const { agent } = yield* unclaimedAgent();
           assert.deepEqual(
             [...repositoryToolsOf(agent)].sort(),
-            [
-              CODER_TOOL.APPLY_PATCH,
-              CODER_TOOL.OPEN_PULL_REQUEST,
-              CODER_TOOL.WRITE_FILE,
-              CODER_TOOL.SHOW_CODE,
-            ].sort(),
+            [CODER_TOOL.APPLY_PATCH, CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.SHOW_CODE].sort(),
           );
         }),
     );

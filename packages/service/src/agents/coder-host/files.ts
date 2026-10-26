@@ -21,7 +21,12 @@ import { preparePatch } from "./patch-text.js";
  * Note that the call's input stays what the model wrote, so the transcript
  * shows the model's own paths, as it does for the shell; and that each
  * tool advertises eve's own input schema with its path property described
- * anew, since the model reads the property's words beside the tool's.
+ * anew, since the model reads the property's words beside the tool's. The
+ * words name the folder as the agent's working folder, never a checkout,
+ * because an agent with no repository holds these tools over an empty
+ * folder at the same path; `apply_patch` alone, which only an agent with a
+ * repository is offered (`tool-set.ts`'s `repositoryToolsOf`), names the
+ * checkout.
  *
  * Two of them also spare the model a refusal it could not have avoided by
  * reading the tool. `apply_patch` takes a patch missing its Begin or End
@@ -47,7 +52,7 @@ function fromCheckout(checkout: string, path: string | undefined): string {
 
 /** The one sentence every tool's description and path property carry. */
 function pathsStartIn(checkout: string): string {
-  return `Paths start at ${checkout}, the repository's checkout: a relative path is resolved from it, and an absolute path is taken as written.`;
+  return `Paths start at ${checkout}, your working folder: a relative path is resolved from it, and an absolute path is taken as written.`;
 }
 
 /** eve's description without its own line about absolute paths, where it has one. */
@@ -88,7 +93,7 @@ export function readFileIn(checkout: string) {
     inputSchema: describingPath(
       readFile.inputSchema,
       "filePath",
-      "The path to the file to read, relative to the checkout or absolute.",
+      "The path to the file to read, relative to your working folder or absolute.",
     ),
     execute: (input, ctx) =>
       readFile.execute({ ...input, filePath: fromCheckout(checkout, input.filePath) }, ctx),
@@ -103,7 +108,7 @@ export function writeFileIn(checkout: string) {
     inputSchema: describingPath(
       writeFile.inputSchema,
       "filePath",
-      "The path to the file to write, relative to the checkout or absolute.",
+      "The path to the file to write, relative to your working folder or absolute.",
     ),
     execute: (input, ctx) =>
       writeFile.execute({ ...input, filePath: fromCheckout(checkout, input.filePath) }, ctx),
@@ -118,7 +123,7 @@ export function globIn(checkout: string) {
     inputSchema: describingPath(
       glob.inputSchema,
       "path",
-      "The directory to search in, relative to the checkout or absolute. Omit to search the whole checkout.",
+      "The directory to search in, relative to your working folder or absolute. Omit to search the whole folder.",
     ),
     execute: (input, ctx) =>
       glob.execute({ ...input, path: fromCheckout(checkout, input.path) }, ctx),
@@ -133,7 +138,7 @@ export function grepIn(checkout: string) {
     inputSchema: describingPath(
       grep.inputSchema,
       "path",
-      "Directory or file to search, relative to the checkout or absolute. Omit to search the whole checkout. Narrow this first.",
+      "Directory or file to search, relative to your working folder or absolute. Omit to search the whole folder. Narrow this first.",
     ),
     execute: async (input, ctx) => {
       const search = { ...input, path: fromCheckout(checkout, input.path) };
