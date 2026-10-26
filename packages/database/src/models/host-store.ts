@@ -21,6 +21,7 @@ import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import { Data, DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
+import { codingAgent } from "../schemas/coding-agent.js";
 import { device } from "../schemas/device.js";
 import { hostInstallToken } from "../schemas/host-install-token.js";
 
@@ -197,6 +198,18 @@ const findStanding = SqlSchema.findAll({
     ),
 });
 
+const findHostAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, deviceId: Schema.String }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ userId, deviceId }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: codingAgent.conversationId })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.userId, userId), eq(codingAgent.deviceId, deviceId))),
+    ),
+});
+
 const findBySecret = SqlSchema.findOneOption({
   Request: Schema.Struct({ secretHash: Schema.String }),
   Result: HostCallerSchema,
@@ -341,5 +354,15 @@ export function hostsOf(userId: string): HostEffect<readonly HostRow[]> {
 export function removeHost(userId: string, id: string): HostEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(stampRemoved({ userId, id, now }), (rows) => rows.length > 0),
+  );
+}
+
+/** The conversations of the account's agents pinned to its device, whose runners a removed host can no longer settle. */
+export function hostAgentConversations(
+  userId: string,
+  deviceId: string,
+): HostEffect<readonly string[]> {
+  return Effect.map(findHostAgents({ userId, deviceId }), (rows) =>
+    rows.map((row) => row.conversationId),
   );
 }
