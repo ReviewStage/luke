@@ -171,7 +171,17 @@ export interface LocalAgentPlatformSeam {
     readonly claude?: string | undefined;
     /** The Codex the app ships, where it ships one; none where the host fetches the pinned build (`CODEX_MAC_PIN`). */
     readonly codex?: string | undefined;
+    /** The `gh` a host ships, which signs each agent in where `githubFromLuke` and which git's credential helper names; none takes `gh` from the runner's PATH. */
+    readonly gh?: string | undefined;
   };
+  /**
+   * Whether each agent's `gh` is signed in with a token from Luke, in a
+   * `GH_CONFIG_DIR` inside its folder, renewed every `GITHUB_TOKEN_REFRESH`,
+   * with git reading it through `gh auth git-credential`: a host, which has
+   * no developer's git login. False where the developer's own git login
+   * serves, as on This Mac.
+   */
+  readonly githubFromLuke: boolean;
   readonly deviceName: string;
   /** The platform and architecture the device registers as. */
   readonly devicePlatform: DevicePlatform;

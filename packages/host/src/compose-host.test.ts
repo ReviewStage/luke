@@ -152,6 +152,7 @@ describe("the host's platform concerns", () => {
               deviceIsolation: DEVICE_ISOLATION.BARE,
               deviceCapabilities: [],
               worktreeScript: () => "exit 1",
+              githubFromLuke: false,
             }),
           ),
         ),
