@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { MOTION_DELAY_MS } from "@luke/brand";
-import { act, createElement, Fragment } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { Tooltip } from "../tooltip/hint.js";
@@ -1055,4 +1055,34 @@ test("Escape or a press on the dimmed window puts a sheet away and hands focus b
   });
   expect(sheet()).toBeNull();
   expect(document.activeElement).toBe(more);
+});
+
+/** A ⋯ whose menu holds a Status submenu of one filter value, Todo, toggled on and off where it stays. */
+function FilterHarness(): React.JSX.Element {
+  const [todo, setTodo] = useState(false);
+  const toggle = { label: "Todo", checked: todo, stays: true, onSelect: () => setTodo(!todo) };
+  return createElement(Harness, { groups: [[{ label: "Status", items: [toggle] }]] });
+}
+
+test("in a sheet a submenu's value that stays reads and toggles as its owner now draws it", () => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+  inPhoneLayout();
+  mount(createElement(FilterHarness));
+  press(button("More"));
+  press(button("Status"));
+  press(button("Todo"));
+  expect(button("Todo").getAttribute("aria-checked")).toBe("true");
+  press(button("Todo"));
+  expect(button("Todo").getAttribute("aria-checked")).toBe("false");
+});
+
+test("a choice in a sheet acts with focus already back on what opened it, so a dialog it opens hands focus back there", () => {
+  inPhoneLayout();
+  const held: (Element | null)[] = [];
+  const ask = { label: "Delete", onSelect: () => held.push(document.activeElement) };
+  mount(createElement(Harness, { groups: [[ask]] }));
+  const more = button("More");
+  press(more);
+  press(button("Delete"));
+  expect(held).toEqual([more]);
 });

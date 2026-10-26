@@ -1477,8 +1477,9 @@ function SheetRows({
  * the submenu's with a way back (and Left), which lands focus back on its
  * row. It holds the keyboard as a dialog does, the arrows walking its rows;
  * Escape, a press on the dimmed window, a swipe down, or a choice puts it
- * away, and the dialog hands focus back to what opened it once it is gone,
- * unless the choice took focus somewhere of its own, as Rename does.
+ * away, focus going back to what opened it: at once for a choice, before it
+ * acts, so a dialog it opens is opened from there; otherwise once the sheet
+ * is gone.
  */
 function MenuSheet({
   label,
@@ -1491,14 +1492,19 @@ function MenuSheet({
   onClose,
 }: MenuProps): React.JSX.Element {
   const { id, opener, leaving, ref: hold } = menu;
-  const [page, setPage] = useState<MenuSubmenu | undefined>(undefined);
+  // Note that the submenu standing is held by its name and read from `groups` each render, so a value that stays reads and toggles as its owner now draws it.
+  const [opened, setOpened] = useState<string | undefined>(undefined);
+  const page = groups
+    .flat()
+    .find((entry): entry is MenuSubmenu => "items" in entry && entry.label === opened);
+  const setPage = (submenu: MenuSubmenu | undefined) => setOpened(submenu?.label);
   // The submenu just left, whose row takes focus back.
   const backTo = useRef<string | undefined>(undefined);
   // Opened again while it was leaving, the sheet stands on its first page, as one opened anew does.
   const [wasLeaving, setWasLeaving] = useState(leaving);
   if (wasLeaving !== leaving) {
     setWasLeaving(leaving);
-    if (!leaving) setPage(undefined);
+    if (!leaving) setOpened(undefined);
   }
   const roving = useRovingKeys<HTMLDivElement>({ stop: ROVING_STOP.NONE });
   const [list, setList] = useState<HTMLDivElement | null>(null);
@@ -1533,9 +1539,13 @@ function MenuSheet({
     backTo.current = page?.label;
     setPage(undefined);
   };
-  // Note that a value a filter toggles leaves the sheet standing, so several are chosen in one visit.
+  // Note that a value a filter toggles leaves the sheet standing, so several
+  // are chosen in one visit; and that any other choice hands focus back to
+  // the opener before it acts, as the floating menu does, so a dialog the
+  // choice opens (Permanently delete's question) is opened from the row and
+  // hands focus back to it, never to a row of the sheet that is gone.
   const choose = (action: MenuAction) => {
-    if (action.stays !== true) away();
+    if (action.stays !== true) onClose(true);
     action.onSelect();
   };
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
