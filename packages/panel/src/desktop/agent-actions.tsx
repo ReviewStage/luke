@@ -230,7 +230,7 @@ export function useAgentActions(
   const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal } = terminals;
   const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
-  const local = agent.machine === CODING_AGENT_MACHINE.MAC;
+  const local = agent.machine === CODING_AGENT_MACHINE.DEVICE;
   // Note that a local agent runs in a worktree on its starter's Mac, which no relayed tab reaches, so
   // its Terminal opens the Mac's own Terminal there, offered to its starter alone, whose Mac it is.
   const starter = agent.startedBy !== undefined && agent.startedBy.userId === agents.me;

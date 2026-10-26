@@ -152,7 +152,7 @@ const encodeSecrets = Schema.encodeSync(Schema.fromJsonString(deviceAgentLaunchS
 
 /** A local agent's place on its Mac, under Luke's session given: the agent itself, since it has one place. */
 function macPlace(session: string, agentId: string): MachinePlace {
-  return { machine: CODING_AGENT_MACHINE.MAC, session, running: runningOfAgent(agentId) };
+  return { machine: CODING_AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
 }
 
 /** A failure the store or the seal answered, as a machine's own: unavailable, with no words of the cause. */
@@ -344,7 +344,7 @@ function deviceMachineOver(
             ? { handle: { ...place, command: launch.value.id }, mark: mark.value }
             : undefined;
         const found: FoundPlace = {
-          machine: CODING_AGENT_MACHINE.MAC,
+          machine: CODING_AGENT_MACHINE.DEVICE,
           session,
           agentId,
           name: nameOfAgent(agentId),

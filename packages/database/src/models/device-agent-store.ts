@@ -105,7 +105,7 @@ function pinnedAgent(userId: string, agentId: string) {
   return and(
     eq(codingAgent.id, agentId),
     eq(codingAgent.userId, userId),
-    eq(codingAgent.machine, CODING_AGENT_MACHINE.MAC),
+    eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE),
     eq(device.userId, userId),
   );
 }
@@ -167,7 +167,7 @@ const findPinOfSession = SqlSchema.findOneOption({
         .where(
           and(
             eq(conversations.runtimeSessionId, runtimeSessionId),
-            eq(codingAgent.machine, CODING_AGENT_MACHINE.MAC),
+            eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE),
           ),
         )
         .limit(1),
@@ -182,7 +182,7 @@ const findPin = SqlSchema.findOneOption({
       db
         .select(PIN_COLUMNS)
         .from(codingAgent)
-        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.machine, CODING_AGENT_MACHINE.MAC))),
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE))),
     ),
 });
 

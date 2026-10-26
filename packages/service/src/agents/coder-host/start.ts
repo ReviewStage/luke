@@ -975,7 +975,7 @@ function startRuntimeOf(
   },
 ) {
   const chosen =
-    asked.machine === CODING_AGENT_MACHINE.MAC
+    asked.machine === CODING_AGENT_MACHINE.DEVICE
       ? localAgentRuntimeChoice(userId, model, asked.deviceId, keys)
       : agentRuntimeChoice(userId, model, keys);
   return Effect.catch(chosen, (failure) =>

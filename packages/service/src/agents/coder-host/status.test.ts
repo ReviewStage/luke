@@ -171,7 +171,7 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
     githubAccess: GITHUB_ACCESS.APP,
     kind: CODING_AGENT_KIND.CODER,
     createdAt: STARTED,
-    machine: CODING_AGENT_MACHINE.MAC,
+    machine: CODING_AGENT_MACHINE.DEVICE,
     deviceId: DEVICE,
   };
   const now = 100_000;

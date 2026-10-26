@@ -934,7 +934,7 @@ export function agentCoderInstructions(
     agent.kind,
     context.memoryOn,
     {
-      local: agent.machine === CODING_AGENT_MACHINE.MAC,
+      local: agent.machine === CODING_AGENT_MACHINE.DEVICE,
       checkoutPath: context.place?.checkoutPath ?? SANDBOX_MACHINE.checkoutPath,
       installedSkills: context.place?.installedSkills ?? SANDBOX_MACHINE.installedSkills,
     },

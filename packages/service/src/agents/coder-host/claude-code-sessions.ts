@@ -127,7 +127,7 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
    * developer's, which that login is kept under.
    */
   const onMacLogin = (agent: CodingAgent) =>
-    agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null
+    agent.machine !== CODING_AGENT_MACHINE.DEVICE || agent.deviceId == null
       ? Effect.succeed(false)
       : Effect.map(deviceLayout(userId, agent.deviceId), (device) =>
           Option.exists(device, (standing) => standing.signedIn.claudeCode === true),

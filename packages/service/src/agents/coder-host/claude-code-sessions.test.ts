@@ -769,7 +769,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           repository: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           payer: CODING_AGENT_PAYER.MAC_SIGN_IN,
-          machine: CODING_AGENT_MACHINE.MAC,
+          machine: CODING_AGENT_MACHINE.DEVICE,
           deviceId,
         });
         assert.ok(Option.isSome(started));

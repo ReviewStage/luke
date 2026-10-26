@@ -65,7 +65,7 @@ const openLocalAgent = Effect.gen(function* () {
     planSnapshot: "# Invitations\n",
     prompt: null,
     repository: null,
-    machine: CODING_AGENT_MACHINE.MAC,
+    machine: CODING_AGENT_MACHINE.DEVICE,
     deviceId,
   });
   const { agent } = Option.getOrThrow(started);

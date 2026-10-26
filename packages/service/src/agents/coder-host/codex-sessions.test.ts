@@ -290,7 +290,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
               repository: null,
               runtime: CONVERSATION_RUNTIME.CODEX,
               payer,
-              machine: CODING_AGENT_MACHINE.MAC,
+              machine: CODING_AGENT_MACHINE.DEVICE,
               deviceId,
             }),
             (started) => Option.getOrThrow(started).agent,

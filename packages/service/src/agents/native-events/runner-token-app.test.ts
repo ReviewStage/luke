@@ -153,7 +153,7 @@ const agentOn = (
       prompt: null,
       runtime,
       payer,
-      ...(onMac === undefined ? undefined : { machine: CODING_AGENT_MACHINE.MAC, deviceId }),
+      ...(onMac === undefined ? undefined : { machine: CODING_AGENT_MACHINE.DEVICE, deviceId }),
     });
     const agent = Option.getOrThrow(started).agent;
     const bearer = randomBytes(32).toString("base64url");

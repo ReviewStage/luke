@@ -131,7 +131,7 @@ const MAC_LOGIN: { readonly env: Readonly<Record<string, string>>; readonly ownL
  * written by.
  */
 function onMacLoginOf(agent: CodingAgent, signedIn: DeviceSignedIn): boolean {
-  return agent.machine === CODING_AGENT_MACHINE.MAC && signedIn.codex === true;
+  return agent.machine === CODING_AGENT_MACHINE.DEVICE && signedIn.codex === true;
 }
 
 /**
@@ -141,7 +141,7 @@ function onMacLoginOf(agent: CodingAgent, signedIn: DeviceSignedIn): boolean {
  * (https://learn.chatgpt.com/docs/auth).
  */
 function homeOf(agent: CodingAgent): Readonly<Record<string, string>> {
-  return agent.machine === CODING_AGENT_MACHINE.MAC ? {} : { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
+  return agent.machine === CODING_AGENT_MACHINE.DEVICE ? {} : { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
 }
 
 /**
@@ -150,7 +150,7 @@ function homeOf(agent: CodingAgent): Readonly<Record<string, string>> {
  * `config` reads it off the layout too (`onMacLoginOf`).
  */
 const onMacCodexLogin = (userId: string, agent: CodingAgent) =>
-  agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null
+  agent.machine !== CODING_AGENT_MACHINE.DEVICE || agent.deviceId == null
     ? Effect.succeed(false)
     : Effect.map(deviceLayout(userId, agent.deviceId), (device) =>
         Option.exists(device, (standing) => onMacLoginOf(agent, standing.signedIn)),
@@ -284,7 +284,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     Effect.gen(function* () {
       const model = codexModelOf(agent);
       if (model === undefined) return yield* new LaunchRefused({ reason: "model" });
-      const local = agent.machine === CODING_AGENT_MACHINE.MAC;
+      const local = agent.machine === CODING_AGENT_MACHINE.DEVICE;
       // Note that a Mac runs only the Codex it checked against the pin, and one that checked none runs no Codex agent.
       if (local && layout.codexExecutable === undefined) {
         return yield* new LaunchRefused({ reason: "no codex" });

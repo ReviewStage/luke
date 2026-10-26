@@ -207,12 +207,12 @@ export type CodingAgentKind = (typeof CODING_AGENT_KIND)[keyof typeof CODING_AGE
 
 /**
  * Where an agent's runner and checkout live: a Vercel Sandbox, as every
- * agent from before the column does, or the starter's own Mac, which takes
- * its work as rows it follows (`@luke/features/device-agent-wire`).
+ * agent from before the column does, or one of the starter's devices, which
+ * takes its work as rows it follows (`@luke/features/device-agent-wire`).
  */
 export const CODING_AGENT_MACHINE = {
   VERCEL: "vercel",
-  MAC: "mac",
+  DEVICE: "device",
 } as const;
 
 export type CodingAgentMachine = (typeof CODING_AGENT_MACHINE)[keyof typeof CODING_AGENT_MACHINE];
@@ -737,8 +737,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   title: EffectSchema.NullOr(EffectSchema.String),
   /** What kind of agent it is, said only of a member's operator, which the panel draws as Luke in a row of his own; absent for a coder, and from a service before operators. */
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
-  /** Where its runner runs, said only of a local agent on its starter's Mac; absent for one in a sandbox, and from a service older than it. */
-  machine: EffectSchema.optionalKey(EffectSchema.Literal(CODING_AGENT_MACHINE.MAC)),
+  /** Where its runner runs, said only of a local agent on its starter's device; absent for one in a sandbox, and from a service older than it. */
+  machine: EffectSchema.optionalKey(EffectSchema.Literal(CODING_AGENT_MACHINE.DEVICE)),
   /**
    * The Mac a local agent runs on, by its own name, and the epoch
    * milliseconds it last beat, which a reader holds against its own clock

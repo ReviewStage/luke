@@ -268,7 +268,7 @@ function macOf(
   agent: Pick<CodingAgentLine, "machine" | "deviceId">,
   macs: ReadonlyMap<string, Device>,
 ): CodingAgentSummary["mac"] {
-  if (agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null) return undefined;
+  if (agent.machine !== CODING_AGENT_MACHINE.DEVICE || agent.deviceId == null) return undefined;
   const device = macs.get(agent.deviceId);
   return device === undefined
     ? undefined
@@ -280,7 +280,7 @@ export function summaryDevices(
   agents: readonly Pick<CodingAgentLine, "machine" | "deviceId">[],
 ): readonly string[] {
   return agents.flatMap((agent) =>
-    agent.machine === CODING_AGENT_MACHINE.MAC && agent.deviceId != null ? [agent.deviceId] : [],
+    agent.machine === CODING_AGENT_MACHINE.DEVICE && agent.deviceId != null ? [agent.deviceId] : [],
   );
 }
 
@@ -306,7 +306,7 @@ function summaryFields(
     // Note that only an operator says its kind, so a coder's summary is as it was.
     ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
     // Likewise only a local agent says where it runs, so a sandboxed agent's summary is as it was.
-    ...(agent.machine === CODING_AGENT_MACHINE.MAC ? { machine: agent.machine } : undefined),
+    ...(agent.machine === CODING_AGENT_MACHINE.DEVICE ? { machine: agent.machine } : undefined),
     ...(mac === undefined ? undefined : { mac }),
     createdAt: agent.createdAt.getTime(),
     status: codingAgentStatusOf(standing.turn, {

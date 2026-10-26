@@ -31,7 +31,7 @@ import { type VercelMachineOptions, vercelLifecycle, vercelMachine } from "./ver
 /** The lifecycle of whichever machine answers for the session, or for the place or runner named. */
 function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): MachineLifecycle {
   const of = (machine: CodingAgentMachine): MachineLifecycle =>
-    machine === CODING_AGENT_MACHINE.MAC ? mac : cloud;
+    machine === CODING_AGENT_MACHINE.DEVICE ? mac : cloud;
   const bySession = <A>(
     session: string,
     call: (machine: MachineLifecycle) => Effect.Effect<A, SandboxUnavailable>,
@@ -57,7 +57,7 @@ function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): Ma
 /** Both machines behind one, as above. */
 function routedMachine(cloud: AgentMachineService, mac: DeviceMachineService): AgentMachineService {
   const of = (machine: CodingAgentMachine | undefined): AgentMachineService =>
-    machine === CODING_AGENT_MACHINE.MAC ? mac : cloud;
+    machine === CODING_AGENT_MACHINE.DEVICE ? mac : cloud;
   return {
     ...routedLifecycle(cloud, mac),
     layout: (agent) => of(agent.machine).layout(agent),

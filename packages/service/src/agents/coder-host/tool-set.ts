@@ -239,7 +239,7 @@ export type MachineTool = typeof CODER_TOOL.BROWSER;
  * instructions leave out the same words (`instructions.ts`).
  */
 export function machineToolsOf(agent: Pick<CodingAgent, "machine">): ReadonlySet<MachineTool> {
-  return agent.machine === CODING_AGENT_MACHINE.MAC ? new Set() : new Set([CODER_TOOL.BROWSER]);
+  return agent.machine === CODING_AGENT_MACHINE.DEVICE ? new Set() : new Set([CODER_TOOL.BROWSER]);
 }
 
 /**

@@ -394,7 +394,7 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   },
   runtime: ConversationRuntime,
 ): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
-  if (asked.machine !== CODING_AGENT_MACHINE.MAC) return IN_A_SANDBOX;
+  if (asked.machine !== CODING_AGENT_MACHINE.DEVICE) return IN_A_SANDBOX;
   if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.OFF });
   }
@@ -409,7 +409,7 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!offer.providers.includes(RUNTIME_PROVIDER[runtime])) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.CODEX });
   }
-  return { machine: CODING_AGENT_MACHINE.MAC, deviceId: offer.deviceId };
+  return { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: offer.deviceId };
 });
 
 /**

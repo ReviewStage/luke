@@ -74,7 +74,7 @@ const openAccount = (onMac = true) =>
     if (onMac) {
       yield* db
         .update(codingAgent)
-        .set({ machine: CODING_AGENT_MACHINE.MAC, deviceId })
+        .set({ machine: CODING_AGENT_MACHINE.DEVICE, deviceId })
         .where(eq(codingAgent.id, agentId));
     }
     return { userId, deviceId, agentId };

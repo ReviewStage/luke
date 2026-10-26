@@ -1372,7 +1372,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const { eve, native } = runtimes();
             const ask = {
               ...startIn(workspaceId, each.model),
-              machine: CODING_AGENT_MACHINE.MAC,
+              machine: CODING_AGENT_MACHINE.DEVICE,
               deviceId: "named" in each ? each.named : deviceId,
             };
             const started = yield* Effect.result(
@@ -1398,7 +1398,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             assert.ok(Result.isSuccess(started), each.name);
             assert.deepEqual(
               Option.map(made, (agent) => [agent.machine, agent.deviceId]),
-              Option.some([CODING_AGENT_MACHINE.MAC, deviceId]),
+              Option.some([CODING_AGENT_MACHINE.DEVICE, deviceId]),
               each.name,
             );
             const routing = Option.getOrThrow(
