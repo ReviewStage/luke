@@ -24,7 +24,7 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { TURN_STATUS } from "@luke/wire";
+import { TURN_STATUS, type WireValue, WireValueSchema } from "@luke/wire";
 import {
   and,
   asc,
@@ -928,6 +928,56 @@ const markTurnFastRefused = SqlSchema.void({
     ),
 });
 
+/** The turn a reservation of plan notes is held against, as the subquery of the update names it apart from the row it updates. */
+const runningTurn = alias(turns, "running_turn");
+
+const reserveTurnNotes = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    requested: Schema.Int,
+  }),
+  Result: Schema.Struct({ turnId: Schema.String, taken: Schema.Int }),
+  execute: ({ userId, conversationId, requested }) =>
+    Database.use((db) =>
+      db
+        .update(turns)
+        .set({ planNotesTaken: sql`${turns.planNotesTaken} + ${requested}` })
+        .where(
+          and(
+            eq(turns.userId, userId),
+            inArray(
+              turns.id,
+              db
+                .select({ id: runningTurn.id })
+                .from(runningTurn)
+                .where(
+                  and(
+                    eq(runningTurn.userId, userId),
+                    eq(runningTurn.conversationId, conversationId),
+                    eq(runningTurn.status, TURN_STATUS.RUNNING),
+                  ),
+                )
+                .orderBy(desc(runningTurn.queuedAt), desc(runningTurn.id))
+                .limit(1),
+            ),
+          ),
+        )
+        .returning({ turnId: turns.id, taken: turns.planNotesTaken }),
+    ),
+});
+
+const releaseTurnNotes = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, turnId: Schema.String, released: Schema.Int }),
+  execute: ({ userId, turnId, released }) =>
+    Database.use((db) =>
+      db
+        .update(turns)
+        .set({ planNotesTaken: sql`greatest(0, ${turns.planNotesTaken} - ${released})` })
+        .where(and(eq(turns.userId, userId), eq(turns.id, turnId))),
+    ),
+});
+
 const updateAgentTitle = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -1099,6 +1149,45 @@ const updateAgentNativeSession = SqlSchema.findAll({
         .set({ nativeSession })
         .where(reachableAgentConversation(userId, agentId))
         .returning({ id: conversations.id }),
+    ),
+});
+
+const findNativeHanded = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({ handed: Schema.NullOr(WireValueSchema) }),
+  execute: ({ userId, conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ handed: conversations.nativeHanded })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.userId, userId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
+    ),
+});
+
+const updateNativeHanded = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    handed: WireValueSchema,
+  }),
+  execute: ({ userId, conversationId, handed }) =>
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({ nativeHanded: handed })
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.userId, userId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
     ),
 });
 
@@ -2439,6 +2528,38 @@ export function recordTurnFastRefused(
   return markTurnFastRefused({ userId, turnId });
 }
 
+/** A turn's count of plan notes, as a reservation left it: the turn, and every note it has taken or holds reserved, the reservation's own among them. */
+export interface TurnPlanNotes {
+  readonly turnId: string;
+  readonly taken: number;
+}
+
+/**
+ * Reserves a call's plan notes against the conversation's running turn
+ * before its save goes out, and answers the turn and its count with them;
+ * nothing where no turn of the conversation runs, or the account does not
+ * hold it. Note that the count is raised in one statement, because a
+ * native agent's calls of one step run at once, and each must see the
+ * other's reservation, as eve's session state does (`plan-edit.ts`).
+ */
+export function reserveTurnPlanNotes(
+  userId: string,
+  conversationId: string,
+  requested: number,
+): CodingAgentStoreEffect<Option.Option<TurnPlanNotes>> {
+  return reserveTurnNotes({ userId, conversationId, requested });
+}
+
+/** Settles a reservation once its save answered: the notes it reserved and did not take given back, which is all of them for a refused call. */
+export function settleTurnPlanNotes(
+  userId: string,
+  turnId: string,
+  requested: number,
+  saved: number,
+): CodingAgentStoreEffect<void> {
+  return releaseTurnNotes({ userId, turnId, released: requested - saved });
+}
+
 /** The agent under another title, or none, which its tab shows in place of the model's name; nothing for an agent of a workspace the account is not in. */
 export function renameCodingAgent(
   userId: string,
@@ -2958,6 +3079,29 @@ export function recordCodingAgentNativeSession(
     updateAgentNativeSession({ userId, agentId, nativeSession }),
     (rows) => rows.length > 0,
   );
+}
+
+/**
+ * What the turns' messages of a Claude Code or Codex conversation have
+ * handed its harness's session, as the JSON it was handed
+ * (`coder-host/turn-context.ts`'s `TurnHanded`, whose shape is the service's
+ * and is read back unread here); null before the first turn's message, and
+ * for a conversation the account does not hold.
+ */
+export function readNativeHanded(
+  target: ConversationTarget,
+): CodingAgentStoreEffect<WireValue | null> {
+  return Effect.map(findNativeHanded(target), (row) =>
+    Option.match(row, { onNone: () => null, onSome: ({ handed }) => handed }),
+  );
+}
+
+/** What the turns' messages have handed the harness's session, written over whatever stood; nothing for a conversation the account does not hold. */
+export function recordNativeHanded(
+  target: ConversationTarget,
+  handed: WireValue,
+): CodingAgentStoreEffect<void> {
+  return updateNativeHanded({ ...target, handed });
 }
 
 /** The digest of the runner's bearer recorded on the agent's conversation, or null to retire it; answers whether the account reached the agent. */

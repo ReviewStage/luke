@@ -139,6 +139,8 @@ export interface LocalAgentPlatformSeam {
   readonly bundled: {
     readonly node?: string | undefined;
     readonly claude?: string | undefined;
+    /** The Codex the app ships, where it ships one; none where the host fetches the pinned build (`CODEX_MAC_PIN`). */
+    readonly codex?: string | undefined;
   };
   readonly deviceName: string;
   readonly worktreeScript: (input: {

@@ -10,7 +10,10 @@ import type {
 import { defineTool, type ToolContext, type ToolDefinition } from "eve/tools";
 import { type BashToolInput, bash } from "eve/tools/bash";
 import { COMMAND_DESCRIPTION } from "../command-description.js";
-import { shellWithoutCapabilities } from "../sandbox-capabilities.js";
+import {
+  shellWithoutCapabilities,
+  shellWithoutCapabilitiesOrNetwork,
+} from "../sandbox-capabilities.js";
 
 /**
  * shell.ts -- the coding agent's shell: eve's own `bash`, with every command started in the checkout.
@@ -31,7 +34,12 @@ import { shellWithoutCapabilities } from "../sandbox-capabilities.js";
  * own with every capability dropped (`sandbox-capabilities.ts`), so what
  * the model runs cannot read another process's environment or a file its
  * mode keeps from the sandbox's user, nor reach root through sudo, which
- * the emptied bounding set refuses.
+ * the emptied bounding set refuses. A worker's shell runs with no network
+ * besides (`SHELL_NETWORK.NONE`), so nothing it runs reaches GitHub through
+ * the token the sandbox's firewall sets, or the internet at all: it reads
+ * the checkout, whose history the host fetches for it ahead of such a
+ * command (`apps/dev/subagents/worker/tools/bash.ts`), and runs commands
+ * that change nothing, and it cannot push whatever it is told.
  *
  * eve reads a command's output and exit over calls to Vercel Sandbox's API
  * apart from the one that starts it, and Vercel at times answers one of
@@ -198,17 +206,31 @@ function lostOrThrown(cause: unknown, ctx: ToolContext, start: CommandStart): Sh
  */
 const BASH_BASE = bash as ToolDefinition<BashToolInput, ShellOutput>;
 
-/** eve's `bash`, told and run so that every command starts in the directory given. */
-export function bashStartingIn(directory: string) {
+/** What of the network a shell's commands reach: the open internet, as the agent's do, or none, as a worker's do. */
+export const SHELL_NETWORK = {
+  OPEN: "open",
+  NONE: "none",
+} as const;
+
+export type ShellNetwork = (typeof SHELL_NETWORK)[keyof typeof SHELL_NETWORK];
+
+/** What the shell is told of a command that runs with no network. */
+const NO_NETWORK_WORDS =
+  " The shell has no network: nothing it runs reaches GitHub or the internet, so a fetch, a push, `gh`, a download, or an install fails; a checkout's history is already there to read.";
+
+/** eve's `bash`, told and run so that every command starts in the directory given, and with no network where asked. */
+export function bashStartingIn(directory: string, network: ShellNetwork = SHELL_NETWORK.OPEN) {
+  const wrapped =
+    network === SHELL_NETWORK.NONE ? shellWithoutCapabilitiesOrNetwork : shellWithoutCapabilities;
   return defineTool<typeof SHELL_INPUT.Type, ShellOutput>({
     ...BASH_BASE,
-    description: `${bash.description} Every command starts in ${directory}, your working folder, in a fresh shell, so a \`cd\` lasts only for the call it is in.`,
+    description: `${bash.description} Every command starts in ${directory}, your working folder, in a fresh shell, so a \`cd\` lasts only for the call it is in.${network === SHELL_NETWORK.NONE ? NO_NETWORK_WORDS : ""}`,
     inputSchema: emitJsonSchema(SHELL_INPUT),
     outputSchema: emitJsonSchema(SHELL_OUTPUT),
     execute: (input, ctx) => {
       const start: CommandStart = { accepted: false };
       const answer = bash.execute(
-        { command: shellWithoutCapabilities(`cd ${quoted(directory)} || exit\n${input.command}`) },
+        { command: wrapped(`cd ${quoted(directory)} || exit\n${input.command}`) },
         watchingStart(ctx, start),
       );
       if (Symbol.asyncIterator in answer) return answer;

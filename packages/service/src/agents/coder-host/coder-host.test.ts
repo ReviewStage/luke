@@ -1771,67 +1771,42 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
         }),
     );
 
-    it.effect(
-      "show_image keeps an agent's pictures beside its own transcript, and a worker's beside the worker's",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { target, auth, admitted } = yield* openAgent(host);
-          const header = new Uint8Array(33);
-          header.set([
-            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52,
-          ]);
-          new DataView(header.buffer).setUint32(16, 1200);
-          new DataView(header.buffer).setUint32(20, 720);
-          const sandbox = () =>
-            Promise.resolve({
-              readFile: () =>
-                Promise.resolve(
-                  new ReadableStream<Uint8Array>({
-                    start(controller) {
-                      controller.enqueue(header);
-                      controller.close();
-                    },
-                  }),
-                ),
-            });
-          const input = unparsedWire({ images: [{ path: "shot.png", caption: "Members page" }] });
-          const shownId = (answer: WireRecord) => {
-            const read = Schema.decodeUnknownSync(
-              Schema.Struct({ pictures: Schema.Tuple([Schema.Struct({ id: Schema.String })]) }),
-            )(answer);
-            return read.pictures[0].id;
-          };
-          const workerCall = "call-worker";
-          const child = childConversationId(target.conversationId, workerCall);
-          const db = yield* Database;
-          yield* db.insert(conversations).values({
-            id: child,
-            userId: target.userId,
-            kind: CONVERSATION_KIND.CHILD,
-            parentConversationId: target.conversationId,
+    it.effect("show_image keeps an agent's pictures beside its own transcript", () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { target, admitted } = yield* openAgent(host);
+        const header = new Uint8Array(33);
+        header.set([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52,
+        ]);
+        new DataView(header.buffer).setUint32(16, 1200);
+        new DataView(header.buffer).setUint32(20, 720);
+        const sandbox = () =>
+          Promise.resolve({
+            readFile: () =>
+              Promise.resolve(
+                new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    controller.enqueue(header);
+                    controller.close();
+                  },
+                }),
+              ),
           });
-          const turn = { id: "turn_0", sequence: 0 };
-          const worker = {
-            id: mintSession(),
-            auth,
-            turn,
-            parent: { callId: workerCall, rootSessionId: "root", sessionId: "root", turn },
-          };
+        const input = unparsedWire({ images: [{ path: "shot.png", caption: "Members page" }] });
+        const shownId = (answer: WireRecord) => {
+          const read = Schema.decodeUnknownSync(
+            Schema.Struct({ pictures: Schema.Tuple([Schema.Struct({ id: Schema.String })]) }),
+          )(answer);
+          return read.pictures[0].id;
+        };
 
-          const agentPicture = shownId(yield* host.showImage(admitted, input, sandbox));
-          const workerPicture = shownId(yield* host.showDelegatedImage(worker, input, sandbox));
+        const agentPicture = shownId(yield* host.showImage(admitted, input, sandbox));
 
-          assert.ok(
-            Option.isSome(yield* readConversationPicture(target.conversationId, agentPicture)),
-          );
-          assert.ok(Option.isSome(yield* readConversationPicture(child, workerPicture)));
-          assert.deepEqual(
-            yield* readConversationPicture(target.conversationId, workerPicture),
-            Option.none(),
-            "a worker's picture is its own transcript's",
-          );
-        }),
+        assert.ok(
+          Option.isSome(yield* readConversationPicture(target.conversationId, agentPicture)),
+        );
+      }),
     );
 
     it.effect(

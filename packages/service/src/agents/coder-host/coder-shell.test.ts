@@ -9,7 +9,7 @@ import type { ReadableStream } from "node:stream/web";
 import type { SandboxSpawnOptions } from "eve/sandbox";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { test } from "vitest";
-import { bashStartingIn } from "./shell.js";
+import { bashStartingIn, SHELL_NETWORK, type ShellNetwork } from "./shell.js";
 
 /**
  * The coding agent's shell: every command starts in the checkout, in a
@@ -25,7 +25,10 @@ import { bashStartingIn } from "./shell.js";
  * `setpriv` with each capability set emptied: the sandbox's `setpriv` here
  * is a stand-in that refuses any other flags and runs the rest, since only
  * a process holding the capabilities, as the sandbox's commands do, may
- * empty the bounding set. A command's description is for the developer's
+ * empty the bounding set. A worker's command runs, past the drop, under
+ * bubblewrap in a network namespace of its own; the sandbox's `bwrap` here
+ * is a stand-in that refuses any other flags and runs the rest with a mark
+ * of its own. A command's description is for the developer's
  * transcript, so it reaches the shell as nothing, and what the model is
  * offered is recorded the way the wire's schemas are. A command whose
  * outcome Vercel Sandbox's API lost, as `@vercel/sandbox` and undici throw
@@ -59,12 +62,32 @@ const SETPRIV_STAND_IN = [
   'LUKE_CAPABILITIES=dropped exec "$@"',
 ].join("\n");
 
-/** A sandbox root with a checkout standing one directory below it, as the coding agent's does, and `setpriv` on its search path. */
+/** How the stand-in `bwrap` exits where it is asked for anything but a network namespace over the whole filesystem. */
+const NETWORK_KEPT_EXIT = 98;
+
+/**
+ * A stand-in for `bwrap` on the sandbox's search path: the command after
+ * `--` is run only where it is asked for a network namespace of its own over
+ * the filesystem as it stands, with a mark in its environment that it was,
+ * and refused otherwise.
+ */
+const BWRAP_STAND_IN = [
+  "#!/bin/sh",
+  'if [ "$1 $2 $3 $4 $5 $6" != "--unshare-net --dev-bind / / --die-with-parent --" ]; then',
+  "  echo 'bwrap: the network was kept' >&2",
+  `  exit ${NETWORK_KEPT_EXIT}`,
+  "fi",
+  "shift 6",
+  'LUKE_NETWORK=none exec "$@"',
+].join("\n");
+
+/** A sandbox root with a checkout standing one directory below it, as the coding agent's does, and `setpriv` and `bwrap` on its search path. */
 function sandboxRoot() {
   const root = mkdtempSync(join(tmpdir(), "coder-shell-"));
   const checkout = join(root, "repository");
   mkdirSync(checkout);
   writeFileSync(join(root, "setpriv"), `${SETPRIV_STAND_IN}\n`, { mode: 0o755 });
+  writeFileSync(join(root, "bwrap"), `${BWRAP_STAND_IN}\n`, { mode: 0o755 });
   return { root, checkout };
 }
 
@@ -135,8 +158,9 @@ async function run(
   checkout: string,
   command: string,
   description?: string,
+  network: ShellNetwork = SHELL_NETWORK.OPEN,
 ): Promise<Completed> {
-  const shell = bashStartingIn(checkout);
+  const shell = bashStartingIn(checkout, network);
   const input = description === undefined ? { command } : { command, description };
   const answer = await shell.execute(input, contextOver(shellSandbox(root)));
   assert.ok(!(Symbol.asyncIterator in answer) && answer.status === "completed");
@@ -166,6 +190,17 @@ test("a command runs whole, in a bash with every capability dropped, and answers
   );
   assert.equal(script.stdout, "kept $as written");
   assert.equal(script.exitCode, 7);
+});
+
+test("a worker's command runs in the checkout with every capability dropped and no network, and the shell says so", async () => {
+  const { root, checkout } = sandboxRoot();
+  const command = 'printf "%s|%s|" "$LUKE_CAPABILITIES" "$LUKE_NETWORK"; pwd';
+  const none = await run(root, checkout, command, undefined, SHELL_NETWORK.NONE);
+  assert.equal(none.stdout, `dropped|none|${checkout}\n`);
+  const open = await run(root, checkout, command);
+  assert.equal(open.stdout, `dropped||${checkout}\n`);
+  assert.ok(bashStartingIn(checkout, SHELL_NETWORK.NONE).description.includes("no network"));
+  assert.ok(!bashStartingIn(checkout).description.includes("no network"));
 });
 
 /**

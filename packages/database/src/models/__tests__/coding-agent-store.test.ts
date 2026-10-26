@@ -78,6 +78,7 @@ import {
   readCodingAgentPublished,
   readCodingAgentRouting,
   readEveRunStanding,
+  readNativeHanded,
   readNativeRunStanding,
   readRunnerTokenConversation,
   readStandingOperator,
@@ -85,10 +86,13 @@ import {
   recordCodingAgentNativeSession,
   recordCodingAgentPublished,
   recordCodingAgentRunnerToken,
+  recordNativeHanded,
   recordTurnFastRefused,
   renameCodingAgent,
+  reserveTurnPlanNotes,
   restoreOperatorAgent,
   settleCodingAgentAuthor,
+  settleTurnPlanNotes,
   takeCodingAgentMentionedServers,
   taskHasMergedPullRequest,
   taskNamesOf,
@@ -122,6 +126,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * And an agent deleted for good by any member of its workspace, once it stands stopped.
  * And the member's operator, one standing per workspace, and archived for a fresh one.
  * And that operator private to its member: no teammate reaches it.
+ * And the plan notes a native agent's running turn holds reserved, its account's alone.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -504,6 +509,38 @@ it.layer(getTestDB())("the coding-agent store's Fast refusals", (it) => {
         yield* recordTurnFastRefused(owner, refused);
         const marked = yield* turnUsagesOf(owner, agent);
         assert.deepEqual(marked.map((turn) => turn.fastRefused).sort(), [false, true]);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's plan notes of a turn", (it) => {
+  it.effect(
+    "notes are reserved against the conversation's running turn alone and settled back to what was taken, and another account reaches neither",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const agent = yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT);
+        yield* settledTurn(owner, agent);
+        const running = randomUUID();
+        yield* db.insert(turns).values({
+          id: running,
+          userId: owner,
+          conversationId: agent,
+          origin: TURN_ORIGIN.TYPED,
+          status: TURN_STATUS.RUNNING,
+        });
+
+        const stranger = yield* reserveTurnPlanNotes(other, agent, 5);
+        yield* settleTurnPlanNotes(other, running, 0, 7);
+        const first = yield* reserveTurnPlanNotes(owner, agent, 3);
+        yield* settleTurnPlanNotes(owner, running, 3, 2);
+        const second = yield* reserveTurnPlanNotes(owner, agent, 4);
+
+        assert.ok(Option.isNone(stranger));
+        assert.deepEqual(first, Option.some({ turnId: running, taken: 3 }));
+        assert.deepEqual(second, Option.some({ turnId: running, taken: 6 }));
       }),
   );
 });
@@ -2094,13 +2131,19 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         });
         yield* recordCodingAgentNativeSession(starter, agent.id, "thread-1");
         yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-1");
+        const own = { userId: starter, conversationId: agent.conversationId };
+        yield* recordNativeHanded(own, { spoken: true });
 
         const read = yield* readCodingAgentRouting(outsider, agent.id);
         const wroteSession = yield* recordCodingAgentNativeSession(outsider, agent.id, "thread-2");
         const wroteToken = yield* recordCodingAgentRunnerToken(outsider, agent.id, "digest-2");
+        const theirs = { userId: outsider, conversationId: agent.conversationId };
+        yield* recordNativeHanded(theirs, { task: "task-key" });
 
         assert.ok(Option.isNone(read));
         assert.deepEqual([wroteSession, wroteToken], [false, false]);
+        assert.equal(yield* readNativeHanded(theirs), null);
+        assert.deepEqual(yield* readNativeHanded(own), { spoken: true });
         assert.deepEqual(Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id)), {
           runtime: CONVERSATION_RUNTIME.CODEX,
           nativeSession: "thread-1",

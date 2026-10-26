@@ -23,7 +23,10 @@ import type { ConversationTarget } from "./writer.js";
  * the conversation rewound at it, so a reader holding an older cursor
  * reads the transcript afresh rather than joining what it holds, and
  * keeps the line's client id for the next launch of a Claude Code or
- * Codex runner to cut the harness's own session before. A line no turn
+ * Codex runner to cut the harness's own session before, and clears what
+ * that session's turns' messages handed it (`native_handed`), since the
+ * cut may drop the turns that handed it, so the next message hands the
+ * call's words, the task, and the desk again. A line no turn
  * took yet never reached the harness's session, so a cut at one leaves a
  * cut still waiting for a launch as it stands, since that one is earlier.
  *
@@ -208,7 +211,7 @@ const deleteTurns = SqlSchema.void({
     ),
 });
 
-/** The journal counted up and the conversation marked rewound at it, the harness's cut set unless the line was never heard and an earlier cut waits, and a dropped turn the projection held let go. */
+/** The journal counted up and the conversation marked rewound at it, the harness's cut set unless the line was never heard and an earlier cut waits, what its turns' messages handed cleared, and a dropped turn the projection held let go. */
 const markRewound = SqlSchema.void({
   Request: Schema.Struct({
     conversationId: Schema.String,
@@ -226,6 +229,7 @@ const markRewound = SqlSchema.void({
           nativeRewind: heard
             ? clientId
             : sql`coalesce(${conversations.nativeRewind}, ${clientId})`,
+          nativeHanded: null,
           nativeProjection:
             turnIds.length === 0
               ? sql`${conversations.nativeProjection}`

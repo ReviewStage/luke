@@ -206,6 +206,9 @@ function runtimes() {
 }
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
+/** Where a synthetic Mac keeps the Codex it checked. */
+const CODEX_EXECUTABLE =
+  "/Users/fixture/Library/Application Support/Luke/agent-tools/codex/bin/codex";
 const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 64 }, (_, index) => ({
   id: 9_100 + index,
   login: RELAY.owner,
@@ -1249,7 +1252,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start on a Mac runs only for an account with the experiment on and the Mac it names among its own that beat lately, pinned to that Mac on Claude Code, paid for by that Mac's own Claude Code login where it has one, a plan in Luke or none; Codex, the experiment off, or that Mac not there is refused by name and leaves no agent",
+      "a Start on a Mac runs only for an account with the experiment on and the Mac it names among its own that beat lately, pinned to that Mac on the model's harness, paid for by that Mac's own login to it where it has one, a plan in Luke or none; Codex on a Mac with none checked, the experiment off, or that Mac not there is refused by name and leaves no agent",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1260,16 +1263,39 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               chatGpt: "none",
               model: "anthropic/claude-opus-5.5",
               refused: undefined,
+              runs: ["claude_code", CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION],
             },
             {
               name: "no plan saved in Luke, the Mac signed in to Claude Code",
               on: true,
               mac: true,
               plan: false,
-              signedIn: true,
+              signedIn: { claudeCode: true },
               chatGpt: "none",
               model: "anthropic/claude-opus-5.5",
               refused: undefined,
+              runs: ["claude_code", CODING_AGENT_PAYER.MAC_SIGN_IN],
+            },
+            {
+              name: "a GPT model on a Mac that checked a Codex, the ChatGPT plan saved in Luke",
+              on: true,
+              mac: true,
+              codex: true,
+              chatGpt: "signed_in",
+              model: "openai/gpt-5.5",
+              refused: undefined,
+              runs: ["codex", CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION],
+            },
+            {
+              name: "a GPT model, nothing of OpenAI's saved in Luke, the Mac signed in to Codex",
+              on: true,
+              mac: true,
+              codex: true,
+              signedIn: { codex: true },
+              chatGpt: "none",
+              model: "openai/gpt-5.5",
+              refused: undefined,
+              runs: ["codex", CODING_AGENT_PAYER.MAC_SIGN_IN],
             },
             {
               name: "another Mac of the account signed in to Claude Code, the named one not",
@@ -1279,6 +1305,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               chatGpt: "none",
               model: "anthropic/claude-opus-5.5",
               refused: undefined,
+              runs: ["claude_code", CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION],
             },
             {
               name: "the experiment off",
@@ -1306,7 +1333,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               refused: LOCAL_AGENT_REFUSAL.MAC_AWAY,
             },
             {
-              name: "a GPT model on Codex",
+              name: "a GPT model on a Mac that checked no Codex",
               on: true,
               mac: true,
               chatGpt: "signed_in",
@@ -1316,7 +1343,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           ] as const;
           for (const each of cases) {
             const plan = !("plan" in each) || each.plan;
-            const signedIn = "signedIn" in each && each.signedIn;
+            const signedIn = "signedIn" in each ? each.signedIn : {};
             const { owner, workspaceId } = yield* openStarter(plan, each.chatGpt);
             if (each.on) {
               yield* writeAccountPreferences(owner, {
@@ -1329,7 +1356,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 id: deviceId,
                 name: "Studio",
                 ...MAC_DEVICE_LAYOUT,
-                signedIn: { claudeCode: signedIn },
+                ...("codex" in each ? { codexExecutable: CODEX_EXECUTABLE } : undefined),
+                signedIn,
               });
             }
             if ("otherSignedIn" in each) {
@@ -1376,24 +1404,59 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const routing = Option.getOrThrow(
               yield* readCodingAgentRouting(owner, started.success.agent.id),
             );
-            assert.deepEqual(
-              [routing.runtime, routing.payer],
-              [
-                "claude_code",
-                signedIn ? CODING_AGENT_PAYER.MAC_SIGN_IN : CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-              ],
-              each.name,
-            );
+            assert.deepEqual([routing.runtime, routing.payer], each.runs, each.name);
           }
         }),
     );
 
     it.effect(
-      "a Mac is offered as running Claude's models only to an account that pays for Claude Code in Luke, and as running none otherwise",
+      "a Mac is offered as running a provider's models only where the account pays for its harness in Luke or the Mac is signed in to it, and GPT models only on a Mac that checked a Codex",
       () =>
         Effect.gen(function* () {
-          for (const plan of [true, false]) {
-            const { owner } = yield* openStarter(plan);
+          const cases = [
+            {
+              name: "a Claude plan",
+              plan: true,
+              chatGpt: "none",
+              codex: false,
+              signedIn: {},
+              providers: [MODEL_PROVIDER.ANTHROPIC],
+            },
+            {
+              name: "no credential",
+              plan: false,
+              chatGpt: "none",
+              codex: false,
+              signedIn: {},
+              providers: [],
+            },
+            {
+              name: "a ChatGPT plan, the Mac with no Codex checked",
+              plan: false,
+              chatGpt: "signed_in",
+              codex: false,
+              signedIn: {},
+              providers: [],
+            },
+            {
+              name: "a ChatGPT plan, a Codex checked",
+              plan: false,
+              chatGpt: "signed_in",
+              codex: true,
+              signedIn: {},
+              providers: [MODEL_PROVIDER.OPENAI],
+            },
+            {
+              name: "nothing saved, the Mac signed in to Codex",
+              plan: false,
+              chatGpt: "none",
+              codex: true,
+              signedIn: { codex: true },
+              providers: [MODEL_PROVIDER.OPENAI],
+            },
+          ] as const;
+          for (const each of cases) {
+            const { owner } = yield* openStarter(each.plan, each.chatGpt);
             yield* writeAccountPreferences(owner, {
               experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
             });
@@ -1401,14 +1464,16 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               id: randomUUID(),
               name: "Studio",
               ...MAC_DEVICE_LAYOUT,
+              ...(each.codex ? { codexExecutable: CODEX_EXECUTABLE } : undefined),
+              signedIn: each.signedIn,
             });
             const offers = yield* macOffers(owner).pipe(
               Effect.provide(Layer.mergeAll(environment(), runtimes().native)),
             );
             assert.deepEqual(
               offers.map((offer) => [offer.name, offer.providers]),
-              [["Studio", plan ? [MODEL_PROVIDER.ANTHROPIC] : []]],
-              plan ? "a Claude plan" : "no Claude credential",
+              [["Studio", each.providers]],
+              each.name,
             );
           }
         }),

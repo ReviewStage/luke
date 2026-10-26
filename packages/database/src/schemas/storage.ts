@@ -98,6 +98,8 @@ export const conversations = pgTable(
     rewoundRevision: bigint("rewound_revision", { mode: "number" }),
     /** The client id of the first line a rewind dropped from a Claude Code or Codex conversation, which the next launch's harness cuts its own session before; null once a launch has handed it over, and on one never rewound. */
     nativeRewind: text("native_rewind"),
+    /** What the turns' messages of a Claude Code or Codex conversation have handed its harness's session, as content addresses (`coder-host/turn-context.ts`'s `TurnHanded`), so a turn hands the call's words, the task, and an operator's desk only where they changed; null before the first turn's message. */
+    nativeHanded: jsonb("native_handed"),
     /**
      * The conversation's dispatch claim (`dispatch-claim.ts`): the id of the
      * one hand-over to its runtime under way, fresh for each, written with
@@ -311,6 +313,8 @@ export const turns = pgTable(
     cancelRequestKey: text("cancel_request_key"),
     /** Whether Anthropic refused Fast for a step of the turn, which then ran at standard speed instead (`coder-host/model.ts`). */
     fastRefused: boolean("fast_refused").notNull().default(false),
+    /** How many notes a native coding agent's turn has taken on its plan over Luke's MCP server, reserved before each save (`edit_plan`'s per-turn cap); eve keeps its own count in its session. */
+    planNotesTaken: integer("plan_notes_taken").notNull().default(0),
   },
   (table) => [
     index("turns_by_user").on(table.userId),

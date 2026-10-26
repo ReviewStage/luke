@@ -33,7 +33,7 @@ import {
   coderChannelInput,
 } from "./channel.js";
 import { INBOX_TOOLS } from "./inbox.js";
-import { CODER_HARNESS, coderInstructions } from "./instructions.js";
+import { CODER_HARNESS, coderInstructions, coderWorkerInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
 import { CODER_TOOL, taskToolsOf } from "./tool-set.js";
 
@@ -338,6 +338,55 @@ test("a Claude Code or Codex agent is told of its browser, which Luke's MCP serv
   }
 });
 
+test("a local agent is told its folders on the Mac, its own harness's sandbox, and no browser", () => {
+  const MAC = {
+    local: true,
+    checkoutPath: "/Users/dev/.luke/agents/a1/repository",
+    installedSkills: "/Users/dev/.luke/agents/a1/installed-skills",
+  };
+  const SANDBOX_OF = [
+    [CODER_HARNESS.CLAUDE_CODE, "Claude Code's own sandbox", "Codex's own sandbox"],
+    [CODER_HARNESS.CODEX, "Codex's own sandbox", "Claude Code's own sandbox"],
+  ] as const;
+  for (const repository of ["Acme/Relay", null]) {
+    for (const [harness, own, other] of SANDBOX_OF) {
+      const words = coderInstructions(
+        repository,
+        CODING_AGENT_BRIEF.PROMPT,
+        true,
+        TASK_ADDRESS,
+        undefined,
+        null,
+        false,
+        harness,
+        undefined,
+        false,
+        MAC,
+      );
+      const label = `${harness} ${repository ?? "no repository"}`;
+      assert.ok(words.includes(own), label);
+      assert.ok(!words.includes(other), label);
+      assert.ok(!words.includes("## Your browser"), label);
+      if (repository !== null) assert.ok(words.includes(`\`${MAC.checkoutPath}\``), label);
+    }
+  }
+  const codex = coderInstructions(
+    "Acme/Relay",
+    CODING_AGENT_BRIEF.PROMPT,
+    true,
+    TASK_ADDRESS,
+    undefined,
+    null,
+    false,
+    CODER_HARNESS.CODEX,
+    undefined,
+    false,
+    MAC,
+  );
+  // Codex is pointed at the skills its member installed where the Mac keeps them.
+  assert.ok(codex.includes(`\`${MAC.installedSkills}/`));
+});
+
 test("a Codex agent is told of Codex's own tools and never of Luke's it is not offered, nor of Claude Code's", () => {
   // Luke's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
   const LUKES = [
@@ -612,6 +661,34 @@ test("an agent whose credential reads its checks waits on them with sleep until 
     ],
     [true, false],
   );
+});
+
+test("a worker is offered neither the developer's Mac, the browser, nor show_image, and is told what it cannot do; one of an agent with no repository is told of a working folder and no checkout", () => {
+  for (const tool of [CODER_TOOL.RUN_ON_MAC, CODER_TOOL.BROWSER, CODER_TOOL.SHOW_IMAGE]) {
+    assert.deepEqual(
+      [toolsOf(AGENT_ROLE.CODER).has(tool), toolsOf(AGENT_ROLE.CODER_WORKER).has(tool)],
+      [true, false],
+      tool,
+    );
+  }
+  const inRepository = coderWorkerInstructions("Acme/Relay");
+  const inFolder = coderWorkerInstructions(null);
+  for (const words of [inRepository, inFolder]) {
+    assert.ok(words.includes("Your shell has no network"));
+    assert.ok(
+      words.includes(
+        "you cannot push, open a pull request, run a command on the developer's Mac, or drive a browser",
+      ),
+    );
+    assert.ok(!words.includes("run_on_mac") && !words.includes(`\`${CODER_TOOL.BROWSER}\``));
+  }
+  assert.ok(inRepository.includes(`checked out at \`${CODER.CHECKOUT_PATH}\``));
+  assert.ok(inRepository.includes("history is fetched for you"));
+  assert.ok(inFolder.includes(`working folder is \`${CODER.CHECKOUT_PATH}\``));
+  assert.ok(
+    !inFolder.includes("The agent's repository") && !inFolder.includes("history is fetched"),
+  );
+  assert.ok(inFolder.includes("there is no history to read"));
 });
 
 test("the model is shown the bound on one pause", () => {

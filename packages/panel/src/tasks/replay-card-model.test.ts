@@ -31,6 +31,7 @@ import {
   replayCallsServer,
   replayCount,
   replayOpening,
+  replayTaskTodos,
   replayVerb,
   replayWords,
   STEP_VIEW,
@@ -271,6 +272,42 @@ test("a call's step is drawn as the row its call wears in a transcript: its kind
   // A verb no transcript row says is another call's.
   const used = call("Used: list_tasks", "Input: {}\nResult: []");
   assert.equal(used.kind === STEP_VIEW.CALL && used.view.kind, CALL_KIND.OTHER);
+});
+
+test("Claude Code's task calls among a replay's steps are drawn as the to-do list as it stood after each, as the transcript draws them", () => {
+  const steps = [
+    toolStep({
+      summary: "Called: TaskCreate",
+      tool: "TaskCreate",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: JSON.stringify({ subject: "Round the totals", description: "Round them" }),
+      inputForm: REPLAY_VALUE_FORM.JSON,
+      output: "Task #1 created successfully: Round the totals",
+    }),
+    toolStep({
+      summary: "Ran: pnpm test",
+      tool: "bash",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: JSON.stringify({ command: "pnpm test" }),
+      inputForm: REPLAY_VALUE_FORM.JSON,
+      output: "ok",
+    }),
+    toolStep({
+      summary: "Called: TaskUpdate",
+      tool: "TaskUpdate",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: JSON.stringify({ taskId: "1", status: "completed" }),
+      inputForm: REPLAY_VALUE_FORM.JSON,
+      output: "Updated task #1 status",
+    }),
+  ];
+  const todos = replayTaskTodos(steps);
+  assert.deepEqual([...todos.keys()], [0, 2]);
+  const update = stepView(steps[2] ?? assert.fail("the update step"), todos.get(2));
+  assert.ok(update.kind === STEP_VIEW.CALL);
+  assert.equal(update.view.kind, CALL_KIND.TODOS);
+  assert.equal(update.view.subject, "1 of 1 done");
+  assert.deepEqual(update.view.input, { kind: TOOL_BLOCK.TEXT, text: "- [x] Round the totals" });
 });
 
 test("a call's step whose marker names its tool is drawn as the live transcript draws a call of that tool", () => {

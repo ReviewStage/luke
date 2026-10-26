@@ -12,7 +12,9 @@
  * The bearer is admitted as the events route admits it (`../luke-mcp/bearer.ts`):
  * a bearer no standing coding agent's conversation holds, a retired one's
  * among them, is refused. So is one whose agent does not run on Codex on its
- * starter's ChatGPT plan, and one past the brake, which is kept per agent.
+ * starter's ChatGPT plan, and one past the brake, which is kept per agent. A
+ * local agent's runner asks here from its Mac as a sandbox's does, so no
+ * token travels through the Mac's queue.
  * What this answers is the token the runner's launch was already handed as
  * the plan's payer, to the same sandbox the same bearer already reaches
  * Luke's MCP server from. The token is never logged, and travels in the
@@ -25,11 +27,13 @@ import {
   readCodingAgentHeaderOfConversation,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
+import { latestMacAgentLaunch } from "@luke/database/models/mac-agent-store";
 import { parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { macAgentLaunchPayloadSchema } from "@luke/features/mac-agent-wire";
 import { HTTP_METHOD } from "@luke/wire";
-import { Duration, Effect, Layer, Option, Redacted, Result } from "effect";
+import { Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import {
@@ -76,6 +80,27 @@ const REFUSAL_OF_ACCESS = {
   [CHATGPT_ACCESS.INELIGIBLE]: HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE,
 } as const satisfies Record<Exclude<ChatGptAccess["outcome"], "ready">, HostedRefusal>;
 
+const decodeLaunchPayload = Schema.decodeUnknownOption(macAgentLaunchPayloadSchema);
+
+/**
+ * Whether the agent's newest launch runs on its Mac's own sign-in, as its
+ * launch line recorded it (`RunnerMark.ownLogin`), whatever the Mac says of
+ * its sign-in since; one with no launch, or none the store can read, reads
+ * as so, and is handed nothing.
+ */
+const launchedOnMacLogin = (userId: string, agentId: string) =>
+  hostedStoreOrUnavailable(
+    Effect.map(latestMacAgentLaunch(userId, agentId), (launch) =>
+      Option.match(
+        Option.flatMap(launch, (line) => decodeLaunchPayload(line.payload)),
+        {
+          onNone: () => true,
+          onSome: (payload) => payload.ownLogin === true,
+        },
+      ),
+    ),
+  );
+
 /** POST: the plan's access token, for the Codex agent on the plan the bearer stands for. */
 const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")(function* (
   brake: RateBrake,
@@ -101,13 +126,20 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   const routing = yield* hostedStoreOrUnavailable(
     readCodingAgentRouting(target.userId, agent.value.id),
   );
-  // Note that only an agent its starter's plan pays for, on Codex, is handed the plan's token.
-  const onPlan = Option.exists(
-    routing,
-    (row) =>
-      row.runtime === CONVERSATION_RUNTIME.CODEX &&
-      row.payer === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+  // Note that only an agent its starter's plan pays for, on Codex, is handed the plan's token: one
+  // started on the plan, or a local one started on its Mac's own sign-in whose running launch
+  // turned to the plan as that Mac was signed out of Codex (`codex-sessions.ts`'s `savedPayer`),
+  // which its launch line records, so a sign-in on the Mac since cuts no plan-backed turn short.
+  const payer = Option.getOrUndefined(
+    Option.flatMap(
+      Option.filter(routing, (row) => row.runtime === CONVERSATION_RUNTIME.CODEX),
+      (row) => Option.fromNullishOr(row.payer),
+    ),
   );
+  const onPlan =
+    payer === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION ||
+    (payer === CODING_AGENT_PAYER.MAC_SIGN_IN &&
+      !(yield* launchedOnMacLogin(target.userId, agent.value.id)));
   if (!onPlan) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   if (!(yield* brake.check(agent.value.id))) {
     return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);

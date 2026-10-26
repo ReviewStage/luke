@@ -20,7 +20,6 @@ import {
   CODING_AGENT_RUNTIME,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
-  CODING_AGENT_TODO_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentArchivedBy,
   type CodingAgentAttachment,
@@ -34,7 +33,6 @@ import {
   type CodingAgentSender,
   type CodingAgentStatus,
   type CodingAgentSummary,
-  type CodingAgentTodos,
   type CodingAgentUsage,
   type ContextWindow,
   OPERATOR_QUIET_REPLY,
@@ -106,7 +104,6 @@ import {
   plainWords,
   remoteCallOf,
   TOOL_TARGET,
-  todosView,
   toolTarget,
 } from "./tool-call-model.js";
 
@@ -1697,52 +1694,26 @@ export function isDelegation(
   return part.kind === AGENT_PART.TOOL && delegates(part);
 }
 
-/** Whether a tool part is a write of the agent's to-do list, which the tab draws as the list on a row of its own. */
-function isTodos(part: AgentPart): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
-  return part.kind === AGENT_PART.TOOL && part.tool === AGENT_TOOL.WRITE_TODOS;
+/** Claude Code's calls on its task list, each of which the tab draws as the list as it stood after it (`agent-todos.ts`). */
+const TASK_CALL_TOOLS: ReadonlySet<string> = new Set([
+  CLAUDE_CODE_TOOL.TASK_CREATE,
+  CLAUDE_CODE_TOOL.TASK_UPDATE,
+  CLAUDE_CODE_TOOL.TASK_LIST,
+  CLAUDE_CODE_TOOL.TASK_GET,
+]);
+
+/** Whether a tool is one of Claude Code's calls on its task list. */
+export function isTaskCall(tool: string): boolean {
+  return TASK_CALL_TOOLS.has(tool);
 }
 
-/** The agent's newest to-do list, and the call that wrote it. */
-export interface StandingTodos {
-  readonly callId: string;
-  readonly todos: CodingAgentTodos["todos"];
-}
-
-/**
- * The agent's newest to-do list, which its tab keeps out of a finished
- * turn's fold and draws open, or docks above the composer while it is
- * worked (`dockedTodos`); nothing before the first. Note that a write whose
- * input does not yet read as a list is passed over, because while it
- * streams the list before it is still the one standing.
- */
-export function newestTodos(messages: readonly CodingAgentMessage[]): StandingTodos | undefined {
-  // Note that the messages are read from the newest back, so a page is read only as far as its newest list.
-  for (let at = messages.length - 1; at >= 0; at -= 1) {
-    const message = messages[at];
-    const parts = message === undefined ? [] : agentParts(message);
-    for (let index = parts.length - 1; index >= 0; index -= 1) {
-      const part = parts[index];
-      if (part === undefined || part.kind !== AGENT_PART.TOOL || !isTodos(part)) continue;
-      const todos = todosView(part.input);
-      if (todos !== undefined) return { callId: part.callId, todos };
-    }
-  }
-  return undefined;
-}
-
-/**
- * The list docked above the composer: the newest, while the agent may
- * still write and an item of it is not done, as Claude Code keeps its list
- * over the prompt; nothing otherwise, when the transcript's own row is
- * where it is read.
- */
-export function dockedTodos(
-  standing: StandingTodos | undefined,
-  working: boolean,
-): StandingTodos | undefined {
-  if (!working || standing === undefined) return undefined;
-  const open = standing.todos.some((todo) => todo.status !== CODING_AGENT_TODO_STATUS.DONE);
-  return open ? standing : undefined;
+/** Whether a tool part carries the agent's to-do list, which the tab draws as the list on a row of its own: a write of the whole list, or a call on Claude Code's task list. */
+export function isTodos(
+  part: AgentPart,
+): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
+  return (
+    part.kind === AGENT_PART.TOOL && (part.tool === AGENT_TOOL.WRITE_TODOS || isTaskCall(part.tool))
+  );
 }
 
 /** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent, a to-do list and a set of pictures or a recording shown each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
@@ -2338,8 +2309,8 @@ type SentLineState = (typeof SENT_LINE_STATE)[keyof typeof SENT_LINE_STATE];
 
 /**
  * A line the developer sent that the transcript has not read back yet:
- * drawn as theirs the moment it goes, and let go once the service's own
- * row for it lands.
+ * drawn as theirs the moment it goes, and let go once the service took it
+ * and its own row for it landed.
  */
 export interface SentLine {
   /**
@@ -2359,6 +2330,8 @@ export interface SentLine {
   readonly state: SentLineState;
   /** The developer's line it was written in place of, by its message id, which the agent is taken back to just before as it goes; none for a line sent after the rest. */
   readonly rewinds?: string | undefined;
+  /** Whether the service answered that the agent took it; until it does, a row read back may still be withdrawn. */
+  readonly taken?: boolean | undefined;
 }
 
 /** The ids the developer's rows of a transcript were written under, which a sent line's row is one of once it lands. */
@@ -2384,6 +2357,22 @@ export function unreadSentLines(
 ): readonly SentLine[] {
   const landed = landedLines(messages);
   return sent.filter((line) => line.state === SENT_LINE_STATE.UNDELIVERED || !landed.has(line.id));
+}
+
+/**
+ * The sent lines the box still holds: all but those the service took whose
+ * row has landed. Note that a line whose row was read back is held, undrawn,
+ * until its answer comes, because the service writes the row before the agent
+ * is handed the line and withdraws it where the agent did not take it, so a
+ * refusal may follow the row; and a line refused is held until Retry sends
+ * it again, since its row, still drawn as the refusal lands, is on its way out.
+ */
+export function heldSentLines(
+  sent: readonly SentLine[],
+  messages: readonly CodingAgentMessage[],
+): readonly SentLine[] {
+  const landed = landedLines(messages);
+  return sent.filter((line) => line.taken !== true || !landed.has(line.id));
 }
 
 /**

@@ -8,6 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
+import { newestTodos, taskTodos } from "./agent-todos.js";
 import { agentUsageLine } from "./coding-agent-model.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
@@ -43,13 +44,19 @@ function storedPart(tool: string, input: WireRecord, output?: WireValue): WireRe
   };
 }
 
-/** The part drawn as a turn of the agent's, every target its row opens recorded. */
-function drawn(part: WireRecord) {
+/** The parts drawn as one turn of the agent's, every target a row opens recorded, and its to-do lists placed as the tab places them where asked. */
+function drawn(part: WireRecord | readonly WireRecord[], todos = false) {
   const message: CodingAgentMessage = {
     id: "turn",
     role: MESSAGE_ROLE.ASSISTANT,
-    parts: [part],
+    parts: Array.isArray(part) ? part : [part],
   };
+  const lists = taskTodos([message]);
+  const standing = newestTodos([message], lists);
+  const place =
+    todos && standing !== undefined
+      ? { kept: standing.callId, open: standing.callId, live: undefined, lists }
+      : undefined;
   const opened: ToolTarget[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -63,6 +70,7 @@ function drawn(part: WireRecord) {
         lead: AGENT_LEAD,
         moving: false,
         delegation: { models: [], onOpenTarget: (target) => opened.push(target) },
+        ...(place === undefined ? undefined : { todos: place }),
       }),
     ),
   );
@@ -280,6 +288,35 @@ test("Claude Code's TodoWrite is drawn as the agent's to-do list, a completed it
   act(() => line.click());
   const words = container.textContent ?? "";
   for (const item of ["Round the totals", "Export the invoices", "Open the pull request"]) {
+    assert.ok(words.includes(item), `${words} lists ${item}`);
+  }
+});
+
+test("Claude Code's task calls are drawn as the agent's to-do list as it stood after each, the newest open", () => {
+  const { container } = drawn(
+    [
+      storedPart(
+        "TaskCreate",
+        { subject: "Round the totals", description: "Round them" },
+        "Task #1 created successfully: Round the totals",
+      ),
+      {
+        ...storedPart(
+          "TaskCreate",
+          { subject: "Export the invoices", description: "Export them" },
+          "Task #2 created successfully: Export the invoices",
+        ),
+        toolCallId: "toolu_TaskCreate_2",
+      },
+      storedPart("TaskUpdate", { taskId: "1", status: "completed" }, "Updated task #1 status"),
+    ],
+    true,
+  );
+  // The newest list stands open on a row of its own; the calls before it fold with the turn, as a whole list's writes do.
+  const lines = [...container.querySelectorAll("summary")].map((line) => line.textContent ?? "");
+  assert.ok(lines.at(-1)?.includes("1 of 2 done"), lines.join("\n"));
+  const words = container.textContent ?? "";
+  for (const item of ["Round the totals", "Export the invoices"]) {
     assert.ok(words.includes(item), `${words} lists ${item}`);
   }
 });

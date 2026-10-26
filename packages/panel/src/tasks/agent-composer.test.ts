@@ -5,7 +5,11 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_BOUNDS,
+  CODING_AGENT_STATUS,
+  type CodingAgentMessage,
+} from "@luke/features/coding-agent-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
@@ -16,6 +20,8 @@ import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { MESSAGE_ROLE } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -96,15 +102,18 @@ async function settle(): Promise<void> {
 function Box({
   sender,
   call,
+  messages = [],
 }: {
   sender: MessageSender;
+  /** The transcript as the tab reads it, which a sent line is read back from. */
+  messages?: readonly CodingAgentMessage[];
   /** What stands in Call's place, and whether a call holds the microphone, as an agent's tab hands them. */
   call?: { controls: ReactNode; onCall: boolean };
 }): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
     taskId: "plan-1",
-    messages: [],
+    messages,
     send: sender,
     onStatus: ignore,
   });
@@ -383,6 +392,50 @@ test("a message refused while another waits behind it still lets that one go, an
   assert.equal(box.shown(), "First", "the refused words wait in the box");
   assert.ok(
     [...box.container.querySelectorAll("button")].some((each) => each.textContent === "Retry"),
+    "with Retry beside them",
+  );
+});
+
+test("a message refused after its row was read back comes back into the box with Retry, since the service withdrew that row", async () => {
+  let answer: (answered: CodingAgentAgentAnswer) => void = ignore;
+  const keys: string[] = [];
+  const sender: MessageSender = (_agentId, _text, clientKey) => {
+    keys.push(clientKey);
+    return new Promise((resolve) => {
+      answer = resolve;
+    });
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const draw = (messages: readonly CodingAgentMessage[]) =>
+    act(async () => root.render(onRegistry(registry, createElement(Box, { sender, messages }))));
+  await draw([]);
+  await settle();
+  typeInComposer(container, "Fix the bug");
+  pressInComposer(container, "Enter");
+  await settle();
+
+  // The service writes the line's row before the agent is handed it, and the transcript reads it back.
+  const row: CodingAgentMessage = {
+    id: "m-1",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "Fix the bug" }],
+    clientId: sentLineId(keys[0] ?? assert.fail("the line went")),
+  };
+  await draw([row]);
+  await settle();
+  // The agent did not take it, so the service withdraws the row and refuses the send.
+  answer({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await settle();
+  await draw([]);
+  await settle();
+
+  assert.equal(composerEditor(container).textContent, "Fix the bug");
+  assert.ok(
+    [...container.querySelectorAll("button")].some((each) => each.textContent === "Retry"),
     "with Retry beside them",
   );
 });

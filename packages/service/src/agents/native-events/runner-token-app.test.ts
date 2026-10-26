@@ -6,6 +6,8 @@ import {
   createCodingAgent,
   recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
+import { queueMacAgentLine } from "@luke/database/models/mac-agent-store";
+import { beatMacDevice, registerMacDevice } from "@luke/database/models/mac-device-store";
 import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
@@ -14,8 +16,13 @@ import {
 } from "@luke/database/models/provider-key-store";
 import { user } from "@luke/database/schemas/auth";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
+import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "@luke/database/testing";
+import {
+  CODING_AGENT_MACHINE,
+  CODING_AGENT_PAYER,
+  type CodingAgentPayer,
+} from "@luke/features/coding-agent-wire";
+import { MAC_AGENT_LINE_KIND } from "@luke/features/mac-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -116,12 +123,26 @@ const standing = Effect.gen(function* () {
 });
 
 /** A coding agent on the runtime and payer given, its runner's bearer recorded. */
-const agentOn = (runtime: ConversationRuntime, payer: CodingAgentPayer, model = "openai/gpt-5.5") =>
+const agentOn = (
+  runtime: ConversationRuntime,
+  payer: CodingAgentPayer,
+  model = "openai/gpt-5.5",
+  onMac?: { readonly codex: boolean },
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
+    const deviceId = randomUUID();
+    if (onMac !== undefined) {
+      yield* registerMacDevice(userId, {
+        id: deviceId,
+        name: "Studio",
+        ...MAC_DEVICE_LAYOUT,
+        signedIn: { codex: onMac.codex },
+      });
+    }
     const started = yield* createCodingAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
@@ -132,11 +153,12 @@ const agentOn = (runtime: ConversationRuntime, payer: CodingAgentPayer, model = 
       prompt: null,
       runtime,
       payer,
+      ...(onMac === undefined ? undefined : { machine: CODING_AGENT_MACHINE.MAC, deviceId }),
     });
     const agent = Option.getOrThrow(started).agent;
     const bearer = randomBytes(32).toString("base64url");
     yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
-    return { userId, agentId: agent.id, bearer };
+    return { userId, agentId: agent.id, bearer, deviceId };
   });
 
 const codexOnPlan = agentOn(CONVERSATION_RUNTIME.CODEX, CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION);
@@ -246,6 +268,44 @@ it.layer(getTestDB())("the runner's token route", (it) => {
         yield* recordCodingAgentRunnerToken(agent.userId, agent.agentId, null);
         assert.deepEqual((yield* ask(agent.bearer)).body, invalid);
         assert.equal(openai.state.renewals, 0);
+      }),
+  );
+
+  it.effect(
+    "hands a local agent started on its Mac's own Codex sign-in no token while its running launch runs on that sign-in, and the plan's to a launch that turned to the plan, whatever the Mac says since",
+    () =>
+      Effect.gen(function* () {
+        const { ask } = yield* standing;
+        const agent = yield* agentOn(
+          CONVERSATION_RUNTIME.CODEX,
+          CODING_AGENT_PAYER.MAC_SIGN_IN,
+          "openai/gpt-5.5",
+          { codex: true },
+        );
+        yield* signIn(agent.userId, 60);
+        /** A launch line of the agent's, as its Mac's machine queues one, on the Mac's sign-in or not. */
+        const launched = (ownLogin: boolean) =>
+          queueMacAgentLine(agent.userId, {
+            agentId: agent.agentId,
+            kind: MAC_AGENT_LINE_KIND.LAUNCH,
+            payload: {
+              checkoutPath: "/Users/fixture/.luke/agents/a/repository",
+              repository: null,
+              startBranch: null,
+              firstSequence: 0,
+              ...(ownLogin ? { ownLogin: true } : undefined),
+            },
+          });
+
+        yield* launched(true);
+        const refused = yield* ask(agent.bearer);
+        assert.equal(refused.status, HOSTED_HTTP_STATUS.FORBIDDEN);
+        assert.deepEqual(refused.body, { error: HOSTED_API_ERROR.NOT_PERMITTED });
+
+        // The Mac signed out and the agent relaunched on the plan; the Mac signing in again mid-turn cuts that launch's turn no short.
+        yield* launched(false);
+        yield* beatMacDevice(agent.userId, agent.deviceId, { codex: true });
+        assert.deepEqual((yield* ask(agent.bearer)).body, { accessToken: "access-0" });
       }),
   );
 

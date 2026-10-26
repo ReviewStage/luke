@@ -11,10 +11,10 @@ import {
   type BrowserToolResult,
   browserModelOutput,
   browserNotRun,
-  browserTranscriptOf,
   runBrowserTool,
 } from "@luke/service/agents/browser/browser-tool";
 import { CheckoutRefused } from "@luke/service/agents/coder-host/checkout";
+import type { DeepenDoor } from "@luke/service/agents/coder-host/deepen";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
 import {
   type AgentToolCall,
@@ -29,6 +29,7 @@ import {
 import { INBOX_TOOLS, inboxRejected } from "@luke/service/agents/coder-host/inbox";
 import { postThreadWords } from "@luke/service/agents/coder-host/inbox-door";
 import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
+import { coderWorkerInstructions } from "@luke/service/agents/coder-host/instructions";
 import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
 import { type PlanEditResult, planEditRejected } from "@luke/service/agents/coder-host/plan-edit";
 import {
@@ -495,6 +496,30 @@ export function runBoardTool(
 }
 
 /**
+ * A door the checkout is brought up to date through before a call runs, for
+ * `deepeningFirst`: the session admitted as given, and the host's step run
+ * on the sandbox under its Vercel environment, which is the handle that
+ * carries the firewall.
+ */
+function checkoutDoor(admit: CoderHost["admit"], step: CoderHost["deepen"]): DeepenDoor {
+  return async (ctx: ToolContext) => {
+    const sandbox = await ctx.getSandbox(environment);
+    await runAgent(
+      Effect.gen(function* () {
+        const admitted = yield* admit(ctx.session.auth, ctx.session.id);
+        if (Result.isFailure(admitted)) {
+          return yield* Effect.fail(new CheckoutRefused({ reason: admitted.failure }));
+        }
+        yield* step(admitted.success, sandbox);
+      }).pipe(
+        // A store failure by its kind alone, since its message may name a statement.
+        Effect.mapError((failure) => new Error(describeFailure(failure))),
+      ),
+    );
+  };
+}
+
+/**
  * The session's checkout deepened before a call that writes runs
  * (`packages/service/src/agents/coder-host/deepen.ts`), for the tools that
  * write: the write token set at the sandbox's firewall, in the shape
@@ -503,20 +528,40 @@ export function runBoardTool(
  * deepen that fails fails the call that asked for it, in the host's words,
  * and the next write runs it again.
  */
-export async function deepenCheckout(ctx: ToolContext): Promise<void> {
-  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
-  const sandbox = await ctx.getSandbox(environment);
-  await runAgent(
+export const deepenCheckout: DeepenDoor = checkoutDoor(host.admit, host.deepen);
+
+/**
+ * The agent's checkout's history fetched before a worker's command that may
+ * read it runs, under the worker's own admission, on the same terms as a
+ * deepen but with no identity set and no deepen recorded
+ * (`packages/service/src/agents/coder-host/checkout.ts`'s
+ * `fetchAgentHistory`), so a worker started before the agent's first write
+ * reads the whole history its `git log` and `blame` need; nothing where
+ * the checkout is already whole. A fetch that fails fails the call, in the
+ * host's words, and the worker's next such command tries again.
+ */
+export const fetchWorkerHistory: DeepenDoor = checkoutDoor(host.admitDelegated, host.fetchHistory);
+
+/**
+ * The instructions a worker's session runs under, for its own instructions
+ * resolver: the worker's standing rules worded for the agent's repository,
+ * or for its working folder where it has none
+ * (`packages/service/src/agents/coder-host/instructions.ts`); nothing for a
+ * session the host does not admit as a worker's, or whose conversation is
+ * no agent's, which its model resolver fails anyway.
+ */
+export function delegatedInstructions(
+  auth: SessionAuth,
+  sessionId: string,
+): Promise<string | undefined> {
+  return runAgent(
     Effect.gen(function* () {
-      const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
-      if (Result.isFailure(admitted)) {
-        return yield* Effect.fail(new CheckoutRefused({ reason: admitted.failure }));
-      }
-      yield* host.deepen(admitted.success, sandbox);
-    }).pipe(
-      // A store failure by its kind alone, since its message may name a statement.
-      Effect.mapError((failure) => new Error(describeFailure(failure))),
-    ),
+      const admitted = yield* host.admitDelegated(auth, sessionId);
+      if (Result.isFailure(admitted)) return undefined;
+      const agent = yield* host.agent(admitted.success);
+      if (Result.isFailure(agent)) return undefined;
+      return coderWorkerInstructions(agent.success.repository);
+    }),
   );
 }
 
@@ -530,15 +575,6 @@ export function runShowImageTool(
   return admitted(auth, sessionId, showImageRejected, (session) =>
     host.showImage(session, input, sandbox),
   );
-}
-
-/** One of a worker's `show_image` calls, its pictures kept beside the worker's own transcript, for the worker's tool. */
-export function runDelegatedShowImageTool(
-  session: Parameters<CoderHost["showDelegatedImage"]>[0],
-  input: UnparsedWireValue,
-  sandbox: InboxSandboxDoor,
-): Promise<WireRecord> {
-  return runAgent(host.showDelegatedImage(session, input, sandbox));
 }
 
 /**
@@ -631,20 +667,20 @@ export function integrationConnectionsFor(
 }
 
 /**
- * `run_on_mac` as the agent and its worker are offered it, each admitted on
- * its own terms (the worker's on ownership, as its resolvers are), and run
- * through the one door every agent's call goes through
+ * `run_on_mac` as the agent is offered it, and no worker, which changes
+ * nothing of the developer's: admitted on the session's own standing and
+ * run through the one door every agent's call goes through
  * (`packages/service/src/agents/mac-command.ts`). A session the host does not admit runs
  * nothing.
  */
-export function runOnMacFor(admit: CoderHost["admit"]) {
+export function macCommandTool() {
   return defineTool({
     description: RUN_ON_MAC_TOOL.description,
     inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
     execute: (input, ctx): Promise<MacCommandAnswer> =>
       runAgent(
         Effect.gen(function* () {
-          const admitted = yield* admit(ctx.session.auth, ctx.session.id);
+          const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) {
             return { status: MAC_COMMAND_STATUS.NOT_RUN, reason: admitted.failure };
           }
@@ -657,17 +693,16 @@ export function runOnMacFor(admit: CoderHost["admit"]) {
 }
 
 /**
- * `browser` as the agent and its worker are offered it, each admitted on
- * its own terms (the worker's on ownership, as its resolvers are), and run
- * through the one door every agent's call goes through
+ * `browser` as the agent is offered it, and no worker, which reads and
+ * changes nothing: admitted on the session's own standing and run through
+ * the one door every agent's call goes through
  * (`packages/service/src/agents/browser/browser-tool.ts`): the Chromium in
- * the root's sandbox, which a worker shares, with its tabs kept under the
- * agent's own conversation, which a worker's admission names too. A session
- * the host does not admit runs nothing. Its screenshots reach the model as
- * small images, and the transcript keeps each at full size beside the
- * transcript the call is written to, a worker's its own.
+ * the root's sandbox, with its tabs kept under the agent's own
+ * conversation. A session the host does not admit runs nothing. Its
+ * screenshots reach the model as small images, and the transcript keeps
+ * each at full size beside the agent's own transcript.
  */
-export function browserFor(admit: CoderHost["admit"]) {
+export function browserTool() {
   return defineTool({
     description: BROWSER_TOOL.description,
     inputSchema: emitJsonSchema(BROWSER_TOOL.inputSchema),
@@ -676,15 +711,13 @@ export function browserFor(admit: CoderHost["admit"]) {
     execute: (input, ctx): Promise<BrowserToolResult> =>
       runAgent(
         Effect.gen(function* () {
-          const admitted = yield* admit(ctx.session.auth, ctx.session.id);
+          const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return browserNotRun(admitted.failure);
           const { target } = admitted.success;
           const call = {
             browserSession: browserSessionOf(ctx.session),
             conversationId: target.conversationId,
-            // A worker's screenshots are kept beside its own transcript, where its window reads them.
-            transcript: browserTranscriptOf(target, ctx.session.parent?.callId),
-            // A worker's sandbox is its parent's (`defineParentSandbox`), so its door opens that one.
+            transcript: target,
             openSandbox: () => ctx.getSandbox(),
           };
           // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.

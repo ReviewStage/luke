@@ -242,7 +242,7 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
         model: model.modelId,
         ...(effort === undefined ? undefined : { effort }),
         ...(model.fast ? { fast: true } : undefined),
-        append: yield* options.instructions(agent, layout.checkoutPath),
+        append: yield* options.instructions(agent, layout),
         ...(resume === undefined ? undefined : { resume }),
         ...(rewindBefore === undefined ? undefined : { rewindBefore }),
         firstSequence,

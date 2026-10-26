@@ -10,7 +10,7 @@ import { user } from "../../schemas/auth.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
-import { createCodingAgent } from "../coding-agent-store.js";
+import { createCodingAgent, readNativeHanded, recordNativeHanded } from "../coding-agent-store.js";
 import {
   clearNativeRewindHanded,
   REWIND_REFUSAL,
@@ -206,19 +206,24 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
       }),
   );
 
-  it.effect("keeps the line's id for the next launch until it is handed over", () =>
-    Effect.gen(function* () {
-      const target = yield* openConversation;
-      const { secondLine } = yield* threeLines(target);
+  it.effect(
+    "keeps the line's id for the next launch until it is handed over, and clears what the turns' messages handed",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation;
+        const { secondLine } = yield* threeLines(target);
+        yield* recordNativeHanded(target, { spoken: true, task: "task-key" });
 
-      yield* rewindConversation(target, secondLine);
-      const waiting = yield* readNativeRewind(target);
-      yield* clearNativeRewindHanded(target.conversationId, "client-3");
-      const handed = yield* readNativeRewind(target);
+        yield* rewindConversation(target, secondLine);
+        const waiting = yield* readNativeRewind(target);
+        const turnsHanded = yield* readNativeHanded(target);
+        yield* clearNativeRewindHanded(target.conversationId, "client-3");
+        const handed = yield* readNativeRewind(target);
 
-      assert.deepEqual(waiting, Option.some("client-3"));
-      assert.deepEqual(handed, Option.none());
-    }),
+        assert.deepEqual(waiting, Option.some("client-3"));
+        assert.equal(turnsHanded, null);
+        assert.deepEqual(handed, Option.none());
+      }),
   );
 
   it.effect("cuts the harness at the earliest heard line, never at one it did not hear", () =>

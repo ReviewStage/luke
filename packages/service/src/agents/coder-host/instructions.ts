@@ -182,6 +182,8 @@ interface ToolWords {
   readonly worker: (worker: { readonly reads: string; readonly readOnly: string }) => string;
   /** How it reaches the services the developer connected, where its harness takes each as an MCP server of its own; nothing where it reaches them through tools of its own. */
   readonly integrations: string;
+  /** The sandbox its commands run under on the developer's Mac, a local agent's: its harness's own. */
+  readonly ownSandbox: string;
 }
 
 /** What a native agent is told of the services the developer connected, each of which its harness takes as an MCP server of its own (`../luke-mcp/app.ts`). */
@@ -249,6 +251,8 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     worker: ({ reads, readOnly }) =>
       `\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped job to ${reads} its answer arrives as that worker's result. Wait for it by calling task_wait right after delegating, unless you set \`background\` because there is other work to do while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${readOnly} Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its job explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.`,
     integrations: "",
+    // Note that eve runs in no Mac of the developer's, so its words never say this.
+    ownSandbox: "",
   },
   [CODER_HARNESS.CLAUDE_CODE]: {
     checkout: `Your own tools start there: every Bash command runs in the checkout, and Read, Edit, Write, Glob, and Grep resolve a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION} The checkout holds the repository's whole history.`,
@@ -272,6 +276,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     worker: ({ readOnly }) =>
       `Claude Code's Agent tool hands a scoped job to a worker, which Claude Code calls a subagent: give it \`subagent_type: "${CLAUDE_CODE_WORKER}"\`, Luke's worker, which runs on your model and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${readOnly} A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.`,
     integrations: NATIVE_INTEGRATION_WORDS,
+    ownSandbox: "Claude Code's own sandbox",
   },
   [CODER_HARNESS.CODEX]: {
     checkout: `Your own tools start there: every shell command runs in the checkout, and \`apply_patch\` resolves a relative path from it. The checkout holds the repository's whole history.`,
@@ -296,6 +301,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     worker: ({ readOnly }) =>
       `Codex's own subagents are your workers: each takes a scoped job, runs on a GPT model, and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${readOnly} A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.`,
     integrations: NATIVE_INTEGRATION_WORDS,
+    ownSandbox: "Codex's own sandbox",
   },
 };
 
@@ -497,6 +503,14 @@ function branchWords(startBranch: string | null): BranchWords {
   };
 }
 
+/**
+ * Where the first message names an open pull request's branch to push to,
+ * such as a review told to push its fixes, the agent pushes there and opens
+ * no pull request of its own, in place of the branch it would cut.
+ */
+const PULL_REQUEST_BRANCH_WORDS =
+  " Where your first message names an open pull request's branch to push to, check that branch out and push your commits to it instead, and open no new pull request for them.";
+
 /** What the agent is told of messaging another agent: when its work meets theirs, short and complete, and how its message and theirs read. */
 const MESSAGE_AGENT_WORDS = ` Message another agent with \`${MESSAGE_AGENT_TOOL.name}\` and its id when its work meets yours, such as a change of yours it depends on or something only it knows, and keep each message short and complete; only the two of you see it, and it is told of it at once, under your name, without your waiting for a reply.`;
 
@@ -531,29 +545,37 @@ const EXAMPLE_REPOSITORY = "acme/app";
 export interface CoderMachine {
   readonly local: boolean;
   readonly checkoutPath: string;
+  /** Where the machine keeps the skills the member installed into Luke. */
+  readonly installedSkills: string;
 }
 
-/** A sandbox of the agent's own, its checkout where every sandbox keeps it. */
-const SANDBOX_MACHINE: CoderMachine = { local: false, checkoutPath: CODER.CHECKOUT_PATH };
+/** A sandbox of the agent's own, its checkout and installed skills where every sandbox keeps them. */
+const SANDBOX_MACHINE: CoderMachine = {
+  local: false,
+  checkoutPath: CODER.CHECKOUT_PATH,
+  installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
+};
 
 /**
- * A harness's words on the machine given: a local agent's folder in place of
- * the sandbox's, and no word of a browser of Luke's, which a local agent is
- * not offered (`tool-set.ts`'s `machineToolsOf`).
+ * A harness's words on the machine given: a local agent's folders in place of
+ * the sandbox's, its checkout and its installed skills, and no word of a
+ * browser of Luke's, which a local agent is not offered (`tool-set.ts`'s
+ * `machineToolsOf`).
  */
 function toolsOn(tools: ToolWords, machine: CoderMachine): ToolWords {
   if (!machine.local) return tools;
   return {
     ...tools,
     sandbox: tools.sandbox.replaceAll(`\`${CODER.CHECKOUT_PATH}\``, `\`${machine.checkoutPath}\``),
+    skills: tools.skills.replaceAll(NATIVE_SKILLS_PATH.INSTALLED, machine.installedSkills),
     browser: "",
   };
 }
 
 /** The checkout section's words after where it stands and the tools' own: how GitHub is reached, and the Mac beside the sandbox. */
-function checkoutReachWords(machine: CoderMachine): string {
+function checkoutReachWords(tools: ToolWords, machine: CoderMachine): string {
   return machine.local
-    ? "GitHub is reachable through `gh` and `git` from the shell, under the developer's own git credentials on their Mac, so never put a token in a URL or a command, and never sign in as anyone else. You run on the developer's own Mac, in a worktree of your own, with their installed tools and running services, inside Claude Code's own sandbox, which keeps your worktree and the temp folder writable."
+    ? `GitHub is reachable through \`gh\` and \`git\` from the shell, under the developer's own git credentials on their Mac, so never put a token in a URL or a command, and never sign in as anyone else. You run on the developer's own Mac, in a worktree of your own, with their installed tools and running services, inside ${tools.ownSandbox}, which keeps your worktree and the temp folder writable.`
     : "GitHub is reachable through `gh` and `git` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. `run_on_mac` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.";
 }
 
@@ -586,13 +608,13 @@ function repositoryWords(
 
 ## The checkout
 
-The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}. Work there. ${tools.checkout} To walk the developer through code, put the lines on their screen with \`${CODER_TOOL.SHOW_CODE}\` and a note on why they matter. ${checkoutReachWords(machine)}
+The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}. Work there. ${tools.checkout} To walk the developer through code, put the lines on their screen with \`${CODER_TOOL.SHOW_CODE}\` and a note on why they matter. ${checkoutReachWords(tools, machine)}
 
 ## How to work
 
 1. Read the repository's \`AGENTS.md\` and \`CLAUDE.md\` at the root and in every directory you touch, and its package files, before anything else. They say how this repository is built, tested, and reviewed, and they outrank these instructions where the two meet.
 2. ${words.reread}
-3. Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, ${branch.cut}
+3. Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, ${branch.cut}${PULL_REQUEST_BRANCH_WORDS}
 4. ${authorshipRule(coAuthor)}
 5. Make the smallest coherent change that ${words.whole}. Follow the repository's own conventions over any habit of yours.
 6. Run the repository's checks as its own files describe them, and fix what they find before you consider publishing.
@@ -614,8 +636,10 @@ ${tools.integrations}`,
 `,
     links: `A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at. A GitHub \`blob\` link into your repository names a file of your checkout: read it with ${tools.readFile} at that path before you act on it, since it may have changed on your branch; one pinned to a commit with \`#L3-L5\` names those lines as they stood at that commit. A GitHub \`tree\` link into your repository names a folder: look through it with ${tools.glob}.`,
     worker: {
-      reads: "a worker that reads the same checkout, your uncommitted edits included;",
-      readOnly: "a worker is read-only in the checkout, so it never edits, commits, or pushes.",
+      reads:
+        "a worker that reads the same checkout, your uncommitted edits included, its history fetched whole for it, from a shell with no network;",
+      readOnly:
+        "a worker is read-only in the checkout and on GitHub, so it never edits, commits, pushes, or opens a pull request, and it runs nothing on the developer's Mac and drives no browser.",
     },
   };
 }
@@ -625,7 +649,7 @@ function sandboxSection(tools: ToolWords, machine: CoderMachine = SANDBOX_MACHIN
   if (machine.local) {
     return `## Your folder
 
-You work on the developer's own Mac, in a folder of your own with no repository in it, with their installed tools and running services, inside Claude Code's own sandbox. ${tools.sandbox}`;
+You work on the developer's own Mac, in a folder of your own with no repository in it, with their installed tools and running services, inside ${tools.ownSandbox}. ${tools.sandbox}`;
   }
   return `## Your sandbox
 
@@ -663,8 +687,10 @@ ${tools.integrations}`,
 `,
     links: `A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at.`,
     worker: {
-      reads: "a worker that reads the same sandbox, what you wrote in it included;",
-      readOnly: "a worker is read-only, so it never writes a file or changes anything.",
+      reads:
+        "a worker that reads the same working folder, what you wrote in it included, from a shell with no network;",
+      readOnly:
+        "a worker is read-only, so it never writes a file or changes anything, and it runs nothing on the developer's Mac and drives no browser.",
     },
   };
 }
@@ -713,8 +739,10 @@ ${tools.integrations}`,
     links:
       "A link in the developer's message whose label starts with `@`, such as `[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)`, is something they pointed you at.",
     worker: {
-      reads: "a worker that reads the same sandbox, what you wrote in it included;",
-      readOnly: "a worker is read-only, so it never writes a file or changes anything.",
+      reads:
+        "a worker that reads the same working folder, what you wrote in it included, from a shell with no network;",
+      readOnly:
+        "a worker is read-only, so it never writes a file or changes anything, and it runs nothing on the developer's Mac and drives no browser.",
     },
   };
 }
@@ -890,8 +918,8 @@ export interface AgentInstructionsContext {
   readonly workspace: string;
   readonly memoryOn: boolean;
   readonly harness: CoderHarness;
-  /** Where the agent's machine keeps its checkout; where every sandbox keeps it, where unsaid. */
-  readonly checkoutPath?: string | undefined;
+  /** Where the agent's machine keeps its checkout and its installed skills; where every sandbox keeps them, where unsaid. */
+  readonly place?: { readonly checkoutPath: string; readonly installedSkills: string } | undefined;
 }
 
 /**
@@ -924,18 +952,55 @@ export function agentCoderInstructions(
     context.memoryOn,
     {
       local: agent.machine === CODING_AGENT_MACHINE.MAC,
-      checkoutPath: context.checkoutPath ?? CODER.CHECKOUT_PATH,
+      checkoutPath: context.place?.checkoutPath ?? SANDBOX_MACHINE.checkoutPath,
+      installedSkills: context.place?.installedSkills ?? SANDBOX_MACHINE.installedSkills,
     },
   );
 }
 
-/** The instructions a worker runs under: one slice of the agent's work, read-only, answered whole. */
-export function coderWorkerInstructions(): string {
+/** What a worker's instructions say of where it reads: the agent's checkout, or the working folder of an agent with no repository. */
+interface WorkerPlaceWords {
+  /** Where the agent's files stand and what is in them. */
+  readonly where: string;
+  /** What of the history the worker reads, after the sentence that its shell has no network; nothing where there is none. */
+  readonly history: string;
+  /** What never goes into a web search. */
+  readonly privateWords: string;
+  /** What state its commands must leave as it is. */
+  readonly state: string;
+}
+
+const WORKER_CHECKOUT_WORDS: WorkerPlaceWords = {
+  where: `The agent's repository is checked out at \`${CODER.CHECKOUT_PATH}\`, with the agent's own uncommitted edits in it.`,
+  history:
+    "; the checkout's history is fetched for you ahead of a command that reads it, so `git log` and `git blame` read it whole",
+  privateWords: "the repository's code, names, or paths",
+  state: "the checkout's state",
+};
+
+const WORKER_FOLDER_WORDS: WorkerPlaceWords = {
+  where: `The agent's working folder is \`${CODER.CHECKOUT_PATH}\`, with what the agent wrote in it; nothing is checked out there and there is no history to read.`,
+  history: "",
+  privateWords: "private names or words",
+  state: "the folder's state",
+};
+
+/**
+ * The instructions a worker runs under: one slice of the agent's work,
+ * read-only, answered whole, worded for the agent's repository, or for its
+ * working folder where it has none. What holds the worker to reading is
+ * its tools, not these words: its shell has no network and its history is
+ * fetched for it (`apps/dev/subagents/worker/tools/bash.ts`), and it is
+ * offered no `run_on_mac`, `browser`, or `show_image`
+ * (`../agent-runtime/tools.ts`).
+ */
+export function coderWorkerInstructions(repository: string | null): string {
+  const place = repository === null ? WORKER_FOLDER_WORDS : WORKER_CHECKOUT_WORDS;
   return `You do one job for a coding agent, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
 
-The agent's repository is checked out at \`${CODER.CHECKOUT_PATH}\`, with the agent's own uncommitted edits in it. Every \`bash\` command starts there, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. Search the public web with \`${CODER_TOOL.WEB_SEARCH}\` and read a page with \`${CODER_TOOL.READ_WEB_PAGE}\` where the job needs it, and never put the repository's code, names, or paths into a query: the repository is private and a search is public. \`run_on_mac\` runs a command on the developer's own Mac, from their home folder, where the developer may be asked to allow the command, for what only their Mac has. \`${CODER_TOOL.BROWSER}\` drives the agent's own browser, whose tabs the developer can watch and take over: use it only where the job asks for a page in it, take a snapshot for the refs before you click, and while the developer drives a tab, leave it be.
+${place.where} Every \`bash\` command starts there, in a fresh shell, so give it paths relative to that folder and never open a command with a \`cd\` into it. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from it, and an absolute path is taken as written. Your shell has no network: nothing it runs reaches GitHub or the internet, so a fetch, a push, \`gh\`, a download, or an install fails${place.history}. Search the public web with \`${CODER_TOOL.WEB_SEARCH}\` and read a page with \`${CODER_TOOL.READ_WEB_PAGE}\` where the job needs it, and never put ${place.privateWords} into a query: a search is public.
 
-You read and you never write the checkout: run no command that edits a file, stages, commits, pushes, installs, or changes the checkout's state, since the agent and other workers are reading the same tree. Where the developer connected ${INTEGRATION_NAMES_SAID}, you may read it with \`connection_search\` and \`connection_execute\`; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
+You read and you never change anything: run no command that edits a file, stages, commits, installs, or changes ${place.state}, since the agent and other workers are reading the same tree; and you cannot push, open a pull request, run a command on the developer's Mac, or drive a browser, so never try to. Where the developer connected ${INTEGRATION_NAMES_SAID}, you may read it with \`connection_search\` and \`connection_execute\`; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
 
 Return a complete result that answers the job, grounded in what you read: file paths with line numbers, and the commands you ran with what they printed where it matters. Say plainly what you could not confirm. Never print a credential or a token.`;
 }
