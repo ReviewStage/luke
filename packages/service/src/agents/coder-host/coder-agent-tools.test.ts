@@ -138,7 +138,7 @@ import {
   UPDATE_TASK_REFUSAL,
 } from "../coding-agent-tools.js";
 import { LIST_OPEN_ASKS_REFUSAL } from "../operator-desk.js";
-import { STEWARD_DELETE_REFUSAL } from "../steward.js";
+import { STEWARD_CONTINUED_REFUSAL, STEWARD_DELETE_REFUSAL } from "../steward.js";
 import { TASK_ISSUE_REFUSAL } from "../task-issue-tools.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
@@ -3613,7 +3613,7 @@ function stewardRefused(answer: WireRecord): boolean {
   );
 }
 
-test("an operator stops, renames, archives, and continues its member's own agents, refuses each of those on a teammate's agent, which a coder may still act on, and deletes no section", async () => {
+test("an operator stops, renames, archives, and continues its member's own agents, once each, refuses each of those on a teammate's agent and a second continuation, changes its member's own task and never a teammate's, which a coder may still act on, and deletes no section", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const operator = await operatorOn(agents.caller.userId, workspaceId);
@@ -3657,6 +3657,33 @@ test("an operator stops, renames, archives, and continues its member's own agent
     "continue-own",
   );
   assert.equal(continued.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(continued));
+  // A second continuation of the same agent is refused the operator, which continues one once.
+  assert.deepEqual(
+    await call(CODER_TOOL.START_AGENT, { from: { agentId: agents.caller.id } }, "continue-again"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: STEWARD_CONTINUED_REFUSAL },
+  );
+
+  // The member's own task is changed; a teammate's is read and never changed.
+  const done = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.invitations, status: TASK_STATUS.DONE },
+    "done-own",
+  );
+  assert.equal(done.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(done));
+  const theirs = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.billing, name: "Mine now" },
+    "rename-task",
+  );
+  assert.equal(theirs.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(theirs));
+  assert.ok(
+    typeof theirs.reason === "string" && theirs.reason.includes("that task is a teammate's"),
+    JSON.stringify(theirs),
+  );
+  assert.equal(
+    (await call(CODER_TOOL.READ_TASK, { taskId: tasks.billing })).status,
+    ACTION_RESULT_STATUS.ACCEPTED,
+  );
 
   // An operator deletes nothing, and is not offered the delete; a coder is, and may still stop a teammate's agent.
   assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: randomUUID() }, "delete"), {
@@ -3678,6 +3705,12 @@ test("an operator stops, renames, archives, and continues its member's own agent
     "coder",
   );
   assert.equal(byCoder.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(byCoder));
+  const taskByCoder = await coder(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.billing, name: "Billing, renamed" },
+    "coder-task",
+  );
+  assert.equal(taskByCoder.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(taskByCoder));
 });
 
 test("list_open_asks lists every ask waiting on the operator's member across their own agents, and nothing a teammate's agent asked; it is offered to an operator alone, and a coder's call is refused", async () => {
