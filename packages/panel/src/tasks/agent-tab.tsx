@@ -12,6 +12,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSubagentStanding,
   type CodingAgentSummary,
+  type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
 import { inboxLineWords } from "@luke/features/inbox-wire";
@@ -117,6 +118,7 @@ import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
+import { dockedTodos, newestTodos, taskTodos, todosOfPart } from "./agent-todos.js";
 import { ArchivedComposerNote } from "./archived-note.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import {
@@ -138,17 +140,16 @@ import {
   continuedByIds,
   continuedByTitles,
   delegates,
-  dockedTodos,
   type EndLineParts,
   endLineOffersContinue,
   endLineParts,
   endLineReason,
   finishedReplyLead,
+  isTodos,
   lineSender,
   macOwnerOf,
   messageWords,
   nativeSubagent,
-  newestTodos,
   placedMessages,
   planPayerOf,
   providerOf,
@@ -207,7 +208,6 @@ import {
   type ToolTarget,
   todoFocus,
   todosSummary,
-  todosView,
   toolCallView,
   toolTarget,
   type WorkerJobs,
@@ -647,21 +647,23 @@ function DelegationRow({
 }
 
 /**
- * One write of the agent's to-do list: the list, open while it is the
- * newest and folded once a newer one stands, or a call's row where its
- * input does not read as a list. Note that the row is keyed by whether it
- * is open, because the fold reads `defaultOpen` once.
+ * One call carrying the agent's to-do list, a write of the whole list or a
+ * call on Claude Code's task list (`agent-todos.ts`): the list as it stood
+ * after the call, open while it is the newest and folded once a newer one
+ * stands, or a call's row where no list reads from it. Note that the row is
+ * keyed by whether it is open, because the fold reads `defaultOpen` once.
  */
 function TodosRow({
   part,
+  todos,
   open,
   live,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  todos: CodingAgentTodos["todos"] | undefined;
   open: boolean;
   live: boolean;
 }): ReactNode {
-  const todos = todosView(part.input);
   if (todos === undefined) return <ToolCallView part={part} />;
   return (
     <TranscriptTodos
@@ -677,24 +679,39 @@ function TodosRow({
   );
 }
 
-/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, the call whose list is drawn open, none while the list is docked above the composer, and the call whose list the agent is at, none once it stops. */
+/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, the call whose list is drawn open, none while the list is docked above the composer, the call whose list the agent is at, none once it stops, and the list as it stood after each of Claude Code's task calls (`taskTodos`). */
 interface TodosPlace {
   readonly kept: string | undefined;
   readonly open: string | undefined;
   readonly live: string | undefined;
+  readonly lists: ReadonlyMap<string, CodingAgentTodos["todos"]>;
 }
 
 /** A transcript that holds no to-do list, as the brain's does not. */
-const NO_TODOS: TodosPlace = { kept: undefined, open: undefined, live: undefined };
+const NO_TODOS: TodosPlace = {
+  kept: undefined,
+  open: undefined,
+  live: undefined,
+  lists: new Map(),
+};
+
+/** Whether two places draw the to-do lists alike: the same calls kept, open, and live, and each task call's list the one it was. */
+function sameTodosPlace(a: TodosPlace, b: TodosPlace): boolean {
+  return (
+    a.kept === b.kept && a.open === b.open && a.live === b.live && sameEntries(a.lists, b.lists)
+  );
+}
 
 /** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it, and live while the agent works. */
 function todosPlace(messages: readonly CodingAgentMessage[], working: boolean): TodosPlace {
-  const standing = newestTodos(messages);
+  const lists = taskTodos(messages);
+  const standing = newestTodos(messages, lists);
   const docked = dockedTodos(standing, working);
   return {
     kept: standing?.callId,
     open: docked === undefined ? standing?.callId : undefined,
     live: working ? standing?.callId : undefined,
+    lists,
   };
 }
 
@@ -706,7 +723,7 @@ function TodosDock({
   messages: readonly CodingAgentMessage[];
   working: boolean;
 }): ReactNode {
-  const docked = dockedTodos(newestTodos(messages), working);
+  const docked = dockedTodos(newestTodos(messages, taskTodos(messages)), working);
   if (docked === undefined) return null;
   return (
     <div className={`agent-todos-dock ${COMPOSER_DOCK_CLASS}`}>
@@ -906,10 +923,11 @@ function AgentPartView({
           />
         );
       }
-      if (part.tool === AGENT_TOOL.WRITE_TODOS) {
+      if (isTodos(part)) {
         return (
           <TodosRow
             part={part}
+            todos={todosOfPart(part, todos.lists)}
             open={part.callId === todos.open}
             live={part.callId === todos.live}
           />
@@ -1384,7 +1402,7 @@ export function AgentMessage({
   const drawnEditor = editor ?? (editing.mounted ? lastEditor.current : undefined);
   // Note that the doors and the to-do lists a page hands anew are kept while they draw alike, so the rows a page did not touch stand as drawn (`TranscriptRows`).
   const doors = useKept(delegation, sameDoors);
-  const todosKept = useKept(todos, sameFields);
+  const todosKept = useKept(todos, sameTodosPlace);
   const drawPart = useCallback(
     (part: AgentPart) => (
       <SteadyAgentPart part={part} delegation={doors} todos={todosKept} moving={moving} />
@@ -1742,7 +1760,7 @@ function sameMessageDraw(a: AgentMessageProps, b: AgentMessageProps): boolean {
   // Note that every prop is compared, each the same value unless named here, so a prop added later is never missed.
   return sameFieldsBy(a, b, {
     message: (ours, theirs) => ours === theirs || sameHeldPiece(a, b),
-    todos: sameFields,
+    todos: sameTodosPlace,
     forkCut: sameFields,
     sender: sameFields,
     arrived: sameArrived,
@@ -1894,7 +1912,7 @@ function useLogEntries(
   arrivals: ReadonlyMap<string, readonly ArrivedLine[]>,
 ): readonly LogEntry[] {
   const reads = useRef(new Map<string, PiecesRead>());
-  const todos = useKept(placing.todos, sameFields);
+  const todos = useKept(placing.todos, sameTodosPlace);
   return useMemo(() => {
     const held = reads.current;
     const next = new Map<string, PiecesRead>();

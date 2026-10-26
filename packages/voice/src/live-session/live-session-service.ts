@@ -110,7 +110,8 @@ const RUN_END_NOTE = {
  * confirmed before it is told, and the stop instruction has the voice wait
  * for the developer, so this is context for its next reply and never speech.
  */
-const STOPPED_RUN_NOTE = "The developer stopped this ask, and your backend's work on it was cancelled.";
+const STOPPED_RUN_NOTE =
+  "The developer stopped this ask, and your backend's work on it was cancelled.";
 
 /**
  * What a call back is told of Luke's words the developer did not hear because

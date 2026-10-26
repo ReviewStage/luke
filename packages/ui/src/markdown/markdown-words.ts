@@ -11,4 +11,3 @@ import { gfm } from "micromark-extension-gfm";
 export function markdownTree(text: string): Root {
   return fromMarkdown(text, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
 }
-

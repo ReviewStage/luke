@@ -139,11 +139,7 @@ import {
   pullRequestActionRequestSchema,
 } from "./pull-request-write-wire.js";
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
-import {
-  agentGitHubImagePath,
-  agentPicturePath,
-  inboxAttachmentPath,
-} from "./service-paths.js";
+import { agentGitHubImagePath, agentPicturePath, inboxAttachmentPath } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,

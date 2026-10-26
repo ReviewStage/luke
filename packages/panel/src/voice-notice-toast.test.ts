@@ -149,9 +149,7 @@ test("a failure the voice still says stands past every toast hold, because the v
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   drawn({ speakers: NOBODY, error: VOICE_FAILURE.CALL_DROPPED });
   pass(Duration.toMillis(TOAST_HOLD.FAILED) * 2);
-  assert.deepEqual(standing(), [
-    "The call dropped. Call again to carry on.",
-  ]);
+  assert.deepEqual(standing(), ["The call dropped. Call again to carry on."]);
 });
 
 test("a call whose OpenAI key is missing, refused or out of credit offers the remedy that fixes it, and its press does it", () => {
