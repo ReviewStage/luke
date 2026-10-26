@@ -14,8 +14,6 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   GAP,
-  GROUP_ACTIONS,
-  GROUP_HEADING,
   GROUP_SURFACE,
   GroupHeader,
   HoverCard,
@@ -1091,7 +1089,7 @@ export function InboxListSkeleton({
   );
 }
 
-/** The words naming the list's search, on its field and the sidebar's magnifier alike. */
+/** The words naming the list's search. */
 const SEARCH_INBOX = "Search inbox";
 
 /**
@@ -1124,19 +1122,14 @@ function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element 
  * alone. On the window's Inbox its heading and its button glide as the
  * sidebar folds, the name moving to the list's middle, clear of the
  * sidebar's toggle, and the button keeping to the list's edge. Where the
- * list offers a search, a page stands its field under the head
- * (`ListSearch`), and the sidebar's head, too tight for one, a magnifier
- * after the name that unfolds a field over it (`FoldingSearch`), the
- * buttons after it standing still either way.
+ * list offers a search, its field stands under the head (`ListSearch`).
  */
 function ListHead({
   head,
   readerId,
-  placement,
 }: {
   head: InboxListHead;
   readerId: string | undefined;
-  placement: InboxListPlacement;
 }): React.JSX.Element {
   const { shown, show, view } = head;
   const title = inboxTitle(show.show);
@@ -1176,7 +1169,7 @@ function ListHead({
       </>
     );
   }
-  if (head.phone !== undefined && placement === INBOX_LIST_PLACEMENT.PAGE) {
+  if (head.phone !== undefined) {
     return (
       <>
         <PhoneHead
@@ -1240,33 +1233,15 @@ function ListHead({
       />
     </>
   );
-  const sidebar = placement === INBOX_LIST_PLACEMENT.SIDEBAR;
   return (
     <>
-      {/* In the sidebar the list is headed as the sidebar's own sections are, under its places, rather than as a page. */}
-      {sidebar ? (
-        <GroupHeader
-          heading={GROUP_HEADING.NONE}
-          label={title}
-          actionsShown={GROUP_ACTIONS.AT_REST}
-          actions={options}
-          search={
-            head.search === undefined
-              ? undefined
-              : { label: SEARCH_INBOX, value: head.search.query, onChange: head.search.onQuery }
-          }
-        />
+      {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
+      {view === undefined ? (
+        <PaneBar title={title} actions={options} />
       ) : (
-        <>
-          {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
-          {view === undefined ? (
-            <PaneBar title={title} actions={options} />
-          ) : (
-            <Toolbar title={title} actions={options} end={TOOLBAR_INSET.COLUMN} />
-          )}
-          {search}
-        </>
+        <Toolbar title={title} actions={options} end={TOOLBAR_INSET.COLUMN} />
       )}
+      {search}
       {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
     </>
   );
@@ -1278,7 +1253,7 @@ export function SearchEmpty({ searched }: { searched: string }): React.JSX.Eleme
 }
 
 /** What the Inbox says where a read of its items, or of the tasks holding them, did not answer. */
-export const INBOX_NOT_READ = readFailedWords(`some ${TERM.INBOX_ITEM.many}`);
+const INBOX_NOT_READ = readFailedWords(`some ${TERM.INBOX_ITEM.many}`);
 
 /** The words of the way on from an Inbox with nothing in it. */
 const NEW_TASK_LABEL = "New task";
@@ -1353,14 +1328,6 @@ export function InboxListNote({
   return <NoteLine look={NOTE_LINE_LOOK.ROWS}>{NEEDS_YOU.NONE}</NoteLine>;
 }
 
-/** Where a list of the window's Inbox stands: a column of its own on the Inbox's page, or the sidebar, which the inbox-first sidebar makes it. */
-export const INBOX_LIST_PLACEMENT = {
-  PAGE: "page",
-  SIDEBAR: "sidebar",
-} as const;
-
-export type InboxListPlacement = (typeof INBOX_LIST_PLACEMENT)[keyof typeof INBOX_LIST_PLACEMENT];
-
 /** What the list's head offers: its scopes on every Inbox, and on the window's how it groups its items and which plans are folded. */
 export interface InboxListHead {
   /** Whether the list is on screen, for its menu not to outlive it. */
@@ -1371,7 +1338,7 @@ export interface InboxListHead {
   readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
   /** Mark all as read, in the view's menu, where the list marks its items. */
   readonly readAll?: InboxReadAll | undefined;
-  /** The list's search, under a page's head or unfolded from the sidebar's magnifier, on the window's Inbox and a task's own alike; none where the list offers none. */
+  /** The list's search, under its head, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;
   /** Opens a New thread in the pane, from the head's compose button; none where the list offers none. */
   readonly onCompose?: (() => void) | undefined;
@@ -1508,7 +1475,6 @@ export function InboxList({
   columns,
   rows,
   reading = false,
-  placement = INBOX_LIST_PLACEMENT.PAGE,
   onChoose,
   onMark,
   onClose,
@@ -1529,8 +1495,6 @@ export function InboxList({
   columns: InboxColumnsShown;
   /** Where each row's press is kept, by the item it opens. */
   rows: InboxRowPresses;
-  /** Where the list stands: its own column on the Inbox's page, or the sidebar, which scrolls it with the rest and draws the chosen item's open beside it. */
-  placement?: InboxListPlacement;
   onChoose: (listed: InboxListed) => void;
   /** Marks an item read or unread from its row or the selection's bar, answering whether the service took it; none where the rows offer no mark. */
   onMark?: InboxListMark | undefined;
@@ -1540,9 +1504,7 @@ export function InboxList({
   const now = useMinute();
   const regionId = useId();
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
-  // Note that only the list on a page chooses rows; the sidebar's leaves its rows to open alone.
-  const choosing = placement === INBOX_LIST_PLACEMENT.PAGE;
-  const drawn = choosing ? drawnItems(view, (key) => head.view?.folds.folded(key) ?? false) : [];
+  const drawn = drawnItems(view, (key) => head.view?.folds.folded(key) ?? false);
   // Note that only rows drawn stay chosen, so an item gone from the list, filtered out, or folded away is never acted on, and stays unchosen once back.
   const picks = drawn.filter(({ item }) => picked.has(item.id));
   if (picks.length !== picked.size) setPicked(new Set(picks.map(({ item }) => item.id)));
@@ -1550,7 +1512,7 @@ export function InboxList({
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  // Note that the rows of every group are one Tab stop that ↑↓ walk on a page, and in the sidebar join the sidebar's own walk, a box around them.
+  // Note that the rows of every group are one Tab stop that ↑↓ walk.
   const roving = useRovingKeys<HTMLDivElement>();
   const rovingBody = useMemo(() => joinRefs(bodyRef, roving.ref), [roving.ref]);
   // Note that only the window's Inbox shows its rows' media, as its view's menu chooses; a task's own shows none.
@@ -1568,7 +1530,6 @@ export function InboxList({
     label: "Resize inbox list",
     onResize,
   });
-  const sidebar = placement === INBOX_LIST_PLACEMENT.SIDEBAR;
   // Note that a row names its task wherever no task's header stands over it, and a teammate's face wherever no person's does.
   // A row whose item is done with is drawn gray, the chosen row kept on For you and every such row on All alike.
   // A row leaving the list is the list's motion's rather than one of the keyboard's rows (`ListMotion`).
@@ -1577,7 +1538,7 @@ export function InboxList({
       key={listed.item.id}
       listed={listed}
       chosen={listed.item.id === chosen}
-      open={listed.item.id === chosen && (sidebar || columns === INBOX_COLUMNS.BOTH)}
+      open={listed.item.id === chosen && columns === INBOX_COLUMNS.BOTH}
       now={now}
       models={models}
       readerId={readerId}
@@ -1587,7 +1548,7 @@ export function InboxList({
       muted={isDone(listed.item)}
       media={media}
       ref={leaving ? undefined : rows.hold(listed.item.id)}
-      selectKey={choosing && !leaving ? listed.item.id : undefined}
+      selectKey={leaving ? undefined : listed.item.id}
       onChoose={onChoose}
       onMark={onMark}
       onClose={onClose}
@@ -1629,13 +1590,9 @@ export function InboxList({
   // Note that each grouping draws its groups anew, keyed by it, so a group of one grouping never leaves into another's.
   const body = (
     <div
-      {...(sidebar ? {} : roving)}
-      ref={sidebar ? bodyRef : rovingBody}
-      className={
-        sidebar
-          ? "inbox-tasks-body min-h-list-held-least p-0"
-          : "inbox-tasks-body min-h-list-held-least px-column-inset pt-row-inset pb-column-inset data-[empty=true]:flex data-[empty=true]:min-h-full data-[empty=true]:flex-col"
-      }
+      {...roving}
+      ref={rovingBody}
+      className="inbox-tasks-body min-h-list-held-least px-column-inset pt-row-inset pb-column-inset data-[empty=true]:flex data-[empty=true]:min-h-full data-[empty=true]:flex-col"
       data-empty={String(listedItems(view).length === 0)}
       {...motionRows()}
     >
@@ -1681,40 +1638,32 @@ export function InboxList({
       {note}
     </div>
   );
-  // Note that in the sidebar the list scrolls with the sidebar's own scroller, under its pins, and takes the sidebar's width.
   return (
     <nav
       ref={rowFocus.ref}
-      className="inbox-tasks relative flex min-h-0 min-w-0 flex-col border-r border-border data-[placement=sidebar]:block data-[placement=sidebar]:border-r-0 data-[placement=sidebar]:[&_.inbox-tasks-chips]:px-0"
-      data-placement={placement}
+      className="inbox-tasks relative flex min-h-0 min-w-0 flex-col border-r border-border"
       aria-label="Inbox items"
-      hidden={!sidebar && columns === INBOX_COLUMNS.ITEM}
+      hidden={columns === INBOX_COLUMNS.ITEM}
       onFocus={rowFocus.onFocus}
       onBlur={rowFocus.onBlur}
-      style={sidebar ? undefined : { width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
+      style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
-      <ListHead head={head} readerId={readerId} placement={placement} />
+      <ListHead head={head} readerId={readerId} />
       <ListMotion root={bodyRef} change={view} reading={reading}>
-        {sidebar ? (
-          body
-        ) : (
-          <SelectionRegion id={regionId} selection={{ selected: picked, onChange: setPicked }}>
-            <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>
-          </SelectionRegion>
-        )}
+        <SelectionRegion id={regionId} selection={{ selected: picked, onChange: setPicked }}>
+          <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>
+        </SelectionRegion>
       </ListMotion>
       {/* Note that the bar stands at the list's foot rather than over its rows, so choosing a row moves none under the pointer. */}
-      {choosing ? (
-        <InboxSelectionBar
-          listed={picks}
-          controls={regionId}
-          shown={head.shown}
-          onClear={unpick}
-          onMark={onMark}
-          onClose={onClose}
-        />
-      ) : null}
-      {!sidebar && columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
+      <InboxSelectionBar
+        listed={picks}
+        controls={regionId}
+        shown={head.shown}
+        onClear={unpick}
+        onMark={onMark}
+        onClose={onClose}
+      />
+      {columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
     </nav>
   );
 }

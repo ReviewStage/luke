@@ -52,8 +52,7 @@ import {
  *
  * It stands in the plan's place, opened by the sidebar's Tasks row, and its
  * way out is `EXIT_BOARD`, so Back, Escape, and the window's history treat it
- * as the place the Board alone once was. With the inbox-first sidebar on,
- * the sidebar lists the Inbox and this page is where the task list stands.
+ * as the place the Board alone once was.
  *
  * Its toolbar ends in Filter and View options (`tasks-page-options.tsx`).
  * The filter is the page's, one for both views and one for each workspace,

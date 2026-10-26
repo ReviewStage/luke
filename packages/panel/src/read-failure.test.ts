@@ -22,7 +22,6 @@ import { PANEL_TAB } from "./panel-tabs.js";
 import { AgentAuthSection } from "./settings/agent-auth-section.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
 import { SHELL_ROOM } from "./shell-room.js";
-import { useInboxListing } from "./tasks/use-inbox-listing.js";
 import { HISTORY_READ } from "./tasks/use-plan-history.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
@@ -284,12 +283,6 @@ const INBOX_VIEW = {
   onTaskAgents: () => undefined,
 } as const;
 
-/** The Inbox whose sidebar lists it, so the page shows the chosen item alone. */
-function PanedInbox({ tasks }: { tasks: ReturnType<typeof tasksControl> }): React.JSX.Element {
-  const listing = useInboxListing(tasks);
-  return createElement(DesktopInbox, { tasks, listing });
-}
-
 test("an Inbox whose task list could not be read says so, never that nothing needs you, and Retry reads the list again", async () => {
   let retried = 0;
   const tasks = tasksControl({
@@ -300,24 +293,6 @@ test("an Inbox whose task list could not be read says so, never that nothing nee
     inboxView: INBOX_VIEW,
   });
   const page = await mount(createElement(DesktopInbox, { tasks }));
-  const failure = readFailure(page);
-  assertSaidAlike(failure, "Some items could not be read.");
-  assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u);
-  assert.equal(page.querySelector('[role="status"]'), null, "no loading placeholder");
-  failure.retry();
-  assert.equal(retried, 1);
-});
-
-test("an Inbox the sidebar lists says a failed read across its page, never that nothing needs you, and Retry reads again", async () => {
-  let retried = 0;
-  const tasks = tasksControl({
-    listFailed: true,
-    onRetryList: () => {
-      retried += 1;
-    },
-    inboxView: INBOX_VIEW,
-  });
-  const page = await mount(createElement(PanedInbox, { tasks }));
   const failure = readFailure(page);
   assertSaidAlike(failure, "Some items could not be read.");
   assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u);

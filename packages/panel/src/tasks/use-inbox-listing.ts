@@ -35,18 +35,11 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * the item chosen, read live through its holder's own read.
  *
  * The window's Inbox page reads it for its list and the item beside it
- * (`desktop-inbox.tsx`). While the account has the inbox-first sidebar on,
- * the shell reads it once and hands it to both the sidebar, which lists the
- * items, and the Inbox page, which then shows the chosen item alone, so the
- * two never read or choose apart. Note that the list's reads stand as long
- * as it is read, so a sidebar that lists it reads every task holding items
- * while it is on screen, where the page read them only while it stood.
+ * (`desktop-inbox.tsx`).
  *
- * Its search, the words typed in the list's head, is held here too, so the
- * page's list and the sidebar's narrow alike, the item the pane shows
- * keeping its place among the steps, as it does under any scope (`inboxList`);
- * and whether a New thread stands in the pane, so the sidebar's head and the
- * page open the same one.
+ * Its search, the words typed in the list's head, is held here too, the item
+ * the pane shows keeping its place among the steps, as it does under any
+ * scope (`inboxList`); and whether a New thread stands in the pane.
  */
 
 /** A New thread just opened, before the Inbox it opened on has named the item it stands over. */
@@ -68,9 +61,6 @@ function listedHoldings(
   return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
 }
 
-/** No task's items are read while the listing reads nothing. */
-const NO_HOLDINGS: readonly AppInboxTaskHolding[] = [];
-
 /** Each task holding items as the list groups it, with its items as last read; a task the list given does not hold is left out. */
 function holdingGroups(
   holdings: readonly AppInboxTaskHolding[],
@@ -91,22 +81,11 @@ export function choiceOf({ holder, item }: InboxListed): InboxChoice {
     : { agentId: item.agentId, itemId: item.id };
 }
 
-/** No agent with no task is read while the listing reads nothing. */
-const NO_TASKLESS: TasksControl["inboxTaskless"] = [];
-
 /**
  * The window's Inbox as it is read and listed, and its chosen item; see the
  * module's head, its list held still while it is shown (`use-held-inbox-list.ts`).
- * Where it is not `enabled` it reads nothing, lists nothing,
- * and chooses nothing, so a shell that always calls it costs nothing while
- * the inbox-first sidebar is off.
  */
-export function useInboxListing(
-  tasks: TasksControl,
-  enabled = true,
-  /** Whether the list is in sight, where it is drawn apart from the Inbox's page, as the inbox-first sidebar draws it; none reads it as the page's. */
-  listShown?: boolean,
-) {
+export function useInboxListing(tasks: TasksControl) {
   const view = tasks.inboxView;
   const { act } = useAct();
   const choices = useInboxViewChoices();
@@ -119,16 +98,16 @@ export function useInboxListing(
   );
   const { inboxTasks, tasks: listedTasks } = tasks.listed;
   const holdings = useMemo(
-    () => (enabled ? listedHoldings(inboxTasks, listedTasks) : NO_HOLDINGS),
-    [enabled, inboxTasks, listedTasks],
+    () => listedHoldings(inboxTasks, listedTasks),
+    [inboxTasks, listedTasks],
   );
   const read = useInboxItems({ holdings });
-  const waitingTaskless = enabled ? tasks.inboxTaskless : NO_TASKLESS;
+  const waitingTaskless = tasks.inboxTaskless;
   const tasklessReads = useTasklessInboxItems(waitingTaskless);
   // Note that the window's own answers and messages stand over the agents' reads until they hold them, so a stale read never brings an answered item back.
   const tasklessItems = useSettledReads(tasklessReads.items);
   const taskless = { ...tasklessReads, items: tasklessItems };
-  const asked = enabled ? view.chosen : undefined;
+  const asked = view.chosen;
   const chosenTask =
     asked !== undefined && "taskId" in asked
       ? tasks.tasks.find((task) => task.id === asked.taskId)
@@ -228,12 +207,12 @@ export function useInboxListing(
     readerId: tasks.me,
   };
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
-  // both held still while the list is shown: the page's while it stands, else what the caller says.
+  // both held still while the page stands.
   const { list, steps } = useHeldInboxList(
     standing,
     filter,
     asked?.itemId,
-    enabled && (listShown ?? (view.open && tasks.shown)),
+    view.open && tasks.shown,
   );
   const chosen = listedItems(steps).find(({ item }) => item.id === asked?.itemId);
   // Note that a scope leaving out every item listed is said apart from an Inbox holding none.
@@ -339,6 +318,3 @@ export function useInboxListing(
     onRetry,
   };
 }
-
-/** The window's Inbox as `useInboxListing` reads it. */
-export type InboxListing = ReturnType<typeof useInboxListing>;

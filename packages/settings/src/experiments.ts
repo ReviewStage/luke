@@ -16,8 +16,6 @@ export const EXPERIMENT = {
   VIDEO_CALLS: "video-calls",
   /** A workspace's memory: its coding agents keep and recall facts with remember and recall, reviewed in Settings › Memory. */
   MEMORY: "memory",
-  /** The sidebar as the Inbox: its threads under their tasks where the task list stood, the tasks left to the Tasks page. */
-  INBOX_FIRST: "inbox-first",
   /** Luke as the member's operator: one standing agent per workspace that manages their other agents. */
   OPERATOR: "operator",
   /** Coding agents that run on the developer's own Mac, in a worktree, with their own tools, rather than in a cloud sandbox. */
@@ -73,15 +71,6 @@ export const EXPERIMENTS = [
       "and tells you what needs you.",
     owner: "Dean",
     since: "2026-10-22",
-  },
-  {
-    key: EXPERIMENT.INBOX_FIRST,
-    name: "Inbox-first sidebar",
-    detail:
-      "The sidebar lists your inbox's items under their tasks in place of your task list, " +
-      "which you find on the tasks page.",
-    owner: "Dean",
-    since: "2026-10-20",
   },
   {
     key: EXPERIMENT.CODE_REVIEW,

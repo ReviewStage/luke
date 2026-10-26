@@ -822,7 +822,7 @@
 
   /* Rows and navigation (`components/list-row/`, `nav-item/`, `disclosure/`,
      `bar-item/`, `pane-bar/`, `toolbar/`, `over-pane/`, `resize-corner/`,
-     `folding-search/`, `searchable-menu/`): the inks, lengths, and lifts a
+     `searchable-menu/`): the inks, lengths, and lifts a
      row, a place in a column or a bar, a fold, and a pane's bars stand at,
      each a profile's role or the base scale's step. */
   --color-attention-fill: var(--luke-color-attention-fill);

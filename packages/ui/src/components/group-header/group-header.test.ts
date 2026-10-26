@@ -11,8 +11,7 @@ import { type GroupFold, GroupHeader } from "./group-header.js";
  * group-header.test.ts -- pressing a group's head folds and unfolds its
  * rows and says so in `aria-expanded`, open or folded from the start or as
  * its holder keeps it; an action beside the fold presses without folding;
- * a head that folds nothing draws its rows always and no fold control; a
- * head may offer a search that the actions beside it survive; the count is
+ * a head that folds nothing draws its rows always and no fold control; the count is
  * drawn as its caller gives it; and a folded group draws what it leaves
  * standing.
  */
@@ -120,32 +119,6 @@ test("an action beside the fold is pressed without folding the group", () => {
   assert.equal(presses, 1);
   assert.equal(headOf(container).getAttribute("aria-expanded"), "true");
   assert.ok(container.textContent?.includes(ROWS));
-});
-
-test("a head that offers a search unfolds it over the label while the actions beside it stay pressable", () => {
-  const typed: string[] = [];
-  let presses = 0;
-  const container = render(
-    group(undefined, {
-      actions: createElement(
-        "button",
-        { type: "button", onClick: () => (presses += 1) },
-        "View options",
-      ),
-      search: { label: "Search tasks", value: "", onChange: (value: string) => typed.push(value) },
-    }),
-  );
-  const magnifier = container.querySelector<HTMLButtonElement>('button[aria-label="Search tasks"]');
-  assert.ok(magnifier, "the head offers the search");
-  assert.equal(container.querySelector("h2")?.textContent, "acme/web");
-
-  act(() => magnifier.click());
-  assert.ok(container.querySelector("input"), "the field is open");
-  const options = [...container.querySelectorAll("button")].find(
-    (button) => button.textContent === "View options",
-  );
-  act(() => options?.click());
-  assert.equal(presses, 1);
 });
 
 test("a label that is a placeholder block heads a group as its words do", () => {

@@ -45,7 +45,6 @@ import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import { useChannelPlace } from "../tasks/use-channels.js";
-import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useAgentLook, useTaskLooks } from "../tasks/use-task-looks.js";
 import {
   AUTOMATIONS_PAGE,
@@ -83,7 +82,7 @@ import { PersonPageSkeleton } from "./person-frame.js";
 import { PhoneHead } from "./phone-head.js";
 import { PLACE_LIST, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
 import { SidePanelChord, SidePanelToggle } from "./side-panel.js";
-import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
+import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
 import { awayBack } from "./task-pane-switcher.js";
 import { useSummaryPin } from "./task-summary.js";
@@ -715,20 +714,9 @@ export function DesktopShell({
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
       : undefined;
-  // Note that Channels stands in the inbox-first sidebar's place, its sidebar listing channels and its page a channel's stream.
+  // Note that with Channels on the sidebar lists channels and the Inbox's page is a channel's stream.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const channelPlace = useChannelPlace();
-  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST) && !channelsOn;
-  // With the inbox-first sidebar on, the Inbox is read once here, the sidebar listing it and the Inbox's page showing its chosen item; off, it reads nothing.
-  // Note that a narrow room's drawer is too skinny for the list, so there the Inbox's page lists its items itself, the list and then the item each across the screen.
-  const sidebarListsInbox = inboxFirst && tasks.signedIn && room !== SHELL_ROOM.NARROW;
-  // Note that the sidebar draws its list, so the list holds still while the sidebar is in sight.
-  const inboxListing = useInboxListing(
-    tasks,
-    sidebarListsInbox,
-    tasks.shown && sidebarInSight(sidebar),
-  );
-  const sharedListing = sidebarListsInbox ? inboxListing : undefined;
   useWindowTitle(titleSubject(tab, tasks, shownTask));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = useTaskLooks(shownTask, tasks.me);
@@ -924,7 +912,6 @@ export function DesktopShell({
         onSignOut={settings.onSignOut}
         onPressWithin={keepOverlay}
         room={room}
-        inboxListing={sharedListing}
       />
       {room === SHELL_ROOM.NARROW ? <DrawerScrim open={drawerOver} /> : null}
       <main className="desktop-main" inert={drawerOver}>
@@ -932,7 +919,7 @@ export function DesktopShell({
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
             {inboxOpen ? (
-              <DesktopInbox tasks={tasks} listing={sharedListing} room={room} />
+              <DesktopInbox tasks={tasks} room={room} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
               <DesktopAgentPage

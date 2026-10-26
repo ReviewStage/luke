@@ -210,7 +210,7 @@ say: keyframes, `:has()`, container queries, and rules other sheets read.
 
 The rows and navigation are drawn in the theme's utilities with no shadcn
 base: `ListRow` and `List`, `NavItem`, `Disclosure`, `BarItem`, `PaneBar`,
-`Toolbar`, `OverPane`, `ResizeCorner`, `FoldingSearch`, and `SearchableMenu`.
+`Toolbar`, `OverPane`, `ResizeCorner`, and `SearchableMenu`.
 None has a shadcn component that fits without changing what it does. Base
 UI's collapsible owns the open state, unmounts its panel and hides it, where
 a `Disclosure` is a real `<details>` that keeps a closed body out of the
