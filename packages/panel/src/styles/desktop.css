@@ -86,7 +86,7 @@ body,
 /* Scrollbars ---------------------------------------------------------------- */
 
 /* Every scroller in the window draws the one scrollbar a Mac app does: a thin
-   rounded thumb in the muted `--luke-color-scrollbar` ink and no track at all, faded in
+   rounded thumb in the muted `--luke-color-scrollbar` ink and no track at all, shown
    while the pointer is over the scroller or focus is in it. Note that the
    track is named transparent rather than left to the engine, because macOS
    set to always show scroll bars (or a mouse attached) draws Chromium's
@@ -95,13 +95,15 @@ body,
    them after, as it does in any Mac app. No scroller sets its own: the
    colour inherits, so it reaches into Pierre's tree through its shadow root
    too, where it stands in for that tree's own `::-webkit-scrollbar` thumb.
-   In the `base` layer with the element resets (base.css), so a component's
-   own `transition`, or a utility's, still wins on its element. */
+   In the `base` layer with the element resets (base.css). Note that the
+   thumb is not faded in, because a transition on every element starts one
+   on each element whose hover or focus changes, and a commit that moves
+   focus (opening a task) then pays for all of them on every style read:
+   seconds on a long agent's task. */
 @layer base {
   * {
     scrollbar-color: transparent transparent;
     scrollbar-width: thin;
-    transition: scrollbar-color var(--luke-duration-quick) var(--luke-motion-exit);
   }
 
   *:hover,
