@@ -54,6 +54,8 @@ export const DEVICE_AGENT_LINE_KIND = {
   RETUNE: "retune",
   /** Files written under the agent's folder, before a later line names them, whether or not a runner runs. */
   FILES: "files",
+  /** Let the agent go: its runner stopped, and its folder, its worktree and everything it wrote there, removed from the device. */
+  DISCARD: "discard",
 } as const;
 
 export type DeviceAgentLineKind =

@@ -76,7 +76,8 @@ import type { RunMode } from "./run-mode.js";
  * or a log, and its first lines on its stdin; its line is settled with the
  * runner's exit code once it exits. A message or retune line is written to
  * the running runner's stdin; a files line writes its files under the
- * agent's folder; a stop line ends the runner's group. A launch whose
+ * agent's folder; a stop line ends the runner's group; a discard line ends
+ * it and removes the agent's folder with everything in it. A launch whose
  * worktree could not be made is settled with the script's failure, and the
  * runner never starts.
  *
@@ -619,6 +620,26 @@ export function composeLocalAgents(
             yield* Fiber.await(runner.exited);
           });
 
+        /**
+         * The agent let go of: its runner stopped and its exit settled, and
+         * its folder removed with everything in it, its worktree and what its
+         * runner and commands wrote there; the shared clone the worktree was
+         * made from stays, and the next worktree made of it prunes this one's
+         * record. A removal that fails is reported.
+         */
+        const discarded = (agentId: string) =>
+          Effect.gen(function* () {
+            yield* stopped(agentId);
+            yield* fileSystem.remove(deviceAgentLayout(folder, agentId).folder, {
+              recursive: true,
+              force: true,
+            });
+          }).pipe(
+            Effect.catch(() =>
+              Effect.sync(() => report("a local agent's folder could not be removed")),
+            ),
+          );
+
         /** A files line's files written under the agent's folder, each at its mode; one outside the folder is never written. */
         const wroteFiles = (agentId: string, payload: unknown) =>
           Effect.gen(function* () {
@@ -646,7 +667,7 @@ export function composeLocalAgents(
             ),
           );
 
-        /** One line of the agent's, delivered: a runner started, written to, or stopped, or files written; every line but a launch settled at once. */
+        /** One line of the agent's, delivered: a runner started, written to, or stopped, files written, or the agent let go of; every line but a launch settled at once. */
         const delivered = (
           agentId: string,
           claimed: DeviceAgentClaimedLine,
@@ -673,6 +694,9 @@ export function composeLocalAgents(
                 break;
               case DEVICE_AGENT_LINE_KIND.STOP:
                 yield* stopped(agentId);
+                break;
+              case DEVICE_AGENT_LINE_KIND.DISCARD:
+                yield* discarded(agentId);
                 break;
             }
             yield* settle(line.id);
