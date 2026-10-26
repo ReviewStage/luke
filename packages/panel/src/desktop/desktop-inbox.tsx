@@ -33,6 +33,8 @@ import {
   ChannelMissing,
   ChannelReading,
   ChannelStream,
+  type PostMenuDoors,
+  type StreamChannel,
   useChannelStream,
 } from "../tasks/channel-stream.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
@@ -65,7 +67,12 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
-import { useChannelPlace, useChannels, useThreadChannel } from "../tasks/use-channels.js";
+import {
+  useArchivedChannels,
+  useChannelPlace,
+  useChannels,
+  useThreadChannel,
+} from "../tasks/use-channels.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { choiceOf, type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
@@ -260,11 +267,24 @@ function InboxShown({
   const streaming = useExperiment(EXPERIMENT.CHANNELS) && !paneOnly;
   const channelPlace = useChannelPlace();
   const channels = useChannels(streaming ? tasks.workspace?.id : undefined, tasks.shown);
+  // A channel chosen that is open no more is looked for among the archived ones, read only then, and shown to read where it is one.
+  const chosenGone =
+    streaming &&
+    channels.channels !== undefined &&
+    channelPlace.channelId !== undefined &&
+    !channels.channels.some((each) => each.id === channelPlace.channelId);
+  const archived = useArchivedChannels(chosenGone ? tasks.workspace?.id : undefined);
+  const archivedReading =
+    chosenGone && archived.channels === undefined && archived.failure === undefined;
   const channelState = channelShown(
     streaming ? channels.channels : undefined,
     channelPlace.channelId,
+    archived.channels,
   );
-  const channel = channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel : undefined;
+  const archivedShown =
+    channelState.kind === CHANNEL_SHOWN.ARCHIVED ? channelState.channel : undefined;
+  const channel: StreamChannel | undefined =
+    channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel : archivedShown;
   // Note that a phone shows one thing at a time across the screen: the list of channels its bar opens, a channel's stream, or a thread in place of the stream.
   const phone = room === SHELL_ROOM.NARROW;
   // A phone's list of channels stands while the list is asked for, as the bar's Channels asks, so the window's Back returns to it from a stream.
@@ -470,6 +490,18 @@ function InboxShown({
     });
     channelPlace.onOpenThread(thread.id);
   };
+  // A post's ⋯ marks, closes, and moves its thread, and opens its task or its agent where the pane's crumbs would.
+  const postMenu: PostMenuDoors = {
+    onMark: markItem,
+    onClose: closeItem,
+    onOpenTask: tasks.onShowTask,
+    onOpenAgent: (thread, holder) =>
+      holder?.kind === INBOX_HOLDER.TASK
+        ? tasks.onShowAgent(holder.task.id, thread.agentId)
+        : tasks.agentView.onOpen(thread.agentId),
+    onMove: channels.onMove,
+    channels: channels.channels ?? [],
+  };
   // A channel pressed on a phone's list opens on its stream, never on a thread left open in it.
   const openChannel = (channelId: string) => {
     channelPlace.onChoose(channelId);
@@ -484,7 +516,7 @@ function InboxShown({
     openThread,
     tasks.shown && channel !== undefined && !channelsListed && !sidePanel.fullScreen,
   );
-  // A phone's list of channels makes one from its "+", as the sidebar does, opening it once made.
+  // A phone's list of channels makes one from its "+", and edits one from its row's menu, as the sidebar does, opening one once made.
   const making = useChannelDialog({
     workspaceId: tasks.workspace?.id,
     channels,
@@ -634,12 +666,15 @@ function InboxShown({
                 {streaming ? (
                   channelsListed ? (
                     <ChannelList
-                      channels={channels.channels}
-                      failed={channels.failed}
+                      workspaceId={tasks.workspace?.id}
+                      channels={channels}
+                      shown={tasks.shown}
                       onOpen={openChannel}
                       onNew={() => making.askNew(false)}
-                      onRetry={channels.onRefresh}
+                      onEdit={making.askEdit}
                     />
+                  ) : archivedReading ? (
+                    <ChannelReading />
                   ) : channelState.kind === CHANNEL_SHOWN.MISSING ? (
                     <ChannelMissing
                       onGeneral={
@@ -658,6 +693,15 @@ function InboxShown({
                       shown={tasks.shown}
                       agents={named}
                       listedOf={listedOf}
+                      menuDoors={postMenu}
+                      archived={
+                        archivedShown === undefined
+                          ? undefined
+                          : {
+                              archivedAt: archivedShown.archivedAt,
+                              onUnarchive: () => channels.onUnarchive(archivedShown.id),
+                            }
+                      }
                       onOpen={openThread}
                       onLook={channels.onLook}
                       onAnswered={channels.onRefresh}

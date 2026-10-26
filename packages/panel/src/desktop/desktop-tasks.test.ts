@@ -1019,7 +1019,7 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   assert.equal(inbox.title(), "Ship it?");
   assert.deepEqual(marked, [`read:${SHIP.id}`]);
   const dot = (title: string) =>
-    inbox.row(title)?.querySelector(".inbox-row-gutter .inbox-row-unread") !== null;
+    inbox.row(title)?.querySelector(".luke-unread-gutter .luke-unread-dot") !== null;
   assert.deepEqual([dot("Ship it?"), dot("Roll back?")], [false, true]);
   const mark = inbox
     .row("Roll back?")

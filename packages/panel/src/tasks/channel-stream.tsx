@@ -8,6 +8,7 @@ import {
   openAskOf,
   threadNeedsReader,
 } from "@luke/features/inbox-wire";
+import { agoText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -21,11 +22,15 @@ import {
   CONTROL_GROUND,
   Comment,
   CommentSkeleton,
+  type ContextMenuProps,
   ControlGround,
   EmptyState,
   ERROR_STATE_PLACEMENT,
+  ErrorLine,
   ErrorState,
   IconButton,
+  MoreButton,
+  moreLabel,
   NOTE_LINE_LOOK,
   NoteLine,
   NotFoundIcon,
@@ -40,9 +45,11 @@ import {
   TOOLBAR_INSET,
   Toolbar,
   Tooltip,
+  UnreadMark,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
-import { ArrowUpIcon, SlidersHorizontalIcon } from "@luke/ui/icons";
+import { ArrowUpIcon, GLYPH, SlidersHorizontalIcon } from "@luke/ui/icons";
 import { askScroll } from "@luke/ui/scroll-asked";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -53,7 +60,7 @@ import {
   ConversationScrollButton,
   FLOATING_OVER_LOG_CLASS,
 } from "../ai-elements/conversation.js";
-import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
+import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
 import { usePerson } from "../member-directory.js";
 import { type AgentLine, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import {
@@ -70,15 +77,20 @@ import {
   viewedThreads,
 } from "./channels-model.js";
 import { AskControls } from "./inbox-ask-controls.js";
+import type { InboxCloser } from "./inbox-close.js";
 import { VIEW_OPTIONS } from "./inbox-columns.js";
+import { useInboxItemActions } from "./inbox-item-actions.js";
 import {
   EMPTY_INBOX_DRAFT,
   INBOX_HOLDER,
+  type InboxHolder,
   type InboxListed,
   inboxThreadSend,
+  isUnread,
   knownAsk,
 } from "./inbox-model.js";
 import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
+import { useMoveThreadDialog } from "./move-thread-dialog.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { type ChannelThreadsControl, useChannelThreads, useChannelView } from "./use-channels.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
@@ -105,6 +117,13 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
  * answered, since the window's own answers are laid over the read
  * (`inbox-settling.ts`). A press anywhere on a post opens its thread in the
  * side panel beside the stream, or in its place on a phone (`onOpen`).
+ * An unread thread, changed since the reader last read it or marked
+ * unread, wears the Inbox's blue dot in a gutter before its writer's face
+ * until it is opened (`UnreadMark`). Each post's ⋯, at its head's end under
+ * the pointer, and a right-click or a long press on the post, offer the
+ * thread's menu: Mark as read or unread, Copy link, Open task and Open
+ * agent, Move to channel, which asks which (`move-thread-dialog.tsx`), and
+ * Resolve without answering, asked first, while its ask stands open.
  * While a post that needs the reader is scrolled out of sight above, a
  * button floats over the stream's head counting them,
  * and a press scrolls the stream's own box to the nearest; never
@@ -137,9 +156,9 @@ const STREAM =
 const STREAM_BODY =
   "channel-stream-body flex flex-col gap-luke-4 px-column-inset pt-luke-8 pb-luke-16";
 
-/** One post: its own ground, the hover's fill, the chosen thread's, or the attention tint where it needs the reader. */
+/** One post: the unread dot's gutter and the post's words, on its own ground, the hover's fill, the chosen thread's, or the attention tint where it needs the reader. */
 const POST =
-  "channel-post relative rounded-luke-10 px-luke-12 py-luke-8 hover:bg-muted data-[chosen]:bg-fill-selected data-[needs]:bg-attention-tint";
+  "channel-post relative flex gap-luke-4 rounded-luke-10 py-luke-8 ps-luke-4 pe-luke-12 hover:bg-muted data-[chosen]:bg-fill-selected data-[needs]:bg-attention-tint";
 
 /** A post's words and what stands under them. */
 const POST_BODY = "channel-post-body flex min-w-0 flex-col gap-luke-6";
@@ -149,6 +168,9 @@ const POST_LINE = "channel-post-line relative z-1 flex flex-wrap items-center ga
 
 /** The way up to an older post that needs the reader, floating over the stream's head on a ground of its own, so no post's words show through it. */
 const JUMP = `channel-jump ${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 bg-button-ground [--luke-button-ground:var(--luke-color-well)]`;
+
+/** What a reader hears an unread post is, the dot saying it to the eye. */
+const UNREAD_WORD = "Unread";
 
 /** What the line before the first thread posted since the reader last looked says. */
 const NEW_LINE = "New";
@@ -364,14 +386,22 @@ function PostAsk({
   );
 }
 
-/** A post's own box, its ground marking it chosen or needing the reader. */
+/** A post's own box, its ground marking it chosen or needing the reader, the unread dot in a gutter before it, and its menu where it has one. */
 function PostFrame({
   chosen,
   needs,
+  unread = false,
+  contextMenu,
+  menu,
   children,
 }: {
   chosen: boolean;
   needs: boolean;
+  unread?: boolean;
+  /** The right-click and long press that open the post's menu. */
+  contextMenu?: ContextMenuProps | undefined;
+  /** The post's menu and its question, while drawn. */
+  menu?: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -380,8 +410,12 @@ function PostFrame({
       data-channel-post=""
       data-chosen={chosen ? "" : undefined}
       data-needs={needs ? "" : undefined}
+      data-unread={unread ? "" : undefined}
+      {...contextMenu}
     >
-      {children}
+      <UnreadMark unread={unread} />
+      <div className="channel-post-comment min-w-0 flex-1">{children}</div>
+      {menu}
     </div>
   );
 }
@@ -399,13 +433,160 @@ export function ChannelStreamSkeleton(): React.JSX.Element {
   );
 }
 
-/** One thread as a post in the stream. */
+/** What heads a stream: an open channel, or an archived one, read as one. */
+export type StreamChannel = Pick<Channel, "id" | "name" | "purpose" | "lookedAt">;
+
+/** An archived channel's stream: when it was archived, and the door that opens it again; what refused it, or none where it opened. */
+export interface ArchivedStream {
+  readonly archivedAt: number;
+  readonly onUnarchive: () => Promise<string | undefined>;
+}
+
+/** What an archived stream's head and foot say. */
+const ARCHIVED_WORDS = {
+  UNARCHIVE: "Unarchive",
+  UNARCHIVING: "Unarchiving",
+} as const;
+
+/** An archived stream's Unarchive, at its head's end, and what refused it, under its posts. */
+function useUnarchive(archived: ArchivedStream | undefined) {
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  if (archived === undefined) return { button: null, refusal: undefined };
+  const press = () => {
+    setBusy(true);
+    setRefusal(undefined);
+    archived.onUnarchive().then((refused) => {
+      setBusy(false);
+      setRefusal(refused);
+    });
+  };
+  return {
+    button: (
+      <Button
+        size={BUTTON_SIZE.COMPACT}
+        variant={BUTTON_VARIANT.OUTLINE}
+        busy={busy}
+        busyLabel={ARCHIVED_WORDS.UNARCHIVING}
+        onClick={press}
+      >
+        {ARCHIVED_WORDS.UNARCHIVE}
+      </Button>
+    ),
+    refusal,
+  };
+}
+
+/** What a post's ⋯ acts through, as the stream's owner hands them down. */
+export interface PostMenuDoors {
+  /** Marks the thread read or unread. */
+  readonly onMark: (item: InboxItem, unread: boolean) => void;
+  /** Closes an open ask without an answer, asked first; none where the stream offers no close. */
+  readonly onClose: InboxCloser | undefined;
+  /** Opens the task that holds a thread. */
+  readonly onOpenTask: (taskId: string) => void;
+  /** Opens the thread's agent, on its task where a task holds it. */
+  readonly onOpenAgent: (thread: ChannelThread, holder: InboxHolder | undefined) => void;
+  /** Moves a thread into another open channel; what refused it, or none where it moved. */
+  readonly onMove: (threadId: string, channelId: string) => Promise<string | undefined>;
+  /** The workspace's open channels, which Move to channel lists. */
+  readonly channels: readonly Channel[];
+}
+
+/** What a post's ⋯ calls its thread. */
+const POST_THING = "Thread";
+
+/** What a post's ⋯ offers of its own between the thread's link and its close. */
+const POST_WORDS = {
+  OPEN_TASK: "Open task",
+  OPEN_AGENT: "Open agent",
+  MOVE: "Move to channel…",
+} as const;
+
+/**
+ * A post's ⋯, at its head's end under the pointer or the keyboard, and the
+ * same menu on a right-click or a long press anywhere on the post: the
+ * thread's own acts as every menu of an Inbox item offers them
+ * (`inbox-item-actions.tsx`), with Open task where a task holds it, Open
+ * agent, and Move to channel between its link and its close.
+ */
+function usePostMenu({
+  item,
+  holder,
+  chosen,
+  shown,
+  menuDoors,
+  onAskMove,
+}: {
+  item: ChannelThread;
+  holder: InboxHolder | undefined;
+  chosen: boolean;
+  shown: boolean;
+  menuDoors: PostMenuDoors;
+  onAskMove: ((thread: ChannelThread) => void) | undefined;
+}) {
+  const menu = useMenu(shown);
+  const { close, groups } = useInboxItemActions(holder, item, {
+    onMark: menuDoors.onMark,
+    onClose: menuDoors.onClose,
+    shown,
+    keyed: chosen,
+  });
+  const opens: MenuAction[] = [
+    ...(holder?.kind === INBOX_HOLDER.TASK
+      ? [
+          {
+            label: POST_WORDS.OPEN_TASK,
+            detail: holder.task.name,
+            icon: <GLYPH.TASK />,
+            onSelect: () => menuDoors.onOpenTask(holder.task.id),
+          },
+        ]
+      : []),
+    {
+      label: POST_WORDS.OPEN_AGENT,
+      icon: <GLYPH.AGENT />,
+      onSelect: () => menuDoors.onOpenAgent(item, holder),
+    },
+  ];
+  const move: MenuAction[] =
+    onAskMove === undefined
+      ? []
+      : [{ label: POST_WORDS.MOVE, icon: <GLYPH.MOVE />, onSelect: () => onAskMove(item) }];
+  const entries = groups([], [opens, move]);
+  return {
+    contextMenu: menu.contextMenu(),
+    button: (
+      <div className="comment-tools">
+        <MoreButton thing={POST_THING} size={BUTTON_SIZE.COMPACT} {...menu.trigger()} />
+      </div>
+    ),
+    drawn: (
+      <>
+        {menu.drawn === undefined ? null : (
+          <ActionMenu
+            label={moreLabel(POST_THING)}
+            menu={menu.drawn}
+            groups={entries}
+            onClose={menu.close}
+          />
+        )}
+        {close.dialog}
+      </>
+    ),
+  };
+}
+
+/** One thread as a post in the stream, the unread dot in a gutter before it until it is opened, as the Inbox's rows wear it. */
 function ThreadPost({
   item,
   doors,
   chosen,
   readerId,
   now,
+  shown,
+  menuDoors,
+  onAskMove,
   onPick,
   onOpen,
 }: {
@@ -414,20 +595,45 @@ function ThreadPost({
   chosen: boolean;
   readerId: string | undefined;
   now: number;
-  onPick: (item: InboxItem, label: string) => void;
+  shown: boolean;
+  menuDoors: PostMenuDoors;
+  onAskMove: ((thread: ChannelThread) => void) | undefined;
+  /** Answers a decision from the post; none where the stream is read-only, which offers its asks nowhere. */
+  onPick: ((item: InboxItem, label: string) => void) | undefined;
   onOpen: () => void;
 }): React.JSX.Element {
   const first = item.thread?.[0];
   const actor = useWriter(first, item, doors);
   const replies = repliesLine(item, readerId);
   const needs = threadNeedsReader(item, readerId);
+  const unread = isUnread(item);
+  const menu = usePostMenu({
+    item,
+    holder: doors.listed?.holder,
+    chosen,
+    shown,
+    menuDoors,
+    onAskMove,
+  });
   return (
-    <PostFrame chosen={chosen} needs={needs}>
+    <PostFrame
+      chosen={chosen}
+      needs={needs}
+      unread={unread}
+      contextMenu={menu.contextMenu}
+      menu={menu.drawn}
+    >
       <Comment
         author={commentAuthor(actor)}
         nameRef={<ActorRef actor={actor} nameOnly />}
         at={item.postedAt}
         now={now}
+        trailing={
+          <>
+            {unread ? <VisuallyHidden>{UNREAD_WORD}</VisuallyHidden> : null}
+            {menu.button}
+          </>
+        }
       >
         <div className={POST_BODY}>
           <CardPress reach={CARD_PRESS_REACH.CARD} label={`Open ${item.title}`} onPress={onOpen}>
@@ -440,7 +646,7 @@ function ThreadPost({
           )}
           {/* Note that on the attention tint the ask's controls stand on the column's ground, so they read gray as in the thread. */}
           <ControlGround ground={needs ? CONTROL_GROUND.OPAQUE : CONTROL_GROUND.CLEAR}>
-            <PostAsk item={item} onPick={onPick} onOpen={onOpen} />
+            {onPick === undefined ? null : <PostAsk item={item} onPick={onPick} onOpen={onOpen} />}
           </ControlGround>
           <div className={POST_LINE}>
             {replies.repliers.map((reply) => (
@@ -590,11 +796,13 @@ export function ChannelStream({
   shown,
   agents,
   listedOf,
+  menuDoors,
+  archived,
   onOpen,
   onLook,
   onAnswered,
 }: {
-  channel: Channel;
+  channel: StreamChannel;
   /** The channel's stream as its holder reads it (`useChannelStream`). */
   stream: ChannelStreamRead;
   /** The thread open in the side panel beside the stream, where one is. */
@@ -608,6 +816,10 @@ export function ChannelStream({
   /** The open thread's agents, as its pane names them, which every post naming one of them names it by. */
   agents: StreamAgents;
   listedOf: (itemId: string) => InboxListed | undefined;
+  /** What each post's ⋯ acts through. */
+  menuDoors: PostMenuDoors;
+  /** Where the channel is archived, which draws its threads to read alone: no ask answered from a post and no thread moved, and Unarchive at its head. */
+  archived?: ArchivedStream | undefined;
   onOpen: (thread: ChannelThread) => void;
   /** Stamps the reader's look at the channel, as they leave it. */
   onLook: (channelId: string) => void;
@@ -628,6 +840,15 @@ export function ChannelStream({
   const above = useNeedsAbove(log, `${channel.id}:${view}:${viewed.length}:${needsCount}`);
   useChosenInView(log, chosenId);
   const { onRefresh } = read;
+  const unarchive = useUnarchive(archived);
+  const move = useMoveThreadDialog({
+    channels: menuDoors.channels,
+    from: channel.id,
+    threads: read.threads ?? NO_THREADS,
+    shown,
+    onMove: menuDoors.onMove,
+    onMoved: onRefresh,
+  });
   const pick = (item: InboxItem, label: string) => {
     const message = inboxThreadSend(item.thread ?? [], { ...EMPTY_INBOX_DRAFT, choices: [label] });
     if (message?.answers === undefined) return;
@@ -655,7 +876,10 @@ export function ChannelStream({
         detail={channel.purpose}
         end={TOOLBAR_INSET.COLUMN}
         actions={
-          <StreamViewOptions view={view} needsCount={needsCount} shown={shown} onView={onView} />
+          <>
+            {unarchive.button}
+            <StreamViewOptions view={view} needsCount={needsCount} shown={shown} onView={onView} />
+          </>
         }
       />
       {read.threads === undefined && read.failure !== undefined ? (
@@ -684,7 +908,10 @@ export function ChannelStream({
                   chosen={row.thread.id === chosenId}
                   readerId={readerId}
                   now={now}
-                  onPick={pick}
+                  shown={shown}
+                  menuDoors={menuDoors}
+                  onAskMove={archived === undefined ? move.ask : undefined}
+                  onPick={archived === undefined ? pick : undefined}
                   onOpen={() => onOpen(row.thread)}
                 />
               ) : row.kind === STREAM_ROW.DAY ? (
@@ -696,6 +923,11 @@ export function ChannelStream({
                   {NEW_LINE}
                 </StreamDivider>
               ),
+            )}
+            {archived === undefined || read.threads === undefined ? null : (
+              <NoteLine look={NOTE_LINE_LOOK.CENTRED}>
+                {`#${channel.name} was archived ${agoText(archived.archivedAt, now)}. Its threads stay here to read.`}
+              </NoteLine>
             )}
             {/* Note that a refresh failing over the threads held keeps them, and says so under the newest. */}
             {read.threads !== undefined && read.failure !== undefined ? (
@@ -719,6 +951,9 @@ export function ChannelStream({
           )}
         </Conversation>
       )}
+      {/* Note that Unarchive's refusal stands outside the posts, so a stream whose first read failed still says why. */}
+      <ErrorLine>{unarchive.refusal}</ErrorLine>
+      {move.dialog}
     </StreamColumn>
   );
 }

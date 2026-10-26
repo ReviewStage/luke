@@ -8,7 +8,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import type { Channel } from "@luke/features/channel-wire";
+import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnsweredView,
@@ -5685,7 +5685,7 @@ test("no row draws the attention mark, which an open item nearly always would: t
       mark: meta?.querySelector(".attention-mark") !== null,
       face: meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
       said: meta?.querySelector(".luke-visually-hidden")?.textContent,
-      dot: row.querySelector(".inbox-row-unread") !== null,
+      dot: row.querySelector(".luke-unread-dot") !== null,
       unread: row.closest("li")?.dataset.unread === "true",
     };
   };
@@ -5768,7 +5768,7 @@ test("a teammate's open item of an agent with no plan is listed under the automa
 function unreadOf(page: HTMLElement, title: string): boolean | "?" {
   const row = rowNamed(page, title);
   const marks = [
-    row.querySelector(".inbox-row-gutter .inbox-row-unread") !== null,
+    row.querySelector(".luke-unread-gutter .luke-unread-dot") !== null,
     row.closest("li")?.dataset.unread === "true",
     [...row.querySelectorAll(".luke-list-row-meta .luke-visually-hidden")].some(
       (each) => each.textContent === "Unread",
@@ -9498,6 +9498,73 @@ const GENERAL: Channel = {
   waiting: 0,
 };
 
+test("an unread post wears the dot, and its ⋯ offers the thread's acts, its Move to channel moving it to the channel picked", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  const moves: { threadId: string; channelId: string }[] = [];
+  const previous = fakeActsAnswer();
+  const done = (value: unknown): Promise<FakeActAnswer> =>
+    Promise.resolve({ status: FAKE_ANSWER.DONE, value } as FakeActAnswer);
+  const threads = [
+    { ...THRESHOLD, unread: true, channelId: GENERAL.id },
+    { ...EXPIRY, channelId: GENERAL.id },
+  ];
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.CHANNELS_LIST) {
+        return done({ channels: [GENERAL, APP_CHANNEL] });
+      }
+      if (request.kind === ACT_KIND.CHANNELS_THREADS) return done({ threads });
+      if (request.kind === ACT_KIND.CHANNELS_MOVE) {
+        moves.push(request.payload);
+        return done({ thread: { ...threads[0], channelId: request.payload.channelId } });
+      }
+      return previous(request);
+    },
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  const post = (title: string) =>
+    [...page.querySelectorAll<HTMLElement>(".channel-stream [data-channel-post]")].find((each) =>
+      each.textContent?.includes(title),
+    ) ?? assert.fail(`the post ${title} is drawn`);
+  assert.ok(
+    post(THRESHOLD.title).querySelector(".luke-unread-dot"),
+    "the unread post wears the dot",
+  );
+  assert.equal(post(EXPIRY.title).querySelector(".luke-unread-dot"), null, "a read one does not");
+
+  act(() =>
+    (
+      post(THRESHOLD.title).querySelector<HTMLElement>('button[aria-label="Thread actions"]') ??
+      assert.fail("the post has its ⋯")
+    ).click(),
+  );
+  assert.deepEqual(menuWords(), [
+    "Mark as read",
+    "—",
+    "Copy link",
+    "—",
+    `Open task${BILLING.name}`,
+    "Open agent",
+    "—",
+    "Move to channel…",
+    "—",
+    "Resolve without answering",
+  ]);
+  act(() => menuItem("Move to channel…").click());
+  await settle();
+  const move =
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.textContent === "Move to #app",
+    ) ?? assert.fail("the dialog offers the other channel");
+  act(() => move.click());
+  await settle();
+  assert.deepEqual(moves, [{ threadId: THRESHOLD.id, channelId: APP_CHANNEL.id }]);
+});
+
 test("a post pressed in a channel's stream opens its thread in the side panel, another post's press swaps the panel to its thread, and hiding the panel closes the thread while the stream stands as it stood, its look not yet stamped", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
@@ -9621,6 +9688,10 @@ function answerChannels(answers: {
   follow?: AsyncIterableIterator<unknown>;
   /** A channel made or archived, before the channels as they then stand are answered. */
   onWrite?: (write: AnyAct) => void;
+  /** The workspace's archived channels, or why their read fails; the read is refused where none are given. */
+  archived?: () => readonly ArchivedChannel[] | { readonly failure: string };
+  /** Why the service refuses an unarchive, where it does. */
+  unarchiveRefused?: string;
 }): void {
   const previous = fakeActsAnswer();
   const done = (value: unknown): Promise<FakeActAnswer> =>
@@ -9634,14 +9705,25 @@ function answerChannels(answers: {
       if (
         request.kind === ACT_KIND.CHANNELS_LOOK ||
         request.kind === ACT_KIND.CHANNELS_CREATE ||
-        request.kind === ACT_KIND.CHANNELS_ARCHIVE
+        request.kind === ACT_KIND.CHANNELS_ARCHIVE ||
+        request.kind === ACT_KIND.CHANNELS_UNARCHIVE
       ) {
         answers.onWrite?.(request);
+        if (
+          request.kind === ACT_KIND.CHANNELS_UNARCHIVE &&
+          answers.unarchiveRefused !== undefined
+        ) {
+          return done({ failure: answers.unarchiveRefused });
+        }
         return done({ channels: answers.channels?.() ?? [GENERAL] });
       }
       if (request.kind === ACT_KIND.CHANNELS_THREADS) {
         const read = answers.threads?.(request.payload.before) ?? Promise.resolve(threadsPage());
         return read.then((value) => ({ status: FAKE_ANSWER.DONE, value }) as FakeActAnswer);
+      }
+      if (request.kind === ACT_KIND.CHANNELS_ARCHIVED && answers.archived !== undefined) {
+        const archived = answers.archived();
+        return done("failure" in archived ? archived : { channels: archived });
       }
       if (request.kind === ACT_KIND.CHANNELS_FOLLOW && answers.follow !== undefined) {
         return done(answers.follow);
@@ -9739,6 +9821,129 @@ test("a channel archived or unknown says so in the stream's place, with the way 
   );
   await settle();
   assert.ok(page.querySelector('section[aria-label="#general"]'), "#general's stream stands");
+});
+
+test("an archived channel chosen shows its threads to read, offering no ask and no move, and Unarchive opens it again", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  const old: ArchivedChannel = {
+    id: "c0ffee00-0000-4000-8000-0000000000aa",
+    name: "old-app",
+    purpose: "The apps, before the split",
+    project: false,
+    createdAt: 1,
+    archivedAt: 2,
+  };
+  const unarchived: string[] = [];
+  answerChannels({
+    archived: () => [old],
+    onWrite: (write) => {
+      if (write.kind === ACT_KIND.CHANNELS_UNARCHIVE) unarchived.push(write.payload.channelId);
+    },
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  act(() => channelPlaceNow?.onChoose(old.id));
+  await settle();
+  const stream =
+    page.querySelector<HTMLElement>('section[aria-label="#old-app"]') ??
+    assert.fail("the archived channel's stream stands");
+  assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title]);
+  assert.equal(stream.querySelector(".channel-post-ask"), null, "no ask is answered from a post");
+  assert.match(stream.textContent ?? "", /#old-app was archived/u);
+
+  act(() =>
+    (
+      stream.querySelector<HTMLElement>('button[aria-label="Thread actions"]') ??
+      assert.fail("a post has its ⋯")
+    ).click(),
+  );
+  assert.ok(!menuWords().includes("Move to channel…"), "no thread is moved out of it");
+  act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+
+  act(() =>
+    (
+      [...stream.querySelectorAll<HTMLButtonElement>("button")].find(
+        (each) => each.textContent === "Unarchive",
+      ) ?? assert.fail("the stream offers Unarchive")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(unarchived, [old.id]);
+  // Note that the window's channel place outlives the test, so it goes back to #general for the next.
+  act(() => channelPlaceNow?.onChoose(GENERAL.id));
+});
+
+test("an archived channel whose threads could not be read still says why its Unarchive was refused", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  const old: ArchivedChannel = {
+    id: "c0ffee00-0000-4000-8000-0000000000ab",
+    name: "old-app",
+    purpose: "The apps, before the split",
+    project: false,
+    createdAt: 1,
+    archivedAt: 2,
+  };
+  answerChannels({
+    archived: () => [old],
+    threads: () => Promise.resolve({ failure: "unanswered" }),
+    unarchiveRefused: "name-taken",
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  act(() => channelPlaceNow?.onChoose(old.id));
+  await settle();
+  const stream =
+    page.querySelector<HTMLElement>('section[aria-label="#old-app"]') ??
+    assert.fail("the archived channel's stream stands");
+  assert.match(stream.textContent ?? "", /Could not read #old-app/u);
+
+  act(() =>
+    (
+      [...stream.querySelectorAll<HTMLButtonElement>("button")].find(
+        (each) => each.textContent === "Unarchive",
+      ) ?? assert.fail("the stream offers Unarchive")
+    ).click(),
+  );
+  await settle();
+  assert.match(stream.textContent ?? "", /Another channel already goes by that name\./u);
+  act(() => channelPlaceNow?.onChoose(GENERAL.id));
+});
+
+test("an archived channel shown stays shown when a later read of the archived channels fails", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  const old: ArchivedChannel = {
+    id: "c0ffee00-0000-4000-8000-0000000000ac",
+    name: "old-app",
+    purpose: "The apps, before the split",
+    project: false,
+    createdAt: 1,
+    archivedAt: 2,
+  };
+  let archivedReads = 0;
+  const follow = channelFollow();
+  answerChannels({
+    follow: follow.stream,
+    archived: () => {
+      archivedReads += 1;
+      return archivedReads === 1 ? [old] : { failure: "unanswered" };
+    },
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  act(() => channelPlaceNow?.onChoose(old.id));
+  await settle();
+  assert.ok(page.querySelector('section[aria-label="#old-app"]'), "the archived stream stands");
+
+  act(() => follow.push({ moved: [GENERAL.id] }));
+  await settle();
+  assert.ok(archivedReads > 1, "the archived channels were read again");
+  assert.ok(page.querySelector('section[aria-label="#old-app"]'), "a failed read kept it shown");
+  assert.equal(page.querySelector('section[aria-label="Channel not found"]'), null);
+  act(() => channelPlaceNow?.onChoose(GENERAL.id));
 });
 
 test("a thread opened in a channel's stream that is gone says so beside the stream, with the way back to it", async () => {

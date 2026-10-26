@@ -2666,7 +2666,7 @@ svg.lucide {
   white-space: nowrap;
 }
 
-/* A comment's tools stand at its corner under the pointer or the keyboard. */
+/* A comment's tools, and a channel's post's, stand at its corner under the pointer or the keyboard. */
 .comment-tools {
   position: relative;
   z-index: 1;
@@ -2682,7 +2682,8 @@ svg.lucide {
 }
 
 @media (hover: hover) {
-  .comment-entry:hover .comment-tools {
+  .comment-entry:hover .comment-tools,
+  .channel-post:hover .comment-tools {
     opacity: 1;
   }
 }

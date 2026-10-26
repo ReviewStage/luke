@@ -35,6 +35,7 @@ import {
   chooseChannel,
   listChannelWorkspace,
   openChannelThread,
+  useArchivedChannels,
   useChannelPlace,
   useChannels,
 } from "./tasks/use-channels.js";
@@ -1248,6 +1249,65 @@ test("with Channels on, a channel chosen and a thread opened in it are each a st
   );
   act(() => window.history().onBack());
   assert.equal(place().channelId, general.id);
+  handState({});
+});
+
+test("with Channels on, an archived channel shown, once its stream read the archived channels, is a step named and linked by it", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  const workspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const general = { id: "a1000001-0000-4000-8000-000000000001", name: "general" };
+  const old = { id: "a1000001-0000-4000-8000-0000000000aa", name: "old-app" };
+  const channel = (each: { id: string; name: string }) => ({
+    ...each,
+    purpose: "",
+    project: false,
+    createdAt: 1,
+  });
+  fakeActPort({
+    [ACT_KIND.CHANNELS_LIST]: () =>
+      Promise.resolve({ channels: [{ ...channel(general), waiting: 0 }] }),
+    [ACT_KIND.CHANNELS_ARCHIVED]: () =>
+      Promise.resolve({ channels: [{ ...channel(old), archivedAt: 2 }] }),
+  });
+  listChannelWorkspace(workspace.id);
+  await channelsRead(workspace.id);
+  // Note that the stream showing an archived channel reads the archived channels, as the Inbox does.
+  const ArchivedReader = () => {
+    useArchivedChannels(workspace.id);
+    return null;
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(ArchivedReader))));
+  await settle();
+  const base = tasksControl();
+  const window = mount(
+    tasksControl({
+      workspace,
+      workspaces: [workspace],
+      inboxView: {
+        ...base.inboxView,
+        open: true,
+        onOpen: () => undefined,
+        onChoose: () => undefined,
+      },
+    }),
+    memoryHistory(),
+    stepTitleOf,
+  );
+  await settle();
+  press();
+  act(() => chooseChannel(old.id));
+  await settle();
+
+  assert.equal(window.addresses().at(-1), `/acme/channel/${old.id}`);
+  act(() => chooseChannel(general.id));
   handState({});
 });
 

@@ -14,6 +14,7 @@ import {
   channelShown,
   channelSlug,
   channelStep,
+  channelUnread,
   repliesLine,
   STREAM_ROW,
   streamRows,
@@ -27,8 +28,9 @@ import {
  * thread someone else posted since the reader looked; a post's replies line
  * says who replied and who the ask waits on; a typed name is written as a
  * channel's; the stream opens on #general where none is chosen and says a
- * channel chosen that stands no more is gone; and ⌥↑ and ⌥↓ walk the
- * channels in the sidebar's order, wrapping round.
+ * channel chosen that stands no more is gone; ⌥↑ and ⌥↓ walk the channels
+ * in the sidebar's order, wrapping round; and a channel reads unread while
+ * something was posted since the reader looked.
  */
 
 const ME = { userId: "user-me", name: "Me Reader" } as const;
@@ -225,6 +227,16 @@ test("the stream opens on the channel chosen while it stands, on #general where 
   assert.deepEqual(channelShown(undefined, "c-app"), { kind: CHANNEL_SHOWN.NONE });
 });
 
+test("a channel chosen among the archived ones is shown to read, and one neither open nor archived is gone", () => {
+  const general = channelOf("c-general", "general");
+  const old = { ...channelOf("c-old", "old-app"), archivedAt: NOON };
+  assert.deepEqual(channelShown([general], "c-old", [old]), {
+    kind: CHANNEL_SHOWN.ARCHIVED,
+    channel: old,
+  });
+  assert.deepEqual(channelShown([general], "c-unknown", [old]), { kind: CHANNEL_SHOWN.MISSING });
+});
+
 test("the channels are walked in the sidebar's order, the standing then the projects', wrapping round", () => {
   // Note that the service's order mixes a project's channel among the standing ones.
   const channels = [
@@ -239,4 +251,20 @@ test("the channels are walked in the sidebar's order, the standing then the proj
   assert.equal(walk("c-app", -1), "launch", "up from the first wraps to the last");
   assert.equal(walk(undefined, 1), "app", "down from no channel shown is the first");
   assert.equal(walk(undefined, -1), "launch", "up from no channel shown is the last");
+});
+
+test("a channel reads unread once something is posted after the reader's look, or where they never looked at one holding a thread", () => {
+  const channel = (seen: Partial<Channel>): Channel => ({
+    id: "c-app",
+    name: "app",
+    purpose: "A purpose",
+    project: false,
+    createdAt: NOON,
+    waiting: 0,
+    ...seen,
+  });
+  assert.equal(channelUnread(channel({ lookedAt: NOON, latestPostedAt: NOON + HOUR })), true);
+  assert.equal(channelUnread(channel({ lookedAt: NOON + HOUR, latestPostedAt: NOON })), false);
+  assert.equal(channelUnread(channel({ latestPostedAt: NOON })), true);
+  assert.equal(channelUnread(channel({})), false);
 });

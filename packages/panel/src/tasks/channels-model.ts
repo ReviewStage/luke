@@ -1,4 +1,4 @@
-import type { Channel, ChannelThread } from "@luke/features/channel-wire";
+import type { ArchivedChannel, Channel, ChannelThread } from "@luke/features/channel-wire";
 import {
   type InboxItem,
   type InboxMessage,
@@ -19,7 +19,9 @@ import {
  * the threads of their own tasks, those asking them, and those they wrote
  * in; Everyone, every thread; and Needs me, the open asks addressed to them
  * alone. A thread needs the reader while its ask stands open and it waits
- * on them, which the stream marks on the attention tint and nothing else.
+ * on them, which the stream marks on the attention tint and nothing else. A
+ * channel reads as unread while something was posted in it since the
+ * reader last looked, which its row says in the unread weight.
  */
 
 /** The channel every thread that names none goes to, which is never renamed or archived; the service mints it under this name (`GENERAL_CHANNEL`). */
@@ -238,6 +240,17 @@ export function sectionChannels(
   return channels.filter((channel) => channel.project === section.project);
 }
 
+/**
+ * Whether a channel reads as unread to the reader: something they may read
+ * was posted in it since they last looked, or they never looked at one that
+ * holds a thread.
+ */
+export function channelUnread(channel: Channel): boolean {
+  const { latestPostedAt, lookedAt } = channel;
+  if (latestPostedAt === undefined) return false;
+  return lookedAt === undefined || latestPostedAt > lookedAt;
+}
+
 /** Whether a channel may be renamed or archived: any but #general. */
 export function channelEditable(channel: Channel): boolean {
   return channel.name !== GENERAL_CHANNEL_NAME;
@@ -248,10 +261,12 @@ export function generalChannel(channels: readonly Channel[]): Channel | undefine
   return channels.find((channel) => channel.name === GENERAL_CHANNEL_NAME);
 }
 
-/** What the Inbox's place shows of the workspace's channels: one of them, that the channel chosen stands no more, or none. */
+/** What the Inbox's place shows of the workspace's channels: one of them, an archived one to read, that the channel chosen stands nowhere, or none. */
 export const CHANNEL_SHOWN = {
   CHANNEL: "channel",
-  /** The channel chosen is archived, or was never one of the workspace's open channels. */
+  /** The channel chosen is one of the workspace's archived channels, its threads drawn to read. */
+  ARCHIVED: "archived",
+  /** The channel chosen is neither open nor among the archived channels given. */
   MISSING: "missing",
   /** The channels are not read yet, or the workspace has none. */
   NONE: "none",
@@ -259,22 +274,30 @@ export const CHANNEL_SHOWN = {
 
 export type ChannelShown =
   | { readonly kind: typeof CHANNEL_SHOWN.CHANNEL; readonly channel: Channel }
+  | { readonly kind: typeof CHANNEL_SHOWN.ARCHIVED; readonly channel: ArchivedChannel }
   | { readonly kind: typeof CHANNEL_SHOWN.MISSING }
   | { readonly kind: typeof CHANNEL_SHOWN.NONE };
 
 /**
  * What the place shows once the channels are read: the channel chosen
- * where it is still open, a missing channel's state where it is not, so a
- * link to an archived or unknown channel says so rather than showing
- * another, and #general, else the first, while nothing is chosen.
+ * where it is still open, or where it is among the `archived` channels
+ * given, that one to read; a missing channel's state where it is neither,
+ * so a link to an unknown channel says so rather than showing another; and
+ * #general, else the first, while nothing is chosen.
  */
 export function channelShown(
   channels: readonly Channel[] | undefined,
   chosenId: string | undefined,
+  archived: readonly ArchivedChannel[] = [],
 ): ChannelShown {
   if (channels === undefined) return { kind: CHANNEL_SHOWN.NONE };
   const chosen = channels.find((channel) => channel.id === chosenId);
-  if (chosenId !== undefined && chosen === undefined) return { kind: CHANNEL_SHOWN.MISSING };
+  if (chosenId !== undefined && chosen === undefined) {
+    const gone = archived.find((channel) => channel.id === chosenId);
+    return gone === undefined
+      ? { kind: CHANNEL_SHOWN.MISSING }
+      : { kind: CHANNEL_SHOWN.ARCHIVED, channel: gone };
+  }
   const channel = chosen ?? generalChannel(channels) ?? channels[0];
   return channel === undefined
     ? { kind: CHANNEL_SHOWN.NONE }
