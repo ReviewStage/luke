@@ -4,6 +4,7 @@ import { MOTION_DELAY_MS } from "@luke/brand";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
+import { holdExits } from "../../testing/held-exits.js";
 import { Tooltip } from "../tooltip/hint.js";
 import {
   MENU_DETAIL,
@@ -416,6 +417,42 @@ test("resting on one submenu's item after another's opens the second's submenu, 
   expect(openMenu("Group by")).toBeNull();
   pointerMove(button("Order by"), button("Name"));
   expect(openMenu("Order by")).not.toBeNull();
+});
+
+test("a value that stays, pressed in the second submenu the pointer opened once the first's exit has played, is chosen with both menus standing", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  try {
+    const chosen: Chosen = [];
+    const value = (label: string) => ({ ...action(label, chosen), checked: false, stays: true });
+    mount(
+      createElement(Harness, {
+        groups: [
+          [
+            { label: "Status", items: [value("Todo")] },
+            { label: "Priority", items: [value("High")] },
+          ],
+        ],
+      }),
+    );
+    press(button("More"));
+    pointerMove(null, button("Status"));
+    pointerMove(button("Status"), button("Priority"));
+    act(() => vi.advanceTimersToNextFrame());
+    await act(async () => exits.finish());
+    act(() => {
+      button("High").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    });
+    press(button("High"));
+    expect(chosen).toEqual(["High"]);
+    // Note that a menu closing is still drawn while its exit is held, so standing is read as not ending.
+    const standing = (label: string) =>
+      document.querySelector(`[role="menu"][aria-label="${label}"]:not([data-ending-style])`);
+    expect(standing("Priority")).not.toBeNull();
+    expect(standing("Plan actions")).not.toBeNull();
+  } finally {
+    exits.restore();
+  }
 });
 
 test("a press or Right on an item whose submenu the pointer opened takes the keyboard into it", () => {

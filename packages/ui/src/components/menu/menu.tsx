@@ -958,10 +958,15 @@ function Submenu({
   const focusInto = useRef(false);
   // Note that the popup is held in state too, because Base UI's portal draws it a render after the submenu opens.
   const [popup, setPopup] = useState<HTMLDivElement | null>(null);
+  // Note that a submenu gone lets the menu's surface go only while it is still its own, because the pointer opens the next submenu before this one's exit has played, and the next one's surface must stand.
   const drawn = useCallback(
-    (node: HTMLDivElement | null) => {
+    (node: HTMLDivElement) => {
       surface.current = node;
       setPopup(node);
+      return () => {
+        if (surface.current === node) surface.current = null;
+        setPopup(null);
+      };
     },
     [surface],
   );
