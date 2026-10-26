@@ -342,6 +342,7 @@ it.effect(
       const { spawned, write, run } = yield* launch([script], luke, {
         [RUNNER_ENV.BEARER]: BEARER,
         PATH: "/usr/bin",
+        HOME: home,
       });
       yield* write({ ...CONFIG, cwd: checkout, writableRoots: [folder], ownLogin: true });
       yield* write(message("Run sleep 600.", LINE.FIRST));

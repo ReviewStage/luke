@@ -1410,11 +1410,53 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Mac is offered as running Claude's models only to an account that pays for Claude Code in Luke, and as running none otherwise",
+      "a Mac is offered as running a provider's models only where the account pays for its harness in Luke or the Mac is signed in to it, and GPT models only on a Mac that checked a Codex",
       () =>
         Effect.gen(function* () {
-          for (const plan of [true, false]) {
-            const { owner } = yield* openStarter(plan);
+          const cases = [
+            {
+              name: "a Claude plan",
+              plan: true,
+              chatGpt: "none",
+              codex: false,
+              signedIn: {},
+              providers: [MODEL_PROVIDER.ANTHROPIC],
+            },
+            {
+              name: "no credential",
+              plan: false,
+              chatGpt: "none",
+              codex: false,
+              signedIn: {},
+              providers: [],
+            },
+            {
+              name: "a ChatGPT plan, the Mac with no Codex checked",
+              plan: false,
+              chatGpt: "signed_in",
+              codex: false,
+              signedIn: {},
+              providers: [],
+            },
+            {
+              name: "a ChatGPT plan, a Codex checked",
+              plan: false,
+              chatGpt: "signed_in",
+              codex: true,
+              signedIn: {},
+              providers: [MODEL_PROVIDER.OPENAI],
+            },
+            {
+              name: "nothing saved, the Mac signed in to Codex",
+              plan: false,
+              chatGpt: "none",
+              codex: true,
+              signedIn: { codex: true },
+              providers: [MODEL_PROVIDER.OPENAI],
+            },
+          ] as const;
+          for (const each of cases) {
+            const { owner } = yield* openStarter(each.plan, each.chatGpt);
             yield* writeAccountPreferences(owner, {
               experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
             });
@@ -1422,14 +1464,16 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               id: randomUUID(),
               name: "Studio",
               ...MAC_DEVICE_LAYOUT,
+              ...(each.codex ? { codexExecutable: CODEX_EXECUTABLE } : undefined),
+              signedIn: each.signedIn,
             });
             const offers = yield* macOffers(owner).pipe(
               Effect.provide(Layer.mergeAll(environment(), runtimes().native)),
             );
             assert.deepEqual(
               offers.map((offer) => [offer.name, offer.providers]),
-              [["Studio", plan ? [MODEL_PROVIDER.ANTHROPIC] : []]],
-              plan ? "a Claude plan" : "no Claude credential",
+              [["Studio", each.providers]],
+              each.name,
             );
           }
         }),

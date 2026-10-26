@@ -1,1 +1,0 @@
-ALTER TABLE "mac_device" ADD COLUMN "codex_executable" text;

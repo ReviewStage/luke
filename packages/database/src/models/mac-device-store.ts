@@ -131,6 +131,7 @@ const findNamed = SqlSchema.findAll({
           name: macDevice.name,
           lastSeenAt: macDevice.lastSeenAt,
           signedIn: macDevice.signedIn,
+          codexExecutable: macDevice.codexExecutable,
         })
         .from(macDevice)
         .where(inArray(macDevice.id, [...ids])),

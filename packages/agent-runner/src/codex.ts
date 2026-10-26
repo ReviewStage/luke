@@ -63,6 +63,7 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { Duration, Effect, Exit, Option, Queue, Schema, Scope, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
@@ -83,6 +84,7 @@ import {
   installedSkillsPath,
   type LaunchContext,
   type LaunchOutcome,
+  MAC_CLONES,
   MAC_TOOLCHAIN_CACHES,
   ON_MAC,
   type RunnerSelf,
@@ -337,13 +339,11 @@ function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
  * developer's home. Each is absolute, as app-server's `writableRoots` are.
  */
 function writableRoots(config: CodexConfig, env: LaunchContext<CodexConfig>["env"]): string[] {
-  const home = env.HOME;
-  const caches =
-    ON_MAC && home !== undefined && home !== ""
-      ? MAC_TOOLCHAIN_CACHES.map((cache) => join(home, cache))
-      : [];
+  const home = env.HOME !== undefined && env.HOME !== "" ? env.HOME : homedir();
+  const caches = ON_MAC ? MAC_TOOLCHAIN_CACHES.map((cache) => join(home, cache)) : [];
+  // Note that a worktree's shared Git folder is granted only inside Luke's own clones, since the agent writes its `.git` file.
   return [
-    gitCommonDir(config.cwd) ?? join(config.cwd, ".git"),
+    gitCommonDir(config.cwd, join(home, MAC_CLONES)) ?? join(config.cwd, ".git"),
     ...(config.writableRoots ?? []),
     ...caches,
   ];

@@ -1,0 +1,1 @@
+ALTER TABLE "mac_device" ADD COLUMN IF NOT EXISTS "codex_executable" text;
