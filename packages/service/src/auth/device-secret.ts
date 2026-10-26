@@ -66,12 +66,22 @@ export function mintHostSecret(prefix: string): MintedSecret {
   return { secret, hash: hostSecretHash(secret) };
 }
 
-/** The device secret a request's bearer carries, or nothing where it carries another bearer or none. */
-function presentedDeviceSecret(request: Request): string | undefined {
+/** The secret of the prefix given a request's bearer carries, or nothing where it carries another bearer or none. */
+function presentedBearer(request: Request, prefix: string): string | undefined {
   const authorization = request.headers.get(CREDENTIAL_HEADER.AUTHORIZATION)?.trim() ?? "";
   if (!authorization.startsWith(BEARER_PREFIX)) return undefined;
   const bearer = authorization.slice(BEARER_PREFIX.length).trim();
-  return bearer.startsWith(HOST_WIRE.DEVICE_SECRET_PREFIX) ? bearer : undefined;
+  return bearer.startsWith(prefix) ? bearer : undefined;
+}
+
+/** The device secret a request's bearer carries, or nothing where it carries another bearer or none. */
+function presentedDeviceSecret(request: Request): string | undefined {
+  return presentedBearer(request, HOST_WIRE.DEVICE_SECRET_PREFIX);
+}
+
+/** The install token an enroll's bearer carries, or nothing where it carries another bearer or none. */
+export function presentedInstallToken(request: Request): string | undefined {
+  return presentedBearer(request, HOST_WIRE.INSTALL_TOKEN_PREFIX);
 }
 
 /** The daemon version a request carries, trimmed, or nothing where it carries none. */

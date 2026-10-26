@@ -120,10 +120,9 @@ function enroll(
   token: string,
   init: { readonly deviceId?: string; readonly version?: string } = {},
 ) {
-  return request(undefined, PATH.ENROLL, {
+  return request(token, PATH.ENROLL, {
     version: init.version ?? HOST_VERSION.FLOOR,
     body: {
-      installToken: token,
       deviceId: init.deviceId ?? randomUUID(),
       name: "fra-01",
       platform: DEVICE_PLATFORM.LINUX,
@@ -243,26 +242,37 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
       }),
   );
 
-  it.effect("a removed host's secret is refused at once", () =>
-    Effect.gen(function* () {
-      const owner = yield* account(true);
-      const host = yield* enrolledHost(owner);
-      const other = yield* account(true);
+  it.effect(
+    "a standing host's id enrolls again only once removed, and a removed host's secret is refused at once",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account(true);
+        const host = yield* enrolledHost(owner);
+        const other = yield* account(true);
 
-      const removedByOther = yield* statusOf(
-        request(other, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
-      );
-      const removed = yield* statusOf(
-        request(owner, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
-      );
-      const beat = yield* statusOf(hostBeat(host.secret, host.deviceId));
-      const listed = yield* answerOf(request(owner, PATH.HOSTS));
+        const rerun = yield* answerOf(enroll(host.token.token, { deviceId: host.deviceId }));
+        const beatAfterRerun = yield* statusOf(hostBeat(host.secret, host.deviceId));
+        const removedByOther = yield* statusOf(
+          request(other, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
+        );
+        const removed = yield* statusOf(
+          request(owner, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
+        );
+        const beat = yield* statusOf(hostBeat(host.secret, host.deviceId));
+        const listed = yield* answerOf(request(owner, PATH.HOSTS));
+        const back = yield* statusOf(enroll(host.token.token, { deviceId: host.deviceId }));
 
-      assert.equal(removedByOther, HOSTED_HTTP_STATUS.NOT_FOUND);
-      assert.equal(removed, HOSTED_HTTP_STATUS.OK);
-      assert.equal(beat, HOSTED_HTTP_STATUS.UNAUTHORIZED);
-      assert.deepEqual(listed.body.hosts, []);
-    }),
+        assert.deepEqual(rerun, {
+          status: HOSTED_HTTP_STATUS.CONFLICT,
+          body: { error: "host-still-enrolled" },
+        });
+        assert.equal(beatAfterRerun, HOSTED_HTTP_STATUS.OK, "the standing host keeps its secret");
+        assert.equal(removedByOther, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.equal(removed, HOSTED_HTTP_STATUS.OK);
+        assert.equal(beat, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+        assert.deepEqual(listed.body.hosts, []);
+        assert.equal(back, HOSTED_HTTP_STATUS.OK, "a removed host enrolls again");
+      }),
   );
 
   it.effect(

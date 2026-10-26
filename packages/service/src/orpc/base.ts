@@ -30,7 +30,12 @@ import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect
 import { implement } from "@orpc/server";
 import type { ResponseHeadersHandlerPluginContext } from "@orpc/server/plugins";
 import { Effect, Option, Result } from "effect";
-import { hostCallerOf } from "../auth/device-secret.js";
+import {
+  admittedHostVersion,
+  hostCallerOf,
+  presentedHostVersion,
+  presentedInstallToken,
+} from "../auth/device-secret.js";
 import { sessionCredential } from "../auth/session-credential.js";
 import { HostedEnvironment } from "../environment.js";
 import {
@@ -111,6 +116,28 @@ export function deviceMiddleware(resolveUserId: UserIdResolver) {
     return yield* next({ context: { userId: account.value, hostDeviceId: undefined } });
   });
 }
+
+/** An enroll's caller: the install token its bearer carries, and its daemon's version, at or past the floor. */
+export interface EnrollingHost {
+  readonly installToken: string;
+  readonly hostVersion: string;
+}
+
+/**
+ * The caller as a box enrolling: an install token as its bearer, or refused
+ * as unauthenticated, as every other procedure refuses a caller that names
+ * no credential; then its daemon's version, refused as needing an upgrade
+ * below the floor. Whether the token stands is the enroll's to read.
+ */
+export const installTokenMiddleware = middlewareGen<HostedContext, EnrollingHost>(function* ({
+  context,
+  next,
+}) {
+  const installToken = presentedInstallToken(context.request);
+  if (installToken === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  const hostVersion = yield* admittedHostVersion(presentedHostVersion(context.request));
+  return yield* next({ context: { installToken, hostVersion } });
+});
 
 /** The deployment's ring, handed on as the procedure's, or the request refused as unavailable where it holds none it can parse. */
 export const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: KeyRing }>(

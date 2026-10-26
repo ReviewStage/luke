@@ -6,12 +6,15 @@
  * runner's secrets and an answer is the word of the device that ran it, and
  * names the device's id: a desktop's sign-in, or a host's device secret,
  * which acts for its own device alone and answers not found for any other.
- * The enroll reads no bearer: it trades an install token for a host and the
- * secret it calls on from then on (`@luke/features/host-wire`), answered
- * this once, and refuses an unknown, revoked, or expired token as an invalid
- * token. A host's every call, the enroll's included, is refused as needing
- * an upgrade where its daemon is below the floor (`auth/device-secret.ts`). Each answers not found, before it touches a row, where the
- * account has the `local-agents` experiment off, and every one but the
+ * The enroll's bearer is an install token instead (`installTokenMiddleware`),
+ * which it trades for a host and the secret it calls on from then on
+ * (`@luke/features/host-wire`), answered this once; it refuses an unknown,
+ * revoked, or expired token as an invalid token, and the id of one of the
+ * token's member's standing hosts as still enrolled. A host's every call,
+ * the enroll's included, is refused as needing an upgrade where its daemon
+ * is below the floor (`auth/device-secret.ts`). Each answers not found,
+ * before it touches a row, where the account has the `local-agents`
+ * experiment off, and every one but the
  * register where the account holds no such Mac (`agents/device-agent.ts`); a
  * register under an id another account holds writes nothing and answers
  * not found too. A held read answers what waits for that Mac
@@ -26,22 +29,22 @@ import {
   claimDeviceAgentRequest,
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
-import { enrollHost } from "@luke/database/models/host-store";
+import { enrollHost, HOST_ENROLL_REFUSAL } from "@luke/database/models/host-store";
 import { HOST_WIRE } from "@luke/features/host-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect, Option } from "effect";
-import {
-  admittedHostVersion,
-  hostSecretHash,
-  mintHostSecret,
-  presentedHostVersion,
-} from "../auth/device-secret.js";
+import { hostSecretHash, mintHostSecret } from "../auth/device-secret.js";
 import {
   HOSTED_REFUSAL,
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { type DeviceCaller, deviceMiddleware, hosted } from "../orpc/base.js";
+import {
+  type DeviceCaller,
+  deviceMiddleware,
+  hosted,
+  installTokenMiddleware,
+} from "../orpc/base.js";
 import {
   claimedDeviceAgentLine,
   deviceAgentDeviceOf,
@@ -80,20 +83,27 @@ const keptOrNotFound = (kept: boolean) =>
 /** The device-agents resource: the enroll on an install token, and every other procedure on the device's bearer. */
 export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
   const deviceAgents = hosted.deviceAgents.use(deviceMiddleware(seams.resolveUserId));
+  // Note that each caller middleware is used on the resource rather than its procedure, so it refuses before the input is read, as every procedure's does.
+  const enrolling = hosted.deviceAgents.use(installTokenMiddleware);
   return {
-    enroll: hosted.deviceAgents.enroll.effect(function* ({ context, input }) {
-      const version = yield* admittedHostVersion(presentedHostVersion(context.request));
-      const { installToken, deviceId, ...box } = input;
+    enroll: enrolling.enroll.effect(function* ({ context, input }) {
+      const { deviceId, ...box } = input;
       const minted = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
       const enrolled = yield* hostedStoreOrUnavailable(
-        enrollHost(hostSecretHash(installToken), {
+        enrollHost(hostSecretHash(context.installToken), {
           id: deviceId,
           ...box,
-          version,
+          version: context.hostVersion,
           secretHash: minted.hash,
         }),
       );
-      if (Option.isNone(enrolled)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+      if ("refused" in enrolled) {
+        return yield* Effect.fail(
+          enrolled.refused === HOST_ENROLL_REFUSAL.STILL_ENROLLED
+            ? HOSTED_REFUSAL.HOST_STILL_ENROLLED
+            : HOSTED_REFUSAL.INVALID_TOKEN,
+        );
+      }
       return { deviceId, deviceSecret: minted.secret };
     }),
     register: deviceAgents.register.effect(function* ({ context, input }) {

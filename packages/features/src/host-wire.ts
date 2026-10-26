@@ -64,12 +64,13 @@ function secretOf(prefix: string) {
 }
 
 /**
- * An enroll: the install token, the id the box minted for itself once and
- * keeps, its name (its hostname), and its platform and architecture. Its
- * daemon's version rides in `HOST_WIRE.VERSION_HEADER`, as on every call.
+ * An enroll: the id the box minted for itself once and keeps, its name (its
+ * hostname), and its platform and architecture. The install token is its
+ * credential, so it rides as the call's bearer (`Authorization: Bearer
+ * lkh_…`) as a device secret does on every later call, and its daemon's
+ * version in `HOST_WIRE.VERSION_HEADER`.
  */
 export const hostEnrollRequestSchema = EffectSchema.Struct({
-  installToken: secretOf(HOST_WIRE.INSTALL_TOKEN_PREFIX),
   deviceId: wireUuidSchema,
   name: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(200)),
   platform: EffectSchema.Literals(Object.values(DEVICE_PLATFORM)),

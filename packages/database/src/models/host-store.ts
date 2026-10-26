@@ -67,8 +67,23 @@ export interface HostEnrollment {
 
 const KeptSchema = Schema.Struct({ id: Schema.String });
 
+/** Why an enroll wrote nothing. */
+export const HOST_ENROLL_REFUSAL = {
+  /** The token is unknown, revoked, or expired, or the id is another account's device or the account's own desktop. */
+  REFUSED: "refused",
+  /** The id is one of the token account's standing hosts, which only a Remove lets enroll again. */
+  STILL_ENROLLED: "still-enrolled",
+} as const;
+
+export type HostEnrollRefusal = (typeof HOST_ENROLL_REFUSAL)[keyof typeof HOST_ENROLL_REFUSAL];
+
+/** What an enroll answers: the account the host was enrolled under, or why nothing was written. */
+export type HostEnrolled = { readonly userId: string } | { readonly refused: HostEnrollRefusal };
+
 /** An enroll whose id is not the token account's host to key, failed so its transaction rolls back. */
-class EnrollRefused extends Data.TaggedError("EnrollRefused") {}
+class EnrollRefused extends Data.TaggedError("EnrollRefused")<{
+  readonly refused: HostEnrollRefusal;
+}> {}
 
 const insertToken = SqlSchema.findOne({
   Request: Schema.Struct({ userId: Schema.String, tokenHash: Schema.String, now: Schema.Date }),
@@ -160,6 +175,25 @@ const upsertHost = SqlSchema.findAll({
           setWhere: sql`${device.userId} = ${userId} and ${device.kind} = ${DEVICE_KIND.HOST} and ${device.removedAt} is not null`,
         })
         .returning({ id: device.id }),
+    ),
+});
+
+const findStanding = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, id: Schema.String }),
+  Result: KeptSchema,
+  execute: ({ userId, id }) =>
+    Database.use((db) =>
+      db
+        .select({ id: device.id })
+        .from(device)
+        .where(
+          and(
+            eq(device.id, id),
+            eq(device.userId, userId),
+            eq(device.kind, DEVICE_KIND.HOST),
+            isNull(device.removedAt),
+          ),
+        ),
     ),
 });
 
@@ -257,27 +291,34 @@ export function revokeHostInstallToken(userId: string, id: string): HostEffect<b
  * hash, seen now. The id of a host the account removed may be enrolled
  * again, which brings that host back with the new secret, so a box is never
  * listed twice; a standing host's id may not, so a token alone never takes
- * over a box already enrolled. Answers the account, or nothing where the
- * token is unknown, revoked, or expired, or the id is a standing host,
- * another account's device, or the account's own desktop, and then nothing
- * was written.
+ * over a box already enrolled. Answers the account, or why nothing was
+ * written: still enrolled where the id is one of the token account's
+ * standing hosts, which is said apart so a rerun on an enrolled box can keep
+ * its enrollment, and refused for an unknown, revoked, or expired token, or
+ * an id that is another account's device or the account's own desktop.
  */
 export function enrollHost(
   tokenHash: string,
   enrollment: HostEnrollment,
-): HostEffect<Option.Option<string>> {
+): HostEffect<HostEnrolled> {
   const enroll = Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const token = yield* useToken({ tokenHash, now });
-    if (Option.isNone(token)) return Option.none<string>();
+    if (Option.isNone(token)) return { refused: HOST_ENROLL_REFUSAL.REFUSED } as const;
     const { userId } = token.value;
     const kept = yield* upsertHost({ userId, ...enrollment, now });
+    if (kept.length > 0) return { userId };
+    const standing = yield* findStanding({ userId, id: enrollment.id });
     // Note that a refused id rolls the token's stamp back with it, so a refused enroll writes nothing.
-    if (kept.length === 0) return yield* Effect.fail(new EnrollRefused());
-    return Option.some(userId);
+    return yield* Effect.fail(
+      new EnrollRefused({
+        refused:
+          standing.length > 0 ? HOST_ENROLL_REFUSAL.STILL_ENROLLED : HOST_ENROLL_REFUSAL.REFUSED,
+      }),
+    );
   });
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(enroll)).pipe(
-    Effect.catchTag("EnrollRefused", () => Effect.succeed(Option.none<string>())),
+    Effect.catchTag("EnrollRefused", (failed) => Effect.succeed({ refused: failed.refused })),
   );
 }
 

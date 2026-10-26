@@ -10,6 +10,7 @@ import { DEVICE_LAYOUT, getTestDB } from "../../testing/index.js";
 import { deviceLayout, devicesSeenSince, registerDevice } from "../device-store.js";
 import {
   enrollHost,
+  HOST_ENROLL_REFUSAL,
   type HostEnrollment,
   hostBySecret,
   hostsOf,
@@ -74,10 +75,10 @@ it.layer(getTestDB())("the host store", (it) => {
         const otherToken = yield* mintedToken(other);
         const takenOver = yield* enrollHost(otherToken.tokenHash, box("not-yours", enrolled.id));
 
-        assert.deepEqual(enrolledUnder, Option.some(owner));
+        assert.deepEqual(enrolledUnder, { userId: owner });
         assert.deepEqual(
           [revokedByOther, removedByOther, takenOver],
-          [false, false, Option.none()],
+          [false, false, { refused: HOST_ENROLL_REFUSAL.REFUSED }],
         );
         assert.deepEqual(yield* hostsOf(other), []);
         assert.deepEqual(
@@ -108,9 +109,15 @@ it.layer(getTestDB())("the host store", (it) => {
       yield* revokeHostInstallToken(owner, revoked.id);
       yield* TestClock.adjust("25 hours");
 
-      assert.deepEqual(yield* enrollHost(revoked.tokenHash, box("late-1")), Option.none());
-      assert.deepEqual(yield* enrollHost(expiring.tokenHash, box("late-2")), Option.none());
-      assert.deepEqual(yield* enrollHost(`token-${randomUUID()}`, box("unknown")), Option.none());
+      assert.deepEqual(yield* enrollHost(revoked.tokenHash, box("late-1")), {
+        refused: HOST_ENROLL_REFUSAL.REFUSED,
+      });
+      assert.deepEqual(yield* enrollHost(expiring.tokenHash, box("late-2")), {
+        refused: HOST_ENROLL_REFUSAL.REFUSED,
+      });
+      assert.deepEqual(yield* enrollHost(`token-${randomUUID()}`, box("unknown")), {
+        refused: HOST_ENROLL_REFUSAL.REFUSED,
+      });
       assert.deepEqual(
         Option.map(yield* hostBySecret(first.secretHash), (host) => host.deviceId),
         Option.some(first.id),
@@ -144,7 +151,11 @@ it.layer(getTestDB())("the host store", (it) => {
         const rekeyed = { ...enrolled, secretHash: `secret-${randomUUID()}` };
         yield* enrollHost(token.tokenHash, rekeyed);
 
-        assert.deepEqual(takenOver, Option.none(), "a standing host's id is refused");
+        assert.deepEqual(
+          takenOver,
+          { refused: HOST_ENROLL_REFUSAL.STILL_ENROLLED },
+          "a standing host's id is refused, and said apart",
+        );
         assert.ok(Option.isSome(standingAfterTakeover), "the standing host keeps its secret");
         assert.ok(Option.isNone(yield* hostBySecret(takeover.secretHash)));
         assert.equal(removed, true);

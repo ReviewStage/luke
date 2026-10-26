@@ -133,4 +133,5 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.CHANNEL_NAME_TAKEN]: {},
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: { data: localAgentRefusedData },
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: { data: hostUpgradeNeededData },
+  [HOSTED_API_ERROR.HOST_STILL_ENROLLED]: {},
 } as const satisfies Record<HostedApiError, ErrorMapItem>;
