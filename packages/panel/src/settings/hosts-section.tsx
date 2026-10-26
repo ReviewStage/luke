@@ -34,11 +34,12 @@ import {
   Text,
   TrashIcon,
   useConfirmDialog,
+  useMinute,
   useSecond,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Base64Url, Hex } from "effect/encoding";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { useExperiment } from "../use-app-state.js";
@@ -66,6 +67,9 @@ import { MenuRow } from "./menu-row.js";
 
 /** The bytes of randomness behind an install token, as many as a device secret's. */
 const INSTALL_TOKEN_BYTES = 32;
+
+/** `useMinute` counts in milliseconds, so the minute the list stands on is read off it in whole ones. */
+const MINUTE_MS = 60_000;
 
 /**
  * The class PostHog's recorder leaves out of a recording, element and children
@@ -255,6 +259,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const on = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const { act } = useAct();
   const now = useSecond();
+  const minute = Math.floor(useMinute() / MINUTE_MS);
   const [hosts, setHosts] = useState<readonly Host[] | undefined>(undefined);
   const [installScriptUrl, setInstallScriptUrl] = useState<string | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
@@ -287,6 +292,24 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
       live = false;
     };
   }, [act, on, signedIn, attempt]);
+
+  // A server that joins while the page stands is drawn within a minute, with no skeleton over the list the member is reading.
+  const mountMinute = useRef(minute);
+  useEffect(() => {
+    // The mount's own read is the effect above, so the minute it began in stands as it is.
+    if (!on || !signedIn || minute === mountMinute.current) return;
+    let live = true;
+    act(ACT_KIND.HOSTS_LIST).then(
+      (answer) => {
+        if (!live || "failure" in answer) return;
+        setHosts((standing) => (standing === undefined ? standing : answer.hosts));
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [act, on, signedIn, minute]);
 
   const add = useCallback(() => {
     setAdding(true);

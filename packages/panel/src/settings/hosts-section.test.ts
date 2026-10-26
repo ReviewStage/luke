@@ -2,15 +2,23 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { it } from "@effect/vitest";
+import type { Host } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
+import { timeRuntime } from "@luke/ui";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { HostsSection } from "./hosts-section.js";
 
@@ -80,3 +88,37 @@ test("Add hosts shows the token in its command and sends the service only the to
   assert.deepEqual(sent, [{ tokenHash: createHash("sha256").update(token).digest("hex") }]);
   assert.ok(!JSON.stringify(sent).includes(token), "nothing sent carries the token");
 });
+
+it.effect("a server that enrolls while Settings stays open is listed within a minute", () =>
+  Effect.gen(function* () {
+    handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
+    const hosts: Host[] = [];
+    fakeActPort({
+      [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
+    });
+    const registry = AtomRegistry.make({
+      initialValues: [
+        [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, yield* Clock.Clock))],
+      ],
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+    act(() => root.render(onRegistry(registry, createElement(HostsSection, { signedIn: true }))));
+    yield* Effect.promise(settle);
+    assert.ok(!document.body.textContent?.includes("fra-03"), "no server has joined yet");
+
+    hosts.push({
+      id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
+      name: "fra-03",
+      seenAt: Date.now(),
+      version: "0.1.0",
+      upgradeNeeded: false,
+    });
+    yield* TestClock.adjust("1 minute");
+    yield* Effect.promise(settle);
+    assert.ok(document.body.textContent?.includes("fra-03"), "the server that joined is listed");
+    registry.dispose();
+  }),
+);
