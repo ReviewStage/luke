@@ -330,6 +330,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onThreadRevealed: ignore,
     sectionReveal: undefined,
     commentReveal: undefined,
+    inboxItemReveal: undefined,
+    onInboxItemRevealed: ignore,
     onSectionRevealed: ignore,
     onShowInbox: ignore,
     inbox: [],

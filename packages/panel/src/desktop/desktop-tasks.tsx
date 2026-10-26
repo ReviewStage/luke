@@ -366,15 +366,14 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
 /** The plan's own Inbox lists one plan's items in one run, so nothing in it folds. */
 const NO_FOLDS = () => false;
 
-/** An item a call's row asked the task's Inbox to open: the thread under `key` of the agent whose row it was, any of the task's agents' where the row names none. */
-interface InboxItemAsk {
-  readonly taskId: string;
-  readonly key: string;
-  readonly agentId: string | undefined;
-}
+/** An item asked of the task's Inbox to open: one a link names by its id, or the thread under `key` a call's row names, of the agent whose row it was, any of the task's agents' where the row names none. */
+type InboxItemAsk =
+  | { readonly taskId: string; readonly itemId: string }
+  | { readonly taskId: string; readonly key: string; readonly agentId: string | undefined };
 
-/** The item an ask names among a task's items, the latest posted where more than one agent posted under its key. */
+/** The item an ask names among a task's items: by its id, else the latest posted where more than one agent posted under its key. */
 function askedItem(items: readonly InboxItem[], ask: InboxItemAsk): InboxItem | undefined {
+  if ("itemId" in ask) return items.find((item) => item.id === ask.itemId);
   const named = items.filter(
     (item) => item.key === ask.key && (ask.agentId === undefined || item.agentId === ask.agentId),
   );
@@ -400,7 +399,7 @@ function askedItem(items: readonly InboxItem[], ask: InboxItemAsk): InboxItem | 
  * go back to. K and J, and the pager where the item stands alone, step
  * through the list (`inbox-pager.tsx`). Its head's magnifier searches the
  * list as the window's Inbox's does, the item shown keeping its place. A
- * call's row that names a thread asks for its item, which the tab opens
+ * call's row that names a thread, or a link to an item, asks for it, which the tab opens
  * once its read holds it, or lets go once a read holds no such item.
  */
 function TaskInboxTab({
@@ -416,7 +415,7 @@ function TaskInboxTab({
   tasks: TasksControl;
   task: TasksControl["tasks"][number];
   inbox: TaskInboxControl;
-  /** The item a call's row asked for, none where none waits to be opened. */
+  /** The item a call's row or a link asked for, none where none waits to be opened. */
   ask: InboxItemAsk | undefined;
   onAsked: () => void;
   onOpenTask: () => void;
@@ -663,6 +662,13 @@ function PlanDocument({
     actOnComment: (params) => act(ACT_KIND.TASKS_COMMENT_ACT, params),
   });
   const openComments = comments?.threads.filter(openThread).length;
+  // A link to one of the task's Inbox items asks its Inbox tab for the item, once per ask.
+  const { inboxItemReveal, onInboxItemRevealed } = tasks;
+  useEffect(() => {
+    if (inboxItemReveal === undefined || inboxItemReveal.planId !== inboxTaskId) return;
+    setInboxAsk({ taskId: inboxItemReveal.planId, itemId: inboxItemReveal.itemId });
+    onInboxItemRevealed(inboxItemReveal.ask);
+  }, [inboxItemReveal, inboxTaskId, onInboxItemRevealed]);
   // A link to a resolved thread opens the task's Comments tab, where it is listed, once per ask.
   const resolvedLinked =
     tasks.commentReveal?.planId === inboxTaskId &&

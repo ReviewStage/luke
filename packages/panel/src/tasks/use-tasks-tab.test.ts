@@ -1258,8 +1258,11 @@ test("a Luke link to a review thread opens its agent's Pull request tab on the v
   assert.equal(tab.control().threadReveal, undefined);
 });
 
-test("a Luke link to an Inbox item opens it in its task's workspace, and one to an automation in the workspace its slug names", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+test("a Luke link to an Inbox item opens it in its task's own Inbox tab in the task's workspace, and one to an automation in the workspace its slug names", () => {
+  const tab = mount(
+    { shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "notes" } },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
+  );
   const alerts = "alerts";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
   const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
@@ -1270,8 +1273,12 @@ test("a Luke link to an Inbox item opens it in its task's workspace, and one to 
       place: { kind: LINK_PLACE.INBOX_ITEM, planId: alerts, itemId },
     }),
   );
-  const inbox = { open: tab.control().inboxView.open, chosen: tab.control().inboxView.chosen };
+  const selected = tab.told.at(-1);
+  const inboxOpen = tab.control().inboxView.open;
+  const reveal = tab.control().inboxItemReveal;
   const listed = tab.control().workspace?.id;
+  act(() => tab.control().onInboxItemRevealed(1));
+  const taken = tab.control().inboxItemReveal;
   act(() =>
     tab.control().onOpenLink({
       workspace: "personal",
@@ -1279,7 +1286,10 @@ test("a Luke link to an Inbox item opens it in its task's workspace, and one to 
     }),
   );
 
-  assert.deepEqual(inbox, { open: true, chosen: { taskId: alerts, itemId, opened: true } });
+  assert.equal(selected, ACT_KIND.TASKS_SELECT);
+  assert.equal(inboxOpen, false);
+  assert.deepEqual(reveal, { planId: alerts, itemId, ask: 1 });
+  assert.equal(taken, undefined);
   assert.equal(listed, ACME.id);
   assert.equal(tab.control().inboxView.open, false);
   assert.deepEqual(tab.control().automationsView.place, {
@@ -1302,7 +1312,7 @@ function channelPlaceNow(): () => ChannelPlaceControl {
   return () => seen ?? assert.fail("the channel place is read");
 }
 
-test("with Channels on, a channel's link opens its stream in the Inbox's place, and a thread's link, or an item opened from another surface, opens as the thread in its channel", async () => {
+test("with Channels on, a channel's link opens its stream in the Inbox's place, and a thread's link of an agent with no task, or an item opened from another surface, opens as the thread in its channel", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
   await settle();
@@ -1327,7 +1337,7 @@ test("with Channels on, a channel's link opens its stream in the Inbox's place, 
   act(() =>
     tab.control().onOpenLink({
       workspace: "acme",
-      place: { kind: LINK_PLACE.INBOX_ITEM, planId: "alerts", itemId: linked },
+      place: { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT_ID, itemId: linked },
     }),
   );
   const thread = { channelId: place().channelId, threadId: place().threadId };
@@ -1741,12 +1751,7 @@ test("the Inbox opened again stands on the item last chosen in it, as a row's ch
   act(() => tab.control().boardView.onOpen());
   act(() => tab.control().inboxView.onOpen());
   const chosen = tab.control().inboxView.chosen;
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "personal",
-      place: { kind: LINK_PLACE.INBOX_ITEM, planId: "notes", itemId },
-    }),
-  );
+  act(() => tab.control().inboxView.onOpenItem({ taskId: "notes", itemId }));
   act(() => tab.control().boardView.onOpen());
   act(() => tab.control().inboxView.onOpen());
   const linked = tab.control().inboxView.chosen;
