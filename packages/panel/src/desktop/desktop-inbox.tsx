@@ -660,6 +660,7 @@ export function DesktopInbox({
                       onOpen={openThread}
                       onLook={channels.onLook}
                       onAnswered={channels.onRefresh}
+                      onChannels={phone ? () => onListed(true) : undefined}
                     />
                   ) : channels.channels === undefined && !channels.failed ? (
                     <ChannelReading />

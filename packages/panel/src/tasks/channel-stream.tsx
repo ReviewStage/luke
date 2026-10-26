@@ -14,6 +14,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import {
   AVATAR_SIZE,
   Avatar,
+  BackButton,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -31,6 +32,7 @@ import {
   IconButton,
   MoreButton,
   moreLabel,
+  NO_BACK_KEY,
   NOTE_LINE_LOOK,
   NoteLine,
   NotFoundIcon,
@@ -174,6 +176,9 @@ const UNREAD_WORD = "Unread";
 
 /** What the line before the first thread posted since the reader last looked says. */
 const NEW_LINE = "New";
+
+/** The list of channels, by the words its way back wears and the place a sentence names it mid-way, which its hint reads. */
+const CHANNELS_BACK = { label: "Channels", place: "channels" } as const;
 
 /** No thread is read yet. */
 const NO_THREADS: readonly ChannelThread[] = [];
@@ -801,6 +806,7 @@ export function ChannelStream({
   onOpen,
   onLook,
   onAnswered,
+  onChannels,
 }: {
   channel: StreamChannel;
   /** The channel's stream as its holder reads it (`useChannelStream`). */
@@ -825,6 +831,8 @@ export function ChannelStream({
   onLook: (channelId: string) => void;
   /** Tells the window a thread was answered here, so what counts what waits is read again. */
   onAnswered: () => void;
+  /** Opens the list of channels in the stream's place, as a phone's does; none where the list stands beside the stream. */
+  onChannels?: (() => void) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const settler = useInboxSettler();
@@ -871,10 +879,23 @@ export function ChannelStream({
   };
   return (
     <StreamColumn label={`#${channel.name}`} hidden={hidden}>
+      {/* Note that the way back names no key, because the window's Back takes one history step, which leads to the list only where the reader came from it. */}
       <Toolbar
+        lead={
+          onChannels === undefined ? undefined : (
+            <BackButton
+              label={CHANNELS_BACK.label}
+              place={CHANNELS_BACK.place}
+              command={NO_BACK_KEY}
+              onBack={onChannels}
+            />
+          )
+        }
         title={channelTitle(channel.name, view)}
         detail={channel.purpose}
+        start={onChannels === undefined ? undefined : TOOLBAR_INSET.COLUMN}
         end={TOOLBAR_INSET.COLUMN}
+        folded={onChannels !== undefined}
         actions={
           <>
             {unarchive.button}

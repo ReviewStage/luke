@@ -9718,6 +9718,23 @@ test("on a phone, Back from a thread opened in a channel's stream goes back to t
   assert.equal(page.querySelector(".channel-list"), null, "the list of channels stands nowhere");
 });
 
+test("on a phone, a channel's stream leads its bar with Back to Channels, which opens the list of channels", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  answerChannels({});
+  const { page } = mount([], { channels: true, room: SHELL_ROOM.NARROW });
+  await settle();
+  const back =
+    [...(page.querySelector(".channel-stream")?.querySelectorAll("button") ?? [])].find(
+      (button) => button.textContent === "Channels",
+    ) ?? assert.fail("the stream's bar offers Back to Channels");
+
+  act(() => back.click());
+  await settle();
+  assert.ok(page.querySelector(".channel-list"), "the list of channels stands");
+  assert.equal(page.querySelector(".channel-stream"), null, "the stream gave it its place");
+});
+
 test("a channel archived or unknown says so in the stream's place, with the way to #general", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
