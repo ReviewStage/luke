@@ -179,6 +179,8 @@ interface ToolWords {
   readonly worker: (worker: { readonly reads: string; readonly readOnly: string }) => string;
   /** How it reaches the services the developer connected, where its harness takes each as an MCP server of its own; nothing where it reaches them through tools of its own. */
   readonly integrations: string;
+  /** The sandbox its commands run under on the developer's Mac, a local agent's: its harness's own. */
+  readonly ownSandbox: string;
 }
 
 /** What a native agent is told of the services the developer connected, each of which its harness takes as an MCP server of its own (`../luke-mcp/app.ts`). */
@@ -233,6 +235,8 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     worker: ({ reads, readOnly }) =>
       `\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped job to ${reads} its answer arrives as that worker's result. Wait for it by calling task_wait right after delegating, unless you set \`background\` because there is other work to do while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${readOnly} Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its job explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.`,
     integrations: "",
+    // Note that eve runs in no Mac of the developer's, so its words never say this.
+    ownSandbox: "",
   },
   [CODER_HARNESS.CLAUDE_CODE]: {
     checkout: `Your own tools start there: every Bash command runs in the checkout, and Read, Edit, Write, Glob, and Grep resolve a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION} The checkout holds the repository's whole history.`,
@@ -253,6 +257,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     worker: () =>
       "Claude Code's Agent tool hands a scoped job to a worker, which Claude Code calls a subagent, runs on a Claude model, and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself. A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
     integrations: NATIVE_INTEGRATION_WORDS,
+    ownSandbox: "Claude Code's own sandbox",
   },
   [CODER_HARNESS.CODEX]: {
     checkout: `Your own tools start there: every shell command runs in the checkout, and \`apply_patch\` resolves a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION} The checkout holds the repository's whole history.`,
@@ -273,6 +278,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     worker: () =>
       "Codex's own subagents are your workers: each takes a scoped job, runs on a GPT model, and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself. A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
     integrations: NATIVE_INTEGRATION_WORDS,
+    ownSandbox: "Codex's own sandbox",
   },
 };
 
@@ -503,29 +509,37 @@ const EXAMPLE_REPOSITORY = "acme/app";
 export interface CoderMachine {
   readonly local: boolean;
   readonly checkoutPath: string;
+  /** Where the machine keeps the skills the member installed into Luke. */
+  readonly installedSkills: string;
 }
 
-/** A sandbox of the agent's own, its checkout where every sandbox keeps it. */
-const SANDBOX_MACHINE: CoderMachine = { local: false, checkoutPath: CODER.CHECKOUT_PATH };
+/** A sandbox of the agent's own, its checkout and installed skills where every sandbox keeps them. */
+const SANDBOX_MACHINE: CoderMachine = {
+  local: false,
+  checkoutPath: CODER.CHECKOUT_PATH,
+  installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
+};
 
 /**
- * A harness's words on the machine given: a local agent's folder in place of
- * the sandbox's, and no word of a browser of Luke's, which a local agent is
- * not offered (`tool-set.ts`'s `machineToolsOf`).
+ * A harness's words on the machine given: a local agent's folders in place of
+ * the sandbox's, its checkout and its installed skills, and no word of a
+ * browser of Luke's, which a local agent is not offered (`tool-set.ts`'s
+ * `machineToolsOf`).
  */
 function toolsOn(tools: ToolWords, machine: CoderMachine): ToolWords {
   if (!machine.local) return tools;
   return {
     ...tools,
     sandbox: tools.sandbox.replaceAll(`\`${CODER.CHECKOUT_PATH}\``, `\`${machine.checkoutPath}\``),
+    skills: tools.skills.replaceAll(NATIVE_SKILLS_PATH.INSTALLED, machine.installedSkills),
     browser: "",
   };
 }
 
 /** The checkout section's words after where it stands and the tools' own: how GitHub is reached, and the Mac beside the sandbox. */
-function checkoutReachWords(machine: CoderMachine): string {
+function checkoutReachWords(tools: ToolWords, machine: CoderMachine): string {
   return machine.local
-    ? "GitHub is reachable through `gh` and `git` from the shell, under the developer's own git credentials on their Mac, so never put a token in a URL or a command, and never sign in as anyone else. You run on the developer's own Mac, in a worktree of your own, with their installed tools and running services, inside Claude Code's own sandbox, which keeps your worktree and the temp folder writable."
+    ? `GitHub is reachable through \`gh\` and \`git\` from the shell, under the developer's own git credentials on their Mac, so never put a token in a URL or a command, and never sign in as anyone else. You run on the developer's own Mac, in a worktree of your own, with their installed tools and running services, inside ${tools.ownSandbox}, which keeps your worktree and the temp folder writable.`
     : "GitHub is reachable through `gh` and `git` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. `run_on_mac` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.";
 }
 
@@ -558,7 +572,7 @@ function repositoryWords(
 
 ## The checkout
 
-The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}. Work there. ${tools.checkout} To walk the developer through code, put the lines on their screen with \`${CODER_TOOL.SHOW_CODE}\` and a note on why they matter. ${checkoutReachWords(machine)}
+The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}. Work there. ${tools.checkout} To walk the developer through code, put the lines on their screen with \`${CODER_TOOL.SHOW_CODE}\` and a note on why they matter. ${checkoutReachWords(tools, machine)}
 
 ## How to work
 
@@ -597,7 +611,7 @@ function sandboxSection(tools: ToolWords, machine: CoderMachine = SANDBOX_MACHIN
   if (machine.local) {
     return `## Your folder
 
-You work on the developer's own Mac, in a folder of your own with no repository in it, with their installed tools and running services, inside Claude Code's own sandbox. ${tools.sandbox}`;
+You work on the developer's own Mac, in a folder of your own with no repository in it, with their installed tools and running services, inside ${tools.ownSandbox}. ${tools.sandbox}`;
   }
   return `## Your sandbox
 
@@ -858,8 +872,8 @@ export interface AgentInstructionsContext {
   readonly workspace: string;
   readonly memoryOn: boolean;
   readonly harness: CoderHarness;
-  /** Where the agent's machine keeps its checkout; where every sandbox keeps it, where unsaid. */
-  readonly checkoutPath?: string | undefined;
+  /** Where the agent's machine keeps its checkout and its installed skills; where every sandbox keeps them, where unsaid. */
+  readonly place?: { readonly checkoutPath: string; readonly installedSkills: string } | undefined;
 }
 
 /**
@@ -892,7 +906,8 @@ export function agentCoderInstructions(
     context.memoryOn,
     {
       local: agent.machine === CODING_AGENT_MACHINE.MAC,
-      checkoutPath: context.checkoutPath ?? CODER.CHECKOUT_PATH,
+      checkoutPath: context.place?.checkoutPath ?? SANDBOX_MACHINE.checkoutPath,
+      installedSkills: context.place?.installedSkills ?? SANDBOX_MACHINE.installedSkills,
     },
   );
 }

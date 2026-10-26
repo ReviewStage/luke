@@ -338,6 +338,57 @@ test("a Claude Code or Codex agent is told of its browser, which Luke's MCP serv
   }
 });
 
+test("a local agent is told its folders on the Mac, its own harness's sandbox, and no browser", () => {
+  const MAC = {
+    local: true,
+    checkoutPath: "/Users/dev/.luke/agents/a1/repository",
+    installedSkills: "/Users/dev/.luke/agents/a1/installed-skills",
+  };
+  const SANDBOX_OF = [
+    [CODER_HARNESS.CLAUDE_CODE, "Claude Code's own sandbox", "Codex's own sandbox"],
+    [CODER_HARNESS.CODEX, "Codex's own sandbox", "Claude Code's own sandbox"],
+  ] as const;
+  for (const repository of ["Acme/Relay", null]) {
+    for (const [harness, own, other] of SANDBOX_OF) {
+      const words = coderInstructions(
+        repository,
+        CODING_AGENT_BRIEF.PROMPT,
+        true,
+        TASK_ADDRESS,
+        undefined,
+        true,
+        null,
+        false,
+        harness,
+        undefined,
+        false,
+        MAC,
+      );
+      const label = `${harness} ${repository ?? "no repository"}`;
+      assert.ok(words.includes(own), label);
+      assert.ok(!words.includes(other), label);
+      assert.ok(!words.includes("## Your browser"), label);
+      if (repository !== null) assert.ok(words.includes(`\`${MAC.checkoutPath}\``), label);
+    }
+  }
+  const codex = coderInstructions(
+    "Acme/Relay",
+    CODING_AGENT_BRIEF.PROMPT,
+    true,
+    TASK_ADDRESS,
+    undefined,
+    true,
+    null,
+    false,
+    CODER_HARNESS.CODEX,
+    undefined,
+    false,
+    MAC,
+  );
+  // Codex is pointed at the skills its member installed where the Mac keeps them.
+  assert.ok(codex.includes(`\`${MAC.installedSkills}/`));
+});
+
 test("a Codex agent is told of Codex's own tools and never of Luke's it is not offered, nor of Claude Code's", () => {
   // Luke's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.
   const LUKES = [

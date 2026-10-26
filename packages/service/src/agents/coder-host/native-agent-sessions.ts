@@ -26,7 +26,7 @@ import {
 } from "../../integrations/connection-door.js";
 import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
 import { LUKE_MCP_PATH, lukeIntegrationMcpUrl } from "../luke-mcp/app.js";
-import type { AgentMachine } from "../machine/agent-machine.js";
+import type { AgentMachine, MachineLayout } from "../machine/agent-machine.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import type { SandboxRunner } from "../machine/vercel-machine.js";
 import { memoryOnFor } from "../memory-tools.js";
@@ -59,7 +59,7 @@ const nativeCoderInstructions = (
   userId: string,
   agent: CodingAgent,
   harness: CoderHarness,
-  checkoutPath: string,
+  place: Pick<MachineLayout, "checkoutPath" | "installedSkills">,
 ) =>
   Effect.gen(function* () {
     const target = { userId, conversationId: agent.conversationId };
@@ -76,7 +76,7 @@ const nativeCoderInstructions = (
       workspace,
       memoryOn,
       harness,
-      checkoutPath,
+      place,
     });
   });
 
@@ -116,8 +116,8 @@ export function nativeAgentSessionsLayer(
         mcpUrl: new URL(LUKE_MCP_PATH, origin).href,
         integrations: (agent) =>
           nativeIntegrations(account, agent, origin).pipe(Effect.provideContext(context)),
-        instructions: (agent, checkoutPath) =>
-          nativeCoderInstructions(account, agent, harness, checkoutPath).pipe(
+        instructions: (agent, place) =>
+          nativeCoderInstructions(account, agent, harness, place).pipe(
             Effect.provideContext(context),
           ),
         // One past the last event the store applied, so a relaunch goes on numbering where the last launch stopped.

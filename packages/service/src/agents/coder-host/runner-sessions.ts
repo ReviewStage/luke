@@ -173,8 +173,11 @@ export interface RunnerSessionsOptions {
   readonly mcpUrl: string;
   /** The integrations the agent is handed as its launch starts, each an MCP server of its own beside Luke's. */
   readonly integrations: (agent: CodingAgent) => Effect.Effect<readonly IntegrationServer[]>;
-  /** Luke's coder instructions for the agent, naming its checkout where its machine keeps it, which the harness's config carries. */
-  readonly instructions: (agent: CodingAgent, checkoutPath: string) => Effect.Effect<string>;
+  /** Luke's coder instructions for the agent, naming its checkout and installed skills where its machine keeps them, which the harness's config carries. */
+  readonly instructions: (
+    agent: CodingAgent,
+    place: Pick<MachineLayout, "checkoutPath" | "installedSkills">,
+  ) => Effect.Effect<string>;
   /** One past the last event the store applied of the conversation's runner, where a launch numbers its events from. */
   readonly nextSequence: (
     conversationId: string,

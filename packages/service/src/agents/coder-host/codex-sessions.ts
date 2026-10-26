@@ -206,7 +206,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         model,
         ...(effort === undefined ? undefined : { effort }),
         ...(providerModelOf(agent.model)?.fast === true ? { fast: true } : undefined),
-        developerInstructions: yield* options.instructions(agent, layout.checkoutPath),
+        developerInstructions: yield* options.instructions(agent, layout),
         ...(resume === undefined ? undefined : { threadId: resume }),
         ...(rewindBefore === undefined ? undefined : { rewindBefore }),
         firstSequence,
