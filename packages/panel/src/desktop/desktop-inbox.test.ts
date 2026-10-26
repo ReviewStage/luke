@@ -9519,6 +9519,32 @@ test("a post pressed in a channel's stream opens its thread in the side panel as
   assert.deepEqual(panel().strip, [], "the thread's tab went with it");
 });
 
+test("a thread open beside a channel's stream leads its path with the channel's glyph and bare name, then its task and agent, and an agent no automation names under the channel alone", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  agentInboxes = new Map([[STRAY_AGENT, [BUMP]]]);
+  answerChannels({ threads: () => Promise.resolve(threadsPage([THRESHOLD, BUMP])) });
+  const { page } = mount([{ ...waitingTaskless(BUMP), automationId: null, automationName: null }], {
+    channels: true,
+  });
+  await settle();
+  const open = async (title: string) => {
+    act(() => page.querySelector<HTMLElement>(`button[aria-label="Open ${title}"]`)?.click());
+    await settle();
+  };
+
+  await open(THRESHOLD.title);
+  assert.deepEqual(pathWords(page), ["general", "Billing usage alerts", "Alerts"]);
+  assert.ok(
+    page.querySelector('.inbox-view-items nav[aria-label="Path"] li .lucide-hash'),
+    "the channel's crumb wears its glyph",
+  );
+
+  await open(BUMP.title);
+  assert.deepEqual(pathWords(page), ["general", "Coding agent"]);
+});
+
 /** #app, a second standing channel of the workspace. */
 const APP_CHANNEL: Channel = {
   id: "c0ffee00-0000-4000-8000-000000000002",

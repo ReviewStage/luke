@@ -1183,20 +1183,22 @@ function useAutomationCrumb(
 }
 
 /**
- * The pane's path, task › agent, each crumb wearing its tab's glyph in the
- * task's column, the task's document glyph and the agent's mark: each opens
- * what it names, the task or the agent's tab, and hangs the card its
- * sidebar row or tab hangs. An agent with no task stands under the
- * automation that started it instead, by its clock and name, which hang its
- * card and open the automation's page where that can be opened, and are
- * words alone where it cannot. An agent this window does not list, one
- * started on another Mac, hangs a card saying so and still opens its tab.
- * Once the thread's heading has scrolled away, the item's title joins the
- * path as its last words, in the text's own ink, so the bar still says what
- * is read; it fades in as it comes and out as the heading comes back, so the
- * title never stands twice. A narrow bar cuts the task's crumb short first,
- * then the title, which fades out where it is cut as every title does, and
- * the agent's keeps its size.
+ * The pane's path, task › agent, led in a channel by the channel's glyph and
+ * its bare name, each crumb wearing its tab's glyph in the task's column,
+ * the task's document glyph and the agent's mark: each opens what it names,
+ * the task or the agent's tab, and hangs the card its sidebar row or tab
+ * hangs. An agent with no task stands under the automation that started it
+ * instead, by its clock and name, which hang its card and open the
+ * automation's page where that can be opened, and are words alone where it
+ * cannot; in a channel, an agent no automation names stands under the
+ * channel alone, Other agents being the Inbox's group. An agent this window
+ * does not list, one started on another Mac, hangs a card saying so and
+ * still opens its tab. Once the thread's heading has scrolled away, the
+ * item's title joins the path as its last words, in the text's own ink, so
+ * the bar still says what is read; it fades in as it comes and out as the
+ * heading comes back, so the title never stands twice. A narrow bar cuts the
+ * task's crumb short first, then the title, which fades out where it is cut
+ * as every title does, and the agent's keeps its size.
  */
 function Crumbs({
   holder,
@@ -1233,16 +1235,21 @@ function Crumbs({
           onPress: () => onOpenHolder?.(),
         }
       : undefined;
+  // Note that in a channel the agents no automation names stand under nothing, since their group is the Inbox's alone.
+  const unnamed =
+    channel !== undefined &&
+    holder.kind === INBOX_HOLDER.AUTOMATION &&
+    holder.automationId === null;
   const crumbs: Crumb[] = [
     channel === undefined
       ? undefined
       : {
-          label: `#${channel.name}`,
+          label: channel.name,
           glyph: <GLYPH.CHANNEL />,
-          hint: `#${channel.name}`,
+          hint: channel.name,
           onPress: channel.onClose,
         },
-    task ?? automation,
+    task ?? (unnamed ? undefined : automation),
     {
       label: name,
       glyph: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,

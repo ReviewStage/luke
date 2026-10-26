@@ -288,7 +288,7 @@ function useChannelsLook(tasks: TasksControl): KindLook | undefined {
   const shown = channelShown(channels, channelId);
   // Note that until a channel names it, as before the channels are read, the place is Channels, never the Inbox it stands in for.
   return !(phone && tasks.inboxView.listed) && shown.kind === CHANNEL_SHOWN.CHANNEL
-    ? { icon: <GLYPH.CHANNEL />, label: `#${shown.channel.name}` }
+    ? { icon: <GLYPH.CHANNEL />, label: shown.channel.name }
     : { icon: <GLYPH.CHANNEL />, label: CHANNELS_WORDS };
 }
 

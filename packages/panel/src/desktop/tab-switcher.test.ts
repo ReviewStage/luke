@@ -450,11 +450,11 @@ async function channelCardNames(room: ShellRoom, listed: boolean): Promise<strin
   return cards().map((card) => card.textContent ?? "");
 }
 
-test("with Channels on, the Inbox's card names the channel its place shows", async () => {
+test("with Channels on, the Inbox's card names the channel its place shows by its bare name beside its glyph", async () => {
   const names = await channelCardNames(SHELL_ROOM.WIDE, false);
   assert.ok(
-    names.some((name) => name.includes("#general")),
-    "the card names #general, the channel shown where none was chosen",
+    names.includes("general"),
+    `the card names general, the channel shown where none was chosen: ${names.join(" | ")}`,
   );
   assert.ok(!names.some((name) => /Inbox/u.test(name)));
 });
@@ -462,7 +462,7 @@ test("with Channels on, the Inbox's card names the channel its place shows", asy
 test("with Channels on, a phone standing its list of channels names the Inbox's card for the list, not a channel", async () => {
   const names = await channelCardNames(SHELL_ROOM.NARROW, true);
   assert.ok(names.includes("Channels"));
-  assert.ok(!names.some((name) => name.includes("#general")));
+  assert.ok(!names.some((name) => name.includes("general")));
 });
 
 test("a card pressed while the cards show is gone to, a place through its own door", async () => {
