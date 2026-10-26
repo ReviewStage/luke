@@ -1341,8 +1341,6 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     note: note === "" ? undefined : note,
     blank: request.blank,
     call: request.call,
-    machine: request.machine,
-    deviceId: request.deviceId,
     summaryModel,
     reached,
     landed,
