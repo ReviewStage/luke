@@ -1112,6 +1112,14 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   userId: string,
   ask: StartAsk,
 ): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
+  // Note that a fresh Start's retry is answered with the agent its key made before where it runs is
+  // decided, because its task may run elsewhere since, or its device be away, and the agent stands.
+  if (ask.from === undefined) {
+    const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
+    if (Option.isSome(made) && (yield* madeInPlace(userId, made.value, whereOf(ask)))) {
+      return { agent: made.value, created: false };
+    }
+  }
   // Note that a retry from another agent is answered before its source is read, because the source
   // may be gone since the first Start made the agent its key names.
   if (ask.from !== undefined) {

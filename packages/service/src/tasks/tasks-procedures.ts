@@ -477,14 +477,15 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
       }
       const organizationId = yield* startingWorkspace(seams, userId, input.workspaceId);
-      // Where its agents run is checked before anything is written, so a device refused starts no task.
-      const runsOn =
-        input.runsOn === undefined ? undefined : yield* runsOnAsked(userId, input.runsOn);
       const before =
         agent === undefined
           ? Option.none()
           : yield* startedBefore(userId, agent.idempotencyKey, organizationId);
       if (Option.isSome(before)) return { status: TASK_START_STATUS.RETRIED, body: before.value };
+      // Where its agents run is checked before anything is written, so a device refused starts no task;
+      // a retry is answered above first, since its device may be away by now while its task stands.
+      const runsOn =
+        input.runsOn === undefined ? undefined : yield* runsOnAsked(userId, input.runsOn);
       const reached = yield* reachableRepository(
         Effect.succeed(organizationId),
         input.repository,
