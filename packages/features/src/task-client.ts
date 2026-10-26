@@ -12,6 +12,7 @@ import {
 import type { Board, BoardElement, BoardSaveAnswer } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
+import type { LocalAgentRefusal } from "./coding-agent-wire.js";
 import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
 import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
 import type {
@@ -140,7 +141,12 @@ export interface TaskWritten {
 /** One call's answer, or why there is none. */
 export type TaskCallResult<Answer, Failure> =
   | { readonly ok: true; readonly answer: Answer }
-  | { readonly ok: false; readonly failure: Failure };
+  | {
+      readonly ok: false;
+      readonly failure: Failure;
+      /** Why the device the call named would not take the task's agents, where that is why and the service said. */
+      readonly localAgentRefusal?: LocalAgentRefusal;
+    };
 
 export interface HostedTaskClientOptions {
   /** What authorizes each call on the signed-in account, read fresh for every attempt. */
@@ -184,6 +190,7 @@ const START_REFUSALS = {
   ...REPOSITORY_REFUSALS,
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 } as const;
 
 /** The refusals a move can answer with: the task or the workspace not the account's, or the workspace not reaching its repository. */
@@ -215,8 +222,13 @@ function hostedResult<Answer, Failure extends string>(
   return Effect.match(asked, {
     onSuccess: succeeded,
     onFailure: (failed) => {
-      const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
-      return failure === undefined ? UNANSWERED : ({ ok: false, failure } as const);
+      if (failed._tag !== "HostedRefused") return UNANSWERED;
+      const failure = named[failed.refusal];
+      if (failure === undefined) return UNANSWERED;
+      const localAgentRefusal = failed.data?.localAgentRefusal;
+      return localAgentRefusal === undefined
+        ? ({ ok: false, failure } as const)
+        : ({ ok: false, failure, localAgentRefusal } as const);
     },
   });
 }
@@ -1075,7 +1087,8 @@ export class HostedTaskClient {
 function taskStartedOf(started: TaskStartAnswer): TaskStarted {
   const written = started.txid === undefined ? {} : { txid: started.txid };
   if (started.agent !== undefined) {
-    return { task: started.plan, agent: { agent: started.agent }, ...written };
+    const notice = started.notice === undefined ? {} : { notice: started.notice };
+    return { task: started.plan, agent: { agent: started.agent, ...notice }, ...written };
   }
   if (started.agentRefusal !== undefined) {
     return { task: started.plan, agent: startRefusedAs(started.agentRefusal), ...written };

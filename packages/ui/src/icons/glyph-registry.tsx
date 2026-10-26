@@ -9,6 +9,7 @@ import {
   CircleSlash,
   ClipboardCheck,
   Clock,
+  Cloud,
   File,
   FileDiff,
   FilePenLine,
@@ -27,6 +28,7 @@ import {
   Pin,
   PinOff,
   RotateCcw,
+  Server,
   Split,
   Unplug,
   Users,
@@ -44,6 +46,7 @@ import {
   EllipsisIcon,
   ExternalIcon,
   GearIcon,
+  LaptopIcon,
   MarkDoneIcon,
   McpIcon,
   MemoryIcon,
@@ -133,6 +136,10 @@ export const GLYPH = {
   CALL: WaveformIcon,
   SETTINGS: GearIcon,
   TIME: lucideGlyph(Clock),
+  // Where a task's coding agents run: the cloud, a member's Mac running Luke, or a host they added.
+  CLOUD: lucideGlyph(Cloud),
+  DESKTOP: LaptopIcon,
+  HOST: lucideGlyph(Server),
   // A task's or an item's status as a field: what a filter or a grouping is by.
   STATUS: lucideGlyph(CircleDotDashed),
   // An agent's to-do list, the same ticked list a plan's to-do block wears.

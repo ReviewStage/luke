@@ -56,6 +56,8 @@ import {
   type CodingAgentStatus,
   contextWindowSchema,
   disabledServersSchema,
+  LOCAL_AGENT_REFUSAL,
+  type LocalAgentRefusal,
   type NativeCodingAgentRuntime,
 } from "@luke/features/coding-agent-wire";
 import {
@@ -455,6 +457,18 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING, START_CODING_AGENT_REFUSAL.CREDENTIAL_MISSING],
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE, START_CODING_AGENT_REFUSAL.API_KEY_UNREADABLE],
 ]);
+
+/** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for. */
+const LOCAL_AGENT_REFUSAL_WORDS = {
+  [LOCAL_AGENT_REFUSAL.OFF]:
+    "Not started: this task runs its agents on a device, and Local agents is off for the member you start for. Ask them to turn it on, or to change where the task runs.",
+  [LOCAL_AGENT_REFUSAL.MAC_AWAY]:
+    "Not started: the device this task runs its agents on is away, asleep or with Luke closed, so it cannot take an agent. Try again once it is back, or ask the member to change where the task runs.",
+  [LOCAL_AGENT_REFUSAL.CODEX]:
+    "Not started: the device this task runs its agents on has no Codex set up yet, so it cannot run this model. Start on a Claude model, or ask the member to change where the task runs.",
+  [LOCAL_AGENT_REFUSAL.NO_HARNESS]:
+    "Not started: the device this task runs its agents on cannot run this model. Start on another model, or ask the member to change where the task runs.",
+} as const satisfies Record<LocalAgentRefusal, string>;
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
 export const AGENT_CALLER = {
@@ -1291,6 +1305,9 @@ function withReset(words: string, refusal: HostedRefusal): string {
 
 /** A start's refusal in the model's words. */
 function startRefusalWords(refusal: HostedRefusal): string {
+  if (refusal.localAgentRefusal !== undefined) {
+    return LOCAL_AGENT_REFUSAL_WORDS[refusal.localAgentRefusal];
+  }
   return withReset(
     START_REFUSAL_WORDS.get(refusal.error) ?? START_CODING_AGENT_REFUSAL.UNAVAILABLE,
     refusal,
@@ -1764,6 +1781,8 @@ export function runStartAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: yield* startedReading(started.success.agent, yield* offeredModels, ownTask),
         ...earlierContinuations(landing?.success.continuedBy, started.success.agent.id),
+        // An agent sent to the cloud on a device's task says why, so the caller can tell its member.
+        ...(started.success.notice === undefined ? undefined : { notice: started.success.notice }),
       };
     }),
   );

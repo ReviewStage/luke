@@ -14,6 +14,12 @@ import {
 } from "@luke/features/provider-key-wire";
 import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
+import {
+  SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
+  SETTING_SECTION,
+  type SettingsRowsInput,
+  settingRowsForPage,
+} from "@luke/settings";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   CHOICE_BAR_LOOK,
@@ -66,7 +72,9 @@ import { ChaptersModelSection } from "./chapters-model-section.js";
 import { HostsSection } from "./hosts-section.js";
 import { SettingMarks } from "./marks.js";
 import { PickerRow } from "./picker-row.js";
+import { SchemaSettingRows } from "./schema-rows.js";
 import { SwitchRow } from "./switch-row.js";
+import type { SettingsWrites } from "./writes.js";
 
 /**
  * coding-agents-page.tsx -- Settings › Agents: the one model and effort every agent starts on, a voice chat's as a Start's, there being no voice default of its own.
@@ -75,7 +83,8 @@ import { SwitchRow } from "./switch-row.js";
  * each saying how Claude Code or Codex is connected and opening the dialog
  * that connects it with a plan or an API key (`agent-auth-section.tsx`),
  * then this file's Default model, then the model a Generate chapters runs
- * on (`chapters-model-section.tsx`). The harnesses and the Default model
+ * on (`chapters-model-section.tsx`), then the page's schema rows, Run agents
+ * on this Mac among them while local agents are on. The harnesses and the Default model
  * share the one read of the keys, so a
  * key saved or removed above is what the model row says at once. The default model's one value is the account's, kept
  * on the service beside the settings preferences and written by this page
@@ -494,7 +503,41 @@ function CodingAgentsSection({
  * own key, so it reads them from the rows that change them rather than from
  * a read of its own that a save there would leave behind.
  */
-export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
+/**
+ * The page's schema rows, under the page's own groups: whether this Mac runs
+ * the account's local agents, drawn only while the Local agents experiment is
+ * on in the desktop app (`@luke/settings`'s schema says so). Nothing, not
+ * even its group, where no row stands.
+ */
+function AgentSchemaRows({
+  view,
+  writes,
+}: {
+  view: SettingsRowsInput;
+  writes: SettingsWrites;
+}): React.JSX.Element | null {
+  if (
+    settingRowsForPage(SCHEMA_SETTINGS_PAGE.CODING_AGENTS, SETTING_SECTION.MAIN, view).length === 0
+  ) {
+    return null;
+  }
+  return (
+    <SettingsSection>
+      <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.CODING_AGENTS} view={view} writes={writes} />
+    </SettingsSection>
+  );
+}
+
+export function CodingAgentsPage({
+  signedIn,
+  view,
+  writes,
+}: {
+  signedIn: boolean;
+  /** What the schema rows are drawn from; none before the settings are read, where no row is drawn. */
+  view?: SettingsRowsInput | undefined;
+  writes?: SettingsWrites | undefined;
+}): React.JSX.Element {
   const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>();
   const [keysAnswered, setKeysAnswered] = useState(0);
   const onKeys = useCallback((keys: readonly ProviderKeySummary[]) => {
@@ -506,6 +549,9 @@ export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX
       <AgentAuthSection signedIn={signedIn} onKeys={onKeys} />
       <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
       <ChaptersModelSection signedIn={signedIn} />
+      {view === undefined || writes === undefined ? null : (
+        <AgentSchemaRows view={view} writes={writes} />
+      )}
       <HostsSection signedIn={signedIn} />
     </>
   );

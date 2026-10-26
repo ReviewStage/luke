@@ -1560,7 +1560,12 @@ export const PlanBody = memo(function PlanBody({
             {page === undefined ? (
               <>
                 {taskStanding === undefined ? null : (
-                  <TaskStandingChips task={task} onSet={taskStanding.onSet} />
+                  <TaskStandingChips
+                    task={task}
+                    onSet={taskStanding.onSet}
+                    devices={taskStanding.devices}
+                    readDevices={taskStanding.readDevices}
+                  />
                 )}
                 {underTitle}
                 <PlanByline

@@ -500,7 +500,9 @@ export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
  * spoken, and it may start on a task with no repository, where it works in
  * none. A Start `call` is one a Call opens a call into as it lands, from a
  * draft's composer: it runs where the account's routing chooses, as any
- * Start does, eve or the provider's own harness alike.
+ * Start does, eve or the provider's own harness alike. A Start names no
+ * machine: the agent runs where its source runs, else where its task runs
+ * (`task-wire.ts`'s `runsOn`), else in the cloud.
  */
 export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -514,10 +516,6 @@ export const codingAgentStartRequestFields = {
   note: EffectSchema.optionalKey(messageWordsSchema),
   blank: EffectSchema.optionalKey(EffectSchema.Boolean),
   call: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** Where the agent runs: one of the starter's Macs, the one `deviceId` names; a sandbox where absent. */
-  machine: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_MACHINE))),
-  /** The Mac a Start on a Mac runs on, one Start offered (`@luke/features/models-wire`'s `macOfferSchema`), which the service checks is the starter's and there before it pins the agent to it. */
-  deviceId: EffectSchema.optionalKey(wireUuidSchema),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
@@ -859,6 +857,13 @@ const codingAgentTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/
 export const codingAgentAnswerSchema = EffectSchema.Struct({
   agent: codingAgentSummarySchema,
   txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+  /**
+   * Why a Start runs its agent in the cloud on a task that runs on a device,
+   * in plain words, which the agent's transcript says too: the device is a
+   * teammate's, and only its owner's agents run on it. Absent otherwise, and
+   * from a service older than it.
+   */
+  notice: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 /**

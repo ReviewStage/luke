@@ -5,7 +5,11 @@ import {
 } from "./agent-browser-tab-wire.js";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
-import { codingAgentSummarySchema, tasklessAgentSchema } from "./coding-agent-wire.js";
+import {
+  codingAgentSummarySchema,
+  localAgentRefusalSchema,
+  tasklessAgentSchema,
+} from "./coding-agent-wire.js";
 import {
   GITHUB_ISSUES_BOUNDS,
   githubIssueSummarySchema,
@@ -65,6 +69,7 @@ import {
   taskPrioritySchema,
   taskPullRequestsSchema,
   taskRenameRequestSchema,
+  taskRunsOnRequestSchema,
   taskSchema,
   taskSkillsSchema,
   taskStatusSchema,
@@ -401,23 +406,28 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
-/** Whether a change of where a task stands names its status, its priority, its assignee, or any of them. */
+/** Whether a change of where a task stands names its status, its priority, its assignee, where its agents run, or any of them. */
 function namesAStanding(params: {
   status?: unknown;
   priority?: unknown;
   assigneeId?: unknown;
+  runsOn?: unknown;
 }): boolean {
   return (
-    params.status !== undefined || params.priority !== undefined || params.assigneeId !== undefined
+    params.status !== undefined ||
+    params.priority !== undefined ||
+    params.assigneeId !== undefined ||
+    params.runsOn !== undefined
   );
 }
 
-/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), or any of them, as the window asks it. */
+/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), where its agents run, or any of them, as the window asks it. */
 export const tasksSetStandingParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
+  runsOn: EffectSchema.optionalKey(taskRunsOnRequestSchema),
 }).check(EffectSchema.makeFilter(namesAStanding));
 
 export type TasksSetStandingParams = typeof tasksSetStandingParamsSchema.Type;
@@ -448,6 +458,8 @@ export const TASK_CALL_FAILURE = {
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** The workspace's Linear could not be read for the issue a plan was to start from: none connected, its grant refused, or no such issue. */
   LINEAR_UNAVAILABLE: "linear-unavailable",
+  /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
+  LOCAL_AGENT_REFUSED: "local-agent-refused",
 } as const;
 
 export type TaskCallFailure = (typeof TASK_CALL_FAILURE)[keyof typeof TASK_CALL_FAILURE];
@@ -462,11 +474,12 @@ export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
 
 const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILURES);
 
-/** Why a start answered no plan: a repository call's reasons, the Linear issue it was to start from could not be read, or the workspace it was to start in is none of the account's. */
+/** Why a start answered no plan: a repository call's reasons, the Linear issue it was to start from could not be read, the workspace it was to start in is none of the account's, or the device it named would not take its agents. */
 const START_CALL_FAILURES = [
   ...REPOSITORY_CALL_FAILURES,
   TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
   TASK_CALL_FAILURE.NOT_FOUND,
+  TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 ] as const;
 
 export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
@@ -481,7 +494,10 @@ export const tasksStartAnswerSchema = EffectSchema.Union([
     planId: EffectSchema.String,
     agentStart: EffectSchema.optionalKey(codingAgentAgentAnswerSchema),
   }),
-  EffectSchema.Struct({ failure: EffectSchema.Literals(START_CALL_FAILURES) }),
+  EffectSchema.Struct({
+    failure: EffectSchema.Literals(START_CALL_FAILURES),
+    localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
+  }),
 ]);
 
 export type TasksStartAnswer = typeof tasksStartAnswerSchema.Type;

@@ -12,6 +12,7 @@ import {
   SearchableMenu,
   SettingsRow,
   type SettingsRowDensity,
+  Tooltip,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
@@ -59,6 +60,8 @@ interface PickerProps {
   /** The id a pressed search result lands on: marked on the chip, which takes the keyboard. */
   anchor?: string | undefined;
   disabled?: boolean | undefined;
+  /** What the chip's hover says beyond its value, such as when a change takes; none where its name says enough. */
+  hint?: string | undefined;
   /** The chip's edge the menu hangs from; the trailing one where none is named. */
   align?: PopoverAlign | undefined;
   /** How wide the chip stands; the settings column where none is named. */
@@ -88,6 +91,7 @@ export function Picker({
   note,
   anchor,
   disabled,
+  hint,
   align = POPOVER_ALIGN.END,
   width = CHIP_WIDTH.FIELD,
   onOpen,
@@ -112,27 +116,29 @@ export function Picker({
       className="settings-picker relative inline-flex min-w-0 flex-initial items-center"
       ref={row}
     >
-      <Chip
-        ref={chip}
-        look={CHIP_LOOK.FIELD}
-        width={width}
-        chevron
-        {...(anchor ? searchAnchorProps(anchor) : undefined)}
-        aria-label={`${label}: ${valueLabel}`}
-        aria-describedby={describedBy}
-        aria-invalid={invalid}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        disabled={disabled}
-        onClick={() => {
-          if (!open) onOpen?.();
-          setOpen(!open);
-        }}
-      >
-        {valueIcon}
-        <ChipName>{valueLabel}</ChipName>
-      </Chip>
+      <Tooltip label={open ? undefined : hint}>
+        <Chip
+          ref={chip}
+          look={CHIP_LOOK.FIELD}
+          width={width}
+          chevron
+          {...(anchor ? searchAnchorProps(anchor) : undefined)}
+          aria-label={`${label}: ${valueLabel}`}
+          aria-describedby={describedBy}
+          aria-invalid={invalid}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          disabled={disabled}
+          onClick={() => {
+            if (!open) onOpen?.();
+            setOpen(!open);
+          }}
+        >
+          {valueIcon}
+          <ChipName>{valueLabel}</ChipName>
+        </Chip>
+      </Tooltip>
       {drawn.mounted ? (
         <SearchableMenu
           leaving={drawn.leaving}
