@@ -1209,14 +1209,12 @@ body,
   transition: visibility 0s linear var(--luke-duration-pane);
 }
 
-/* The line under an automation's agent's bar (`automation-agent-run.tsx`):
-   what fired its run, when, and where it stands, its words where the bar's
-   title starts, over a hairline. */
-.automation-agent-run {
-  flex: none;
-  padding: 0 calc(var(--column-inset) + var(--luke-row-inset) + var(--luke-list-inset))
-    var(--luke-item-gap);
-  border-bottom: 1px solid var(--luke-color-border);
+/* The run's bar under an automation's agent's bar (`automation-agent-run.tsx`)
+   is a tab's (`PaneBar`), but it stands under the page's toolbar rather than
+   a tab strip, so it starts its glyph a column's inset further in, on one
+   line with the toolbar's first crumb. */
+.agent-page > .luke-pane-bar {
+  padding-inline: calc(var(--column-inset) + var(--luke-list-inset));
 }
 
 /* Where the run stands among the arrows, in figures that hold their width as they step. */
