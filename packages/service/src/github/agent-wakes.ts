@@ -13,6 +13,7 @@ import {
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -180,8 +181,20 @@ const FENCE_TAG = {
   [AGENT_WAKE.COMMENT]: "github-comment",
 } as const;
 
+/**
+ * What the agent reads GitHub with, by its access: `gh` on the App's
+ * credential, and GitHub's REST API through `gh api` alone on a member's
+ * token, where `gh pr` commands do not work (`instructions.ts`).
+ */
+const GITHUB_READER = {
+  [GITHUB_ACCESS.APP]: "`gh`",
+  [GITHUB_ACCESS.TOKEN]: "`gh api`",
+} as const;
+
 /** What closes what a review or a comment says where it would not fit the message. */
-const CUT_MARK = "\n… (cut to fit; read the rest with `gh`)";
+function cutMark(reader: string): string {
+  return `\n… (cut to fit; read the rest with ${reader})`;
+}
 
 /** What a review's or a comment's words are read as, said before them. */
 const FENCE_PREAMBLE =
@@ -503,12 +516,12 @@ function lineCommentWords(comment: GitHubReviewLineComment): string {
  * what the message bound leaves it, then `close`; where nothing was said,
  * the head and the close alone.
  */
-function withWords(head: string, tag: string, said: string, close: string): string {
+function withWords(head: string, tag: string, said: string, close: string, reader: string): string {
   if (said === "") return `${head}\n\n${close}`;
   const open = `${head}\n\n${FENCE_PREAMBLE}\n<${tag}>\n`;
   const end = `\n</${tag}>\n\n${close}`;
   const room = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - open.length - end.length;
-  return `${open}${fencedWithin(said, room, CUT_MARK)}${end}`;
+  return `${open}${fencedWithin(said, room, cutMark(reader))}${end}`;
 }
 
 /**
@@ -516,14 +529,17 @@ function withWords(head: string, tag: string, said: string, close: string): stri
  * transcript draws as GitHub's: a review with what it says and its inline
  * comments, where they were read (`inline` none where they could not be),
  * a comment with what it says, a failed check by its address, and every
- * check finished by its commit, with whether any `failing`.
+ * check finished by its commit, with whether any `failing`, each read with
+ * what the agent's GitHub `access` reaches GitHub with.
  */
 function agentWakeText(
   wake: AgentWake,
   branch: string | null,
   inline: Option.Option<readonly GitHubReviewLineComment[]>,
   failing: boolean,
+  access: GitHubAccess,
 ): string {
+  const reader = GITHUB_READER[access];
   switch (wake.kind) {
     case AGENT_WAKE.REVIEW: {
       const verdict = VERDICT_WORDS.get(wake.verdict ?? "") ?? REVIEWED;
@@ -535,23 +551,24 @@ function agentWakeText(
         .filter((part) => part !== "")
         .join("\n\n");
       const close = Option.isNone(inline)
-        ? "Its inline comments could not be read here, so read them with `gh`, and act on the review as you judge best."
-        : "Act on it as you judge best, and read with `gh` anything cut short or the rest of a thread.";
-      return withWords(head, FENCE_TAG[AGENT_WAKE.REVIEW], said, close);
+        ? `Its inline comments could not be read here, so read them with ${reader}, and act on the review as you judge best.`
+        : `Act on it as you judge best, and read with ${reader} anything cut short or the rest of a thread.`;
+      return withWords(head, FENCE_TAG[AGENT_WAKE.REVIEW], said, close, reader);
     }
     case AGENT_WAKE.COMMENT:
       return withWords(
         `@${wake.by} commented on ${pullRequestWords(wake)}`,
         FENCE_TAG[AGENT_WAKE.COMMENT],
         wake.words?.trim() ?? "",
-        "Act on it as you judge best, and read with `gh` anything cut short or the conversation before it.",
+        `Act on it as you judge best, and read with ${reader} anything cut short or the conversation before it.`,
+        reader,
       );
     case AGENT_WAKE.CHECK_FAILED:
-      return `A check failed on your branch \`${branch ?? ""}\`: ${wake.url}\n\nRead why with \`gh\`, fix the cause, and push, as you watch your own checks.`;
+      return `A check failed on your branch \`${branch ?? ""}\`: ${wake.url}\n\nRead why with ${reader}, fix the cause, and push, as you watch your own checks.`;
     case AGENT_WAKE.CHECKS_COMPLETED: {
       const sha = (wake.sha ?? "").slice(0, SHORT_SHA_CHARS);
       const outcome = failing
-        ? "At least one failed: read why with `gh`, fix the cause, and push."
+        ? `At least one failed: read why with ${reader}, fix the cause, and push.`
         : "None failed.";
       return `Every check finished on \`${sha}\`, the head of ${pullRequestWords(wake)}\n\n${outcome}`;
     }
@@ -734,7 +751,7 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
       Effect.gen(function* () {
         const eve = yield* eveFor(userId);
         yield* steerCodingAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
-          text: agentWakeText(wake, agent.branch, inline, failing),
+          text: agentWakeText(wake, agent.branch, inline, failing, agent.githubAccess),
           clientKey,
           sender: { kind: MESSAGE_SENDER.GITHUB, login: wake.by },
         });

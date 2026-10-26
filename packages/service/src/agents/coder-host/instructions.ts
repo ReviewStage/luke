@@ -486,6 +486,14 @@ function branchWords(startBranch: string | null): BranchWords {
   };
 }
 
+/**
+ * Where the first message names an open pull request's branch to push to,
+ * such as a review told to push its fixes, the agent pushes there and opens
+ * no pull request of its own, in place of the branch it would cut.
+ */
+const PULL_REQUEST_BRANCH_WORDS =
+  " Where your first message names an open pull request's branch to push to, check that branch out and push your commits to it instead, and open no new pull request for them.";
+
 /** What the agent is told of messaging another agent: when its work meets theirs, short and complete, and how its message and theirs read. */
 const MESSAGE_AGENT_WORDS = ` Message another agent with \`${MESSAGE_AGENT_TOOL.name}\` and its id when its work meets yours, such as a change of yours it depends on or something only it knows, and keep each message short and complete; only the two of you see it, and it is told of it at once, under your name, without your waiting for a reply.`;
 
@@ -589,7 +597,7 @@ The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}
 
 1. Read the repository's \`AGENTS.md\` and \`CLAUDE.md\` at the root and in every directory you touch, and its package files, before anything else. They say how this repository is built, tested, and reviewed, and they outrank these instructions where the two meet.
 2. ${words.reread}
-3. Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, ${branch.cut}
+3. Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, ${branch.cut}${PULL_REQUEST_BRANCH_WORDS}
 4. ${authorshipRule(coAuthor)}
 5. Make the smallest coherent change that ${words.whole}. Follow the repository's own conventions over any habit of yours.
 6. Run the repository's checks as its own files describe them, and fix what they find before you consider publishing.
