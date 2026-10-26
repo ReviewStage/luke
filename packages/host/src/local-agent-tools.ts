@@ -19,9 +19,11 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * pinned members are extracted, into a folder of their own beside the kept
  * one, which is moved into place whole. Where the pin names the Developer ID
  * team its binary is signed by, macOS's own `codesign` must verify the
- * binary strictly and name that team before the build is marked. The mark
- * is written last, so a fetch cut off, or a build refused, leaves nothing
- * that is ever run, and the next ask fetches again.
+ * binary strictly and name that team before the build is marked, and again
+ * each time the kept build is first answered after a start, so a binary
+ * changed on disk since is refused and fetched anew. The mark is written
+ * last, so a fetch cut off, or a build refused, leaves nothing that is ever
+ * run, and the next ask fetches again.
  */
 
 const TOOL_FETCH = {
@@ -151,7 +153,13 @@ export const localAgentTool = Effect.fnUntraced(function* (
   if (bundled !== undefined && (yield* exists(bundled))) return Option.some(bundled);
   const folder = path.join(stateRoot, TOOL_FETCH.FOLDER, pin.NAME, pin.VERSION);
   const binary = path.join(folder, pin.BINARY);
-  const kept = (yield* exists(path.join(folder, TOOL_FETCH.MARK))) && (yield* exists(binary));
+  const marked = (yield* exists(path.join(folder, TOOL_FETCH.MARK))) && (yield* exists(binary));
+  // Note that a kept build signed by a pinned team is checked again before it is answered, since
+  // anything of the developer's could have written it since: a binary changed since is fetched again.
+  const kept =
+    marked &&
+    (pin.TEAM === undefined ||
+      (yield* signedAsPinned(binary, pin.TEAM).pipe(Effect.orElseSucceed(() => false))));
   if (kept) return Option.some(binary);
   return yield* fetchTool(pin, folder).pipe(
     Effect.as(Option.some(binary)),
