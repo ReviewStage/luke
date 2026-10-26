@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
+import { CLAUDE_CODE_MAC_PIN, CODEX_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
 import type { DeviceAgentClaimedLine } from "@luke/features";
 import {
   DEVICE_AGENT_LINE_KIND,
@@ -114,6 +115,8 @@ const following = (githubFromLuke: boolean) =>
         runnerBundle: "/opt/luke/agent-runner.mjs",
         runnerEnv: {},
         bundled: { node: TOOLS.node, claude: TOOLS.claude, gh: TOOLS.gh },
+        pins: { node: NODE_MAC_PIN, claude: CLAUDE_CODE_MAC_PIN, codex: CODEX_MAC_PIN },
+        ownSignIns: true,
         githubFromLuke,
         deviceName: "rack-1",
         devicePlatform: DEVICE_PLATFORM.LINUX,

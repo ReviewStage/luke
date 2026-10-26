@@ -8,6 +8,7 @@
     ".": "./src/index.js",
     "./effect": "./src/effect/index.js",
     "./node": "./src/node/index.js",
+    "./linux-host": "./src/linux-host/index.js",
     "./acts": "./src/acts.js",
     "./act-port": "./src/act-port/index.js",
     "./act-port/testing": "./src/act-port/testing.js",

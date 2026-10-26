@@ -31,6 +31,9 @@ export {
   DEVICE_AGENT_NOT_CLAIMED,
   type DeviceAgentClaimedLine,
   type DeviceAgentDevice,
+  enrollHost,
+  HOST_ENROLL_OUTCOME,
+  type HostEnrollOutcome,
   HostedDeviceAgentClient,
   type HostedDeviceAgentClientOptions,
 } from "./device-agent-client.js";

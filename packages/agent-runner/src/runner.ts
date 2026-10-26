@@ -66,6 +66,7 @@ import {
   ON_MAC,
   RunnerFailed,
   type RunnerSelf,
+  runsOnHost,
 } from "./launch.js";
 import { openMcpRelay } from "./mcp-relay.js";
 import { ProcessTable } from "./processes.js";
@@ -92,6 +93,9 @@ import {
   type RunnerWakeup,
 } from "./protocol.js";
 import { oneShotDueAt } from "./wakeups.js";
+
+/** The CLI's own switch that strips credentials from every command it starts (https://code.claude.com/docs/en/env-vars). */
+const CLAUDE_SUBPROCESS_SCRUB = "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB";
 
 /** The name the Luke MCP server is registered under, so its tools reach the model as `mcp__luke__<tool>`. */
 const MCP_SERVER = "luke";
@@ -192,6 +196,31 @@ const resumePointOf = Effect.fn("agent-runner/resumePointOf")(function* (
   return at === undefined ? ({ resume } satisfies ResumePoint) : { resume, at };
 });
 
+/**
+ * The command sandbox every command the agent runs is under, in a sandbox and
+ * on a Mac: bubblewrap or Seatbelt, the network on, and the credentials
+ * denied. A host runs none (`RUNNER_PLACE.HOST`).
+ */
+function commandSandbox(config: ClaudeCodeConfig): NonNullable<Options["sandbox"]> {
+  return {
+    enabled: true,
+    failIfUnavailable: true,
+    autoAllowBashIfSandboxed: true,
+    allowUnsandboxedCommands: false,
+    // Note that the sandbox's VM masks /proc/kcore and /proc/keys, so the
+    // kernel refuses bubblewrap a fresh /proc and every command failed; the
+    // host /proc is bound instead, where another process's environ, the
+    // CLI's and its token included, is still refused, as under Codex. A Mac's
+    // Seatbelt has no /proc to bind.
+    ...(ON_MAC ? {} : { enableWeakerNestedSandbox: true }),
+    // Note that the list is no strict allowlist, so under `bypassPermissions` a host past it is
+    // still reached, which leaves a Mac's network open as the developer's own shell has it.
+    network: { allowedDomains: [...config.allowedDomains] },
+    ...(ON_MAC ? { filesystem: { allowWrite: [...macWritable(config.cwd)] } } : {}),
+    credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
+  };
+}
+
 /** The documented options a launch runs `query()` with (the plan's P05). */
 function queryOptions(
   config: ClaudeCodeConfig,
@@ -213,29 +242,20 @@ function queryOptions(
     disallowedTools: [...CLAUDE_CODE_TOOLS.DENIED],
     agents: { [CLAUDE_CODE_WORKER]: WORKER },
     // The CLI's environment is the runner's own, less the bearer, which only
-    // the runner uses; Node leaves an undefined one unset.
-    env: { ...env, [RUNNER_ENV.BEARER]: undefined },
+    // the runner uses; Node leaves an undefined one unset. Note that on a host,
+    // which runs no command sandbox to deny the credentials, the CLI strips
+    // them from every command it starts itself (`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`,
+    // https://code.claude.com/docs/en/env-vars).
+    env: {
+      ...env,
+      [RUNNER_ENV.BEARER]: undefined,
+      ...(runsOnHost(env) ? { [CLAUDE_SUBPROCESS_SCRUB]: "1" } : undefined),
+    },
     // Note that the SDK puts an HTTP server's config, headers and all, in the
     // CLI's argv, which any process in the sandbox can read, so Luke's is an
     // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`), as is each integration's.
     mcpServers: { ...servers },
-    sandbox: {
-      enabled: true,
-      failIfUnavailable: true,
-      autoAllowBashIfSandboxed: true,
-      allowUnsandboxedCommands: false,
-      // Note that the sandbox's VM masks /proc/kcore and /proc/keys, so the
-      // kernel refuses bubblewrap a fresh /proc and every command failed; the
-      // host /proc is bound instead, where another process's environ, the
-      // CLI's and its token included, is still refused, as under Codex. A Mac's
-      // Seatbelt has no /proc to bind.
-      ...(ON_MAC ? {} : { enableWeakerNestedSandbox: true }),
-      // Note that the list is no strict allowlist, so under `bypassPermissions` a host past it is
-      // still reached, which leaves a Mac's network open as the developer's own shell has it.
-      network: { allowedDomains: [...config.allowedDomains] },
-      ...(ON_MAC ? { filesystem: { allowWrite: [...macWritable(config.cwd)] } } : {}),
-      credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
-    },
+    sandbox: runsOnHost(env) ? { enabled: false } : commandSandbox(config),
     hooks: { Stop: [{ hooks: [onStop] }] },
   };
   if (config.effort !== undefined) options.effort = config.effort;

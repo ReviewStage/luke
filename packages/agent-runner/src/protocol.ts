@@ -47,6 +47,23 @@ export const RUNNER_ENV = {
    * Codex runs inherits.
    */
   OPENAI_API_KEY: "OPENAI_API_KEY",
+  /**
+   * Where the runner runs, where its starter says (`RUNNER_PLACE`): set by a
+   * host's daemon alone, and unset in a sandbox and on a Mac, which the
+   * runner tells apart by its platform.
+   */
+  PLACE: "LUKE_RUNNER_PLACE",
+} as const;
+
+/** The places a runner's starter names in `RUNNER_ENV.PLACE`. */
+export const RUNNER_PLACE = {
+  /**
+   * A Linux box its member added as a host, with nobody signed in at it,
+   * where each launch runs in a systemd unit of its own and no harness runs
+   * a sandbox of its own: the box is the boundary, and bubblewrap and
+   * Landlock would keep a command from `/dev/kvm`.
+   */
+  HOST: "host",
 } as const;
 
 /**

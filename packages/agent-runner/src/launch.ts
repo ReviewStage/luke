@@ -14,10 +14,15 @@ import { join, resolve } from "node:path";
 import type { Cause, Queue, Redacted } from "effect";
 import { Data } from "effect";
 import type { EventSink } from "./events.js";
-import type { RunnerEnd, RunnerWakeup } from "./protocol.js";
+import { RUNNER_ENV, RUNNER_PLACE, type RunnerEnd, type RunnerWakeup } from "./protocol.js";
 
 /** Whether the runner runs on the developer's Mac, under Seatbelt, rather than in a Linux sandbox under bubblewrap. */
 export const ON_MAC = process.platform === "darwin";
+
+/** Whether the runner runs on a host its member added (`RUNNER_PLACE.HOST`), as the environment it was started with says. */
+export function runsOnHost(env: Readonly<Record<string, string | undefined>>): boolean {
+  return env[RUNNER_ENV.PLACE] === RUNNER_PLACE.HOST;
+}
 
 /**
  * Where a command the agent runs on a Mac may write beside its worktree and

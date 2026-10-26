@@ -1,0 +1,22 @@
+{
+  "name": "@luke/host-daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Luke's host daemon: a headless Linux box's own follower of the local agents its member starts on it, and the install script that sets it up",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/luke-host.mjs --define:process.env.LUKE_HOST_VERSION='\"'$npm_package_version'\"' --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@luke/features": "workspace:*",
+    "@luke/host": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "esbuild": "0.28.2",
+    "typescript": "catalog:"
+  }
+}

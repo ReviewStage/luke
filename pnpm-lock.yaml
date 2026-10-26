@@ -206,6 +206,9 @@ importers:
       '@keyframelabs/sdk':
         specifier: 0.3.0
         version: 0.3.0(@types/dom-mediacapture-record@1.0.22)
+      '@luke/agent-runner':
+        specifier: workspace:*
+        version: link:../../packages/agent-runner
       '@luke/brand':
         specifier: workspace:*
         version: link:../../packages/brand
@@ -373,6 +376,31 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  apps/host:
+    dependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(redis@6.2.1)
+      '@luke/features':
+        specifier: workspace:*
+        version: link:../../packages/features
+      '@luke/host':
+        specifier: workspace:*
+        version: link:../../packages/host
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.2.0
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

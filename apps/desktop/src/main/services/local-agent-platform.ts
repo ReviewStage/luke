@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { CLAUDE_CODE_MAC_PIN, CODEX_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
 import {
   DEVICE_ARCH,
   DEVICE_CAPABILITY,
@@ -95,6 +96,8 @@ export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
       args: [node, bundle],
       env,
     }),
+    pins: { node: NODE_MAC_PIN, claude: CLAUDE_CODE_MAC_PIN, codex: CODEX_MAC_PIN },
+    ownSignIns: true,
     deviceName: deviceName(),
     // Note that the app is built for Apple silicon alone (`package.json`'s `--mac --arm64`).
     devicePlatform: DEVICE_PLATFORM.DARWIN,
