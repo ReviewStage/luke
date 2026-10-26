@@ -5,7 +5,7 @@ import "@luke/panel/testing/resize-observer";
 import { LINK_OPEN, LINK_PLATFORM } from "@luke/features/link-open";
 import { afterEach, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
-import { fakeService, LISTED_TASK } from "./support/fake-service";
+import { fakeService, LISTED_CHANNEL, LISTED_TASK } from "./support/fake-service";
 import { pageLoadedBy } from "./support/page-load";
 
 /**
@@ -40,6 +40,8 @@ test("a plan's link reloaded on a Mac by an account that chose the Mac app is no
 
   assert.ok(app !== undefined, "the host stands");
   // The plan drawn comes well after a hand-off would have, which asks the service once.
-  await vi.waitFor(() => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")));
+  await vi.waitFor(() =>
+    assert.match(root.textContent ?? "", new RegExp(LISTED_CHANNEL.name, "u")),
+  );
   assert.deepEqual(opened, []);
 });

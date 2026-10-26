@@ -5,7 +5,7 @@ import "@luke/panel/testing/resize-observer";
 import { LINK_OPEN, LINK_PLATFORM } from "@luke/features/link-open";
 import { afterEach, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
-import { fakeService, LISTED_TASK } from "./support/fake-service";
+import { fakeService, LISTED_CHANNEL, LISTED_TASK } from "./support/fake-service";
 import { pageLoadedBy } from "./support/page-load";
 
 /**
@@ -45,7 +45,9 @@ test("a plan's link opened on a Mac by an account that chose the Mac app is hand
   assert.match(opened[0] ?? "", new RegExp(`/plan/${LISTED_TASK.id}$`, "u"));
   // The visitor comes back to the tab, which is still drawn and asks the app nothing more.
   window.dispatchEvent(new Event("focus"));
-  await vi.waitFor(() => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")));
+  await vi.waitFor(() =>
+    assert.match(root.textContent ?? "", new RegExp(LISTED_CHANNEL.name, "u")),
+  );
   assert.equal(opened.length, 1);
   assert.equal(root.querySelector("section.luke-auth-card"), null, "no sign-in is drawn");
 });

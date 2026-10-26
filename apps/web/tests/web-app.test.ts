@@ -7,7 +7,7 @@ import "@luke/panel/testing/resize-observer";
 import { LINK_PLATFORM } from "@luke/features/link-open";
 import { afterEach, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
-import { type FakeService, fakeService, LISTED_TASK } from "./support/fake-service";
+import { type FakeService, fakeService, LISTED_CHANNEL } from "./support/fake-service";
 
 /**
  * The web app's root signed out, on a Mac: the shared host in the tab reads
@@ -44,7 +44,7 @@ afterEach(async () => {
   document.documentElement.removeAttribute("data-luke-boot-sidebar");
 });
 
-test("signed out, the panel draws its sign-in; a return after another tab signed in opens the account's tasks", async () => {
+test("signed out, the panel draws its sign-in; a return after another tab signed in opens the account's channels", async () => {
   const service = fakeService({ signedIn: false });
   // An earlier load read someone signed in here, the sidebar open.
   localStorage.setItem("luke.signed-in-here", "true");
@@ -81,7 +81,7 @@ test("signed out, the panel draws its sign-in; a return after another tab signed
   await vi.waitFor(() => {
     window.dispatchEvent(new Event("focus"));
     assert.ok(root.querySelector("section.luke-auth-card") === null, "the sign-in is gone");
-    assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
+    assert.match(root.textContent ?? "", new RegExp(LISTED_CHANNEL.name, "u"));
   }, 5_000);
   await vi.waitFor(() =>
     assert.ok(nextFramePinsSidebar(), "signed in, the next frame stands the sidebar"),

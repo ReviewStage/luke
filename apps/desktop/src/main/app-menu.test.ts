@@ -41,7 +41,7 @@ describe("the menu bar's gate", () => {
       "Command Palette",
       "-",
       "Ask Luke",
-      "Inbox",
+      "Channels",
       "Tasks",
       "Automations",
       "-",

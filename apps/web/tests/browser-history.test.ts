@@ -318,8 +318,8 @@ it.effect(
         const entries = window.history.length;
 
         await travel(() => window.history.back());
-        assert.ok(panel.shows("Inbox"), "Back lands where the window rests");
-        assert.equal(addressBar(), "/personal/inbox", "at the address of the Inbox it rests on");
+        assert.ok(panel.shows("#general"), "Back lands where the window rests");
+        assert.equal(addressBar(), "/personal/inbox", "at the address of the channels it rests on");
         assert.equal(window.history.length, entries, "and pushes nothing");
 
         await travel(() => window.history.forward());
@@ -331,7 +331,10 @@ it.effect(
         window.history.pushState(null, "", "/app");
         await travel(() => window.history.back());
         await travel(() => window.history.forward());
-        assert.ok(panel.shows("Inbox"), "the entry holding no step opens where the window rests");
+        assert.ok(
+          panel.shows("#general"),
+          "the entry holding no step opens where the window rests",
+        );
         assert.ok(savedEntry() !== undefined, "and the page writes its step on it");
       });
     }),

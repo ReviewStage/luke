@@ -8,7 +8,7 @@ import { Effect, Layer } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { afterEach, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
-import { fakeService, LISTED_TASK } from "./support/fake-service";
+import { fakeService, LISTED_CHANNEL } from "./support/fake-service";
 
 /**
  * The web app's first frame: the page's root as app.html serves it holds the
@@ -85,14 +85,14 @@ test("the shell's frame stands while the session is read, and the signed-in pane
     root.querySelector(".boot-frame .desktop-shell .desktop-main") !== null,
     "the frame stands",
   );
-  assert.doesNotMatch(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
+  assert.doesNotMatch(root.textContent ?? "", new RegExp(LISTED_CHANNEL.name, "u"));
 
   session.resolve();
   app = await mounting;
 
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() => {
-    assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
+    assert.match(root.textContent ?? "", new RegExp(LISTED_CHANNEL.name, "u"));
     assert.equal(root.querySelector(".boot-frame"), null, "the frame is gone");
   }, 5_000);
 });

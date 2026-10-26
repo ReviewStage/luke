@@ -1,5 +1,5 @@
 /**
- * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, Notion's sign-in and a workspace's GitHub installation addresses, the workspace's members, the repositories the Luke GitHub App reaches, the account's link choice, and nothing else, answered over a fake `HttpClient`.
+ * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, the account's own workspace, a task list, the workspace's channels, a Slack sign-in under way, Notion's sign-in and a workspace's GitHub installation addresses, the workspace's members, the repositories the Luke GitHub App reaches, the account's link choice, and nothing else, answered over a fake `HttpClient`.
  *
  * The Slack sign-in is settled only by the settling POST, as the service
  * answers a cookie caller. The web client's host calls the origin that
@@ -7,8 +7,8 @@
  * every client reads as unanswered, so a test states only what it reads.
  * The session is the browser's cookie in a real tab: here it is whatever the
  * test last set, read on every `get-session`, so "the cookie changed" is
- * one call; a test that holds the session read answers it when it lets go. The task list is followed as
- * the tab follows it with Realtime off: polled, the listed task's row inline.
+ * one call; a test that holds the session read answers it when it lets go. The workspaces and the task list are
+ * followed as the tab follows them with Realtime off: polled, their rows inline.
  */
 
 import type { LinkOpen } from "@luke/features/link-open";
@@ -37,6 +37,16 @@ export const LISTED_TASK = {
   repository: null,
 } as const;
 
+/** The one channel the fake lists, the workspace's #general. */
+export const LISTED_CHANNEL = {
+  id: "0c0c0c0c-0000-4000-8000-000000000001",
+  name: "general",
+  purpose: "Anything that belongs nowhere else.",
+  project: false,
+  createdAt: 1_760_000_000_000,
+  waiting: 0,
+} as const;
+
 /** The rows each part of the task list delivers: the listed task, owned by the signed-in user, no agent, and no linked issue. */
 const LIVE_ROWS: ReadonlyMap<string, readonly WireValue[]> = new Map<string, readonly WireValue[]>([
   [
@@ -61,21 +71,49 @@ const LIVE_ROWS: ReadonlyMap<string, readonly WireValue[]> = new Map<string, rea
   ["issues", []],
 ]);
 
-/** Where the task list's rows stand, which never moves in the fake: each part's digest, in the parts' name order. */
-const LIVE_DIGEST = "1,1,1";
+/** The rows each part of the workspaces delivers: the signed-in user's own workspace, the listed task's, with no GitHub installation. */
+const WORKSPACE_ROWS: ReadonlyMap<string, readonly WireValue[]> = new Map<
+  string,
+  readonly WireValue[]
+>([
+  [
+    "workspaces",
+    [
+      {
+        id: LISTED_TASK.workspaceId,
+        name: "Ada Lovelace",
+        slug: LISTED_TASK.workspaceId,
+        own: true,
+        personal: true,
+        role: "owner",
+        linearActive: null,
+        memberCount: 1,
+        photoVersion: null,
+        ownerImage: null,
+      },
+    ],
+  ],
+  ["installations", []],
+]);
 
-/** The task list as a polled read answers it: each part's rows inline at the poll address, or only where they stand where they have not moved. */
-function polledTaskList(unchanged: boolean): WireValue {
-  const part = (name: string) => ({
+/** Where a followed read's rows stand, which never moves in the fake: each part's digest, in the parts' name order. */
+function digestOf(rows: ReadonlyMap<string, readonly WireValue[]>): string {
+  return [...rows.keys()].map(() => "1").join(",");
+}
+
+/** A followed read as a poll answers it: each part's rows inline at the poll address, or only where they stand where they have not moved. */
+function polledRead(rows: ReadonlyMap<string, readonly WireValue[]>, url: string): WireValue {
+  const unchanged = new URL(url).searchParams.get(LIVE_POLL.AFTER) === digestOf(rows);
+  const part = (name: string, held: readonly WireValue[]) => ({
     capability: name,
     queryFingerprint: name,
     expiresAt: 4_000_000_000_000,
     digest: "1",
-    ...(unchanged ? undefined : { rows: JSON.stringify(LIVE_ROWS.get(name) ?? []) }),
+    ...(unchanged ? undefined : { rows: JSON.stringify(held) }),
   });
   return {
     url: LIVE_POLL_URL,
-    queries: { plans: part("plans"), agents: part("agents"), issues: part("issues") },
+    queries: Object.fromEntries([...rows].map(([name, held]) => [name, part(name, held)])),
   };
 }
 
@@ -171,11 +209,17 @@ export function fakeService(options: FakeServiceOptions): FakeService {
       const linkOpen = options.linkOpen === undefined ? undefined : { linkOpen: options.linkOpen };
       return json({ preferences: {}, ...linkOpen });
     }
+    // Realtime is off, so a followed read is answered polled, its rows inline; a poll past where they stand answers them unchanged.
     if (pathname === "/api/live/tasks" && method === "GET") {
-      if (!signedIn) return json({ error: "unauthorized" }, 401);
-      // Realtime is off, so the list is answered polled, its rows inline; a poll past where they stand answers them unchanged.
-      const unchanged = new URL(url).searchParams.get(LIVE_POLL.AFTER) === LIVE_DIGEST;
-      return json(polledTaskList(unchanged));
+      return signedIn ? json(polledRead(LIVE_ROWS, url)) : json({ error: "unauthorized" }, 401);
+    }
+    if (pathname === "/api/live/workspaces" && method === "GET") {
+      return signedIn
+        ? json(polledRead(WORKSPACE_ROWS, url))
+        : json({ error: "unauthorized" }, 401);
+    }
+    if (pathname === "/api/channels" && method === "GET" && signedIn) {
+      return json({ channels: [LISTED_CHANNEL] });
     }
     if (pathname === "/api/plans" && method === "GET") {
       return signedIn ? json({ plans: [LISTED_TASK] }) : json({ error: "unauthorized" }, 401);
