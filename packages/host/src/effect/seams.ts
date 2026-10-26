@@ -9,6 +9,7 @@ import type { OpenConsent } from "@luke/credentials";
 import type {
   DeviceArch,
   DeviceCapability,
+  DeviceIsolation,
   DevicePlatform,
 } from "@luke/features/device-agent-wire";
 import type { OpenSocket } from "@luke/voice/live-socket";
@@ -175,6 +176,8 @@ export interface LocalAgentPlatformSeam {
   /** The platform and architecture the device registers as. */
   readonly devicePlatform: DevicePlatform;
   readonly deviceArch: DeviceArch;
+  /** How the launcher runs each agent, which the device registers as: directly on the machine, or in a VM of its own. */
+  readonly deviceIsolation: DeviceIsolation;
   /**
    * The lines beyond the first the device registers it takes
    * (`DEVICE_CAPABILITY`). The follower takes every one, but a device names

@@ -342,6 +342,7 @@ test("a Claude Code or Codex agent is told of its browser, which Luke's MCP serv
 test("a local agent is told its folders on the Mac, its own harness's sandbox, and no browser", () => {
   const MAC = {
     local: true,
+    sandboxed: false,
     checkoutPath: "/Users/dev/.luke/agents/a1/repository",
     installedSkills: "/Users/dev/.luke/agents/a1/installed-skills",
   };
@@ -386,6 +387,37 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
   );
   // Codex is pointed at the skills its member installed where the Mac keeps them.
   assert.ok(codex.includes(`\`${MAC.installedSkills}/`));
+});
+
+test("a local agent in a VM on its device is told its tools and logins there are out of reach", () => {
+  const VM = {
+    local: true,
+    sandboxed: true,
+    checkoutPath: "/home/luke-host/.luke/agents/a1/repository",
+    installedSkills: "/home/luke-host/.luke/agents/a1/installed-skills",
+  };
+  for (const repository of ["Acme/Relay", null]) {
+    const words = coderInstructions(
+      repository,
+      CODING_AGENT_BRIEF.PROMPT,
+      true,
+      TASK_ADDRESS,
+      undefined,
+      null,
+      false,
+      CODER_HARNESS.CLAUDE_CODE,
+      undefined,
+      false,
+      VM,
+    );
+    const label = repository ?? "no repository";
+    assert.ok(words.includes("Linux virtual machine of your own"), label);
+    assert.ok(words.includes("out of your reach"), label);
+    assert.ok(!words.includes("their installed tools"), label);
+    assert.ok(!words.includes("the developer's own git credentials"), label);
+    assert.ok(!words.includes("## Your browser"), label);
+    if (repository !== null) assert.ok(words.includes(`\`${VM.checkoutPath}\``), label);
+  }
 });
 
 test("a Codex agent is told of Codex's own tools and never of Luke's it is not offered, nor of Claude Code's", () => {

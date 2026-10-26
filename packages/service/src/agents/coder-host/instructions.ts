@@ -12,6 +12,7 @@ import {
   type CodingAgentKind,
   OPERATOR_QUIET_REPLY,
 } from "@luke/features/coding-agent-wire";
+import { DEVICE_ISOLATION, type DeviceIsolation } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ANSWER_LEAD, INBOX_MESSAGE_LEAD } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
@@ -540,11 +541,14 @@ const EXAMPLE_REPOSITORY = "acme/app";
 
 /**
  * Where an agent works: its own sandbox, or, for a local agent, its
- * starter's Mac (`coding_agent.machine`), with the checkout's path the
- * machine reports either way (`../machine/agent-machine.ts`'s `layout`).
+ * starter's Mac (`coding_agent.machine`), directly or in a Linux VM of its
+ * own there, with the checkout's path the machine reports either way
+ * (`../machine/agent-machine.ts`'s `layout`).
  */
 export interface CoderMachine {
   readonly local: boolean;
+  /** Whether a local agent runs in a VM of its own on its device (`DEVICE_ISOLATION`), out of reach of the device's own tools and services. */
+  readonly sandboxed: boolean;
   readonly checkoutPath: string;
   /** Where the machine keeps the skills the member installed into Luke. */
   readonly installedSkills: string;
@@ -553,6 +557,7 @@ export interface CoderMachine {
 /** A sandbox of the agent's own, its checkout and installed skills where every sandbox keeps them. */
 const SANDBOX_MACHINE: CoderMachine = {
   local: false,
+  sandboxed: false,
   checkoutPath: CODER.CHECKOUT_PATH,
   installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
 };
@@ -573,8 +578,15 @@ function toolsOn(tools: ToolWords, machine: CoderMachine): ToolWords {
   };
 }
 
+/** Where a sandboxed local agent runs, and what of its device it cannot reach. */
+const DEVICE_VM_WORDS =
+  "You run in a Linux virtual machine of your own on one of the developer's devices, booted from Luke's sandbox image, with your folder mounted in from the device: the device's own installed tools, running services, and files outside your folder are out of your reach.";
+
 /** The checkout section's words after where it stands and the tools' own: how GitHub is reached, and the Mac beside the sandbox. */
 function checkoutReachWords(tools: ToolWords, machine: CoderMachine): string {
+  if (machine.sandboxed) {
+    return `GitHub is reachable through \`gh\` and \`git\` from the shell, already signed in for you, so never put a token in a URL or a command, and never try to sign in. ${DEVICE_VM_WORDS}`;
+  }
   return machine.local
     ? `GitHub is reachable through \`gh\` and \`git\` from the shell, under the developer's own git credentials on their Mac, so never put a token in a URL or a command, and never sign in as anyone else. You run on the developer's own Mac, in a worktree of your own, with their installed tools and running services, inside ${tools.ownSandbox}, which keeps your worktree and the temp folder writable.`
     : "GitHub is reachable through `gh` and `git` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. `run_on_mac` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.";
@@ -582,6 +594,9 @@ function checkoutReachWords(tools: ToolWords, machine: CoderMachine): string {
 
 /** How the agent looks at what it built before it publishes: on the sandbox's Playwright, display, and browser, or on the developer's Mac with whatever the repository runs. */
 function seeingWords(tools: ToolWords, machine: CoderMachine): string {
+  if (machine.sandboxed) {
+    return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with Playwright from the shell, whose \`playwright\` command, package, and Chromium are installed in your machine, look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words; a WebM of a flow plays there too, kept under 4 MB. ${tools.started}`;
+  }
   if (machine.local) {
     return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with whatever the repository or the Mac has for it, such as Playwright from the shell, look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words; a WebM of a flow plays there too, kept under 4 MB. ${tools.started}`;
   }
@@ -647,6 +662,11 @@ ${tools.integrations}`,
 
 /** The sandbox with no repository an agent with none works in, and the Mac beside it; or, for a local agent, its folder on that Mac. */
 function sandboxSection(tools: ToolWords, machine: CoderMachine = SANDBOX_MACHINE): string {
+  if (machine.sandboxed) {
+    return `## Your folder
+
+You work in a folder of your own with no repository in it. ${DEVICE_VM_WORDS} ${tools.sandbox}`;
+  }
   if (machine.local) {
     return `## Your folder
 
@@ -944,8 +964,14 @@ export interface AgentInstructionsContext {
   readonly workspace: string;
   readonly memoryOn: boolean;
   readonly harness: CoderHarness;
-  /** Where the agent's machine keeps its checkout and its installed skills; where every sandbox keeps them, where unsaid. */
-  readonly place?: { readonly checkoutPath: string; readonly installedSkills: string } | undefined;
+  /** Where the agent's machine keeps its checkout and its installed skills, and how a local agent's device runs it; where every sandbox keeps them, where unsaid. */
+  readonly place?:
+    | {
+        readonly checkoutPath: string;
+        readonly installedSkills: string;
+        readonly isolation: DeviceIsolation | undefined;
+      }
+    | undefined;
 }
 
 /**
@@ -978,6 +1004,9 @@ export function agentCoderInstructions(
     context.memoryOn,
     {
       local: agent.machine === CODING_AGENT_MACHINE.DEVICE,
+      sandboxed:
+        agent.machine === CODING_AGENT_MACHINE.DEVICE &&
+        context.place?.isolation === DEVICE_ISOLATION.SANDBOX,
       checkoutPath: context.place?.checkoutPath ?? SANDBOX_MACHINE.checkoutPath,
       installedSkills: context.place?.installedSkills ?? SANDBOX_MACHINE.installedSkills,
     },

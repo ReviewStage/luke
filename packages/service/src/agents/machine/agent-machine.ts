@@ -36,7 +36,7 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { CodingAgentMachine } from "@luke/features/coding-agent-wire";
-import type { DeviceSignedIn } from "@luke/features/device-agent-wire";
+import type { DeviceIsolation, DeviceSignedIn } from "@luke/features/device-agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect } from "effect";
 import type { AgentSandboxImage } from "../agent-sandbox-image.js";
 import type { KeyRefusal, PlanRefusal } from "../brain-host/eve-sessions.js";
@@ -74,8 +74,9 @@ export interface MachinePlace {
  * installed skills are installed and where they are written for that, the
  * folder a message's files are written under, the Claude Code CLI and the
  * Codex a launch runs, none where the harness's own default stands, the
- * folders the agent's commands may write beside its checkout, and which
- * harnesses the machine is signed in to by itself.
+ * folders the agent's commands may write beside its checkout, which
+ * harnesses the machine is signed in to by itself, and how a local agent's
+ * device runs it.
  */
 export interface MachineLayout {
   readonly checkoutPath: string;
@@ -89,6 +90,8 @@ export interface MachineLayout {
   readonly writableRoots: readonly string[];
   /** The Mac's own logins, as it last said; none for a sandbox. */
   readonly signedIn: DeviceSignedIn;
+  /** How a local agent's device runs it, in a VM of its own or directly on the machine; none for a sandbox of Luke's. */
+  readonly isolation: DeviceIsolation | undefined;
 }
 
 /** What a later call reads of a launch: its first event number, and what it was started with, as a digest (`runner-sessions.ts`'s `launchFingerprint`). */
