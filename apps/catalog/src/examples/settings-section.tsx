@@ -3,12 +3,14 @@ import {
   BUTTON_VARIANT,
   Button,
   ErrorState,
+  SETTINGS_ROW_DENSITY,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_SECTION_FRAME,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
   type SettingsRowControl,
+  type SettingsRowDensity,
   type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
@@ -24,7 +26,8 @@ import { CatalogSection } from "../section";
  * settings-section.tsx -- a headed section of rows, one with no heading,
  * one holding a single row, one with a long heading and long rows in a
  * column narrower than the 380px a row's controls drop below its words
- * under, one with no card around a text area that draws its own frame, and
+ * under, one with no card around a text area that draws its own frame,
+ * groups of compact rows bare in a surface that frames them, and
  * lines in the rows' place: a note before rows, a note alone, and a read
  * that failed with its Retry; and placeholders while a read is out: rows in
  * a card, marked and not, every control a row ends in, and whole sections.
@@ -63,9 +66,17 @@ function HeldSwitch({ label, control }: { label: string; control: SettingsRowCon
   );
 }
 
-function SwitchRow({ label, description }: { label: string; description?: string }) {
+function SwitchRow({
+  label,
+  description,
+  density,
+}: {
+  label: string;
+  description?: string;
+  density?: SettingsRowDensity;
+}) {
   return (
-    <SettingsRow label={label} description={description}>
+    <SettingsRow label={label} description={description} density={density}>
       {(control) => <HeldSwitch label={label} control={control} />}
     </SettingsRow>
   );
@@ -129,6 +140,17 @@ function SettingsSections(): React.JSX.Element {
         <div className="catalog-settings">
           <SettingsSection title="Prompt" frame={SETTINGS_SECTION_FRAME.NONE}>
             <HeldTextArea />
+          </SettingsSection>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-section-rows" title="Bare rows, in a surface that frames them">
+        <div className="catalog-settings catalog-settings-narrow">
+          <SettingsSection title="Lines" frame={SETTINGS_SECTION_FRAME.ROWS}>
+            <SwitchRow label="Word wrap" density={SETTINGS_ROW_DENSITY.COMPACT} />
+            <SwitchRow label="Line numbers" density={SETTINGS_ROW_DENSITY.COMPACT} />
+          </SettingsSection>
+          <SettingsSection title="Text" frame={SETTINGS_SECTION_FRAME.ROWS}>
+            <SwitchRow label="Ligatures" density={SETTINGS_ROW_DENSITY.COMPACT} />
           </SettingsSection>
         </div>
       </CatalogSection>

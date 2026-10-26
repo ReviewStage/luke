@@ -19,7 +19,11 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * landmark hears what the rows are for before reaching them. The room
  * between sections is the page's. A section of one control that draws its
  * own frame, a text area, stands it under the heading with no card, so no
- * frame is drawn within a frame.
+ * frame is drawn within a frame. A section in a surface that already frames
+ * and insets what it holds, a popover's or a dialog's compact rows, stands
+ * its rows bare under a group's heading instead (`SETTINGS_SECTION_FRAME.ROWS`),
+ * each such section after the first set apart from the one before by a rule,
+ * so no card is drawn within the surface's.
  *
  * A section a Settings link or a search result lands on wears its `anchor`
  * whole. Its card is a reveal area (`RevealArea`), so the rows a setting
@@ -242,10 +246,11 @@ export function SettingsSectionsSkeleton({
   );
 }
 
-/** Whether the children stand in the card, or bare under the heading for one control that is its own frame. */
+/** Whether the children stand in the card, bare under the heading for one control that is its own frame, or as rows bare under a group's heading in a surface that frames them already. */
 export const SETTINGS_SECTION_FRAME = {
   CARD: "card",
   NONE: "none",
+  ROWS: "rows",
 } as const;
 
 export type SettingsSectionFrame =
@@ -270,16 +275,30 @@ function SectionFrame({
   children: ReactNode;
 }): React.JSX.Element {
   const card = useRef<HTMLDivElement>(null);
+  const rows = frame === SETTINGS_SECTION_FRAME.ROWS;
   return (
     <section
-      className="luke-settings-section flex min-w-0 flex-col gap-luke-8"
+      className={
+        rows
+          ? "luke-settings-section flex min-w-0 flex-col gap-tight-gap"
+          : "luke-settings-section flex min-w-0 flex-col gap-luke-8"
+      }
+      data-frame={frame}
       aria-labelledby={labelledBy}
       {...(anchor === undefined ? undefined : searchAnchorProps(anchor))}
     >
       {head === undefined ? null : (
-        <div className="luke-settings-section-head px-luke-2">{head}</div>
+        <div
+          className={rows ? "luke-settings-section-head" : "luke-settings-section-head px-luke-2"}
+        >
+          {head}
+        </div>
       )}
-      {frame === SETTINGS_SECTION_FRAME.CARD ? (
+      {rows ? (
+        <div className="luke-settings-section-rows flex min-w-0 flex-col gap-tight-gap">
+          {children}
+        </div>
+      ) : frame === SETTINGS_SECTION_FRAME.CARD ? (
         <RevealArea root={card}>
           <div
             ref={card}
@@ -307,7 +326,7 @@ export function SettingsSection({
   title?: ReactNode;
   /** The id a Settings link or a search result lands on, worn by the whole section. */
   anchor?: string | undefined;
-  /** The card around the children, or none for one control that draws its own frame. */
+  /** The card around the children, none for one control that draws its own frame, or the rows bare in a surface that frames them. */
   frame?: SettingsSectionFrame;
   /** The rows, each drawn edge to edge with a rule above every one but the first. */
   children: ReactNode;
@@ -319,7 +338,9 @@ export function SettingsSection({
       head={
         headed ? (
           <Text
-            variant={TEXT_VARIANT.SECTION}
+            variant={
+              frame === SETTINGS_SECTION_FRAME.ROWS ? TEXT_VARIANT.GROUP : TEXT_VARIANT.SECTION
+            }
             tone={TEXT_TONE.MUTED}
             as={TEXT_ELEMENT.H2}
             id={headingId}
