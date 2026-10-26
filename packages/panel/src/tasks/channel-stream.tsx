@@ -93,9 +93,10 @@ import { useChannelThreads, useChannelView } from "./use-channels.js";
  * and who the open ask waits on. A post that needs the reader stands on the
  * attention tint and nothing else marks it, cleared the moment it is
  * answered, since the window's own answers are laid over the read
- * (`inbox-settling.ts`). A press anywhere on a post opens its thread beside
- * the stream (`onOpen`). While a post that needs the reader is scrolled out
- * of sight above, a button floats over the stream's head counting them,
+ * (`inbox-settling.ts`). A press anywhere on a post opens its thread in the
+ * side panel beside the stream, or in its place on a phone (`onOpen`).
+ * While a post that needs the reader is scrolled out of sight above, a
+ * button floats over the stream's head counting them,
  * and a press scrolls the stream's own box to the nearest; never
  * `scrollIntoView`, which would scroll the window around a sliding pane
  * (`packages/panel/AGENTS.md`). Leaving the channel stamps the reader's
@@ -104,14 +105,13 @@ import { useChannelThreads, useChannelView } from "./use-channels.js";
  */
 
 /**
- * The stream's column, its log filling what its head leaves, a rule at its
- * end where a thread stands beside it. Note that its bar ends where its
- * posts do wherever the side panel's toggle stands over no edge of it, with
- * a thread or the side panel beside it, rather than past the toggle or at
- * the sheet's edge as the window would end it.
+ * The stream's column, its log filling what its head leaves. Note that its
+ * bar ends where its posts do while the side panel stands beside it, its
+ * thread's or another tab's, whose toggle stands over no edge of it, rather
+ * than past the toggle or at the sheet's edge as the window would end it.
  */
 const STREAM =
-  "channel-stream relative flex min-h-0 min-w-0 flex-col data-[beside]:border-r data-[beside]:border-border data-[beside]:[--luke-toolbar-end-at:initial] in-data-[panel-open=true]:[--luke-toolbar-end-at:initial]";
+  "channel-stream relative flex min-h-0 min-w-0 flex-col in-data-[panel-open=true]:[--luke-toolbar-end-at:initial]";
 
 /** The posts' run, on the column's inset. */
 const STREAM_BODY =
@@ -372,7 +372,6 @@ function ThreadPost({
 export function ChannelStream({
   channel,
   chosenId,
-  beside,
   hidden,
   readerId,
   now,
@@ -384,10 +383,8 @@ export function ChannelStream({
   onAnswered,
 }: {
   channel: Channel;
-  /** The thread the pane beside shows, where one does. */
+  /** The thread open in the side panel beside the stream, where one is. */
   chosenId: string | undefined;
-  /** Whether a thread stands open beside the stream. */
-  beside: boolean;
   /** Whether a thread stands in the stream's place, as on a phone, which keeps the stream and the New line where they stood. */
   hidden: boolean;
   readerId: string | undefined;
@@ -445,12 +442,7 @@ export function ChannelStream({
     );
   };
   return (
-    <section
-      className={STREAM}
-      aria-label={`#${channel.name}`}
-      data-beside={beside ? "" : undefined}
-      hidden={hidden}
-    >
+    <section className={STREAM} aria-label={`#${channel.name}`} hidden={hidden}>
       <Toolbar
         title={channelTitle(channel.name, view)}
         detail={channel.purpose}
@@ -477,7 +469,7 @@ export function ChannelStream({
                   key={row.thread.id}
                   item={row.thread}
                   listed={listedOf(row.thread.id)}
-                  chosen={beside && row.thread.id === chosenId}
+                  chosen={row.thread.id === chosenId}
                   readerId={readerId}
                   now={now}
                   onPick={pick}

@@ -127,8 +127,6 @@
      and the attention mark's glyph a size under a row's. */
   --grid-template-columns-inbox: auto minmax(0, 1fr);
   --grid-template-columns-single: minmax(0, 1fr);
-  /* A channel's stream and the thread opened beside it, the thread the narrower. */
-  --grid-template-columns-channel-thread: minmax(0, 1fr) minmax(0, 44%);
   --spacing-list-held-least: var(--luke-list-held-height, 0);
   --spacing-inbox-face-half: calc(var(--luke-space-20) / 2);
   --spacing-inbox-line: calc(var(--luke-space-20) / 2 - 1px);

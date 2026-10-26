@@ -64,7 +64,11 @@ import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { choiceOf, type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
-import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
+import {
+  PULL_REQUEST_VIEW,
+  SIDE_PANEL_TAB,
+  type SidePanelControl,
+} from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useExperiment } from "../use-app-state.js";
 import { useAgentCallDoors } from "./agent-actions.js";
@@ -137,9 +141,9 @@ import { taskCardOf } from "./task-card.js";
  * its own and no way back to one, the list being always in sight.
  */
 
-/** The page's grid while it is a channel's stream: the stream alone, or the stream and its thread beside it; a narrow room draws no title bar's buttons, so its bars start where their column's words do, as a phone's own row does (`phone-head.tsx`). */
+/** The page's grid while it is a channel's stream, which stands alone, its thread opening in the side panel beside it; a narrow room draws no title bar's buttons, so its bars start where their column's words do, as a phone's own row does (`phone-head.tsx`). */
 const CHANNELS_VIEW =
-  "inbox-view channels-view @container grid min-h-0 flex-1 grid-cols-single data-[thread]:grid-cols-channel-thread [&>[hidden]]:hidden in-data-[luke-room=narrow]:[--luke-toolbar-start-at:initial]";
+  "inbox-view channels-view @container grid min-h-0 flex-1 grid-cols-single [&>[hidden]]:hidden in-data-[luke-room=narrow]:[--luke-toolbar-start-at:initial]";
 
 /** What the page says while the workspace's channels are read, where none could be, and where none stand. */
 const CHANNELS_READING = "Reading channels…";
@@ -238,7 +242,7 @@ function InboxShown({
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
   const now = useMinute();
-  // Note that with Channels on the page is a channel's stream, its thread beside it once one is opened, rather than the Inbox's list.
+  // Note that with Channels on the page is a channel's stream, its thread in the side panel once one is opened, rather than the Inbox's list.
   const streaming = useExperiment(EXPERIMENT.CHANNELS) && !paneOnly;
   const channelPlace = useChannelPlace();
   const channels = useChannels(streaming ? tasks.workspace?.id : undefined, tasks.shown);
@@ -249,12 +253,10 @@ function InboxShown({
   const phone = room === SHELL_ROOM.NARROW;
   // A phone's list of channels stands while the list is asked for, as the bar's Channels asks, so the window's Back returns to it from a stream.
   const channelsListed = streaming && phone && view.listed;
-  const threadShown =
-    channel !== undefined &&
-    chosen !== undefined &&
-    channelPlace.threadId === chosen.item.id &&
-    !channelsListed;
-  const threadBeside = threadShown && !phone;
+  // A thread opened from a stream stands in the side panel as its Inbox tab (`use-tasks-tab.ts`), and on a phone in the stream's place.
+  const threadOpen = streaming && chosen !== undefined && channelPlace.threadId === chosen.item.id;
+  const threadShown = threadOpen && channel !== undefined && !channelsListed;
+  const threadBeside = threadOpen && !phone;
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
   // Note that the window keeps whether the list was asked for, so its history can go back to it.
   const { listed, onListed, onSingle } = view;
@@ -352,25 +354,36 @@ function InboxShown({
           tasklessMentions(place, tasks.onShowMention, readMentionAgents),
           taskId === undefined ? undefined : openFile,
         );
-  const drawing = useSidePanelDrawing(sidePanel);
+  // Closing the thread gives the stream the place again, and what counts what waits is read again, an answer given there among it.
+  const closeThread = () => {
+    channelPlace.onCloseThread();
+    channels.onRefresh();
+  };
+  // The thread beside the stream is the panel's Inbox tab, so closing that tab closes the thread, and the panel's hiding closes it too.
+  const threadTabs = useThreadTab(sidePanel, threadBeside, chosen?.item.id, closeThread);
+  const drawing = useSidePanelDrawing(threadTabs);
   const views = useTabViews();
   const { onArea, focus } = useColumnFocus();
   // The panel holds the keys while the focus went into it last, or while it fills the window over the Inbox.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
+  // The thread beside the stream is seen while the panel shows its tab.
+  const threadSeen = threadBeside && sidePanel.open && sidePanel.tab === SIDE_PANEL_TAB.INBOX;
   // The item shown is read as it opens, and U marks it, only while the Inbox holds the keys and the panel does not cover it.
-  // Note that a stream with no thread open beside it shows no item, so none is read or nodded to unseen.
+  // Note that a stream with no thread open shows no item, so none is read or nodded to unseen.
   const opened =
     tasks.shown &&
-    !sidePanel.fullScreen &&
-    columns.shown !== INBOX_COLUMNS.LIST &&
     !compose.on &&
-    (!streaming || threadShown)
+    (threadBeside
+      ? threadSeen
+      : !sidePanel.fullScreen &&
+        columns.shown !== INBOX_COLUMNS.LIST &&
+        (!streaming || threadShown))
       ? chosen
       : undefined;
   useReadOnOpen({
     shown: opened?.item,
     chosen: chosen?.item,
-    active: tasks.shown && !sideFocused,
+    active: tasks.shown && (threadSeen || !sideFocused),
     onMark: markItem,
   });
   // A notice of the reader's own is acknowledged as it opens, on the same terms, once its holder's held read holds it.
@@ -409,9 +422,12 @@ function InboxShown({
       (holder.task.ownerId === tasks.me || holder.task.assignee?.userId === tasks.me)
     );
   };
-  // A post's press opens its thread beside the stream, chosen as the Inbox chooses an item, by its holder where it is read.
+  // A post's press opens its thread in the side panel beside the stream, chosen as the Inbox chooses an item, by its holder where it is read.
   const openThread = (thread: ChannelThread) => {
     compose.onEnd();
+    // Note that the thread already open is shown again, its tab chosen over what was opened from it.
+    if (threadBeside && thread.id === channelPlace.threadId)
+      sidePanel.onChoose(SIDE_PANEL_TAB.INBOX);
     const listedThread = listedOf(thread.id);
     view.onChoose({
       ...(listedThread === undefined
@@ -426,11 +442,6 @@ function InboxShown({
     channelPlace.onChoose(channelId);
     channelPlace.onCloseThread();
     onListed(false);
-  };
-  // Closing the thread gives the stream the place again, and what counts what waits is read again, an answer given there among it.
-  const closeThread = () => {
-    channelPlace.onCloseThread();
-    channels.onRefresh();
   };
   const openHere: OpenHere = (href) => {
     const target = inboxPanelTarget(href, {
@@ -483,6 +494,58 @@ function InboxShown({
         return true;
     }
   };
+  // The chosen item's thread, in the Inbox's place, or beside a channel's stream as the side panel's Inbox tab.
+  const itemPane = (listed: InboxListed, beside: boolean) => (
+    <OpenHereProvider value={openHere}>
+      <SkillFiles
+        source={agents.readSkills}
+        onOpen={(skill) => {
+          // Note that a skill's file opens in the panel beside the Inbox, as a file the item names does, and on GitHub where the item has no plan's panel to open it in.
+          if (place === undefined) return;
+          const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
+          if (!openHere(url)) appPlatform().openGitHub(url);
+        }}
+      >
+        {/* The item's links are written under its own workspace, which a link may open outside the one listed. */}
+        <LinkWorkspaceProvider value={chosenLinkWorkspace}>
+          {/* Its thread's words read their mentions where its box does, so a file it names opens as its code does. */}
+          <TaskMentions value={mentions}>
+            <InboxPane
+              holder={listed.holder}
+              item={listed.item}
+              control={live}
+              agents={named}
+              hidden={!streaming && columns.shown === INBOX_COLUMNS.LIST}
+              onBack={beside ? undefined : streaming ? closeThread : columns.onBack}
+              pager={!streaming && columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+              next={streaming ? undefined : next}
+              mentions={mentions}
+              channel={
+                streaming && channel !== undefined
+                  ? { name: channel.name, onClose: closeThread }
+                  : undefined
+              }
+              phone={
+                phone && !beside
+                  ? { onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle }
+                  : undefined
+              }
+              doors={{
+                ...paneDoors(tasks, listed.holder, {
+                  act,
+                  now,
+                  panelFor,
+                  besideAgents: named.agentIds,
+                }),
+                onMark: markItem,
+                onClose: closeItem,
+              }}
+            />
+          </TaskMentions>
+        </LinkWorkspaceProvider>
+      </SkillFiles>
+    </OpenHereProvider>
+  );
   return (
     <LinkWorkspaceProvider value={listedWorkspace?.slug ?? listedWorkspace?.id}>
       <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
@@ -502,7 +565,6 @@ function InboxShown({
                 className={streaming ? CHANNELS_VIEW : INBOX_VIEW}
                 ref={columns.ref}
                 data-columns={streaming ? undefined : columns.shown}
-                data-thread={threadBeside ? "" : undefined}
               >
                 {streaming ? (
                   channel === undefined ? (
@@ -524,8 +586,7 @@ function InboxShown({
                     <ChannelStream
                       key={channel.id}
                       channel={channel}
-                      chosenId={chosen?.item.id}
-                      beside={threadBeside}
+                      chosenId={threadBeside ? chosen?.item.id : undefined}
                       hidden={threadShown && phone}
                       readerId={tasks.me}
                       now={now}
@@ -580,7 +641,7 @@ function InboxShown({
                     onClose={closeItem}
                   />
                 )}
-                {streaming && !threadShown ? null : compose.on ? (
+                {streaming && !(threadShown && phone) ? null : compose.on ? (
                   <InboxCompose
                     // Note that the pane is the listed workspace's, so another listed starts it afresh, its To and its agents read there.
                     key={listedWorkspace?.id}
@@ -654,62 +715,7 @@ function InboxShown({
                     )}
                   </section>
                 ) : (
-                  <OpenHereProvider value={openHere}>
-                    <SkillFiles
-                      source={agents.readSkills}
-                      onOpen={(skill) => {
-                        // Note that a skill's file opens in the panel beside the Inbox, as a file the item names does, and on GitHub where the item has no plan's panel to open it in.
-                        if (place === undefined) return;
-                        const url = encodeMention(
-                          { kind: MENTION_KIND.FILE, path: skill.path },
-                          place,
-                        );
-                        if (!openHere(url)) appPlatform().openGitHub(url);
-                      }}
-                    >
-                      {/* The item's links are written under its own workspace, which a link may open outside the one listed. */}
-                      <LinkWorkspaceProvider value={chosenLinkWorkspace}>
-                        {/* Its thread's words read their mentions where its box does, so a file it names opens as its code does. */}
-                        <TaskMentions value={mentions}>
-                          <InboxPane
-                            holder={chosen.holder}
-                            item={chosen.item}
-                            control={live}
-                            agents={named}
-                            hidden={!streaming && columns.shown === INBOX_COLUMNS.LIST}
-                            onBack={streaming ? (phone ? closeThread : undefined) : columns.onBack}
-                            pager={
-                              !streaming && columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined
-                            }
-                            next={streaming ? undefined : next}
-                            mentions={mentions}
-                            channel={
-                              threadShown && channel !== undefined
-                                ? { name: channel.name, onClose: closeThread }
-                                : undefined
-                            }
-                            phone={
-                              room === SHELL_ROOM.NARROW
-                                ? {
-                                    onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle,
-                                  }
-                                : undefined
-                            }
-                            doors={{
-                              ...paneDoors(tasks, chosen.holder, {
-                                act,
-                                now,
-                                panelFor,
-                                besideAgents: named.agentIds,
-                              }),
-                              onMark: markItem,
-                              onClose: closeItem,
-                            }}
-                          />
-                        </TaskMentions>
-                      </LinkWorkspaceProvider>
-                    </SkillFiles>
-                  </OpenHereProvider>
+                  itemPane(chosen, false)
                 )}
               </div>
             </PageFind>
@@ -725,6 +731,7 @@ function InboxShown({
                 agents={named}
                 views={views}
                 mentions={mentions}
+                thread={threadBeside && chosen !== undefined ? itemPane(chosen, true) : undefined}
                 phone={
                   room === SHELL_ROOM.NARROW && chosen !== undefined
                     ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
@@ -737,6 +744,47 @@ function InboxShown({
       </MemberDirectory>
     </LinkWorkspaceProvider>
   );
+}
+
+/**
+ * The side panel beside a channel's stream, whose Inbox tab is the thread
+ * open there (`use-side-panel.ts`'s `thread`): each thread opened is chosen
+ * on it, which opens the panel, and closing the tab, or hiding the panel,
+ * closes the thread, the stream keeping its scroll, its New line, and its
+ * look, since it stays drawn. What the thread opens, a pull request, a page,
+ * or a file, stands as a tab beside it, and closing that one, or choosing
+ * the thread's tab, is the way back to the thread.
+ */
+function useThreadTab(
+  panel: SidePanelControl,
+  beside: boolean,
+  threadId: string | undefined,
+  onCloseThread: () => void,
+): SidePanelControl {
+  const shownId = beside ? threadId : undefined;
+  const choose = useRef(panel.onChoose);
+  choose.current = panel.onChoose;
+  // Note that a thread is chosen as it opens alone, so a tab opened from it after stays chosen.
+  useLayoutEffect(() => {
+    if (shownId !== undefined) choose.current(SIDE_PANEL_TAB.INBOX);
+  }, [shownId]);
+  const close = useRef(onCloseThread);
+  close.current = onCloseThread;
+  const wasOpen = useRef(panel.open);
+  const { open } = panel;
+  useEffect(() => {
+    const hidden = wasOpen.current && !open;
+    wasOpen.current = open;
+    if (hidden && shownId !== undefined) close.current();
+  }, [open, shownId]);
+  if (!beside) return panel;
+  return {
+    ...panel,
+    onClose: (tab) => {
+      if (tab === SIDE_PANEL_TAB.INBOX) onCloseThread();
+      panel.onClose(tab);
+    },
+  };
 }
 
 /** A file the item names as its code names it: its path, and its lines where it names them. */
@@ -810,6 +858,7 @@ function InboxSidePanel({
   agents,
   views,
   mentions,
+  thread,
   phone,
 }: {
   tasks: TasksControl;
@@ -824,6 +873,8 @@ function InboxSidePanel({
   views: TabViews;
   /** What the item's box offers an `@`, which the composer of an agent's transcript beside it offers too. */
   mentions: TaskMentionsValue | undefined;
+  /** The channel's thread open beside its stream, which the panel's Inbox tab shows; none where no thread is open there. */
+  thread: React.ReactNode | undefined;
   /** Where the panel heads itself on a phone, its way back shutting it to the item (`SidePanel`'s `phone`). */
   phone: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
@@ -899,6 +950,7 @@ function InboxSidePanel({
       focused={focused}
       onOpenTarget={openTarget}
       transcript={taskId === undefined ? undefined : transcript}
+      inbox={thread === undefined ? undefined : { body: thread, board: undefined, drafted: false }}
       phone={phone}
     />
   );

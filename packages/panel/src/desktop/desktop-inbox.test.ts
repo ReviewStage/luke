@@ -8,6 +8,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
+import type { Channel } from "@luke/features/channel-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnsweredView,
@@ -57,7 +58,9 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
 import { isTranscriptTab } from "@luke/ui/tab-strip-model";
 import type { TaskMark } from "@luke/ui/tasks-model";
@@ -73,8 +76,9 @@ import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { useChannelPlace } from "../tasks/use-channels.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
-import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
@@ -567,6 +571,7 @@ function mount(
     withSidebar = false,
     readerKnown = true,
     toasts = false,
+    channels = false,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -583,6 +588,8 @@ function mount(
     readerKnown?: boolean;
     /** Whether the window's toasts stand beside the Inbox, where the test presses one's action. */
     toasts?: boolean;
+    /** Whether the side panel is the chosen thread's, as the tasks tab holds it beside a channel's stream. */
+    channels?: boolean;
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
@@ -600,6 +607,7 @@ function mount(
     // The drafts are handed to the account signed in, none here, as the panel's root hands them.
     useDraftsOwner(undefined);
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
+    const threadPanel = useThreadPanel(chosen);
     // Whether the list was asked for, which the window keeps as the Tasks tab does.
     const [listAsked, setListAsked] = useState(false);
     const [inboxOpen, setOpen] = useState(true);
@@ -625,12 +633,14 @@ function mount(
       workspace: listedWorkspace,
       tasks: listed,
       listRead,
-      sidePanel: sidePanel ?? {
-        ...tasksControl().sidePanel,
-        onPreview: (tab) => {
-          if (isTranscriptTab(tab)) asked.previewedAgents.push(tab.transcript);
-        },
-      },
+      sidePanel: channels
+        ? threadPanel
+        : (sidePanel ?? {
+            ...tasksControl().sidePanel,
+            onPreview: (tab) => {
+              if (isTranscriptTab(tab)) asked.previewedAgents.push(tab.transcript);
+            },
+          }),
       inbox: [
         { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
         { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
@@ -699,6 +709,30 @@ function mount(
   const page = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
   act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
+}
+
+/** The side panel beside a channel's stream as the window last drew it. */
+let threadPanelNow: SidePanelControl | undefined;
+
+/** The side panel as the tasks tab holds it beside a channel's stream: the chosen item's task's, its Inbox tab the thread open there (`use-tasks-tab.ts`). */
+function useThreadPanel(chosen: InboxChoice | undefined): SidePanelControl {
+  const { threadId } = useChannelPlace();
+  const panel = useSidePanel(
+    undefined,
+    {
+      id: chosen === undefined ? undefined : "taskId" in chosen ? chosen.taskId : chosen.agentId,
+      holds: {},
+      bare: true,
+      thread: threadId !== undefined && chosen?.itemId === threadId ? true : undefined,
+    },
+    [],
+    [],
+    [],
+    [],
+    [AGENT.id],
+  );
+  threadPanelNow = panel;
+  return panel;
 }
 
 /** What the Inbox told the window of whether it shows one column, in order. */
@@ -9395,4 +9429,77 @@ test("on a phone New thread is headed by its way back's glyph, its title centred
     ["Inbox", "Discard"],
   );
   assert.equal(head.querySelector("h1")?.textContent, "New thread");
+});
+
+/** The workspace's #general, where the two tasks' threads are posted. */
+const GENERAL: Channel = {
+  id: "c0ffee00-0000-4000-8000-000000000001",
+  name: "general",
+  purpose: "Everything the agents post",
+  project: false,
+  createdAt: 1,
+  waiting: 0,
+};
+
+test("a post pressed in a channel's stream opens its thread in the side panel, another post's press swaps the panel to its thread, and hiding the panel closes the thread while the stream stands as it stood, its look not yet stamped", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  // Note that the stream shows everyone's threads, so the two tasks' posts stand whoever owns them.
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  const looks: string[] = [];
+  const previous = fakeActsAnswer();
+  const done = (value: unknown): Promise<FakeActAnswer> =>
+    Promise.resolve({ status: FAKE_ANSWER.DONE, value } as FakeActAnswer);
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.CHANNELS_LIST) return done({ channels: [GENERAL] });
+      if (request.kind === ACT_KIND.CHANNELS_THREADS) {
+        return done({
+          threads: [THRESHOLD, EXPIRY].map((item) => ({ ...item, channelId: GENERAL.id })),
+        });
+      }
+      if (request.kind === ACT_KIND.CHANNELS_LOOK) {
+        looks.push(request.payload.channelId);
+        return done({ channels: [GENERAL] });
+      }
+      return previous(request);
+    },
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  const stream = page.querySelector(".channel-stream") ?? assert.fail("the stream is drawn");
+  const panel = () => threadPanelNow ?? assert.fail("the panel is held");
+  const press = (title: string) =>
+    act(() =>
+      (
+        stream.querySelector<HTMLElement>(`button[aria-label="Open ${title}"]`) ??
+        assert.fail(`the post ${title} is drawn`)
+      ).click(),
+    );
+  const threadBeside = () => page.querySelector("aside.side-panel")?.textContent ?? "";
+  const chosenPost = () =>
+    stream.querySelector("[data-channel-post][data-chosen]")?.textContent ?? undefined;
+  assert.equal(panel().open, false, "nothing stands beside a stream no thread is open in");
+
+  press(THRESHOLD.title);
+  await settle();
+  assert.equal(panel().open, true);
+  assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX, "the thread is the panel's Inbox tab");
+  assert.match(threadBeside(), /Alert at 80%\?/u);
+  assert.match(chosenPost() ?? "", /Alert at 80%\?/u);
+
+  press(EXPIRY.title);
+  await settle();
+  assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX);
+  assert.match(threadBeside(), /Expire after 7 days\?/u);
+  assert.doesNotMatch(threadBeside(), /Alert at 80%\?/u, "the panel swapped to the other thread");
+
+  act(() => panel().onToggle());
+  await settle();
+  assert.equal(chosenPost(), undefined, "hiding the panel closed the thread");
+  assert.equal(page.querySelector(".channel-stream"), stream, "the stream stood throughout");
+  assert.deepEqual(looks, [], "the stream was never left, so its look is not stamped");
+  act(() => panel().onToggle());
+  assert.deepEqual(panel().strip, [], "the thread's tab went with it");
 });

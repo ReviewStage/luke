@@ -173,6 +173,7 @@ import { freshAccount, newestWaiting, RESTING_PAGE, restingPage } from "./restin
 import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
+import { useChannelPlace } from "./use-channels.js";
 import {
   type CodingAgentsControl,
   useCodingAgents,
@@ -1561,10 +1562,23 @@ export function useTasksTab(input: {
     pageAgent !== undefined &&
     viewed.agentCallCode?.agentId === pageAgent &&
     viewed.agentCallCode.shownCode.length > 0;
+  // A channel's thread opened beside its stream stands in the panel beside it, as its Inbox tab, while the Inbox's choice is that thread; a phone shows it in the stream's place instead (`desktop-inbox.tsx`).
+  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const channelThread = useChannelPlace().threadId;
+  const threadBeside =
+    channelsOn &&
+    input.room !== SHELL_ROOM.NARROW &&
+    channelThread !== undefined &&
+    inboxChosen?.itemId === channelThread;
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
-      ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
+      ? {
+          id: inboxTask ?? inboxAgent,
+          holds: NO_HOLDS,
+          bare: true,
+          thread: threadBeside ? true : undefined,
+        }
       : pageAgents === undefined
         ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld) }
         : { id: pageAgent, holds: pageCodeHeld ? CODE_HOLDS : NO_HOLDS },

@@ -618,6 +618,94 @@ test("an agent's transcript stands in a panel beside the Inbox alone, once the t
   );
 });
 
+test("beside a channel's stream the panel's Inbox tab is the thread open there: what the thread opens stands beside it and closing that goes back to it, closing it closes the panel where nothing else stands, and the task's own page keeps no Inbox tab of it", () => {
+  /** Where the panel stands: the task's own page, beside a stream with a thread open, or beside the stream alone. */
+  type Beside = "task" | "thread" | "stream";
+  let control: SidePanelControl | undefined;
+  function Probe({ beside }: { beside: Beside }) {
+    control = useSidePanel(
+      undefined,
+      beside === "task"
+        ? usedTask(TASK)
+        : { id: TASK, holds: {}, bare: true, thread: beside === "thread" ? true : undefined },
+      [],
+      [],
+      [],
+      [],
+      [AGENT],
+    );
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const render = (beside: Beside) => act(() => root.render(createElement(Probe, { beside })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  render("stream");
+  assert.deepEqual(panel().strip, [], "a stream with no thread open holds no tab beside it");
+  render("thread");
+  act(() => panel().onChoose(SIDE_PANEL_TAB.INBOX));
+  assert.equal(panel().open, true);
+  assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX);
+
+  // A pull request the thread links opens beside it, and closing it is the way back to the thread.
+  act(() => panel().onPreview({ changes: AGENT }));
+  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.INBOX, { changes: AGENT }]);
+  assert.deepEqual(panel().tab, { changes: AGENT });
+  act(() => panel().onClose({ changes: AGENT }));
+  assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX);
+
+  // Closing the thread's tab, the last standing, closes the panel with it.
+  act(() => panel().onClose(SIDE_PANEL_TAB.INBOX));
+  assert.equal(panel().open, false);
+
+  render("task");
+  assert.ok(
+    !panel().strip.includes(SIDE_PANEL_TAB.INBOX),
+    "the thread's tab was the stream's, never a choice of the task's",
+  );
+});
+
+test("closing a channel's thread beside its stream leaves the task's own Inbox tab viewed as it was, so a tab closed on the task's page still goes back to it", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ thread }: { thread: boolean }) {
+    control = useSidePanel(
+      undefined,
+      thread ? { id: TASK, holds: {}, bare: true, thread: true } : usedTask(TASK),
+      [],
+      [],
+      [],
+      [],
+      [AGENT],
+    );
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const render = (thread: boolean) => act(() => root.render(createElement(Probe, { thread })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  render(false);
+  act(() => panel().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.INBOX));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+
+  render(true);
+  act(() => panel().onChoose(SIDE_PANEL_TAB.INBOX));
+  act(() => panel().onClose(SIDE_PANEL_TAB.INBOX));
+
+  render(false);
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX, "the tab viewed before the Board is the Inbox");
+});
+
 test("an archived agent's Pull request tab is drawn as a live agent's, while its Terminal tab is not", () => {
   const drawn = { taskAgents: ["live"], heldAgents: ["live", "archived"] };
   assert.equal(drawsChanges({ changes: "archived" }, drawn), true);
