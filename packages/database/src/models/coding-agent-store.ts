@@ -24,7 +24,7 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { TURN_STATUS } from "@luke/wire";
+import { TURN_STATUS, type WireValue, WireValueSchema } from "@luke/wire";
 import {
   and,
   asc,
@@ -1099,6 +1099,45 @@ const updateAgentNativeSession = SqlSchema.findAll({
         .set({ nativeSession })
         .where(reachableAgentConversation(userId, agentId))
         .returning({ id: conversations.id }),
+    ),
+});
+
+const findNativeHanded = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({ handed: Schema.NullOr(WireValueSchema) }),
+  execute: ({ userId, conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ handed: conversations.nativeHanded })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.userId, userId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
+    ),
+});
+
+const updateNativeHanded = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    handed: WireValueSchema,
+  }),
+  execute: ({ userId, conversationId, handed }) =>
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({ nativeHanded: handed })
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.userId, userId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
     ),
 });
 
@@ -2958,6 +2997,29 @@ export function recordCodingAgentNativeSession(
     updateAgentNativeSession({ userId, agentId, nativeSession }),
     (rows) => rows.length > 0,
   );
+}
+
+/**
+ * What the turns' messages of a Claude Code or Codex conversation have
+ * handed its harness's session, as the JSON it was handed
+ * (`coder-host/turn-context.ts`'s `TurnHanded`, whose shape is the service's
+ * and is read back unread here); null before the first turn's message, and
+ * for a conversation the account does not hold.
+ */
+export function readNativeHanded(
+  target: ConversationTarget,
+): CodingAgentStoreEffect<WireValue | null> {
+  return Effect.map(findNativeHanded(target), (row) =>
+    Option.match(row, { onNone: () => null, onSome: ({ handed }) => handed }),
+  );
+}
+
+/** What the turns' messages have handed the harness's session, written over whatever stood; nothing for a conversation the account does not hold. */
+export function recordNativeHanded(
+  target: ConversationTarget,
+  handed: WireValue,
+): CodingAgentStoreEffect<void> {
+  return updateNativeHanded({ ...target, handed });
 }
 
 /** The digest of the runner's bearer recorded on the agent's conversation, or null to retire it; answers whether the account reached the agent. */

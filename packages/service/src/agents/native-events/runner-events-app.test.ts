@@ -58,6 +58,7 @@ import { NativeAgentSessions, RUNNER_CHOICE } from "../coder-host/runtime-sessio
 import { titleCodingAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
+import { readNativeTurnHanded, recordNativeTurnHanded } from "../coder-host/turn-message.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import {
   RUNNER_EVENTS_PATH,
@@ -899,6 +900,14 @@ it.layer(getTestDB())("the runner events route", (it) => {
           { type: RUNNER_EVENT.END, reason: RUNNER_END.INPUT_CLOSED },
         ].map((message, index) => ({ sequence: events.length + index, message }) as RunnerEvent);
 
+        // What the turns' messages handed, which the summary may have dropped.
+        yield* recordNativeTurnHanded(agent.target, {
+          task: "task-key",
+          spoken: true,
+          callWords: true,
+          opened: true,
+        });
+
         yield* post(agent.bearer, events);
         yield* post(agent.bearer, relaunch);
         const { turns: ended } = yield* transcriptOf(agent.target.conversationId);
@@ -912,6 +921,8 @@ it.layer(getTestDB())("the runner events route", (it) => {
           [TURN_STATUS.FAILED, "input_closed"],
         ]);
         assert.notEqual(Option.getOrThrow(context).compactedAt, null);
+        // Only the last turn's kind stands, so the next message hands the call's words and the task again.
+        assert.deepEqual(yield* readNativeTurnHanded(agent.target), { spoken: true });
       }),
   );
 

@@ -78,6 +78,7 @@ import {
   readCodingAgentPublished,
   readCodingAgentRouting,
   readEveRunStanding,
+  readNativeHanded,
   readNativeRunStanding,
   readRunnerTokenConversation,
   readStandingOperator,
@@ -85,6 +86,7 @@ import {
   recordCodingAgentNativeSession,
   recordCodingAgentPublished,
   recordCodingAgentRunnerToken,
+  recordNativeHanded,
   recordTurnFastRefused,
   renameCodingAgent,
   restoreOperatorAgent,
@@ -2094,13 +2096,19 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         });
         yield* recordCodingAgentNativeSession(starter, agent.id, "thread-1");
         yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-1");
+        const own = { userId: starter, conversationId: agent.conversationId };
+        yield* recordNativeHanded(own, { spoken: true });
 
         const read = yield* readCodingAgentRouting(outsider, agent.id);
         const wroteSession = yield* recordCodingAgentNativeSession(outsider, agent.id, "thread-2");
         const wroteToken = yield* recordCodingAgentRunnerToken(outsider, agent.id, "digest-2");
+        const theirs = { userId: outsider, conversationId: agent.conversationId };
+        yield* recordNativeHanded(theirs, { task: "task-key" });
 
         assert.ok(Option.isNone(read));
         assert.deepEqual([wroteSession, wroteToken], [false, false]);
+        assert.equal(yield* readNativeHanded(theirs), null);
+        assert.deepEqual(yield* readNativeHanded(own), { spoken: true });
         assert.deepEqual(Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id)), {
           runtime: CONVERSATION_RUNTIME.CODEX,
           nativeSession: "thread-1",
