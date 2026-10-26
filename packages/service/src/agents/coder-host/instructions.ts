@@ -597,8 +597,10 @@ ${tools.integrations}`,
 `,
     links: `A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at. A GitHub \`blob\` link into your repository names a file of your checkout: read it with ${tools.readFile} at that path before you act on it, since it may have changed on your branch; one pinned to a commit with \`#L3-L5\` names those lines as they stood at that commit. A GitHub \`tree\` link into your repository names a folder: look through it with ${tools.glob}.`,
     worker: {
-      reads: "a worker that reads the same checkout, your uncommitted edits included;",
-      readOnly: "a worker is read-only in the checkout, so it never edits, commits, or pushes.",
+      reads:
+        "a worker that reads the same checkout, your uncommitted edits included, its history fetched whole for it, from a shell with no network;",
+      readOnly:
+        "a worker is read-only in the checkout and on GitHub, so it never edits, commits, pushes, or opens a pull request, and it runs nothing on the developer's Mac and drives no browser.",
     },
   };
 }
@@ -646,8 +648,10 @@ ${tools.integrations}`,
 `,
     links: `A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at.`,
     worker: {
-      reads: "a worker that reads the same sandbox, what you wrote in it included;",
-      readOnly: "a worker is read-only, so it never writes a file or changes anything.",
+      reads:
+        "a worker that reads the same working folder, what you wrote in it included, from a shell with no network;",
+      readOnly:
+        "a worker is read-only, so it never writes a file or changes anything, and it runs nothing on the developer's Mac and drives no browser.",
     },
   };
 }
@@ -696,8 +700,10 @@ ${tools.integrations}`,
     links:
       "A link in the developer's message whose label starts with `@`, such as `[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)`, is something they pointed you at.",
     worker: {
-      reads: "a worker that reads the same sandbox, what you wrote in it included;",
-      readOnly: "a worker is read-only, so it never writes a file or changes anything.",
+      reads:
+        "a worker that reads the same working folder, what you wrote in it included, from a shell with no network;",
+      readOnly:
+        "a worker is read-only, so it never writes a file or changes anything, and it runs nothing on the developer's Mac and drives no browser.",
     },
   };
 }
@@ -912,13 +918,49 @@ export function agentCoderInstructions(
   );
 }
 
-/** The instructions a worker runs under: one slice of the agent's work, read-only, answered whole. */
-export function coderWorkerInstructions(): string {
+/** What a worker's instructions say of where it reads: the agent's checkout, or the working folder of an agent with no repository. */
+interface WorkerPlaceWords {
+  /** Where the agent's files stand and what is in them. */
+  readonly where: string;
+  /** What of the history the worker reads, after the sentence that its shell has no network; nothing where there is none. */
+  readonly history: string;
+  /** What never goes into a web search. */
+  readonly privateWords: string;
+  /** What state its commands must leave as it is. */
+  readonly state: string;
+}
+
+const WORKER_CHECKOUT_WORDS: WorkerPlaceWords = {
+  where: `The agent's repository is checked out at \`${CODER.CHECKOUT_PATH}\`, with the agent's own uncommitted edits in it.`,
+  history:
+    "; the checkout's history is fetched for you ahead of a command that reads it, so `git log` and `git blame` read it whole",
+  privateWords: "the repository's code, names, or paths",
+  state: "the checkout's state",
+};
+
+const WORKER_FOLDER_WORDS: WorkerPlaceWords = {
+  where: `The agent's working folder is \`${CODER.CHECKOUT_PATH}\`, with what the agent wrote in it; nothing is checked out there and there is no history to read.`,
+  history: "",
+  privateWords: "private names or words",
+  state: "the folder's state",
+};
+
+/**
+ * The instructions a worker runs under: one slice of the agent's work,
+ * read-only, answered whole, worded for the agent's repository, or for its
+ * working folder where it has none. What holds the worker to reading is
+ * its tools, not these words: its shell has no network and its history is
+ * fetched for it (`apps/dev/subagents/worker/tools/bash.ts`), and it is
+ * offered no `run_on_mac`, `browser`, or `show_image`
+ * (`../agent-runtime/tools.ts`).
+ */
+export function coderWorkerInstructions(repository: string | null): string {
+  const place = repository === null ? WORKER_FOLDER_WORDS : WORKER_CHECKOUT_WORDS;
   return `You do one job for a coding agent, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
 
-The agent's repository is checked out at \`${CODER.CHECKOUT_PATH}\`, with the agent's own uncommitted edits in it. Every \`bash\` command starts there, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. Search the public web with \`${CODER_TOOL.WEB_SEARCH}\` and read a page with \`${CODER_TOOL.READ_WEB_PAGE}\` where the job needs it, and never put the repository's code, names, or paths into a query: the repository is private and a search is public. \`run_on_mac\` runs a command on the developer's own Mac, from their home folder, where the developer may be asked to allow the command, for what only their Mac has. \`${CODER_TOOL.BROWSER}\` drives the agent's own browser, whose tabs the developer can watch and take over: use it only where the job asks for a page in it, take a snapshot for the refs before you click, and while the developer drives a tab, leave it be.
+${place.where} Every \`bash\` command starts there, in a fresh shell, so give it paths relative to that folder and never open a command with a \`cd\` into it. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from it, and an absolute path is taken as written. Your shell has no network: nothing it runs reaches GitHub or the internet, so a fetch, a push, \`gh\`, a download, or an install fails${place.history}. Search the public web with \`${CODER_TOOL.WEB_SEARCH}\` and read a page with \`${CODER_TOOL.READ_WEB_PAGE}\` where the job needs it, and never put ${place.privateWords} into a query: a search is public.
 
-You read and you never write the checkout: run no command that edits a file, stages, commits, pushes, installs, or changes the checkout's state, since the agent and other workers are reading the same tree. Where the developer connected ${INTEGRATION_NAMES_SAID}, you may read it with \`connection_search\` and \`connection_execute\`; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
+You read and you never change anything: run no command that edits a file, stages, commits, installs, or changes ${place.state}, since the agent and other workers are reading the same tree; and you cannot push, open a pull request, run a command on the developer's Mac, or drive a browser, so never try to. Where the developer connected ${INTEGRATION_NAMES_SAID}, you may read it with \`connection_search\` and \`connection_execute\`; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
 
 Return a complete result that answers the job, grounded in what you read: file paths with line numbers, and the commands you ran with what they printed where it matters. Say plainly what you could not confirm. Never print a credential or a token.`;
 }

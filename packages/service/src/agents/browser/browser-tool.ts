@@ -1,17 +1,17 @@
 /**
  * browser-tool.ts -- `browser`, an agent's one tool for a real browser: its input, the one place a call is routed to a browser, a member's takeover heeded, the tab store kept in step, and the result as the model and the stored conversation each see it.
  *
- * Luke, a coding agent, and either's workers are offered the same tool. A
+ * Luke and a coding agent are offered the same tool, and neither's workers,
+ * which read and change nothing. A
  * call names one to ten actions of the shared vocabulary
  * (`@luke/features/browser-agent-actions`) and runs them in order on the
  * Chromium in the agent's own sandbox (`agent-browser.ts`,
- * `browser-actions.ts`); a worker drives its parent's, since it works in its
- * parent's sandbox. Every call is routed to its browser here alone
+ * `browser-actions.ts`). Every call is routed to its browser here alone
  * (`browserFor`).
  *
  * The agent's tabs are kept in the service under the conversation whose
  * agent's browser holds them (`@luke/database/models/agent-browser-tabs`):
- * a coding agent's own, the task's for Luke, a worker's parent's. Before a
+ * a coding agent's own, the task's for Luke. Before a
  * call runs, the action on a tab a member drives is refused, with words that
  * say so, and nothing after it runs, so the agent waits for the tab to be
  * handed back or asks; what ran before it stands. After it runs, the store
@@ -56,7 +56,6 @@ import {
   upsertBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
-import { childConversationId } from "@luke/database/models/ids";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import type { TaskStoreFailure } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
@@ -202,31 +201,14 @@ export const BROWSER_TOOL_REFUSAL = {
 
 /** What a call runs under: the session whose sandbox its browser is in, the conversation its tabs belong to, and the transcript its screenshots are kept beside. */
 export interface BrowserCall {
-  /** The eve session whose sandbox the browser runs in: a root's own, a worker's root's (`browserSessionOf`). */
+  /** The eve session whose sandbox the browser runs in: the root's own (`browserSessionOf`). */
   readonly browserSession: string;
-  /** The conversation of the agent whose browser holds the tabs: a coding agent's own, the task's for Luke, a worker's parent's. */
+  /** The conversation of the agent whose browser holds the tabs: a coding agent's own, the task's for Luke. */
   readonly conversationId: string;
-  /** The transcript the call is written to, which keeps its screenshots: an agent's own, a worker's own child (`browserTranscriptOf`). */
+  /** The transcript the call is written to, which keeps its screenshots: the agent's own, since no worker is offered the tool. */
   readonly transcript: ConversationTarget;
-  /** Opens the sandbox the browser runs in, as eve opens it for any tool that needs it, a worker's its parent's; one already open is answered as it stands. */
+  /** Opens the sandbox the browser runs in, as eve opens it for any tool that needs it; one already open is answered as it stands. */
   readonly openSandbox: () => PromiseLike<unknown>;
-}
-
-/**
- * The transcript a call is written to, from the conversation its session
- * was admitted to: that one for an agent's own call, and for a worker's,
- * the child its turns are recorded under, which the delegation call names,
- * so its screenshots are read where its transcript is.
- */
-export function browserTranscriptOf(
-  admitted: ConversationTarget,
-  parentCallId: string | undefined,
-): ConversationTarget {
-  if (parentCallId === undefined) return admitted;
-  return {
-    userId: admitted.userId,
-    conversationId: childConversationId(admitted.conversationId, parentCallId),
-  };
 }
 
 /** A call that ran nothing, and why. */

@@ -23,6 +23,22 @@
  * a command that cannot apply it fails rather than running with the set.
  * Luke's own commands (the checkout, the image's preparation) keep the set.
  *
+ * A worker's commands (`coder-host/shell.ts`) run under the drop and, past
+ * it, in a network namespace of their own, which bubblewrap opens
+ * (`agent-runtime/sandbox-image.ts` installs it for Claude Code's own
+ * sandbox, and the probe proved it starts under the drop): the namespace
+ * holds the loopback alone, which bubblewrap brings up, so a server a test
+ * starts on localhost is reached and nothing else is. The sandbox's firewall
+ * sets the session's GitHub token on every request from the sandbox to
+ * GitHub's hosts, whoever sent it, so a worker that could reach the network
+ * could push, open a pull request, or write anything the token writes; with
+ * no network, it cannot, whatever its command says. Note that the drop comes
+ * first, because bubblewrap refuses to start under the capability set, and
+ * that it starts the command in a user namespace of its own, in which the
+ * emptied bounding set is reset to full: those capabilities hold over the
+ * new namespaces alone, and a setuid program, sudo among them, still fails
+ * there, since root is mapped to nobody.
+ *
  * A leaf importing nothing, because every tool file of the coding agent
  * bundles the shell that reads it.
  */
@@ -40,6 +56,17 @@ export const WITHOUT_CAPABILITIES = {
   ARGS: [...DROP_CAPABILITIES, "--"],
 } as const;
 
+/**
+ * The program, and the arguments ahead of a command's own argv, that run
+ * that command with no network: bubblewrap over the sandbox's whole
+ * filesystem as it stands, devices included, in a network namespace of its
+ * own, ending with its parent.
+ */
+const WITHOUT_NETWORK = {
+  COMMAND: "bwrap",
+  ARGS: ["--unshare-net", "--dev-bind", "/", "/", "--die-with-parent", "--"],
+} as const;
+
 /** A string as one single-quoted shell word. */
 function shellWord(text: string): string {
   return `'${text.replaceAll("'", `'\\''`)}'`;
@@ -53,4 +80,14 @@ function shellWord(text: string): string {
  */
 export function shellWithoutCapabilities(script: string): string {
   return `exec ${WITHOUT_CAPABILITIES.COMMAND} ${WITHOUT_CAPABILITIES.ARGS.join(" ")} /bin/bash -c ${shellWord(script)}`;
+}
+
+/**
+ * Shell text that runs the script given as `shellWithoutCapabilities` does,
+ * and with no network: the bash runs in a network namespace of its own,
+ * with the loopback alone, so nothing it runs reaches GitHub or the
+ * internet.
+ */
+export function shellWithoutCapabilitiesOrNetwork(script: string): string {
+  return `exec ${WITHOUT_CAPABILITIES.COMMAND} ${WITHOUT_CAPABILITIES.ARGS.join(" ")} ${WITHOUT_NETWORK.COMMAND} ${WITHOUT_NETWORK.ARGS.join(" ")} /bin/bash -c ${shellWord(script)}`;
 }

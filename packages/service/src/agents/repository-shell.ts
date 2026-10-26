@@ -118,6 +118,9 @@ const DEEPENED_RECORD = ".luke/deepened";
 /** Whether the deepen finished, printed as `true` or `false`: its record stands only once every step of it did. */
 const DEEPENED_PROBE_SCRIPT = `if [ -f ${DEEPENED_RECORD} ]; then echo true; else echo false; fi`;
 
+/** Whether the checkout is still shallow, printed as git prints it: `true` for one cloned at a depth and not deepened since. */
+const SHALLOW_PROBE_SCRIPT = "cd repository && git rev-parse --is-shallow-repository";
+
 /** How long a deepen waits on another deepen of the same checkout before it goes ahead, in seconds. */
 const DEEPEN_LOCK_WAIT_SECONDS = 120;
 
@@ -384,6 +387,20 @@ export const checkoutDeepened = /* @__PURE__ */ Effect.fn("web/checkoutDeepened"
   sandbox: RepositorySandbox,
 ): Effect.fn.Return<boolean, RepositoryRefusal> {
   const probed = yield* deepenStep(sandbox, DEEPENED_PROBE_SCRIPT, DEEPEN_STEP.PROBE);
+  if (probed.exitCode !== 0) return yield* gitRefusal(probed);
+  return probed.stdout.trim() === "true";
+});
+
+/**
+ * Whether the standing checkout is still shallow, as git says: one cloned
+ * at a depth and not deepened since, whose `git log` and `blame` stop at
+ * the commit it was cloned at; refused where the sandbox could not say or
+ * no checkout stands.
+ */
+export const checkoutShallow = /* @__PURE__ */ Effect.fn("web/checkoutShallow")(function* (
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<boolean, RepositoryRefusal> {
+  const probed = yield* deepenStep(sandbox, SHALLOW_PROBE_SCRIPT, DEEPEN_STEP.SHALLOW);
   if (probed.exitCode !== 0) return yield* gitRefusal(probed);
   return probed.stdout.trim() === "true";
 });

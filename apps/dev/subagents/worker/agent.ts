@@ -5,8 +5,10 @@ import { delegationRecord } from "../../session-prompt.js";
 
 /**
  * The worker: a subagent the coding agent hands one scoped slice of its work
- * to, read-only in the agent's own checkout, answering the agent's call
- * when it is done (`../../tools/delegate.ts`). It is declared hidden, so the
+ * to, read-only in the agent's own checkout, or its working folder where it
+ * has no repository, from a shell with no network and with no reach to the
+ * developer's Mac or the agent's browser (`tools/`), answering the agent's
+ * call when it is done (`../../tools/delegate.ts`). It is declared hidden, so the
  * agent reaches it through that tool alone and chooses its model and effort
  * there: eve hands a resolver no lineage, so the step reads the call its
  * hook pinned and the delegation recorded under it. It authors no token
@@ -14,7 +16,7 @@ import { delegationRecord } from "../../session-prompt.js";
  */
 export default defineAgent({
   description:
-    "Do one read-only job in the coding agent's checkout: search, read files, run commands that change nothing, read the web, and answer whole.",
+    "Do one read-only job in the coding agent's checkout or working folder: search, read files, run commands that change nothing from a shell with no network, read the web, and answer whole.",
   defaultTools: false,
   tool: false,
   model: defineDynamic({

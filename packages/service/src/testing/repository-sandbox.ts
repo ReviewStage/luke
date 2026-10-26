@@ -140,10 +140,16 @@ export function sandboxDouble(
     run: (run: SandboxRunOptions) => {
       const env = run.env;
       double.runs.push({ command: run.command, workingDirectory: run.workingDirectory, env });
-      // A deepen's two steps: the probe of whether the checkout is shallow, and the fetch of the rest of its history.
+      // A deepen's steps: the probe of whether one finished, the probe of whether the checkout is shallow, and the fetch of the rest of its history.
       const deepen = env?.[VARIABLE.DEEPEN];
       if (deepen === DEEPEN_STEP.PROBE) {
         return Promise.resolve(result(EXIT.OK, `${double.deepenMarked}\n`));
+      }
+      if (deepen === DEEPEN_STEP.SHALLOW) {
+        if (double.checkedOut === undefined) {
+          return Promise.resolve(result(128, "", "fatal: not a git repository"));
+        }
+        return Promise.resolve(result(EXIT.OK, `${double.shallow}\n`));
       }
       if (deepen === DEEPEN_STEP.FETCH) {
         double.policiesDuringFetch.push(policy);

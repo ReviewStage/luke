@@ -25,6 +25,7 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import {
   type CheckoutIdentity,
   checkoutDeepened,
+  checkoutShallow,
   cloneRepository,
   deepenRepository,
   markDeepened,
@@ -525,6 +526,44 @@ export const deepenCheckoutWith = /* @__PURE__ */ Effect.fn("web/deepenCheckoutW
   yield* deepenRepository(sandbox).pipe(Effect.mapError(refusedWith));
   yield* setCheckoutIdentity(sandbox, plan.identity).pipe(Effect.mapError(refusedWith));
   yield* markDeepened(sandbox).pipe(Effect.mapError(refusedWith));
+});
+
+/**
+ * The rest of the agent's shallow checkout's history fetched for a worker
+ * to read, as a worker's first command that may reach git asks
+ * (`apps/dev/subagents/worker/tools/bash.ts`): a write token minted and set
+ * at the firewall in the session's own shape, and the history fetched
+ * through it, as the agent's own deepen does; a checkout already whole
+ * fetches nothing and mints nothing. Note that the token is a write token,
+ * never a read one, because the policy stands once set and a worker's fetch
+ * may land while the agent's own deepen is setting the agent's, which a
+ * read policy would overwrite and leave the agent's push refused; set to
+ * the same shape, either order leaves a token that pushes. And that neither
+ * the identity is set nor the deepen's record written: the agent's first
+ * write still deepens whole (`deepenAgentCheckout`), fetching nothing but
+ * minting the token its session's record then renews from, so the token a
+ * worker's fetch left standing is never the one the agent pushes on past
+ * its age. The worker itself cannot use it: its shell has no network
+ * (`shell.ts`).
+ */
+export const fetchAgentHistory = /* @__PURE__ */ Effect.fn("web/fetchAgentHistory")(function* (
+  target: ConversationTarget,
+  agent: WithRepository<CodingAgent>,
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
+  if (!(yield* checkoutShallow(sandbox).pipe(Effect.mapError(refusedWith)))) return;
+  const setNetworkPolicy = sandbox.setNetworkPolicy;
+  if (setNetworkPolicy === undefined) {
+    return yield* new CheckoutRefused({ reason: REPOSITORY_REFUSAL.NO_FIREWALL });
+  }
+  const minted = yield* agentRepositoryToken(target, agent);
+  const credential = { token: minted.token, fullName: minted.fullName, access: minted.access };
+  // The token is revealed only into the firewall rules set for GitHub.
+  yield* Effect.tryPromise({
+    try: () => setNetworkPolicy(credentialPolicy(credential)),
+    catch: () => new CheckoutRefused({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
+  });
+  yield* deepenRepository(sandbox).pipe(Effect.mapError(refusedWith));
 });
 
 /**

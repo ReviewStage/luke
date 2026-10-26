@@ -29,7 +29,10 @@ const { CODER, CODER_WORKER } = AGENT_ROLE;
 /**
  * The roles each tool serves. Note that a coding agent's worker is offered
  * only reads, never an edit, so workers run in parallel
- * without colliding and the agent alone edits. A coding agent is offered the
+ * without colliding and the agent alone edits: not `run_on_mac`, which runs
+ * on the developer's own Mac, not `browser`, which drives the agent's own
+ * tabs, and not `show_image`, since a worker never speaks to the developer
+ * and answers the agent in words. A coding agent is offered the
  * call's own tools, `queue_question`, `withdraw_question`, and `end_call`, on
  * every turn, so its tools are the same whatever kind of turn it runs, and refused off a call
  * (`../coder-host/tool-set.ts`'s `runCallTool`), since they mean something
@@ -68,8 +71,8 @@ const TOOL_ROLES = {
   [AGENT_TOOL.END_CALL]: [CODER],
   [AGENT_TOOL.WEB_SEARCH]: [CODER, CODER_WORKER],
   [AGENT_TOOL.READ_WEB_PAGE]: [CODER, CODER_WORKER],
-  [AGENT_TOOL.RUN_ON_MAC]: [CODER, CODER_WORKER],
-  [AGENT_TOOL.BROWSER]: [CODER, CODER_WORKER],
+  [AGENT_TOOL.RUN_ON_MAC]: [CODER],
+  [AGENT_TOOL.BROWSER]: [CODER],
   [AGENT_TOOL.BASH]: [CODER, CODER_WORKER],
   [AGENT_TOOL.READ_FILE]: [CODER, CODER_WORKER],
   [AGENT_TOOL.WRITE_FILE]: [CODER],
@@ -94,7 +97,7 @@ const TOOL_ROLES = {
   [AGENT_TOOL.RESOLVE_THREAD]: [CODER],
   [AGENT_TOOL.REOPEN_THREAD]: [CODER],
   [AGENT_TOOL.READ_PAGE]: [CODER],
-  [AGENT_TOOL.SHOW_IMAGE]: [CODER, CODER_WORKER],
+  [AGENT_TOOL.SHOW_IMAGE]: [CODER],
   [AGENT_TOOL.SLEEP]: [CODER],
 } as const satisfies { readonly [Tool in AgentTool]: readonly AgentRole[] };
 

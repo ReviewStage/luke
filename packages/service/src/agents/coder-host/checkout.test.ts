@@ -36,7 +36,12 @@ import {
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { credentialPolicy } from "../terminal/agent-sandbox.js";
-import { agentCoAuthor, checkOutAgentRepository, deepenAgentCheckout } from "./checkout.js";
+import {
+  agentCoAuthor,
+  checkOutAgentRepository,
+  deepenAgentCheckout,
+  fetchAgentHistory,
+} from "./checkout.js";
 
 /**
  * A coding agent's checkout: the repository cloned one commit deep into its
@@ -338,6 +343,44 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
 
         assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
         assert.deepEqual(sandbox.policies.at(-1), APP_CREDENTIAL);
+        assert.equal(sandbox.deepenMarked, true);
+        assert.equal(sandbox.deepened, 1);
+      }),
+  );
+
+  it.effect(
+    "a worker's read of the history fetches the rest of a shallow checkout on a write token at the firewall, with no identity set and no deepen recorded, so the agent's first write still deepens on a token of its own; a checkout already whole fetches and mints nothing",
+    () =>
+      Effect.gen(function* () {
+        const installation = installationOf(15);
+        const { agent, target } = yield* openAgent(installation);
+        const github = githubReaching([installation], undefined, {}, developerReach(false));
+        const sandbox = sandboxDouble(() => undefined);
+        yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
+
+        yield* fetchAgentHistory(target, agent, sandbox).pipe(Effect.provide(github.layer));
+
+        assert.equal(sandbox.shallow, false);
+        assert.deepEqual(sandbox.policiesDuringFetch, [APP_CREDENTIAL]);
+        assert.deepEqual(sandbox.policies.at(-1), APP_CREDENTIAL);
+        assert.deepEqual(sandbox.identities, []);
+        assert.equal(sandbox.deepenMarked, false);
+        for (const run of sandbox.runs) {
+          assert.equal(carriesToken(JSON.stringify(run)), false);
+        }
+        assert.deepEqual(repositoryMints(github.sent).at(-1), {
+          repositories: [RELAY.name],
+          permissions: { contents: "write", pull_requests: "write" },
+        });
+        const mintsAfterFetch = repositoryMints(github.sent).length;
+
+        yield* fetchAgentHistory(target, agent, sandbox).pipe(Effect.provide(github.layer));
+        assert.equal(repositoryMints(github.sent).length, mintsAfterFetch);
+        assert.equal(sandbox.policies.length, 3);
+
+        yield* deepenAgentCheckout(target, agent, sandbox).pipe(Effect.provide(github.layer));
+        assert.equal(repositoryMints(github.sent).length, mintsAfterFetch + 1);
+        assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
         assert.equal(sandbox.deepenMarked, true);
         assert.equal(sandbox.deepened, 1);
       }),
