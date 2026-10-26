@@ -1126,6 +1126,11 @@ export const NEEDS_YOU = {
   NONE: "Nothing needs you",
 } as const;
 
+/** A count of what waits on the developer with its words, as a card's corner or a badge says it: "1 needs you", "3 need you". */
+export function needsYouWords(count: number): string {
+  return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
+}
+
 /** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it. */
 export const INBOX_HOLDER = {
   TASK: "plan",

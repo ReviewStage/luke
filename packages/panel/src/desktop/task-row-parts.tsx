@@ -32,7 +32,7 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { useActorDoor } from "../person-door.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { agentStillWriting, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
-import { NEEDS_YOU } from "../tasks/inbox-model.js";
+import { needsYouWords } from "../tasks/inbox-model.js";
 import { PullRequestMark, pullRequestMarkState } from "../tasks/pull-request-mark.js";
 import {
   assigneeRows,
@@ -301,11 +301,7 @@ export function StatusChip({
 /** How many of a task's Inbox threads wait on the reader, as a badge; nothing at none. */
 export function WaitingBadge({ count }: { count: number }): React.JSX.Element | null {
   if (count === 0) return null;
-  return (
-    <Badge tone={STATUS_TONE.ATTENTION}>
-      {`${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
-    </Badge>
-  );
+  return <Badge tone={STATUS_TONE.ATTENTION}>{needsYouWords(count)}</Badge>;
 }
 
 /** Pull requests in the order a task's marks draw them: those still standing first, then the merged and the closed, each kept in the order it came. */

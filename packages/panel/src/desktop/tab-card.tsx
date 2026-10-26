@@ -14,7 +14,7 @@ import { ChangesCard } from "../tasks/changes-card.js";
 import { PageChipCard, TaskChipCard } from "../tasks/chip-cards.js";
 import { browserOf } from "../tasks/cloud-browser-pane.js";
 import { FileCard } from "../tasks/file-ref.js";
-import { type InboxBoardView, NEEDS_YOU } from "../tasks/inbox-model.js";
+import { type InboxBoardView, NEEDS_YOU, needsYouWords } from "../tasks/inbox-model.js";
 import { PageCard, PageNameCard } from "../tasks/page-card.js";
 import { type PlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { TerminalCardFoot } from "../tasks/terminal-shells.js";
@@ -150,11 +150,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
     <HoverCard data-tab-card="">
       <HoverCardHead
         name={TAB_WORDS.INBOX}
-        corner={
-          waiting === 0
-            ? NEEDS_YOU.NONE
-            : `${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`
-        }
+        corner={waiting === 0 ? NEEDS_YOU.NONE : needsYouWords(waiting)}
       />
       {latest === undefined ? null : <HoverCardNote>{latest.title}</HoverCardNote>}
     </HoverCard>
