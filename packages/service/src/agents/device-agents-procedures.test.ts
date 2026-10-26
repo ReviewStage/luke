@@ -9,13 +9,19 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { createCodingAgent, latestTurnsOfReached } from "@luke/database/models/coding-agent-store";
 import { devicesSeenSince } from "@luke/database/models/device-store";
 import { mintHostInstallToken, revokeHostInstallToken } from "@luke/database/models/host-store";
+import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
-import { DEVICE_LAYOUT, getTestDB } from "@luke/database/testing";
+import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
+import { BRAIN_RUN_EVENT, BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER } from "@luke/features/brain";
+import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
+import { sessionKey } from "@luke/runtime/vocabulary";
 import { EXPERIMENT } from "@luke/settings";
+import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -23,6 +29,7 @@ import { HOST_VERSION, hostSecretHash, mintHostSecret } from "../auth/device-sec
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
+import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { deviceAgentsProcedures } from "./device-agents-procedures.js";
 import { hostsProcedures } from "./hosts-procedures.js";
 
@@ -153,6 +160,37 @@ const enrolledHost = (userId: string) =>
     return { deviceId, secret, token };
   });
 
+/** An agent of the account's pinned to the device given, or to none, whose turn is running; its conversation's id. */
+const agentRunningOn = (userId: string, deviceId: string | null) =>
+  Effect.gen(function* () {
+    const task = yield* startTask(userId, { name: "Invitations" });
+    const started = yield* createCodingAgent(userId, {
+      taskId: task.id,
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: "# Invitations\n",
+      prompt: null,
+      repository: null,
+      ...(deviceId === null ? {} : { machine: CODING_AGENT_MACHINE.DEVICE, deviceId }),
+    });
+    const { conversationId } = Option.getOrThrow(started).agent;
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    const target = { userId, conversationId };
+    const turnId = randomUUID();
+    yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+    yield* writer.consume(target, {
+      conversationId: sessionKey(conversationId),
+      turnId,
+      kind: BRAIN_RUN_EVENT.TURN_STARTED,
+      sequence: 1,
+      origin: BRAIN_TURN_ORIGIN.TYPED,
+      trigger: BRAIN_TURN_TRIGGER.ASK,
+      at: yield* Clock.currentTimeMillis,
+    });
+    return conversationId;
+  });
+
 /** A host's beat on its secret, naming the device given, at the version given or the floor's. */
 function hostBeat(secret: string, deviceId: string, version: string = HOST_VERSION.FLOOR) {
   return request(secret, PATH.PRESENCE, { version, body: { deviceId } });
@@ -273,6 +311,32 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
         assert.deepEqual(listed.body.hosts, []);
         assert.equal(back, HOSTED_HTTP_STATUS.OK, "a removed host enrolls again");
       }),
+  );
+
+  it.effect("removing a host settles its agents' running turns as failed, and no one else's", () =>
+    Effect.gen(function* () {
+      const owner = yield* account(true);
+      const host = yield* enrolledHost(owner);
+      const onHost = yield* agentRunningOn(owner, host.deviceId);
+      const elsewhere = yield* agentRunningOn(owner, null);
+
+      const removed = yield* statusOf(
+        request(owner, PATH.HOST_REMOVE, { body: { id: host.deviceId } }),
+      );
+      const turns = yield* latestTurnsOfReached([onHost, elsewhere]);
+
+      assert.equal(removed, HOSTED_HTTP_STATUS.OK);
+      assert.equal(
+        turns.get(onHost)?.status,
+        TURN_STATUS.FAILED,
+        "the host's agent no longer runs",
+      );
+      assert.equal(
+        turns.get(elsewhere)?.status,
+        TURN_STATUS.RUNNING,
+        "an agent on no host runs on",
+      );
+    }),
   );
 
   it.effect(
