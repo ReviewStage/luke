@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { Channel } from "@luke/features/channel-wire";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { experimentsOn } from "@luke/settings/testing";
 import { holdExits } from "@luke/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -16,11 +19,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB } from "../panel-tabs.js";
+import { useChannels } from "../tasks/use-channels.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handState,
+  stateWith,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
@@ -380,6 +389,60 @@ test("a person's page card wears their face and name, not a generic icon", async
   const card = cards().find((each) => each.textContent?.includes("Ada Lovelace"));
   assert.ok(card, "the person's page is a card");
   assert.equal(card.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
+});
+
+/** A channel of the workspace as the service answers it, synthetic. */
+function channelNamed(name: string, id: string): Channel {
+  return { id, name, purpose: "", project: false, createdAt: 1, waiting: 0 };
+}
+
+/** What reads the workspace's channels as the window's sidebar does, so the window holds them. */
+function ChannelsRead({ workspaceId }: { workspaceId: string }): null {
+  useChannels(workspaceId, true);
+  return null;
+}
+
+test("with Channels on, the Inbox's card names the channel its place shows", async () => {
+  const base = stateWith({}, {});
+  handState(experimentsOn(EXPERIMENT.CHANNELS), {
+    run: { ...base.run, capabilities: DESKTOP_CAPABILITIES },
+  });
+  fakeActPort({
+    [ACT_KIND.CHANNELS_LIST]: () =>
+      Promise.resolve({
+        channels: [
+          channelNamed("app", "a1000001-6d9f-4ab7-92df-000000000001"),
+          channelNamed("general", "a1000001-6d9f-4ab7-92df-000000000002"),
+        ],
+      }),
+  });
+  const workspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const reader = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(reader);
+  await act(async () => {
+    reader.render(
+      onRegistry(AtomRegistry.make(), createElement(ChannelsRead, { workspaceId: workspace.id })),
+    );
+    for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  });
+  const told = asked();
+  const window = await mounted();
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { workspace, inboxView: inboxOpen() }));
+  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, { workspace }));
+
+  tab();
+  tab(true);
+  const names = cards().map((card) => card.textContent ?? "");
+  assert.ok(
+    names.some((name) => name.includes("#general")),
+    "the card names #general, the channel shown where none was chosen",
+  );
+  assert.ok(!names.some((name) => /Inbox/u.test(name)));
 });
 
 test("a card pressed while the cards show is gone to, a place through its own door", async () => {

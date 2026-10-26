@@ -871,13 +871,17 @@ export function DesktopShell({
   const pagePerson = tasks.personView.userId;
   const automationsOpen = tasks.automationsView.open;
   const boardOpen = tasks.boardView.open;
+  // Note that with Channels on the Inbox's chosen item stands only while its thread is open, so a bare stream has no panel to toggle.
+  const inboxChosen = tasks.inboxView.chosen;
+  const inboxItemShown =
+    inboxChosen !== undefined && (!channelsOn || channelPlace.threadId === inboxChosen.itemId);
   // The Admin place is an admin's alone; while the account's access is still read it stands as it does while its chunk loads.
   const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
   // A phone's task is headed by a row of its own, whose ⋯ stands for the panel's toggle (`task-pane-switcher.tsx`).
   const panelToggle =
     (planToggle && room !== SHELL_ROOM.NARROW) ||
     pageAgent !== undefined ||
-    (inboxOpen && tasks.inboxView.chosen !== undefined);
+    (inboxOpen && inboxItemShown);
   // A phone's drawer is modal, as a phone's own drawers are: while it stands
   // over the work, the work is inert, so neither a screen reader nor a
   // keyboard reaches what the drawer covers, and a press there only puts it

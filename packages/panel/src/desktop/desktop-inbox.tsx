@@ -137,9 +137,9 @@ import { taskCardOf } from "./task-card.js";
  * its own and no way back to one, the list being always in sight.
  */
 
-/** The page's grid while it is a channel's stream: the stream alone, or the stream and its thread beside it. */
+/** The page's grid while it is a channel's stream: the stream alone, or the stream and its thread beside it; a narrow room draws no title bar's buttons, so its bars start where their column's words do, as a phone's own row does (`phone-head.tsx`). */
 const CHANNELS_VIEW =
-  "inbox-view channels-view @container grid min-h-0 flex-1 grid-cols-single data-[thread]:grid-cols-channel-thread [&>[hidden]]:hidden";
+  "inbox-view channels-view @container grid min-h-0 flex-1 grid-cols-single data-[thread]:grid-cols-channel-thread [&>[hidden]]:hidden in-data-[luke-room=narrow]:[--luke-toolbar-start-at:initial]";
 
 /** What the page says while the workspace's channels are read, where none could be, and where none stand. */
 const CHANNELS_READING = "Reading channels…";

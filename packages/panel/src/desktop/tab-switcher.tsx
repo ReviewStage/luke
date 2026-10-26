@@ -32,7 +32,8 @@
  * names they go by now and a person's card by the name the workspace's
  * members give them, each falling back to what was kept as it stood, the
  * column's agent wearing its glyph as its tab drew it (`switcher-looks.ts`),
- * at work or failed as everywhere.
+ * at work or failed as everywhere. With Channels on, the Inbox's card names
+ * the channel its place shows, "#general", wearing the channel's glyph.
  * Its preview is a still of the whole work area, taken once the window
  * settles on the screen and again as ⌃Tab leaves it: main takes a downscaled
  * picture of that part of the window (`window.capture`). A still is a picture
@@ -43,12 +44,14 @@
  */
 
 import { useAtomSet } from "@effect/atom-react";
+import type { Channel } from "@luke/features/channel-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { HOST_CAPABILITY } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND, commandForKey, type KeyedCommand } from "@luke/settings/shortcuts";
 import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import {
   isAgentTab,
   isChangesTab,
@@ -74,11 +77,13 @@ import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
+import { shownChannel } from "../tasks/channels-model.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCapability } from "../use-app-state.js";
+import { useCapability, useExperiment } from "../use-app-state.js";
 import { type HeldLook, heldLook, LOOK_STRIP } from "./switcher-looks.js";
 import {
   forgotten,
@@ -200,6 +205,7 @@ function cardLook(
   tasks: TasksControl,
   title: StepTitle | undefined,
   members: readonly WorkspaceMember[] | undefined,
+  channel: Channel | undefined,
 ): CardLook {
   switch (stop.kind) {
     case STOP_KIND.TASK: {
@@ -227,6 +233,10 @@ function cardLook(
       };
     }
     case STOP_KIND.PLACE: {
+      // Note that with Channels on the Inbox's place is a channel's stream, so its card names the channel as the stream's bar does.
+      if (stop.place === SWITCHER_PLACE.INBOX && channel !== undefined) {
+        return { icon: <GLYPH.CHANNEL />, label: `#${channel.name}`, detail: undefined };
+      }
       const { icon: Icon, label } = PLACE_LOOK[stop.place];
       return { icon: <Icon />, label, detail: undefined };
     }
@@ -257,6 +267,19 @@ function cardLook(
   }
 }
 
+/**
+ * The channel the Inbox's place shows with Channels on, which its card goes
+ * back to; none with Channels off, or before the window has read its
+ * channels. Note that it reads the channels the window holds rather than
+ * reading them again, as the phone's bar does.
+ */
+function useInboxChannel(tasks: TasksControl): Channel | undefined {
+  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const { channels } = useChannels(channelsOn ? tasks.workspace?.id : undefined, false);
+  const { channelId } = useChannelPlace();
+  return channels === undefined ? undefined : shownChannel(channels, channelId);
+}
+
 /** One card of a stop, named against the workspace's members around it (`cardLook`). */
 function StopCard({
   stop,
@@ -278,7 +301,8 @@ function StopCard({
   onPick: () => void;
 }): React.JSX.Element {
   const { members } = useMemberDirectory();
-  const look = cardLook(stop, tasks, title, members);
+  const channel = useInboxChannel(tasks);
+  const look = cardLook(stop, tasks, title, members, channel);
   return (
     <TabCard
       icon={look.icon}
