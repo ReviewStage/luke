@@ -87,7 +87,7 @@ import {
   type SentryOffer,
 } from "./automation-editor.js";
 import {
-  AutomationGroupCard,
+  AutomationGroupList,
   AutomationListSkeleton,
   AutomationOwnerFrame,
   AutomationRowMeta,
@@ -224,7 +224,7 @@ function OwnerCell({
  * One automation's row: its tile, the glyph of what fires it wearing where its newest run
  * stands, its name over what fires it, its owner, when it runs next with a
  * failure's mark before it, and its switch, hanging the automation's card. The owner and the next run each keep a column of their
- * own, so they line up down the card whatever each row says. Everything but the switch is one press
+ * own, so they line up down the list whatever each row says. Everything but the switch is one press
  * that opens its page, as a sidebar task's row is, so the row opens wherever
  * it is pressed and the switch beside the press only switches. Its
  * right-click offers Copy link, then Delete in red, which asks first, and
@@ -384,9 +384,9 @@ function AutomationGroupRows({
 }
 
 /**
- * The list, each owner's automations in a card, under its own heading where
+ * The list, each owner's automations in a list, under its own heading where
  * both stand, or in a narrow room, whose rows name no owner. Note that a
- * lone owner's card is still a region named by its owner, as a headed one is
+ * lone owner's list is still a region named by its owner, as a headed one is
  * by its heading, so a reader moving by landmark hears whose automations
  * they are either way.
  */
@@ -404,15 +404,15 @@ function AutomationList({
           shown.workspace?.name,
           group.automations.every((automation) => automation.mine === true),
         );
-        // A phone's lone owner's card is headed too, since its rows name no owner.
+        // A phone's lone owner's list is headed too, since its rows name no owner.
         return (
-          <AutomationGroupCard
+          <AutomationGroupList
             key={group.owner}
             name={name}
             headed={groups.length > 1 || shown.narrow}
           >
             <AutomationGroupRows automations={group.automations} shown={shown} />
-          </AutomationGroupCard>
+          </AutomationGroupList>
         );
       })}
     </>
@@ -773,7 +773,7 @@ function RunsPage({
       }
       state={runsState(workspacesUnread, read)}
       loadingLabel={READING_RUNS}
-      skeleton={<RunsSkeleton card />}
+      skeleton={<RunsSkeleton />}
       error={
         workspacesUnread ? (
           <ErrorState onRetry={tasks.onRetryWorkspaces} placement={ERROR_STATE_PLACEMENT.CENTRED}>

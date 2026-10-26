@@ -19,7 +19,6 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_LEAD,
   LIST_ROW_META,
-  LIST_VARIANT,
   List,
   ListMotion,
   ListRow,
@@ -206,14 +205,13 @@ export function RunRow({
 /**
  * The runs while they are first read: rows in a run's own row, a block where
  * its glyph, its title, its line, and when it fired will stand, so the runs
- * land where the blocks stood, in a card where they will stand in one, as
- * the Runs tab draws them. The rows open nothing, and the region says what
- * is being read.
+ * land where the blocks stood, in the panel and the Runs tab alike. The rows
+ * open nothing, and the region says what is being read.
  */
-export function RunsSkeleton({ card = false }: { card?: boolean }): React.JSX.Element {
+export function RunsSkeleton(): React.JSX.Element {
   return (
     <SkeletonRegion label={READING_RUNS}>
-      <List label="Runs" variant={card ? LIST_VARIANT.CARD : LIST_VARIANT.PLAIN}>
+      <List label="Runs">
         {SKELETON_RUNS.map(({ title, line }) => (
           <ListRow
             key={title}
