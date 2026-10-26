@@ -29,6 +29,7 @@ import {
   removeProviderKey,
   saveProviderKey,
   setPlanStatus,
+  setProviderKeyForAgents,
 } from "@luke/database/models/provider-key-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
@@ -706,7 +707,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a local agent on a Mac signed in to Claude Code launches with no credential of the account's, and on the plan's refusal once the Mac signs out with none saved in Luke",
+    "a local agent on a Mac signed in to Claude Code launches with no credential of the account's; once the Mac signs out, on the plan's refusal with none saved in Luke, and on the account's key where Settings keeps the plan from agents",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -758,6 +759,36 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(refused.outcome, EVE_SEND_OUTCOME.FAILED);
         assert.equal("planRefusal" in refused && refused.planRefusal, PLAN_REFUSAL.SIGNED_OUT);
         assert.deepEqual(signedOut.commands, []);
+
+        // A plan Settings keeps from agents stands aside for the account's own key, as Start would choose.
+        yield* savePlan(userId);
+        yield* setProviderKeyForAgents(
+          userId,
+          PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+          false,
+        );
+        const ring = parseKeyRing(Redacted.make(RING));
+        assert.ok(Result.isSuccess(ring));
+        const keyOwner = {
+          userId,
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.API_KEY,
+        };
+        yield* saveProviderKey(
+          userId,
+          keyOwner.provider,
+          keyOwner.kind,
+          sealProviderKey(ring.success, keyOwner, Redacted.make(API_KEY)),
+          "sk-ant-api…-key",
+          null,
+          new Date(0),
+        );
+        const onKey = runnerSandboxApi();
+        const keyed = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(onKey)));
+        assert.equal((yield* keyed.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(onKey.commands[0]?.env[RUNNER_ENV.API_KEY], API_KEY);
+        assert.equal(onKey.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
       }),
   );
 

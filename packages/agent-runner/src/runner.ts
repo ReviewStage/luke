@@ -27,6 +27,8 @@
  */
 
 import { randomUUID, type UUID } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type {
   HookCallback,
   McpSdkServerConfigWithInstance,
@@ -58,6 +60,7 @@ import {
   installedSkillsPath,
   type LaunchContext,
   type LaunchOutcome,
+  MAC_CLONES,
   MAC_TOOLCHAIN_CACHES,
   ON_MAC,
   RunnerFailed,
@@ -111,7 +114,7 @@ const DENIED_VARIABLES = [
  * Git folder the worktree commits to.
  */
 function macWritable(cwd: string): readonly string[] {
-  const common = gitCommonDir(cwd);
+  const common = gitCommonDir(cwd, join(homedir(), MAC_CLONES));
   return [
     ...MAC_TOOLCHAIN_CACHES.map((folder) => `~/${folder}`),
     ...(common === undefined ? [] : [common]),

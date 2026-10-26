@@ -136,9 +136,9 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
   /**
    * Where the account's saved credential pays for the agent: its own API key
    * for an agent started on it; for one started on its Mac's login, signed
-   * out since, the plan where the account keeps one, its key where it keeps
-   * only that, and the plan's refusal where it keeps neither; the plan for
-   * every other.
+   * out since, the plan where Settings lets it pay for agents, the account's
+   * key otherwise, and the plan's refusal where it keeps neither; the plan
+   * for every other.
    */
   const savedPayer = (agent: CodingAgent) =>
     Effect.gen(function* () {
@@ -147,7 +147,9 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
       if (payer !== CODING_AGENT_PAYER.MAC_SIGN_IN) return CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
       const anthropic = (rows: readonly { readonly provider: string }[]) =>
         rows.some((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
-      if (anthropic(yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN))) {
+      // Note that the plan pays only where Settings lets it pay for agents, as Start decides (`providerRuntimeChoice`).
+      const plans = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN);
+      if (anthropic(plans.filter((row) => row.forAgents))) {
         return CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
       }
       // Note that an account that saved neither is refused in the plan's words, as signed out, which its Mac now is.

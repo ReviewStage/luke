@@ -38,14 +38,16 @@ function cloneWithWorktree() {
   git(clone, ["add", "--all"]);
   git(clone, ["commit", "--quiet", "-m", "main"]);
   git(clone, ["worktree", "add", "--quiet", "--detach", worktree]);
-  return { clone, worktree };
+  return { root, clone, worktree };
 }
 
 describe("gitCommonDir", () => {
-  it("names the clone's Git folder a worktree commits to, and none for a clone's own checkout", () => {
-    const { clone, worktree } = cloneWithWorktree();
+  it("names the clone's Git folder a worktree commits to, none for a clone's own checkout, and none a rewritten .git points outside Luke's clones", () => {
+    const { root, clone, worktree } = cloneWithWorktree();
+    const elsewhere = cloneWithWorktree();
 
-    assert.strictEqual(gitCommonDir(worktree), join(clone, ".git"));
-    assert.strictEqual(gitCommonDir(clone), undefined);
+    assert.strictEqual(gitCommonDir(worktree, root), join(clone, ".git"));
+    assert.strictEqual(gitCommonDir(clone, root), undefined);
+    assert.strictEqual(gitCommonDir(worktree, join(elsewhere.root, "clone")), undefined);
   });
 });

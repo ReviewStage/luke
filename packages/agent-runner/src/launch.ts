@@ -9,7 +9,7 @@
  * down is numbered after it.
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Cause, Queue, Redacted } from "effect";
 import { Data } from "effect";
@@ -29,24 +29,34 @@ export const ON_MAC = process.platform === "darwin";
  */
 export const MAC_TOOLCHAIN_CACHES = [".cache", "Library/Caches", ".npm"] as const;
 
+/** Where every Luke install on a Mac keeps its shared clones, under the developer's home (`@luke/host`'s `cloneFolder`): the one place a worktree's Git folder may be. */
+export const MAC_CLONES = ".luke/clones";
+
 /**
  * The Git folder a worktree's commits write, where it is not the worktree's
- * own: a local agent's worktree is one of Luke's shared clone
- * (`@luke/host`'s `agentWorktreeScript`), whose objects and refs stand
- * outside it, so a sandbox that writes only the worktree could not commit.
- * Read from the worktree's `.git` file and its `commondir`, as Git resolves
- * them (https://git-scm.com/docs/gitrepository-layout); none for a checkout
- * whose `.git` is its own folder, and none where either cannot be read.
+ * own and stands inside `within`: a local agent's worktree is one of Luke's
+ * shared clone (`@luke/host`'s `agentWorktreeScript`), whose objects and
+ * refs stand outside it, so a sandbox that writes only the worktree could
+ * not commit. Read from the worktree's `.git` file and its `commondir`, as
+ * Git resolves them (https://git-scm.com/docs/gitrepository-layout). Note
+ * that the agent writes its worktree, `.git` file included, so the folder
+ * those name is only taken where its real path stands inside `within`'s,
+ * Luke's own clones, never wherever a rewritten file points. None for a
+ * checkout whose `.git` is its own folder, one outside `within`, or where
+ * any of it cannot be read.
  */
-export function gitCommonDir(cwd: string): string | undefined {
+export function gitCommonDir(cwd: string, within: string): string | undefined {
   try {
     const dotGit = join(cwd, ".git");
     if (statSync(dotGit).isDirectory()) return undefined;
     const pointer = /^gitdir:\s*(.+)$/m.exec(readFileSync(dotGit, "utf8"))?.[1]?.trim();
     if (pointer === undefined) return undefined;
     const gitDir = resolve(cwd, pointer);
-    const common = readFileSync(join(gitDir, "commondir"), "utf8").trim();
-    return resolve(gitDir, common);
+    const common = realpathSync(
+      resolve(gitDir, readFileSync(join(gitDir, "commondir"), "utf8").trim()),
+    );
+    const root = realpathSync(within);
+    return common.startsWith(`${root}/`) ? common : undefined;
   } catch {
     return undefined;
   }

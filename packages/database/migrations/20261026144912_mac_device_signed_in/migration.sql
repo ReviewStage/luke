@@ -1,1 +1,0 @@
-ALTER TABLE "mac_device" ADD COLUMN "signed_in" jsonb DEFAULT '{}' NOT NULL;
