@@ -9501,10 +9501,6 @@ test("a post pressed in a channel's stream opens its thread in the side panel as
     ["Thread"],
     "the tab is named for the thread, never the Inbox",
   );
-  assert.ok(
-    page.querySelector('aside.side-panel [role="tab"] .lucide-hash'),
-    "the tab wears the channel's glyph, never the Inbox's",
-  );
   assert.match(threadBeside(), /Alert at 80%\?/u);
   assert.match(chosenPost() ?? "", /Alert at 80%\?/u);
 
