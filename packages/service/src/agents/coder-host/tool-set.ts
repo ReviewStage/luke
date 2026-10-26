@@ -18,7 +18,7 @@ import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
  *
  * The coding agent runs eve's own tools, authored one file each under
  * `apps/dev/tools/` so the set is exactly this list and eve adds nothing
- * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
+ * beside it but its tools over each connection it is handed (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
  * search, eve's provider-run web search on the agent's own model call and
  * key, the hosted page read (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
@@ -31,7 +31,7 @@ import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
  * (`../page-tool.ts`), eve's own durable `sleep`, which it waits on its
  * checks or a deploy with, and the call's own question queue and hang-up,
  * refused off a call (`runCallTool`). The worker's own rows name
- * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
+ * the few of the same tools its role is offered (`../agent-runtime/tools.ts`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
  * its part spells; eve declares each tool's input itself, so what is held
@@ -216,7 +216,7 @@ export type KindTool =
  * `list_open_asks` and never `delete_section` or `delete_automation`; every
  * other agent the reverse.
  * Note that each tool withheld is one its call would only be refused by,
- * since a native harness is offered every tool: an operator's delete by its
+ * since the tools a harness is offered are narrowed by role and kind: an operator's delete by its
  * door (`agent-doors.ts`'s `runAgentTools`), and another agent's read of the
  * member's asks by the tool itself (`../operator-desk.ts`); and that the
  * instructions leave out the same words (`instructions.ts`).

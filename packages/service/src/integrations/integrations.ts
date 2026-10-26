@@ -180,6 +180,22 @@ export const INTEGRATION = {
   },
 } as const satisfies Record<IntegrationProvider, IntegrationDefinition>;
 
+/**
+ * What an agent is told of one integration's connection: its description and,
+ * where the member holds more than one account there, the note naming which
+ * account this one is. The one formula eve's connection
+ * (`integration-connection.ts`) and the connection door's MCP server
+ * (`connection-door.ts`) both say.
+ */
+export function integrationInstructions(
+  provider: IntegrationProvider,
+  accountNote: string | undefined,
+): string {
+  return accountNote === undefined
+    ? INTEGRATION[provider].DESCRIPTION
+    : `${INTEGRATION[provider].DESCRIPTION} ${accountNote}`;
+}
+
 /** Every integration's name as one phrase an instruction can say: "Linear or Notion". */
 export const INTEGRATION_NAMES_SAID = orList(
   INTEGRATION_PROVIDER_LIST.map((provider) => INTEGRATION_NAME[provider]),
