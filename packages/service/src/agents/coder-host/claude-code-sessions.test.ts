@@ -23,6 +23,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { readNativeRewind, rewindConversation } from "@luke/database/models/conversation-rewind";
 import { installSkill } from "@luke/database/models/installed-skill-store";
+import { beatMacDevice, registerMacDevice } from "@luke/database/models/mac-device-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
   removeProviderKey,
@@ -34,8 +35,12 @@ import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_FAILURE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "@luke/database/testing";
+import {
+  CODING_AGENT_FAILURE,
+  CODING_AGENT_MACHINE,
+  CODING_AGENT_PAYER,
+} from "@luke/features/coding-agent-wire";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -697,6 +702,62 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           planRefusal: PLAN_REFUSAL.SIGNED_OUT,
         });
         assert.deepEqual(refused.commands, []);
+      }),
+  );
+
+  it.effect(
+    "a local agent on a Mac signed in to Claude Code launches with no credential of the account's, and on the plan's refusal once the Mac signs out with none saved in Luke",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const userId = `user-${randomUUID()}`;
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+        );
+        const deviceId = randomUUID();
+        yield* registerMacDevice(userId, {
+          id: deviceId,
+          name: "Studio",
+          ...MAC_DEVICE_LAYOUT,
+          signedIn: { claudeCode: true },
+        });
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(userId, {
+          taskId: task.id,
+          idempotencyKey: "start-key",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+          repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.MAC_SIGN_IN,
+          machine: CODING_AGENT_MACHINE.MAC,
+          deviceId,
+        });
+        assert.ok(Option.isSome(started));
+        const agent = started.value.agent;
+
+        const api = runnerSandboxApi();
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const [command] = api.commands;
+        assert.ok(command !== undefined);
+        assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
+        assert.equal(command.env[RUNNER_ENV.API_KEY], undefined);
+
+        yield* beatMacDevice(userId, deviceId, { claudeCode: false });
+        const signedOut = runnerSandboxApi();
+        const without = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(signedOut)),
+        );
+        const refused = yield* without.open(message(agent, "Go."));
+        assert.equal(refused.outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.equal("planRefusal" in refused && refused.planRefusal, PLAN_REFUSAL.SIGNED_OUT);
+        assert.deepEqual(signedOut.commands, []);
       }),
   );
 

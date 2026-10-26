@@ -8,6 +8,7 @@ import {
   type MacAgentLaunchSecrets,
   type MacAgentLine,
   type MacAgentRequest,
+  type MacSignedIn,
 } from "./mac-agent-wire.js";
 
 /**
@@ -34,11 +35,12 @@ export interface MacAgentClaimedLine {
   readonly secrets?: MacAgentLaunchSecrets | undefined;
 }
 
-/** What a Mac registers as: its name, its home folder, and the Claude Code CLI it bundles. */
+/** What a Mac registers as: its name, its home folder, the Claude Code CLI it bundles, and which harnesses it is signed in to. */
 export interface MacAgentDevice {
   readonly name: string;
   readonly home: string;
   readonly claudeExecutable: string;
+  readonly signedIn: MacSignedIn;
 }
 
 export interface HostedMacAgentClientOptions {
@@ -69,9 +71,12 @@ export class HostedMacAgentClient {
     );
   }
 
-  /** That this Mac is here now; whether the service took it. */
-  beat(deviceId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.macAgents.beat, { deviceId }).pipe(
+  /** That this Mac is here now, and which harnesses it is signed in to; whether the service took it. */
+  beat(
+    deviceId: string,
+    signedIn: MacSignedIn,
+  ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.macAgents.beat, { deviceId, signedIn }).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );

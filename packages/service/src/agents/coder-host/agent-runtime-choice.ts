@@ -36,7 +36,10 @@
  * (`macOffers`) only to an account with the `local-agents` experiment on,
  * each that beat within `THIS_MAC.FRESH`, and the agent is pinned to the one
  * the Start named, once it is checked to be among them. A local agent runs Claude Code alone, so one on
- * Codex, or on no harness at all, is refused by name.
+ * Codex, or on no harness at all, is refused by name. A local agent on a
+ * Claude model whose Mac is signed in to Claude Code runs on that login
+ * (`localAgentRuntimeChoice`), whatever the account saved in Luke, and that
+ * Mac offers Claude's models whether or not the account could pay for them.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -122,6 +125,12 @@ const ON_CLAUDE_CODE_API_KEY: AgentRuntimeChoice = {
 const ON_CODEX_API_KEY: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.CODEX,
   payer: CODING_AGENT_PAYER.API_KEY,
+};
+
+/** Claude Code on a local agent's own Mac, by Claude Code's login there, which needs no credential of the account's. */
+const ON_MAC_CLAUDE_CODE: AgentRuntimeChoice = {
+  runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+  payer: CODING_AGENT_PAYER.MAC_SIGN_IN,
 };
 
 const ON_CODEX: AgentRuntimeChoice = {
@@ -272,11 +281,44 @@ const paidMacProviders = Effect.fnUntraced(function* (
   return paid;
 });
 
+/** The account's Macs that beat within `THIS_MAC.FRESH`, the latest first. */
+const freshMacs = (userId: string) =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    return yield* macDevicesSeenSince(userId, new Date(now - Duration.toMillis(THIS_MAC.FRESH)));
+  });
+
+/**
+ * The runtime and payer of a new local agent of the account's on the model
+ * given, on the Mac its Start named: Claude Code on that Mac's own login,
+ * the Mac's first for a local agent, where the model is Claude's and the
+ * Mac, one of the account's that beat within `THIS_MAC.FRESH`, said it is
+ * signed in to Claude Code; otherwise as any agent's (`agentRuntimeChoice`),
+ * on the account's saved credential. So an account that saved no Claude
+ * plan or key in Luke still starts one on a Mac signed in to Claude Code.
+ * Note that the Mac read here is the one the Start pins (`agentMachineChoice`),
+ * by its id, so the payer and the pin are of the same Mac.
+ */
+export const localAgentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  model: string,
+  deviceId: string | undefined,
+  rows?: AccountKeyRows,
+): Effect.fn.Return<AgentRuntimeChoice, StoreFailure | AgentCredentialMissing, DatabaseServices> {
+  const provider = yield* providerOfModel(model);
+  const harness = Option.isSome(yield* Effect.serviceOption(NativeAgentSessions));
+  if (harness && provider === MODEL_PROVIDER.ANTHROPIC && deviceId !== undefined) {
+    const named = (yield* freshMacs(userId)).find((device) => device.id === deviceId);
+    if (named?.signedIn.claudeCode === true) return ON_MAC_CLAUDE_CODE;
+  }
+  return yield* agentRuntimeChoice(userId, model, rows);
+});
+
 /**
  * The Macs the account may start a local agent on, as Start offers them:
  * each of its Macs that beat within `THIS_MAC.FRESH`, the latest first,
  * with the providers a Start on it runs that the account can pay for
- * (`paidMacProviders`), where the account has the `local-agents`
+ * (`paidMacProviders`), or that its own harness login pays for, where the account has the `local-agents`
  * experiment on; none otherwise.
  * Note that Start offers every one by name rather than one as This Mac,
  * because the service cannot tell which Mac the asking window runs on, and
@@ -286,14 +328,19 @@ export const macOffers = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
 ): Effect.fn.Return<readonly MacOffer[], StoreFailure, DatabaseServices> {
   if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return [];
-  const now = yield* Clock.currentTimeMillis;
-  const seen = yield* macDevicesSeenSince(
-    userId,
-    new Date(now - Duration.toMillis(THIS_MAC.FRESH)),
-  );
+  const seen = yield* freshMacs(userId);
   if (seen.length === 0) return [];
-  const providers = yield* paidMacProviders(userId);
-  return seen.map((device) => ({ deviceId: device.id, name: device.name, providers }));
+  const paid = yield* paidMacProviders(userId);
+  // Note that a Mac signed in to Claude Code runs Claude's models on that login, paid for or not.
+  return seen.map((device) => ({
+    deviceId: device.id,
+    name: device.name,
+    providers: MAC_PROVIDERS.filter(
+      (provider) =>
+        paid.includes(provider) ||
+        (provider === MODEL_PROVIDER.ANTHROPIC && device.signedIn.claudeCode === true),
+    ),
+  }));
 });
 
 /**

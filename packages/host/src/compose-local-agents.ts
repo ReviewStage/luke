@@ -5,6 +5,7 @@ import {
   type MacAgentLayout,
   type MacAgentLine,
   type MacAgentRequest,
+  type MacSignedIn,
   macAgentFilesPayloadSchema,
   macAgentLaunchPayloadSchema,
   macAgentLayout,
@@ -46,8 +47,12 @@ import type { RunMode } from "./run-mode.js";
  * id (`@luke/features/mac-agent-wire`, `contract/mac-agents.ts`): lines for
  * its runner and requests from its tools. The id is minted once per account
  * and kept in the host's state, and every time the gate opens, an app start
- * among them, the Mac registers it with its home folder and the Claude Code
- * CLI it bundles, then beats every `BEAT_EVERY` while it follows. It holds
+ * among them, the Mac registers it with its home folder, the Claude Code
+ * CLI it bundles, and which harnesses it is signed in to by itself, then
+ * beats every `BEAT_EVERY` while it follows. A local agent on a harness its
+ * Mac is signed in to launches on that login, so its launch line carries no
+ * credential of the account's; the check is the harness's own CLI's, never
+ * the credential, made under the environment a runner starts with. It holds
  * one read for its lines and one for its requests, each answered by the
  * service as soon as one waits, and claims each by its id.
  *
@@ -84,6 +89,17 @@ import type { RunMode } from "./run-mode.js";
 const IDLE = Duration.seconds(5);
 /** How often a Mac following its agents beats: a third of the service's forty-five-second presence window. */
 const BEAT_EVERY = Duration.seconds(15);
+/** How often a Mac found signed in to a harness is checked again, so a sign-out reaches Start and the next launch. */
+const SIGN_IN_EVERY = Duration.minutes(10);
+/** How long a harness's sign-in check has before its answer is taken as signed out. */
+const SIGN_IN_CHECK = Duration.seconds(20);
+/**
+ * The `authMethod`s of `claude auth status` a launch with no credential of
+ * the account's runs on: a claude.ai login, and a Console key a login saved.
+ * The rest come from the environment or settings a runner is not started
+ * with (`oauth_token`, `api_key_helper`, `third_party`), or are none.
+ */
+const CLAUDE_CODE_LOGINS: ReadonlySet<string> = new Set(["claude.ai", "api_key"]);
 /** How a held read the service did not answer is asked again. */
 const REREAD = Duration.seconds(2);
 /** How many times a runner's exit is settled again where the service did not take it, `REREAD` apart. */
@@ -126,6 +142,9 @@ const encodeState = Schema.encodeSync(Schema.fromJsonString(LocalAgentStateSchem
 const decodeLaunch = Schema.decodeUnknownOption(macAgentLaunchPayloadSchema);
 const decodeStdin = Schema.decodeUnknownOption(macAgentStdinPayloadSchema);
 const decodeFiles = Schema.decodeUnknownOption(macAgentFilesPayloadSchema);
+const decodeAuthStatus = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ authMethod: Schema.String })),
+);
 
 /** The service's side of local agents, as this concern asks it. */
 type LocalAgentClient = Pick<
@@ -259,10 +278,87 @@ export function composeLocalAgents(
         on && Option.isSome(home) && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
     );
 
+    // -- the developer's own environment and sign-ins ----------------------------
+
+    /** The login shell's PATH, which a runner started from the Dock would otherwise go without. */
+    const loginPath = Effect.scoped(
+      Effect.gen(function* () {
+        const handle = yield* ChildProcess.make(shell, ["-l", "-c", 'printf %s "$PATH"'], {
+          stdin: "ignore",
+        });
+        const printed = yield* Stream.mkString(Stream.decodeText(handle.stdout));
+        yield* handle.exitCode;
+        return printed;
+      }),
+    ).pipe(
+      Effect.timeoutOption(Duration.seconds(10)),
+      Effect.map(Option.filter((printed) => printed.length > 0)),
+      Effect.orElseSucceed(() => Option.none<string>()),
+    );
+
+    /**
+     * What a runner, a command, and a sign-in check are started with of the
+     * Mac's own: the developer's identity and shell, and their login shell's
+     * PATH, read once each time the gate opens; never the rest of the app's
+     * environment, which is Luke's and none of the agent's.
+     */
+    const shellEnvironment = Effect.map(
+      loginPath,
+      (loginShellPath): Readonly<Record<string, string>> => ({
+        ...handedOn,
+        ...Option.match(loginShellPath, {
+          onNone: () => ({}),
+          onSome: (value) => ({ [VARIABLE.PATH]: value }),
+        }),
+      }),
+    );
+
+    /**
+     * Whether Claude Code is signed in on this Mac by itself, as the CLI the
+     * Mac bundles answers `claude auth status`
+     * (https://code.claude.com/docs/en/cli-reference): exit 0 when logged in,
+     * with its `authMethod` as JSON. Asked under the environment a runner is
+     * started with, so no variable of Luke's or the shell's stands in, and its
+     * config folder left as the developer's, which the Keychain login is kept
+     * under. A claude.ai login, or a Console key saved by a login, counts;
+     * anything else, a check that fails or outlasts `SIGN_IN_CHECK`, does not.
+     * Nothing the CLI prints is kept but that one word.
+     */
+    const claudeCodeSignedIn = (env: Readonly<Record<string, string>>) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const handle = yield* ChildProcess.make(platform.claudeExecutable, ["auth", "status"], {
+            env,
+            extendEnv: false,
+            stdin: "ignore",
+            stderr: "ignore",
+          });
+          const printed = yield* Stream.mkString(Stream.decodeText(handle.stdout));
+          if (Number(yield* handle.exitCode) !== 0) return false;
+          return Option.exists(decodeAuthStatus(printed), (status) =>
+            CLAUDE_CODE_LOGINS.has(status.authMethod),
+          );
+        }),
+      ).pipe(
+        Effect.timeoutOption(SIGN_IN_CHECK),
+        Effect.map((answer) => Option.getOrElse(answer, () => false)),
+        Effect.orElseSucceed(() => false),
+      );
+
+    /** Which harnesses this Mac is signed in to by itself, each checked as its own CLI answers. */
+    const signedInNow = (env: Readonly<Record<string, string>>) =>
+      Effect.map(claudeCodeSignedIn(env), (claudeCode): MacSignedIn => ({ claudeCode }));
+
     // -- one account's follow --------------------------------------------------
 
     /** Everything one open gate runs for the account `userId` names, on the device it registered, from its home folder. */
-    const follow = (userId: string, deviceId: string, folder: string) =>
+    const follow = (
+      userId: string,
+      deviceId: string,
+      folder: string,
+      shellVariables: Readonly<Record<string, string>>,
+      checkedSignIn: MacSignedIn,
+    ) =>
       Effect.gen(function* () {
         const workers = yield* FiberMap.make<string>();
         const mailboxes = new Map<string, Queue.Queue<MacAgentClaimedLine>>();
@@ -271,38 +367,6 @@ export function composeLocalAgents(
 
         const settle = (id: string, exitCode?: number) =>
           asked(client.settleLine(deviceId, id, exitCode));
-
-        /** The login shell's PATH, which a runner started from the Dock would otherwise go without. */
-        const loginPath = Effect.scoped(
-          Effect.gen(function* () {
-            const handle = yield* ChildProcess.make(shell, ["-l", "-c", 'printf %s "$PATH"'], {
-              stdin: "ignore",
-            });
-            const printed = yield* Stream.mkString(Stream.decodeText(handle.stdout));
-            yield* handle.exitCode;
-            return printed;
-          }),
-        ).pipe(
-          Effect.timeoutOption(Duration.seconds(10)),
-          Effect.map(Option.filter((printed) => printed.length > 0)),
-          Effect.orElseSucceed(() => Option.none<string>()),
-        );
-
-        /**
-         * What a runner and a command are started with of the Mac's own: the
-         * developer's identity and shell, and their login shell's PATH, read
-         * once a follow; never the rest of the app's environment, which is
-         * Luke's and none of the agent's.
-         */
-        const shellEnvironment = yield* Effect.cached(
-          Effect.map(loginPath, (loginShellPath) => ({
-            ...handedOn,
-            ...Option.match(loginShellPath, {
-              onNone: () => ({}),
-              onSome: (value) => ({ [VARIABLE.PATH]: value }),
-            }),
-          })),
-        );
 
         /** The agent's worktree made where it has none: a folder for an agent with no repository, and Luke's shared clone's worktree otherwise. */
         const madeWorktree = (
@@ -362,7 +426,6 @@ export function composeLocalAgents(
             if (!made) return yield* settle(line.id, NOT_STARTED);
             const temp = path.join(layout.folder, TEMP_FOLDER);
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
-            const shellVariables = yield* shellEnvironment;
             const runnerScope = yield* Scope.fork(agentScope);
             const stdin = yield* Queue.unbounded<string>();
             const encoder = new TextEncoder();
@@ -555,7 +618,7 @@ export function composeLocalAgents(
             if (claimed === undefined || !("agentId" in claimed)) return;
             const layout = macAgentLayout(folder, claimed.agentId);
             const env = {
-              ...(yield* shellEnvironment),
+              ...shellVariables,
               TMPDIR: path.join(layout.folder, TEMP_FOLDER),
             };
             const answer = yield* answeredLocalAgentRequest(layout, claimed, env).pipe(
@@ -574,15 +637,36 @@ export function composeLocalAgents(
         );
 
         /** The beats, for as long as the gate stands and the account signed in is the one the follow is for; it returns once either changes. */
+        /**
+         * The beats, each saying which harnesses the Mac is signed in to, for
+         * as long as the gate stands and the account signed in is the one
+         * the follow is for; it returns once either changes. A sign-in is
+         * checked again every `SIGN_IN_EVERY` only while the last check found
+         * one, so a sign-out is heard; a Mac found signed out is checked again
+         * only as the gate next opens, because the check reads the Keychain,
+         * and a developer who declined its prompt must not be asked again on
+         * every beat.
+         */
         const presence = Effect.gen(function* () {
+          let signedIn = checkedSignIn;
           let sinceBeat = Duration.toMillis(BEAT_EVERY);
+          let sinceCheck = 0;
           while ((yield* gateOpen) && dependencies.accountId() === userId) {
+            if (
+              Object.values(signedIn).some((each) => each === true) &&
+              sinceCheck >= Duration.toMillis(SIGN_IN_EVERY)
+            ) {
+              signedIn = yield* signedInNow(shellVariables);
+              sinceCheck = 0;
+              sinceBeat = Duration.toMillis(BEAT_EVERY);
+            }
             if (sinceBeat >= Duration.toMillis(BEAT_EVERY)) {
-              yield* asked(client.beat(deviceId));
+              yield* asked(client.beat(deviceId, signedIn));
               sinceBeat = 0;
             }
             yield* Effect.sleep(IDLE);
             sinceBeat += Duration.toMillis(IDLE);
+            sinceCheck += Duration.toMillis(IDLE);
           }
         });
 
@@ -604,11 +688,14 @@ export function composeLocalAgents(
         return yield* Effect.sleep(IDLE);
       }
       const deviceId = yield* deviceOf(userId);
+      const shellVariables = yield* shellEnvironment;
+      const signedIn = yield* signedInNow(shellVariables);
       const registered = yield* asked(
         client.register(deviceId, {
           name: platform.deviceName,
           home: home.value,
           claudeExecutable: platform.claudeExecutable,
+          signedIn,
         }),
       );
       if (!registered) return yield* Effect.sleep(IDLE);
@@ -616,7 +703,7 @@ export function composeLocalAgents(
       for (const launch of left) {
         if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
       }
-      yield* Effect.scoped(follow(userId, deviceId, home.value));
+      yield* Effect.scoped(follow(userId, deviceId, home.value, shellVariables, signedIn));
     });
 
     const lifetime = Effect.gen(function* () {

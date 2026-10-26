@@ -71,7 +71,9 @@ export function macAgentsProcedures(seams: MacAgentsProcedureSeams) {
     beat: macAgents.beat.effect(function* ({ context, input }) {
       yield* followed(context.userId, input.deviceId);
       return yield* keptOrNotFound(
-        yield* hostedStoreOrUnavailable(beatMacDevice(context.userId, input.deviceId)),
+        yield* hostedStoreOrUnavailable(
+          beatMacDevice(context.userId, input.deviceId, input.signedIn),
+        ),
       );
     }),
     lines: macAgents.lines.effect(function* ({ context, input }) {

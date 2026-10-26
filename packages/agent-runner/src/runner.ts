@@ -54,9 +54,12 @@ import { ClaudeCode, type ClaudeCodeSession, type ClaudeCodeShape } from "./clau
 import { runCodex } from "./codex.js";
 import { type EventSink, makeEventSink } from "./events.js";
 import {
+  gitCommonDir,
   installedSkillsPath,
   type LaunchContext,
   type LaunchOutcome,
+  MAC_TOOLCHAIN_CACHES,
+  ON_MAC,
   RunnerFailed,
   type RunnerSelf,
 } from "./launch.js";
@@ -102,16 +105,18 @@ const DENIED_VARIABLES = [
 ] as const;
 
 /**
- * Where a command the agent runs on a Mac may write beside its worktree and
- * its temp folder, which Claude Code's sandbox keeps writable: the caches
- * toolchains share across projects, so a build or an install there works as
- * in the developer's own shell. A Mac's sandbox is the developer's whole
- * home otherwise, read but not written.
+ * Where Claude Code's sandbox lets a command the agent runs on a Mac write,
+ * beside the worktree and the temp folder it keeps writable: the toolchain
+ * caches, as home-relative paths the sandbox expands, and the shared clone's
+ * Git folder the worktree commits to.
  */
-const MAC_TOOLCHAIN_CACHES = ["~/.cache", "~/Library/Caches", "~/.npm"] as const;
-
-/** Whether the runner runs on the developer's Mac, under Seatbelt, rather than in a Linux sandbox under bubblewrap. */
-const ON_MAC = process.platform === "darwin";
+function macWritable(cwd: string): readonly string[] {
+  const common = gitCommonDir(cwd);
+  return [
+    ...MAC_TOOLCHAIN_CACHES.map((folder) => `~/${folder}`),
+    ...(common === undefined ? [] : [common]),
+  ];
+}
 
 const CLAUDE_EFFORTS: ReadonlySet<string> = new Set(Object.values(EFFORT));
 
@@ -204,7 +209,7 @@ function queryOptions(
       // Note that the list is no strict allowlist, so under `bypassPermissions` a host past it is
       // still reached, which leaves a Mac's network open as the developer's own shell has it.
       network: { allowedDomains: [...config.allowedDomains] },
-      ...(ON_MAC ? { filesystem: { allowWrite: [...MAC_TOOLCHAIN_CACHES] } } : {}),
+      ...(ON_MAC ? { filesystem: { allowWrite: [...macWritable(config.cwd)] } } : {}),
       credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
     },
     hooks: { Stop: [{ hooks: [onStop] }] },
