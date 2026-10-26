@@ -13,6 +13,7 @@ import path from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
 import {
+  agentUnsavedWorkScript,
   agentWorktreeScript,
   cloneFolder,
   openOnMacScript,
@@ -920,6 +921,60 @@ test(
     assert.equal(
       readFileSync(path.join(agent("first"), "README.md"), "utf8"),
       "the agent's edit\n",
+    );
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a discard finds work in an agent's worktree only where it is changed, ahead of its upstream, or on no remote branch",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const worktree = path.join(scratch, "agents", "one", "repository");
+    run(
+      scratch,
+      shell,
+      agentWorktreeScript({
+        repository: "acme/app",
+        clone: cloneFolder(state, "acme/app"),
+        worktree,
+        branch: "luke/fix-relay",
+        remotes: { https: origin, ssh: origin },
+      }),
+    );
+    const found = () =>
+      runEnded(scratch, shell, agentUnsavedWorkScript({ worktree })).printed.trim();
+    const commit = (name: string) => {
+      writeFileSync(path.join(worktree, name), `${name}\n`);
+      git(worktree, ["add", "--all"]);
+      git(worktree, ["commit", "--quiet", "-m", name]);
+    };
+
+    assert.equal(found(), "", "a clean worktree on GitHub's head holds nothing");
+
+    writeFileSync(path.join(worktree, "notes.md"), "unsaved\n");
+    assert.match(found(), /changes not committed/u);
+    git(worktree, ["add", "--all"]);
+    git(worktree, ["commit", "--quiet", "-m", "notes"]);
+    assert.match(found(), /no remote branch/u, "a commit on a detached head, on no upstream");
+
+    git(worktree, ["checkout", "--quiet", "--track", "-b", "mine", "origin/luke/fix-relay"]);
+    assert.equal(found(), "", "a branch level with its upstream holds nothing");
+    commit("ahead.md");
+    assert.match(found(), /its upstream does not/u);
+
+    git(worktree, ["checkout", "--quiet", "-b", "unpublished", "origin/luke/fix-relay"]);
+    git(worktree, ["branch", "--unset-upstream"]);
+    assert.equal(found(), "", "a branch with no upstream and no commits of its own holds nothing");
+    commit("local.md");
+    assert.match(found(), /no remote branch/u);
+
+    const missing = path.join(scratch, "agents", "none", "repository");
+    assert.deepEqual(
+      runEnded(scratch, shell, agentUnsavedWorkScript({ worktree: missing })),
+      { printed: "", code: 0 },
+      "an agent that never had a worktree holds nothing",
     );
   },
   GIT_DEADLINE,

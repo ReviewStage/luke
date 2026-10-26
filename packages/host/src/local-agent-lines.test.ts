@@ -1,5 +1,5 @@
 /**
- * local-agent-lines.test.ts -- the follower as a device sees its lines: a discard line takes the agent's folder off the disk, and a line of a kind it does not know is settled without holding back the lines after it.
+ * local-agent-lines.test.ts -- the follower as a device sees its lines: a discard line takes the agent's folder off the disk, unless the platform's check finds work in it, and a line of a kind it does not know is settled without holding back the lines after it.
  *
  * The follower runs over the real client, its held read and claims answered
  * by a scripted service, so an answer is decoded as the wire decodes it; on
@@ -27,7 +27,7 @@ import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
-import { scriptedSpawner } from "./testing/scripted-spawner.js";
+import { type Script, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const SERVICE = "https://luke.test";
 const AGENT_ID = "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1";
@@ -50,6 +50,9 @@ const NEWER_KIND: DeviceAgentLine = {
   payload: {},
 };
 
+/** The platform's check of the worktree, named so the scripted spawner answers it. */
+const UNSAVED_WORK_SCRIPT = "check-for-unsaved-work";
+
 const json = (body: unknown) =>
   new Response(JSON.stringify(body), {
     status: 200,
@@ -64,7 +67,7 @@ const held = () => new Promise<Response>(() => {});
  * answered once with the lines given and every line claimable, with the
  * folder and the line ids it settled.
  */
-const following = (lines: readonly DeviceAgentLine[]) =>
+const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("luke-agent-lines-");
     const home = path.join(root, "home");
@@ -101,6 +104,7 @@ const following = (lines: readonly DeviceAgentLine[]) =>
       if (program === "/bin/bash" && args[0] === "-l") {
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
       }
+      if (program === "/bin/bash" && args[1] === UNSAVED_WORK_SCRIPT) return unsavedWork;
       return program === tools.claude ? { exitCode: 1 } : undefined;
     });
     const services = Layer.mergeAll(
@@ -120,6 +124,7 @@ const following = (lines: readonly DeviceAgentLine[]) =>
         deviceArch: DEVICE_ARCH.X64,
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
+        unsavedWorkScript: unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -177,3 +182,24 @@ it.effect(
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
+
+for (const [name, check, kept] of [
+  ["says it holds work", { stdout: "it has changes not committed\n", exitCode: 0 }, true],
+  ["cannot say", { exitCode: 1 }, true],
+  ["finds nothing", { exitCode: 0 }, false],
+] as const) {
+  it.effect(
+    `a discard where the platform's check ${name} ${kept ? "keeps" : "removes"} the folder and is settled`,
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { folder, settled } = yield* following([DISCARD], check);
+          yield* until(() => settled.includes(DISCARD.id));
+
+          const fileSystem = yield* FileSystem.FileSystem;
+          assert.equal(yield* fileSystem.exists(folder), kept);
+          assert.deepEqual(settled, [DISCARD.id]);
+        }),
+      ).pipe(Effect.provide(NodeFileSystem.layer)),
+  );
+}

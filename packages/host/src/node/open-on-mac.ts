@@ -412,3 +412,40 @@ export function agentWorktreeScript(input: {
     "",
   ].join("\n");
 }
+
+/**
+ * The script, its path quoted, that says what a discard would lose from a
+ * local agent's worktree (`@luke/host`'s `compose-local-agents.ts`): it
+ * prints one line, and exits 0, when the worktree holds work that is nowhere
+ * else, changes `git status --porcelain` shows, or commits its upstream does
+ * not hold, or, with no upstream, commits on no remote branch of Luke's
+ * shared clone nor a head it fetched. It prints nothing and exits 0 for a
+ * worktree with nothing to lose, or none at all, and exits 1 where Git could
+ * not say, which the caller takes as work to keep.
+ */
+export function agentUnsavedWorkScript(input: { readonly worktree: string }): string {
+  return [
+    // An app opened from the Dock has a bare PATH; the login shell's is the one the developer's Git lives on.
+    'PATH="$("${SHELL:-/bin/zsh}" -l -c \'printf %s "$PATH"\' 2>/dev/null || printf %s "$PATH")"',
+    "export PATH",
+    `worktree=${shellQuoted(input.worktree)}`,
+    '[ -e "$worktree/.git" ] || exit 0',
+    'cd "$worktree" || exit 1',
+    'changes="$(git status --porcelain)" || exit 1',
+    'if [ -n "$changes" ]; then',
+    '  echo "it has changes not committed"',
+    "  exit 0",
+    "fi",
+    // Note that the upstream is asked for quietly, since a branch with none is the common case and no failure.
+    "if git rev-parse --verify --quiet '@{upstream}' >/dev/null; then",
+    `  ahead="$(git rev-list --max-count=1 HEAD --not '@{upstream}')" || exit 1`,
+    '  [ -z "$ahead" ] || echo "it has commits its upstream does not"',
+    "else",
+    // Note that the heads Luke fetched into refs/luke are GitHub's too, which the agent's own commits are not.
+    `  ahead="$(git rev-list --max-count=1 HEAD --not --remotes --glob='refs/luke/*')" || exit 1`,
+    '  [ -z "$ahead" ] || echo "it has commits on no remote branch"',
+    "fi",
+    "exit 0",
+    "",
+  ].join("\n");
+}
