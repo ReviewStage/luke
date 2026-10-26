@@ -2,7 +2,6 @@ import {
   cn,
   Fill,
   IconButton,
-  SCROLL_END_INSET,
   SCROLL_FADE,
   ScrollArea,
   type ScrollFade,
@@ -362,12 +361,7 @@ export interface ConversationContentProps {
   children?: ReactNode;
 }
 
-/**
- * The scroll box, a log of what follows, its lines in one block inside it.
- * While the way back to the newest line shows, the log's end fade ends
- * above the foot it stands in (`SCROLL_END_INSET.CONTROL`), so the lines
- * are gone before they reach it and it never sits on a line's edge.
- */
+/** The scroll box, a log of what follows, its lines in one block inside it. */
 export function ConversationContent({
   className,
   fade = SCROLL_FADE.BOTH,
@@ -375,7 +369,7 @@ export function ConversationContent({
   streams = false,
   children,
 }: ConversationContentProps): ReactNode {
-  const { list, isAtBottom, onScroll, onFold } = useConversation();
+  const { list, onScroll, onFold } = useConversation();
   return (
     <ScrollArea
       ref={list}
@@ -383,7 +377,6 @@ export function ConversationContent({
       aria-live={streams ? "off" : undefined}
       fade={fade}
       fadeInset={fadeInset}
-      endInset={isAtBottom ? SCROLL_END_INSET.NONE : SCROLL_END_INSET.CONTROL}
       onScroll={onScroll}
       onClickCapture={onFold}
     >
@@ -470,8 +463,8 @@ const SCROLL_LABEL = "Scroll to the newest line";
 
 /**
  * The way back to the newest line, shown while the reader has scrolled away
- * from it: the shared icon button, floating on a ground of its own in the
- * middle of the foot the log's lines end above (`--luke-scroll-foot`).
+ * from it: the shared icon button, floating over the lines on a ground of
+ * its own.
  */
 export function ConversationScrollButton(): ReactNode {
   const { isAtBottom, scrollToBottom } = useConversation();
@@ -479,7 +472,7 @@ export function ConversationScrollButton(): ReactNode {
   return (
     // Its ground is the button's own (`--luke-button-ground`), which the button's lit fill is laid over as a title bar's is.
     <div
-      className={`conversation-scroll ${FLOATING_OVER_LOG_CLASS} bottom-luke-8 flex bg-button-ground [--luke-button-ground:var(--luke-color-well)]`}
+      className={`conversation-scroll ${FLOATING_OVER_LOG_CLASS} bottom-luke-16 flex bg-button-ground [--luke-button-ground:var(--luke-color-well)]`}
     >
       <Tooltip label={SCROLL_LABEL}>
         <IconButton
