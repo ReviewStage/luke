@@ -119,8 +119,32 @@ export class SignInConsent extends Context.Service<SignInConsent, SignInConsentS
 ) {}
 
 /**
+ * One runner as the follower starts it (`compose-local-agents.ts`): the
+ * agent it runs for, the agent's own folder and the worktree in it, the Node
+ * and the bundle it runs, and the environment the follower made for it, the
+ * claim's secrets among it.
+ */
+export interface LocalAgentRunner {
+  readonly agentId: string;
+  /** The agent's own folder (`deviceAgentLayout`), which holds its worktree and its temp folder. */
+  readonly folder: string;
+  readonly checkout: string;
+  readonly node: string;
+  readonly bundle: string;
+  readonly env: Readonly<Record<string, string>>;
+}
+
+/** The process the follower spawns for a runner: its program, its arguments, and its whole environment. */
+export interface LocalAgentCommand {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly env: Readonly<Record<string, string>>;
+}
+
+/**
  * What a local agent's runner is started with on this Mac
- * (`compose-local-agents.ts`): the launcher every runner starts through,
+ * (`compose-local-agents.ts`): how every runner is started (`launch`), the
+ * one door another way of running it, a unit or a sandbox, would replace,
  * the runner's bundle, and what the start adds to its environment, which
  * the desktop chooses by how it runs; the copies of Node and the Claude
  * Code CLI the app or the checkout already has, where it has them, which
@@ -133,8 +157,8 @@ export class SignInConsent extends Context.Service<SignInConsent, SignInConsentS
  * a browser. Only the local agents concern asks for it.
  */
 export interface LocalAgentPlatformSeam {
-  /** The program every runner is started through, given the Node and the bundle to run. */
-  readonly launcher: string;
+  /** The process a runner is started as, given the runner the follower made: on the desktop, the Node and the bundle through its launcher. */
+  readonly launch: (runner: LocalAgentRunner) => LocalAgentCommand;
   readonly runnerBundle: string;
   readonly runnerEnv: Readonly<Record<string, string>>;
   readonly bundled: {

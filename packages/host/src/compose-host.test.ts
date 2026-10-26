@@ -142,7 +142,7 @@ describe("the host's platform concerns", () => {
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
             Layer.succeed(SignInConsent, { open: loopbackConsent }),
             Layer.succeed(LocalAgentPlatform, {
-              launcher: "/usr/bin/false",
+              launch: ({ env }) => ({ command: "/usr/bin/false", args: [], env }),
               runnerBundle: "/usr/bin/false",
               runnerEnv: {},
               bundled: {},

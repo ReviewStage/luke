@@ -65,6 +65,28 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.23.0 — 2026-10-26
+
+### Improvements
+
+- Claude Code and Codex agents on a call can queue questions for the voice
+  and hang up, as Luke's own agents do
+  ([#5544](https://github.com/ReviewStage/luke/pull/5544))
+- Claude Code agents search with Glob and Grep, keep a to-do list, and hand
+  read-only jobs to a worker
+  ([#5533](https://github.com/ReviewStage/luke/pull/5533),
+  [#5563](https://github.com/ReviewStage/luke/pull/5563))
+- The voice on a call names only the tools its agent holds, and speaks to
+  whether that agent is scoping a task, already at work, or on none
+  ([#5537](https://github.com/ReviewStage/luke/pull/5537))
+- An agent's tool descriptions say what its tools actually do
+  ([#5541](https://github.com/ReviewStage/luke/pull/5541))
+
+### Fixes
+
+- Fixed opening a task freezing the app for seconds at a time
+  ([#5564](https://github.com/ReviewStage/luke/pull/5564))
+
 ## 0.22.0 — 2026-10-26
 
 ### Menus rise from the bottom on a phone

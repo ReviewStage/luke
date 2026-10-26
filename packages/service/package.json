@@ -1,6 +1,6 @@
 {
   "name": "@luke/service",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -126,6 +126,7 @@
     "./agents/repository-skills": "./src/agents/repository-skills.js",
     "./agents/retire-sessions": "./src/agents/retire-sessions.js",
     "./agents/agent-sandbox-image": "./src/agents/agent-sandbox-image.js",
+    "./agents/sandbox-oci-image": "./src/agents/sandbox-oci-image.js",
     "./agents/session-sandboxes": "./src/agents/session-sandboxes.js",
     "./agents/terminal/agent-sandbox": "./src/agents/terminal/agent-sandbox.js",
     "./agents/terminal/tmux": "./src/agents/terminal/tmux.js",

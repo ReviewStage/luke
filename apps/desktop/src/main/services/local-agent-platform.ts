@@ -2,7 +2,11 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { DEVICE_ARCH, DEVICE_ISOLATION, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
-import type { LocalAgentPlatformSeam } from "@luke/host/effect";
+import type {
+  LocalAgentCommand,
+  LocalAgentPlatformSeam,
+  LocalAgentRunner,
+} from "@luke/host/effect";
 import { agentWorktreeScript, cloneFolder, worktreesRoot } from "@luke/host/node";
 import { app } from "electron";
 import { nativeHelperPath } from "../native/native-helper";
@@ -74,8 +78,13 @@ export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
       worktree,
       branch,
     });
+  const launcher = nativeHelperPath(LAUNCHER);
   const shared = {
-    launcher: nativeHelperPath(LAUNCHER),
+    launch: ({ node, bundle, env }: LocalAgentRunner): LocalAgentCommand => ({
+      command: launcher,
+      args: [node, bundle],
+      env,
+    }),
     deviceName: deviceName(),
     // Note that the app is built for Apple silicon alone (`package.json`'s `--mac --arm64`).
     devicePlatform: DEVICE_PLATFORM.DARWIN,
