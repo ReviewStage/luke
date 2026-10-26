@@ -124,6 +124,8 @@ export interface LiveBrainAsk {
   sessionId: string;
   /** The ask's revision in that session's order of delegations: a higher one supersedes a lower. */
   revision: number;
+  /** Whether the developer hears the reply: not for their last line handed over as the call ends, which the brain answers as a line it reads rather than says. */
+  heard: boolean;
 }
 
 export const LIVE_BRAIN_SUBMISSION = {

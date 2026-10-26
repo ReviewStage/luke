@@ -123,7 +123,7 @@ function spokenAsk(
   sessionId: string = `voice_${randomUUID()}`,
 ): LiveBrainAsk {
   revisions += 1;
-  return { submissionId, question, sessionId, revision: revisions };
+  return { submissionId, question, sessionId, revision: revisions, heard: true };
 }
 
 /** An eve session id of this test's own: the relay names a turn by session and eve turn, so a counted id would collide across the files that share one database on CI. */
@@ -321,6 +321,27 @@ it.live(
       const again = yield* Effect.promise(() => database.run(f.brain.submitAsk(ask)));
       assert.deepEqual(again, accepted);
       assert.equal(f.eve.opened.length, 1);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "a line no one hears opens an unheard turn while its ask stays spoken, so the transcript's row is still its line",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
+      const ask = { ...spokenAsk("Developer: make it three days."), heard: false };
+
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(ask)));
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      assert.deepEqual(
+        f.eve.opened.map((message) => message.turn),
+        [BRAIN_HOST_TURN.UNHEARD],
+      );
+      const recorded = yield* Effect.promise(() => asks.named(target.userId, accepted.runId));
+      assert.equal(recorded?.origin, ASK_ORIGIN.SPOKEN);
       yield* Effect.promise(() => f.stop());
     }),
 );

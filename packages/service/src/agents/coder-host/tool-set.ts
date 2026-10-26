@@ -152,17 +152,22 @@ export type CallTool =
   | typeof CODER_TOOL.END_CALL;
 
 /**
- * Why each of the call's own tools is refused on a turn no call is live on.
- * Note that they are offered on every turn, spoken or typed, so the tools a
- * turn sends, which lead its prompt, are the same whichever kind it is, and
- * a call that starts mid-PR reads the agent's history from the provider's
- * cache; off a call each refuses as other tools refuse.
+ * Why each of the call's own tools is refused on a turn that is not spoken:
+ * a typed one, or the unheard one a call's last line opens once it has
+ * ended. Note that they are offered on every turn, spoken or not, so the
+ * tools a turn sends, which lead its prompt, are the same whichever kind it
+ * is, and a call that starts mid-PR reads the agent's history from the
+ * provider's cache; off a spoken turn each refuses as other tools refuse.
+ * Note too that the words name the turn rather than the call, because a
+ * line typed while a call stands opens a typed turn too (`channel.ts`).
  */
 const OFF_CALL_REASON = {
   [CODER_TOOL.QUEUE_QUESTION]:
-    "No call is live, so no one hears a queued question: post it to the developer in a thread instead.",
-  [CODER_TOOL.WITHDRAW_QUESTION]: "No call is live, so no question waits on one.",
-  [CODER_TOOL.END_CALL]: "No call is live to end.",
+    "This turn is not spoken (nothing you write is heard), so no one hears a queued question: post it to the developer in a thread instead.",
+  [CODER_TOOL.WITHDRAW_QUESTION]:
+    "This turn is not spoken (nothing you write is heard), so a queued question is taken back only on a spoken turn.",
+  [CODER_TOOL.END_CALL]:
+    "This turn is not spoken (nothing you write is heard), so it has no call to end.",
 } as const satisfies Record<CallTool, string>;
 
 /** One call of the call's own tools as the turn's kind answers it: its run on a spoken turn, refused on any other. */

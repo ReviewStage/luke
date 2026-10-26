@@ -19,7 +19,7 @@ import {
 } from "@luke/voice/live-session";
 import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
-import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
+import type { BrainHostTurn } from "../agents/brain-host/bounds.js";
 import type { AgentSessions } from "../agents/brain-host/eve-sessions.js";
 import type { CallBackend } from "./call-backend.js";
 import { hostedLiveBrain } from "./live-brain.js";
@@ -66,9 +66,12 @@ export interface HostedLiveExchangeOptions {
   /**
    * eve as the deployment reaches it for this account: `eveSessions` with
    * the deployment's secret and this account, composed by the caller, so neither the secret nor eve's origin enters
-   * here and a test hands in a fake. It sends a spoken ask and nothing else.
+   * here and a test hands in a fake. It sends a spoken ask, as an unheard
+   * turn where no one hears it (`brain-ask.ts`'s `heard`).
    */
-  readonly eve: AgentSessions<typeof BRAIN_HOST_TURN.SPOKEN>;
+  readonly eve: AgentSessions<BrainHostTurn>;
+  /** Whether the call's agent is on a task, whose plan the developer's last unheard line is written into. */
+  readonly hasTask: boolean;
   readonly createId: () => string;
   readonly report: (message: string) => void;
   /** What the voice and the brain are doing, told whole on each change; the device is shown it. */
@@ -242,6 +245,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     LiveSessionService.make({
       createId: options.createId,
       report,
+      hasTask: options.hasTask,
       onStatus: (told) => {
         status = told;
         tellActivity();

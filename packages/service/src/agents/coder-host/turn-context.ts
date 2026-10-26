@@ -40,6 +40,7 @@ import {
 } from "@luke/features/plan-template";
 import { PLAN_FIELD, type PlanRevisionLine } from "@luke/features/task-wire";
 import { openThreadsText } from "../../tasks/comment-tools.js";
+import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL } from "./tool-set.js";
 
@@ -174,30 +175,36 @@ export function taskKey(
   return contentKey(JSON.stringify([...read, boardText(board)]));
 }
 
-/** The line a turn opens with where its kind is the last turn's, or a typed one follows spoken ones. */
+/** The line a turn opens with where its kind is the last turn's, or a typed or unheard one follows spoken ones. */
 const TURN_KIND_LINE = {
   SPOKEN_AGAIN:
     'This turn is spoken too: the developer is still on the call, and "This turn is spoken" above still holds.',
   TYPED_AFTER_CALL:
-    'This turn is typed: no call is live, so "This turn is spoken" above no longer holds. Your words are read, not heard, and a question for the developer goes in a thread.',
+    'This turn is typed (nothing you write is heard), so "This turn is spoken" above no longer holds: your words are read, and a question for the developer goes in a thread.',
+  UNHEARD_AFTER_CALL:
+    'The call has ended (nothing you write is heard), so "This turn is spoken" above no longer holds: your words are read, and a question for the developer goes in a thread.',
 } as const;
 
 /**
  * What a turn opens with of its kind: on a spoken turn the call's words,
  * and how to talk the plan through for an agent on a task, unless the turn
  * before was spoken and the words still stand in the history, where a line
- * says they still hold; on a typed turn after a spoken one, a line saying
- * they no longer do; and nothing on a typed turn after a typed one.
+ * says they still hold; on a typed or unheard turn after a spoken one, a
+ * line saying they no longer do; and nothing on one after a typed one.
  */
 export function turnKindWords(
-  spoken: boolean,
+  kind: BrainHostTurn | undefined,
   handed: TurnHanded,
   onTask: boolean,
 ): string | undefined {
+  const spoken = kind === BRAIN_HOST_TURN.SPOKEN;
   const afterSpoken = handed.spoken === true;
   if (spoken && afterSpoken && handed.callWords === true) return TURN_KIND_LINE.SPOKEN_AGAIN;
   if (spoken) return onTask ? `${SPOKEN_WORDS}\n\n${DOCUMENT_TALK_WORDS}` : SPOKEN_WORDS;
-  return afterSpoken ? TURN_KIND_LINE.TYPED_AFTER_CALL : undefined;
+  if (!afterSpoken) return undefined;
+  return kind === BRAIN_HOST_TURN.UNHEARD
+    ? TURN_KIND_LINE.UNHEARD_AFTER_CALL
+    : TURN_KIND_LINE.TYPED_AFTER_CALL;
 }
 
 /**

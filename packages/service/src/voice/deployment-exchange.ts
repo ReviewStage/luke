@@ -3,7 +3,7 @@ import { storeWriter } from "@luke/database/models/writer";
 import { Data, Effect, type Layer, type Redacted } from "effect";
 import { FetchHttpClient } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
+import type { BrainHostTurn } from "../agents/brain-host/bounds.js";
 import {
   type AgentSessions,
   type EveMount,
@@ -27,15 +27,13 @@ import type { ExchangeAttachment } from "./live-exchange.js";
  * switch every hosted endpoint keeps, and the same outcome a store that
  * cannot be reached has. Nothing is read from the environment here; the
  * function hands the reads in, and a test hands in its own database and a
- * fake eve behind the same door. Its eve sends a spoken ask and nothing else
- * by its type, under the coding agents' mount, into the agent the call names,
+ * fake eve behind the same door. Its eve sends a spoken ask, as an unheard turn
+ * where no one hears it (`brain-ask.ts`'s `heard`), under the coding agents'
+ * mount, into the agent the call names,
  * routed as every other message is (`routedSessions`): to eve, or to the
  * native harness the agent's conversation runs on, where the function
  * provides the harnesses (`apps/web/server/native-agents.ts`).
  */
-
-/** The one kind of turn the voice function asks an agent for. */
-type SpokenTurn = typeof BRAIN_HOST_TURN.SPOKEN;
 
 interface DeploymentExchangeSeams {
   /** The secret the deployment acts for an account under at eve's door, its own (`EVE_DEPLOYMENT_SECRET`) and never the cron's; nothing refuses every session. */
@@ -43,7 +41,7 @@ interface DeploymentExchangeSeams {
   /** The origin eve answers on; nothing refuses every session. */
   readonly eveOrigin: () => string | undefined;
   /** eve as the deployment reaches it for one account under one mount; a test hands in a fake, the function composes the real client below. */
-  readonly eve?: (accountId: string, mount: EveMount) => AgentSessions<SpokenTurn>;
+  readonly eve?: (accountId: string, mount: EveMount) => AgentSessions<BrainHostTurn>;
   /**
    * The `HttpClient` eve's client is composed over. The exchange stands inside
    * the voice service, whose effects ask for the store's client alone, so the
@@ -92,9 +90,9 @@ function deploymentEve(
   compose: EveSessionsComposer,
   origin: string,
   deploymentSecret: Redacted.Redacted,
-): (accountId: string, mount: EveMount) => AgentSessions<SpokenTurn> {
+): (accountId: string, mount: EveMount) => AgentSessions<BrainHostTurn> {
   return (accountId, mount) =>
-    compose<SpokenTurn>({
+    compose({
       origin,
       caller: { secret: deploymentSecret, account: accountId },
       mount,

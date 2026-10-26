@@ -121,10 +121,12 @@ export const CODER_DEPLOYMENT_TURNS = {
   [DEPLOYMENT_ACT.OPEN]: {
     [BRAIN_HOST_TURN.TYPED]: true,
     [BRAIN_HOST_TURN.SPOKEN]: true,
+    [BRAIN_HOST_TURN.UNHEARD]: true,
   },
   [DEPLOYMENT_ACT.FOLLOW_UP]: {
     [BRAIN_HOST_TURN.TYPED]: true,
     [BRAIN_HOST_TURN.SPOKEN]: true,
+    [BRAIN_HOST_TURN.UNHEARD]: true,
   },
 } as const satisfies DeploymentTurnTable;
 
