@@ -57,7 +57,6 @@ import {
   isSubagentTab,
   isTerminalTab,
   isTranscriptTab,
-  pullRequestLabelOf,
   type StripTab,
   sameTab,
 } from "@luke/ui/tab-strip-model";
@@ -155,7 +154,6 @@ import {
 } from "./closed-tabs.js";
 import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
-  agentName,
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
   choiceRequest,
@@ -200,9 +198,6 @@ import {
   drawsMacTerminal,
   drawsSubagent,
   drawsTerminal,
-  inColumn,
-  isPinnable,
-  type PinnedTab,
   SIDE_PANEL_TAB,
   type SidePanelControl,
   type SidePanelTab,
@@ -699,12 +694,8 @@ export interface TasksControl {
   boardView: BoardViewControl;
   /** Opens a task's file in its side panel at the commit named, or its default branch's head where none is, the reference's lines lit, opening the task first where it is not the open one: what an inbox item's code opens. */
   onShowFile: (taskId: string, ref: CodeRef, commit: string | undefined) => void;
-  /** Opens a tab pinned to the sidebar: its task, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
-  onOpenPinnedTab: (pin: PinnedTab) => void;
   /** Opens the tab closed latest again as it stood, on its task, opening the task first where it is not the open one; none while no closed tab is kept. */
   onReopenClosedTab: (() => void) | undefined;
-  /** The pin the open task was last opened from, which the sidebar marks in the task's place for as long as the task stays open; none once a task is opened otherwise. */
-  chosenPin: PinnedTab | undefined;
   /** What the repository chip offers, in the composer and on the open task alike. */
   repositories: RepositoryChooser;
   /** The ask standing for the open task's chip to open its menu: which task it is about, and how many asks so far. */
@@ -971,12 +962,6 @@ interface HistoryOpening {
   readonly spot: HistorySpot | undefined;
 }
 
-/** A pin pressed in the sidebar, and the task open when it was, or its own once that opens. */
-interface PinChoice {
-  readonly pin: PinnedTab;
-  readonly over: string | undefined;
-}
-
 /**
  * A task asked of the host, or the home page as nothing, and the open
  * task it was asked over: the ask stands only while that task is still the
@@ -1185,7 +1170,6 @@ export function useTasksTab(input: {
   >(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<TasksControl["repositoryMenu"]>(undefined);
   const [asked, setAsked] = useState<TaskAsk | undefined>(undefined);
-  const [chosen, setChosen] = useState<PinChoice | undefined>(undefined);
   /**
    * The task whose version history stands in the window, which it does only
    * while that task is the one bound for, and the save whose revision it
@@ -1577,35 +1561,6 @@ export function useTasksTab(input: {
         : inboxAgents
       : (pageAgents ?? agents.heldIds),
   );
-  // An agent, or its Pull request, pinned to the sidebar is named there as
-  // its tab is named now, so a pin made before the agent had its title or its
-  // pull request was read, or before a rename, catches up while its task is open.
-  const pinLabels = useMemo(
-    () => ({
-      agents: new Map(
-        (agents.agents ?? []).map((agent) => [agent.id, agentName(agent, agents.models)]),
-      ),
-      pullRequests: new Map(
-        [...agents.pullRequests].map(([agentId, pullRequest]) => [
-          agentId,
-          pullRequestLabelOf(pullRequest),
-        ]),
-      ),
-      numbered: new Map(
-        [...agents.numberedPullRequests].map(([agentId, numbered]) => [
-          agentId,
-          new Map(
-            [...numbered].map(([number, pullRequest]) => [number, pullRequestLabelOf(pullRequest)]),
-          ),
-        ]),
-      ),
-    }),
-    [agents.agents, agents.models, agents.pullRequests, agents.numberedPullRequests],
-  );
-  const { onRenamePins } = sidePanel;
-  useEffect(() => {
-    if (viewed.activeTaskId !== undefined) onRenamePins(viewed.activeTaskId, pinLabels);
-  }, [viewed.activeTaskId, pinLabels, onRenamePins]);
   // Main hears which agent's tab, or which task's Inbox, is on screen, and
   // neither while the tab is away, the version history stands in the task's
   // place, the side panel fills the window over the column, or the column
@@ -1692,13 +1647,6 @@ export function useTasksTab(input: {
     historyFor !== undefined &&
     historyFor.taskId === boundFor &&
     region.kind !== DOCUMENT_REGION.MISSING;
-  // A pin stays chosen while its task stays open, whichever of its tabs is
-  // shown: once its task opens it is held there, and any other task opening
-  // lets it go. Note that this reads the task open rather than the one asked
-  // for, because an ask the host refuses leaves the pin chosen.
-  if (chosen !== undefined && openTaskId !== chosen.over) {
-    setChosen(openTaskId === chosen.pin.task ? { pin: chosen.pin, over: openTaskId } : undefined);
-  }
   const listedId = listedWorkspace?.id;
   const tasksNow = tasks.tasks;
   const workspacesNow = viewed.workspaces;
@@ -3032,9 +2980,6 @@ export function useTasksTab(input: {
   // A strip's tab is viewed only while the task's page is on screen, nothing standing over it.
   const taskOnScreen =
     shown && page === TASKS_PAGE.DOCUMENT && standIn === undefined && historyFor === undefined;
-  const pinnedHere = (tab: StripTab) =>
-    isPinnable(tab) &&
-    sidePanel.pins.some((pin) => pin.task === viewed.activeTaskId && sameTab(pin.tab, tab));
   useIdleTabs({
     taskId: fixture === undefined ? viewed.activeTaskId : undefined,
     column:
@@ -3048,7 +2993,6 @@ export function useTasksTab(input: {
             onIdle: dozeColumnTab,
             keeps: (tab) =>
               isDraftTab(tab) ||
-              pinnedHere(tab) ||
               awakeAgents.includes(tab.agent) ||
               input.unseenAgents.includes(tab.agent),
           },
@@ -3062,10 +3006,7 @@ export function useTasksTab(input: {
             onViewedAt: sidePanel.onViewedAt,
             onIdle: closeSidePanelTab,
             keeps: (tab) =>
-              typeof tab === "string" ||
-              isCloudBrowserTab(tab) ||
-              isMacTerminalTab(tab) ||
-              pinnedHere(tab),
+              typeof tab === "string" || isCloudBrowserTab(tab) || isMacTerminalTab(tab),
           },
     awake: awakeAgents,
     onWake: mainTabs.onWake,
@@ -3243,20 +3184,16 @@ export function useTasksTab(input: {
       onReturn: (taskId, spot) => openHistory({ taskId, save: undefined, spot }),
       onClose: () => setHistoryFor(undefined),
     },
-    // Note that the pin's own task opened by its row is the task the
-    // sidebar marks again rather than the pin; another task's lets the pin
-    // go only once it opens. A narrow room shows one pane, so a task opened
+    // Note that a narrow room shows one pane, so a task opened
     // there from a list lands on its plan, the side panel standing full
     // screen on the plan's tab, rather than on whatever tab it last showed;
     // a link names its own place (`openLink`), and the history opens a task
     // through `onRestoreTask` instead, standing the pane its step held.
     onSelect: guard((taskId: string) => {
-      setChosen((held) => (held?.pin.task === taskId ? undefined : held));
       select(taskId);
       if (input.room === SHELL_ROOM.NARROW) sidePanel.onShow(taskId, SIDE_PANEL_TAB.PLAN);
     }),
     onRestoreTask: guard((taskId: string) => {
-      setChosen((held) => (held?.pin.task === taskId ? undefined : held));
       select(taskId);
     }),
     onShowAgent: guard((taskId: string, agentId: string) =>
@@ -3405,21 +3342,6 @@ export function useTasksTab(input: {
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
     onShowInbox: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.INBOX)),
-    // A pinned tab is in one of the task's columns, so a version history over it gives way as well.
-    onOpenPinnedTab: guard((pin: PinnedTab) => {
-      const { tab } = pin;
-      setChosen({ pin, over: openTaskId });
-      if (pin.task !== tasks.activeTaskId) select(pin.task);
-      setStandIn(undefined);
-      setHistoryFor(undefined);
-      if (!inColumn(tab)) {
-        sidePanel.onShow(pin.task, tab);
-        return;
-      }
-      if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-      mainTabs.onShow(pin.task, tab);
-    }),
-    chosenPin: chosen !== undefined && chosen.pin.task === boundFor ? chosen.pin : undefined,
     onReopenClosedTab: reopenable.length === 0 ? undefined : reopenClosedTab,
     repositories,
     repositoryMenu,

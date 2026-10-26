@@ -1259,11 +1259,6 @@ function PlanDocument({
                               agents={agents}
                               unread={tasks.unreadTabs}
                               views={views}
-                              pins={{
-                                pinned: sidePanel.pins,
-                                onPin: sidePanel.onPin,
-                                onUnpin: sidePanel.onUnpin,
-                              }}
                               keys={tasks.shown && !sideFocused}
                               shown={tasks.shown}
                               onOpenTerminal={terminalDoors.onOpenTerminal}

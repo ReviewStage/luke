@@ -97,19 +97,13 @@ test("an agent's Changes tab opens on its plan, stands chosen across a launch, a
   assert.equal(second.control().tab, SIDE_PANEL_TAB.PLAN);
 });
 
-test("a record kept before tasks had their name holds each task's choices under plans and its pins' task under plan, and a launch still opens on both", () => {
+test("a record kept before tasks had their name holds each task's choices under plans, and a launch still opens on them, a pin it kept to the sidebar read past", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
-  act(() => first.control().onPin({ changes: AGENT }, "Changes: Invite flow"));
   first.quit();
-  const { tasks, pins, ...kept } = JSON.parse(
-    window.localStorage.getItem("luke.sidePanel") ?? "{}",
-  );
+  const { tasks, ...kept } = JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}");
   assert.ok(tasks, "the record keeps the task's choices");
-  const earlierPins = pins.map(({ task, ...pin }: { readonly task: string }) => ({
-    ...pin,
-    plan: task,
-  }));
+  const earlierPins = [{ plan: TASK, tab: { changes: AGENT }, label: "Changes", at: 1 }];
   window.localStorage.setItem(
     "luke.sidePanel",
     JSON.stringify({ ...kept, plans: tasks, pins: earlierPins }),
@@ -117,10 +111,6 @@ test("a record kept before tasks had their name holds each task's choices under 
 
   const second = launch({ task: TASK, taskAgents: [AGENT] });
   assert.deepEqual(second.control().tab, { changes: AGENT });
-  assert.deepEqual(
-    second.control().pins.map(({ task, tab, label }) => ({ task, tab, label })),
-    [{ task: TASK, tab: { changes: AGENT }, label: "Changes: Invite flow" }],
-  );
 });
 
 test("a Changes tab closed stays closed across a launch, and closing the chosen one chooses the tab viewed before it", () => {
@@ -164,47 +154,6 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   const second = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.deepEqual(second.control().terminals, []);
   assert.equal(second.control().tab, SIDE_PANEL_TAB.PLAN);
-});
-
-test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its pull request's name, never its agent's", () => {
-  const first = launch({ task: TASK, taskAgents: [AGENT] });
-  act(() => first.control().onChoose({ changes: AGENT }));
-  act(() => first.control().onPin({ changes: AGENT }, "Pull request"));
-  first.quit();
-
-  const second = launch({ task: TASK, taskAgents: [AGENT] });
-  assert.deepEqual(
-    second.control().pins.map(({ task, tab, label }) => ({ task, tab, label })),
-    [{ task: TASK, tab: { changes: AGENT }, label: "Pull request" }],
-  );
-  // The panel's other choices read too, rather than the whole record being dropped.
-  assert.deepEqual(second.control().tab, { changes: AGENT });
-
-  const agents = new Map([[AGENT, "Expiring invites"]]);
-  act(() => second.control().onRenamePins(TASK, { agents, pullRequests: new Map() }));
-  assert.equal(second.control().pins[0]?.label, "Pull request", "its pull request unread");
-  const pullRequests = new Map([[AGENT, "#42 Expire invitations"]]);
-  act(() => second.control().onRenamePins(TASK, { agents, pullRequests }));
-  assert.equal(second.control().pins[0]?.label, "#42 Expire invitations");
-
-  // Shown from its pin on another task, it opens there, at the end of that task's strip.
-  second.render({ task: OTHER_TASK, taskAgents: [OTHER_AGENT] });
-  act(() => second.control().onShow(TASK, { changes: AGENT }));
-  second.render({ task: TASK, taskAgents: [AGENT] });
-  assert.deepEqual(second.control().tab, { changes: AGENT });
-  assert.deepEqual(second.control().changes, [{ changes: AGENT }]);
-});
-
-test("a tab pinned to the sidebar keeps the place a drag gave it across a launch, on this Mac", () => {
-  const first = launch({ task: TASK, taskAgents: [AGENT] });
-  act(() => first.control().onChoose({ changes: AGENT }));
-  act(() => first.control().onPin({ changes: AGENT }, "Changes: Invite flow"));
-  const at = first.control().pins[0]?.at ?? assert.fail("the tab is pinned");
-  act(() => first.control().onPlacePins(new Map([[at, "a3"]])));
-  first.quit();
-
-  const second = launch({ task: TASK, taskAgents: [AGENT] });
-  assert.equal(second.control().pins[0]?.position, "a3");
 });
 
 test("a file named alone, as ⌘K finds it, shows the tab it has as it stands, and one Luke never showed opens in a tab the plan draws", () => {
@@ -426,7 +375,7 @@ test("a task that may draw no Inbox, holding no agent and nothing waiting, draws
   assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
 });
 
-test("a record kept while the Call stood in the panel reads with its tab let go from the strip, and its pin let go too", () => {
+test("a record kept while the Call stood in the panel reads with its tab let go from the strip", () => {
   window.localStorage.setItem(
     "luke.sidePanel",
     JSON.stringify({
@@ -445,7 +394,6 @@ test("a record kept while the Call stood in the panel reads with its tab let go 
     "the Call stands in no strip of the panel, and the plan leads it",
   );
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
-  assert.deepEqual(panel.control().pins, [], "a pin of the Call, which is gone, is let go");
 });
 
 test("a narrow room holds the open panel full screen alone, so the window's ways out of full screen shut it there, and a room widened again stands it beside the document", () => {

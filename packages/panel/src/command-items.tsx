@@ -94,8 +94,6 @@ export const PANEL_COMMAND = {
   RENAME: unkeyed("Rename", <GLYPH.RENAME />),
   RENAME_TASK: unkeyed("Rename", <GLYPH.RENAME />, NOUN.TASK),
   VERSION_HISTORY: unkeyed("Version history", <HistoryIcon />),
-  PIN_TAB: unkeyed("Pin", <GLYPH.PIN />, NOUN.TAB),
-  UNPIN_TAB: unkeyed("Unpin", <GLYPH.UNPIN />, NOUN.TAB),
   CLOSE_TAB: keyed(APP_COMMAND.CLOSE_TAB, <GLYPH.CLOSE />, NOUN.TAB),
   CLOSE_OTHER_TABS: unkeyed("Close others", <ListXIcon />),
   SHOW_TERMINAL: keyed(APP_COMMAND.SHOW_TERMINAL, <GLYPH.TERMINAL />),

@@ -3658,7 +3658,7 @@ function waitingFrom(agentId: string): AppInboxTask {
 }
 
 it.effect(
-  "a side panel tab not viewed for a day closes itself onto ⇧⌘T's stack, while the tab shown, a fixed tab, and a pinned one stay",
+  "a side panel tab not viewed for a day closes itself onto ⇧⌘T's stack, while the tab shown and a fixed tab stay",
   () =>
     Effect.gen(function* () {
       const tab = mount(
@@ -3669,10 +3669,7 @@ it.effect(
       yield* landed;
       const panel = () => tab.control().sidePanel;
       const file = { file: CODE.ref.path };
-      const pulls = { changes: AGENT_ID };
       act(() => panel().onOpenFile(CODE.ref));
-      act(() => panel().onChoose(pulls));
-      act(() => panel().onPin(pulls, "Pull request"));
       act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
       yield* landed;
       const strip = panel().strip;
@@ -3680,7 +3677,6 @@ it.effect(
         SIDE_PANEL_TAB.PLAN,
         SIDE_PANEL_TAB.CODE,
         file,
-        pulls,
         SIDE_PANEL_TAB.BOARD,
       ]);
 
@@ -3690,8 +3686,8 @@ it.effect(
       yield* passing(Duration.hours(1));
       assert.deepEqual(
         panel().strip,
-        [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.CODE, pulls, SIDE_PANEL_TAB.BOARD],
-        "the file's tab closed; the fixed tabs, the pinned Pull request, and the tab shown stay",
+        [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.BOARD],
+        "the file's tab closed; the fixed tabs and the tab shown stay",
       );
       assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
 

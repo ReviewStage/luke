@@ -167,7 +167,6 @@ import {
   drawsTerminal,
   type FileHistoryStep,
   type FixedSidePanelTab,
-  isPinnable,
   type OpenFile,
   PULL_REQUEST_VIEW,
   type PullRequestView,
@@ -195,7 +194,6 @@ import {
   type TabActionGroups,
   type TabDoors,
   type TabLook,
-  type TabPin,
   TabSkeleton,
   type TabViews,
   type TranscriptCopier,
@@ -1319,14 +1317,6 @@ function PanelTabs({
   // falls through to the menu bar, which closes the window (`app-menu.ts`).
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
-  const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
-    if (holder !== SIDE_PANEL_HOLDER.TASK || !isPinnable(tab)) return undefined;
-    const pinned = panel.pins.some((pin) => pin.task === taskId && sameTab(pin.tab, tab));
-    return {
-      pinned,
-      onToggle: () => (pinned ? panel.onUnpin(taskId, tab) : panel.onPin(tab, look.label)),
-    };
-  };
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
     const others = strip.filter((_, place) => place !== at);
     // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id, and names only its pages by it.
@@ -1346,7 +1336,6 @@ function PanelTabs({
               for (const other of others) other.close();
               panel.onChoose(entry.tab);
             },
-      pin: pinOf(entry),
       onCopy: entry.copy,
       copyLink: linked === undefined ? undefined : copyLink(linked),
       handed:

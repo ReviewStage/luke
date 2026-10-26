@@ -45,8 +45,7 @@ import { MenuTab } from "./tab-strip.js";
  *
  * Both strips are the one `TabStrip` (tab-strip.tsx), each of its tabs a
  * `MenuTab` whose right-click offers the actions `tabActionGroups` lists:
- * Close and Close others; Pin or Unpin, and an agent's Rename,
- * beside it; an agent's Show terminal; a transcript's two copies; and an
+ * Close and Close others; an agent's Rename; an agent's Show terminal; a transcript's two copies; and an
  * agent's Archive. Those that act on what the chosen tab shows, an agent's
  * Rename, Show terminal, copies, and Archive, and a subagent's copies, its
  * strip's toolbar also offers from a ⋯ (`ToolbarTabActions`), with what the
@@ -72,12 +71,6 @@ const TRANSCRIPT_COPIED_NOTE = "Transcript copied";
 /** What the toast says when a tab's transcript could not be read whole for a copy. */
 const TRANSCRIPT_UNREAD_NOTE = "The transcript could not be copied. Try again.";
 
-/** A tab's pin to the sidebar, as its menu offers it: whether it stands, and the press that sets it or takes it away. */
-export interface TabPin {
-  pinned: boolean;
-  onToggle: () => void;
-}
-
 /** A tab's menu, as either strip offers it: what each action does, and those it holds beyond Close. */
 export interface TabDoors {
   /** Whether the tab is the one chosen, which ⌘W closes. */
@@ -86,8 +79,6 @@ export interface TabDoors {
   onClose: (() => void) | undefined;
   /** Closes every other tab that closes, none where there is none. */
   onCloseOthers: (() => void) | undefined;
-  /** The tab's pin to the sidebar, for a fixed tab's, an agent's, and a file's. */
-  pin: TabPin | undefined;
   /** Copies the tab's transcript, for an agent's and a subagent's. */
   onCopy?: ((copy: TranscriptCopy) => void) | undefined;
   /** Renames what the tab shows, for the plan's and an agent's. */
@@ -190,8 +181,7 @@ function contentActions(doors: TabDoors): ContentActions {
 /**
  * A tab's actions in the groups a rule divides, as an editor's tab offers
  * them on a right-click: Close and Close others, the plan's tab offering
- * only the second; Pin or Unpin, which puts it in the sidebar or
- * takes it out, and a Rename beside it; for an agent's, its Show terminal;
+ * only the second; a Rename; for an agent's, its Show terminal;
  * Copy link, for a tab whose thing has a link, and a transcript's two
  * copies after it; then, for an agent's, its Archive, and last and alone its
  * Permanently delete. Close others stands dimmed where nothing else would close.
@@ -205,16 +195,6 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
           // ⌘W closes the tab chosen, so only the chosen tab's Close says it.
           commandAction(PANEL_COMMAND.CLOSE_TAB, onClose, doors.chosen),
         ];
-  const pin: MenuAction[] =
-    doors.pin === undefined
-      ? []
-      : [
-          commandAction(
-            doors.pin.pinned ? PANEL_COMMAND.UNPIN_TAB : PANEL_COMMAND.PIN_TAB,
-            doors.pin.onToggle,
-            false,
-          ),
-        ];
   const { rename, terminal, copies, archive, deletion } = contentActions(doors);
   return [
     [
@@ -224,16 +204,14 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
         disabled: doors.onCloseOthers === undefined,
       },
     ],
-    ...[[...pin, ...rename], terminal, copies, archive, deletion].filter(
-      (group) => group.length > 0,
-    ),
+    ...[rename, terminal, copies, archive, deletion].filter((group) => group.length > 0),
   ];
 }
 
 /**
  * The chosen tab's actions as its toolbar's ⋯ offers them: those of its
  * right-click that act on what it shows (`contentActions`), in the same
- * groups, and none of the tab's own keeping, Close, Close others, and Pin,
+ * groups, and none of the tab's own keeping, Close and Close others,
  * which stay on the right-click alone. An agent's own page offers the same
  * in its toolbar's ⋯ (`desktop-agent-page.tsx`), so a taskless agent is
  * acted on as a task's is.

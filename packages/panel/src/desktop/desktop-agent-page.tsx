@@ -201,7 +201,6 @@ function AgentPageBar({
     chosen: true,
     onClose: undefined,
     onCloseOthers: undefined,
-    pin: undefined,
     ...doors,
   });
   const rename = luke ? undefined : actions.rename;

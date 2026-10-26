@@ -39,7 +39,6 @@ import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import type { MainTab, MainTabsControl } from "../tasks/use-main-tabs.js";
-import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
 import type { TaskCards } from "./side-panel.js";
@@ -51,7 +50,6 @@ import {
   type HeldTranscripts,
   type TabDoors,
   type TabLook,
-  type TabPin,
   TabSkeleton,
   type TabViews,
 } from "./strip-tabs.js";
@@ -432,7 +430,6 @@ export function MainTabStrip({
   agents,
   unread,
   views,
-  pins,
   keys,
   shown,
   onOpenTerminal,
@@ -444,12 +441,6 @@ export function MainTabStrip({
   /** The agents that ended while no one was looking, each in semibold until shown. */
   unread: readonly StripTab[];
   views: TabViews;
-  /** The sidebar's pins, which an agent's tab is pinned among, and their presses. */
-  pins: {
-    pinned: readonly PinnedTab[];
-    onPin: (tab: ColumnPinnableTab, label: string, model?: string) => void;
-    onUnpin: (taskId: string, tab: ColumnPinnableTab) => void;
-  };
   /** Whether the column offers its keys: on screen, and holding the window's focus. */
   keys: boolean;
   /** Whether the task's page is on screen, which a tab's Archive asks its question on. */
@@ -460,8 +451,6 @@ export function MainTabStrip({
   calling: string | undefined;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
-  const pinnedOf = (tab: ColumnPinnableTab) =>
-    pins.pinned.some((pin) => pin.task === task.id && sameTab(pin.tab, tab));
   // The agents' and the draft's tabs in the column's order,
   // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
@@ -474,13 +463,6 @@ export function MainTabStrip({
   const copyLink = useCopyLinkItem();
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
-  const pinDoor = (tab: ColumnPinnableTab, label: string, model?: string): TabPin => {
-    const pinned = pinnedOf(tab);
-    return {
-      pinned,
-      onToggle: () => (pinned ? pins.onUnpin(task.id, tab) : pins.onPin(tab, label, model)),
-    };
-  };
   const doorsOf = (entry: DrawnTab): TabDoors => {
     // An agent's link is its own action (`agent-actions.tsx`); the Call's is the task's.
     const linked: LinkPlace | undefined =
@@ -490,9 +472,6 @@ export function MainTabStrip({
     const others = strip.flatMap((other) =>
       other === entry || other.close === undefined ? [] : [other.close],
     );
-    const { agent } = entry;
-    const pinTab: ColumnPinnableTab | undefined =
-      agent === undefined ? undefined : { agent: agent.id };
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -503,7 +482,6 @@ export function MainTabStrip({
               for (const close of others) close();
               main.onChoose(entry.tab);
             },
-      pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       copyLink: linked === undefined ? undefined : copyLink(linked),
     };
   };
