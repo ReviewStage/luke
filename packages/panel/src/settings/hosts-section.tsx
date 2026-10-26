@@ -67,8 +67,13 @@ import { MenuRow } from "./menu-row.js";
 /** The bytes of randomness behind an install token, as many as a device secret's. */
 const INSTALL_TOKEN_BYTES = 32;
 
-/** The class PostHog's recorder leaves out of a recording, element and children alike. */
-const NO_CAPTURE = "ph-no-capture";
+/**
+ * The class PostHog's recorder leaves out of a recording, element and children
+ * alike, and a size containment: the commands do not wrap, so without it
+ * their width widens the dialog's grid track past a phone's and puts the card,
+ * its Done among it, off the screen. They scroll inside their cards instead.
+ */
+const COMMANDS = "ph-no-capture contain-inline-size";
 
 const WORDS = {
   TITLE: "Hosts",
@@ -210,7 +215,7 @@ function AddHostsDialog({
       }
       actions={<DialogActions onDone={onClose} />}
     >
-      <div className={NO_CAPTURE}>
+      <div className={COMMANDS}>
         <Stack gap={GAP.CONTROL}>
           <Text>
             {`It works on as many servers as you like until ${momentText(shown.expiresAt)}, and isn't shown again.`}
