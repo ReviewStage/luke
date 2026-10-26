@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { DEVICE_KIND } from "@luke/features/device-agent-wire";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { type MacOffer, MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskRunsOnRequest } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -25,7 +25,8 @@ import { NewTaskComposer } from "./new-task-composer.js";
 /**
  * new-task-composer-runs-on.test.ts -- New task's Runs on, with local agents
  * on and two of the member's devices offered, one offline: the task starts on
- * the device picked, by its id, and the offline one cannot be picked. Note
+ * the device picked, by its id, and the offline one cannot be picked; and a
+ * card that fell back to Cloud stays there when the device comes back. Note
  * that it stands in a file of its own, because a window reads its document
  * once, and the gate reads the experiment off that document. Synthetic
  * throughout.
@@ -67,38 +68,44 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The card in Acme offering the Studio, online, and the build host, offline, each start's Runs on written down. */
-async function mount() {
+/** The member's devices: the Studio, online unless said, and the build host, offline. */
+function devicesWith(studioSeenAt = Date.now()): readonly MacOffer[] {
+  return [
+    {
+      deviceId: STUDIO,
+      name: "Studio",
+      providers: [MODEL_PROVIDER.ANTHROPIC],
+      kind: DEVICE_KIND.DESKTOP,
+      seenAt: studioSeenAt,
+    },
+    {
+      deviceId: BUILDER,
+      name: "Build host",
+      providers: [MODEL_PROVIDER.ANTHROPIC],
+      kind: DEVICE_KIND.HOST,
+      seenAt: 0,
+    },
+  ];
+}
+
+/** The card in Acme offering what `offered` holds now, each start's Runs on written down; `redraw` draws it again over the devices offered then. */
+async function mount(offered: { devices: readonly MacOffer[] } = { devices: devicesWith() }) {
   const control = tasksControl();
   const starts: (TaskRunsOnRequest | undefined)[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
+  const registry = AtomRegistry.make();
+  const draw = () =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registry,
         createElement(NewTaskComposer, {
           newTask: {
             ...control.newTask,
             workspaces: [ACME],
             workspaceId: ACME.id,
-            devices: [
-              {
-                deviceId: STUDIO,
-                name: "Studio",
-                providers: [MODEL_PROVIDER.ANTHROPIC],
-                kind: DEVICE_KIND.DESKTOP,
-                seenAt: Date.now(),
-              },
-              {
-                deviceId: BUILDER,
-                name: "Build host",
-                providers: [MODEL_PROVIDER.ANTHROPIC],
-                kind: DEVICE_KIND.HOST,
-                seenAt: 0,
-              },
-            ],
+            devices: offered.devices,
             start: (_name, _repository, _workspaceId, from) => {
               starts.push(from?.runsOn);
               return Promise.resolve(undefined);
@@ -109,10 +116,14 @@ async function mount() {
           listSide: MENTION_MENU_SIDE.ABOVE,
         }),
       ),
-    ),
-  );
+    );
+  act(draw);
   await settle();
-  return { container, starts };
+  const redraw = async () => {
+    act(draw);
+    await settle();
+  };
+  return { container, starts, redraw };
 }
 
 /** The menu's row naming `name`. */
@@ -141,4 +152,16 @@ test("a task starts on the device Runs on picked, by its id, and an offline devi
 
   assert.equal(chip().getAttribute("aria-label"), "Runs on: Studio");
   assert.deepEqual(starts, [{ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
+});
+
+test("a card that fell back to Cloud for an offline last pick stays on Cloud once that device comes back", async () => {
+  window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
+  const offered = { devices: devicesWith(0) };
+  const { container, starts, redraw } = await mount(offered);
+  offered.devices = devicesWith();
+  await redraw();
+  pressInComposer(container, "Enter", { metaKey: true });
+  await settle();
+
+  assert.deepEqual(starts, [{ machine: CODING_AGENT_MACHINE.VERCEL }]);
 });

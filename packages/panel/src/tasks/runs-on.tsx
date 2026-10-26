@@ -5,6 +5,7 @@ import type { TaskRunsOn, TaskRunsOnRequest } from "@luke/features/task-wire";
 import { CHIP_WIDTH, type MenuRow, POPOVER_ALIGN, useSecond } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { Schema } from "effect";
+import { useState } from "react";
 import { ExperimentTag } from "../experiment-marks.js";
 import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
@@ -20,7 +21,8 @@ import { keptKey, useKept } from "../use-kept.js";
  * the window's own clock. An offline device is listed but not picked, since
  * the service refuses a task set to one that has not beat lately. New task's chip
  * starts on the member's last pick, kept in this window, and on Cloud where
- * that device is no longer listed or is offline, and wears the Experimental
+ * that device is no longer listed or is offline, which the card then holds
+ * until a pick, so a device coming back mid-compose never moves it; it wears the Experimental
  * tag; it stands only while the member has a device to pick. The task's
  * control stands with its status and priority, saying the device it runs on
  * and whether it is online, or that the device was removed, and its hint
@@ -90,10 +92,18 @@ export function useNewTaskRunsOn(
   devices: readonly MacOffer[] | undefined,
 ): readonly [MacOffer | undefined, (deviceId: string | undefined) => void] {
   const [kept, keep] = useKept(KEPT.PICK, CLOUD_ROW);
+  // Whether this card fell back to Cloud, which it holds until a pick, so a device coming back mid-compose never moves it.
+  const [fellBack, setFellBack] = useState(false);
   const now = useSecond();
   const picked = devices?.find((each) => each.deviceId === kept);
-  const standing = picked !== undefined && offerOnline(picked, now) ? picked : undefined;
-  return [standing, (deviceId) => keep(deviceId ?? CLOUD_ROW)];
+  const usable = picked !== undefined && offerOnline(picked, now);
+  // Note that a list not yet read judges nothing, so the kept device stands once it arrives online.
+  if (!fellBack && !usable && kept !== CLOUD_ROW && devices !== undefined) setFellBack(true);
+  const choose = (deviceId: string | undefined) => {
+    setFellBack(false);
+    keep(deviceId ?? CLOUD_ROW);
+  };
+  return [usable && !fellBack ? picked : undefined, choose];
 }
 
 /** What a start sends of New task's pick: the device it names, or the cloud. */
