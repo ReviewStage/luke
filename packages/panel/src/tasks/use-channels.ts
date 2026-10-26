@@ -70,6 +70,9 @@ const held = new Map<string, HeldChannels>();
 /** Each workspace's channels read, by its id, a new map whenever a read is held, which a reader of every workspace's channels draws again by. */
 let heldChannels: ReadonlyMap<string, readonly Channel[]> = new Map();
 
+/** Each workspace's archived channels as last read, by its id, a new map whenever a read is held, so the window's links and history name an archived channel its stream shows. */
+let heldArchived: ReadonlyMap<string, readonly ArchivedChannel[]> = new Map();
+
 /** The window's surfaces drawing any workspace's channels, told of each change. */
 const listeners = new Set<() => void>();
 
@@ -126,6 +129,11 @@ const NOTHING_KEPT: Readonly<Record<string, string>> = {};
 /** The place as it stands, which a server's render reads as the window's does. */
 function placeNow(): ChannelPlace {
   return place;
+}
+
+/** Every workspace's archived channels read, as they stand, which a server's render reads as the window's does. */
+function heldArchivedNow(): ReadonlyMap<string, readonly ArchivedChannel[]> {
+  return heldArchived;
 }
 
 /** Every workspace's channels read, as they stand, which a server's render reads as the window's does. */
@@ -440,23 +448,33 @@ export function useHeldChannels(): ReadonlyMap<string, readonly Channel[]> {
   return useSyncExternalStore(subscribe, heldNow, heldNow);
 }
 
-/** What the Inbox's place shows with Channels on: the channel its stream shows, and the thread opened in it, by its item's id. */
+/** What the Inbox's place shows with Channels on: the channel its stream shows, open or archived, and the thread opened in it, by its item's id. */
 export interface ShownChannel {
-  readonly channel: Channel;
+  readonly channel: Pick<Channel, "id" | "name">;
   readonly threadId: string | undefined;
 }
 
 /**
  * The channel a workspace's stream shows and the thread opened in it, as
- * the window holds its channels, which it reads nothing to learn; none with
- * Channels off, before the channels are read, or where the workspace holds none.
+ * the window holds its channels and its archived ones, which it reads
+ * nothing to learn: an archived channel is named once the stream that
+ * shows it has read the archived channels. None with Channels off, before
+ * the channels are read, or where the workspace holds none.
  */
 export function useShownChannel(workspaceId: string | undefined): ShownChannel | undefined {
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const { channels } = useChannels(channelsOn ? workspaceId : undefined, false);
+  const archived = useSyncExternalStore(subscribe, heldArchivedNow, heldArchivedNow);
   const { channelId, threadId } = useChannelPlace();
-  const shown = channelShown(channels, channelId);
-  const channel = shown.kind === CHANNEL_SHOWN.CHANNEL ? shown.channel : undefined;
+  const shown = channelShown(
+    channels,
+    channelId,
+    workspaceId === undefined ? undefined : archived.get(workspaceId),
+  );
+  const channel =
+    shown.kind === CHANNEL_SHOWN.CHANNEL || shown.kind === CHANNEL_SHOWN.ARCHIVED
+      ? shown.channel
+      : undefined;
   return useMemo(
     () => (channel === undefined ? undefined : { channel, threadId }),
     [channel, threadId],
@@ -627,7 +645,12 @@ export function useArchivedChannels(workspaceId: string | undefined): ArchivedCh
   const onRefresh = useCallback(() => {
     if (workspaceId === undefined) return;
     act(ACT_KIND.CHANNELS_ARCHIVED, { workspaceId }).then(
-      (view) => setRead({ workspaceId, view }),
+      (view) => {
+        setRead({ workspaceId, view });
+        if ("failure" in view) return;
+        heldArchived = new Map(heldArchived).set(workspaceId, view.channels);
+        told();
+      },
       () => setRead({ workspaceId, view: { failure: CHANNEL_CALL_FAILURE.UNANSWERED } }),
     );
   }, [act, workspaceId]);

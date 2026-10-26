@@ -9690,6 +9690,8 @@ function answerChannels(answers: {
   onWrite?: (write: AnyAct) => void;
   /** The workspace's archived channels; the read is refused where none are given. */
   archived?: readonly ArchivedChannel[];
+  /** Why the service refuses an unarchive, where it does. */
+  unarchiveRefused?: string;
 }): void {
   const previous = fakeActsAnswer();
   const done = (value: unknown): Promise<FakeActAnswer> =>
@@ -9707,6 +9709,12 @@ function answerChannels(answers: {
         request.kind === ACT_KIND.CHANNELS_UNARCHIVE
       ) {
         answers.onWrite?.(request);
+        if (
+          request.kind === ACT_KIND.CHANNELS_UNARCHIVE &&
+          answers.unarchiveRefused !== undefined
+        ) {
+          return done({ failure: answers.unarchiveRefused });
+        }
         return done({ channels: answers.channels?.() ?? [GENERAL] });
       }
       if (request.kind === ACT_KIND.CHANNELS_THREADS) {
@@ -9863,6 +9871,43 @@ test("an archived channel chosen shows its threads to read, offering no ask and 
   await settle();
   assert.deepEqual(unarchived, [old.id]);
   // Note that the window's channel place outlives the test, so it goes back to #general for the next.
+  act(() => channelPlaceNow?.onChoose(GENERAL.id));
+});
+
+test("an archived channel whose threads could not be read still says why its Unarchive was refused", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  const old: ArchivedChannel = {
+    id: "c0ffee00-0000-4000-8000-0000000000ab",
+    name: "old-app",
+    purpose: "The apps, before the split",
+    project: false,
+    createdAt: 1,
+    archivedAt: 2,
+  };
+  answerChannels({
+    archived: [old],
+    threads: () => Promise.resolve({ failure: "unanswered" }),
+    unarchiveRefused: "name-taken",
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  act(() => channelPlaceNow?.onChoose(old.id));
+  await settle();
+  const stream =
+    page.querySelector<HTMLElement>('section[aria-label="#old-app"]') ??
+    assert.fail("the archived channel's stream stands");
+  assert.match(stream.textContent ?? "", /Could not read #old-app/u);
+
+  act(() =>
+    (
+      [...stream.querySelectorAll<HTMLButtonElement>("button")].find(
+        (each) => each.textContent === "Unarchive",
+      ) ?? assert.fail("the stream offers Unarchive")
+    ).click(),
+  );
+  await settle();
+  assert.match(stream.textContent ?? "", /Another channel already goes by that name\./u);
   act(() => channelPlaceNow?.onChoose(GENERAL.id));
 });
 

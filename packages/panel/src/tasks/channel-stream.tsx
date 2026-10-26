@@ -929,7 +929,6 @@ export function ChannelStream({
                 {`#${channel.name} was archived ${agoText(archived.archivedAt, now)}. Its threads stay here to read.`}
               </NoteLine>
             )}
-            <ErrorLine>{unarchive.refusal}</ErrorLine>
             {/* Note that a refresh failing over the threads held keeps them, and says so under the newest. */}
             {read.threads !== undefined && read.failure !== undefined ? (
               <ErrorState
@@ -952,6 +951,8 @@ export function ChannelStream({
           )}
         </Conversation>
       )}
+      {/* Note that Unarchive's refusal stands outside the posts, so a stream whose first read failed still says why. */}
+      <ErrorLine>{unarchive.refusal}</ErrorLine>
       {move.dialog}
     </StreamColumn>
   );
