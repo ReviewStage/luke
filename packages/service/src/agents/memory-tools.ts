@@ -353,9 +353,10 @@ export function runRecall(
  * its starter, read from the service's record of the agent as every agent
  * tool reads them (`callerWorkspace`), then the call itself. An agent whose
  * workspace cannot be read for its starter now keeps and recalls nothing, and
- * neither does one whose starter has Memory off (`EXPERIMENT.MEMORY`): a
- * harness that offers every tool still reaches this door, so the refusal
- * stands here rather than only in what the agent is offered.
+ * neither does one whose starter has Memory off (`EXPERIMENT.MEMORY`): eve
+ * and Luke's MCP server (`luke-mcp/tools.ts`) list neither tool to such an
+ * agent, but a harness may still call a tool it was not listed, or Memory
+ * may go off mid-run, so the refusal stands here as well.
  */
 function agentMemory(
   call: CodingAgentCall,

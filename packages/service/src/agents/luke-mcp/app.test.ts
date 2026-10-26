@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { listAgentBrowserTabs } from "@luke/database/models/agent-browser-tabs";
 import { writeDrawing, writeScene } from "@luke/database/models/board-store";
 import {
@@ -10,7 +11,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { user } from "@luke/database/schemas/auth";
-import { conversations } from "@luke/database/schemas/storage";
+import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
@@ -20,7 +21,14 @@ import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
-import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { EXPERIMENT } from "@luke/settings";
+import {
+  TURN_ORIGIN,
+  TURN_STATUS,
+  type UnparsedWireValue,
+  unparsedWire,
+  type WireBoundaryInput,
+} from "@luke/wire";
 import { webmBytes } from "@luke/wire/testing";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -80,6 +88,7 @@ import {
 import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
+import { PLAN_EDIT_REFUSAL } from "../coder-host/plan-edit.js";
 import type { RepositorySandboxDoor } from "../repository-shell.js";
 import {
   LUKE_INTEGRATION_MCP_PATH,
@@ -612,6 +621,9 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
+        yield* writeAccountPreferences(agent.userId, {
+          experiments: { [EXPERIMENT.MEMORY]: true },
+        });
         const client = yield* connected(fetch, agent.bearer);
 
         const listed = yield* Effect.promise(() => client.listTools());
@@ -636,7 +648,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
   );
 
   it.effect(
-    "tools/list leaves out what eve offers no agent on no task and in no repository: the plan's, the board's, the comments', and the checkout's",
+    "tools/list leaves out what eve offers no agent on no task and in no repository, the plan's, the board's, the comments', and the checkout's, and the memory where its starter has Memory off",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -658,11 +670,67 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
           "open_pull_request",
           "show_code",
           "list_open_asks",
+          "remember",
+          "recall",
         ];
         assert.deepEqual(
           listed.tools.map((tool) => tool.name).sort(),
           SERVED_TOOLS.filter((name) => !withheld.includes(name)).sort(),
         );
+      }),
+  );
+
+  it.effect(
+    "edit_plan holds a turn to its 40 notes across calls, refuses notes before the turn is recorded, and a new turn starts its count afresh",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentInSandbox;
+        const runTurn = Database.use((db) =>
+          db.insert(turns).values({
+            userId: agent.userId,
+            conversationId: agent.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.RUNNING,
+          }),
+        );
+        const client = yield* connected(fetch, agent.bearer);
+        const editPlan = (count: number, turn: string) => {
+          const notes = Array.from({ length: count }, (_, index) => ({
+            kind: "add",
+            section: "Approach",
+            text: `- ${turn} note ${index + 1}.`,
+          }));
+          return Effect.promise(() => client.callTool({ name: "edit_plan", arguments: { notes } }));
+        };
+
+        const early = yield* editPlan(1, "Unrecorded turn");
+        yield* runTurn;
+        const first = yield* editPlan(39, "First turn");
+        const fortieth = yield* editPlan(1, "First turn's last");
+        const past = yield* editPlan(1, "First turn's extra");
+        yield* Database.use((db) =>
+          db
+            .update(turns)
+            .set({ status: TURN_STATUS.SETTLED })
+            .where(eq(turns.conversationId, agent.conversationId)),
+        );
+        yield* runTurn;
+        const next = yield* editPlan(1, "Second turn");
+        yield* Effect.promise(() => client.close());
+
+        assert.deepEqual(firstJson(early), {
+          status: "rejected",
+          reason: PLAN_EDIT_REFUSAL.NO_TURN,
+        });
+        assert.deepEqual(firstJson(first), { status: "accepted", taken: 39 });
+        assert.deepEqual(firstJson(fortieth), { status: "accepted", taken: 1 });
+        assert.deepEqual(firstJson(past), {
+          status: "rejected",
+          reason: PLAN_EDIT_REFUSAL.TOO_MANY,
+        });
+        assert.equal(past.isError, true);
+        assert.deepEqual(firstJson(next), { status: "accepted", taken: 1 });
       }),
   );
 

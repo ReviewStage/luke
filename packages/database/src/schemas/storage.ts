@@ -313,6 +313,8 @@ export const turns = pgTable(
     cancelRequestKey: text("cancel_request_key"),
     /** Whether Anthropic refused Fast for a step of the turn, which then ran at standard speed instead (`coder-host/model.ts`). */
     fastRefused: boolean("fast_refused").notNull().default(false),
+    /** How many notes a native coding agent's turn has taken on its plan over Luke's MCP server, reserved before each save (`edit_plan`'s per-turn cap); eve keeps its own count in its session. */
+    planNotesTaken: integer("plan_notes_taken").notNull().default(0),
   },
   (table) => [
     index("turns_by_user").on(table.userId),

@@ -1,0 +1,1 @@
+ALTER TABLE "turns" ADD COLUMN "plan_notes_taken" integer DEFAULT 0 NOT NULL;
