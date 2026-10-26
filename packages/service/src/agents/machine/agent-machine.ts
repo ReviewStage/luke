@@ -290,9 +290,10 @@ export interface AgentMachineService {
   /**
    * Text appended to the runner's stdin after whatever it already took;
    * `NOT_FOUND_STATUS` where the runner has ended. Note that a line written
-   * here is not sealed, so a line that carries a secret (Codex's token
-   * refresh, `@luke/agent-runner/protocol`) must be sealed on a machine that
-   * keeps its lines, once Codex runs on one.
+   * here is not sealed, and a Mac keeps its lines in the store until it
+   * takes them, so no line may carry a secret: Codex asks Luke for each
+   * access token over HTTPS through the runner's token command
+   * (`@luke/agent-runner`'s `codex-token.ts`) rather than taking it on stdin.
    */
   readonly writeLine: (
     handle: RunnerHandle,
