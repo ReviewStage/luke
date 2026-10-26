@@ -54,6 +54,7 @@ const isHostedRefusal = Schema.is(
     provider: Schema.optionalKey(Schema.Literals(Object.values(MODEL_PROVIDER))),
     ...installedSkillRefusedDataSchema.fields,
     localAgentRefusal: Schema.optionalKey(localAgentRefusalSchema),
+    minimumVersion: Schema.optionalKey(Schema.String),
   }),
 );
 
