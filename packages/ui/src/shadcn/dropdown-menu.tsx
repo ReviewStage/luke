@@ -51,8 +51,9 @@ export const DROPDOWN_MENU_ITEM =
  * A row in a menu lit by the fill every row is lit by, never ringed: under
  * the pointer, where the keyboard's focus stands, and on a submenu's item
  * while its submenu stands beside it; never where it does not apply now.
+ * A phone's sheet of a menu's rows, which stand in no Base UI menu, wears it too.
  */
-const DROPDOWN_MENU_ITEM_LIT =
+export const DROPDOWN_MENU_ITEM_LIT =
   "[&:is(:hover,:focus-visible,[data-popup-open]):not(:disabled,[aria-disabled=true])]:bg-secondary data-[variant=destructive]:[&:is(:hover,:focus-visible):not(:disabled)]:bg-destructive/16";
 
 /** The surface every menu stands on, a list its owner hangs and keys itself included. */
@@ -200,12 +201,15 @@ function DropdownMenuCheckboxItem({
   );
 }
 
+/** The rule between a menu's groups, which a phone's sheet of a menu's rows draws too. */
+export const DROPDOWN_MENU_RULE = "mx-row-inset my-menu-inset h-px flex-none border-0 bg-border";
+
 function DropdownMenuSeparator({ className, ...props }: MenuPrimitive.Separator.Props) {
   return (
     <MenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
       render={<hr />}
-      className={cn("mx-row-inset my-menu-inset h-px flex-none border-0 bg-border", className)}
+      className={cn(DROPDOWN_MENU_RULE, className)}
       {...props}
     />
   );

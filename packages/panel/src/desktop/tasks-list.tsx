@@ -143,6 +143,7 @@ import {
   StatusChip,
   statusOf,
   TaskWorkMarks,
+  taskSubject,
   useStandingDoor,
   WaitingBadge,
 } from "./task-row-parts.js";
@@ -766,7 +767,12 @@ function TaskListRow({
   });
   const press = useRef<HTMLButtonElement | null>(null);
   const nameId = useId();
-  const own = { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer };
+  const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
+  const own = {
+    ...rowMenu("Task", actions.groups(), tasks.shown),
+    footer: actions.footer,
+    subject: taskSubject(task, task.repository === null ? undefined : repositoryName, key),
+  };
   const menu = useRowMenu(
     rename.editing
       ? undefined
@@ -782,7 +788,6 @@ function TaskListRow({
   );
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
   const drawn = (property: TaskProperty) => properties.includes(property);
-  const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
   // Note that the marks before the name are a control and decoration to a screen reader, so the key and status are said in the press, and left out of find, which finds them drawn.
   const spoken = [
     drawn(TASK_PROPERTY.KEY) ? key : undefined,

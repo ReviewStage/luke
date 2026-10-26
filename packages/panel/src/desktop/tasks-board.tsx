@@ -73,7 +73,7 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
-import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
+import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { RENAME_FAILED_NOTE, repositoryPageUrl } from "@luke/ui/tasks-model";
 import {
   COMPLETED_WINDOW,
@@ -126,6 +126,7 @@ import {
   StatusChip,
   standsAt,
   TaskWorkMarks,
+  taskSubject,
   useStandingDoor,
   WaitingBadge,
   WORK_LOOK,
@@ -338,15 +339,20 @@ function TaskBoardCard({
   });
   const press = useRef<HTMLButtonElement | null>(null);
   const nameId = useId();
+  const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
+  const repository = task.repository === null ? undefined : repositoryLabel(task.repository, []);
   const menu = useRowMenu(
     rename.editing
       ? undefined
-      : { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer },
+      : {
+          ...rowMenu("Task", actions.groups(), tasks.shown),
+          footer: actions.footer,
+          subject: taskSubject(task, repository, key),
+        },
     { disabled: actions.deletion.busy, opener: press },
   );
   const drawn = (property: TaskProperty) => properties.includes(property);
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
-  const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
   return (
     <Card
       as={CARD_ELEMENT.LI}
