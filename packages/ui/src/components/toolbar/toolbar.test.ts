@@ -227,7 +227,7 @@ test("a bar that would cut the page's name under the readable floor stands it on
   );
 });
 
-test("a bar reads its title again once the page's fonts finish loading, which widen its words in a bar that keeps its width", () => {
+test("a bar reads its title again once the page's fonts finish loading, which widen or narrow its words in a bar that keeps its width", () => {
   const fonts = new EventTarget();
   Object.defineProperty(document, "fonts", { configurable: true, value: fonts });
   const lay = (whole: number) =>
@@ -249,6 +249,14 @@ test("a bar reads its title again once the page's fonts finish loading, which wi
       banner.dataset.wrapped,
       "true",
       "96px of the 116px it now needs is under the floor",
+    );
+    laid.restore();
+    laid = lay(90);
+    act(() => fonts.dispatchEvent(new Event("loadingdone")));
+    assert.equal(
+      banner.dataset.wrapped,
+      undefined,
+      "a font that narrows it to 90px stands it whole on one row again",
     );
   } finally {
     laid.restore();

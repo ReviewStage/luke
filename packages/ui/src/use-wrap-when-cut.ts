@@ -8,7 +8,8 @@
  * row then needed. The bar is read two frames after each render, each
  * resize, and each time the page's fonts finish loading, which moves the
  * title's words inside a bar that keeps its width, once anything inside it
- * that answers its width on its own (a path's fold) has settled. A host
+ * that answers its width on its own (a path's fold) has settled; a title
+ * wrapped in the font before is stood on one row again to be read afresh. A host
  * with no resize observer lays nothing out, so its bar never wraps.
  */
 
@@ -74,7 +75,8 @@ export function useWrapWhenCut(
     settled();
     const observer = new ResizeObserver(settled);
     observer.observe(bar);
-    const stopFonts = onFontsSettled(settled);
+    // Note that a wrapped title stands on one row again to be read once the fonts load, because the width it needed was read in the font before.
+    const stopFonts = onFontsSettled(() => (wrapped ? setWrapped(false) : settled()));
     return () => {
       cancelAnimationFrame(frameId);
       observer.disconnect();
