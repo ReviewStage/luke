@@ -1001,16 +1001,16 @@ function peopleRows(
   }));
 }
 
-/** The listed workspace's open channels, each by its name and its purpose, which choosing opens on its stream. */
+/** The listed workspace's open channels, each by its glyph and name, as the sidebar lists it, and its purpose, which choosing opens on its stream; `#app` typed finds it too. */
 function channelRows(
   channels: readonly Channel[],
   open: (channelId: string) => void,
 ): readonly PaletteRow[] {
   return channels.map((channel) => ({
     icon: <GLYPH.CHANNEL />,
-    label: `#${channel.name}`,
+    label: channel.name,
     detail: channel.purpose,
-    terms: [`#${channel.name}`, channel.name, channel.purpose],
+    terms: [channel.name, `#${channel.name}`, channel.purpose],
     onChoose: () => open(channel.id),
   }));
 }

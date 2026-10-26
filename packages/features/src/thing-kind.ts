@@ -240,12 +240,10 @@ export const THING_NAME: ThingNames = {
   },
   [THING_KIND.INBOX]: NO_LIVE_NAME,
   [THING_KIND.INBOX_ITEM]: { live: true, held: (item, known) => known.inboxItems.get(item.itemId) },
+  // Note that a channel's chip wears its glyph, a `#`, so its name is said without one, as the sidebar lists it.
   [THING_KIND.CHANNEL]: {
     live: true,
-    held: (channel, known) => {
-      const name = known.channels?.get(channel.channelId);
-      return name === undefined ? undefined : `#${name}`;
-    },
+    held: (channel, known) => known.channels?.get(channel.channelId),
   },
   [THING_KIND.AUTOMATIONS]: NO_LIVE_NAME,
   [THING_KIND.AUTOMATION]: {

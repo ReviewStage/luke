@@ -2902,8 +2902,8 @@ test("with Channels on, ⌘K's Channels lists the workspace's channels by name a
   await settle();
 
   assert.ok(offWithout, "no Channels filter stands with Channels off");
-  assert.deepEqual(rows(), ["#app · The desktop and web app"]);
-  press("#app · The desktop and web app");
+  assert.deepEqual(rows(), ["app · The desktop and web app"]);
+  press("app · The desktop and web app");
   await settle();
   assert.deepEqual(opened, [app.id]);
   handState({});
