@@ -321,7 +321,9 @@ const NO_PAGES: readonly PageLine[] = [];
  * chosen item's task, holding what the item opened there, the task's
  * files, pages, and Pull requests, and none of the kinds its page draws
  * from what it holds, the fixed three and Terminal; nor is a tab of it
- * pinned there, since the Inbox is no plan's page.
+ * pinned there, since the Inbox is no plan's page. Beside a channel's
+ * stream it holds the thread open there as its Inbox tab
+ * (`use-side-panel.ts`'s `thread`).
  */
 export const SIDE_PANEL_HOLDER = {
   TASK: "plan",
@@ -2404,11 +2406,11 @@ export function SidePanel({
   plan?: React.ReactNode;
   /** The task whose plan that is, whose name and status its Plan tab wears; none beside anything but a task's page. */
   task?: PlanStanding | undefined;
-  /** The task's Inbox, which its Inbox tab shows, its board, whose items waiting on the developer the tab counts and its card says, and whether a card holds a draft, which the tab marks; none beside anything but a task's page. */
+  /** The task's Inbox, which its Inbox tab shows, its board, whose items waiting on the developer the tab counts and its card says, and whether a card holds a draft, which the tab marks; beside the window's Inbox, the channel's thread open beside its stream, with no board; none elsewhere. */
   inbox?:
     | {
         readonly body: React.ReactNode;
-        readonly board: InboxBoardView;
+        readonly board: InboxBoardView | undefined;
         readonly drafted: boolean;
       }
     | undefined;
