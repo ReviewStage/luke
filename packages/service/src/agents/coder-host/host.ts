@@ -1,7 +1,6 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { settleEndedSession } from "@luke/database/models/abandoned-turns";
 import { askRecord } from "@luke/database/models/asks";
-import { readBoard } from "@luke/database/models/board-store";
 import {
   type CodingAgent,
   hasRepository,
@@ -14,17 +13,9 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
-import {
-  listRecentMessages,
-  type StoredMessageRecord,
-  turnsBefore,
-} from "@luke/database/models/message-reads";
-import { readPlanCommentThreads } from "@luke/database/models/plan-comments";
-import { listRevisions } from "@luke/database/models/plan-revisions";
+import { listRecentMessages, type StoredMessageRecord } from "@luke/database/models/message-reads";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { readTask } from "@luke/database/models/task-store";
-import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
-import { EMPTY_BOARD } from "@luke/features/board-wire";
+import type { StoreWriter } from "@luke/database/models/writer";
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { causeKind } from "@luke/runtime/effect";
@@ -48,14 +39,8 @@ import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { endsTurn } from "../agent-runtime/sandbox.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
-import { standingContext } from "../agent-runtime/standing-context.js";
 import { turnKindOf } from "../brain-host/auth.js";
-import {
-  BRAIN_HOST,
-  BRAIN_HOST_TURN,
-  type BrainHostTurn,
-  RELAY_TURN,
-} from "../brain-host/bounds.js";
+import { BRAIN_HOST, type BrainHostTurn, RELAY_TURN } from "../brain-host/bounds.js";
 import {
   type AdmittedConversation,
   admitConversation,
@@ -79,7 +64,6 @@ import { rotationSeedText } from "../brain-host/seed.js";
 import { carryStop } from "../brain-host/stop-carrier.js";
 import { newestLineIsAutomation } from "../memory-provenance.js";
 import { memoryOnFor, seedMemoryText } from "../memory-tools.js";
-import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
 import { type ReadWebPageResult, ResearchBudget, runReadWebPage } from "../public-research.js";
 import { checkoutDeepened, type RepositorySandbox } from "../repository-shell.js";
 import { isOperator } from "../steward.js";
@@ -125,17 +109,8 @@ import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-imag
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
-import {
-  contentKey,
-  FLUSH_LINE,
-  flushDue,
-  savedByAnotherSince,
-  type TurnHanded,
-  taskKey,
-  taskWithLead,
-  timeWithLead,
-  turnKindWords,
-} from "./turn-context.js";
+import { flushDue, type TurnHanded } from "./turn-context.js";
+import { type CoderTurn, type CoderTurnMessage, coderTurnMessage } from "./turn-message.js";
 
 /**
  * host.ts -- the coding-agent host composed over eve and the store: what the coder project's authored files call.
@@ -207,18 +182,6 @@ export interface CoderSessionPromptRecord {
   readonly coAuthor?: string;
   readonly workspace?: string;
   readonly memoryOn?: boolean;
-}
-
-/** The turn opening: its kind, as its request named it, and its store id. */
-interface CoderTurn {
-  readonly kind: BrainHostTurn | undefined;
-  readonly turnId: string | undefined;
-}
-
-/** A turn's own message, where there is one to hand, and what the session has handed once it is. */
-export interface CoderTurnMessage {
-  readonly text: string | undefined;
-  readonly handed: TurnHanded;
 }
 
 /** The model a step runs on under the scripted fixture: whatever the authored file hands in, under the fixture's own id. */
@@ -506,9 +469,7 @@ export interface CoderHost extends HostAdmission {
 
 export type { AgentToolCall, BoardTool } from "./agent-doors.js";
 export type { InboxCall, ThreadToolResult } from "./inbox-door.js";
-
-/** The newest turns read to find the agent's previous one: the turn opening, where the relay queued it already, and the one before. */
-const PREVIOUS_TURN_READ = 2;
+export type { CoderTurnMessage } from "./turn-message.js";
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 export function describeFailure(failure: CheckoutFailure): string {
@@ -646,21 +607,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
   };
 
   /**
-   * The operator's desk as its turn opens (`../operator-desk.ts`), its
-   * member's open work as it stands; nothing for any other agent, or where
-   * a read failed, which is logged, so the turn still opens.
-   */
-  const deskOf = (
-    agent: CodingAgent,
-  ): Effect.Effect<OperatorDesk | undefined, never, DatabaseServices> =>
-    isOperator(agent)
-      ? readOperatorDesk(agent).pipe(
-          Effect.tapError(logStoreFailure),
-          Effect.orElseSucceed(() => undefined),
-        )
-      : Effect.succeed(undefined);
-
-  /**
    * Whether an operator's turn opens with the line telling it its history
    * will soon be summarised (`turn-context.ts`'s `flushDue`), read against
    * the window the catalog lists for what it runs on now; never for any
@@ -688,77 +634,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           Effect.tapError(logStoreFailure),
           Effect.orElseSucceed(() => false),
         );
-
-  /**
-   * When the agent's turn before the one opening started, or nothing for its
-   * first turn: the newest of the conversation's turns but the one named,
-   * which the relay may have queued already as this one opens.
-   */
-  const previousTurnStart = (target: ConversationTarget, turnId: string | undefined) =>
-    Effect.map(
-      turnsBefore(target.userId, target.conversationId, PREVIOUS_TURN_READ, undefined),
-      (page) => {
-        const previous = page.turns.findLast((turn) => turn.id !== turnId);
-        return previous === undefined
-          ? undefined
-          : (previous.startedAt ?? previous.queuedAt).getTime();
-      },
-    );
-
-  /**
-   * The agent's task as the turn's message hands it (`turn-context.ts`), read
-   * as the member whose turn this is, and what the session has handed of it
-   * once this turn is (`taskKey`), or nothing for an agent on no task or one
-   * whose task is gone. The task is handed where a revision of the plan
-   * another writer made was saved after the agent's previous turn started,
-   * so a save made while that turn ran, which none of its steps may have
-   * read, is handed too; or where the rest of it is not what the session
-   * last handed; never on a typed first turn, whose first message the plan,
-   * or the prompt beside it, already is. A read that fails is logged and
-   * hands nothing.
-   */
-  const taskOf = (
-    admitted: AdmittedConversation,
-    agent: CodingAgent,
-    turn: CoderTurn,
-    handed: TurnHanded,
-  ) =>
-    Effect.gen(function* () {
-      const { taskId } = agent;
-      if (taskId === null) return undefined;
-      const [stored, board, comments, since] = yield* Effect.all(
-        [
-          readTask(admitted.caller, taskId),
-          readBoard(admitted.caller, taskId),
-          readPlanCommentThreads(admitted.caller, taskId),
-          previousTurnStart(admitted.target, turn.turnId),
-        ],
-        { concurrency: "unbounded" },
-      );
-      if (Option.isNone(stored)) return undefined;
-      const drawn = Option.getOrElse(board, () => EMPTY_BOARD);
-      const threads = Option.getOrElse(comments, () => []);
-      const key = taskKey(stored.value, drawn, threads);
-      // Note that a turn opened on a spoken line, heard or not, carries no task in its message.
-      const opening =
-        since === undefined &&
-        turn.kind !== BRAIN_HOST_TURN.SPOKEN &&
-        turn.kind !== BRAIN_HOST_TURN.UNHEARD;
-      const saved =
-        since !== undefined &&
-        savedByAnotherSince(
-          (yield* listRevisions(admitted.caller, taskId)).revisions,
-          since,
-          agent.id,
-        );
-      if (!saved && (opening || key === handed.task)) return { key: handed.task, text: undefined };
-      const clock = { now: seams.now(), timeZone: admitted.timeZone };
-      const text = taskWithLead(standingContext(stored.value, drawn, clock, threads));
-      return { key, text };
-    }).pipe(
-      Effect.tapError(logStoreFailure),
-      Effect.catch(() => Effect.succeed(undefined)),
-    );
 
   /**
    * The ask record every turn binds the voice's asks to: each ask eve delivered into the
@@ -1041,36 +916,14 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         );
         if (Result.isFailure(found)) return { text: undefined, handed };
         const agent = found.success;
-        const [task, desk, flush] = yield* Effect.all(
-          [taskOf(admitted, agent, turn, handed), deskOf(agent), flushOf(agent, handed)],
-          { concurrency: "unbounded" },
+        return yield* coderTurnMessage(
+          admitted,
+          agent,
+          turn,
+          handed,
+          seams.now(),
+          flushOf(agent, handed),
         );
-        const clock = { now: seams.now(), timeZone: admitted.timeZone };
-        const standing = task?.text ?? timeWithLead(standingContext(undefined, EMPTY_BOARD, clock));
-        // An operator's desk is handed again only where its standing work changed since the session
-        // last handed it, or where it carries notices, which are marked read once handed.
-        const deskKey = desk === undefined ? handed.desk : contentKey(desk.standing);
-        const fresh = desk !== undefined && (desk.notices.length > 0 || deskKey !== handed.desk);
-        const desked = fresh ? [desk.text] : [];
-        if (fresh && desk.notices.length > 0) {
-          yield* markDeskNoticesRead(agent, desk).pipe(
-            Effect.tapError(logStoreFailure),
-            Effect.orElseSucceed(() => undefined),
-          );
-        }
-        const spoken = turn.kind === BRAIN_HOST_TURN.SPOKEN;
-        const kind = turnKindWords(turn.kind, handed, agent.taskId !== null);
-        const taskHanded = task === undefined ? handed.task : task.key;
-        const next: TurnHanded = {
-          ...(taskHanded === undefined ? undefined : { task: taskHanded }),
-          ...(deskKey === undefined ? undefined : { desk: deskKey }),
-          ...(spoken ? { spoken: true, callWords: true } : undefined),
-          opened: true,
-          ...(flush || handed.flushTold === true ? { flushTold: true } : undefined),
-        };
-        const flushed = flush ? [FLUSH_LINE] : [];
-        const parts = [...(kind === undefined ? [] : [kind]), ...flushed, standing, ...desked];
-        return { text: parts.join("\n\n"), handed: next };
       }),
 
     showPage: (admitted, input, sandbox) => runAgentShowPage(admitted, input, sandbox),

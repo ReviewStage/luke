@@ -39,6 +39,7 @@ import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "@luke/database/testing";
 import {
   CODING_AGENT_FAILURE,
+  CODING_AGENT_KIND,
   CODING_AGENT_MACHINE,
   CODING_AGENT_PAYER,
 } from "@luke/features/coding-agent-wire";
@@ -96,6 +97,7 @@ import {
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { RUNNER_TAG, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
+import { DESK_LEAD } from "../operator-desk.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
@@ -111,7 +113,7 @@ import {
 } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { codingAgentFailureOf } from "./status.js";
-import { CODER_TOOL_SET } from "./tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * A coding agent's sessions on Claude Code, against a fake of Vercel
@@ -247,6 +249,41 @@ const message = (agent: CodingAgent, text: string, lineId?: string) => ({
   message: text,
   ...(lineId === undefined ? undefined : { lineId }),
 });
+
+/** The developer's words on a call, as the voice sends them. */
+const spoken = (agent: CodingAgent, text: string) => ({
+  ...message(agent, text),
+  turn: "spoken" as const,
+});
+
+/** The developer's words of a message line: what follows the turn's own words, which lead every message (`turn-message.ts`). */
+const developerContent = (line: InputLine | undefined) =>
+  line?.type === INPUT_LINE.MESSAGE ? line.content.slice(1) : [];
+
+/** Each message line of the command as its text blocks, the turn's own words first. */
+const textsOf = (command: Parameters<typeof linesOf>[0]) =>
+  (linesOf(command) as InputLine[]).flatMap((each) =>
+    each.type === INPUT_LINE.MESSAGE
+      ? [each.content.map((block) => (block.type === "text" ? block.text : ""))]
+      : [],
+  );
+
+/** The account's operator in the agent's workspace, on the same plan. */
+const openOperator = (userId: string, agent: CodingAgent) =>
+  Effect.map(
+    createCodingAgent(userId, {
+      taskId: null,
+      organizationId: agent.organizationId,
+      idempotencyKey: `operator-${randomUUID()}`,
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: null,
+      prompt: null,
+      repository: null,
+      kind: CODING_AGENT_KIND.OPERATOR,
+    }),
+    (started) => Option.getOrThrow(started).agent,
+  );
 
 /** A turn of the agent's under way, as the events route queues one, by the id a Stop names it by. */
 const turnUnderWay = (userId: string, agent: CodingAgent) =>
@@ -529,11 +566,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           installedSkills: "/opt/luke/installed-skills",
           warm: true,
         });
-        assert.deepEqual(first, {
-          type: INPUT_LINE.MESSAGE,
-          uuid: lineId,
-          content: [{ type: "text", text: "Fix the invitations." }],
-        });
+        assert.ok(first.type === INPUT_LINE.MESSAGE);
+        assert.equal(first.uuid, lineId);
+        assert.deepEqual(developerContent(first), [{ type: "text", text: "Fix the invitations." }]);
         // No secret in argv, the config, a tag, or anything uploaded.
         const visible = JSON.stringify([
           command.args,
@@ -978,7 +1013,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           (each) => each.type === INPUT_LINE.MESSAGE,
         );
         assert.deepEqual(
-          messages.map((each) => ("content" in each ? each.content : undefined)),
+          messages.map((each) => developerContent(each)),
           [
             [
               { type: "text", text: "Read the spec." },
@@ -1029,17 +1064,19 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       });
       assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
       assert.equal(api.commands.length, 1);
-      assert.deepEqual(linesOf(api.commands[0]).slice(2), [
-        // The agent's model and effort as they stand, ahead of the message, so a change since the launch holds.
-        { type: INPUT_LINE.MODEL, model: "claude-sonnet-5-5", fast: false, effort: "low" },
-        {
-          type: INPUT_LINE.MESSAGE,
-          uuid: lineId,
-          content: [{ type: "text", text: "Also the emails." }],
-        },
-        // The stop names the launch running the turn, by its first event number.
-        { type: INPUT_LINE.STOP, launch: 0 },
-      ]);
+      const [model, line, stop] = (linesOf(api.commands[0]) as InputLine[]).slice(2);
+      // The agent's model and effort as they stand, ahead of the message, so a change since the launch holds.
+      assert.deepEqual(model, {
+        type: INPUT_LINE.MODEL,
+        model: "claude-sonnet-5-5",
+        fast: false,
+        effort: "low",
+      });
+      assert.ok(line?.type === INPUT_LINE.MESSAGE);
+      assert.equal(line.uuid, lineId);
+      assert.deepEqual(developerContent(line), [{ type: "text", text: "Also the emails." }]);
+      // The stop names the launch running the turn, by its first event number.
+      assert.deepEqual(stop, { type: INPUT_LINE.STOP, launch: 0 });
     }),
   );
 
@@ -1137,7 +1174,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(config.resume, CLI_SESSION);
         assert.equal(config.firstSequence, 42);
         assert.ok(line.type === INPUT_LINE.MESSAGE);
-        assert.deepEqual(line.content, [{ type: "text", text: "Now the emails." }]);
+        assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
         // A fresh bearer for the new launch, recorded in place of the last.
         const bearer = relaunch?.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer !== firstBearer);
@@ -1197,7 +1234,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(config.resume, CLI_SESSION);
         assert.equal(config.rewindBefore, "dropped-line");
         assert.ok(line.type === INPUT_LINE.MESSAGE);
-        assert.deepEqual(line.content, [{ type: "text", text: "Fix only the emails." }]);
+        assert.deepEqual(developerContent(line), [{ type: "text", text: "Fix only the emails." }]);
         // The cut is handed over once.
         assert.deepEqual(yield* readNativeRewind(target), Option.none());
       }),
@@ -1269,7 +1306,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const [config, line] = linesOf(relaunch) as [ClaudeCodeConfig, InputLine];
         assert.equal(config.resume, undefined);
         assert.ok(line.type === INPUT_LINE.MESSAGE);
-        assert.deepEqual(line.content, [{ type: "text", text: "Now the emails." }]);
+        assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
         // The session is found again by its tag, in the new sandbox alone.
         const found = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
         assert.equal(found.outcome, EVE_SEND_OUTCOME.ACCEPTED);
@@ -1777,15 +1814,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
         );
         assert.equal(api.commands.length, 2);
-        assert.deepEqual(
-          (linesOf(api.commands[1]) as InputLine[]).flatMap((each) =>
-            each.type === INPUT_LINE.MESSAGE ? each.content : [],
-          ),
-          [
-            { type: "text", text: "One." },
-            { type: "text", text: "Two." },
-          ],
-        );
+        assert.deepEqual((linesOf(api.commands[1]) as InputLine[]).flatMap(developerContent), [
+          { type: "text", text: "One." },
+          { type: "text", text: "Two." },
+        ]);
       }),
   );
 
@@ -1827,16 +1859,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
         );
         assert.equal(api.commands.length, 1);
-        assert.deepEqual(
-          (linesOf(api.commands[0]) as InputLine[]).flatMap((each) =>
-            each.type === INPUT_LINE.MESSAGE ? each.content : [],
-          ),
-          [
-            { type: "text", text: "Fix the invitations." },
-            { type: "text", text: "One." },
-            { type: "text", text: "Two." },
-          ],
-        );
+        assert.deepEqual((linesOf(api.commands[0]) as InputLine[]).flatMap(developerContent), [
+          { type: "text", text: "Fix the invitations." },
+          { type: "text", text: "One." },
+          { type: "text", text: "Two." },
+        ]);
       }),
   );
 
@@ -2313,8 +2340,73 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       assert.equal(api.commands.length, 1);
       const last = (linesOf(api.commands[0]) as InputLine[]).at(-1);
       assert.ok(last?.type === INPUT_LINE.MESSAGE);
-      assert.deepEqual(last.content, [{ type: "text", text: "Now the emails." }]);
+      assert.deepEqual(developerContent(last), [{ type: "text", text: "Now the emails." }]);
     }),
+  );
+
+  it.effect(
+    "the turn's own words lead every message: the time on a typed first turn, the call's words and the task on a spoken one, and that the call's words no longer hold on a typed turn after it",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+
+        const called = yield* sessions.send(opened.sessionId, spoken(agent, "And the emails?"));
+        const after = yield* sessions.send(opened.sessionId, message(agent, "Also the docs."));
+
+        assert.equal(called.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(after.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.commands.length, 1);
+        const [typed, onCall, typedAfter] = textsOf(api.commands[0]);
+        // A typed first turn opens with the time alone: the plan is its first message already.
+        assert.ok(typed?.[0]?.startsWith("The time as this turn opens"), typed?.[0] ?? "");
+        assert.deepEqual(typed?.slice(1), ["Fix the invitations."]);
+        // The call's words, how to talk the plan through, and the task as it stands, ahead of what was said.
+        for (const told of [
+          "## This turn is spoken",
+          `\`${CODER_TOOL.QUEUE_QUESTION}\``,
+          "## Talking the plan through",
+          "The task as it stands as this turn opens",
+        ]) {
+          assert.ok(onCall?.[0]?.includes(told), told);
+        }
+        assert.deepEqual(onCall?.slice(1), ["And the emails?"]);
+        // What the spoken turn handed is kept on the row, so the typed turn after it says the words no longer hold.
+        assert.ok(typedAfter?.[0]?.startsWith("This turn is typed"), typedAfter?.[0] ?? "");
+        assert.ok(typedAfter?.[0]?.includes("The time as this turn opens"), typedAfter?.[0] ?? "");
+        assert.deepEqual(typedAfter?.slice(1), ["Also the docs."]);
+      }),
+  );
+
+  it.effect(
+    "an operator's first message opens with its desk, and a later message hands it again only where it changed",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const operator = yield* openOperator(userId, agent);
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(operator, "What stands?"));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+
+        const sent = yield* sessions.send(opened.sessionId, message(operator, "And now?"));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const [first, later] = textsOf(api.commands[0]);
+        assert.ok(first?.[0]?.includes(DESK_LEAD), first?.[0] ?? "");
+        assert.deepEqual(first?.slice(1), ["What stands?"]);
+        assert.ok(!later?.[0]?.includes(DESK_LEAD), later?.[0] ?? "");
+        assert.deepEqual(later?.slice(1), ["And now?"]);
+      }),
   );
 
   it.effect(

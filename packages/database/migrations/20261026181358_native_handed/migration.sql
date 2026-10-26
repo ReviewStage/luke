@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD COLUMN "native_handed" jsonb;

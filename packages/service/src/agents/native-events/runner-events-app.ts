@@ -71,6 +71,7 @@ import { runnerEnded, runnerIdled } from "../coder-host/runner-sessions.js";
 import { NativeAgentSessions } from "../coder-host/runtime-sessions.js";
 import { estimatedTokens } from "../coder-host/token-estimate.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
+import { compactNativeTurnHanded } from "../coder-host/turn-message.js";
 import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { keepAliveDue } from "../sandbox-keep-alive.js";
 import { keepSessionSandboxAlive } from "../session-sandboxes.js";
@@ -409,7 +410,11 @@ function landWrite(
         recordCodingAgentNativeSession(target.userId, applying.agentId, write.sessionId),
       );
     case NATIVE_WRITE.COMPACTED:
-      return recordCodingAgentCompaction(target.userId, applying.agentId, new Date(now));
+      // The summary may have dropped what the turns' messages handed, so the next message hands it again.
+      return Effect.andThen(
+        recordCodingAgentCompaction(target.userId, applying.agentId, new Date(now)),
+        compactNativeTurnHanded(target),
+      );
     case NATIVE_WRITE.CONTEXT:
       // Note that the harness's own instructions and tools are no text Luke composed, so they are
       // told as the conversation's share rather than estimated, and the brief alone is estimated.

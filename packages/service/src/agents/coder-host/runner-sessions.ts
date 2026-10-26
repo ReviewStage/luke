@@ -76,6 +76,7 @@ import {
   RUNNER_ENV,
   type RunnerConfig,
 } from "@luke/agent-runner/protocol";
+import type { DatabaseServices } from "@luke/database/core/query";
 import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import {
   claimCodingAgentRunnerLease,
@@ -118,6 +119,7 @@ import {
   ImagePreparing,
 } from "../agent-sandbox-image.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
+import type { AdmittedConversation } from "../brain-host/conversation.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -154,6 +156,8 @@ import type { RunnerBundle } from "./runner-bundle.js";
 import { type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
 import { nativeSkills } from "./skills.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
+import type { TurnHanded } from "./turn-context.js";
+import { coderTurnMessage, readNativeTurnHanded, recordNativeTurnHanded } from "./turn-message.js";
 
 /** What the sessions reach: the store, GitHub, Vercel, the agent's machine, the image, the runner's bundle, and the deployment's key ring. */
 export type RunnerServices =
@@ -266,10 +270,23 @@ const ATTACHMENT_MODE = 0o644;
 /** How long a written file's name may be, which a tar header holds whole (`vercel-sandbox-api.ts`'s `tarOf`). */
 const ATTACHMENT_NAME_CHARS = 80;
 
-/** A message line and the files it names, which are written into the running session before the line. */
+/** The developer's line as the runner takes it, under Luke's id for it. */
+type MessageLine = Extract<InputLine, { readonly type: typeof INPUT_LINE.MESSAGE }> & {
+  readonly uuid: string;
+};
+
+/** A message line and the files it names, which are written into the running session before the line, and the turn it opens as the message named it. */
 interface RunnerMessage {
-  readonly line: InputLine & { readonly uuid: string };
+  readonly line: MessageLine;
   readonly files: readonly SandboxFile[];
+  readonly turn: BrainHostTurn;
+  readonly timeZone: string | undefined;
+}
+
+/** The message line as the runner takes it, the turn's own words ahead of the developer's, and what the session has handed once it is. */
+interface OpenedLine {
+  readonly line: InputLine;
+  readonly handed: TurnHanded;
 }
 
 /** A file's name as the sandbox's path holds it: a single segment of safe characters, cut short, its extension kept. */
@@ -552,7 +569,11 @@ export const runnerSessions = <
      */
     const launch = <AE, AR>(
       agent: CodingAgent,
-      place: { readonly name: MachineName; readonly running: MachinePlace },
+      place: {
+        readonly name: MachineName;
+        readonly running: MachinePlace;
+        readonly session: string;
+      },
       layout: MachineLayout,
       first: RunnerMessage,
       resume: string | undefined,
@@ -560,6 +581,7 @@ export const runnerSessions = <
       alongside: Effect.Effect<void, AE, AR>,
     ) =>
       Effect.gen(function* () {
+        const target: ConversationTarget = { userId, conversationId: agent.conversationId };
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
         const recorded = {
           machine: place.running.machine,
@@ -592,12 +614,16 @@ export const runnerSessions = <
                 );
                 return { config, rewind };
               });
+              // The turn's words ahead of the first message, on what the harness's session has handed;
+              // a session not resumed is fresh, and its history holds none of it.
+              const opened = openedLine(agent, place.session, first, resume === undefined);
               // The launch's record is written before its command starts, so an END the launch it
               // replaces posts late is told apart from this one's and stops nothing.
-              const [, made] = yield* Effect.all([launching(firstSequence), read], {
-                concurrency: "unbounded",
-              });
-              return { firstSequence, ...made };
+              const [, made, opening] = yield* Effect.all(
+                [launching(firstSequence), read, opened],
+                { concurrency: "unbounded" },
+              );
+              return { firstSequence, ...made, opening };
             }),
             filesWritten(place.running, first),
             recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer)),
@@ -607,7 +633,7 @@ export const runnerSessions = <
         ).pipe(Effect.map(([made]) => made));
         const {
           handle,
-          ready: { firstSequence, rewind },
+          ready: { firstSequence, rewind, opening },
         } = yield* machine.launchRunner(place.running, {
           env: { ...credential.env, [RUNNER_ENV.BEARER]: bearer },
           agentId: agent.id,
@@ -619,10 +645,12 @@ export const runnerSessions = <
                 firstSequence: made.firstSequence,
                 fingerprint: launchFingerprint(credential, yield* options.integrations(agent)),
               };
-              return { lines: `${line(made.config)}${line(first.line)}`, mark };
+              return { lines: `${line(made.config)}${line(made.opening.line)}`, mark };
             }),
           abandon: (made) => launching(made.firstSequence),
         });
+        // The runner took the first message, so what its words handed is kept for the next.
+        yield* recordNativeTurnHanded(target, opening.handed);
         if (rewind !== undefined) {
           yield* clearNativeRewindHanded(agent.conversationId, rewind).pipe(
             Effect.tapError(() =>
@@ -651,8 +679,51 @@ export const runnerSessions = <
         uuid,
         layout.attachments,
       );
-      return { line: { type: INPUT_LINE.MESSAGE, uuid, content }, files };
+      return {
+        line: { type: INPUT_LINE.MESSAGE, uuid, content },
+        files,
+        turn: message.turn,
+        timeZone: message.timeZone,
+      };
     };
+
+    /**
+     * The message line with the turn's own words ahead of the developer's
+     * (`turn-message.ts`), composed on what the harness's session has handed
+     * (`native_handed`): nothing yet for a fresh session, whose history
+     * holds none of it, and what the row keeps otherwise. The flush line is
+     * eve's alone, whose compaction the row's steps are measured against.
+     */
+    const openedLine = (
+      agent: CodingAgent,
+      sessionId: string,
+      sent: RunnerMessage,
+      fresh: boolean,
+    ): Effect.Effect<OpenedLine, never, DatabaseServices> =>
+      Effect.gen(function* () {
+        const target: ConversationTarget = { userId, conversationId: agent.conversationId };
+        const handed = fresh ? {} : yield* readNativeTurnHanded(target);
+        const admitted: AdmittedConversation = {
+          caller: userId,
+          target,
+          runtimeSessionId: sessionId,
+          timeZone: sent.timeZone,
+        };
+        const now = yield* Clock.currentTimeMillis;
+        const turn = { kind: sent.turn, turnId: undefined };
+        const opened = yield* coderTurnMessage(
+          admitted,
+          agent,
+          turn,
+          handed,
+          now,
+          Effect.succeed(false),
+        );
+        const { content } = sent.line;
+        const ahead: readonly ContentBlock[] =
+          opened.text === undefined ? [] : [{ type: "text", text: opened.text }];
+        return { line: { ...sent.line, content: [...ahead, ...content] }, handed: opened.handed };
+      });
 
     /** The files a message names written into the running place, before its line names them. */
     const filesWritten = (place: MachinePlace, message: RunnerMessage) =>
@@ -725,7 +796,7 @@ export const runnerSessions = <
           (opened, skills) =>
             launch(
               agent,
-              { name: opened.name, running: opened.place },
+              { name: opened.name, running: opened.place, session: sessionId },
               layout,
               first,
               undefined,
@@ -741,6 +812,7 @@ export const runnerSessions = <
     /** The runner launched again in the running place given, its credential set afresh and the harness's session resumed. */
     const relaunched = (
       agent: CodingAgent,
+      sessionId: string,
       name: MachineName,
       running: MachinePlace,
       layout: MachineLayout,
@@ -759,7 +831,15 @@ export const runnerSessions = <
         const resume = Option.getOrUndefined(
           Option.flatMapNullishOr(routing, (read) => read.nativeSession),
         );
-        yield* launch(agent, { name, running }, layout, sent, resume, credential, Effect.void);
+        yield* launch(
+          agent,
+          { name, running, session: sessionId },
+          layout,
+          sent,
+          resume,
+          credential,
+          Effect.void,
+        );
       });
 
     /**
@@ -827,7 +907,7 @@ export const runnerSessions = <
           // A warm runner launched with what has changed since is ended, and the message relaunches it.
           if (yield* staleWarm(agent, running.mark, turnRunning)) {
             yield* machine.kill(running.handle);
-            yield* relaunched(agent, found.value.name, runnerPlace, layout, sent);
+            yield* relaunched(agent, sessionId, found.value.name, runnerPlace, layout, sent);
             yield* handed(SERVER_HANDOFF_PATH.RELAUNCHED);
             return accepted;
           }
@@ -835,15 +915,19 @@ export const runnerSessions = <
           // which a change since the launch takes effect from. The choice read here stands until
           // the write: a change of it is handed to the runner by `retune`, which holds the same
           // lease, so it is written after this line, never undone by it.
-          const [ahead] = yield* Effect.all(
-            [harness.ahead(agent), filesWritten(runnerPlace, sent)],
+          const [ahead, opened] = yield* Effect.all(
+            [
+              harness.ahead(agent),
+              openedLine(agent, sessionId, sent, false),
+              filesWritten(runnerPlace, sent),
+            ],
             { concurrency: "unbounded" },
           );
           // Note that the write is the runner's liveness check: Vercel refuses stdin to a command
           // that exited (`command_not_found_or_exited`, a 404), which relaunches below, because
           // reading the exit first waits out `EXIT_WAIT` on a runner that runs, two seconds a message.
           const wrote = yield* machine
-            .writeLine(running.handle, [...ahead.lines, sent.line].map(line).join(""))
+            .writeLine(running.handle, [...ahead.lines, opened.line].map(line).join(""))
             .pipe(
               Effect.as(true),
               Effect.catchIf(
@@ -852,6 +936,7 @@ export const runnerSessions = <
               ),
             );
           if (wrote) {
+            yield* recordNativeTurnHanded(target, opened.handed);
             // The installation token lives an hour, so each message sets a fresh one, after the
             // write rather than ahead of it: the model takes seconds to reach its first command, and
             // the agent hears the message a GitHub mint and a policy update sooner. Note that a
@@ -903,7 +988,7 @@ export const runnerSessions = <
           yield* handed(SERVER_HANDOFF_PATH.FRESH);
           return accepted;
         }
-        yield* relaunched(agent, found.value.name, resumed, layout, sent);
+        yield* relaunched(agent, sessionId, found.value.name, resumed, layout, sent);
         yield* handed(wasUp ? SERVER_HANDOFF_PATH.RELAUNCHED : SERVER_HANDOFF_PATH.RESUMED);
         return accepted;
       });

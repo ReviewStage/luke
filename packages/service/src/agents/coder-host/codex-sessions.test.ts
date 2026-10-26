@@ -225,6 +225,10 @@ function sessionsFor(userId: string, sequence: { next: number } = { next: 0 }) {
   return codexSessions(options);
 }
 
+/** The developer's words of a message line: what follows the turn's own words, which lead every message (`turn-message.ts`). */
+const developerContent = (line: InputLine | undefined) =>
+  line?.type === INPUT_LINE.MESSAGE ? line.content.slice(1) : [];
+
 const message = (agent: CodingAgent, text: string, lineId?: string) => ({
   conversationId: agent.conversationId,
   turn: "typed" as const,
@@ -297,11 +301,9 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           installedSkills: "/opt/luke/installed-skills",
           warm: true,
         });
-        assert.deepEqual(first, {
-          type: INPUT_LINE.MESSAGE,
-          uuid: lineId,
-          content: [{ type: "text", text: "Fix the invitations." }],
-        });
+        assert.ok(first.type === INPUT_LINE.MESSAGE);
+        assert.equal(first.uuid, lineId);
+        assert.deepEqual(developerContent(first), [{ type: "text", text: "Fix the invitations." }]);
         // No token anywhere in the command, and the bearer only in its environment.
         assert.equal(JSON.stringify(command).includes("access-0"), false);
         const visible = JSON.stringify([
@@ -496,7 +498,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(config.threadId, THREAD);
         assert.equal(config.firstSequence, 17);
         assert.ok(first.type === INPUT_LINE.MESSAGE);
-        assert.deepEqual(first.content, [{ type: "text", text: "Now the emails." }]);
+        assert.deepEqual(developerContent(first), [{ type: "text", text: "Now the emails." }]);
         const bearer = relaunch?.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer !== firstBearer);
         const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));

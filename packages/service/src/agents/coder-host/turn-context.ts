@@ -39,6 +39,7 @@ import {
   PLAN_FIELD_PURPOSE,
 } from "@luke/features/plan-template";
 import { PLAN_FIELD, type PlanRevisionLine } from "@luke/features/task-wire";
+import { Schema } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 import { CODER } from "./bounds.js";
@@ -102,25 +103,31 @@ const TURN_MESSAGE_LEAD = {
 
 /**
  * What a session has handed its agent in its turns' messages, as content
- * addresses kept in eve's durable session state: the task, by the parts
- * of it no save of the plan changes (`taskKey`), an operator's desk, and whether the call's words stand. Nothing yet for a session whose turns
- * handed none, or whose history eve compacted since.
+ * addresses: the task, by the parts of it no save of the plan changes
+ * (`taskKey`), an operator's desk, and whether the call's words stand.
+ * Kept in eve's durable session state for an eve session, and on the
+ * conversation's row for a native harness's (`native_handed`, which
+ * `runner-sessions.ts` reads and writes around each message). Nothing yet
+ * for a session whose turns handed none, or whose history was compacted
+ * since.
  */
-export interface TurnHanded {
-  readonly task?: string;
+export const TurnHandedSchema = Schema.Struct({
+  task: Schema.optionalKey(Schema.String),
   /** The operator's desk as last handed (`../operator-desk.ts`), so one unchanged is not handed again. */
-  readonly desk?: string;
+  desk: Schema.optionalKey(Schema.String),
   /** Whether the session's last turn was spoken, which a compaction leaves standing, so a typed turn after it says the call's words no longer hold. */
-  readonly spoken?: boolean;
+  spoken: Schema.optionalKey(Schema.Boolean),
   /** Whether the call's words stand in the history since the last compaction, so a spoken turn after a spoken one need not hand them again. */
-  readonly callWords?: boolean;
-  /** Whether a turn of the session has opened since it started or eve last compacted it, so the newest step its row holds was read against this history. */
-  readonly opened?: boolean;
+  callWords: Schema.optionalKey(Schema.Boolean),
+  /** Whether a turn of the session has opened since it started or its history was last compacted, so the newest step its row holds was read against this history. */
+  opened: Schema.optionalKey(Schema.Boolean),
   /** Whether an operator was told since the last compaction that its history will soon be summarised (`FLUSH_LINE`), so it is told once. */
-  readonly flushTold?: boolean;
-}
+  flushTold: Schema.optionalKey(Schema.Boolean),
+});
 
-/** What a session has handed once eve compacted its history: only the last turn's kind, since a summary may have dropped the rest. */
+export type TurnHanded = typeof TurnHandedSchema.Type;
+
+/** What a session has handed once its history was compacted: only the last turn's kind, since a summary may have dropped the rest. */
 export function handedAfterCompaction(handed: TurnHanded): TurnHanded {
   return handed.spoken === true ? { spoken: true } : {};
 }
