@@ -191,6 +191,15 @@ export interface LocalAgentPlatformSeam {
     readonly worktree: string;
     readonly branch: string | null;
   }) => string;
+  /**
+   * The script that says what a discard would lose from the agent's worktree
+   * (`@luke/host/node`'s `agentUnsavedWorkScript`): it prints a line naming
+   * the work at risk, nothing where there is none, and exits non-zero where it
+   * could not tell, which keeps the folder. A discard on a device that names
+   * none removes the folder unconditionally, as a host's does, whose folder
+   * never holds the only copy of the developer's work.
+   */
+  readonly unsavedWorkScript?: ((input: { readonly worktree: string }) => string) | undefined;
 }
 
 export class LocalAgentPlatform extends Context.Service<

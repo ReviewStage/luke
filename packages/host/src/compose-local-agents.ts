@@ -77,7 +77,9 @@ import type { RunMode } from "./run-mode.js";
  * runner's exit code once it exits. A message or retune line is written to
  * the running runner's stdin; a files line writes its files under the
  * agent's folder; a stop line ends the runner's group; a discard line ends
- * it and removes the agent's folder with everything in it; a line of a kind
+ * it and removes the agent's folder with everything in it, unless the platform's
+ * check of the worktree finds work there that is nowhere else (the desktop's
+ * does, a host's names none); a line of a kind
  * it does not know is settled untouched. A launch whose worktree could not
  * be made is settled with the script's failure, and the runner never starts.
  *
@@ -103,6 +105,10 @@ const BEAT_EVERY = Duration.seconds(15);
 const SIGN_IN_EVERY = Duration.minutes(10);
 /** How long a harness's sign-in check has before its answer is taken as signed out. */
 const SIGN_IN_CHECK = Duration.seconds(20);
+/** How long a discard waits on the platform's check of the worktree before it keeps the folder. */
+const UNSAVED_CHECK = Duration.seconds(30);
+/** Why a folder is kept where its check could not say what it holds. */
+const UNSAVED_UNKNOWN = "its worktree could not be checked for work not saved elsewhere";
 /**
  * The `authMethod`s of `claude auth status` a launch with no credential of
  * the account's runs on: a claude.ai login, and a Console key a login saved.
@@ -615,6 +621,36 @@ export function composeLocalAgents(
             runners.set(agentId, { lineId: line.id, stdin, handle, exited });
           });
 
+        /**
+         * Why the agent's folder holds work a discard would lose, as the
+         * platform's check says it; none where the platform names no check or
+         * the check finds nothing. A check that fails, outlasts `UNSAVED_CHECK`,
+         * or cannot start is taken as work, since the folder may hold the only
+         * copy.
+         */
+        const unsavedWork = (layout: DeviceAgentLayout) =>
+          Effect.gen(function* () {
+            if (platform.unsavedWorkScript === undefined) return Option.none<string>();
+            const script = platform.unsavedWorkScript({ worktree: layout.checkoutPath });
+            return yield* Effect.scoped(
+              Effect.gen(function* () {
+                const handle = yield* ChildProcess.make("/bin/bash", ["-c", script], {
+                  cwd: folder,
+                  stdin: "ignore",
+                  stderr: "ignore",
+                  forceKillAfter: KILL_GRACE,
+                });
+                const printed = yield* Stream.mkString(Stream.decodeText(handle.stdout));
+                if (Number(yield* handle.exitCode) !== 0) return Option.some(UNSAVED_UNKNOWN);
+                const reason = printed.trim().split("\n")[0] ?? "";
+                return reason.length > 0 ? Option.some(reason) : Option.none<string>();
+              }),
+            ).pipe(
+              Effect.timeoutOption(UNSAVED_CHECK),
+              Effect.map(Option.getOrElse(() => Option.some(UNSAVED_UNKNOWN))),
+            );
+          }).pipe(Effect.orElseSucceed(() => Option.some(UNSAVED_UNKNOWN)));
+
         /** The agent's runner, where one runs, stopped with its group and its exit waited for, so its line is settled first. */
         const stopped = (agentId: string) =>
           Effect.gen(function* () {
@@ -629,15 +665,21 @@ export function composeLocalAgents(
          * its folder removed with everything in it, its worktree and what its
          * runner and commands wrote there; the shared clone the worktree was
          * made from stays, and the next worktree made of it prunes this one's
-         * record. A removal that fails is reported.
+         * record. A device whose platform names a check of the worktree keeps
+         * the folder, and says why, where the check finds work in it that is
+         * nowhere else, or cannot say. A removal that fails is reported.
          */
         const discarded = (agentId: string) =>
           Effect.gen(function* () {
             yield* stopped(agentId);
-            yield* fileSystem.remove(deviceAgentLayout(folder, agentId).folder, {
-              recursive: true,
-              force: true,
-            });
+            const layout = deviceAgentLayout(folder, agentId);
+            const unsaved = yield* unsavedWork(layout);
+            if (Option.isSome(unsaved)) {
+              return yield* Effect.sync(() =>
+                report(`a local agent's folder was kept, since ${unsaved.value}`),
+              );
+            }
+            yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
           }).pipe(
             Effect.catch(() =>
               Effect.sync(() => report("a local agent's folder could not be removed")),

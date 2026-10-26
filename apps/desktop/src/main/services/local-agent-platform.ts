@@ -1,13 +1,23 @@
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { DEVICE_ARCH, DEVICE_ISOLATION, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_ARCH,
+  DEVICE_CAPABILITY,
+  DEVICE_ISOLATION,
+  DEVICE_PLATFORM,
+} from "@luke/features/device-agent-wire";
 import type {
   LocalAgentCommand,
   LocalAgentPlatformSeam,
   LocalAgentRunner,
 } from "@luke/host/effect";
-import { agentWorktreeScript, cloneFolder, worktreesRoot } from "@luke/host/node";
+import {
+  agentUnsavedWorkScript,
+  agentWorktreeScript,
+  cloneFolder,
+  worktreesRoot,
+} from "@luke/host/node";
 import { app } from "electron";
 import { nativeHelperPath } from "../native/native-helper";
 
@@ -91,9 +101,10 @@ export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
     deviceArch: DEVICE_ARCH.ARM64,
     // Note that every agent runs directly on the Mac, since its launcher starts the runner there; no Mac sandbox exists yet.
     deviceIsolation: DEVICE_ISOLATION.BARE,
-    // Note that This Mac names no capability until the service that knows the field has deployed, since one from before it refuses a register naming any.
-    deviceCapabilities: [],
+    deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
     worktreeScript,
+    // Note that only This Mac checks, since its worktree can hold the only copy of the developer's work, which a host's VM never does.
+    unsavedWorkScript: agentUnsavedWorkScript,
   };
   return packaged
     ? {

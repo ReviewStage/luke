@@ -12,6 +12,7 @@ export {
   startMacTerminal,
 } from "./mac-terminal.js";
 export {
+  agentUnsavedWorkScript,
   agentWorktreeScript,
   cloneFolder,
   openOnMacScript,
