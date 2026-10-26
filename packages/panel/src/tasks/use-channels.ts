@@ -1,28 +1,32 @@
 import {
+  type ArchivedChannelsView,
   CHANNEL_CALL_FAILURE,
   type ChannelCallFailure,
   type ChannelsView,
 } from "@luke/features/channel-view";
-import type { Channel, ChannelThread } from "@luke/features/channel-wire";
+import type { ArchivedChannel, Channel, ChannelThread } from "@luke/features/channel-wire";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { Schema } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { useAct } from "../act.js";
+import { askAct, useAct } from "../act.js";
+import { streamFrom } from "../act-stream.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { CHANNEL_VIEW, type ChannelView } from "./channels-model.js";
 
 /**
- * use-channels.ts -- a workspace's channels as the window holds them, the channel chosen, and one channel's threads, each read through the act port (STAG-547).
+ * use-channels.ts -- a workspace's channels as the window holds them, the channel chosen, one channel's threads page by page, and its archived channels, each read through the act port (STAG-547).
  *
  * The channels are held once per workspace for the whole window, so the
  * sidebar that lists them and the stream that heads one with its name and
  * purpose draw the same read, and a write made in either, a channel made,
- * renamed, or archived, or the reader's look, stands in both the moment the
- * service answers it with the workspace's channels as they then stand. They
- * are read as the first surface holding them is drawn, again as the window
- * comes back into view, and again whenever a channel is opened or a thread
- * in it answered, since nothing follows them live yet. Which channel the
+ * edited, archived, or unarchived, or the reader's look, stands in both the
+ * moment the service answers it with the workspace's channels as they then
+ * stand. They are read as the first surface holding them is drawn, again as
+ * the window comes back into view, and followed while any surface draws
+ * them in view (`channels.follow`): each time the host tells that channels
+ * moved, the channels are read again, and so is a channel's stream that
+ * shows one of them, keeping the older pages it loaded. Which channel the
  * window shows, and whether a thread stands open beside it, is the
  * window's own while it runs; which view the stream shows, Mine by
  * default, is kept on this Mac as the Inbox's view choices are.
@@ -42,6 +46,12 @@ const held = new Map<string, HeldChannels>();
 /** The window's surfaces drawing any workspace's channels, told of each change. */
 const listeners = new Set<() => void>();
 
+/** Each workspace whose channels the window follows, by its id: how many surfaces hold the follow, and its stop. */
+const follows = new Map<string, { readonly holders: number; readonly stop: () => void }>();
+
+/** The streams drawing a channel's threads, told which channels moved. */
+const moveListeners = new Set<(moved: readonly string[]) => void>();
+
 /**
  * The channel the window shows and the thread opened in it, by its item's
  * id. Note that the thread is named rather than flagged open, so it stands
@@ -60,7 +70,7 @@ const REFUSAL_WORDS = {
   [CHANNEL_CALL_FAILURE.UNANSWERED]: ACT_UNREACHED_WORDS,
   [CHANNEL_CALL_FAILURE.NOT_FOUND]: "That channel is gone. Someone may have archived it.",
   [CHANNEL_CALL_FAILURE.NAME_TAKEN]: "Another channel already goes by that name.",
-  [CHANNEL_CALL_FAILURE.NOT_PERMITTED]: "#general is never renamed or archived.",
+  [CHANNEL_CALL_FAILURE.NOT_PERMITTED]: "#general keeps its name and is never archived.",
   [CHANNEL_CALL_FAILURE.INVALID]:
     "A name is lowercase words joined by dashes, and a purpose is one short line.",
 } as const satisfies Record<ChannelCallFailure, string>;
@@ -92,6 +102,48 @@ function hold(workspaceId: string, view: ChannelsView | undefined): void {
   told();
 }
 
+/** Reads a workspace's channels again and holds the answer. */
+function readChannels(workspaceId: string): void {
+  askAct(ACT_KIND.CHANNELS_LIST, { workspaceId }).then(
+    (view) => hold(workspaceId, view),
+    () => hold(workspaceId, undefined),
+  );
+}
+
+/**
+ * Follows a workspace's channels for one more surface, opening the follow
+ * for the first; the stop lets it go, closing it with the last. Each move
+ * the host tells reads the channels again and tells every stream which
+ * channels moved; a follow the host ended says nothing, and the channels
+ * read as they stand when a surface next shows them.
+ */
+function holdFollow(workspaceId: string): () => void {
+  const standing = follows.get(workspaceId);
+  if (standing === undefined) {
+    const stop = streamFrom(
+      () => askAct(ACT_KIND.CHANNELS_FOLLOW, { workspaceId }),
+      (heard) => {
+        if ("failure" in heard) return;
+        readChannels(workspaceId);
+        for (const listener of moveListeners) listener(heard.moved);
+      },
+    );
+    follows.set(workspaceId, { holders: 1, stop });
+  } else {
+    follows.set(workspaceId, { ...standing, holders: standing.holders + 1 });
+  }
+  return () => {
+    const now = follows.get(workspaceId);
+    if (now === undefined) return;
+    if (now.holders > 1) {
+      follows.set(workspaceId, { ...now, holders: now.holders - 1 });
+      return;
+    }
+    follows.delete(workspaceId);
+    now.stop();
+  };
+}
+
 /** Moves the window's place, telling every surface drawing it. */
 function moveTo(next: ChannelPlace): void {
   if (next.channelId === place.channelId && next.threadId === place.threadId) return;
@@ -113,30 +165,37 @@ export interface ChannelsControl {
     purpose: string,
     project: boolean,
   ) => Promise<string | undefined>;
-  /** Renames a channel; what refused it, or none where it was renamed. */
-  readonly onRename: (channelId: string, name: string) => Promise<string | undefined>;
+  /** Gives a channel a new name, a new purpose, or both; what refused it, or none where it was edited. */
+  readonly onEdit: (
+    channelId: string,
+    edit: { readonly name?: string; readonly purpose?: string },
+  ) => Promise<string | undefined>;
   /** Archives a channel; what refused it, or none where it was archived. */
   readonly onArchive: (channelId: string) => Promise<string | undefined>;
+  /** Opens an archived channel again; what refused it, or none where it was opened. */
+  readonly onUnarchive: (channelId: string) => Promise<string | undefined>;
+  /** Moves a thread into another open channel of the workspace; what refused it, or none where it moved. */
+  readonly onMove: (threadId: string, channelId: string) => Promise<string | undefined>;
   /** Stamps the reader's look at a channel, now. */
   readonly onLook: (channelId: string) => void;
 }
 
-/** A workspace's channels as the window holds them, read as the first surface holding them is drawn and as `shown` comes back. */
+/** A workspace's channels as the window holds them, read as the first surface holding them is drawn and as `shown` comes back, and followed while it is. */
 export function useChannels(workspaceId: string | undefined, shown: boolean): ChannelsControl {
   const { act } = useAct();
   const standing = useSyncExternalStore(subscribe, () =>
     workspaceId === undefined ? NOTHING_HELD : (held.get(workspaceId) ?? NOTHING_HELD),
   );
   const onRefresh = useCallback(() => {
-    if (workspaceId === undefined) return;
-    act(ACT_KIND.CHANNELS_LIST, { workspaceId }).then(
-      (view) => hold(workspaceId, view),
-      () => hold(workspaceId, undefined),
-    );
-  }, [act, workspaceId]);
+    if (workspaceId !== undefined) readChannels(workspaceId);
+  }, [workspaceId]);
   useEffect(() => {
     if (shown) onRefresh();
   }, [shown, onRefresh]);
+  useEffect(
+    () => (workspaceId === undefined || !shown ? undefined : holdFollow(workspaceId)),
+    [workspaceId, shown],
+  );
   return useMemo(() => {
     /** A write whose answer, the channels as they then stand, is held; what refused it, or none. */
     const written = (asked: Promise<ChannelsView>): Promise<string | undefined> =>
@@ -156,14 +215,23 @@ export function useChannels(workspaceId: string | undefined, shown: boolean): Ch
         workspaceId === undefined
           ? Promise.resolve(ACT_UNREACHED_WORDS)
           : written(act(ACT_KIND.CHANNELS_CREATE, { workspaceId, name, purpose, project })),
-      onRename: (channelId, name) =>
+      onEdit: (channelId, edit) =>
         workspaceId === undefined
           ? Promise.resolve(ACT_UNREACHED_WORDS)
-          : written(act(ACT_KIND.CHANNELS_RENAME, { workspaceId, channelId, name })),
+          : written(act(ACT_KIND.CHANNELS_EDIT, { workspaceId, channelId, ...edit })),
       onArchive: (channelId) =>
         workspaceId === undefined
           ? Promise.resolve(ACT_UNREACHED_WORDS)
           : written(act(ACT_KIND.CHANNELS_ARCHIVE, { workspaceId, channelId })),
+      onUnarchive: (channelId) =>
+        workspaceId === undefined
+          ? Promise.resolve(ACT_UNREACHED_WORDS)
+          : written(act(ACT_KIND.CHANNELS_UNARCHIVE, { workspaceId, channelId })),
+      onMove: (threadId, channelId) =>
+        act(ACT_KIND.CHANNELS_MOVE, { threadId, channelId }).then(
+          (view) => ("failure" in view ? REFUSAL_WORDS[view.failure] : undefined),
+          () => ACT_UNREACHED_WORDS,
+        ),
       onLook: (channelId) => {
         if (workspaceId === undefined) return;
         // Note that a look that does not land leaves the New line where it stood, which says nothing wrong.
@@ -204,51 +272,158 @@ export function useChannelView(): readonly [ChannelView, (view: ChannelView) => 
   return [view, onView];
 }
 
-/** One channel's threads as last read, oldest first, and the door that reads them again. */
+/** One channel's threads as last read, oldest first, the doors that read them again and read an older page. */
 export interface ChannelThreadsControl {
   /** The threads, none until first read. */
   readonly threads: readonly ChannelThread[] | undefined;
   /** Why the last read failed, none where it answered. */
   readonly failure: ChannelCallFailure | undefined;
+  /** Whether an older page stands to be read. */
+  readonly hasOlder: boolean;
+  /** Reads the latest page again, keeping the older pages read. */
   readonly onRefresh: () => void;
+  /** Reads the next older page, where one stands. */
+  readonly onOlder: () => void;
 }
 
-/** A channel's threads, read as it opens and again on `onRefresh`; a read for a channel left since is let go. */
+/** One channel's threads as read: the older pages, the latest page, and the thread to read the next older page before. */
+interface ChannelThreadsRead {
+  readonly channelId: string;
+  /** The threads the older pages carried, oldest first. */
+  readonly earlier: readonly ChannelThread[];
+  /** The threads the latest page carried, none until it is first read. */
+  readonly latest: readonly ChannelThread[] | undefined;
+  readonly older: string | undefined;
+  readonly failure: ChannelCallFailure | undefined;
+}
+
+/** The older pages and the latest as one stream, each thread once as the latest read it, oldest posted first. */
+function threadsOf(read: ChannelThreadsRead): readonly ChannelThread[] | undefined {
+  if (read.latest === undefined) return undefined;
+  const latest = new Set(read.latest.map((thread) => thread.id));
+  return [...read.earlier.filter((thread) => !latest.has(thread.id)), ...read.latest].toSorted(
+    (a, b) => a.postedAt - b.postedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+}
+
+/**
+ * A channel's threads, read as it opens, again on `onRefresh` and whenever
+ * the follow says the channel moved, and an older page on `onOlder`; a read
+ * for a channel left since is let go.
+ */
 export function useChannelThreads(channelId: string | undefined): ChannelThreadsControl {
   const { act } = useAct();
-  const [read, setRead] = useState<{
-    readonly channelId: string;
-    readonly threads: readonly ChannelThread[] | undefined;
-    readonly failure: ChannelCallFailure | undefined;
-  }>();
+  const [read, setRead] = useState<ChannelThreadsRead>();
   // Note that a read landing after another channel was opened is let go, so it never stands over the newer channel's.
   const asking = useRef(channelId);
   asking.current = channelId;
+  /** Folds an answer into the read of `channelId`, a failure keeping what was read. */
+  const fold = useCallback(
+    (asked: string, change: (was: ChannelThreadsRead) => ChannelThreadsRead) =>
+      setRead((was) => {
+        if (asking.current !== asked) return was;
+        const standing =
+          was?.channelId === asked
+            ? was
+            : {
+                channelId: asked,
+                earlier: [],
+                latest: undefined,
+                older: undefined,
+                failure: undefined,
+              };
+        return change(standing);
+      }),
+    [],
+  );
   const onRefresh = useCallback(() => {
     if (channelId === undefined) return;
     act(ACT_KIND.CHANNELS_THREADS, { channelId }).then(
       (view) =>
-        setRead((was) => {
-          if (asking.current !== channelId) return was;
-          if ("failure" in view) {
-            const kept = was?.channelId === channelId ? was.threads : undefined;
-            return { channelId, threads: kept, failure: view.failure };
-          }
-          return { channelId, threads: view.threads, failure: undefined };
-        }),
-      () =>
-        setRead((was) =>
-          asking.current !== channelId
-            ? was
+        fold(channelId, (was) =>
+          "failure" in view
+            ? { ...was, failure: view.failure }
             : {
-                channelId,
-                threads: was?.channelId === channelId ? was.threads : undefined,
-                failure: CHANNEL_CALL_FAILURE.UNANSWERED,
+                ...was,
+                latest: view.threads,
+                // Note that the latest page's cursor stands only until an older page was read, which holds its own.
+                older: was.earlier.length === 0 ? view.older : was.older,
+                failure: undefined,
               },
         ),
+      () => fold(channelId, (was) => ({ ...was, failure: CHANNEL_CALL_FAILURE.UNANSWERED })),
     );
-  }, [act, channelId]);
+  }, [act, channelId, fold]);
+  const older = read?.channelId === channelId ? read?.older : undefined;
+  const onOlder = useCallback(() => {
+    if (channelId === undefined || older === undefined) return;
+    act(ACT_KIND.CHANNELS_THREADS, { channelId, before: older }).then(
+      (view) =>
+        fold(channelId, (was) =>
+          "failure" in view
+            ? { ...was, failure: view.failure }
+            : was.older !== older
+              ? was
+              : { ...was, earlier: [...view.threads, ...was.earlier], older: view.older },
+        ),
+      () => fold(channelId, (was) => ({ ...was, failure: CHANNEL_CALL_FAILURE.UNANSWERED })),
+    );
+  }, [act, channelId, older, fold]);
   useEffect(() => onRefresh(), [onRefresh]);
+  useEffect(() => {
+    if (channelId === undefined) return undefined;
+    const listener = (moved: readonly string[]) => {
+      if (moved.includes(channelId)) onRefresh();
+    };
+    moveListeners.add(listener);
+    return () => {
+      moveListeners.delete(listener);
+    };
+  }, [channelId, onRefresh]);
   const current = read?.channelId === channelId ? read : undefined;
-  return { threads: current?.threads, failure: current?.failure, onRefresh };
+  return {
+    threads: current === undefined ? undefined : threadsOf(current),
+    failure: current?.failure,
+    hasOlder: older !== undefined,
+    onRefresh,
+    onOlder,
+  };
+}
+
+/** A workspace's archived channels as last read, the latest archived first, and the door that reads them again. */
+export interface ArchivedChannelsControl {
+  /** The archived channels, none until first read. */
+  readonly channels: readonly ArchivedChannel[] | undefined;
+  /** Why the last read failed, none where it answered. */
+  readonly failure: ChannelCallFailure | undefined;
+  readonly onRefresh: () => void;
+}
+
+/** A workspace's archived channels, read as the surface opens, again on `onRefresh`, and whenever the follow says any channel moved, since an archive or an unarchive moves one. */
+export function useArchivedChannels(workspaceId: string | undefined): ArchivedChannelsControl {
+  const { act } = useAct();
+  const [read, setRead] = useState<{
+    readonly workspaceId: string;
+    readonly view: ArchivedChannelsView;
+  }>();
+  const onRefresh = useCallback(() => {
+    if (workspaceId === undefined) return;
+    act(ACT_KIND.CHANNELS_ARCHIVED, { workspaceId }).then(
+      (view) => setRead({ workspaceId, view }),
+      () => setRead({ workspaceId, view: { failure: CHANNEL_CALL_FAILURE.UNANSWERED } }),
+    );
+  }, [act, workspaceId]);
+  useEffect(() => onRefresh(), [onRefresh]);
+  useEffect(() => {
+    moveListeners.add(onRefresh);
+    return () => {
+      moveListeners.delete(onRefresh);
+    };
+  }, [onRefresh]);
+  const current = read?.workspaceId === workspaceId ? read?.view : undefined;
+  return {
+    channels: current === undefined || "failure" in current ? undefined : current.channels,
+    failure: current !== undefined && "failure" in current ? current.failure : undefined,
+    onRefresh,
+  };
 }

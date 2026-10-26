@@ -210,6 +210,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const channels = yield* composeChannels({
       kernel,
       account,
+      accountId,
       client: new HostedChannelClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         credential: account.credential,
@@ -305,6 +306,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* tasks.reset;
       yield* codingAgents.reset;
       yield* automations.reset;
+      yield* channels.reset;
       yield* terminals.reset;
       yield* chatGptSignIn.reset;
       yield* account.applyVoiceCredential;

@@ -238,13 +238,27 @@ export const GATEWAY_METHOD = {
   CHANNELS_LIST: "channels.list",
   /** A channel made; the workspace's channels as they then stand. */
   CHANNELS_CREATE: "channels.create",
-  /** A channel renamed; the workspace's channels as they then stand. */
-  CHANNELS_RENAME: "channels.rename",
+  /** A channel's name, purpose, or both edited; the workspace's channels as they then stand. */
+  CHANNELS_EDIT: "channels.edit",
   /** A channel archived; the workspace's channels as they then stand. */
   CHANNELS_ARCHIVE: "channels.archive",
+  /** An archived channel opened again; the workspace's channels as they then stand. */
+  CHANNELS_UNARCHIVE: "channels.unarchive",
+  /** A workspace's archived channels, the latest archived first; or why there are none. */
+  CHANNELS_ARCHIVED: "channels.archived",
+  /** A thread moved into another open channel of its workspace; the thread as it then stands, or why it did not move. */
+  CHANNELS_MOVE: "channels.move",
+  /**
+   * A workspace's channels, followed from now until let go or the account
+   * signs out, over Neon Realtime. Which of them moved is heard as
+   * `CHANNELS_CHANGED` events, never answered; following again starts over.
+   */
+  CHANNELS_FOLLOW: "channels.follow",
+  /** A followed workspace's channels let go: no more `CHANNELS_CHANGED` events of it until it is followed again. */
+  CHANNELS_UNFOLLOW: "channels.unfollow",
   /** The reader's look at a channel stamped; the workspace's channels as they then stand. */
   CHANNELS_LOOK: "channels.look",
-  /** A channel's latest threads the reader may read, oldest first; or why there are none. */
+  /** A page of a channel's threads the reader may read, oldest first; or why there are none. */
   CHANNELS_THREADS: "channels.threads",
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
@@ -744,6 +758,8 @@ export const GATEWAY_EVENT = {
   TASKS_BROWSER_TABS_CHANGED: "tasks.browserTabsChanged",
   /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
   AUTOMATIONS_CHANGED: "automations.changed",
+  /** Which of a followed workspace's channels moved, each time any does while followed, or why it is heard no more. */
+  CHANNELS_CHANGED: "channels.changed",
   /** A followed workspace's people as they now stand, each time they move while followed. */
   WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
   /** A followed workspace's pending invitations as they now stand, each time they move while followed. */

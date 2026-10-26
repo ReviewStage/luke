@@ -1,19 +1,32 @@
 import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
+import type { ChannelsLiveAnswer } from "./channel-live.js";
 import {
+  type ArchivedChannelsView,
   CHANNEL_CALL_FAILURE,
   type ChannelArchiveParams,
   type ChannelCallFailure,
   type ChannelCreateParams,
+  type ChannelEditParams,
   type ChannelLookParams,
-  type ChannelRenameParams,
+  type ChannelMoveParams,
+  type ChannelMoveView,
+  type ChannelsArchivedParams,
   type ChannelsListParams,
   type ChannelsView,
   type ChannelThreadsParams,
   type ChannelThreadsView,
+  type ChannelUnarchiveParams,
 } from "./channel-view.js";
-import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
+import {
+  askHosted,
+  askLive,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "./hosted-link.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
 
 /**
@@ -56,6 +69,20 @@ function answered<Answer>(
   });
 }
 
+/** A live read's answer, signed out where the service refused the session as another account's (`LIVE_SIGNED_OUT`), or the refusal it failed with, as `answered` reads one. */
+function liveAnswered<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<Answer | Failed | typeof LIVE_SIGNED_OUT, never, HttpClient.HttpClient> {
+  return answered(
+    Effect.catchIf(
+      asked,
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ),
+  );
+}
+
 /** The window's reads and writes of a workspace's channels. */
 export class HostedChannelClient {
   readonly #hosted: HostedClient;
@@ -78,9 +105,9 @@ export class HostedChannelClient {
     return answered(askHosted(this.#hosted.channels.create, params));
   }
 
-  /** A channel renamed, answering the workspace's channels as they then stand. */
-  rename(params: ChannelRenameParams): Effect.Effect<ChannelsView, never, HttpClient.HttpClient> {
-    return answered(askHosted(this.#hosted.channels.rename, params));
+  /** A channel's name, purpose, or both edited, answering the workspace's channels as they then stand. */
+  edit(params: ChannelEditParams): Effect.Effect<ChannelsView, never, HttpClient.HttpClient> {
+    return answered(askHosted(this.#hosted.channels.edit, params));
   }
 
   /** A channel archived, answering the workspace's channels as they then stand. */
@@ -88,12 +115,52 @@ export class HostedChannelClient {
     return answered(askHosted(this.#hosted.channels.archive, params));
   }
 
+  /** An archived channel opened again, answering the workspace's channels as they then stand. */
+  unarchive(
+    params: ChannelUnarchiveParams,
+  ): Effect.Effect<ChannelsView, never, HttpClient.HttpClient> {
+    return answered(askHosted(this.#hosted.channels.unarchive, params));
+  }
+
+  /** The workspace's archived channels, the latest archived first. */
+  archived(
+    params: ChannelsArchivedParams,
+  ): Effect.Effect<ArchivedChannelsView, never, HttpClient.HttpClient> {
+    return answered(askHosted(this.#hosted.channels.archived, params));
+  }
+
+  /** A thread moved into another open channel of its workspace, answering it as it then stands. */
+  move(params: ChannelMoveParams): Effect.Effect<ChannelMoveView, never, HttpClient.HttpClient> {
+    return answered(askHosted(this.#hosted.channels.move, params));
+  }
+
+  /**
+   * A workspace's channels sealed for following over Neon Realtime, to a
+   * member of it and for the account named, or with their rows inline where
+   * `poll` asks for them, held by the service until they move past `after`;
+   * signed out where the session is another account's, or why not.
+   */
+  live(
+    workspaceId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    ChannelsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveAnswered(
+      askLive(this.#hosted.live.channels, { workspaceId, [LIVE_USER_QUERY]: userId }, poll, after),
+    );
+  }
+
   /** The reader's look at a channel stamped, answering the workspace's channels as they then stand. */
   look(params: ChannelLookParams): Effect.Effect<ChannelsView, never, HttpClient.HttpClient> {
     return answered(askHosted(this.#hosted.channels.look, params));
   }
 
-  /** A channel's latest threads the reader may read, oldest first. */
+  /** A page of a channel's threads the reader may read, oldest first, older ones before the thread `before` names. */
   threads(
     params: ChannelThreadsParams,
   ): Effect.Effect<ChannelThreadsView, never, HttpClient.HttpClient> {

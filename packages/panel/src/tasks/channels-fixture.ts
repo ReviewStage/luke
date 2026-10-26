@@ -1001,10 +1001,21 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     CHANNELS = [...CHANNELS, made].toSorted((a, b) => a.name.localeCompare(b.name));
     return channelsAnswer();
   },
-  [ACT_KIND.CHANNELS_RENAME]: ({ channelId, name }) => {
-    if (CHANNELS.some((channel) => channel.name === name)) return { failure: "name-taken" };
-    if (channelId === CHANNEL.GENERAL) return { failure: "not-permitted" };
-    changed(channelId, (channel) => ({ ...channel, name }));
+  [ACT_KIND.CHANNELS_FOLLOW]: () => pushedOnce({ moved: [] }),
+  [ACT_KIND.CHANNELS_ARCHIVED]: () => ({ channels: [] }),
+  [ACT_KIND.CHANNELS_EDIT]: ({ channelId, name, purpose }) => {
+    const standing = CHANNELS.find((channel) => channel.id === channelId);
+    if (standing === undefined) return { failure: "not-found" };
+    const renamed = name !== undefined && name !== standing.name;
+    if (renamed && CHANNELS.some((channel) => channel.name === name)) {
+      return { failure: "name-taken" };
+    }
+    if (renamed && channelId === CHANNEL.GENERAL) return { failure: "not-permitted" };
+    changed(channelId, (channel) => ({
+      ...channel,
+      ...(name === undefined ? undefined : { name }),
+      ...(purpose === undefined ? undefined : { purpose }),
+    }));
     CHANNELS = CHANNELS.toSorted((a, b) => a.name.localeCompare(b.name));
     return channelsAnswer();
   },

@@ -92,14 +92,19 @@ export const AUTOMATION_ACT_KIND = {
   AUTOMATIONS_FOLLOW: "automations.follow",
 } as const;
 
-/** The Channels view's asks: a workspace's channels listed, made, renamed, archived, and looked at, and one's threads read. */
+/** The Channels view's asks: a workspace's channels listed, made, edited, archived, unarchived, and looked at, its archived ones read, a page of one's threads read, a thread moved, and the channels followed. */
 export const CHANNEL_ACT_KIND = {
   CHANNELS_LIST: "channels.list",
   CHANNELS_CREATE: "channels.create",
-  CHANNELS_RENAME: "channels.rename",
+  CHANNELS_EDIT: "channels.edit",
   CHANNELS_ARCHIVE: "channels.archive",
+  CHANNELS_UNARCHIVE: "channels.unarchive",
+  CHANNELS_ARCHIVED: "channels.archived",
   CHANNELS_LOOK: "channels.look",
   CHANNELS_THREADS: "channels.threads",
+  CHANNELS_MOVE: "channels.move",
+  /** Which of a workspace's channels moved, pushed to the window while it holds the stream open. */
+  CHANNELS_FOLLOW: "channels.follow",
 } as const;
 
 /**

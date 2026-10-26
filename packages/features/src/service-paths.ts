@@ -125,6 +125,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_WORKSPACE_MEMBERS: "/api/live/workspace-members",
   /** One workspace's pending invitations under `WORKSPACE_INVITATIONS_QUERY`, sealed for following over Neon Realtime (GET), to an owner or an admin: or `not-found`, `not-permitted`, or `unavailable`. */
   LIVE_WORKSPACE_INVITATIONS: "/api/live/workspace-invitations",
+  /** One workspace's channels under `?workspaceId=`, sealed for following over Neon Realtime (GET): its channels and where each one's threads stand, or `not-found`, or their rows inline where polled. */
+  LIVE_CHANNELS: "/api/live/channels",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
@@ -192,13 +194,19 @@ export const HOSTED_SERVICE_PATH = {
    * them all as they then stand. `channel-wire.ts` declares both.
    */
   CHANNELS: "/api/channels",
-  /** A channel renamed (POST), answered with the workspace's channels as they then stand. */
-  CHANNELS_RENAME: "/api/channels/rename",
+  /** A channel's name, purpose, or both edited (POST), answered with the workspace's channels as they then stand. */
+  CHANNELS_EDIT: "/api/channels/edit",
   /** A channel archived (POST), answered with the workspace's channels as they then stand. */
   CHANNELS_ARCHIVE: "/api/channels/archive",
+  /** An archived channel opened again (POST), answered with the workspace's channels as they then stand. */
+  CHANNELS_UNARCHIVE: "/api/channels/unarchive",
+  /** A workspace's archived channels, the latest archived first (GET). */
+  CHANNELS_ARCHIVED: "/api/channels/archived",
+  /** A thread moved into another open channel of its workspace (POST), answered with the thread as it then stands. */
+  CHANNELS_MOVE: "/api/channels/move",
   /** The reader's look at a channel stamped (POST), answered with the workspace's channels as they then stand. */
   CHANNELS_LOOK: "/api/channels/look",
-  /** A channel's latest threads the reader may read (GET), each with its channel. */
+  /** A page of a channel's threads the reader may read (GET), each with its channel, older ones before the thread `?before=` names. */
   CHANNELS_THREADS: "/api/channels/threads",
   /**
    * The repositories the signed-in account reaches through the Luke GitHub

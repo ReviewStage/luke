@@ -69,6 +69,9 @@ import {
   accountWaitingStamps,
   acknowledgeInboxItem,
   answerInboxAsk,
+  CHANNEL_MOVE_REFUSAL,
+  type ChannelThreadPage,
+  channelLatestPosts,
   channelThreads,
   channelWaitingCounts,
   closeInboxItem,
@@ -84,6 +87,7 @@ import {
   markInboxRead,
   memberAgentInboxItems,
   memberAgentInboxLiveStatements,
+  moveChannelThread,
   postInboxMessage,
   postInboxThread,
   readInboxAttachment,
@@ -113,6 +117,10 @@ import { accountInboxPast, taskInboxPast } from "./inbox-page.js";
  *
  * Synthetic accounts, tasks, and words throughout.
  */
+
+/** A channel's first page of threads the reader may read, oldest first. */
+const firstPage = (userId: string, channelId: string) =>
+  Effect.map(channelThreads(userId, channelId), (page) => Option.getOrThrow(page).threads);
 
 const openUser = Effect.gen(function* () {
   const db = yield* Database;
@@ -1838,7 +1846,7 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         yield* updateTask(owner, agent.taskId ?? "", { assigneeId: owner });
         const app = yield* channelIn(owner, workspaceId, "app");
         const standing = Effect.gen(function* () {
-          const [item] = yield* channelThreads(teammate, app);
+          const [item] = yield* firstPage(teammate, app);
           const stamps = yield* accountWaitingStamps(teammate);
           return {
             waitsOn: item?.waitsOn?.userId,
@@ -1883,7 +1891,7 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         );
         const theirs = yield* channelIn(outsider, elsewhere.workspaceId, "app");
         const channelOf = (readerId: string, channelId: string) =>
-          Effect.map(channelThreads(readerId, channelId), (threads) =>
+          Effect.map(firstPage(readerId, channelId), (threads) =>
             threads.map((thread) => thread.key),
           );
 
@@ -1928,7 +1936,7 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         assert.equal(moved.id, asked.id);
         assert.equal(moved.waitsOn?.userId, teammate);
         assert.deepEqual(
-          (yield* channelThreads(agent.userId, app)).map((thread) => thread.id),
+          (yield* firstPage(agent.userId, app)).map((thread) => thread.id),
           [asked.id],
         );
         assert.deepEqual(refused, Result.fail(INBOX_POST_REFUSAL.NO_CHANNEL));
@@ -1986,7 +1994,7 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         );
         const standing = (readerId: string) =>
           Effect.gen(function* () {
-            const threads = yield* channelThreads(readerId, app);
+            const threads = yield* firstPage(readerId, app);
             return {
               counted: (yield* channelWaitingCounts(readerId, workspaceId)).get(app) ?? 0,
               needsMe: threads
@@ -2009,7 +2017,7 @@ it.layer(getTestDB())("a thread's channel", (it) => {
           teammate: { counted: 3, needsMe: ["decide", "do", "for-teammate"] },
         });
         assert.equal(
-          (yield* channelThreads(owner, app)).length,
+          (yield* firstPage(owner, app)).length,
           INBOX_BOUNDS.MAX_ITEMS_READ,
           "the latest a read carries, and no thread asking nobody past them",
         );
@@ -2031,14 +2039,131 @@ it.layer(getTestDB())("a thread's channel", (it) => {
       );
 
       assert.deepEqual(
-        (yield* channelThreads(agent.userId, app)).map((thread) => [thread.id, thread.channelId]),
+        (yield* firstPage(agent.userId, app)).map((thread) => [thread.id, thread.channelId]),
         [
           [item.id, app],
           [theirs.id, app],
         ],
       );
-      assert.deepEqual(yield* channelThreads(outsider, app), []);
+      assert.deepEqual(yield* firstPage(outsider, app), []);
       assert.deepEqual([...(yield* channelWaitingCounts(outsider, workspaceId))], []);
     }),
+  );
+
+  it.effect(
+    "a member moves a thread they may read into another open channel of its workspace, and is refused one archived, unknown, or another workspace's, as an outsider is the thread",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const elsewhere = yield* openAgentIn;
+        const outsider = elsewhere.agent.userId;
+        const app = yield* channelIn(agent.userId, workspaceId, "app");
+        const web = yield* channelIn(agent.userId, workspaceId, "web");
+        const retired = yield* channelIn(agent.userId, workspaceId, "retired");
+        yield* archiveChannel(agent.userId, workspaceId, retired, new Date(2));
+        const theirs = yield* channelIn(outsider, elsewhere.workspaceId, "app");
+        const item = yield* post(agent, { ...NOTICE, channelId: app });
+        const idsIn = (channelId: string) =>
+          Effect.map(firstPage(agent.userId, channelId), (threads) =>
+            threads.map((thread) => thread.id),
+          );
+
+        const refused = yield* Effect.all([
+          moveChannelThread(teammate, item.id, retired),
+          moveChannelThread(teammate, item.id, theirs),
+          moveChannelThread(teammate, item.id, randomUUID()),
+          moveChannelThread(outsider, item.id, web),
+          moveChannelThread(outsider, item.id, theirs),
+        ]);
+        const unmoved = yield* idsIn(app);
+        const moved = yield* moveChannelThread(teammate, item.id, web);
+
+        assert.deepEqual(refused, [
+          Result.fail(CHANNEL_MOVE_REFUSAL.NO_CHANNEL),
+          Result.fail(CHANNEL_MOVE_REFUSAL.NO_CHANNEL),
+          Result.fail(CHANNEL_MOVE_REFUSAL.NO_CHANNEL),
+          Result.fail(CHANNEL_MOVE_REFUSAL.NO_THREAD),
+          Result.fail(CHANNEL_MOVE_REFUSAL.NO_THREAD),
+        ]);
+        assert.deepEqual(unmoved, [item.id]);
+        assert.deepEqual(
+          Result.map(moved, (thread) => [thread.id, thread.channelId]),
+          Result.succeed([item.id, web]),
+        );
+        assert.deepEqual([yield* idsIn(app), yield* idsIn(web)], [[], [item.id]]);
+      }),
+  );
+
+  it.effect(
+    "paging back from a channel's first page reads every thread once, ties on the bound included, the asks waiting on the reader on the first page alone, and an outsider pages nothing",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        yield* updateTask(owner, agent.taskId ?? "", { assigneeId: owner });
+        const app = yield* channelIn(owner, workspaceId, "app");
+        // Two asks waiting on the reader, posted first, so both are older than every page's bound.
+        const asks = [
+          yield* post(agent, { ...SETTINGS, key: "ask-1", channelId: app }),
+          yield* post(agent, { ...SETTINGS, key: "ask-2", channelId: app }),
+        ];
+        // Two pages of threads asking nobody and seven more, the two either side of the first page's bound posted at one instant.
+        const notices = 2 * INBOX_BOUNDS.MAX_ITEMS_READ + 7;
+        const bound = notices - INBOX_BOUNDS.MAX_ITEMS_READ;
+        const at = (step: number) =>
+          new Date(
+            Date.parse("2026-10-21T12:00:00Z") + (step === bound - 1 ? bound : step) * 1_000,
+          );
+        yield* Database.use((db) =>
+          db.insert(inboxItem).values(
+            Array.from({ length: notices }, (_, step) => ({
+              userId: owner,
+              taskId: agent.taskId,
+              organizationId: workspaceId,
+              agentId: agent.agentId,
+              channelId: app,
+              key: `notice-${step}`,
+              revision: 1,
+              version: INBOX_WIRE_VERSION,
+              title: `Notice ${step}`,
+              needsReply: false,
+              status: INBOX_STATUS.OPEN,
+              postedAt: at(step),
+              updatedAt: at(step),
+            })),
+          ),
+        );
+
+        const pages: ChannelThreadPage[] = [];
+        let before: string | undefined;
+        do {
+          const page = Option.getOrThrow(yield* channelThreads(owner, app, before));
+          pages.push(page);
+          before = page.older;
+        } while (before !== undefined);
+        const read = pages.flatMap((page) => page.threads.map((thread) => thread.id));
+        const stored = yield* Database.use((db) =>
+          db.select({ id: inboxItem.id }).from(inboxItem).where(eq(inboxItem.channelId, app)),
+        );
+
+        assert.deepEqual(
+          pages.map((page) => page.threads.length),
+          [INBOX_BOUNDS.MAX_ITEMS_READ + asks.length, INBOX_BOUNDS.MAX_ITEMS_READ, 7],
+        );
+        assert.deepEqual(read.toSorted(), stored.map((row) => row.id).toSorted());
+        assert.deepEqual(
+          asks.map((ask) => pages[0]?.threads.some((thread) => thread.id === ask.id)),
+          [true, true],
+        );
+        assert.equal(
+          (yield* channelLatestPosts(owner, workspaceId)).get(app),
+          at(notices - 1).getTime(),
+        );
+        assert.deepEqual(yield* channelThreads(outsider, app, pages[0]?.older), Option.none());
+      }),
   );
 });
