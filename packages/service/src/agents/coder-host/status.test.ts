@@ -183,7 +183,15 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
       new Map(),
       [],
       new Map([
-        [DEVICE, { id: DEVICE, name: "Charles's MacBook Pro", lastSeenAt: new Date(lastSeenAt) }],
+        [
+          DEVICE,
+          {
+            id: DEVICE,
+            name: "Charles's MacBook Pro",
+            lastSeenAt: new Date(lastSeenAt),
+            signedIn: {},
+          },
+        ],
       ]),
     ).mac;
 

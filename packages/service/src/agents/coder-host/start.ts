@@ -969,7 +969,10 @@ function startRuntimeOf(
   userId: string,
   model: string,
   keys: AccountKeyRows,
-  asked: { readonly machine?: CodingAgentMachine | undefined; readonly deviceId?: string | undefined },
+  asked: {
+    readonly machine?: CodingAgentMachine | undefined;
+    readonly deviceId?: string | undefined;
+  },
 ) {
   const chosen =
     asked.machine === CODING_AGENT_MACHINE.MAC
