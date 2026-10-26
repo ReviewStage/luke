@@ -162,6 +162,8 @@ export const macAgentLaunchPayloadSchema = EffectSchema.Struct({
   firstSequence: EffectSchema.Int,
   /** What the launch was started with, as a one-way digest the service reads back; nothing for the Mac to read. */
   fingerprint: EffectSchema.optionalKey(EffectSchema.String),
+  /** Whether the launch runs on the Mac's own sign-in, which the service's token route reads back; absent for one on the account's credential. */
+  ownLogin: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type MacAgentLaunchPayload = typeof macAgentLaunchPayloadSchema.Type;

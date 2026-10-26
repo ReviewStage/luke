@@ -6,6 +6,7 @@ import {
   createCodingAgent,
   recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
+import { queueMacAgentLine } from "@luke/database/models/mac-agent-store";
 import { beatMacDevice, registerMacDevice } from "@luke/database/models/mac-device-store";
 import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
@@ -21,6 +22,7 @@ import {
   CODING_AGENT_PAYER,
   type CodingAgentPayer,
 } from "@luke/features/coding-agent-wire";
+import { MAC_AGENT_LINE_KIND } from "@luke/features/mac-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -270,7 +272,7 @@ it.layer(getTestDB())("the runner's token route", (it) => {
   );
 
   it.effect(
-    "hands a local agent started on its Mac's own Codex sign-in no token while that Mac is signed in, and the plan's once it signed out",
+    "hands a local agent started on its Mac's own Codex sign-in no token while its running launch runs on that sign-in, and the plan's to a launch that turned to the plan, whatever the Mac says since",
     () =>
       Effect.gen(function* () {
         const { ask } = yield* standing;
@@ -281,12 +283,28 @@ it.layer(getTestDB())("the runner's token route", (it) => {
           { codex: true },
         );
         yield* signIn(agent.userId, 60);
+        /** A launch line of the agent's, as its Mac's machine queues one, on the Mac's sign-in or not. */
+        const launched = (ownLogin: boolean) =>
+          queueMacAgentLine(agent.userId, {
+            agentId: agent.agentId,
+            kind: MAC_AGENT_LINE_KIND.LAUNCH,
+            payload: {
+              checkoutPath: "/Users/fixture/.luke/agents/a/repository",
+              repository: null,
+              startBranch: null,
+              firstSequence: 0,
+              ...(ownLogin ? { ownLogin: true } : undefined),
+            },
+          });
 
+        yield* launched(true);
         const refused = yield* ask(agent.bearer);
         assert.equal(refused.status, HOSTED_HTTP_STATUS.FORBIDDEN);
         assert.deepEqual(refused.body, { error: HOSTED_API_ERROR.NOT_PERMITTED });
 
-        yield* beatMacDevice(agent.userId, agent.deviceId, { codex: false });
+        // The Mac signed out and the agent relaunched on the plan; the Mac signing in again mid-turn cuts that launch's turn no short.
+        yield* launched(false);
+        yield* beatMacDevice(agent.userId, agent.deviceId, { codex: true });
         assert.deepEqual((yield* ask(agent.bearer)).body, { accessToken: "access-0" });
       }),
   );

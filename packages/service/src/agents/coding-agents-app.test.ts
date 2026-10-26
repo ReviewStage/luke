@@ -5,9 +5,7 @@ import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
-import {
-  readAccountPreferences,
-} from "@luke/database/models/account-store";
+import { readAccountPreferences } from "@luke/database/models/account-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import {
   createAutomation,
@@ -164,7 +162,7 @@ import { LIVE_CLOSE_REASON, TRANSCRIPT_SPEAKER } from "@luke/live";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { sentLineId } from "@luke/wire/host-ids";
-import { temporaryDirectory, } from "@luke/wire/testing";
+import { temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { and, eq, sql } from "drizzle-orm";
 import {

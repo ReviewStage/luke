@@ -419,6 +419,7 @@ function macMachineOver(
             startBranch: agent.value.startBranch,
             firstSequence: mark.firstSequence,
             ...(mark.fingerprint === undefined ? {} : { fingerprint: mark.fingerprint }),
+            ...(mark.ownLogin === true ? { ownLogin: true } : {}),
           };
           yield* queued(pin, {
             id,

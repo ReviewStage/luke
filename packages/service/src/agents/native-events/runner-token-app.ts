@@ -24,15 +24,16 @@
 import type { RunnerTokenAnswer } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  readCodingAgent,
   readCodingAgentHeaderOfConversation,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
+import { latestMacAgentLaunch } from "@luke/database/models/mac-agent-store";
 import { parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { macAgentLaunchPayloadSchema } from "@luke/features/mac-agent-wire";
 import { HTTP_METHOD } from "@luke/wire";
-import { Duration, Effect, Layer, Option, Redacted, Result } from "effect";
+import { Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import {
@@ -52,7 +53,7 @@ import {
 } from "../../http/http-effect.js";
 import { makeRateBrake, type RateBrake } from "../../http/rate-brake.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
-import { CODEX_TOKEN_MARGIN, onMacCodexLogin } from "../coder-host/codex-sessions.js";
+import { CODEX_TOKEN_MARGIN } from "../coder-host/codex-sessions.js";
 import { admitRunnerBearer, presentedBearer } from "../luke-mcp/bearer.js";
 
 /** The path a runner's token command posts to. */
@@ -79,14 +80,24 @@ const REFUSAL_OF_ACCESS = {
   [CHATGPT_ACCESS.INELIGIBLE]: HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE,
 } as const satisfies Record<Exclude<ChatGptAccess["outcome"], "ready">, HostedRefusal>;
 
-/** Whether the agent runs on its Mac's own Codex sign-in now; an agent the store does not hold reads as so, and is handed nothing. */
-const onMacLoginNow = (userId: string, agentId: string) =>
+const decodeLaunchPayload = Schema.decodeUnknownOption(macAgentLaunchPayloadSchema);
+
+/**
+ * Whether the agent's newest launch runs on its Mac's own sign-in, as its
+ * launch line recorded it (`RunnerMark.ownLogin`), whatever the Mac says of
+ * its sign-in since; one with no launch, or none the store can read, reads
+ * as so, and is handed nothing.
+ */
+const launchedOnMacLogin = (userId: string, agentId: string) =>
   hostedStoreOrUnavailable(
-    Effect.flatMap(readCodingAgent(userId, agentId), (agent) =>
-      Option.match(agent, {
-        onNone: () => Effect.succeed(true),
-        onSome: (found) => onMacCodexLogin(userId, found),
-      }),
+    Effect.map(latestMacAgentLaunch(userId, agentId), (launch) =>
+      Option.match(
+        Option.flatMap(launch, (line) => decodeLaunchPayload(line.payload)),
+        {
+          onNone: () => true,
+          onSome: (payload) => payload.ownLogin === true,
+        },
+      ),
     ),
   );
 
@@ -116,8 +127,9 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
     readCodingAgentRouting(target.userId, agent.value.id),
   );
   // Note that only an agent its starter's plan pays for, on Codex, is handed the plan's token: one
-  // started on the plan, or a local one started on its Mac's own sign-in while that Mac is signed
-  // out of Codex, the one case its launch runs on the plan (`codex-sessions.ts`'s `savedPayer`).
+  // started on the plan, or a local one started on its Mac's own sign-in whose running launch
+  // turned to the plan as that Mac was signed out of Codex (`codex-sessions.ts`'s `savedPayer`),
+  // which its launch line records, so a sign-in on the Mac since cuts no plan-backed turn short.
   const payer = Option.getOrUndefined(
     Option.flatMap(
       Option.filter(routing, (row) => row.runtime === CONVERSATION_RUNTIME.CODEX),
@@ -127,7 +139,7 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   const onPlan =
     payer === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION ||
     (payer === CODING_AGENT_PAYER.MAC_SIGN_IN &&
-      !(yield* onMacLoginNow(target.userId, agent.value.id)));
+      !(yield* launchedOnMacLogin(target.userId, agent.value.id)));
   if (!onPlan) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   if (!(yield* brake.check(agent.value.id))) {
     return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);

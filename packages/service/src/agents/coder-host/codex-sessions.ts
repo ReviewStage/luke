@@ -120,7 +120,10 @@ function codexModelOf(agent: CodingAgent): string | undefined {
 }
 
 /** A launch on its Mac's own Codex sign-in: nothing of the account's in its environment, and `CODEX_HOME` left as the developer's. */
-const MAC_LOGIN: { readonly env: Readonly<Record<string, string>> } = { env: {} };
+const MAC_LOGIN: { readonly env: Readonly<Record<string, string>>; readonly ownLogin: true } = {
+  env: {},
+  ownLogin: true,
+};
 
 /**
  * Whether a local agent runs on its Mac's own Codex sign-in, by what the Mac
@@ -144,10 +147,9 @@ function homeOf(agent: CodingAgent): Readonly<Record<string, string>> {
 /**
  * Whether the agent runs on its starter's Mac and that Mac last said Codex
  * there holds a sign-in of its own (`mac_device.signed_in`), as a launch's
- * `config` reads it off the layout too (`onMacLoginOf`); the token route asks
- * it as well, since such an agent's launch runs on no plan of the account's.
+ * `config` reads it off the layout too (`onMacLoginOf`).
  */
-export const onMacCodexLogin = (userId: string, agent: CodingAgent) =>
+const onMacCodexLogin = (userId: string, agent: CodingAgent) =>
   agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null
     ? Effect.succeed(false)
     : Effect.map(macDeviceLayout(userId, agent.deviceId), (device) =>

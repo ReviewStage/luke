@@ -96,6 +96,8 @@ export interface RunnerMark {
   readonly firstSequence: number;
   /** None for a launch from before fingerprints were recorded. */
   readonly fingerprint?: string;
+  /** Whether the launch runs on its Mac's own sign-in rather than a credential of the account's; nothing secret, and none for any other launch. */
+  readonly ownLogin?: boolean;
 }
 
 /** A runner as its machine recorded it: the handle a later call writes to, and its launch's mark. */

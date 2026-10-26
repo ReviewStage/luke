@@ -321,7 +321,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
               .split("\n")
               .map((line: string): CodexConfig => JSON.parse(line));
             assert.ok(config !== undefined);
-            return { stored: JSON.stringify(row), secrets, config };
+            return { stored: JSON.stringify(row), payload: row.payload, secrets, config };
           });
         const folder = macAgentLayout(MAC_DEVICE_LAYOUT.home, "").folder;
 
@@ -332,6 +332,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(plan.config.tokenUrl, TOKEN_URL);
         assert.deepEqual(plan.config.writableRoots, [`${folder}${onPlan.id}`]);
         assert.equal(plan.config.ownLogin, undefined);
+        assert.equal(plan.payload.ownLogin, undefined);
         const bearer = plan.secrets.env[RUNNER_ENV.BEARER] ?? "";
         // The bearer is sealed in the row, and no token of the plan's is in the row or the launch at all.
         for (const secret of ["access-0", "refresh-0", "id-token-0", bearer]) {
@@ -343,6 +344,8 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const own = yield* launched(yield* localAgent(CODING_AGENT_PAYER.MAC_SIGN_IN));
         assert.deepEqual(Object.keys(own.secrets.env), [RUNNER_ENV.BEARER]);
         assert.equal(own.config.ownLogin, true);
+        // The line says which credential the launch took, which the token route reads back.
+        assert.equal(own.payload.ownLogin, true);
       }),
   );
 
