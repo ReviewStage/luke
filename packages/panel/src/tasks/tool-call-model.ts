@@ -1095,7 +1095,18 @@ const AGENT_TOOL_VIEWS = {
   },
 } as const satisfies Record<AgentTool, ToolReader>;
 
-type RetiredTool = (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL];
+/**
+ * The retired tools a row reads by name: every one but Chat's four, whose
+ * calls, with no Chat left to open, draw as any other call does, by the
+ * tool's name and what it was handed and answered.
+ */
+type RetiredTool = Exclude<
+  (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
+  | typeof RETIRED_TOOL.POST_CHAT
+  | typeof RETIRED_TOOL.READ_CHAT
+  | typeof RETIRED_TOOL.RESOLVE_ASK
+  | typeof RETIRED_TOOL.EDIT_CHANNEL
+>;
 
 /** How each tool no agent is offered now reads, as a transcript written while it was offered still names it, under the name it had then. */
 const RETIRED_TOOL_VIEWS = {
