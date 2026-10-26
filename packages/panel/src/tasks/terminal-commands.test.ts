@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
@@ -11,7 +12,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { StripTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
@@ -23,6 +24,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { ToastHost } from "../toast.js";
 import type { MainTab } from "./use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
@@ -123,7 +125,8 @@ async function mount(input: {
   main?: MainTab;
   side?: SidePanelTab;
   lastTerminal?: string;
-  started?: () => void;
+  /** A Start pressed, answering why it was refused, where it was. */
+  started?: () => Failure | undefined;
 }) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -158,7 +161,7 @@ async function mount(input: {
         available: input.cannotStart === undefined,
         reason: input.cannotStart,
         busy: false,
-        onPress: () => input.started?.(),
+        onPress: async () => input.started?.(),
       },
     }),
   });
@@ -166,7 +169,12 @@ async function mount(input: {
     root.render(
       onRegistry(
         registry,
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+        createElement(
+          Fragment,
+          null,
+          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+          createElement(ToastHost),
+        ),
       ),
     ),
   );
@@ -259,7 +267,13 @@ test("with several agents and no terminal used yet, ⌘J asks, and the agent pic
 
 test("with no agent on the plan, the picker offers to start one", async () => {
   let started = 0;
-  const task = await mount({ agents: [], started: () => (started += 1) });
+  const task = await mount({
+    agents: [],
+    started: () => {
+      started += 1;
+      return undefined;
+    },
+  });
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, [
     { name: "Start a coding agent", detail: undefined, working: false, chosen: true },
@@ -267,6 +281,20 @@ test("with no agent on the plan, the picker offers to start one", async () => {
   await picker()?.choose("Start a coding agent");
   assert.equal(started, 1);
   assert.deepEqual(task.shown, []);
+});
+
+test("a Start the picker pressed that the service refused says why on the toast, its repository's remedy beside it", async () => {
+  const words = "This task has no repository yet.";
+  const task = await mount({
+    agents: [],
+    started: () => ({ reason: FAILURE_REASON.CHOOSE_REPOSITORY, text: words, taskId: TASK.id }),
+  });
+  await task.run(APP_COMMAND.NEW_TERMINAL);
+  await picker()?.choose("Start a coding agent");
+  await settle();
+  const said = document.body.textContent ?? "";
+  assert.ok(said.includes(words), "the toast says why");
+  assert.ok(said.includes("Choose a repository"), "and offers the remedy");
 });
 
 test("the panel's + lists each agent's terminal under Terminal, says how it stands, and a pick adds a shell to that agent's sandbox", async () => {
@@ -416,7 +444,10 @@ test("where no agent can start, the picker says why beside the offer and starts 
   const task = await mount({
     agents: [],
     cannotStart: "Choose a repository",
-    started: () => (started += 1),
+    started: () => {
+      started += 1;
+      return undefined;
+    },
   });
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, [

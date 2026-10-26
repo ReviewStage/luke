@@ -315,8 +315,8 @@ export interface CodingAgentsControl {
     reason: string | undefined;
     /** Whether a Start is out. */
     busy: boolean;
-    /** Starts an agent on the choice given, or on the account's default with none, saying why on a toast where it did not start. */
-    onPress: (choice?: ModelChoice) => void;
+    /** Starts an agent on the choice given, or on the account's default with none; answers why it did not start, or nothing once it did or while it could not be pressed. */
+    onPress: (choice?: ModelChoice) => Promise<Failure | undefined>;
     /** The agent a Start on the open task is still making, its tab standing under the press's key until the service answers; none while none is out. */
     pending?: StartingAgent | undefined;
   };
@@ -1052,8 +1052,8 @@ export function useCodingAgents(input: {
     readAgain();
   };
 
-  const pressStart = (choice?: ModelChoice) => {
-    if (taskId === undefined || repository === null || starting) return;
+  const pressStart = async (choice?: ModelChoice): Promise<Failure | undefined> => {
+    if (taskId === undefined || repository === null || starting) return undefined;
     // The key is the press's own, and a press asked again after the service
     // did not answer carries the one it minted, so the service answers the
     // agent it may already have started rather than a second one.
@@ -1066,20 +1066,19 @@ export function useCodingAgents(input: {
     // The agent's tab opens on the press, under its key, and gives way to the agent once it is made.
     setPressed({ taskId, starting: { key, model: choice?.model } });
     latest.current.onStarted(key);
-    askStart(taskId, {
+    const answer = await askStart(taskId, {
       idempotencyKey: key,
       ...(choice === undefined ? undefined : choiceRequest(choice)),
-    }).then((answer) => {
-      setPressed((was) => (was?.starting.key === key ? undefined : was));
-      if ("failure" in answer) {
-        // Only a service that never answered is asked again under the same key.
-        if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
-        failed(startFailureNote(answer, taskId).text);
-        return;
-      }
-      pending.current = undefined;
-      landed(taskId, answer.agent);
     });
+    setPressed((was) => (was?.starting.key === key ? undefined : was));
+    if ("failure" in answer) {
+      // Only a service that never answered is asked again under the same key.
+      if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
+      return startFailureNote(answer, taskId);
+    }
+    pending.current = undefined;
+    landed(taskId, answer.agent);
+    return undefined;
   };
 
   // Note that an empty draft's press mints its own key, because a blank

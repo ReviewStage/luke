@@ -366,7 +366,9 @@ test("a plan's Start stands its agent's tab at once under the press's key, which
   );
   await tab.mount();
 
-  act(() => tab.control().start.onPress({ model: "openai/gpt-6.1-sol", effort: "xhigh" }));
+  act(() => {
+    void tab.control().start.onPress({ model: "openai/gpt-6.1-sol", effort: "xhigh" });
+  });
   await settle();
   assert.deepEqual(tab.control().start.pending, { key: "key-1", model: "openai/gpt-6.1-sol" });
   assert.deepEqual(tab.control().agentIds, ["key-1"]);
@@ -383,13 +385,16 @@ test("a plan's Start stands its agent's tab at once under the press's key, which
     "the list already read is joined the agent rather than read again",
   );
 
-  act(() => tab.control().start.onPress());
-  await settle();
+  let refused: Failure | undefined;
+  await act(async () => {
+    refused = await tab.control().start.onPress();
+  });
   assert.equal(tab.control().start.pending, undefined);
   assert.deepEqual(tab.control().agentIds, [AGENT], "a refused Start leaves no tab");
-  assert.ok(
-    document.body.textContent?.includes("That model isn't offered any more."),
-    "and says why on the window's toast",
+  assert.equal(
+    refused?.text,
+    "That model isn't offered any more. Choose another.",
+    "and answers why",
   );
 });
 
@@ -405,7 +410,9 @@ test("a plan's Start on a task whose list did not read stands its tab at once, a
   await tab.mount();
   assert.equal(tab.control().listFailed, true, "the list did not read");
 
-  act(() => tab.control().start.onPress());
+  act(() => {
+    void tab.control().start.onPress();
+  });
   await settle();
   assert.deepEqual(tab.control().agentIds, ["key-1"]);
 
@@ -422,7 +429,9 @@ test("a plan's Start on a task whose list did not read stands its tab at once, a
   // A second Start while the list still does not read stands beside the first.
   const second = { ...STARTED, id: "9d2b7b5e-4e3f-4e9c-9c77-7a5d8b3f4c32", createdAt: 2 };
   tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: second });
-  act(() => tab.control().start.onPress());
+  act(() => {
+    void tab.control().start.onPress();
+  });
   await settle();
   assert.deepEqual(tab.control().agentIds, [AGENT, second.id]);
 

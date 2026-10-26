@@ -1,4 +1,5 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import { remedyLabel } from "@luke/features/failure-remedy";
 import {
   TERMINAL_ASK,
   TERMINAL_TARGET,
@@ -8,9 +9,12 @@ import {
 import { sandboxRead, shellsAsked } from "@luke/features/terminal-store";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { STATUS_TONE } from "@luke/ui";
 import { useCallback, useContext, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
+import { useRepositoryRemedy } from "./repository-remedy.js";
 import { TerminalPicker } from "./terminal-picker.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import type { SidePanelControl } from "./use-side-panel.js";
@@ -69,6 +73,8 @@ export function TerminalCommands({
 }): React.JSX.Element {
   const { act } = useAct();
   const registry = useContext(RegistryContext);
+  const toast = useToast();
+  const repositoryRemedy = useRepositoryRemedy();
   const [asking, setAsking] = useState<Asking | undefined>(undefined);
   const open = useOpenTerminal(sidePanel, onShown);
   const run = (ask: TerminalAsk) => {
@@ -105,6 +111,20 @@ export function TerminalCommands({
     },
     [act, registry],
   );
+  // A refused start says why on the toast, its repository's remedy as its action where it has one,
+  // since the picker that pressed it has closed; a move starts the agent again once it lands.
+  const startAgent = () => {
+    void agents.start.onPress().then((failure) => {
+      if (failure === undefined) return;
+      const label = remedyLabel(failure);
+      const remedy = repositoryRemedy(failure, startAgent);
+      toast(
+        label === undefined || remedy === undefined
+          ? { words: failure.text, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }
+          : { words: failure.text, tone: STATUS_TONE.DANGER, action: { label, onPress: remedy } },
+      );
+    });
+  };
   return (
     <TerminalPicker
       pick={asking}
@@ -112,7 +132,7 @@ export function TerminalCommands({
       lastUsed={sidePanel.lastTerminal}
       readSandbox={readSandbox}
       onPick={(agentId) => open(agentId, asking?.ask ?? TERMINAL_ASK.SHOW)}
-      onStartAgent={() => agents.start.onPress()}
+      onStartAgent={startAgent}
       start={agents.start}
       onClose={() => setAsking(undefined)}
     />

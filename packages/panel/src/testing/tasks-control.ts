@@ -147,7 +147,7 @@ export function codingAgentsControl(
       available: false,
       reason: undefined,
       busy: false,
-      onPress: ignore,
+      onPress: () => Promise.resolve(undefined),
     },
     startCall: undefined,
     onStop: () => Promise.resolve(),
