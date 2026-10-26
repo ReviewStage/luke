@@ -2302,7 +2302,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return yield* serial(
           Effect.gen(function* () {
             const started = yield* served(client.create(request));
-            if (!started.ok) return carried<TasksStartAnswer>({ failure: started.failure });
+            if (!started.ok) {
+              const { failure, localAgentRefusal } = started;
+              return carried<TasksStartAnswer>(
+                localAgentRefusal === undefined ? { failure } : { failure, localAgentRefusal },
+              );
+            }
             const { task, agent } = started.answer;
             // A task just started has had no call. A call about another task
             // is left to the start's own Talk press, which moves it here.

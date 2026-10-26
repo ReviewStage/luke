@@ -366,8 +366,8 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
-/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), or any of them. */
-export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority" | "assigneeId">;
+/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), where its agents run, or any of them. */
+export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority" | "assigneeId" | "runsOn">;
 
 /**
  * A repository the account pinned in the sidebar, and the instant it was

@@ -25,6 +25,7 @@ import {
   codingAgentServersRequestSchema,
   codingAgentStartRequestFields,
   codingAgentSummarySchema,
+  localAgentRefusalSchema,
   operatorEnsureAnswerSchema,
   operatorEnsureRequestSchema,
 } from "./coding-agent-wire.js";
@@ -145,6 +146,8 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_API_KEY_UNREADABLE: "agent-api-key-unreadable",
   /** A dictated clip is heard on the account's own OpenAI API key, and the account saved none. */
   OPENAI_KEY_MISSING: "openai-key-missing",
+  /** The task runs its agents on a device that would not take this one, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
+  LOCAL_AGENT_REFUSED: "local-agent-refused",
 } as const;
 
 export type CodingAgentCallFailure =
@@ -155,12 +158,13 @@ const failureSchema = EffectSchema.Literals(Object.values(CODING_AGENT_CALL_FAIL
 /** A failed call, as every answer below spells one. */
 const failed = EffectSchema.Struct({ failure: failureSchema });
 
-/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, and the provider whose credential is missing where it is that. */
+/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, the provider whose credential is missing where it is that, and why the task's device would not take the agent where it is that. */
 const failedReaching = EffectSchema.Struct({
   failure: failureSchema,
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
   provider: EffectSchema.optionalKey(modelProviderSchema),
+  localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
 });
 
 /** The models the service offers, as the window hears them: the list and the Mac a Start may run on where it offers one (`modelsAnswerSchema`), or why there is none. */
@@ -361,6 +365,7 @@ export const codingAgentAgentAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     agent: codingAgentSummarySchema,
     txid: codingAgentAnswerSchema.fields.txid,
+    notice: codingAgentAnswerSchema.fields.notice,
   }),
   failedReaching,
 ]);

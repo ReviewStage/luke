@@ -78,11 +78,16 @@ import {
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestOnWire,
+  type LocalAgentRefusal,
   type OperatorEnsureRequest,
   TRANSCRIPT_PARTS_QUERY,
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
-import { credentialMissingDataSchema, planLimitReachedDataSchema } from "./contract/errors.js";
+import {
+  credentialMissingDataSchema,
+  localAgentRefusedDataSchema,
+  planLimitReachedDataSchema,
+} from "./contract/errors.js";
 import { conversationMediaTypeSchema } from "./conversation-picture-wire.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
@@ -184,6 +189,7 @@ type Failed = {
   readonly unreached?: RepositoryUnreached;
   readonly resetsAt?: number;
   readonly provider?: ModelProvider;
+  readonly localAgentRefusal?: LocalAgentRefusal;
 };
 
 /** The refusals a call may answer with, by the service's own word for each. */
@@ -205,6 +211,7 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 } satisfies NamedRefusals;
 
 /** The refusals a memories read or forget can answer with: a workspace the account is not in, or a memory it may not forget. */
@@ -312,6 +319,12 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
     const missing = Result.getOrUndefined(readServiceAnswer(credentialMissingDataSchema)(payload));
     return missing?.provider === undefined ? { failure } : { failure, provider: missing.provider };
   }
+  if (failure === CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
+    const refused = Result.getOrUndefined(readServiceAnswer(localAgentRefusedDataSchema)(payload));
+    return refused?.localAgentRefusal === undefined
+      ? { failure }
+      : { failure, localAgentRefusal: refused.localAgentRefusal };
+  }
   if (failure !== CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
   const reached = Result.getOrUndefined(readServiceAnswer(repositoryNotReachableSchema)(payload));
   return reached === undefined ? { failure } : { failure, unreached: reached.unreached };
@@ -387,11 +400,13 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
   const unreached = failed.data?.unreached;
   const resetsAt = failed.data?.resetsAt;
   const provider = failed.data?.provider;
+  const localAgentRefusal = failed.data?.localAgentRefusal;
   return {
     failure,
     ...(unreached === undefined ? undefined : { unreached }),
     ...(resetsAt === undefined ? undefined : { resetsAt }),
     ...(provider === undefined ? undefined : { provider }),
+    ...(localAgentRefusal === undefined ? undefined : { localAgentRefusal }),
   };
 }
 

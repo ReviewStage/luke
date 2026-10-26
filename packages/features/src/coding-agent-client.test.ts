@@ -6,7 +6,7 @@ import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
-import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { CODING_AGENT_STATUS, LOCAL_AGENT_REFUSAL } from "./coding-agent-wire.js";
 import { INBOX_REPLY } from "./inbox-wire.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";
 import {
@@ -151,6 +151,30 @@ it.effect(
         failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
       });
     }),
+);
+
+it.effect("a Start the task's device refused carries why, as the service named it", () =>
+  Effect.gen(function* () {
+    const refusing = fakeCloudApi({
+      [`POST /api/plans/${TASK_ID}/agents`]: {
+        answer: () => ({
+          error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
+          localAgentRefusal: LOCAL_AGENT_REFUSAL.MAC_AWAY,
+        }),
+        status: HTTP_STATUS.CONFLICT,
+      },
+    });
+
+    const refused = yield* Effect.provide(
+      client().start(TASK_ID, { idempotencyKey: "press-1" }),
+      refusing.layer,
+    );
+
+    assert.deepEqual(refused, {
+      failure: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+      localAgentRefusal: LOCAL_AGENT_REFUSAL.MAC_AWAY,
+    });
+  }),
 );
 
 it.effect(

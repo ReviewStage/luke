@@ -16,6 +16,7 @@ import {
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import { CHIP_WIDTH, POPOVER_ALIGN, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
@@ -30,6 +31,7 @@ import {
   useDraftWriter,
 } from "../composer-drafts.js";
 import { automationAgentBrief } from "../desktop/automation-agent-brief.js";
+import { useExperiment } from "../use-app-state.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
 import { ISSUE_CHORD, IssuePickerChip } from "./issue-picker-chip.js";
 import type { MentionMenuSide } from "./mention-picker.js";
@@ -44,6 +46,7 @@ import {
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
+import { NewTaskRunsOnChip, newTaskRunsOn, useNewTaskRunsOn } from "./runs-on.js";
 import { SkillFiles } from "./skill-chip.js";
 import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
@@ -63,7 +66,10 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * dialog and on a new account's welcome: the title, "New task", then the repository the task
  * is about (`repository-chip.tsx`), and at the row's right end the Issue
  * chip, where the workspace has GitHub or Linear connected
- * (`issue-picker-chip.tsx`, ⌘L from the card). The repository chip starts on the one the press chose
+ * (`issue-picker-chip.tsx`, ⌘L from the card). While local agents are on
+ * and the member has a device, the Runs on chip follows the repository's,
+ * Cloud or one of their devices, which the task's agents run on
+ * (`runs-on.tsx`); an automation's card draws none. The repository chip starts on the one the press chose
  * (a repository group's +), else the one the newest task in the workspace
  * was about, either only where the workspace's GitHub reaches it.
  *
@@ -174,12 +180,14 @@ const COMPOSER_WORDS = {
   NEEDS_REPOSITORY: "Choose a repository",
 } as const;
 
-/** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */
+/** What one Agent-mode press asked beside its key: the task's name, repository, workspace, issues, and where its agents run, and the agent's words, files, and model. */
 interface AgentAsk {
   readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
   readonly issues: readonly TaskIssueChoice[];
+  /** The device the task's agents run on, by its id; none for the cloud. */
+  readonly deviceId?: string | undefined;
   readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
 }
 
@@ -202,13 +210,14 @@ function sameChoice(a: TaskIssueChoice, b: TaskIssueChoice | undefined): boolean
   return a.repository === b.repository && a.number === b.number;
 }
 
-/** Whether two presses ask the same: the same task, words, files in the same order, and model. */
+/** Whether two presses ask the same: the same task, device, words, files in the same order, and model. */
 function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
   return (
     a.name === b.name &&
     a.repository === b.repository &&
     a.workspaceId === b.workspaceId &&
     sameIssues(a.issues, b.issues) &&
+    a.deviceId === b.deviceId &&
     a.agent.prompt === b.agent.prompt &&
     a.agent.attachments.length === b.agent.attachments.length &&
     a.agent.attachments.every((file, index) => file === b.agent.attachments[index]) &&
@@ -314,6 +323,14 @@ export function NewTaskComposer({
     (linearIssuesIn(workspaceId) !== undefined || githubIssuesIn(workspaceId) !== undefined);
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
+  // Runs on stands while local agents are on and the member has a device, never for an automation's agent.
+  const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
+  const devices =
+    localAgents && !forAutomation && newTask.devices !== undefined && newTask.devices.length > 0
+      ? newTask.devices
+      : undefined;
+  const [device, chooseDevice] = useNewTaskRunsOn(devices);
+  const runsOn = devices === undefined ? undefined : newTaskRunsOn(device);
   // The repositories the chip's last read listed, an App's and a member's token's alike.
   const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
   // A repository or an issue picked in one workspace is none of another's,
@@ -407,6 +424,8 @@ export function NewTaskComposer({
     newTask
       .start(name, repository, workspaceId, {
         ...(issues.length === 0 ? undefined : { issues }),
+        ...(runsOn === undefined ? undefined : { runsOn }),
+        ...(device === undefined ? undefined : { device }),
         ...handing,
       })
       .then((refused) => {
@@ -435,6 +454,7 @@ export function NewTaskComposer({
       repository,
       workspaceId,
       issues,
+      deviceId: device?.deviceId,
       agent: { prompt, attachments, choice },
     };
     const held = pressed.current;
@@ -551,6 +571,14 @@ export function NewTaskComposer({
             {PURPOSE_HEADING[purpose]}
           </Text>
           {repositoryChip}
+          {devices === undefined ? null : (
+            <NewTaskRunsOnChip
+              devices={devices}
+              device={device}
+              disabled={starting}
+              onChoose={chooseDevice}
+            />
+          )}
         </div>
         {forAutomation ? null : issueChip}
       </div>

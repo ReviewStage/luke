@@ -17,7 +17,12 @@ import type {
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+import {
+  type CatalogModel,
+  type MacOffer,
+  MODEL_PROVIDER,
+  type ModelChoice,
+} from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -26,6 +31,7 @@ import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section
 import {
   type CodeRef,
   type Task,
+  type TaskRunsOnRequest,
   type TaskStanding,
   type TaskStatus,
   type TaskSummary,
@@ -159,6 +165,7 @@ import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
   choiceRequest,
+  localAgentRefusalWords,
   openingLineOf,
   type SentLine,
 } from "./coding-agent-model.js";
@@ -549,6 +556,10 @@ interface NewTaskCardKept {
  */
 export interface NewTaskStart {
   readonly issues?: readonly TaskIssueChoice[];
+  /** Where the task's agents run, where the card's Runs on chose: the cloud, or one of the member's devices. */
+  readonly runsOn?: TaskRunsOnRequest;
+  /** The device Runs on chose, which a refusal names; none for the cloud. */
+  readonly device?: MacOffer;
   readonly handed?: NewTaskAgent;
   /** What the card held as it pressed Start, which it opens again on where an agent's start is refused after the card closed. */
   readonly card?: NewTaskCardKept;
@@ -806,6 +817,8 @@ export interface TasksControl {
     ) => Promise<Failure | undefined>;
     /** The models the composer's chip offers, as last read; nothing before the first read lands. */
     models: readonly CatalogModel[] | undefined;
+    /** The member's devices Runs on offers, as the same read last listed them; nothing before it lands, or while local agents are off. */
+    devices: readonly MacOffer[] | undefined;
     /** Whether the last read of the models did not land. */
     modelsFailed: boolean;
     /** Reads the models now, for the chip's name, its menu opening, and its Retry. */
@@ -1442,6 +1455,7 @@ export function useTasksTab(input: {
     onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
     keywords: dictationWords,
     viewedAgents: tasklessAgents,
+    device: openDocument?.id === viewed.activeTaskId ? openDocument?.runsOn?.device : undefined,
   });
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
   // each pinned, named, and archived as given here until main's view carries it.
@@ -2634,6 +2648,7 @@ export function useTasksTab(input: {
       ...(from.issues === undefined || from.issues.length === 0
         ? undefined
         : { issues: from.issues }),
+      ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
     }).then(
@@ -2641,14 +2656,17 @@ export function useTasksTab(input: {
         if ("failure" in answer) {
           return refusedWith({
             reason: FAILURE_REASON.OTHER,
-            text: startFailureNote(answer.failure),
+            text:
+              answer.failure === TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED
+                ? localAgentRefusalWords(answer.localAgentRefusal, from.device)
+                : startFailureNote(answer.failure),
           });
         }
         setNewTaskAsk(undefined);
         setStartingTask(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);
-        if (handed !== undefined) openAgent(answer.planId, handed, answer.agentStart);
+        if (handed !== undefined) openAgent(answer.planId, handed, answer.agentStart, from.device);
         return undefined;
       },
       (refused: Error) => refusedWith({ reason: FAILURE_REASON.OTHER, text: refused.message }),
@@ -2664,6 +2682,7 @@ export function useTasksTab(input: {
     planId: string,
     handed: NewTaskAgent,
     started: CodingAgentAgentAnswer | undefined,
+    device: MacOffer | undefined,
   ) => {
     if (started !== undefined && !("failure" in started)) {
       agents.onTaskStarted(planId, started.agent, {
@@ -2672,11 +2691,13 @@ export function useTasksTab(input: {
         attachments: handed.attachments,
       });
       mainTabs.onShow(planId, { agent: started.agent.id });
+      if (started.notice !== undefined) agents.onNotice(started.notice);
       return;
     }
     const refused = agentStartFailureNote(
       started ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
       planId,
+      device,
     );
     const { idempotencyKey: id, ...words } = handed;
     agents.onHandDraft(planId, { id, ...words, refused });
@@ -3567,6 +3588,7 @@ export function useTasksTab(input: {
       repositoriesIn,
       start: steadyStartTask,
       models: agents.models,
+      devices: agents.macs,
       modelsFailed: agents.modelsFailed,
       readModels: agents.readModels,
       readDefault: agents.readDefault,
