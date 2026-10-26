@@ -15,17 +15,20 @@ import {
   type CodingAgentMessage,
   type CodingAgentSender,
   type CodingAgentSummary,
+  type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
 import { isRecord, valueFromJsonText, type WireValue } from "@luke/wire";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
-import { AGENT_PART, agentParts, messageWords } from "./coding-agent-model.js";
+import { foldTaskCall, NO_TASKS, type TaskFold, todosOf } from "./agent-todos.js";
+import { AGENT_PART, agentParts, isTaskCall, messageWords } from "./coding-agent-model.js";
 import { type DrawnCall, drawnCall } from "./native-tool-calls.js";
 import {
   type CalledAgent,
   calledAgent,
   isServerCallTool,
   type ToolCallView,
+  todosListView,
   toolCallView,
 } from "./tool-call-model.js";
 
@@ -455,23 +458,64 @@ function stepCall(
 function toolView(
   step: ReplayStep & { readonly state: ReplayToolState; readonly input: string },
   tool: string,
+  todos: Todos | undefined,
 ): StepView {
   const read = markedCall(step);
   const call = stepCall(step, tool);
   return {
     kind: STEP_VIEW.CALL,
     state: read.state,
-    view: toolCallView(call),
+    // Note that one of Claude Code's task calls is drawn as the list as it stood after it, as the transcript draws it, where the replay's fold handed one.
+    view: todos === undefined ? toolCallView(call) : todosListView(todos),
     errorText: read.errorText,
     agent: calledAgent(call),
   };
 }
 
+type Todos = CodingAgentTodos["todos"];
+
+/** A tool call's step whose marker named its tool, which is read as the transcript reads a call of that tool. */
+type MarkedToolStep = ReplayStep & {
+  readonly state: ReplayToolState;
+  readonly input: string;
+  readonly tool: string;
+};
+
+/** A step as a marked tool call, or nothing where its marker named no tool, its state, or its input. */
+function markedToolStep(step: ReplayStep): MarkedToolStep | undefined {
+  const { state, input, tool } = step;
+  return state !== undefined && input !== undefined && tool !== undefined
+    ? { ...step, state, input, tool }
+    : undefined;
+}
+
+/**
+ * The to-do list as it stood after each of Claude Code's task calls among
+ * a replay's steps, by the step's place among them, folded as the
+ * transcript folds the calls (`agent-todos.ts`); an empty map for a replay
+ * that holds none.
+ */
+export function replayTaskTodos(steps: readonly ReplayStep[]): ReadonlyMap<number, Todos> {
+  const lists = new Map<number, Todos>();
+  let fold: TaskFold = NO_TASKS;
+  steps.forEach((step, index) => {
+    const marked = step.kind === REPLAY_STEP_KIND.TOOL ? markedToolStep(step) : undefined;
+    if (marked === undefined || !isTaskCall(marked.tool)) return;
+    const read = markedCall(marked);
+    fold = foldTaskCall(fold, {
+      ...stepCall(marked, marked.tool),
+      failed: read.state === TOOL_STATE.OUTPUT_ERROR,
+    });
+    lists.set(index, todosOf(fold));
+  });
+  return lists;
+}
+
 /** A call's step read back as its row: as a transcript draws its tool where its marker named one, and otherwise its kind and subject from its summary, and where it stood, its input, and its output from its marker, or from its words where the marker names none. */
-function callView(step: ReplayStep): StepView {
+function callView(step: ReplayStep, todos: Todos | undefined): StepView {
   const { state, input, tool } = step;
   const marked = state !== undefined && input !== undefined ? { ...step, state, input } : undefined;
-  if (marked !== undefined && tool !== undefined) return toolView(marked, tool);
+  if (marked !== undefined && tool !== undefined) return toolView(marked, tool, todos);
   const read = marked === undefined ? spelledCall(step) : markedCall(marked);
   const split = step.summary.indexOf(SPEAKER_SEPARATOR);
   const verb = split < 0 ? step.summary : step.summary.slice(0, split);
@@ -529,7 +573,7 @@ function sentByOf(step: ReplayStep, name: string): CodingAgentSender | undefined
  * a line as a sent message under whoever sent it, the agent's words as its
  * words, and a call as a call's row opening onto its input and its result.
  */
-export function stepView(step: ReplayStep): StepView {
+export function stepView(step: ReplayStep, todos?: Todos): StepView {
   switch (step.kind) {
     case REPLAY_STEP_KIND.LINE: {
       const sender = stepLine(step).who;
@@ -545,7 +589,7 @@ export function stepView(step: ReplayStep): StepView {
     case REPLAY_STEP_KIND.SAID:
       return { kind: STEP_VIEW.SAID, words: step.words };
     case REPLAY_STEP_KIND.TOOL:
-      return callView(step);
+      return callView(step, todos);
   }
 }
 

@@ -345,7 +345,17 @@ function todoLine(todo: CodingAgentTodos["todos"][number]): string {
   }
 }
 
-/** A to-do write's row: how far the list has got, and the list as checkboxes, or its JSON where it does not read. Its answer only says the list was taken, so none is shown. */
+/** A to-do list's row, a whole list's write or the list as it stood after one of Claude Code's task calls (`agent-todos.ts`): how far the list has got, and the list as checkboxes. The call's answer only says the list was taken, so none is shown. */
+export function todosListView(todos: CodingAgentTodos["todos"]): ToolCallView {
+  return {
+    kind: CALL_KIND.TODOS,
+    subject: todosSummary(todos),
+    input: textBlock(todos.map(todoLine).join("\n")),
+    output: undefined,
+  };
+}
+
+/** A to-do write's row: the list it carries, or its JSON where it does not read. */
 function todosToolView(input: WireValue | undefined): ToolCallView {
   const todos = todosView(input);
   if (todos === undefined) {
@@ -356,12 +366,7 @@ function todosToolView(input: WireValue | undefined): ToolCallView {
       output: undefined,
     };
   }
-  return {
-    kind: CALL_KIND.TODOS,
-    subject: todosSummary(todos),
-    input: textBlock(todos.map(todoLine).join("\n")),
-    output: undefined,
-  };
+  return todosListView(todos);
 }
 
 const readPost = Schema.decodeUnknownOption(inboxPostInputSchema);
