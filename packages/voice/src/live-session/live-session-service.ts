@@ -110,7 +110,8 @@ const RUN_END_NOTE = {
  * confirmed before it is told, and the stop instruction has the voice wait
  * for the developer, so this is context for its next reply and never speech.
  */
-const STOPPED_RUN_NOTE = "The developer stopped this ask, and your backend's work on it was cancelled.";
+const STOPPED_RUN_NOTE =
+  "The developer stopped this ask, and your backend's work on it was cancelled.";
 
 /**
  * What a call back is told of Luke's words the developer did not hear because
@@ -124,11 +125,16 @@ function missedWorkNote(missed: string, working: boolean): string {
 
 /**
  * How the developer's words no ask carried are handed to the brain as the
- * call ends: what they settle is still the plan's, and nothing Luke answers
- * is heard on this call.
+ * call ends: nothing Luke answers is heard, and what they settle is still
+ * the plan's where the agent is on a task, or the agent's own to carry out
+ * where it is on none, since only an agent on a task has a plan to write.
  */
-const UNHEARD_ASK_NOTE =
-  "The call has ended, and no ask carried the developer's latest line above: write into the plan whatever it settles; nothing you answer is heard now. Their line:";
+function unheardAskNote(hasTask: boolean): string {
+  const settles = hasTask
+    ? "write into the plan whatever it settles"
+    : "carry out whatever it settles, and put a question for the developer in a thread";
+  return `The call has ended, and no ask carried the developer's latest line above. Nothing you write is heard now: ${settles}. Their line:`;
+}
 
 /**
  * What the voice is told, silently, of a line the developer typed into the
@@ -298,6 +304,8 @@ export interface AdoptableSession extends Pick<LiveSessionOpened, "sessionId" | 
 export interface LiveSessionServiceOptions {
   createId: () => string;
   report: (message: string) => void;
+  /** Whether the call's agent is on a task, whose plan the developer's last unheard line is written into. */
+  hasTask: boolean;
   /** What the standing session's voice and brain are doing, told whole on a change alone. */
   onStatus?: (status: LiveSessionStatus) => void;
   /** Code the brain named is to go on the developer's screen now, as Luke starts to speak. */
@@ -914,10 +922,11 @@ export class LiveSessionService {
         submissionId,
         question: [
           renderAskContext({ turns, ask: context.ask }),
-          `${UNHEARD_ASK_NOTE} ${last.trim()}`,
+          `${unheardAskNote(this.#options.hasTask)} ${last.trim()}`,
         ].join("\n"),
         sessionId: session.sessionId,
         revision: session.revisions,
+        heard: false,
       });
       if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED || rows.length === 0) return;
       yield* this.#attachAsk(
@@ -1040,6 +1049,7 @@ export class LiveSessionService {
           question,
           sessionId: session.sessionId,
           revision: asked.revision,
+          heard: true,
         });
         const rowIds = rows.map((row) => row.rowId);
         this.#markAsked(session, rowIds);
@@ -1526,6 +1536,7 @@ export class LiveSessionService {
         question,
         sessionId: session.sessionId,
         revision: asked.revision,
+        heard: true,
       });
       // The rule is applied once more over the same span before the attach: the
       // API delivers a delegation ahead of the deltas it is about, and one that

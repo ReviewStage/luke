@@ -2453,7 +2453,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             );
             const refused = runCallTool(BRAIN_HOST_TURN.TYPED, tool, () => accepted);
             assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
-            assert.match(String(refused.reason), /No call is live/u);
+            assert.match(String(refused.reason), /This turn is typed/u);
           }
         }),
     );

@@ -239,6 +239,7 @@ async function stand(
         backend: CALL_BACKEND,
         writer,
         eve,
+        hasTask: true,
         createId: () => randomUUID(),
         report: (message) => reports.push(message),
       }),
@@ -350,7 +351,7 @@ it.live(
 );
 
 it.live(
-  "the developer's words no ask carried reach Luke as the call's exchange closes, so a correction said before hanging up still reaches the plan",
+  "the developer's words no ask carried reach Luke as the call's exchange closes, so a correction said before hanging up still reaches the plan, on a typed turn since no one hears the answer",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
@@ -371,7 +372,7 @@ it.live(
       yield* Effect.promise(() => f.exchange.stop());
       assert.deepEqual(
         f.eve.opened.map((message) => [message.conversationId, message.turn]),
-        [[target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
+        [[target.conversationId, BRAIN_HOST_TURN.TYPED]],
       );
       assert.ok(
         JSON.stringify(f.eve.opened[0]?.message).includes(

@@ -62,11 +62,13 @@ const readWithdrawnQuestion = Schema.decodeUnknownResult(WITHDRAW_QUESTION_INPUT
 export const QUEUE_QUESTION_TOOL = {
   name: AGENT_TOOL.QUEUE_QUESTION,
   description:
-    "Hand Luke one question for the developer the moment you have it, with your recommended " +
+    "Works only on a turn spoken on a voice call, and is refused on any other; off a call, ask " +
+    "the developer with `post_thread` instead. On a call, hand Luke one question for the " +
+    "developer the moment you have it, with your recommended " +
     "answer. Luke asks queued questions one at a time, in the order you queued them, the next " +
     "once the developer has answered, while you keep working. Call it once per question, " +
-    "before reading the repository or thinking further. Answers `accepted`, or `rejected` for " +
-    "an unreadable call.",
+    "before reading the repository or thinking further. Answers `accepted`, or `rejected` off " +
+    "a call or for an unreadable call.",
   inputSchema: QUEUE_QUESTION_INPUT,
 } as const;
 
@@ -90,9 +92,11 @@ export function runQueueQuestion(input: UnparsedWireValue): WireRecord {
 export const WITHDRAW_QUESTION_TOOL = {
   name: AGENT_TOOL.WITHDRAW_QUESTION,
   description:
-    "Take back a question you queued that an answer has made moot, in the words you queued it, " +
-    "so Luke never asks it. A question Luke has already asked is not taken back. Answers " +
-    "`accepted`, or `rejected` for an unreadable call.",
+    "Works only on a turn spoken on a voice call, and is refused on any other; off a call, a " +
+    "question goes to `post_thread`. On a call, take back a question you queued that an answer " +
+    "has made moot, in the words you queued it, so Luke never asks it. A question Luke has " +
+    "already asked is not taken back. Answers `accepted`, or `rejected` off a call or for an " +
+    "unreadable call.",
   inputSchema: WITHDRAW_QUESTION_INPUT,
 } as const;
 

@@ -179,7 +179,7 @@ const TURN_KIND_LINE = {
   SPOKEN_AGAIN:
     'This turn is spoken too: the developer is still on the call, and "This turn is spoken" above still holds.',
   TYPED_AFTER_CALL:
-    'This turn is typed: no call is live, so "This turn is spoken" above no longer holds. Your words are read, not heard, and a question for the developer goes in a thread.',
+    'This turn is typed (nothing you write is heard), so "This turn is spoken" above no longer holds: your words are read, and a question for the developer goes in a thread.',
 } as const;
 
 /**

@@ -2,7 +2,7 @@ import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
-import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
+import type { BrainHostTurn } from "../agents/brain-host/bounds.js";
 import type { AgentSessions, EveMount } from "../agents/brain-host/eve-sessions.js";
 import { CALL_BACKEND } from "./call-backend.js";
 import {
@@ -33,11 +33,8 @@ import { upstreamSideband } from "./live-sideband.js";
 interface ExchangeAttachmentDeps {
   /** The store writer an agent's rows are written through, holding them to the tools it may call. */
   readonly writer: StoreWriter;
-  /** eve as the deployment reaches it for one account under one mount, for a spoken ask alone, composed by the caller so no secret enters here. */
-  readonly eve: (
-    accountId: string,
-    mount: EveMount,
-  ) => AgentSessions<typeof BRAIN_HOST_TURN.SPOKEN>;
+  /** eve as the deployment reaches it for one account under one mount, for a spoken ask, as a typed turn where no one hears it, composed by the caller so no secret enters here. */
+  readonly eve: (accountId: string, mount: EveMount) => AgentSessions<BrainHostTurn>;
   readonly createId: () => string;
   /** Where a standing exchange's own reports go. */
   readonly report: (message: string) => void;
@@ -101,6 +98,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         timeZone: session.timeZone,
         writer: deps.writer,
         eve: deps.eve(session.accountId, CALL_BACKEND.mount),
+        hasTask: session.taskId !== undefined,
         createId: deps.createId,
         report: deps.report,
         ...(session.onActivity ? { onActivity: session.onActivity } : undefined),
