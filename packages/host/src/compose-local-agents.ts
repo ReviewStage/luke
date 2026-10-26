@@ -559,29 +559,33 @@ export function composeLocalAgents(
             const runnerScope = yield* Scope.fork(agentScope);
             const stdin = yield* Queue.unbounded<string>();
             const encoder = new TextEncoder();
-            const started = yield* ChildProcess.make(
-              platform.launcher,
-              [had.node, platform.runnerBundle],
-              {
-                cwd: layout.checkoutPath,
-                env: {
-                  ...shellVariables,
-                  TMPDIR: temp,
-                  ...platform.runnerEnv,
-                  ...secrets.env,
-                },
-                extendEnv: false,
-                // Note that stdin stays open past the first lines, since every later line of the agent's is written to it.
-                stdin: {
-                  stream: Stream.fromQueue(stdin).pipe(Stream.map((text) => encoder.encode(text))),
-                  endOnDone: false,
-                },
-                // Note that nothing the runner prints is kept, since a credential must never reach a log.
-                stdout: "ignore",
-                stderr: "ignore",
-                forceKillAfter: KILL_GRACE,
+            const command = platform.launch({
+              agentId,
+              folder: layout.folder,
+              checkout: layout.checkoutPath,
+              node: had.node,
+              bundle: platform.runnerBundle,
+              env: {
+                ...shellVariables,
+                TMPDIR: temp,
+                ...platform.runnerEnv,
+                ...secrets.env,
               },
-            ).pipe(Scope.provide(runnerScope), Effect.option);
+            });
+            const started = yield* ChildProcess.make(command.command, [...command.args], {
+              cwd: layout.checkoutPath,
+              env: command.env,
+              extendEnv: false,
+              // Note that stdin stays open past the first lines, since every later line of the agent's is written to it.
+              stdin: {
+                stream: Stream.fromQueue(stdin).pipe(Stream.map((text) => encoder.encode(text))),
+                endOnDone: false,
+              },
+              // Note that nothing the runner prints is kept, since a credential must never reach a log.
+              stdout: "ignore",
+              stderr: "ignore",
+              forceKillAfter: KILL_GRACE,
+            }).pipe(Scope.provide(runnerScope), Effect.option);
             if (Option.isNone(started)) {
               yield* Scope.close(runnerScope, Exit.void);
               return yield* settle(line.id, NOT_STARTED);
