@@ -538,6 +538,10 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
         PATH: pathWithCodexTools(config.executable, env.PATH),
         [RUNNER_ENV.CLAUDE_TOKEN]: undefined,
         [RUNNER_ENV.API_KEY]: undefined,
+        // Note that on the Mac's own sign-in no key of Luke's reaches app-server, were one handed to the launch.
+        ...(launch.auth.kind === CODEX_AUTH.OWN_LOGIN
+          ? { [RUNNER_ENV.OPENAI_API_KEY]: undefined }
+          : undefined),
       },
     },
     listenerFor(seen),
