@@ -114,7 +114,8 @@ function watched(input: WireValue | undefined): string {
  * it changed, a search as `glob` or `grep`, a page and a web search as
  * `read_web_page` and `web_search`, the list as `write_todos`, a skill as
  * `load_skill`, and a monitor as the command it watches. A subagent's
- * call and a scheduled wakeup keep their names.
+ * call, a scheduled wakeup, and a call on the CLI's task list keep their
+ * names.
  */
 const CLAUDE_CODE_CALLS: Record<
   (typeof CLAUDE_CODE_TOOL)[keyof typeof CLAUDE_CODE_TOOL],
@@ -203,6 +204,11 @@ const CLAUDE_CODE_CALLS: Record<
   }),
   // Note that a wakeup keeps its name, because it schedules a prompt for later rather than pausing the turn as `sleep` does: it is drawn as a plain call, its reason and prompt in its body.
   [CLAUDE_CODE_TOOL.SCHEDULE_WAKEUP]: (call) => call,
+  // Note that a task call keeps its name, because no one call carries the list: the tab folds the calls before it into the list as it stood after each (`agent-todos.ts`), and draws that as `write_todos`'s.
+  [CLAUDE_CODE_TOOL.TASK_CREATE]: (call) => call,
+  [CLAUDE_CODE_TOOL.TASK_UPDATE]: (call) => call,
+  [CLAUDE_CODE_TOOL.TASK_LIST]: (call) => call,
+  [CLAUDE_CODE_TOOL.TASK_GET]: (call) => call,
   // Note that a subagent's call keeps its name, which the tab draws as a delegation's row, its model named as the catalog names Anthropic's.
   [CLAUDE_CODE_TOOL.AGENT]: (call) => ({ ...call, input: withMaker(call.input, ANTHROPIC) }),
 };

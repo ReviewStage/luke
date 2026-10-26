@@ -1,6 +1,10 @@
 import { REPLAY_STEP_KIND, type Replay, type ReplayStep } from "@luke/features/agent-replay";
 import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-agent-view";
-import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type {
+  CodingAgentPullRequest,
+  CodingAgentSummary,
+  CodingAgentTodos,
+} from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import {
@@ -43,6 +47,7 @@ import {
   replayCount,
   replayLede,
   replayPage,
+  replayTaskTodos,
   replayVerb,
   replayWords,
   STEP_VIEW,
@@ -326,8 +331,17 @@ function CallStep({
  * words as its words; and a call as a call's row, folded onto its input
  * and its result, which run long.
  */
-function StepRow({ step, place }: { step: ReplayStep; place: ReplayPlace }): React.JSX.Element {
-  const view = stepView(step);
+function StepRow({
+  step,
+  todos,
+  place,
+}: {
+  step: ReplayStep;
+  /** The to-do list as it stood after the step, where it is one of Claude Code's task calls (`replayTaskTodos`). */
+  todos: CodingAgentTodos["todos"] | undefined;
+  place: ReplayPlace;
+}): React.JSX.Element {
+  const view = stepView(step, todos);
   switch (view.kind) {
     case STEP_VIEW.LINE:
       return <LineStep view={view} readerId={place.readerId} />;
@@ -384,6 +398,7 @@ function ReplaySteps({
   const page = replayPage(steps.length, finding ? steps.length : shown);
   // Note that the replay's calls stand in its first message's words, which the transcript's own check for a server's call never reads.
   const callsServer = useMemo(() => replayCallsServer(steps), [steps]);
+  const todos = useMemo(() => replayTaskTodos(steps), [steps]);
   const drawMore = () => {
     if (page.next === page.from) list.current?.focus({ preventScroll: true });
     setShown(steps.length - page.from + page.next);
@@ -410,7 +425,12 @@ function ReplaySteps({
       <ConnectionNames needed={callsServer}>
         {steps.slice(page.from).map((step, index) => (
           // Note that a step is keyed by its place among them all, because the replay never changes once handed, and a page landing above keeps the rows below as they were.
-          <StepRow key={page.from + index} step={step} place={place} />
+          <StepRow
+            key={page.from + index}
+            step={step}
+            todos={todos.get(page.from + index)}
+            place={place}
+          />
         ))}
       </ConnectionNames>
     </div>
