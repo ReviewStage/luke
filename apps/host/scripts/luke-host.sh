@@ -22,9 +22,19 @@ uninstall() {
       systemctl --user stop 'luke-agent-*.service' >/dev/null 2>&1 || true
     loginctl disable-linger "$HOST_USER" >/dev/null 2>&1 || true
     loginctl terminate-user "$HOST_USER" >/dev/null 2>&1 || true
+    # Every process of the user's is waited out, and killed after ten seconds, before the user goes.
+    waited=0
+    while pgrep -u "$uid" >/dev/null 2>&1 && [ "$waited" -lt 10 ]; do
+      sleep 1
+      waited=$((waited + 1))
+    done
+    pkill -KILL -u "$uid" >/dev/null 2>&1 || true
     home="$(getent passwd "$HOST_USER" | cut -d: -f6)"
-    userdel "$HOST_USER" >/dev/null 2>&1 || true
-    # Note that the home is removed by its path only where it is the daemon's own.
+    # Note that the home, which holds the box's secret, is removed only once the user is gone.
+    if ! userdel "$HOST_USER"; then
+      printf 'Could not remove the %s user, so its home %s is left in place. Stop its processes and run this again.\n' "$HOST_USER" "$home" >&2
+      exit 1
+    fi
     if [ "$home" = "/var/lib/luke-host" ]; then
       rm -rf "$home"
     fi

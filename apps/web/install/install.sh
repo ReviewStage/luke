@@ -74,6 +74,10 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$VERSION" ] || fail "Luke host has no release yet."
+case "$ORIGIN" in
+  https://*) ;;
+  *) fail "--origin must be an https:// address, not $ORIGIN" ;;
+esac
 [ "$(id -u)" -eq 0 ] || fail "Run it as root: curl -fsSL $ORIGIN/install.sh | sudo sh -s -- --token <token>"
 [ "$(uname -s)" = "Linux" ] || fail "Luke host runs on Linux."
 command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] || fail "Luke host needs systemd."
@@ -162,8 +166,15 @@ ok "$made"
 name="$(hostname -s 2>/dev/null || hostname)"
 if [ -n "$token" ]; then
   # Note that the token goes in on stdin, never an argument another user could read.
-  enrolled="$(printf '%s\n' "$token" | runuser -u "$HOST_USER" -- env HOME="$HOST_HOME" \
-    "$INSTALL_DIR/bin/luke-host" enroll --name "$name" --origin "$ORIGIN")" || exit 1
+  # Note that a box enrolled before keeps running on that enrollment where this one is refused.
+  if ! enrolled="$(printf '%s\n' "$token" | runuser -u "$HOST_USER" -- env HOME="$HOST_HOME" \
+    "$INSTALL_DIR/bin/luke-host" enroll --name "$name" --origin "$ORIGIN")"; then
+    if [ -f "$HOST_HOME/state/device.json" ] && [ -f "$UNIT_FILE" ]; then
+      systemctl restart "$UNIT" || true
+      fail "Not enrolled again: $INSTALL_DIR was upgraded and $UNIT restarted on this box's existing enrollment."
+    fi
+    exit 1
+  fi
   ok "$enrolled"
 else
   ok "Kept this box's enrollment"
