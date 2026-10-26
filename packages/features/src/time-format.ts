@@ -177,6 +177,11 @@ export function clockText(hour: number, minute: number): string {
   return `${hour % 12 === 0 ? 12 : hour % 12}:${String(minute).padStart(2, "0")} ${half}`;
 }
 
+/** A day as a line names it, with its year only where it is not `now`'s: "Oct 11". */
+export function dateOfText(at: number, now: number): string {
+  return dateText(at, now, true);
+}
+
 /** A day alone, with its year: "Oct 11, 2026". */
 export function dayText(at: number): string {
   return DAY_WITH_YEAR.format(at);

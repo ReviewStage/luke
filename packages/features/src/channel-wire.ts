@@ -53,6 +53,8 @@ export const channelSchema = EffectSchema.Struct({
   lookedAt: EffectSchema.optionalKey(countedNumber),
   /** When the latest of its threads the reader may read was posted, which a row beside `lookedAt` reads as unread; absent where it holds none. */
   latestPostedAt: EffectSchema.optionalKey(countedNumber),
+  /** How many of its threads the reader may read; absent from a service before it. */
+  threads: EffectSchema.optionalKey(countedNumber),
 });
 
 export type Channel = typeof channelSchema.Type;
@@ -99,7 +101,7 @@ export const channelUnarchiveRequestSchema = EffectSchema.Struct(channelOfWorksp
 
 export type ChannelUnarchiveRequest = typeof channelUnarchiveRequestSchema.Type;
 
-/** One archived channel of a workspace: what it was, and when it was archived. Its threads stay readable. */
+/** One archived channel of a workspace: what it was, when it was archived, and what it holds for the reader, as an open one does. Its threads stay readable. */
 export const archivedChannelSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   name: EffectSchema.String,
@@ -108,6 +110,12 @@ export const archivedChannelSchema = EffectSchema.Struct({
   createdBy: EffectSchema.optionalKey(EffectSchema.String),
   createdAt: countedNumber,
   archivedAt: countedNumber,
+  /** How many of its threads hold an ask open that waits on the reader; absent from a service before it. */
+  waiting: EffectSchema.optionalKey(countedNumber),
+  /** When the latest of its threads the reader may read was posted; absent where it holds none. */
+  latestPostedAt: EffectSchema.optionalKey(countedNumber),
+  /** How many of its threads the reader may read; absent from a service before it. */
+  threads: EffectSchema.optionalKey(countedNumber),
 });
 
 export type ArchivedChannel = typeof archivedChannelSchema.Type;

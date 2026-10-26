@@ -8,6 +8,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
+import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
@@ -35,7 +36,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import { TaskCard } from "../desktop/task-card.js";
 import { MemberDirectory } from "../member-directory.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -160,6 +161,57 @@ const AUDIT: AutomationSummary = {
   id: "3f0e6f5c-7d1a-4f6e-9a55-000000000002",
   workspaceId: BETA.id,
   name: "Weekly audit",
+};
+
+/** The time a channel's card counts back from: Oct 26, 2026, 3 PM, on the machine's own clock. */
+const CHANNELS_NOW = new Date(2026, 9, 26, 15).getTime();
+
+const MINUTE = 60_000;
+
+/** A standing channel Sam made, its latest post three minutes old, nothing in it waiting on the reader. */
+const BILLING: Channel = {
+  id: "6a1d2c3b-4e5f-4a6b-8c7d-0e1f2a3b4c51",
+  name: "billing",
+  purpose: "Invoices, plans, and the payment provider",
+  project: false,
+  createdBy: SAM,
+  createdAt: new Date(2026, 9, 25, 12).getTime(),
+  waiting: 0,
+  latestPostedAt: CHANNELS_NOW - 3 * MINUTE,
+  threads: 42,
+};
+
+/** A project channel with two asks waiting on the reader. */
+const LAUNCH_WEEK: Channel = {
+  ...BILLING,
+  id: "6a1d2c3b-4e5f-4a6b-8c7d-0e1f2a3b4c52",
+  name: "launch-week",
+  purpose: "Everything for the launch",
+  project: true,
+  waiting: 2,
+  threads: 12,
+};
+
+/** The workspace's #general, which the workspace minted itself, so nobody made it. */
+const { createdBy: _nobody, ...GENERAL_CHANNEL }: Channel = {
+  ...BILLING,
+  id: "6a1d2c3b-4e5f-4a6b-8c7d-0e1f2a3b4c53",
+  name: "general",
+  purpose: "Whatever fits nowhere else",
+};
+
+/** A project channel archived on Oct 26. */
+const PRICING_PAGE: ArchivedChannel = {
+  id: "6a1d2c3b-4e5f-4a6b-8c7d-0e1f2a3b4c54",
+  name: "pricing-page",
+  purpose: "The new pricing page",
+  project: true,
+  createdBy: SAM,
+  createdAt: new Date(2026, 9, 20, 12).getTime(),
+  archivedAt: new Date(2026, 9, 26, 9).getTime(),
+  waiting: 0,
+  latestPostedAt: CHANNELS_NOW - 3 * MINUTE,
+  threads: 5,
 };
 
 /** Main's document holding the plan, its page, and an Inbox item waiting on it. */
@@ -308,6 +360,7 @@ afterEach(() => {
   automationReads.length = 0;
   agentPageReads.length = 0;
   inboxRefused = false;
+  vi.useRealTimers();
 });
 
 /** The plan's card as the window's plans make it, with what a chip hangs it for. */
@@ -356,6 +409,9 @@ async function drawn(
     ...inboxes.procedures,
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) =>
       Promise.resolve(workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS),
+    [ACT_KIND.CHANNELS_LIST]: () =>
+      Promise.resolve({ channels: [BILLING, LAUNCH_WEEK, GENERAL_CHANNEL] }),
+    [ACT_KIND.CHANNELS_ARCHIVED]: () => Promise.resolve({ channels: [PRICING_PAGE] }),
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       automationReads.push(payload.workspaceId);
       const beta = payload.workspaceId === BETA.id;
@@ -418,6 +474,11 @@ async function cardOf(chip: Element | undefined) {
     details: [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
       (detail) => detail.textContent,
     ),
+    detailWords: [
+      ...card.querySelectorAll(
+        '.luke-hover-card-row[data-look="detail"] .luke-hover-card-row-label',
+      ),
+    ].map((label) => label.textContent),
   };
   assert.equal(carriesWords(card, look.name ?? ""), false, "the card's words ride no attribute");
   act(() => {
@@ -737,4 +798,43 @@ test("a member's chip under a link naming its workspace by id, as one with no sl
   const member = await cardOf(chipsOf(container)[0]);
 
   assert.deepEqual([member.name, member.corner], ["Sam Okafor", "Member"]);
+});
+
+/** The card a channel's chip hangs, its workspace's channels read as it is first hung, counted back from `CHANNELS_NOW`. */
+async function channelCard(channel: { readonly id: string; readonly name: string }) {
+  vi.useFakeTimers({ now: CHANNELS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
+  const container = await drawn(`In [${channel.name}](${HOME}/channel/${channel.id}).`);
+  return cardOf(chipsOf(container)[0]);
+}
+
+test("a channel's chip hangs its card: its bare name, its kind and how many threads it holds, its latest post's age, its purpose, and who made it and when", async () => {
+  const standing = await channelCard(BILLING);
+  const project = await channelCard(LAUNCH_WEEK);
+
+  assert.equal(standing.card, "data-channel-card");
+  assert.deepEqual(
+    [standing.name, standing.sub, standing.corner, standing.notes],
+    ["billing", "Channel · 42 threads", "3m", ["Invoices, plans, and the payment provider"]],
+  );
+  assert.deepEqual(standing.detailWords, ["Created by Sam Okafor · Oct 25"]);
+  assert.equal(project.sub, "Project · 12 threads");
+});
+
+test("a channel's corner says how many asks in it wait on the reader rather than its latest post's age", async () => {
+  const card = await channelCard(LAUNCH_WEEK);
+
+  assert.equal(card.corner, "2 need you");
+});
+
+test("#general, which nobody made, hangs its card without the line saying who made it", async () => {
+  const card = await channelCard(GENERAL_CHANNEL);
+
+  assert.deepEqual([card.card, card.name], ["data-channel-card", "general"]);
+  assert.deepEqual(card.details, []);
+});
+
+test("an archived project's card says when it was archived in its size's place", async () => {
+  const card = await channelCard(PRICING_PAGE);
+
+  assert.equal(card.sub, "Project · archived Oct 26");
 });

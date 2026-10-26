@@ -2573,14 +2573,22 @@ const findChannelThreads = SqlSchema.findAll({
     }),
 });
 
-/** The latest posted thread of each channel of the workspace, among those the reader may read. */
-const findChannelLatestPosts = SqlSchema.findAll({
+/** How many threads each channel of the workspace holds and when the latest was posted, among those the reader may read. */
+const findChannelPostTallies = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
-  Result: Schema.Struct({ channelId: Schema.String, latestPostedAt: InstantColumnSchema }),
+  Result: Schema.Struct({
+    channelId: Schema.String,
+    latestPostedAt: InstantColumnSchema,
+    threads: Schema.Number,
+  }),
   execute: ({ userId, organizationId }) =>
     Database.use((db) =>
       db
-        .select({ channelId: inboxItem.channelId, latestPostedAt: max(inboxItem.postedAt) })
+        .select({
+          channelId: inboxItem.channelId,
+          latestPostedAt: max(inboxItem.postedAt),
+          threads: sql<number>`count(*)::int`,
+        })
         .from(inboxItem)
         .where(and(eq(inboxItem.organizationId, organizationId), itemReachableBy(userId)))
         .groupBy(inboxItem.channelId),
@@ -2668,14 +2676,26 @@ function threadAgent(row: typeof ChannelThreadRowSchema.Type): {
   return { agent: { title, model, ...(automationName === null ? {} : { automationName }) } };
 }
 
-/** When the latest thread the reader may read was posted in each channel of the workspace, by channel; a channel with none is left out, and every one for a workspace the account is not in. */
-export function channelLatestPosts(
+/** What a channel holds of the threads the reader may read: how many, and when the latest was posted. */
+export interface ChannelPostTally {
+  readonly latestPostedAt: number;
+  readonly threads: number;
+}
+
+/** What each channel of the workspace holds of the threads the reader may read, by channel, read in one statement; a channel with none is left out, and every one for a workspace the account is not in. */
+export function channelPostTallies(
   userId: string,
   organizationId: string,
-): InboxStoreEffect<ReadonlyMap<string, number>> {
+): InboxStoreEffect<ReadonlyMap<string, ChannelPostTally>> {
   return Effect.map(
-    findChannelLatestPosts({ userId, organizationId }),
-    (rows) => new Map(rows.map((row) => [row.channelId, row.latestPostedAt.getTime()])),
+    findChannelPostTallies({ userId, organizationId }),
+    (rows) =>
+      new Map(
+        rows.map((row) => [
+          row.channelId,
+          { latestPostedAt: row.latestPostedAt.getTime(), threads: row.threads },
+        ]),
+      ),
   );
 }
 

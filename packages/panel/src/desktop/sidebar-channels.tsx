@@ -17,6 +17,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
+import { ChannelCard } from "../tasks/channel-card.js";
 import { useChannelMenu } from "../tasks/channel-menu.js";
 import {
   CHANNEL_SECTIONS,
@@ -40,7 +41,9 @@ import { needsYouNoun } from "./places-waiting.js";
  * and name, and at its end how many open asks in it wait on the reader, in
  * the attention's tone; its name stands in the unread weight while
  * something was posted in it since the reader last looked
- * (`channelUnread`). A press shows the channel in the Inbox's place, and
+ * (`channelUnread`). Resting on a row hangs the channel's card beside it
+ * after the hint's wait, as every other sidebar row's card hangs
+ * (`channel-card.tsx`). A press shows the channel in the Inbox's place, and
  * its row is marked while it stands there. While the channels are first
  * read, each section stands a few rows' blocks in its rows' place
  * (`SidebarChannelRowsSkeleton`), and where that read failed, the Channels
@@ -62,15 +65,17 @@ const CHANNELS_NOT_READ = "Could not read this workspace's channels.";
 /** What each section's head offers beside its "+", which opens the section's archived channels. */
 const BROWSE_ARCHIVED = "Browse archived channels";
 
-/** One channel's row: its glyph, its name, in the unread weight while something in it is unread, what waits on the reader in it, and its menu. */
+/** One channel's row: its glyph, its name, in the unread weight while something in it is unread, what waits on the reader in it, its card, and its menu. */
 function ChannelRow({
   channel,
+  workspaceId,
   current,
   shown,
   groups,
   onOpen,
 }: {
   channel: Channel;
+  workspaceId: string | undefined;
   current: boolean;
   shown: boolean;
   groups: MenuAction[][];
@@ -79,21 +84,27 @@ function ChannelRow({
   const menu = useMenu(shown);
   return (
     <>
-      <NavItem
-        icon={<GLYPH.CHANNEL />}
-        current={current ? NAV_CURRENT.PAGE : undefined}
-        unread={channelUnread(channel)}
-        count={{
-          value: channel.waiting,
-          noun: needsYouNoun(channel.waiting),
-          tone: STATUS_TONE.ATTENTION,
-        }}
-        contextMenu={menu.contextMenu()}
-        roving
-        onClick={onOpen}
+      <Tooltip
+        label={channel.name}
+        card={<ChannelCard channel={channel} workspaceId={workspaceId} />}
+        cardBeside
       >
-        {channel.name}
-      </NavItem>
+        <NavItem
+          icon={<GLYPH.CHANNEL />}
+          current={current ? NAV_CURRENT.PAGE : undefined}
+          unread={channelUnread(channel)}
+          count={{
+            value: channel.waiting,
+            noun: needsYouNoun(channel.waiting),
+            tone: STATUS_TONE.ATTENTION,
+          }}
+          contextMenu={menu.contextMenu()}
+          roving
+          onClick={onOpen}
+        >
+          {channel.name}
+        </NavItem>
+      </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`#${channel.name} actions`}
@@ -160,6 +171,7 @@ export function SidebarChannels({
           <ChannelRow
             key={channel.id}
             channel={channel}
+            workspaceId={workspaceId}
             current={channel.id === currentId}
             shown={shown}
             groups={menu.groups(channel)}

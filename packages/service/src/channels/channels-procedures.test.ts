@@ -153,6 +153,8 @@ it.layer(getTestDB())("the channels route", (it) => {
                 createdBy: dean,
                 createdAt: 2,
                 archivedAt: 3,
+                waiting: 0,
+                threads: 0,
               },
             ],
           },
