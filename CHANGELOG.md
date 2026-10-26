@@ -65,6 +65,79 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.22.0 — 2026-10-26
+
+### Menus rise from the bottom on a phone
+
+On a phone, or in a window small enough to draw the phone layout, a row's ⋯,
+a long press, and a right-click open their menu as a sheet from the bottom of
+the screen, every item in reach, rather than a menu floating over the page.
+([#5552](https://github.com/ReviewStage/luke/pull/5552))
+
+### Long transcripts stay fast
+
+An agent that has run for days, thousands of tool calls and dozens of workers
+long, scrolls and streams as smoothly as a fresh one: Luke draws only the part
+of a long turn you can see, and a row arriving no longer restyles the whole
+window.
+([#5499](https://github.com/ReviewStage/luke/pull/5499),
+[#5503](https://github.com/ReviewStage/luke/pull/5503))
+
+### Improvements
+
+- A Claude Code agent's to-dos draw as its docked to-do list, as other agents'
+  do ([#5555](https://github.com/ReviewStage/luke/pull/5555))
+- Claude Code and Codex agents hear what was said on a call, your time, and
+  what changed on their task, as Luke's own agents do
+  ([#5549](https://github.com/ReviewStage/luke/pull/5549))
+- An agent working without a repository can write files
+  ([#5539](https://github.com/ReviewStage/luke/pull/5539))
+- An Inbox chip in a transcript opens its item in its task's Inbox tab
+  ([#5532](https://github.com/ReviewStage/luke/pull/5532))
+- Settings on a phone or a small window names its page in the bar beside Back,
+  with no empty band under it
+  ([#5495](https://github.com/ReviewStage/luke/pull/5495))
+- A row's ⋯ lights only its dots, and on the web a row whose menu is open
+  wears a softer outline ([#5553](https://github.com/ReviewStage/luke/pull/5553))
+- Automations and Runs rows look and light like every other list's, and an
+  automation agent's run bar is a bar like every tab's
+  ([#5526](https://github.com/ReviewStage/luke/pull/5526),
+  [#5520](https://github.com/ReviewStage/luke/pull/5520),
+  [#5531](https://github.com/ReviewStage/luke/pull/5531))
+- New thread's Subject sits on the same ground as its message box, and Link
+  issue stands at the title's edge
+  ([#5527](https://github.com/ReviewStage/luke/pull/5527))
+
+### Fixes
+
+- Fixed a message to a finished agent looking sent when it never reached the
+  agent ([#5550](https://github.com/ReviewStage/luke/pull/5550))
+- Fixed a Claude Code or Codex agent starting a second agent or sending a
+  message twice when it retried
+  ([#5548](https://github.com/ReviewStage/luke/pull/5548))
+- Fixed Claude Code and Codex agents editing the plan past the cap on notes a
+  turn ([#5540](https://github.com/ReviewStage/luke/pull/5540))
+- Fixed an agent's worker being able to push or write to GitHub
+  ([#5554](https://github.com/ReviewStage/luke/pull/5554))
+- Fixed an agent sending a call's last, unheard line as though it was spoken
+  ([#5542](https://github.com/ReviewStage/luke/pull/5542))
+- Fixed Run now on an automation promising its agent an event that never
+  came ([#5538](https://github.com/ReviewStage/luke/pull/5538))
+- Fixed an agent starting from a long conversation working from a cut-off
+  summary of it ([#5535](https://github.com/ReviewStage/luke/pull/5535))
+- Fixed a log scrolling away from its newest line on its own
+  ([#5492](https://github.com/ReviewStage/luke/pull/5492),
+  [#5524](https://github.com/ReviewStage/luke/pull/5524))
+- Fixed a path cutting its crumbs short when it had room to fold them
+  ([#5547](https://github.com/ReviewStage/luke/pull/5547))
+- Fixed a tab narrowing while its menu was open
+  ([#5522](https://github.com/ReviewStage/luke/pull/5522))
+
+### Misc
+
+- Updated screen copy to cut lines that describe rather than instruct
+  ([#5506](https://github.com/ReviewStage/luke/pull/5506))
+
 ## 0.21.0 — 2026-10-25
 
 ### Undo, not "Are you sure?"
