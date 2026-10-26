@@ -297,12 +297,17 @@ interface ChannelThreadsRead {
   readonly failure: ChannelCallFailure | undefined;
 }
 
+/** Two threads in the order a channel posts them, its id breaking a tie, as the service pages them. */
+function postedOrder(a: ChannelThread, b: ChannelThread): number {
+  return a.postedAt - b.postedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
 /** The older pages and the latest as one stream, each thread once as the latest read it, oldest posted first. */
 function threadsOf(read: ChannelThreadsRead): readonly ChannelThread[] | undefined {
   if (read.latest === undefined) return undefined;
   const latest = new Set(read.latest.map((thread) => thread.id));
   return [...read.earlier.filter((thread) => !latest.has(thread.id)), ...read.latest].toSorted(
-    (a, b) => a.postedAt - b.postedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    postedOrder,
   );
 }
 
@@ -336,20 +341,25 @@ export function useChannelThreads(channelId: string | undefined): ChannelThreads
       }),
     [],
   );
-  // How many older threads the stream holds, which a refresh reads back as far as.
-  const held = useRef(0);
-  held.current = read !== undefined && read.channelId === channelId ? read.earlier.length : 0;
+  // The oldest thread the stream's older pages hold, which a refresh reads back past.
+  const held = useRef<ChannelThread | undefined>(undefined);
+  held.current = read !== undefined && read.channelId === channelId ? read.earlier[0] : undefined;
   const onRefresh = useCallback(() => {
     if (channelId === undefined) return;
-    const depth = held.current;
+    const oldest = held.current;
+    /** Whether the older pages read reach back to where the oldest held thread stood. */
+    const reached = (earlier: readonly ChannelThread[]) => {
+      const first = earlier[0];
+      return oldest === undefined || (first !== undefined && postedOrder(first, oldest) <= 0);
+    };
     const failed = (failure: ChannelCallFailure) => fold(channelId, (was) => ({ ...was, failure }));
-    // Note that the older pages held are read again too, so a thread moved out of one leaves the stream.
+    // Note that the older pages held are read again too, back past where the oldest stood rather than by count, so a thread moved out of one leaves the stream and one posted since drops none off its end.
     const reread = async () => {
       const latest = await act(ACT_KIND.CHANNELS_THREADS, { channelId });
       if ("failure" in latest) return failed(latest.failure);
       let earlier: readonly ChannelThread[] = [];
       let older = latest.older;
-      while (older !== undefined && earlier.length < depth) {
+      while (older !== undefined && !reached(earlier)) {
         const page = await act(ACT_KIND.CHANNELS_THREADS, { channelId, before: older });
         if ("failure" in page) return failed(page.failure);
         earlier = [...page.threads, ...earlier];
