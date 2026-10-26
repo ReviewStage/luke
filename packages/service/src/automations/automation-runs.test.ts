@@ -38,6 +38,7 @@ import {
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   type AutomationGuards,
+  type AutomationTrigger,
   GITHUB_TRIGGER_EVENT,
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
@@ -152,7 +153,7 @@ function fakeEve() {
 /** What a run reaches beside the store: GitHub reaching the repository, and the catalog. */
 const services = Layer.mergeAll(githubReaching(INSTALLATIONS).layer, modelCatalogOf(CATALOG));
 
-/** An owner, a task on the repository of its workspace's installation (or none), and an automation on it due a minute ago. */
+/** An owner, a task on the repository of its workspace's installation (or none), and an automation on it due a minute ago, on a weekday schedule unless another trigger is named. */
 const openAutomation = (
   options: {
     readonly repository?: string | null;
@@ -160,6 +161,7 @@ const openAutomation = (
     readonly archiveSuccessful?: boolean;
     readonly disabledServers?: readonly IntegrationProvider[];
     readonly prompt?: string;
+    readonly trigger?: AutomationTrigger;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -176,7 +178,11 @@ const openAutomation = (
     const made = yield* createAutomation(owner, {
       taskId: task.id,
       name: "Flaky-test sweep",
-      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+      trigger: options.trigger ?? {
+        kind: AUTOMATION_TRIGGER.SCHEDULE,
+        cron: "0 9 * * 1-5",
+        timezone: "UTC",
+      },
       action: {
         kind: AUTOMATION_ACTION.CODING_AGENT,
         prompt: options.prompt ?? PROMPT,
@@ -1126,6 +1132,29 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           ].join("\n"),
         );
         assert.equal(task.split("</github-event>").length, 2, "the fence closes once");
+      }),
+  );
+
+  it.effect(
+    "a run of a GitHub-triggered automation that GitHub did not fire tells its agent no event came, rather than promising one",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation({
+          trigger: {
+            kind: AUTOMATION_TRIGGER.GITHUB,
+            event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+          },
+        });
+        const eve = fakeEve();
+        const run = yield* runNow(automation);
+
+        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const task = Option.getOrThrow(yield* readCodingAgent(owner, agentId)).prompt ?? "";
+        assert.match(task, /No GitHub event came with this run/u);
+        assert.doesNotMatch(task, /<github-event>/u);
       }),
   );
 

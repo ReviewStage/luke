@@ -21,6 +21,7 @@ import {
   CODING_AGENT_BOUNDS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Effect, Option, Stream } from "effect";
@@ -159,36 +160,41 @@ function fakeEve() {
   return { sent, eveFor: () => Effect.succeed(sessions) };
 }
 
-/** An account whose plan's workspace reaches the repository, with one agent standing on a branch of its own, its session opened. */
-const openAgent = Effect.gen(function* () {
-  const owner = yield* openGithubUser();
-  yield* connectAgentApiKeys(owner);
-  const task = yield* startTask(owner, {
-    name: "Teammate invitations",
-    repository: RELAY_FULL_NAME,
+/** An account whose plan's workspace reaches the repository, with one agent on the `githubAccess` given standing on a branch of its own, its session opened. */
+const openAgentOn = (githubAccess: GitHubAccess) =>
+  Effect.gen(function* () {
+    const owner = yield* openGithubUser();
+    yield* connectAgentApiKeys(owner);
+    const task = yield* startTask(owner, {
+      name: "Teammate invitations",
+      repository: RELAY_FULL_NAME,
+    });
+    const installation = INSTALLATIONS[installationsConnected++];
+    assert.ok(installation);
+    yield* connectWorkspaceGitHub(task.workspaceId, installation);
+    const started = yield* createCodingAgent(owner, {
+      taskId: task.id,
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: "# Teammate invitations\n",
+      prompt: null,
+      repository: RELAY_FULL_NAME,
+      githubAccess,
+    });
+    const agent = Option.getOrThrow(started).agent;
+    const ref = `luke/teammate-invitations-${randomUUID()}`;
+    yield* updateCodingAgentBranch(owner, agent.id, ref);
+    yield* claimRuntimeSession(
+      { userId: owner, conversationId: agent.conversationId },
+      `wrun_${randomUUID()}`,
+      new Date(MADE_AT - 3_600_000),
+    );
+    return { owner, agent, ref, target: { userId: owner, conversationId: agent.conversationId } };
   });
-  const installation = INSTALLATIONS[installationsConnected++];
-  assert.ok(installation);
-  yield* connectWorkspaceGitHub(task.workspaceId, installation);
-  const started = yield* createCodingAgent(owner, {
-    taskId: task.id,
-    idempotencyKey: randomUUID(),
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    planSnapshot: "# Teammate invitations\n",
-    prompt: null,
-    repository: RELAY_FULL_NAME,
-  });
-  const agent = Option.getOrThrow(started).agent;
-  const ref = `luke/teammate-invitations-${randomUUID()}`;
-  yield* updateCodingAgentBranch(owner, agent.id, ref);
-  yield* claimRuntimeSession(
-    { userId: owner, conversationId: agent.conversationId },
-    `wrun_${randomUUID()}`,
-    new Date(MADE_AT - 3_600_000),
-  );
-  return { owner, agent, ref, target: { userId: owner, conversationId: agent.conversationId } };
-});
+
+/** {@link openAgentOn} an agent on the App's access, as most are. */
+const openAgent = openAgentOn(GITHUB_ACCESS.APP);
 
 /** The commit an agent's pull request's head stands at in the checks tests. */
 const HEAD = "0123abcd0123abcd0123abcd0123abcd0123abcd";
@@ -623,6 +629,32 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           !Array.isArray(eve.sent[0]?.message.message),
           "a reviewer's mention hands no note as the developer's",
         );
+      }),
+  );
+
+  it.effect(
+    "an agent on a member's token is sent to read a failed check with `gh api`, since `gh pr` does not work on its credential",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ref } = yield* openAgentOn(GITHUB_ACCESS.TOKEN);
+        yield* endedTurn(owner, agent.conversationId, MADE_AT - 60_000);
+        const failed: AgentWake = {
+          kind: AGENT_WAKE.CHECK_FAILED,
+          repository: RELAY_FULL_NAME,
+          branches: [ref],
+          pullRequest: 41,
+          url: `https://github.com/${RELAY_FULL_NAME}/commit/${HEAD}/checks`,
+          by: "github-actions[bot]",
+          at: MADE_AT,
+        };
+
+        yield* wakeAgents(eve.eveFor, failed, randomUUID(), LUKE_BOT).pipe(
+          Effect.provide(githubReaching(INSTALLATIONS).layer),
+        );
+
+        const text = sentText(eve.sent[0]?.message.message);
+        assert.ok(text.includes("Read why with `gh api`, fix the cause, and push"), text);
       }),
   );
 
