@@ -23,7 +23,9 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * installed skills all stand beneath it. Anything else is refused as a path
  * that names no file the agent may read: a read answers no bytes, and a
  * command does not run. A path that does not exist resolves to nothing,
- * and is refused the same way.
+ * and is refused the same way. A read inside the agent's own `gh` sign-in
+ * (`layout.githubConfig`), where a host keeps the agent's GitHub token, is
+ * refused too, however it is reached, so no token reaches a tool's answer.
  *
  * A read answers at most the bytes asked for, and never more than one past
  * `DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES`, so the caller still sees a file
@@ -103,6 +105,9 @@ const answeredRead = (layout: DeviceAgentLayout, args: unknown) =>
     if (Option.isNone(read)) return answer(null);
     const path = yield* confinedPath(layout, read.value.path);
     if (Option.isNone(path)) return answer(null);
+    const fileSystem = yield* FileSystem.FileSystem;
+    const withheld = yield* Effect.option(fileSystem.realPath(layout.githubConfig));
+    if (Option.isSome(withheld) && within(withheld.value, path.value)) return answer(null);
     const bound = Math.max(
       0,
       Math.min(read.value.maxBytes, DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES + 1),

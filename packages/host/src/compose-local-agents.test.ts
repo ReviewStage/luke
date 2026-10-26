@@ -13,6 +13,7 @@ import { it } from "@effect/vitest";
 import type { DeviceAgentClaimedLine } from "@luke/features";
 import {
   DEVICE_AGENT_LINE_KIND,
+  DEVICE_AGENT_REQUEST_KIND,
   DEVICE_ARCH,
   DEVICE_PLATFORM,
   deviceAgentLayout,
@@ -35,6 +36,14 @@ const LAYOUT = deviceAgentLayout(HOME, AGENT_ID);
 const GH_CONFIG_DIR = `${LAYOUT.folder}/gh`;
 const SECRET_ENV = { LUKE_RUNNER_TOKEN: "runner-secret" };
 const FIFTY_MINUTES = Duration.minutes(50);
+
+/** A command one of the agent's tools asks the box to run in its worktree. */
+const COMMAND = {
+  id: "3c2b1a0f-9e8d-4c7b-a6f5-e4d3c2b1a0f9",
+  agentId: AGENT_ID,
+  kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
+  args: { command: "git fetch origin" },
+};
 
 const LAUNCH: DeviceAgentClaimedLine = {
   line: {
@@ -66,14 +75,19 @@ const following = (githubFromLuke: boolean) =>
     const asked: string[] = [];
     const reported: string[] = [];
     let linesRead = 0;
+    let requestsRead = 0;
     const client = {
       register: () => Effect.succeed(true),
       beat: () => Effect.succeed(true),
       lines: () => (linesRead++ === 0 ? Effect.succeed([LAUNCH.line]) : Effect.never),
       claimLine: () => Effect.succeed(LAUNCH),
       settleLine: () => Effect.succeed(true),
-      requests: () => Effect.never,
-      claimRequest: () => Effect.succeed(undefined),
+      // Note that the command is asked once the runner runs, so the launch's spawns come first.
+      requests: () =>
+        requestsRead++ === 0
+          ? Effect.sleep(Duration.seconds(1)).pipe(Effect.as([COMMAND]))
+          : Effect.never,
+      claimRequest: () => Effect.succeed(COMMAND),
       answerRequest: () => Effect.succeed(true),
       githubToken: (agentId: string) =>
         Effect.sync(() => {
@@ -87,6 +101,7 @@ const following = (githubFromLuke: boolean) =>
       FileSystem.layerNoop({
         exists: (path) => Effect.succeed(path === TOOLS.node || path === TOOLS.claude),
         makeDirectory: () => Effect.void,
+        realPath: (path) => Effect.succeed(path),
         writeFileString: () => Effect.void,
         rename: () => Effect.void,
       }),
@@ -119,6 +134,18 @@ const following = (githubFromLuke: boolean) =>
     yield* composer.lifetime;
     return { spawned: spawner.spawned, asked, reported };
   });
+
+/** Whether a spawn is the tool's command, run by the box's request worker. */
+const isCommand = (each: ScriptedSpawner["spawned"][number]) =>
+  each.args[2] === COMMAND.args.command;
+
+/** The variables of an environment that are git's or gh's. */
+const githubVariables = (env: Readonly<Record<string, string | undefined>> | undefined) =>
+  Object.fromEntries(
+    Object.entries(env ?? {}).filter(
+      ([name]) => name === "GH_CONFIG_DIR" || name.startsWith("GIT_CONFIG_"),
+    ),
+  );
 
 /** The clock nudged until the condition holds, as the follower's fibers run up to their next wait. */
 const until = (holds: () => boolean) =>
@@ -213,6 +240,10 @@ it.effect(
           "ghs_fixture_3",
         ]);
 
+        // A command the agent's tools ask reads the same sign-in as the runner.
+        yield* until(() => spawned.some(isCommand));
+        assert.deepEqual(githubVariables(spawned.find(isCommand)?.env), helper);
+
         const said = reported.join("\n");
         for (const token of ["ghs_fixture_1", "ghs_fixture_2", "ghs_fixture_3"]) {
           assert.equal(said.includes(token), false, "a token in a report");
@@ -247,11 +278,9 @@ it.effect(
         );
         assert.equal(script?.env, undefined);
         const runner = spawned.find((each) => each.program === LAUNCHER);
-        const names = Object.keys(runner?.env ?? {});
-        assert.equal(
-          names.some((name) => name === "GH_CONFIG_DIR" || name.startsWith("GIT_CONFIG_")),
-          false,
-        );
+        assert.deepEqual(githubVariables(runner?.env), {});
+        yield* until(() => spawned.some(isCommand));
+        assert.deepEqual(githubVariables(spawned.find(isCommand)?.env), {});
         assert.equal(runner?.env?.LUKE_RUNNER_TOKEN, SECRET_ENV.LUKE_RUNNER_TOKEN);
       }),
     ),

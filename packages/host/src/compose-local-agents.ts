@@ -138,8 +138,6 @@ const STATE_FILE = "local-agents.json";
 const TEMP_FOLDER = "tmp";
 /** The exit code a launch is settled with where its worktree could not be made or its runner started. */
 const NOT_STARTED = 1;
-/** The folder under the agent's own its `gh` keeps its sign-in in, where the host signs it in (`githubFromLuke`). */
-const GH_CONFIG_FOLDER = "gh";
 /** The GitHub host an agent's `gh` signs in to, and whose HTTPS remotes git's credential helper answers for. */
 const GITHUB = {
   HOST: "github.com",
@@ -650,7 +648,7 @@ export function composeLocalAgents(
             }
             // Note that a host signs the agent's own gh in before its worktree is made, since the clone reads the token too.
             const gh = platform.bundled.gh ?? "gh";
-            const configFolder = path.join(layout.folder, GH_CONFIG_FOLDER);
+            const configFolder = layout.githubConfig;
             const signsIn = platform.githubFromLuke && payload.value.repository !== null;
             const github = signsIn ? githubEnvironment(configFolder, gh) : undefined;
             const signedIn = signsIn && (yield* signedInToGithub(agentId, configFolder, gh));
@@ -873,9 +871,13 @@ export function composeLocalAgents(
             );
             if (claimed === undefined || !("agentId" in claimed)) return;
             const layout = deviceAgentLayout(folder, claimed.agentId);
+            // Note that a host's command reads the agent's GitHub sign-in as its runner does, never the token itself.
             const env = {
               ...shellVariables,
               TMPDIR: path.join(layout.folder, TEMP_FOLDER),
+              ...(platform.githubFromLuke
+                ? githubEnvironment(layout.githubConfig, platform.bundled.gh ?? "gh")
+                : undefined),
             };
             const answer = yield* answeredLocalAgentRequest(layout, claimed, env).pipe(
               Effect.provideContext(services),
