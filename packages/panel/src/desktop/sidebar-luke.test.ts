@@ -273,23 +273,12 @@ test("a failed ensure leaves Luke's row standing with a quiet retry, which asks 
   );
 });
 
-test("Luke is listed once, in his own row, not again among the agents with no task", async () => {
-  serve(() => ({ agentId: LUKE_ID }));
-  handState(experimentsOn(EXPERIMENT.OPERATOR));
-  const { sidebar } = await mount(acme([OPERATOR, SWEEP]));
-
-  const names = rowNames(sidebar);
-  assert.equal(names.filter((name) => name === "Luke").length, 1);
-  assert.ok(!names.includes("Orla"), "the operator is not drawn again by its agent's name");
-  assert.ok(names.includes("Copy sweep"), "every other agent still stands");
-});
-
 test("Luke is known by his kind, so a list read before his ensure answers never draws him twice", async () => {
   fakeActPortAnswering(() => new Promise<never>(() => undefined));
   handState(experimentsOn(EXPERIMENT.OPERATOR));
   const { sidebar } = await mount(acme([OPERATOR, SWEEP]));
 
-  assert.deepEqual(rowNames(sidebar), ["Luke", "Copy sweep"]);
+  assert.deepEqual(rowNames(sidebar), ["Luke"]);
 });
 
 test("Reset asks nothing: it ensures a fresh Luke and opens him at once, and Undo brings the old one back and opens him", async () => {

@@ -54,7 +54,6 @@ import {
 import { InboxList, InboxListSkeleton, SearchEmpty, ShowEmpty } from "../tasks/inbox-list.js";
 import {
   firstChoice,
-  INBOX_GROUPING,
   INBOX_SHOW,
   type InboxListed,
   inboxCounts,
@@ -363,9 +362,6 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   return null;
 }
 
-/** The plan's own Inbox lists one plan's items in one run, so nothing in it folds. */
-const NO_FOLDS = () => false;
-
 /** An item a call's row asked the task's Inbox to open: the thread under `key` of the agent whose row it was, any of the task's agents' where the row names none. */
 interface InboxItemAsk {
   readonly taskId: string;
@@ -432,12 +428,7 @@ function TaskInboxTab({
   const groups = [
     { holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] },
   ];
-  const marks = useInboxReadMarks({
-    act,
-    workspaceId: task.workspaceId,
-    // Note that a task's own Inbox offers no Mark all as read.
-    toDo: { groups, holdings: tasks.inboxTasks, readerId: tasks.me },
-  });
+  const marks = useInboxReadMarks({ act });
   const items = groups.flatMap((group) => group.items);
   const counts = inboxCounts(groups, tasks.me);
   // The list's search, as the window's Inbox holds it, which narrows what it lists, never what it counts.
@@ -445,7 +436,6 @@ function TaskInboxTab({
   const search = searchTokens(query);
   const searched = search.length > 0 ? query : undefined;
   const filter = {
-    grouping: INBOX_GROUPING.NONE,
     show: show.show,
     search,
     readerId: tasks.me,
@@ -497,16 +487,12 @@ function TaskInboxTab({
     choose(listed);
     columns.onStep();
   };
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
-    shown,
-    folded: NO_FOLDS,
-  });
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, shown);
   const next = inboxNext(
     steps,
     chosen,
     { models: tasks.agents.models, readerId: tasks.me },
     open,
-    NO_FOLDS,
     direction,
   );
   return (
@@ -522,13 +508,7 @@ function TaskInboxTab({
         chosen={chosen?.item.id}
         columns={columns.shown}
         rows={columns.rows}
-        head={{
-          shown,
-          show,
-          view: undefined,
-          search: { query, onQuery: setQuery },
-          tab: true,
-        }}
+        head={{ shown, show, search: { query, onQuery: setQuery } }}
         models={tasks.agents.models}
         readerId={tasks.me}
         reading={inbox.reading}

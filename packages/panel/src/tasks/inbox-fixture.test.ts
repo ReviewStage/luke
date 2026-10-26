@@ -84,13 +84,13 @@ function itemsOf(heard: Heard): readonly InboxItem[] {
 }
 
 it.effect(
-  "the Inbox profile signs in and its follower hears every task main names: an ask of each kind, a form, code, a long thread, answered and closed",
+  "the person profile signs in and its follower hears every task main names: an ask of each kind, a form, code, a long thread, answered and closed",
   () =>
     Effect.gen(function* () {
-      yield* standFixtureRun(RUN_PROFILE.INBOX);
+      yield* standFixtureRun(RUN_PROFILE.PERSON);
       const fixture = loadedTasksFixture();
       assert.ok(fixture);
-      const state = fixture.fixtureAppState(fixtureRun(RUN_PROFILE.INBOX));
+      const state = fixture.fixtureAppState(fixtureRun(RUN_PROFILE.PERSON));
       assert.equal(state.account.status, ACCOUNT_STATUS.SIGNED_IN);
       assert.ok(state.inbox.tasks.length > 0, "main's read names tasks holding items");
 
@@ -161,12 +161,12 @@ it.effect(
     }),
 );
 
-it.effect("the Inbox profile takes a read mark, so no toast says a mark was refused", () =>
+it.effect("the person profile takes a read mark, so no toast says a mark was refused", () =>
   Effect.gen(function* () {
-    yield* standFixtureRun(RUN_PROFILE.INBOX);
+    yield* standFixtureRun(RUN_PROFILE.PERSON);
     const fixture = loadedTasksFixture();
     assert.ok(fixture);
-    const { run } = fixtureRun(RUN_PROFILE.INBOX);
+    const { run } = fixtureRun(RUN_PROFILE.PERSON);
     const itemId = "00000000-0000-4000-8000-000000000001";
 
     assert.deepEqual(
@@ -176,10 +176,6 @@ it.effect("the Inbox profile takes a read mark, so no toast says a mark was refu
       }),
       { answer: { id: itemId, unread: false } },
     );
-    // Two of the staged items are unread.
-    assert.deepEqual(fixture.fixtureActAnswer(run, ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {}), {
-      answer: { marked: 2 },
-    });
   }),
 );
 

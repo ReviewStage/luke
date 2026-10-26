@@ -48,13 +48,11 @@ export const RUN_PROFILE = {
   TASKS_WORK: "tasks-work",
   /** The same task beside its coding agent, opened at launch on its plan, whose words hold comment threads: one answered, one its agent started, one on a whole block, and one resolved. */
   TASKS_COMMENTS: "tasks-comments",
-  /** A synthetic account signed in, its tasks holding Inbox items: an ask of each kind, a form, a notice with code, a long thread, an answered item, and a closed one. */
-  INBOX: "inbox",
-  /** Channels on, signed in as a member of a synthetic Luke workspace whose channels hold threads of every kind (`channels-fixture.ts`). */
+  /** Signed in as a member of a synthetic Luke workspace whose channels hold threads of every kind (`channels-fixture.ts`), the window resting on them. */
   CHANNELS: "channels",
   /** The same workspace's channels, read as the member's teammate. */
   CHANNELS_TEAMMATE: "channels-teammate",
-  /** The same account and items, its tasks assigned to it and its agents at work, which its own page lists. */
+  /** A synthetic account signed in, its tasks holding inbox items, assigned to it, and its agents at work, which its own page lists. */
   PERSON: "person",
   /** The same task on its coding agent, its Pull request tab beside it: checks, reviews, and a merge queued. */
   AGENT_PULL_REQUEST: "agent-pull-request",
@@ -241,8 +239,8 @@ interface AppInboxAutomationHolding {
 /**
  * What waits on the developer across the account's tasks, as main's own
  * read of it last answered (`@luke/host/agent-notices`): each task with an
- * open inbox item, the task whose item changed latest first. What the
- * sidebar's Inbox counts. Main's, because main holds that read whichever task is
+ * open inbox item, the task whose item changed latest first. Main's,
+ * because main holds that read whichever task is
  * open, and empty while nobody is signed in.
  */
 export interface AppInboxSlice {

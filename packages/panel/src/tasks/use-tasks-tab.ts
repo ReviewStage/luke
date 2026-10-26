@@ -169,7 +169,7 @@ import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { SectionReveal } from "./plan-body.js";
 import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
-import { freshAccount, newestWaiting, RESTING_PAGE, restingPage } from "./resting-page.js";
+import { freshAccount } from "./resting-page.js";
 import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
@@ -259,45 +259,37 @@ export type InboxChoice = (
 };
 
 /**
- * The window's Inbox, standing in the task's place beside the sidebar: the
- * items of every task holding one in a column of their own, and the chosen
- * item beside them. It is the window's alone, as a version history is, so
- * it leaves the task the host has open, and the call bound to it, as they
- * stand; opening any task, or a new one, leaves it. The item chosen is kept
- * while it stands, so the item answered stays in sight, and after it is
- * left, so opening it again in the same workspace stands on the item last read
- * beside the list. A narrow room, a phone's, keeps the choice too but opens
- * on the list, since there the list is the place: an item stands alone only
- * once a row is pressed or a link asks for it (`onOpenItem`).
+ * The window's Channels, standing in the task's place beside the sidebar: a
+ * channel's stream, and the thread chosen in it beside it (`desktop-inbox.tsx`).
+ * It is the window's alone, as a version history is, so it leaves the task
+ * the host has open, and the call bound to it, as they stand; opening any
+ * task, or a new one, leaves it. The thread chosen is kept while it stands,
+ * so the thread answered stays in sight. A narrow room, a phone's, opens on
+ * its list of channels, since there the list is the place: a thread stands
+ * alone only once a post is pressed or a link asks for it (`onOpenItem`).
  */
 interface InboxViewControl {
   readonly open: boolean;
-  /** The item chosen in it, none until one is, where the list's first stands in. */
+  /** The thread chosen in it, none until one is. */
   readonly chosen: InboxChoice | undefined;
-  /** Opens the Inbox, as the places bar, the sidebar, and its chord do: on its list in a narrow room, whatever stood there, and as it was left in a wide one; asked first where leaving would lose unsaved work. */
+  /** Opens Channels, as the places bar, the sidebar, and its chord do: on its list of channels in a narrow room, whatever stood there, and as it was left in a wide one; asked first where leaving would lose unsaved work. */
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
   /**
-   * Opens the Inbox on an item, from wherever the window stands: a row of
-   * the inbox-first sidebar's list, which stands while the Inbox does not.
-   * Asked first where leaving would lose unsaved work, as every door that
-   * moves the place is.
+   * Opens Channels on an item's thread, from wherever the window stands, as
+   * a link or ⌘K's row does. Asked first where leaving would lose unsaved
+   * work, as every door that moves the place is.
    */
   readonly onOpenItem: (chosen: InboxChoice) => void;
   /**
-   * Whether the list stands alone rather than the item chosen, where the
-   * Inbox shows one column (`inbox-columns.ts`): asked for by its way back or
-   * Show all, and given up by a row pressed. It is held here rather than in
-   * the Inbox, so the window's history can record it and go back to it.
+   * Whether a phone's list of channels stands rather than a stream or a
+   * thread: asked for by the places bar, and given up by a channel pressed.
+   * It is held here, so the window's history can record it and go back to it.
    */
   readonly listed: boolean;
-  /** Stands the list alone, or the item chosen. */
+  /** Stands the list of channels, or the channel chosen. */
   readonly onListed: (listed: boolean) => void;
-  /** Whether the open Inbox shows one column by its own width (`inbox-columns.ts`), which the window's history steps between its list and its item by. */
-  readonly single?: boolean;
-  /** Says whether the Inbox shows one column. */
-  readonly onSingle?: (single: boolean) => void;
   /** The pages of the chosen item's task as they move, which the panel beside it opens; none until read, or for an item of an agent with no task. */
   readonly pages: readonly PageLine[] | undefined;
   /** Tells the agents the Inbox read of the chosen item's task, whose Pull request tabs the panel beside it draws (`use-inbox-task-agents.ts`). */
@@ -1206,8 +1198,6 @@ export function useTasksTab(input: {
     launchedStandIn(loadedTasksFixture()?.fixturePlace(input.run)),
   );
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
-  // Whether the window's Inbox shows one column, as it measures itself.
-  const [inboxSingle, setInboxSingle] = useState(false);
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
   /** The item last chosen in the Inbox, by whom and where, which opening the Inbox again stands on. */
   const lastInboxChoice = useRef<RememberedInboxChoice | undefined>(undefined);
@@ -2175,11 +2165,9 @@ export function useTasksTab(input: {
   });
 
   // With no task open the window rests on a page of its own rather than on
-  // nothing: the Inbox, the inbox-first sidebar's newest thread or the Tasks
-  // page, or a new account's welcome, which is the page with no task open
-  // drawn bare (`resting-page.ts`). Note that it waits for the list, and for
-  // a launch reopening the task last open, so neither flashes before it.
-  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
+  // nothing: Channels, or a new account's welcome, which is the page with no
+  // task open drawn bare (`resting-page.ts`). Note that it waits for the list,
+  // and for a launch reopening the task last open, so neither flashes before it.
   const fresh = freshAccount({
     tasks: sidebar,
     taskless: input.inboxTaskless,
@@ -2188,16 +2176,14 @@ export function useTasksTab(input: {
   // A list that could not be read says so on the page rested on, and leaves no account new.
   const listSettled =
     tasks.listStatus === TASKS_READ.READY || tasks.listStatus === TASKS_READ.FAILED;
-  // The page last rested on, while it stands: the sidebar turning to or
-  // from the Inbox's threads, another workspace listed, or another account
-  // signing in rests the window again rather than leave it on a page chosen
-  // for the other sidebar, workspace, or account. Note that it is held by its kind, so a choice made
-  // in the Inbox rested on keeps it rested on, and any other page standing
+  // The page last rested on, while it stands: another workspace listed, or
+  // another account signing in rests the window again rather than leave it
+  // on a page chosen for the other workspace or account. Note that it is held by its kind, so a choice made
+  // in Channels rested on keeps it rested on, and any other page standing
   // in its place lets it go.
   const [rested, setRested] = useState<
     | {
         readonly kind: StandIn["kind"];
-        readonly inboxFirst: boolean;
         readonly workspaceId: string | undefined;
         readonly account: string | undefined;
       }
@@ -2205,12 +2191,7 @@ export function useTasksTab(input: {
   >(undefined);
   const resting = rested !== undefined && standIn?.kind === rested.kind && boundFor === undefined;
   if (rested !== undefined && !resting && standIn !== undefined) setRested(undefined);
-  if (
-    resting &&
-    (rested.inboxFirst !== inboxFirst ||
-      rested.workspaceId !== listedWorkspaceId ||
-      rested.account !== input.account)
-  ) {
+  if (resting && (rested.workspaceId !== listedWorkspaceId || rested.account !== input.account)) {
     setRested(undefined);
     setStandIn(undefined);
   } else if (
@@ -2221,33 +2202,17 @@ export function useTasksTab(input: {
     !restoring &&
     listSettled
   ) {
-    const rest = restingPage({
-      fresh: fresh && tasks.listStatus === TASKS_READ.READY,
-      inboxFirst,
-      remembered: rememberedChoice(lastInboxChoice.current, {
-        account: input.account,
-        workspaceId: listedWorkspaceId,
-      }),
-      newest: newestWaiting({
-        tasks: listedInbox.inbox,
-        taskless: input.inboxTaskless,
-        workspaceId: listedWorkspaceId,
-        readerId: input.accountId,
-      }),
-    });
-    const on: StandIn | undefined =
-      rest.kind === RESTING_PAGE.INBOX
-        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: input.room === SHELL_ROOM.NARROW }
-        : rest.kind === RESTING_PAGE.TASKS
-          ? { kind: STAND_IN.BOARD }
-          : undefined;
-    if (on !== undefined) {
-      setRested({
-        kind: on.kind,
-        inboxFirst,
-        workspaceId: listedWorkspaceId,
-        account: input.account,
-      });
+    // Note that a new account rests on the welcome, which is no stand-in, so it rests on nothing standing in.
+    if (!(fresh && tasks.listStatus === TASKS_READ.READY)) {
+      const on: StandIn = {
+        kind: STAND_IN.INBOX,
+        chosen: rememberedChoice(lastInboxChoice.current, {
+          account: input.account,
+          workspaceId: listedWorkspaceId,
+        }),
+        listed: input.room === SHELL_ROOM.NARROW,
+      };
+      setRested({ kind: on.kind, workspaceId: listedWorkspaceId, account: input.account });
       setStandIn(on);
     }
   }
@@ -3344,8 +3309,6 @@ export function useTasksTab(input: {
       listed: inboxView?.listed ?? false,
       onListed: (listed) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, listed } : held)),
-      single: inboxView !== undefined && inboxSingle,
-      onSingle: setInboxSingle,
       pages: inboxPages.pages,
       onTaskAgents: inboxTaskAgents.onRead,
     },

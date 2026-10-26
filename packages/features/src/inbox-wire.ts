@@ -815,8 +815,8 @@ export const inboxItemSchema = EffectSchema.Struct({
   waitsOn: EffectSchema.optionalKey(memberRefSchema),
   /**
    * Whether the agent addressed the item to a member, who is then the one it
-   * waits on (`waitsOn`): a notice addressed to nobody asks nobody for Got it
-   * under Channels. Absent from a service before it, which the desktop reads
+   * waits on (`waitsOn`): a notice addressed to nobody asks nobody for Got it.
+   * Absent from a service before it, which the desktop reads
    * as addressed to nobody.
    */
   addressed: EffectSchema.optionalKey(EffectSchema.Boolean),

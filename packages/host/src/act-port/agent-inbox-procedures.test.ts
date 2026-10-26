@@ -48,7 +48,6 @@ const CALL: ActSender = { ...PANEL, panel: false, call: true };
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
 const PICTURE_ID = "4fb17055-c16e-4293-bea5-7a8b9cadbec5";
 
 const ITEM: InboxItem = {
@@ -77,8 +76,6 @@ const REFUSAL = {
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: "Could not send the message on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]:
     "Could not mark the inbox item on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]:
-    "Could not mark the inbox read on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]:
     "Could not read the inbox item's image on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE]:
@@ -112,11 +109,6 @@ const ACTS: readonly {
     kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE,
     payload: { itemId: ITEM.id, unread: true },
     ask: "codingAgentInboxReadState",
-  },
-  {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL,
-    payload: { workspaceId: WORKSPACE_ID },
-    ask: "codingAgentInboxReadAll",
   },
   {
     kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT,
@@ -262,11 +254,10 @@ it("a panel's reply that answers the open ask reaches the host with the answer, 
   assert.deepEqual(asked, [["codingAgentInboxMessage", answering]]);
 });
 
-it("a panel marks an inbox item read or unread, or its whole Inbox read in one workspace or all, and hears the read state", async () => {
+it("a panel marks an inbox item read or unread, and hears the read state", async () => {
   const { call, asked } = windowPort(PANEL, {
     answers: {
       codingAgentInboxReadState: () => Effect.succeed({ id: ITEM.id, unread: true }),
-      codingAgentInboxReadAll: () => Effect.succeed({ marked: 3 }),
     },
   });
 
@@ -277,18 +268,7 @@ it("a panel marks an inbox item read or unread, or its whole Inbox read in one w
     }),
     { answer: { id: ITEM.id, unread: true } },
   );
-  assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, { workspaceId: WORKSPACE_ID }),
-    { answer: { marked: 3 } },
-  );
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {}), {
-    answer: { marked: 3 },
-  });
-  assert.deepEqual(asked, [
-    ["codingAgentInboxReadState", { itemId: ITEM.id, unread: true }],
-    ["codingAgentInboxReadAll", { workspaceId: WORKSPACE_ID }],
-    ["codingAgentInboxReadAll", {}],
-  ]);
+  assert.deepEqual(asked, [["codingAgentInboxReadState", { itemId: ITEM.id, unread: true }]]);
 });
 
 it("a panel's read of an inbox image, or an agent's or a worker's picture, reaches the host as asked and hears its bytes", async () => {
@@ -334,15 +314,11 @@ it("a host that dies, or answers what the kind cannot carry, is refused in the k
 it("an answer's key its kind's view schema does not name is left out of what the panel hears", async () => {
   const { call } = windowPort(PANEL, {
     answers: {
-      codingAgentInboxReadAll: () => Effect.succeed({ marked: 3, stray: true }),
       codingAgentInboxMessage: () =>
         Effect.succeed({ item: { ...ITEM, stray: true }, stray: true }),
     },
   });
 
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {}), {
-    answer: { marked: 3 },
-  });
   assert.deepEqual(
     await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, {
       itemId: ITEM.id,

@@ -128,7 +128,7 @@ export function TaskRowMark({
 }
 
 /** A repository's line under a card's name, its owner's picture before it, which opens it on GitHub. */
-export function RepositoryDetail({
+function RepositoryDetail({
   repository,
   pictures,
   onOpenGitHub,

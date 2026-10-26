@@ -90,40 +90,27 @@ async function mountIn(room: ShellRoom): Promise<HTMLElement> {
   return container;
 }
 
-/** Where the sidebar draws the Inbox's row and the Tasks list: whether each stands in the column's scroller. */
+/** Where the sidebar draws the Tasks page's row and the channels: whether each stands in the column's scroller. */
 function scrolled(sidebar: HTMLElement) {
   const scroller =
     sidebar.querySelector(".sidebar-section .luke-scroll-area") ?? assert.fail("the scroller");
-  const home =
-    [...sidebar.querySelectorAll("button")].find((each) => each.textContent?.startsWith("Inbox")) ??
-    assert.fail("the Inbox's row");
-  const list = sidebar.querySelector('nav[aria-label="Tasks"]') ?? assert.fail("the Tasks list");
-  return { home: scroller.contains(home), tasks: scroller.contains(list) };
+  const page =
+    [...sidebar.querySelectorAll("button")].find((each) => each.textContent?.startsWith("Tasks")) ??
+    assert.fail("the Tasks page's row");
+  const channels =
+    sidebar.querySelector('nav[aria-label="Channels"]') ?? assert.fail("the channels");
+  return { page: scroller.contains(page), channels: scroller.contains(channels) };
 }
 
-/** Whether the sidebar draws Pinned. */
-function pinnedStands(sidebar: HTMLElement): boolean {
-  return sidebar.querySelector('nav[aria-label="Pinned"]') !== null;
-}
-
-test("in a phone's drawer under a finger the pages' rows scroll with the tasks, and an empty Pinned stands nowhere", async () => {
+test("in a phone's drawer under a finger the pages' rows scroll with the channels", async () => {
   pointer(true);
   const sidebar = await mountIn(SHELL_ROOM.NARROW);
 
-  assert.deepEqual(scrolled(sidebar), { home: true, tasks: true });
-  assert.equal(pinnedStands(sidebar), false);
+  assert.deepEqual(scrolled(sidebar), { page: true, channels: true });
 });
 
-test("a narrow window worked by a mouse draws no empty Pinned either", async () => {
-  const sidebar = await mountIn(SHELL_ROOM.NARROW);
-
-  assert.equal(pinnedStands(sidebar), false);
-});
-
-test("beside the work the pages' rows scroll with the tasks too, and an empty Pinned stands nowhere", async () => {
+test("beside the work the pages' rows scroll with the channels too", async () => {
   const sidebar = await mountIn(SHELL_ROOM.WIDE);
 
-  assert.deepEqual(scrolled(sidebar), { home: true, tasks: true });
-  assert.equal(pinnedStands(sidebar), false, "no Pinned");
-  assert.doesNotMatch(sidebar.textContent ?? "", /Pinned/u);
+  assert.deepEqual(scrolled(sidebar), { page: true, channels: true });
 });

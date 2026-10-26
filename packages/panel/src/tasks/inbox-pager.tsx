@@ -37,7 +37,7 @@ import { cardTitle } from "./tool-call-model.js";
  * inbox-pager.tsx -- stepping through the Inbox's items one at a time: where the chosen one stands, "2 of 8", and the presses and keys that choose the one above or below it.
  *
  * The steps follow the list's own order, its grouping and its Needs-you
- * filter as drawn, settled items among them and a folded group's left out,
+ * filter as drawn, settled items among them,
  * so the count matches the rows, and they stop at its ends rather than
  * wrapping round. The item read keeps its place among the steps where the
  * filter draws it no row, once it is answered, so they still reach the rows
@@ -113,13 +113,12 @@ export function inboxNext(
     readonly readerId: string | undefined;
   },
   onChoose: (listed: InboxListed) => void,
-  folded: (key: string) => boolean,
   direction: InboxDirection,
 ): InboxNext | undefined {
   if (chosen === undefined || chosen.item.status === INBOX_STATUS.OPEN) return undefined;
-  const next = nextNeedingYou(view, chosen.item.id, folded, direction);
+  const next = nextNeedingYou(view, chosen.item.id, direction);
   if (next === undefined) return undefined;
-  const steps = inboxSteps(view, chosen.item.id, folded);
+  const steps = inboxSteps(view, chosen.item.id);
   const beside = direction === INBOX_DIRECTION.UP ? steps?.previous : steps?.next;
   return {
     listed: next,
@@ -189,12 +188,6 @@ export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
   );
 }
 
-/** Where the Inbox stands: whether it is on screen, and which of its groups are folded away. */
-export interface InboxPagerPlace {
-  readonly shown: boolean;
-  readonly folded: (key: string) => boolean;
-}
-
 /** The pager, where the steps hold the chosen item, and the way the developer last stepped, which Next follows. */
 export interface InboxPaging {
   readonly pager: InboxPager | undefined;
@@ -208,11 +201,12 @@ export function useInboxPager(
   rows: InboxListView,
   chosen: string | undefined,
   onChoose: (listed: InboxListed) => void,
-  place: InboxPagerPlace,
+  /** Whether the Inbox is on screen, where K and J reach it. */
+  shown: boolean,
 ): InboxPaging {
   const [direction, setDirection] = useState<InboxDirection>(INBOX_DIRECTION.DOWN);
-  const at = inboxSteps(steps, chosen, place.folded);
-  const row = inboxSteps(rows, chosen, place.folded);
+  const at = inboxSteps(steps, chosen);
+  const row = inboxSteps(rows, chosen);
   const previous = at?.previous;
   const next = at?.next;
   const onPrevious =
@@ -229,8 +223,8 @@ export function useInboxPager(
           setDirection(INBOX_DIRECTION.DOWN);
           onChoose(next);
         };
-  useAppCommand(APP_COMMAND.PREVIOUS_INBOX_ITEM, place.shown ? onPrevious : undefined);
-  useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, place.shown ? onNext : undefined);
+  useAppCommand(APP_COMMAND.PREVIOUS_INBOX_ITEM, shown ? onPrevious : undefined);
+  useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, shown ? onNext : undefined);
   const pager =
     at === undefined
       ? undefined

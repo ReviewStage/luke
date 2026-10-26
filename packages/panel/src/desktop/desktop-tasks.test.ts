@@ -1032,7 +1032,7 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   inbox.unmount();
 });
 
-test("a plan's own Inbox acknowledges the reader's own notice as it opens it, and leaves a teammate's open", async () => {
+test("a plan's own Inbox acknowledges a notice addressed to the reader as it opens it, and leaves a teammate's open", async () => {
   // Note that the Inbox opens on All, since For you leaves the teammate's notice out.
   window.localStorage.clear();
   showEverything();
@@ -1047,10 +1047,16 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
     needsReply: false,
     revision: 3,
   });
-  const OWN = notice("a1b2c3d4-0000-4000-8000-0000000000b1", "The preview is up", 2);
+  const OWN = {
+    ...notice("a1b2c3d4-0000-4000-8000-0000000000b1", "The preview is up", 2),
+    waitsOn: { userId: "user-reader", name: "Dana Reyes" },
+    addressed: true,
+  };
   const THEIRS = {
     ...notice("a1b2c3d4-0000-4000-8000-0000000000b2", "The migration ran", 1),
     startedBy: { userId: "user-teammate", name: "Charles Pan" },
+    waitsOn: { userId: "user-teammate", name: "Charles Pan" },
+    addressed: true,
   };
   const answered: CodingAgentInboxAnswerParams[] = [];
   const inbox = await narrowTaskInbox([OWN, THEIRS], 1400, undefined, undefined, {

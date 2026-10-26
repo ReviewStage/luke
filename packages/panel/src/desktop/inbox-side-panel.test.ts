@@ -41,6 +41,7 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
+import { CHANNEL_PROCEDURES } from "../testing/channels.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -211,10 +212,15 @@ async function inbox(
   const left = { links, tasks, went };
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   fakeActs({ act: answer });
-  fakeActPort({ ...fakeActPortCalls(), ...follows.procedures });
+  fakeActPort({ ...fakeActPortCalls(), ...follows.procedures, ...CHANNEL_PROCEDURES });
   handState(NO_EXPERIMENTS);
   function Page() {
-    const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
+    // The item opens as a link to it does, beside #general's stream.
+    const [chosen, setChosen] = useState<InboxChoice | undefined>({
+      taskId: TASK.id,
+      itemId: ITEM.id,
+      opened: true,
+    });
     // Whether the list was asked for, which the window keeps as the Tasks tab does.
     const [listed, setListed] = useState(false);
     const panelFor = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;

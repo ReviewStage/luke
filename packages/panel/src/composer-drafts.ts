@@ -24,8 +24,7 @@ import { rendererRuntime } from "./renderer-runtime.js";
  * Discord's, and GitHub's comments alike, and so does every box here that
  * sends somewhere: an agent's composer keeps its words per agent, a plan's
  * draft agent its first message per plan, New task its words per workspace
- * the task starts in, the Inbox's New thread its To, Subject, and words
- * per workspace (`inbox-compose.tsx`), a plan's comment its words per
+ * the task starts in, a plan's comment its words per
  * thread being started, per thread answered, and per comment edited
  * (`plan-comments.tsx`), a line comment in Files changed its words per
  * agent, pull request, file, side, and last line (`comment-drafts.ts`), an agent's line
@@ -73,13 +72,14 @@ const MAX_KEPT = 200;
 /** How long the typing rests before what the window changed is written to storage. */
 const STORE_PAUSE = Duration.millis(300);
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, an Inbox thread not yet started, a plan's comment, a line comment on an agent's changed file, or an agent's line written again. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a plan's comment, a line comment on an agent's changed file, or an agent's line written again. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
   INBOX: "inbox",
   NEW_TASK: "newTask",
   NEW_AUTOMATION: "newAutomation",
+  /** Removed with the Inbox page's New thread, so no box writes it now; kept because a draft an older build kept still may name it, and one unread place refuses every draft. */
   NEW_THREAD: "newThread",
   PLAN_COMMENT: "planComment",
   LINE_COMMENT: "lineComment",
@@ -129,7 +129,6 @@ const draftPlaceSchema = Schema.Union([
   }),
   Schema.Struct({
     kind: Schema.Literal(DRAFT_PLACE.NEW_THREAD),
-    /** The workspace whose Inbox the thread is written in; null before the workspaces are read. */
     workspaceId: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({
@@ -295,9 +294,6 @@ export type NewAgentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_A
 
 /** An inbox card's place. */
 export type InboxPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.INBOX }>;
-
-/** New thread's place: the workspace whose Inbox it is written in. */
-export type NewThreadPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_THREAD }>;
 
 /** A plan comment's place: a thread being started, answered, or one of its comments edited. */
 export type PlanCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.PLAN_COMMENT }>;

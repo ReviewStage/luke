@@ -1,12 +1,39 @@
 import type { TaskStanding } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_SIZE, ComposeIcon, IconButton, PlusIcon, Tooltip } from "@luke/ui";
+import {
+  BUTTON_SIZE,
+  ComposeIcon,
+  EMPTY_STATE_ACTION_LOOK,
+  type EmptyStateAction,
+  IconButton,
+  PlusIcon,
+  Tooltip,
+} from "@luke/ui";
 import { TASKS_GROUP, type TasksGroupHead } from "@luke/ui/tasks-page-model";
 import type { QuickAddInto, TasksControl } from "../tasks/use-tasks-tab.js";
 
 /**
- * new-task-button.tsx -- New task as a glyph: the title bar's while the sidebar is folded, and the start corner of a phone's Inbox and Tasks page (`phone-head.tsx`), opening New task's dialog; and a group's +: a sidebar repository's, opening it on the repository, and a Tasks page group's, adding a task in the group in place (`quick-add.tsx`).
+ * new-task-button.tsx -- New task as a glyph: the title bar's while the sidebar is folded, and the start corner of a phone's Tasks page (`phone-head.tsx`), opening New task's dialog; as the way on from an empty page; and a group's +: a sidebar repository's, opening it on the repository, and a Tasks page group's, adding a task in the group in place (`quick-add.tsx`).
  */
+
+/** The words of the way on from a page with nothing in it. */
+const NEW_TASK_LABEL = "New task";
+
+/**
+ * The way on from a page with nothing in it, as the Tasks page's List and
+ * Board have with no task: New task, opening its dialog, primary because
+ * starting one is all there is to do there. None where nothing can start.
+ */
+export function newTaskAction(onNewTask: (() => void) | undefined): EmptyStateAction | undefined {
+  return onNewTask === undefined
+    ? undefined
+    : {
+        label: NEW_TASK_LABEL,
+        look: EMPTY_STATE_ACTION_LOOK.PRIMARY,
+        icon: <ComposeIcon />,
+        onClick: onNewTask,
+      };
+}
 
 /** What a Tasks page group's + names, to a reader, for the task it adds: one in a status, priority, or repository, or for a person. */
 export function groupNewTaskWords(head: TasksGroupHead, words: string): string {

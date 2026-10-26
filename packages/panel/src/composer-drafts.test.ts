@@ -46,7 +46,6 @@ import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "./tasks/use-task-inbox.js";
 import { NO_LOOKS } from "./tasks/use-task-looks.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import {
   composerEditor,
@@ -628,60 +627,6 @@ function answerMotion(): void {
     }),
   });
 }
-
-/**
- * The sidebar itself, open on `open`'s agent's tab from the tab pinned to it
- * where `pinned`, which the sidebar then marks in place of the task's row.
- */
-async function sidebarOn(open: typeof INVITES, pinned: boolean) {
-  answerMotion();
-  fakeAppBridge({});
-  const pin = { task: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
-  const tasks = tasksControl({
-    page: TASKS_PAGE.DOCUMENT,
-    tasks: [INVITES.plan, BILLING.plan],
-    activeTaskId: open.plan.id,
-    chosenPin: pinned ? pin : undefined,
-    sidePanel: { ...tasksControl().sidePanel, pins: pinned ? [pin] : [] },
-    mainTabs: {
-      ...tasksControl().mainTabs,
-      tabs: [pin.tab],
-      tab: pin.tab,
-      openAgents: [open.agent.id],
-    },
-    agents: codingAgentsControl({ agents: [open.agent], agentIds: [open.agent.id] }),
-  });
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  await act(async () =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
-    ),
-  );
-  await settle();
-  return (name: string) =>
-    (
-      [...container.querySelectorAll<HTMLElement>("ul > li > button")].find(
-        (row) => row.querySelector(".luke-list-row-title")?.firstChild?.textContent === name,
-      ) ?? assert.fail(`the sidebar lists ${name}`)
-    ).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
-}
-
-test("a task opened from a tab pinned to the sidebar is open still, so its row wears no Draft pencil", async () => {
-  window.localStorage.setItem(
-    "luke.composerDrafts",
-    JSON.stringify([
-      { ...keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire"), accountId: null },
-    ]),
-  );
-  const fromPin = await sidebarOn(INVITES, true);
-  assert.equal(fromPin(INVITES.plan.name), false);
-  for (const root of roots.splice(0)) act(() => root.unmount());
-
-  const away = await sidebarOn(BILLING, false);
-  assert.equal(away(INVITES.plan.name), true);
-});
 
 /** The workspace New task starts its tasks in. */
 const WORKSPACE = "workspace-personal";

@@ -1,29 +1,19 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
+import type { InboxItem } from "@luke/features/inbox-wire";
 import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTaskHolding } from "@luke/host/app-state";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { STATUS_TONE } from "@luke/ui";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { ActHandle } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
-import {
-  acknowledgedOnOpen,
-  INBOX_HOLDER,
-  type InboxGroup,
-  type InboxListed,
-  isUnread,
-  readersItem,
-} from "./inbox-model.js";
-import { type InboxReadMark, type InboxToDoMark, useInboxSettler } from "./inbox-settling.js";
+import { acknowledgedOnOpen, type InboxListed, isUnread } from "./inbox-model.js";
+import { type InboxReadMark, useInboxSettler } from "./inbox-settling.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
 
 /**
- * use-inbox-read-marks.ts -- the Inbox's read and unread marks as one control: an item marked read or unread, or every item marked read, its dot flipping at once.
+ * use-inbox-read-marks.ts -- the Inbox's read and unread marks as one control: an item marked read or unread, its dot flipping at once.
  *
  * A mark goes to the service as an act, and is laid over every read the
  * window draws (`@luke/panel`'s `inbox-settling.ts`, through its
@@ -33,15 +23,12 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * whose word the row then draws. Note that a mark moves nothing main hears
  * of, so a list's read of the item's plan is never read again on its
  * account, and the mark stands over it for as long as that read stands. The acts go one at a time, in the order the marks
- * were made, so a quick read, unread, read reaches the service as the last,
- * Mark all as read in its turn among them. A mark the service did not take
+ * were made, so a quick read, unread, read reaches the service as the last.
+ * A mark the service did not take
  * is let go, the dot stands as the reads hold it, and a toast says so, unless
  * the caller asks for quiet because it says the refusal itself, as the
- * selection bar does for the items it marked together. Marking every item
- * read marks the items the Inbox lists in the one workspace it lists, as
- * the service marks them, and asks the reads again once it is taken, since
- * the write moves nothing main hears of; an item waiting on the developer
- * keeps waiting, since the dots are all it clears.
+ * selection bar does for the items it marked together. An item waiting on
+ * the developer keeps waiting, since the dots are all a mark clears.
  *
  * Opening an item marks it read, once each time it is shown
  * (`useReadOnOpen`), so an item the reader marks unread while it is shown
@@ -60,50 +47,11 @@ export interface MarkSaying {
 export interface InboxReadMarks {
   /** Marks one item read or unread; answers, once the mark went, whether the service took it, as a batch of marks counts what it refused. A refusal is toasted unless `saying` is quiet. */
   readonly onMark: (item: InboxItem, unread: boolean, saying?: MarkSaying) => Promise<boolean>;
-  /** Marks every item given that is unread as read, as the service marks the listed workspace's. */
-  readonly onMarkAll: (items: readonly InboxItem[]) => void;
 }
 
-/**
- * What a mark is weighed against for the sidebar's To do count: the groups
- * listed, which say each item's task, main's count of each task, and the
- * reader.
- */
-export interface InboxToDoBasis {
-  readonly groups: readonly InboxGroup[];
-  readonly holdings: readonly AppInboxTaskHolding[];
-  readonly readerId: string | undefined;
-}
-
-/**
- * What a mark on the item moves of its task's To do count, as
- * `inbox-settling.ts` lays it over main's: only a settled item of the
- * reader's, on a task main counts, whatever its status, since an open one
- * is to do whether read or not, and nobody else's ever is.
- */
-function toDoMarkOf(basis: InboxToDoBasis | undefined, item: InboxItem): InboxToDoMark | undefined {
-  if (basis === undefined || item.status === INBOX_STATUS.OPEN) return undefined;
-  if (!readersItem(item, basis.readerId)) return undefined;
-  const group = basis.groups.find(({ items }) => items.some(({ id }) => id === item.id));
-  if (group?.holder.kind !== INBOX_HOLDER.TASK) return undefined;
-  const taskId = group.holder.task.id;
-  const holding = basis.holdings.find((each) => each.taskId === taskId);
-  if (holding?.toDo === undefined) return undefined;
-  return {
-    taskId,
-    wasUnread: isUnread(item),
-    counted: { toDo: holding.toDo, updatedAt: holding.updatedAt },
-  };
-}
-
-/** The mark an item takes: what it says, and what it moves of the To do count. */
-function markOf(
-  basis: InboxToDoBasis | undefined,
-  item: InboxItem,
-  unread: boolean,
-): InboxReadMark {
-  const toDo = toDoMarkOf(basis, item);
-  return { unread, updatedAt: item.updatedAt, ...(toDo === undefined ? undefined : { toDo }) };
+/** The mark an item takes: what it says, of the item as it was marked. */
+function markOf(item: InboxItem, unread: boolean): InboxReadMark {
+  return { unread, updatedAt: item.updatedAt };
 }
 
 /** What one toast says of read marks given to several items: how many the service took, and how many not. */
@@ -124,8 +72,7 @@ interface Wanted {
 }
 
 /**
- * The Inbox's read marks, sent through `act`; every item marked read in
- * `workspaceId` where the Inbox lists one. Nothing reads the Inbox again
+ * The Inbox's read marks, sent through `act`. Nothing reads the Inbox again
  * once the service took a mark: the followed inboxes are pushed each item's
  * read state as it moves.
  *
@@ -136,37 +83,20 @@ interface Wanted {
  * mark standing for any of its own still waiting to go, so a quick read,
  * unread, read reaches it as the last.
  */
-export function useInboxReadMarks({
-  act,
-  workspaceId,
-  toDo,
-}: {
-  act: ActHandle["act"];
-  workspaceId: string | undefined;
-  /** What a mark is weighed against for the sidebar's To do count; none where nothing lists the items. */
-  toDo?: InboxToDoBasis | undefined;
-}): InboxReadMarks {
+export function useInboxReadMarks({ act }: { act: ActHandle["act"] }): InboxReadMarks {
   const settler = useInboxSettler();
   const toast = useToast();
   const refused = useCallback(
     (words: string) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
     [toast],
   );
-  // Note that the basis is read as a mark is made, so the presses stay the same while what is listed moves.
-  const basis = useRef(toDo);
-  useLayoutEffect(() => {
-    basis.current = toDo;
-  });
   // The writes, one after another, and each item's latest mark still to go, which its queued write sends.
   const queue = useRef<Promise<void>>(Promise.resolve());
   const wanted = useRef(new Map<string, Wanted>());
-  const send = useCallback((write: () => Promise<void>) => {
-    queue.current = queue.current.then(write);
-  }, []);
   // Note that a mark a later one stood for before it went answers as taken, since the write that sent the later one answers its own press.
   const onMark = useCallback(
     (item: InboxItem, unread: boolean, saying?: MarkSaying): Promise<boolean> => {
-      const made = settler.mark(new Map([[item.id, markOf(basis.current, item, unread)]]));
+      const made = settler.mark(new Map([[item.id, markOf(item, unread)]]));
       wanted.current.set(item.id, { made, unread });
       const sent = queue.current.then(() => {
         const latest = wanted.current.get(item.id);
@@ -193,31 +123,7 @@ export function useInboxReadMarks({
     },
     [act, settler, refused],
   );
-  const onMarkAll = useCallback(
-    (items: readonly InboxItem[]) => {
-      const marks = new Map(
-        items
-          .filter(isUnread)
-          .map((item) => [item.id, markOf(basis.current, item, false)] as const),
-      );
-      if (marks.size === 0) return;
-      const made = settler.mark(marks);
-      send(() =>
-        act(ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, workspaceId === undefined ? {} : { workspaceId })
-          .catch(() => UNANSWERED)
-          .then((answer) => {
-            if ("failure" in answer) {
-              settler.unmark(made);
-              refused(markedNote(false, 0, marks.size));
-              return;
-            }
-            settler.marked(made);
-          }),
-      );
-    },
-    [act, workspaceId, send, settler, refused],
-  );
-  return useMemo(() => ({ onMark, onMarkAll }), [onMark, onMarkAll]);
+  return useMemo(() => ({ onMark }), [onMark]);
 }
 
 /**
@@ -276,7 +182,6 @@ export function useNodOnOpen({
 }): void {
   const nodded = useRef<{ readonly id: string; readonly revision: number } | undefined>(undefined);
   const { read, failed, draftOf, onAcknowledge } = control;
-  const channels = useExperiment(EXPERIMENT.CHANNELS);
   useEffect(() => {
     if (shown === undefined) {
       nodded.current = undefined;
@@ -288,9 +193,9 @@ export function useNodOnOpen({
     const was = nodded.current;
     if (was !== undefined && was.id === item.id && was.revision === item.revision) return;
     nodded.current = { id: item.id, revision: item.revision };
-    if (!acknowledgedOnOpen(item, readerId, channels)) return;
+    if (!acknowledgedOnOpen(item, readerId)) return;
     const draft = draftOf(item);
     if (draft.note.trim() !== "" || draft.attachments.length > 0) return;
     onAcknowledge(item);
-  }, [shown, readerId, read, failed, draftOf, onAcknowledge, channels]);
+  }, [shown, readerId, read, failed, draftOf, onAcknowledge]);
 }

@@ -8,7 +8,6 @@ import {
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
   type CodingAgentInboxScope,
-  type CodingAgentInboxStartParams,
   INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
@@ -128,11 +127,6 @@ export type InboxAnswerer = (
 /** How one message on an item's thread is sent: the item, the words and files, and the key the send is known by. */
 export type InboxMessenger = (
   params: CodingAgentInboxMessageParams,
-) => Promise<CodingAgentInboxMessagedView>;
-
-/** How one thread is started with an agent: the agent, its subject, the words and files, and the key the send is known by. */
-export type InboxThreadStarter = (
-  params: CodingAgentInboxStartParams,
 ) => Promise<CodingAgentInboxMessagedView>;
 
 /** How one image is read: the item and the attachment it names, answered as the view hears it. */

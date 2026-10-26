@@ -110,11 +110,6 @@ export interface AssigneeGroup {
   readonly rows: readonly TaskRow[];
 }
 
-/** The key a row is followed by, out of one list and into another: its task's id, or its agent's. */
-export function taskRowKey(row: TaskRow): string {
-  return row.kind === TASK_ROW.TASK ? row.task.id : row.agent.id;
-}
-
 /** A task as a row of the list. */
 export function taskRow(task: TaskSummary): TaskRow {
   return { kind: TASK_ROW.TASK, task };
@@ -131,7 +126,7 @@ export function taskRowName(row: TaskRow): string {
 }
 
 /** The repository the row works in; null for a task with none chosen yet. */
-export function taskRowRepository(row: TaskRow): string | null {
+function taskRowRepository(row: TaskRow): string | null {
   return row.kind === TASK_ROW.TASK ? row.task.repository : row.agent.repository;
 }
 
@@ -160,7 +155,7 @@ export function taskTime(task: TaskSummary, order: TaskOrder): number {
 }
 
 /** The time a row shows and is ordered by: its task's (`taskTime`), or its agent's start under Created and its last activity otherwise. */
-export function taskRowTime(row: TaskRow, order: TaskOrder): number {
+function taskRowTime(row: TaskRow, order: TaskOrder): number {
   if (row.kind === TASK_ROW.TASK) return taskTime(row.task, order);
   return order === TASK_ORDER.CREATED ? row.agent.createdAt : row.agent.activityAt;
 }

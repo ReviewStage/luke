@@ -622,8 +622,8 @@ function openPaletteOverPlaces(): void {
 test("the footer says Return runs a command chosen and opens anything else", () => {
   openPaletteOverPlaces();
 
-  type("go to inbox");
-  assert.equal(rows()[0], "Go to inbox");
+  type("go to channels");
+  assert.equal(rows()[0], "Go to channels");
   assert.deepEqual(footer(), ["↑↓ Select", "⏎ Run", "⌘[ / ⌘] Filter"]);
 
   type("theme");
@@ -635,10 +635,10 @@ test("⌘K says a place it opens as Go to the place, and the menus' own words st
   openPaletteOverPlaces();
   chooseFilter("Commands");
 
-  assert.ok(rows().includes("Go to inbox"));
+  assert.ok(rows().includes("Go to channels"));
   assert.ok(rows().includes("Go to tasks"));
   assert.ok(rows().includes("Show my tasks"));
-  assert.ok(!rows().includes("Inbox"), "the place is never said bare, as a verb would be");
+  assert.ok(!rows().includes("Channels"), "the place is never said bare, as a verb would be");
 });
 
 test("the field asks to search Luke under All, and the kind under its filter", () => {
@@ -2380,14 +2380,6 @@ function PinnableTask(): React.JSX.Element {
   );
 }
 
-/** The names the sidebar's Pinned section lists, none while it stands nowhere. */
-function pinnedNames(): (string | null)[] {
-  const section = document.querySelector('nav[aria-label="Pinned"]');
-  return [...(section?.querySelectorAll(".luke-list-row-title") ?? [])].map(
-    (name) => name.firstChild?.textContent ?? null,
-  );
-}
-
 /** The rows ⌘K lists for "pin", the palette opened afresh. */
 function pinRows(): string[] {
   act(() => {
@@ -2397,7 +2389,7 @@ function pinRows(): string[] {
   return rows().filter((row) => /^(Pin|Unpin) /u.test(row));
 }
 
-test("with a task open, ⌘K offers Pin task, which pins it under Pinned and turns to Unpin task", () => {
+test("with a task open, ⌘K offers Pin task, which pins it and turns to Unpin task", () => {
   // The sidebar asks whether motion is reduced, which jsdom cannot answer.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -2413,10 +2405,8 @@ test("with a task open, ⌘K offers Pin task, which pins it under Pinned and tur
 
   assert.deepEqual(pinRows(), ["Pin task"]);
   press("Pin task");
-  assert.deepEqual(pinnedNames(), [DOCUMENT_TASK.name]);
   assert.deepEqual(pinRows(), ["Unpin task"]);
   press("Unpin task");
-  assert.deepEqual(pinnedNames(), []);
   assert.deepEqual(pinRows(), ["Pin task"]);
 });
 
@@ -2866,7 +2856,7 @@ test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no
 
   assert.deepEqual(
     filterOptions().map((option) => option.textContent),
-    ["All", "Tasks", "This task", "Inbox", "People", "Files", "Commands", "Settings"],
+    ["All", "Tasks", "This task", "Threads", "People", "Files", "Commands", "Settings"],
   );
 });
 
@@ -2956,7 +2946,7 @@ test("the Inbox is followed only once it is searched, and then lists what needs 
   await settle();
   assert.deepEqual(main.asked, [], "opening the palette follows no inbox");
 
-  chooseFilter("Inbox");
+  chooseFilter("Threads");
   await settle();
 
   assert.deepEqual(main.asked, [`${INBOX_SCOPE_KIND.PLAN}:${ROTATION.id}`]);
@@ -2968,7 +2958,7 @@ test("the Inbox is followed only once it is searched, and then lists what needs 
 
 test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its Inbox row and its time at its end, and its card hung beside it", async () => {
   paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
-  chooseFilter("Inbox");
+  chooseFilter("Threads");
   await settle();
 
   const [needs, answered] = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
@@ -3004,7 +2994,7 @@ test("an Inbox item is found under All by words its thread says, which its row s
 
 test("choosing an Inbox item opens it in the Inbox, as a notification's would", async () => {
   const { opened } = paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
-  chooseFilter("Inbox");
+  chooseFilter("Threads");
   await settle();
 
   press("Use acme.dev for previews? · Billing usage alerts");
@@ -3015,7 +3005,7 @@ test("choosing an Inbox item opens it in the Inbox, as a notification's would", 
 
 test("an Inbox that could not be read says so, rather than that nothing matches", async () => {
   paletteOverInbox(() => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
-  chooseFilter("Inbox");
+  chooseFilter("Threads");
   await settle();
 
   assert.equal(emptyLine()?.startsWith("Your inbox could not be read."), true);
@@ -3023,7 +3013,7 @@ test("an Inbox that could not be read says so, rather than that nothing matches"
 
 test("a query its title half answers says the thread's words that answer the rest, never the title again", async () => {
   paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
-  chooseFilter("Inbox");
+  chooseFilter("Threads");
 
   type("rotate stripe");
   await settle();
@@ -3069,7 +3059,7 @@ test("an Inbox item is found by a form's field and the value it was answered wit
     settledAt: 4_000,
   };
   paletteOverInbox(() => ({ items: [PORT] }));
-  chooseFilter("Inbox");
+  chooseFilter("Threads");
 
   type("587");
   await settle();
@@ -3080,7 +3070,7 @@ test("an Inbox item is found by a form's field and the value it was answered wit
 
 test("while main says a task's inbox changed later than its push, a query it does not answer says the inbox is still being read", async () => {
   const { main } = paletteOverInbox(() => ({ items: [PREVIEWS] }), 12_000);
-  chooseFilter("Inbox");
+  chooseFilter("Threads");
 
   type("webhook");
   await settle();
@@ -3107,7 +3097,7 @@ test("an Inbox that could not be read says so in the Inbox's own group, beside t
   const notice = document.querySelector("[cmdk-list] [role=alert]");
   assert.equal(notice?.textContent?.startsWith("Your inbox could not be read."), true);
   const group = notice?.closest("[cmdk-group]");
-  assert.equal(group?.querySelector("[cmdk-group-heading]")?.textContent, "Inbox");
+  assert.equal(group?.querySelector("[cmdk-group-heading]")?.textContent, "Threads");
   assert.ok(
     [...document.querySelectorAll("[cmdk-group-heading]")].some(
       (each) => each.textContent === "Tasks",

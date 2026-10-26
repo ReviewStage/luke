@@ -1,63 +1,48 @@
 import { BarItem, EllipsisIcon, MENU_KEEPS_CLEAR } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
-import { InboxIcon, ListTodoIcon } from "lucide-react";
+import { ListTodoIcon } from "lucide-react";
 import { adminSection } from "../admin/routing.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { channelsWaiting } from "../tasks/channels-model.js";
 import { useChannels } from "../tasks/use-channels.js";
 import { automationsTab, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { needsYouNoun, useInboxWaiting } from "./places-waiting.js";
+import { needsYouNoun } from "./places-waiting.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
  * mobile-bar.tsx -- a phone's way between the window's places: a bar at the
- * screen's foot with the Inbox, the Tasks page, and More, which opens the
+ * screen's foot with Channels, the Tasks page, and More, which opens the
  * sidebar's drawer for everything else.
  *
- * It stands only in a narrow room and only on a place's list, the Inbox's,
- * the Tasks page, Automations, or the window resting with no task open, so
- * a task, an agent's page, an item, or a channel being read keeps the whole
- * screen and is left by Back. Each press lands on its place's list, not on
- * the item or channel last read, since on a phone the list is the place
- * (`use-tasks-tab.ts`'s `onOpen`).
+ * It stands only in a narrow room and only on a place's list, the list of
+ * channels or a channel's stream, the Tasks page, Automations, or the window
+ * resting with no task open, so a task, an agent's page, or a thread being
+ * read keeps the whole screen and is left by Back. Each press lands on its
+ * place's list, not on the thread or channel last read, since on a phone the
+ * list is the place (`use-tasks-tab.ts`'s `onOpen`).
  *
  * Settings, which stands over the places rather than among them, keeps the
  * bar on a phone too, its list and its pages alike: no place is the current
  * one there, and a press leaves Settings for the place pressed, More for the
  * drawer over the places (`leave`).
  *
- * The Inbox counts what waits on the developer there, the count the
- * drawer's row shows, read from the one reading they draw from
- * (`places-waiting.ts`), so the two never disagree, and said in the
- * sidebar's words.
- *
- * With Channels on (STAG-547), the bar is Channels, Tasks, and More:
- * Channels stands in the Inbox's place, opens the list of channels
- * (`channel-list.tsx`), and counts every open ask in them that waits on the
- * developer, the sum of the counts that list's rows show. It stands over
- * that list and over a channel's stream, and a thread opened from the
- * stream keeps the whole screen, as an item does.
+ * Channels counts the open asks that wait on the developer, every
+ * channel's summed, as the sidebar counts each.
  */
 
-/** Channels in the Inbox's place, where the account has it on: the thread opened over a channel's stream, by its item's id. */
-export interface BarChannels {
-  readonly threadId: string | undefined;
-}
-
-/** Whether the bar stands: a narrow room, signed in, on one of the places' lists; `channels` is none while Channels is off. */
+/** Whether the bar stands: a narrow room, signed in, on one of the places' lists, a thread standing over its channel's stream only while `threadId` names it. */
 export function mobileBarShown(
   room: ShellRoom,
   tasks: TasksControl,
-  channels: BarChannels | undefined,
+  threadId: string | undefined,
 ): boolean {
   // Note that the open task's side panel is not asked: it is held behind every place, so it says nothing of the one on screen.
   if (room !== SHELL_ROOM.NARROW || !tasks.signedIn) return false;
   const { inboxView, boardView, automationsView, adminView, agentView, personView } = tasks;
   // Note that a thread stands over a channel's stream only while its item is the one chosen, so a choice history went back past shows the stream.
   const chosen = inboxView.chosen;
-  const itemStands =
-    chosen !== undefined && (channels === undefined || channels.threadId === chosen.itemId);
+  const itemStands = chosen !== undefined && threadId === chosen.itemId;
   if (inboxView.open) return inboxView.listed || !itemStands;
   if (agentView.agentId !== undefined || personView.userId !== undefined) return false;
   if (boardView.open) return true;
@@ -71,14 +56,11 @@ export function mobileBarShown(
 /** The bar; see the module's head. */
 export function MobileBar({
   tasks,
-  channelsOn,
   sidebar,
   onPressMore,
   leave,
 }: {
   tasks: TasksControl;
-  /** Whether Channels stands in the Inbox's place. */
-  channelsOn: boolean;
   /** The drawer the bar's More opens, whose float while open leaves every other item inert, as the work it covers is. */
   sidebar: SidebarCollapse;
   /** Marks the press on More as the drawer's own, so the press that opens it does not also put it away. */
@@ -91,14 +73,13 @@ export function MobileBar({
   const inInbox = among && inboxView.open;
   const inTasks = among && !inInbox && boardView.open;
   const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
-  const waiting = useInboxWaiting(tasks);
   // Note that a press leaves what stands over the places first, so the place it opens is the one on screen.
   const go = (open: () => void) => () => {
     leave?.();
     open();
   };
   // Note that the bar reads nothing itself: the sidebar, held behind the drawer, reads the channels as the window comes into view, and the bar draws what it holds.
-  const channels = useChannels(channelsOn ? tasks.workspace?.id : undefined, false);
+  const channels = useChannels(tasks.workspace?.id, false);
   const channelsCount = channelsWaiting(channels.channels ?? []);
   return (
     <nav
@@ -106,27 +87,15 @@ export function MobileBar({
       aria-label="Places"
       {...MENU_KEEPS_CLEAR}
     >
-      {channelsOn ? (
-        <BarItem
-          icon={<GLYPH.CHANNEL />}
-          current={inInbox}
-          count={{ value: channelsCount, noun: needsYouNoun(channelsCount) }}
-          inert={drawerOpen}
-          onPress={go(inboxView.onOpen)}
-        >
-          Channels
-        </BarItem>
-      ) : (
-        <BarItem
-          icon={<InboxIcon />}
-          current={inInbox}
-          count={{ value: waiting, noun: needsYouNoun(waiting) }}
-          inert={drawerOpen}
-          onPress={go(inboxView.onOpen)}
-        >
-          Inbox
-        </BarItem>
-      )}
+      <BarItem
+        icon={<GLYPH.CHANNEL />}
+        current={inInbox}
+        count={{ value: channelsCount, noun: needsYouNoun(channelsCount) }}
+        inert={drawerOpen}
+        onPress={go(inboxView.onOpen)}
+      >
+        Channels
+      </BarItem>
       <BarItem
         icon={<ListTodoIcon />}
         current={inTasks}

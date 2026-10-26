@@ -527,7 +527,6 @@ export function InboxItemEnd({
   now,
   readerId,
   open = false,
-  face = true,
   standing = true,
   before,
   after,
@@ -537,8 +536,6 @@ export function InboxItemEnd({
   readerId: string | undefined;
   /** Whether the item's box stands beside the list, so its draft is in sight and unmarked. */
   open?: boolean;
-  /** Whether a teammate's item wears their face, which a person's group header says instead. */
-  face?: boolean;
   /** Whether the end draws the attention mark and the task's status, which a row saying them elsewhere leaves to a reader's ears. */
   standing?: boolean;
   before?: ReactNode;
@@ -551,7 +548,7 @@ export function InboxItemEnd({
   return (
     <InboxRowMeta>
       {before}
-      {starter === undefined || !face ? null : <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />}
+      {starter === undefined ? null : <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />}
       {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
         <VisuallyHidden>{waitingOn(starter)}</VisuallyHidden>
       )}

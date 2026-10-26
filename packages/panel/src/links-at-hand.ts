@@ -254,8 +254,8 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
       "taskId" in chosen
         ? { kind: LINK_PLACE.INBOX_ITEM, planId: chosen.taskId, itemId: chosen.itemId }
         : { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
-    // An item standing alone, in a narrow room or an Inbox showing one column by its own width, is a step of its own.
-    if ((at.narrow === true || tasks.inboxView.single === true) && !tasks.inboxView.listed) {
+    // A thread standing alone, in a narrow room, is a step of its own.
+    if (at.narrow === true && !tasks.inboxView.listed) {
       return [
         at_(item, LINK_THING.INBOX_ITEM),
         within({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX),

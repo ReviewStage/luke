@@ -53,27 +53,6 @@ type AgentDoors = Pick<
   "onCopy" | "onRename" | "onOpenTerminal" | "archive" | "deletion" | "copyLink"
 >;
 
-/**
- * The doors an agent offers that its sidebar row leaves out, each with why,
- * and the one place that says so. Every other door this hook answers
- * stands in the row's menu (`sidebar-agent.tsx`), which
- * `sidebar-agent.test.ts` holds: a door added to `AgentDoors` either is
- * placed on the row or is named here, or that test fails.
- */
-const NOT_ON_A_ROW = {
-  onOpenTerminal: "The terminal opens in a side panel, and a sidebar row has none.",
-  onCopy: "A task's sidebar row offers no transcript copy either, so an agent's row offers none.",
-} as const satisfies Partial<Record<keyof AgentDoors, string>>;
-
-/** The doors an agent's sidebar row offers: every one but those `NOT_ON_A_ROW` names. */
-type RowDoors = Omit<AgentDoors, keyof typeof NOT_ON_A_ROW>;
-
-/** The doors a row offers of those an agent offers, `NOT_ON_A_ROW`'s left out. */
-export function rowDoors(doors: AgentDoors): RowDoors {
-  const offered = Object.entries(doors).filter(([door]) => !Object.hasOwn(NOT_ON_A_ROW, door));
-  return Object.fromEntries(offered) as RowDoors;
-}
-
 /** The doors a column opens an agent's terminals through, by the agent; each none where it is not offered. */
 export interface AgentTerminalDoors {
   /** Shows the agent's own Terminal tab in the side panel, adding no shell; none where the platform runs no terminals. */
@@ -93,7 +72,7 @@ export interface AgentActions {
 }
 
 /** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
-export function agentTranscriptRead(
+function agentTranscriptRead(
   readTranscript: CodingAgentsControl["readTranscript"],
   agentId: string,
   title: string,

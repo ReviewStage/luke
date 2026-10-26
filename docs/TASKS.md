@@ -91,11 +91,10 @@ sidebar, one page at a time:
  └──────────────────────────────────────────────────────────────┘
 ```
 
-- **Resting page**: whenever no task is open the window shows what the
-  sidebar does not list: the Inbox beside the task list, and under the
-  inbox-first sidebar the newest thread waiting, or the Tasks page where
-  nothing waits. An account with nothing yet sees a welcome with New task's
-  composer instead (`resting-page.ts`). There is no empty page in between.
+- **Resting page**: whenever no task is open the window shows Channels, on
+  the channel last chosen, else #general. An account with nothing yet sees a
+  welcome with New task's composer instead (`resting-page.ts`). There is no
+  empty page in between.
 - **Document page**: the open task's saved document. Its header and its
   microphone row hold still, and only the document scrolls between them.
 

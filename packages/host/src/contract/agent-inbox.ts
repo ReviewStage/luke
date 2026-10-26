@@ -25,14 +25,11 @@ import {
   codingAgentInboxCloseParamsSchema,
   codingAgentInboxMessagedViewSchema,
   codingAgentInboxMessageParamsSchema,
-  codingAgentInboxReadAllViewSchema,
   codingAgentInboxReadStateParamsSchema,
   codingAgentInboxReadStateViewSchema,
   codingAgentInboxScopeSchema,
-  codingAgentInboxStartParamsSchema,
   codingAgentPictureParamsSchema,
 } from "@luke/features/coding-agent-view";
-import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -59,21 +56,11 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(codingAgentInboxMessageParamsSchema))
     .output(EffectSchema.toType(codingAgentInboxMessagedViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_START]: actProcedure(
-    "Could not start the thread on this system.",
-  )
-    .input(exactInput(codingAgentInboxStartParamsSchema))
-    .output(EffectSchema.toType(codingAgentInboxMessagedViewSchema)),
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: actProcedure(
     "Could not mark the inbox item on this system.",
   )
     .input(exactInput(codingAgentInboxReadStateParamsSchema))
     .output(EffectSchema.toType(codingAgentInboxReadStateViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: actProcedure(
-    "Could not mark the inbox read on this system.",
-  )
-    .input(exactInput(inboxReadAllRequestSchema))
-    .output(EffectSchema.toType(codingAgentInboxReadAllViewSchema)),
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: actProcedure(
     "Could not read the inbox item's image on this system.",
   )

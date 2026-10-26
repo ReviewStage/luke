@@ -1048,12 +1048,11 @@ export function useWindowHistory(input: {
   const historyOpen = tasks.history.open;
   const { spot } = tasks.history;
   const inboxOpen = tasks.inboxView.open;
-  // An Inbox showing one column, by its own width or a narrow room's, stands its item alone unless its list was asked for.
-  const inboxSingle = narrow || tasks.inboxView.single === true;
-  const inboxAlone = inboxSingle && !tasks.inboxView.listed ? tasks.inboxView.chosen : undefined;
-  // The item chosen is a step of its own wherever it shows: alone in one column, or beside the list where the Inbox splits.
-  const inboxChosen = inboxSingle ? inboxAlone : tasks.inboxView.chosen;
-  const inboxListed = inboxSingle ? inboxAlone === undefined : undefined;
+  // A phone's Channels stands its thread alone unless its list of channels was asked for.
+  const inboxAlone = narrow && !tasks.inboxView.listed ? tasks.inboxView.chosen : undefined;
+  // The thread chosen is a step of its own wherever it shows: alone on a phone, or beside its channel's stream.
+  const inboxChosen = narrow ? inboxAlone : tasks.inboxView.chosen;
+  const inboxListed = narrow ? inboxAlone === undefined : undefined;
   const historyListed = narrow ? tasks.history.listed : undefined;
   const panelOpen = tasks.sidePanel.open;
   const panelTab = panelOpen ? tasks.sidePanel.tab : undefined;
@@ -1343,14 +1342,14 @@ export function useWindowHistory(input: {
         },
         () => tasks.automationsView.onRuns(false),
       ),
-    // Note that the Inbox's list is a step of its own wherever the Inbox shows one column, a room wider than a narrow one's included.
+    // Note that a phone's list of channels is a step of its own.
     inbox: (listed) => {
       if (!listed) {
         tasks.inboxView.onListed(false);
         return;
       }
       const stand = () => tasks.inboxView.onListed(true);
-      if (inboxSingle) upTo({ kind: PLACE_KIND.INBOX, listed: true }, stand);
+      if (narrow) upTo({ kind: PLACE_KIND.INBOX, listed: true }, stand);
       else stand();
     },
     panel: () => {

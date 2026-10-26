@@ -23,9 +23,10 @@ import { CHANNEL_VIEW, type ChannelView } from "./channels-model.js";
  * are read as the first surface holding them is drawn, again as the window
  * comes back into view, and again whenever a channel is opened or a thread
  * in it answered, since nothing follows them live yet. Which channel the
- * window shows, and whether a thread stands open beside it, is the
- * window's own while it runs; which view the stream shows, Mine by
- * default, is kept on this Mac as the Inbox's view choices are.
+ * window shows is kept on this Mac, so a launch opens on the channel last
+ * chosen, else #general (`shownChannel`); whether a thread stands open
+ * beside it is the window's own while it runs; which view the stream
+ * shows, Mine by default, is kept on this Mac too.
  */
 
 /** A workspace's channels as last read: none until a read answers, and whether the last read failed. */
@@ -53,7 +54,14 @@ interface ChannelPlace {
   readonly threadId: string | undefined;
 }
 
-let place: ChannelPlace = { channelId: undefined, threadId: undefined };
+/** Where the channel last chosen is kept on this Mac, by its id. */
+const KEPT_CHANNEL = keptKey<string>("luke.channel", Schema.String);
+
+/** No channel chosen yet, which shows #general (`shownChannel`). */
+const NO_CHANNEL = "";
+
+/** The thread open beside the stream, by its item's id, the window's own while it runs. */
+let openThread: string | undefined;
 
 /** What a refused write says, by why it was refused. */
 const REFUSAL_WORDS = {
@@ -92,10 +100,10 @@ function hold(workspaceId: string, view: ChannelsView | undefined): void {
   told();
 }
 
-/** Moves the window's place, telling every surface drawing it. */
-function moveTo(next: ChannelPlace): void {
-  if (next.channelId === place.channelId && next.threadId === place.threadId) return;
-  place = next;
+/** Opens a thread beside the stream, or none, and tells every surface drawing it. */
+function openOn(threadId: string | undefined): void {
+  if (threadId === openThread) return;
+  openThread = threadId;
   told();
 }
 
@@ -180,21 +188,23 @@ export interface ChannelPlaceControl extends ChannelPlace {
   readonly onCloseThread: () => void;
 }
 
-/** The channel the window shows and the thread opened in it, the window's own while it runs. */
+/** The channel the window shows, kept on this Mac, and the thread opened in it, the window's own while it runs. */
 export function useChannelPlace(): ChannelPlaceControl {
-  const standing = useSyncExternalStore(subscribe, () => place);
+  const [channelId, chooseChannel] = useKept(KEPT_CHANNEL, NO_CHANNEL);
+  const threadId = useSyncExternalStore(subscribe, () => openThread);
   return useMemo(
     () => ({
-      ...standing,
-      onChoose: (channelId) =>
-        moveTo({
-          channelId,
-          threadId: channelId === place.channelId ? place.threadId : undefined,
-        }),
-      onOpenThread: (itemId) => moveTo({ ...place, threadId: itemId }),
-      onCloseThread: () => moveTo({ ...place, threadId: undefined }),
+      channelId: channelId === NO_CHANNEL ? undefined : channelId,
+      threadId,
+      onChoose: (next) => {
+        // Note that another channel shows its stream alone, never a thread left open in the last.
+        if (next !== channelId) openOn(undefined);
+        chooseChannel(next);
+      },
+      onOpenThread: (itemId) => openOn(itemId),
+      onCloseThread: () => openOn(undefined),
     }),
-    [standing],
+    [channelId, threadId, chooseChannel],
   );
 }
 

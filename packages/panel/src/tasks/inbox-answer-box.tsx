@@ -2,7 +2,6 @@ import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
 import { pasteCutWords } from "@luke/features/words";
-import { EXPERIMENT } from "@luke/settings";
 import { ComposerBody, ComposerFoot, type ComposerNote, STATUS_TONE } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -18,7 +17,6 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import { AttachFilesButton } from "./attach-files-button.js";
@@ -115,7 +113,7 @@ const NOTE_PLACEHOLDER = "Add a note";
 const REPLY_PLACEHOLDER = "Reply";
 
 /** What the note says while the editor bundle could not be loaded. */
-export const EDITOR_LOAD_FAILED = "The answer box could not be loaded.";
+const EDITOR_LOAD_FAILED = "The answer box could not be loaded.";
 
 /** What the box's round Send is called, which is its tooltip too. */
 const SEND = "Send";
@@ -140,7 +138,7 @@ function answerPlaceholder(asks: boolean, own: string | undefined): string {
 }
 
 /** A box's field as its owner holds it: its editor, the field it stands in, the editor's bundle, and its lists and dictation. */
-export interface AnswerField {
+interface AnswerField {
   readonly editor: RefObject<ComposerEditorHandle | undefined>;
   readonly room: RefObject<HTMLDivElement | null>;
   /** The editor's bundle, once it has loaded; none while it loads or where it could not. */
@@ -156,7 +154,7 @@ export interface AnswerField {
  * server's chip says what a send does with it, a turn opened or the running
  * one steered, by the agent the words go to.
  */
-export function useAnswerField({
+function useAnswerField({
   draft,
   placeholder,
   self,
@@ -256,7 +254,7 @@ interface AnswerFormProps {
  * right, a dictation's strip in their place, and what the box says under
  * them; Send reading Got it where the box nods.
  */
-export function AnswerForm({
+function AnswerForm({
   field,
   asks,
   messages,
@@ -385,10 +383,9 @@ function AnswerCard({
     onRefusal: setRefusal,
   });
   // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.
-  const channels = useExperiment(EXPERIMENT.CHANNELS);
-  const nodded = acknowledgedOnOpen(item, readerId, channels) && !control.failed;
-  // Note that under Channels a notice addressed to nobody offers no Got it, since it is only read.
-  const nod = asksNod(item, readerId, channels) && emptyBox(draft) && !nodded;
+  const nodded = acknowledgedOnOpen(item, readerId) && !control.failed;
+  // Note that a notice addressed to nobody offers no Got it, since it is only read.
+  const nod = asksNod(item, readerId) && emptyBox(draft) && !nodded;
   const held = sending || files.reading;
   // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
   const sendable = nod || inboxThreadSend(thread, draft) !== undefined;

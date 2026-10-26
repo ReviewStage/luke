@@ -4,7 +4,11 @@ import {
   pinPositionsForInsert,
   pinPositionsForMove,
 } from "@luke/features/pin-order";
-import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
+import {
+  TASK_SECTION_WRITE,
+  type TaskSection,
+  type TaskSectionWrite,
+} from "@luke/features/task-section-wire";
 import {
   TASK_BOUNDS,
   TASK_PRIORITY_ORDER,
@@ -53,11 +57,13 @@ import {
   joinRefs,
   LAYOUT_ELEMENT,
   ListMotion,
+  MoreButton,
   motionKey,
   motionRows,
   OneLine,
   PAGE_FRAME,
   PAGE_WIDTH,
+  PencilIcon,
   type SelectionAct,
   SelectionBar,
   SelectionRegion,
@@ -70,7 +76,9 @@ import {
   TEXT_VARIANT,
   Text,
   Time,
+  TrashIcon,
   useLeaving,
+  useMenu,
   useMinute,
   useRovingKeys,
   useRowMenu,
@@ -115,7 +123,6 @@ import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { newTaskAction } from "../tasks/inbox-list.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -130,9 +137,15 @@ import { undoToast, useToast } from "../toast.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { rowMenu } from "./action-menu.js";
-import { groupNewTaskWords, NewTaskInButton, quickAddInto } from "./new-task-button.js";
+import { ActionMenu, rowMenu } from "./action-menu.js";
+import {
+  groupNewTaskWords,
+  NewTaskInButton,
+  newTaskAction,
+  quickAddInto,
+} from "./new-task-button.js";
 import { type DraftParts, type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
+import { type SectionDialogs, useSectionDialogs } from "./section-dialogs.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
 import { useTaskMenuItems } from "./task-actions.js";
@@ -975,6 +988,58 @@ function listQuickAddLine(properties: readonly TaskProperty[]): QuickAddLine {
 }
 
 /**
+ * A section's ⋯ on its header, and a right-click on it: Edit section, which
+ * opens the section's dialog on its title and icon, and Delete section, which
+ * asks nothing and offers Undo (`section-dialogs.tsx`).
+ */
+function SectionMenu({
+  section,
+  dialogs,
+  shown,
+}: {
+  section: TaskSection;
+  dialogs: SectionDialogs;
+  shown: boolean;
+}): React.JSX.Element {
+  const menu = useMenu(shown);
+  const ellipsis = useRef<HTMLButtonElement | null>(null);
+  return (
+    <>
+      <MoreButton
+        ref={ellipsis}
+        thing={section.title}
+        size={BUTTON_SIZE.COMPACT}
+        {...menu.trigger()}
+      />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={`${section.title} actions`}
+          menu={menu.drawn}
+          groups={[
+            [
+              {
+                label: "Edit section",
+                icon: <PencilIcon />,
+                onSelect: () => dialogs.askEdit(section),
+              },
+            ],
+            [
+              {
+                label: "Delete section",
+                icon: <TrashIcon />,
+                danger: true,
+                onSelect: () => dialogs.askDelete(section, ellipsis.current),
+              },
+            ],
+          ]}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
+/**
  * One group: its head, a press that folds and opens it, its glyph, name,
  * and count, and the + that adds a task in it in place (`quick-add.tsx`);
  * and its rows, or a line saying it holds none. The group is a
@@ -992,6 +1057,7 @@ function TasksListGroup({
   tasks,
   properties,
   row,
+  sections,
 }: {
   group: TasksGroup;
   head: GroupHead;
@@ -1007,6 +1073,8 @@ function TasksListGroup({
   properties: readonly TaskProperty[];
   /** Draws a task's row. */
   row: (task: TaskSummary) => ReactNode;
+  /** The account's section dialogs, which a section's ⋯ opens. */
+  sections: SectionDialogs;
 }): React.JSX.Element {
   const drawn = useLeaving(group.tasks, taskIdOf);
   const move = folded ? undefined : drops.move(group);
@@ -1016,6 +1084,13 @@ function TasksListGroup({
   });
   const zone = zoneOf(group.head);
   const titled = group.head.kind !== TASKS_GROUP.ALL;
+  // A section's header offers its ⋯, which edits or deletes it.
+  const section =
+    group.head.kind === TASKS_GROUP.SECTION
+      ? tasks.taskSections.sections.find(
+          (each) => group.head.kind === TASKS_GROUP.SECTION && each.id === group.head.sectionId,
+        )
+      : undefined;
   const into = quickAddInto(group.head);
   const quick = useQuickAdd(tasks, into ?? {});
   const adding = quick.shown;
@@ -1074,9 +1149,14 @@ function TasksListGroup({
           head={GROUP_HEAD.STICKS}
           rows={GROUP_ROWS.SUBGRID}
           actions={
-            into === undefined || !tasks.signedIn ? undefined : (
-              <NewTaskInButton label={groupNewTaskWords(group.head, head.name)} onPress={add} />
-            )
+            <>
+              {section === undefined || !tasks.signedIn ? null : (
+                <SectionMenu section={section} dialogs={sections} shown={tasks.shown} />
+              )}
+              {into === undefined || !tasks.signedIn ? null : (
+                <NewTaskInButton label={groupNewTaskWords(group.head, head.name)} onPress={add} />
+              )}
+            </>
           }
         >
           {body}
@@ -1218,6 +1298,7 @@ export function TasksList({
   const directory = useMemberDirectory();
   const now = useMinute();
   const folds = useListFolds();
+  const sectionDialogs = useSectionDialogs(tasks, tasks.shown);
   const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const narrow = room === SHELL_ROOM.NARROW;
@@ -1356,6 +1437,7 @@ export function TasksList({
                     }
                     tasks={tasks}
                     properties={properties}
+                    sections={sectionDialogs}
                     row={(task) => (
                       <TaskListRow
                         key={task.id}
@@ -1393,6 +1475,7 @@ export function TasksList({
       <div className="tasks-list-selection pointer-events-none sticky bottom-luke-16 z-4 flex justify-center *:pointer-events-auto">
         <SelectionBar count={selected.size} acts={acts} onClear={clear} controls={regionId} />
       </div>
+      {sectionDialogs.dialog}
     </CollectionPage>
   );
 }

@@ -43,8 +43,8 @@ import type { TasksControl } from "./tasks/use-tasks-tab.js";
 /** What a version history's step says under its task's name. */
 const VERSION_HISTORY_WORDS = "Version history";
 
-/** What the Inbox's step is called. */
-const INBOX_WORDS = "Inbox";
+/** What the step of Channels, the window's Inbox, is called. */
+const INBOX_WORDS = "Channels";
 
 /** What a Page tab is called where the window does not read its page's title. */
 const PAGE_WORDS = "Page";
@@ -136,9 +136,8 @@ export function stepTitle(
 ): StepTitle | undefined {
   if (tab === PANEL_TAB.SETTINGS) return { label: "Settings" };
   if (tasks.inboxView.open) {
-    // Note that an Inbox showing one column names no item while its list stands, as its step holds none.
-    const single = narrow || tasks.inboxView.single === true;
-    const chosen = single && tasks.inboxView.listed ? undefined : tasks.inboxView.chosen;
+    // Note that a phone's list of channels names no thread, as its step holds none.
+    const chosen = narrow && tasks.inboxView.listed ? undefined : tasks.inboxView.chosen;
     const holder = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
     return { label: INBOX_WORDS, detail: taskName(tasks, holder) };
   }

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -21,7 +21,6 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
-import { STATUS_TONE } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -38,15 +37,17 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
-import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
-import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
-  DESKTOP_CAPABILITIES,
-  handCapabilities,
-  handState,
-} from "../testing/app-state.js";
+  fakeActPort,
+  fakeActPortAnswering,
+  fakeActPortCalls,
+  fakeAppBridge,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
+import { GENERAL_CHANNEL } from "../testing/channels.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -467,12 +468,6 @@ function placeRow(page: HTMLElement, name: string): HTMLButtonElement | undefine
   return rowNamed(page.querySelector("aside.desktop-sidebar") ?? page, name);
 }
 
-test("the sidebar offers no Home row, the window resting on the Inbox with no task open", () => {
-  const page = mount(false);
-  assert.equal(placeRow(page, "Home"), undefined);
-  assert.ok(placeRow(page, "Inbox"), "the Inbox's row stands");
-});
-
 const ACME: Workspace = {
   id: DOCUMENT_TASK.workspaceId,
   name: "Acme",
@@ -481,7 +476,7 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, Automations, or Settings, and Luke once signed out", () => {
+test("the window is called by what stands in it: the plan on screen in its own workspace, else Channels, Automations, or Settings, and Luke once signed out", () => {
   const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
     mount(
       inboxOpen,
@@ -507,7 +502,7 @@ test("the window is called by what stands in it: the plan on screen in its own w
       titled(false, PANEL_TAB.TASKS, false),
       titled(false, PANEL_TAB.TASKS, true, [{ ...ACME, id: "workspace-other" }]),
     ],
-    [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Luke", DOCUMENT_NAME],
+    [`${DOCUMENT_NAME} — Acme`, "Channels — Acme", "Settings", "Luke", DOCUMENT_NAME],
   );
 
   mount(false, false, {
@@ -517,151 +512,6 @@ test("the window is called by what stands in it: the plan on screen in its own w
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
   });
   assert.equal(document.title, "Automations — Acme");
-});
-
-test("a plan opened with its Inbox tab shown rather than its plan is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
-  const unreadOnOpen = (inboxOpen: boolean) => {
-    window.localStorage.setItem("luke.planLooks", JSON.stringify({ [DOCUMENT_TASK.id]: 1 }));
-    window.localStorage.setItem("luke.planLooksSeeded", "1");
-    const page = mount(
-      inboxOpen,
-      false,
-      {
-        page: TASKS_PAGE.DOCUMENT,
-        tasks: [DOCUMENT_TASK],
-        activeTaskId: DOCUMENT_TASK.id,
-        region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-        sidePanel: {
-          ...tasksControl().sidePanel,
-          open: true,
-          tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-          strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-          tab: SIDE_PANEL_TAB.INBOX,
-        },
-      },
-      PANEL_TAB.TASKS,
-      ignore,
-      { collapsed: false },
-    );
-    const row = page.querySelector(".sidebar-tasks > li > button");
-    assert.ok(row, "the plan's row stands in the sidebar");
-    const unread = String(row.textContent?.includes("(unread)") === true);
-    act(() => root?.unmount());
-    window.localStorage.clear();
-    return unread;
-  };
-
-  assert.equal(unreadOnOpen(false), "false");
-  assert.equal(unreadOnOpen(true), "true");
-});
-
-/** A second plan beside `DOCUMENT_PLAN`, saved after it. */
-const NOTES_TASK: Task = {
-  ...DOCUMENT_TASK,
-  id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
-  name: "Release notes",
-  createdAt: 4,
-  updatedAt: 5,
-};
-
-/**
- * The shell with the sidebar unfolded on `listed`, each looked at up to
- * the instant `looks` gives it, redrawn over whichever plan `open` names
- * next and the home page for none, the same shell throughout.
- */
-function mountListing(
-  listed: readonly Task[],
-  looks: Readonly<Record<string, number>>,
-): (open: Task | undefined) => void {
-  window.localStorage.setItem("luke.taskLooks", JSON.stringify(looks));
-  window.localStorage.setItem("luke.taskLooksSeeded", "1");
-  const container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  const registry = AtomRegistry.make();
-  return (open) => {
-    const tasks = tasksControl({
-      page: open === undefined ? TASKS_PAGE.HOME : TASKS_PAGE.DOCUMENT,
-      tasks: listed.map((task) => (task.id === open?.id ? open : task)),
-      activeTaskId: open?.id,
-      region:
-        open === undefined
-          ? { kind: DOCUMENT_REGION.NONE }
-          : { kind: DOCUMENT_REGION.READY, task: open },
-    });
-    const props = shellProps(tasks, PANEL_TAB.TASKS, ignore, { collapsed: false });
-    act(() => root?.render(onRegistry(registry, createElement(DesktopShell, props))));
-  };
-}
-
-/** The sidebar's row for the plan of this name. */
-function sidebarRow(name: string): HTMLButtonElement {
-  const row = [
-    ...document.querySelectorAll<HTMLButtonElement>(".sidebar-tasks > li > button"),
-  ].find((each) => each.querySelector(".luke-list-row-title")?.firstChild?.textContent === name);
-  assert.ok(row, `the sidebar lists ${name}`);
-  return row;
-}
-
-/** Whether the plan's row is drawn in the unread weight. */
-function rowUnread(name: string): string | null {
-  return String(sidebarRow(name).textContent?.includes("(unread)") === true);
-}
-
-/** The read mark the row's right-click menu offers, chosen when `choose` says so. */
-function rowReadMark(name: string, choose = false): string | undefined {
-  act(() => {
-    sidebarRow(name).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-  });
-  const menu = document.querySelector('[role="menu"]');
-  assert.ok(menu, `${name}'s menu opens`);
-  const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((each) =>
-    /^Mark as (un)?read$/u.test(each.textContent ?? ""),
-  );
-  act(() => {
-    if (choose) item?.click();
-    else menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  });
-  assert.equal(document.querySelector('[role="menu"]') === null, true, "the menu closes");
-  return item?.textContent ?? undefined;
-}
-
-test("Mark as unread on the task being looked at draws its row unread through a save landing as it stays, and until it is opened again", () => {
-  const draw = mountListing([DOCUMENT_TASK, NOTES_TASK], {
-    [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
-    [NOTES_TASK.id]: NOTES_TASK.updatedAt,
-  });
-  draw(DOCUMENT_TASK);
-  assert.equal(rowUnread(DOCUMENT_NAME), "false");
-  assert.equal(rowReadMark(DOCUMENT_NAME, true), "Mark as unread");
-  assert.equal(rowUnread(DOCUMENT_NAME), "true");
-
-  draw({ ...DOCUMENT_TASK, updatedAt: DOCUMENT_TASK.updatedAt + 1 });
-  assert.equal(rowUnread(DOCUMENT_NAME), "true");
-
-  draw(NOTES_TASK);
-  assert.equal(rowUnread(DOCUMENT_NAME), "true");
-
-  draw(DOCUMENT_TASK);
-  assert.equal(rowUnread(DOCUMENT_NAME), "false");
-});
-
-test("a task's menu offers Mark as read while its row is unread, which draws it read, and Mark as unread after", () => {
-  const draw = mountListing([DOCUMENT_TASK, NOTES_TASK], {
-    [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
-    [NOTES_TASK.id]: NOTES_TASK.updatedAt - 1,
-  });
-  draw(undefined);
-  assert.equal(rowUnread(NOTES_TASK.name), "true");
-  assert.equal(rowReadMark(DOCUMENT_NAME), "Mark as unread");
-
-  assert.equal(rowReadMark(NOTES_TASK.name, true), "Mark as read");
-  assert.equal(rowUnread(NOTES_TASK.name), "false");
-  assert.equal(rowReadMark(NOTES_TASK.name), "Mark as unread");
-
-  assert.equal(rowReadMark(NOTES_TASK.name, true), "Mark as unread");
-  assert.equal(rowUnread(NOTES_TASK.name), "true");
-  assert.equal(rowReadMark(NOTES_TASK.name), "Mark as read");
 });
 
 /** Lets every promise settled so far run its continuations. */
@@ -706,70 +556,6 @@ test("the sidebar offers no Issues row, with every experiment on, since Luke kee
   assert.equal(placeRow(page, "Issues"), undefined);
 });
 
-test("while the account has the inbox-first sidebar on, the sidebar lists the Inbox in its task list's place, its Inbox row gone, and the Tasks page's row stands either way", async () => {
-  handState({});
-  const off = mount(false);
-  await settle();
-  assert.ok(placeRow(off, "Tasks"));
-  assert.equal(placeRow(off, "Board"), undefined);
-  assert.ok(placeRow(off, "Inbox"));
-  assert.equal(off.querySelector('aside .inbox-tasks[data-placement="sidebar"]'), null);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  handState(experimentsOn(EXPERIMENT.INBOX_FIRST));
-  const on = mount(false);
-  await settle();
-  assert.ok(placeRow(on, "Tasks"));
-  assert.equal(placeRow(on, "Board"), undefined);
-  assert.equal(
-    placeRow(on, "Inbox"),
-    undefined,
-    "the sidebar is the Inbox, so it needs no row for it",
-  );
-  assert.ok(
-    on.querySelector('aside .inbox-tasks[data-placement="sidebar"]'),
-    "the sidebar lists the Inbox",
-  );
-  assert.equal(
-    on.querySelector('aside nav[aria-label="Tasks"]'),
-    null,
-    "the task list stands on its page",
-  );
-});
-
-test("in a narrow room the inbox-first Inbox lists its items on its own page, across the screen, and the drawer keeps its Inbox row", async () => {
-  handState(experimentsOn(EXPERIMENT.INBOX_FIRST));
-  const container = document.body.appendChild(document.createElement("div"));
-  root = createRoot(container);
-  const tasks = tasksControl({
-    page: TASKS_PAGE.HOME,
-    inboxView: { ...tasksControl().inboxView, open: true, listed: true },
-  });
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopShell, {
-          ...shellProps(tasks, PANEL_TAB.TASKS, ignore, { overlay: SIDEBAR_OVERLAY.OPEN }),
-          room: SHELL_ROOM.NARROW,
-        }),
-      ),
-    ),
-  );
-  await settle();
-  assert.equal(
-    container.querySelector('aside .inbox-tasks[data-placement="sidebar"]'),
-    null,
-    "the drawer lists no Inbox",
-  );
-  assert.ok(placeRow(container, "Inbox"), "the drawer's Inbox row stands");
-  assert.ok(
-    container.querySelector('main .inbox-tasks[data-placement="page"]'),
-    "the Inbox's page lists its items",
-  );
-});
-
 /** The shell in a narrow room, a phone's, over `overrides`, the sidebar patched as given. */
 async function mountNarrow(
   overrides: Partial<TasksControl>,
@@ -805,7 +591,7 @@ function barItem(page: HTMLElement, name: string): HTMLButtonElement {
   return item;
 }
 
-test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox", async () => {
+test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Channels opens Channels", async () => {
   const asked: string[] = [];
   const page = await mountNarrow({
     boardView: { ...tasksControl().boardView, open: true },
@@ -816,11 +602,11 @@ test("on a phone the Tasks page stands over a bar of the window's places, its ow
   });
   assert.deepEqual(
     barItems(page).map((item) => item.textContent),
-    ["Inbox", "Tasks", "More"],
+    ["Channels", "Tasks", "More"],
   );
   assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
-  assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
-  act(() => barItem(page, "Inbox").click());
+  assert.equal(barItem(page, "Channels").getAttribute("aria-current"), null);
+  act(() => barItem(page, "Channels").click());
   assert.deepEqual(asked, ["open"]);
 });
 
@@ -841,7 +627,7 @@ test("on a phone the places bar stands over the Tasks page though the task left 
   });
   assert.deepEqual(
     barItems(page).map((item) => item.textContent),
-    ["Inbox", "Tasks", "More"],
+    ["Channels", "Tasks", "More"],
   );
 });
 
@@ -850,7 +636,7 @@ test("on a phone the drawer More opened leaves the bar's other places inert, as 
     { boardView: { ...tasksControl().boardView, open: true } },
     { overlay: SIDEBAR_OVERLAY.OPEN },
   );
-  assert.equal(barItem(page, "Inbox").hasAttribute("inert"), true);
+  assert.equal(barItem(page, "Channels").hasAttribute("inert"), true);
   assert.equal(barItem(page, "Tasks").hasAttribute("inert"), true);
   assert.equal(barItem(page, "More").hasAttribute("inert"), false);
   assert.equal(barItem(page, "More").getAttribute("aria-expanded"), "true");
@@ -863,49 +649,43 @@ function spokenName(item: HTMLElement): string {
   return heard.textContent ?? "";
 }
 
-test("on a phone the bar's Inbox wears the count the drawer's row shows, named in the sidebar's words, and none at zero", async () => {
-  const listed = {
-    tasks: [DOCUMENT_TASK],
-    inbox: [],
-    inboxTasks: [{ taskId: DOCUMENT_TASK.id, items: 3, toDo: 3, updatedAt: 0 }],
+test("on a phone the bar's Channels wears the sum of what each channel's row counts, named in the sidebar's words, and none at zero", async () => {
+  const counted = async (waiting: readonly number[]) => {
+    fakeActPort({
+      ...fakeActPortCalls(),
+      [ACT_KIND.CHANNELS_LIST]: () =>
+        Promise.resolve({
+          channels: waiting.map((each, at) => ({
+            ...GENERAL_CHANNEL,
+            id: `0c0c0c0c-0000-4000-8000-00000000000${at + 1}`,
+            name: at === 0 ? "general" : `area-${at}`,
+            waiting: each,
+          })),
+        }),
+    });
+    const page = await mountNarrow(
+      {
+        workspace: ACME,
+        workspaces: [ACME],
+        boardView: { ...tasksControl().boardView, open: true },
+      },
+      { overlay: SIDEBAR_OVERLAY.OPEN },
+    );
+    const named = barItems(page).map(spokenName);
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
+    return named;
   };
-  const page = await mountNarrow(
-    {
-      boardView: { ...tasksControl().boardView, open: true },
-      listed,
-    },
-    { overlay: SIDEBAR_OVERLAY.OPEN },
-  );
-  const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 need you");
-  assert.ok(inbox, "the bar's Inbox is named with its count");
-  assert.match(inbox.textContent ?? "", /3/u, "the Inbox's count is drawn");
-  assert.match(
-    placeRow(page, "Inbox")?.textContent ?? "",
-    /^Inbox3 need you/u,
-    "the drawer counts the same",
-  );
-  // Note that the counts wear the needs-you tone the rows they count do, not a tally's ink.
-  const toneOf = (row: HTMLElement | undefined) =>
-    row?.querySelector(".luke-nav-item-count")?.getAttribute("data-tone");
-  assert.equal(toneOf(placeRow(page, "Inbox")), STATUS_TONE.ATTENTION);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
 
-  const none = await mountNarrow({
-    boardView: { ...tasksControl().boardView, open: true },
-  });
+  assert.deepEqual(await counted([2, 1]), ["Channels, 3 need you", "Tasks", "More"]);
   assert.deepEqual(
-    barItems(none).map((item) => [spokenName(item), item.textContent]),
-    [
-      ["Inbox", "Inbox"],
-      ["Tasks", "Tasks"],
-      ["More", "More"],
-    ],
-    "nothing waiting, nothing is drawn or said",
+    await counted([0, 0]),
+    ["Channels", "Tasks", "More"],
+    "nothing waiting, nothing is said",
   );
 });
 
-test("the places bar stands only on a phone's lists: an open task, an Inbox item, an automation's editor, and a wide window keep the whole screen", async () => {
+test("the places bar stands only on a phone's lists: an open task, a thread, an automation's editor, and a wide window keep the whole screen", async () => {
   const onTask = await mountNarrow({ page: TASKS_PAGE.DOCUMENT });
   assert.deepEqual(barItems(onTask), [], "an open task keeps the screen");
   act(() => root?.unmount());
@@ -916,17 +696,17 @@ test("the places bar stands only on a phone's lists: an open task, an Inbox item
       ...tasksControl().inboxView,
       open: true,
       listed: false,
-      chosen: { taskId: "task-1", itemId: "item-1" },
+      chosen: { taskId: "task-1", itemId: "item-1", opened: true },
     },
   });
-  assert.deepEqual(barItems(onItem), [], "an item being read keeps the screen");
+  assert.deepEqual(barItems(onItem), [], "a thread being read keeps the screen");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   const onList = await mountNarrow({
     inboxView: { ...tasksControl().inboxView, open: true, listed: true },
   });
-  assert.equal(barItem(onList, "Inbox").getAttribute("aria-current"), "page");
+  assert.equal(barItem(onList, "Channels").getAttribute("aria-current"), "page");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -947,6 +727,32 @@ test("the places bar stands only on a phone's lists: an open task, an Inbox item
     SHELL_ROOM.WIDE,
   );
   assert.deepEqual(barItems(wide), [], "a wide window keeps its sidebar");
+});
+
+test("the panel's toggle stands over Channels only while a thread stands open beside the stream, not over the stream alone", async () => {
+  const toggled = async (opened: boolean) => {
+    const page = await mountNarrow(
+      {
+        inboxView: {
+          ...tasksControl().inboxView,
+          open: true,
+          // Note that each is an item no other test opened, since the thread open is the window's own while it runs.
+          chosen: opened
+            ? { taskId: "task-1", itemId: "toggle-opened", opened: true }
+            : { taskId: "task-1", itemId: "toggle-closed" },
+        },
+      },
+      {},
+      SHELL_ROOM.WIDE,
+    );
+    const toggle = page.querySelector('button[aria-label="Show panel"]') !== null;
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
+    return toggle;
+  };
+
+  assert.equal(await toggled(false), false, "a thread chosen but closed leaves the stream alone");
+  assert.equal(await toggled(true), true, "an open thread offers its panel");
 });
 
 test("the Automations page's sidebar row and its command stand with no experiment on", async () => {

@@ -16,15 +16,8 @@ export interface CountNoun {
   readonly many: string;
 }
 
-/**
- * Where an open group with nothing in it says how to fill it, Pinned or a
- * section: under its header's name, past the header's glyph.
- */
-export const SIDEBAR_SECTION_SLOT =
-  "sidebar-section-slot pt-tight-gap pr-row-inset pb-item-gap pl-sidebar-slot-start";
-
 /** What a folded group's count is read as unless its group holds something else. */
-export const TASK_NOUN: CountNoun = { one: "task", many: "tasks" };
+const TASK_NOUN: CountNoun = { one: "task", many: "tasks" };
 
 /** The count a group's head draws: its figure, read with its noun ("n tasks" unless the group holds something else), where it stands being the head's `surface`. */
 export function groupCount(count: number, noun: CountNoun = TASK_NOUN): NavCount {

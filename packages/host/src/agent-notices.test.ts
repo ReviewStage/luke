@@ -63,7 +63,6 @@ type InboxAnswerGiven =
  */
 function fixture() {
   const posted: AgentNotice[] = [];
-  let channelsOn = false;
   const badges: number[] = [];
   /** Whether the badge door throws, as a platform that refuses one may. */
   let refusingBadges = false;
@@ -122,7 +121,6 @@ function fixture() {
         taskless.push(next.taskless);
         failedRuns.push(next.failedRuns);
       },
-      channelsOn: () => channelsOn,
       report: () => undefined,
     });
   }).pipe(Effect.provide(doors));
@@ -153,10 +151,6 @@ function fixture() {
     taskless,
     badges,
     failedRuns,
-    /** The account's Channels experiment. */
-    turnChannels: (on: boolean) => {
-      channelsOn = on;
-    },
     /** The signed-in account's id as its identity now holds it: none for one stored without it. */
     knowAccountId: (next: string | undefined) => {
       accountId = next;
@@ -941,12 +935,11 @@ it.effect(
 );
 
 it.effect(
-  "with Channels on, the badge counts the open asks that wait on the account, an ask with no task addressed to it among them, and no notice or teammate's ask",
+  "the badge counts the open asks that wait on the account, an ask with no task addressed to it among them, and no notice or teammate's ask",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       yield* f.notices;
-      f.turnChannels(true);
       const teammate = "user-charles";
       f.answerInbox({
         items: [
@@ -964,29 +957,6 @@ it.effect(
       yield* settled;
 
       assert.equal(f.badges.at(-1), 2);
-    }),
-);
-
-it.effect(
-  "Channels turning on counts the badge again from what last waited, with no answer moving",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.answerInbox({
-        items: [
-          waitingItem(ITEM_A, { waitsOn: ACCOUNT_ID, asking: true }),
-          waitingItem(ITEM_B, { waitsOn: ACCOUNT_ID, asking: false }),
-        ],
-        cursor: "1",
-        readAt: READ_AT,
-      });
-      yield* settled;
-      const before = f.badges.at(-1);
-      f.turnChannels(true);
-      notices.recount();
-
-      assert.deepEqual([before, f.badges.at(-1)], [2, 1]);
     }),
 );
 

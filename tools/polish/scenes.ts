@@ -95,7 +95,7 @@ export interface Scene {
 const PLACE = {
   TASKS: "Tasks",
   PLAN: "Plan",
-  INBOX: "Inbox",
+  CHANNELS: "Channels",
   PERSON: "Person",
   AGENT: "Agent",
   TERMINAL: "Terminal",
@@ -121,27 +121,14 @@ const PHONE_TO_LIST: readonly Step[] = [
 ];
 const PHONE_PLACES = { role: "navigation", name: "Places" } as const;
 
-// The Inbox, by the sidebar's row or a phone's places bar, and back from the item it opens on to its
-// list, which a window too narrow for both shows alone; at full width Esc leaves the list as it stands.
-// A phone's places bar opens it on its list already.
-const OPEN_INBOX: Step = { kind: STEP.CLICK, role: "button", name: "Inbox" };
-const TO_INBOX_LIST: Step = { kind: STEP.PRESS, keys: "Escape" };
-const PHONE_TO_INBOX: readonly Step[] = [
-  TO_INBOX_LIST,
-  { kind: STEP.CLICK, role: "button", name: "Inbox", within: PHONE_PLACES },
-];
-const LONG_THREAD: Step = {
+// A thread of #general, the channel the window rests on, opened from its post; a phone rests on its
+// list of channels, from which #general opens first.
+const OPEN_THREAD: Step = {
   kind: STEP.CLICK,
   role: "button",
-  name: "What the expired invite page says",
+  name: "Open Shipped: v0.48 notarized and published",
 };
-const FORM_ITEM: Step = { kind: STEP.CLICK, role: "button", name: "Invite limits" };
-const NEW_THREAD: Step = { kind: STEP.CLICK, role: "button", name: "New thread" };
-// A phone's Inbox head has no compose button: New thread is the first row of its ⋯ menu.
-const PHONE_NEW_THREAD: readonly Step[] = [
-  { kind: STEP.CLICK, role: "button", name: "Inbox actions", within: MAIN },
-  { kind: STEP.CLICK, role: "menuitem", name: "New thread" },
-];
+const PHONE_TO_GENERAL: Step = { kind: STEP.CLICK, role: "button", name: "general" };
 
 // The workspace switcher at the sidebar's head, named "Workspace: {name}" among more words.
 const WORKSPACE_MENU: Step = { kind: STEP.CLICK, role: "button", name: "Workspace:" };
@@ -298,42 +285,17 @@ export const SCENES: readonly Scene[] = [
       RESOLVED,
     ],
   },
-  // The Inbox.
+  // Channels.
+  // Note that a phone rests on its list of channels, where the desk rests on #general's stream.
+  { id: "channels", place: PLACE.CHANNELS, title: "A channel", profile: "channels", sidebar: true },
   {
-    id: "inbox",
-    place: PLACE.INBOX,
-    title: "The Inbox",
-    profile: "inbox",
+    id: "channels-thread",
+    place: PLACE.CHANNELS,
+    title: "A thread",
+    profile: "channels",
     sidebar: true,
-    steps: [OPEN_INBOX],
-    phoneSteps: PHONE_TO_INBOX,
-  },
-  {
-    id: "inbox-thread",
-    place: PLACE.INBOX,
-    title: "A long thread",
-    profile: "inbox",
-    sidebar: true,
-    steps: [OPEN_INBOX, TO_INBOX_LIST, LONG_THREAD],
-    phoneSteps: [...PHONE_TO_INBOX, LONG_THREAD],
-  },
-  {
-    id: "inbox-form",
-    place: PLACE.INBOX,
-    title: "A form",
-    profile: "inbox",
-    sidebar: true,
-    steps: [OPEN_INBOX, TO_INBOX_LIST, FORM_ITEM],
-    phoneSteps: [...PHONE_TO_INBOX, FORM_ITEM],
-  },
-  {
-    id: "inbox-new-thread",
-    place: PLACE.INBOX,
-    title: "New thread",
-    profile: "inbox",
-    sidebar: true,
-    steps: [OPEN_INBOX, TO_INBOX_LIST, NEW_THREAD],
-    phoneSteps: [...PHONE_TO_INBOX, ...PHONE_NEW_THREAD],
+    steps: [OPEN_THREAD],
+    phoneSteps: [PHONE_TO_GENERAL, OPEN_THREAD],
   },
   // A person's page: the account's own, from its menu at the sidebar's foot.
   {
@@ -344,7 +306,6 @@ export const SCENES: readonly Scene[] = [
     sidebar: true,
     steps: [ACCOUNT_MENU, YOUR_PROFILE],
     phoneSteps: [
-      TO_INBOX_LIST,
       { kind: STEP.CLICK, role: "button", name: "More", within: PHONE_PLACES },
       ACCOUNT_MENU,
       YOUR_PROFILE,

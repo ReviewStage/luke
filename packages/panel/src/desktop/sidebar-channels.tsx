@@ -33,7 +33,7 @@ import { needsYouNoun } from "./places-waiting.js";
 import { useFormDialog } from "./use-form-dialog.js";
 
 /**
- * sidebar-channels.tsx -- the sidebar's Channels and Projects sections while Channels is on: every open channel of the workspace, and the questions that make, rename, and archive one (STAG-547).
+ * sidebar-channels.tsx -- the sidebar's Channels and Projects sections: every open channel of the workspace, and the questions that make, rename, and archive one (STAG-547).
  *
  * Each section heads its rows with a "+" that makes a channel there, a
  * project's under Projects. A row is the channel's glyph and name, and at

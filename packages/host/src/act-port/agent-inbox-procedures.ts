@@ -21,14 +21,11 @@ import type {
   CodingAgentInboxCloseParams,
   CodingAgentInboxMessagedView,
   CodingAgentInboxMessageParams,
-  CodingAgentInboxReadAllView,
   CodingAgentInboxReadStateParams,
   CodingAgentInboxReadStateView,
   CodingAgentInboxScope,
-  CodingAgentInboxStartParams,
   CodingAgentPictureParams,
 } from "@luke/features/coding-agent-view";
-import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { AGENT_INBOX_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
@@ -50,15 +47,9 @@ export interface AgentInboxProceduresDependencies {
     codingAgentInboxMessage(
       params: CodingAgentInboxMessageParams,
     ): Effect.Effect<CodingAgentInboxMessagedView>;
-    codingAgentInboxStart(
-      params: CodingAgentInboxStartParams,
-    ): Effect.Effect<CodingAgentInboxMessagedView>;
     codingAgentInboxReadState(
       params: CodingAgentInboxReadStateParams,
     ): Effect.Effect<CodingAgentInboxReadStateView>;
-    codingAgentInboxReadAll(
-      params: InboxReadAllRequest,
-    ): Effect.Effect<CodingAgentInboxReadAllView>;
     codingAgentInboxAttachment(
       params: CodingAgentInboxAttachmentParams,
     ): Effect.Effect<CodingAgentInboxAttachmentView>;
@@ -117,23 +108,11 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.codingAgentInboxMessage(input);
     }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_START]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_START
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentInboxStart(input);
-    }),
     [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: actPort[
       AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.codingAgentInboxReadState(input);
-    }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentInboxReadAll(input);
     }),
     [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: actPort[
       AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT

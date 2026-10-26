@@ -4,9 +4,7 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { backToWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import {
-  EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   NOTE_LINE_LOOK,
@@ -16,8 +14,7 @@ import {
 } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
-import { InboxIcon } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -31,24 +28,13 @@ import { ChannelList } from "../tasks/channel-list.js";
 import { ChannelStream } from "../tasks/channel-stream.js";
 import { shownChannel } from "../tasks/channels-model.js";
 import { agentName } from "../tasks/coding-agent-model.js";
+import { INBOX_VIEW_ITEMS } from "../tasks/inbox-columns.js";
 import {
-  INBOX_COLUMNS,
-  INBOX_VIEW,
-  INBOX_VIEW_ITEMS,
-  useInboxColumns,
-} from "../tasks/inbox-columns.js";
-import { InboxCompose } from "../tasks/inbox-compose.js";
-import { INBOX_NOT_READ, InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
-import {
-  anyUnread,
   INBOX_HOLDER,
   type InboxHolder,
   type InboxListed,
   itemWorkspaceId,
-  listedItems,
-  NEEDS_YOU,
 } from "../tasks/inbox-model.js";
-import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import {
@@ -61,15 +47,13 @@ import {
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
-import { choiceOf, type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
+import { choiceOf, useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useExperiment } from "../use-app-state.js";
 import { useAgentCallDoors } from "./agent-actions.js";
 import { AgentPane } from "./main-tabs.js";
-import { NewTaskButton } from "./new-task-button.js";
 import {
   COLUMN,
   changesTabOf,
@@ -85,59 +69,36 @@ import { type TabViews, useTabViews } from "./strip-tabs.js";
 import { taskCardOf } from "./task-card.js";
 
 /**
- * desktop-inbox.tsx -- the window's Inbox: every item of every task of the listed workspace holding one in a list of its own, and the chosen item read beside it.
+ * desktop-inbox.tsx -- the window's Channels: a channel's stream in the task's place, the thread opened from it read beside it.
  *
- * It stands in the task's place beside the sidebar, whose Inbox row is
- * marked while it does, the way a mail app's mailbox stands beside its
- * folders. The list (`inbox-list.tsx`) holds the items of each task of the
- * workspace the sidebar lists that main says holds one (the switcher counts
- * what waits in the others), needing the developer or settled, each task read whole
- * as main says it changed (`use-inbox-items.ts`), under its task, its
- * person, its status, or in one run, the latest first or the oldest
- * first, For you, what needs them and what of theirs is unread, or All,
- * everything, of everyone's, theirs, or one teammate's, as the developer
- * last chose; Needs
- * you is the Inbox's one name for an item not yet answered
- * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
- * same items. A task's status never hides its items: the Inbox is a feed
- * of what the agents got done, so an item of a task done or canceled is
- * listed and counted as any other until it is read or answered, its row
- * wearing its task's status (`inbox-list.tsx`). A press on a row chooses it, and the pane beside the
- * list (`inbox-pane.tsx`) shows it as a thread, answered in place, on its
- * task's own held read, which stands in for the list's read of that task
- * so an answer shows at once. With nothing chosen, the first item listed
- * that waits stands chosen, else the first listed. The pane's crumbs open
- * the task or the agent's tab, leaving the Inbox; what the item opens that
- * a task's side panel draws opens in that panel beside it instead, standing
- * for the chosen item's task (`use-tasks-tab.ts`): a code block's Open its
- * file, and a link naming a file of the task's repository, one of its
- * pages, or one of its agents' pull requests (`inbox-panel-link.ts`). The
- * panel's toggle, its width, and its keys are a task's own, and ⌘F finds in
- * the panel while it holds the keys, as on a task. With nothing listed, it says so under the Inbox's
- * glyph (`@luke/ui`'s `EmptyState`) over New task, the window resting here
- * with no task open (`resting-page.ts`); with its scope leaving out every item, the list
- * says so and offers the scope that holds something, while the pane goes on showing the item
- * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
- * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item
- * side by side, it shows one at a time (`inbox-columns.ts`): the chosen
- * item, whose way back, Back's chord, or Escape gives the list, and a press
- * on a row there the item again. K and J, and the pager where the
- * item stands alone, step through the list (`inbox-pager.tsx`). Everything in it that names a
- * person, an answer and an agent's starter, reads them against the listed
- * workspace's members (`member-directory.tsx`). The chosen item's box
- * mentions what its repository and workspace hold (`answerPlace`), and
- * its skills are read through its holder and drawn as chips that open
- * their `SKILL.md` in the panel beside it, as a file the item names opens,
- * or on GitHub where the item has no plan whose panel could open it.
- *
- * Its items are read and listed by `use-inbox-listing.ts`. While the account
- * has the inbox-first sidebar on, the shell reads them once and hands the
- * listing to the sidebar, which lists them (`sidebar-inbox.tsx`), and here,
- * where the chosen item then stands alone across the place, with no list of
- * its own and no way back to one, the list being always in sight.
+ * It stands in the task's place beside the sidebar, whose channel's row is
+ * marked while it does. The stream (`channel-stream.tsx`) shows the channel
+ * the sidebar chose, else #general, its threads as posts; a press on a post
+ * opens its thread beside the stream in the thread pane (`inbox-pane.tsx`),
+ * answered in place on its task's own held read, and × closes it. A link
+ * or a notification that asks for an item opens it as a thread beside the
+ * channel shown. The pane's crumbs open the task or the agent's tab,
+ * leaving Channels; what the thread opens that a task's side panel draws
+ * opens in that panel beside it instead, standing for the thread's task
+ * (`use-tasks-tab.ts`): a code block's Open its file, and a link naming a
+ * file of the task's repository, one of its pages, or one of its agents'
+ * pull requests (`inbox-panel-link.ts`). The panel's toggle, its width, and
+ * its keys are a task's own, and ⌘F finds in the panel while it holds the
+ * keys, as on a task. Escape never leaves it, a stray press being no reason
+ * to lose the thread being read; any row of the sidebar does, and so does
+ * Back. A phone shows one thing at a time across the screen: the list of
+ * channels its bar opens, a channel's stream, or a thread in place of the
+ * stream. Everything in it that names a person, an answer and an agent's
+ * starter, reads them against the listed workspace's members
+ * (`member-directory.tsx`). The thread's box mentions what its repository
+ * and workspace hold (`answerPlace`), and its skills are read through its
+ * holder and drawn as chips that open their `SKILL.md` in the panel beside
+ * it, as a file the thread names opens, or on GitHub where it has no plan
+ * whose panel could open it. Its threads' holders are read by
+ * `use-inbox-listing.ts`.
  */
 
-/** The page's grid while it is a channel's stream: the stream alone, or the stream and its thread beside it. */
+/** The page's grid: the stream alone, or the stream and its thread beside it. */
 const CHANNELS_VIEW =
   "inbox-view channels-view @container grid min-h-0 flex-1 grid-cols-single data-[thread]:grid-cols-channel-thread [&>[hidden]]:hidden";
 
@@ -146,72 +107,32 @@ const CHANNELS_READING = "Reading channels…";
 const CHANNELS_NOT_READ = "Could not read this workspace's channels.";
 const CHANNELS_NONE = "This workspace has no channels yet.";
 
-/** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
-const BACK_TO_INBOX = backToWords("inbox");
+/** What leads back to the stream from a missing thread's notice. */
+const BACK_TO_CHANNEL = backToWords("channel");
 
 /** A taskless item's code reads no file, there being no task whose repository it reads through. */
 const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
   Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
 
-const _nothing = (): void => undefined;
-
-/** The column a New thread stands in, which the Inbox shows as it would an item. */
-const COMPOSE_COLUMN = "new-thread";
-
-/** No tab of the Inbox's panel is drawn in semibold: what arrives on a task arrives on its page. */
+/** No tab of the thread's panel is drawn in semibold: what arrives on a task arrives on its page. */
 const NO_UNREAD: readonly StripTab[] = [];
 
-/** No agent's tab stands open beside the Inbox, so no worker's tab stands in its panel. */
+/** No agent's tab stands open beside Channels, so no worker's tab stands in its panel. */
 const NO_OPEN_AGENTS: readonly string[] = [];
 
-/** The window's Inbox, in the task's place: every task's items and every automation's, and the chosen one read beside them. */
+/** The window's Channels, in the task's place: a channel's stream, and the thread opened from it beside it. */
 export function DesktopInbox({
   tasks,
-  listing,
   room = SHELL_ROOM.WIDE,
 }: {
   tasks: TasksControl;
-  /** The Inbox as the inbox-first sidebar lists it, where the sidebar holds the list and the page shows the chosen item alone; none where the page reads and lists it itself. */
-  listing?: InboxListing | undefined;
-  /** The room the stage gives; narrow, a phone's, the list is headed as a phone's page is (`phone-head.tsx`). */
+  /** The room the stage gives; narrow, a phone's, it shows one thing at a time across the screen. */
   room?: ShellRoom;
-}): React.JSX.Element {
-  return listing === undefined ? (
-    <ListedInbox tasks={tasks} room={room} />
-  ) : (
-    <InboxShown tasks={tasks} listing={listing} paneOnly room={room} />
-  );
-}
-
-/** The Inbox page reading its own items, its list and the chosen item side by side. */
-function ListedInbox({ tasks, room }: { tasks: TasksControl; room: ShellRoom }): React.JSX.Element {
-  const listing = useInboxListing(tasks);
-  return <InboxShown tasks={tasks} listing={listing} paneOnly={false} room={room} />;
-}
-
-/**
- * The Inbox as read: its list and the chosen item beside it, or, where the
- * sidebar lists it (`paneOnly`), the chosen item alone across the place,
- * with no way back to a list that is always in sight.
- */
-function InboxShown({
-  tasks,
-  listing,
-  paneOnly,
-  room,
-}: {
-  tasks: TasksControl;
-  listing: InboxListing;
-  paneOnly: boolean;
-  room: ShellRoom;
 }): React.JSX.Element {
   const {
     view,
     act,
-    choices,
-    folds,
     openAutomation,
-    failed,
     asked,
     chosenTask,
     taskId,
@@ -221,91 +142,38 @@ function InboxShown({
     named,
     marks,
     standing,
-    counts,
-    list,
-    steps,
     chosen,
-    filteredOut,
-    search,
-    searched,
     missing,
-    reading,
-    choose,
     closeItem,
-    onRetry,
-    compose,
-  } = listing;
-  // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
-  const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
+  } = useInboxListing(tasks);
   const now = useMinute();
-  // Note that with Channels on the page is a channel's stream, its thread beside it once one is opened, rather than the Inbox's list.
-  const streaming = useExperiment(EXPERIMENT.CHANNELS) && !paneOnly;
   const channelPlace = useChannelPlace();
-  const channels = useChannels(streaming ? tasks.workspace?.id : undefined, tasks.shown);
-  const channel = streaming
-    ? shownChannel(channels.channels ?? [], channelPlace.channelId)
-    : undefined;
+  const channels = useChannels(tasks.workspace?.id, tasks.shown);
+  const channel = shownChannel(channels.channels ?? [], channelPlace.channelId);
   // Note that a phone shows one thing at a time across the screen: the list of channels its bar opens, a channel's stream, or a thread in place of the stream.
   const phone = room === SHELL_ROOM.NARROW;
   // A phone's list of channels stands while the list is asked for, as the bar's Channels asks, so the window's Back returns to it from a stream.
-  const channelsListed = streaming && phone && view.listed;
-  const threadShown =
+  const channelsListed = phone && view.listed;
+  const { onListed } = view;
+  // A thread stands beside the stream only while the item chosen is the one opened, so a choice history went back past shows the stream alone.
+  const threadAsked =
     channel !== undefined &&
-    chosen !== undefined &&
-    channelPlace.threadId === chosen.item.id &&
+    asked !== undefined &&
+    channelPlace.threadId === asked.itemId &&
     !channelsListed;
-  const threadBeside = threadShown && !phone;
-  // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
-  // Note that the window keeps whether the list was asked for, so its history can go back to it.
-  const { listed, onListed, onSingle } = view;
-  const pageColumns = useInboxColumns(
-    compose.on ? COMPOSE_COLUMN : (chosen?.item.id ?? (missing ? asked?.itemId : undefined)),
-    !paneOnly,
-    { asked: listed, onAsk: onListed, onSingle: paneOnly ? undefined : onSingle },
-  );
-  // Note that the Inbox reports one column only once an item stands, since its list lives in the sidebar and a list step would show nothing new.
-  const itemStands = chosen !== undefined;
-  useLayoutEffect(() => {
-    if (paneOnly) onSingle?.(itemStands);
-  }, [paneOnly, onSingle, itemStands]);
-  // Note that with the list in the sidebar the place shows the item alone, measured by nothing, with no way back to a list that stays in sight.
-  const columns = paneOnly
-    ? { ...pageColumns, ref: undefined, shown: INBOX_COLUMNS.ITEM, onBack: undefined }
-    : pageColumns;
-  // A row's press and Next's open their item alike, the keyboard following it.
-  const open = (listed: InboxListed) => {
-    compose.onEnd();
-    choose(listed);
-    columns.onOpen(listed.item.id);
-  };
-  const { onMark: markItem } = marks;
-  // K and J choose the item above or below, the keyboard following it to its row.
-  const step = (listed: InboxListed) => {
-    choose(listed);
-    columns.onStep();
-  };
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
-    shown: tasks.shown,
-    folded: folds.folded,
-  });
-  const next = inboxNext(
-    steps,
-    chosen,
-    { models: named.models, readerId: tasks.me },
-    open,
-    folds.folded,
-    direction,
-  );
-  // A choice that asks for its item opens it once, the one column the Inbox shows being the
-  // item's; Back from it then stands on the list, the choice taken already.
-  const opensItem = asked?.opened === true && chosen?.item.id === asked.itemId;
+  const threadShown = threadAsked && chosen !== undefined;
+  // Note that an item a link asked for that no read holds stands as a notice in the thread's place, so the reader is told it is gone.
+  const goneShown = threadAsked && chosen === undefined && missing;
+  const threadBeside = (threadShown || goneShown) && !phone;
+  // A choice that asks for its item, as a link or a notification does, opens it as a thread beside the channel shown, once.
+  const { onOpenThread } = channelPlace;
   const taken = useRef<InboxChoice | undefined>(undefined);
-  const openColumn = columns.onOpen;
   useEffect(() => {
-    if (!opensItem || asked === undefined || taken.current === asked) return;
+    if (asked?.opened !== true || taken.current === asked) return;
     taken.current = asked;
-    openColumn(asked.itemId);
-  }, [opensItem, asked, openColumn]);
+    onOpenThread(asked.itemId);
+  }, [asked, onOpenThread]);
+  const { onMark: markItem } = marks;
   // Where the chosen item's words are read: its plan's workspace and repository, or, with no plan, its agent's own.
   const place = chosen === undefined ? undefined : answerPlace(chosen, agents, tasks);
   // Where the chosen item's links are written: under its own workspace, by slug once the workspaces are read.
@@ -321,22 +189,9 @@ function InboxShown({
       : (tasks.workspaces.find((each) => each.id === chosenWorkspaceId)?.slug ?? chosenWorkspaceId);
   // What the chosen item's box offers an `@`, read under that workspace and repository.
   const readMentionAgents = useMentionAgentsReader(place?.workspaceId, tasks.tasks, named.models);
-  // What a New thread's To offers: the agents of the workspace the Inbox lists.
-  const readWorkspaceAgents = useMentionAgentsReader(
-    tasks.workspace?.id,
-    tasks.tasks,
-    named.models,
-  );
-  const startCompose = compose.onStart;
-  const onCompose = tasks.signedIn
-    ? () => {
-        startCompose();
-        columns.onOpen(COMPOSE_COLUMN);
-      }
-    : undefined;
   const listedWorkspace = tasks.workspace;
   const { sidePanel } = tasks;
-  // A file the item names opens beside the Inbox as the panel's preview; pressed with ⌘, it goes to the item's task, opened there.
+  // A file the item names opens beside the thread as the panel's preview; pressed with ⌘, it goes to the item's task, opened there.
   const openFile = (ref: CodeRef, commit: string | undefined) => {
     const going = taskId !== undefined && pressedWithCommand() ? taskId : undefined;
     if (going === undefined) return sidePanel.onPreviewFile(ref, commit);
@@ -355,18 +210,11 @@ function InboxShown({
   const drawing = useSidePanelDrawing(sidePanel);
   const views = useTabViews();
   const { onArea, focus } = useColumnFocus();
-  // The panel holds the keys while the focus went into it last, or while it fills the window over the Inbox.
+  // The panel holds the keys while the focus went into it last, or while it fills the window over Channels.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
-  // The item shown is read as it opens, and U marks it, only while the Inbox holds the keys and the panel does not cover it.
+  // The thread shown is read as it opens, and U marks it, only while Channels holds the keys and the panel does not cover it.
   // Note that a stream with no thread open beside it shows no item, so none is read or nodded to unseen.
-  const opened =
-    tasks.shown &&
-    !sidePanel.fullScreen &&
-    columns.shown !== INBOX_COLUMNS.LIST &&
-    !compose.on &&
-    (!streaming || threadShown)
-      ? chosen
-      : undefined;
+  const opened = tasks.shown && !sidePanel.fullScreen && threadShown ? chosen : undefined;
   useReadOnOpen({
     shown: opened?.item,
     chosen: chosen?.item,
@@ -382,7 +230,7 @@ function InboxShown({
     url: opened.url,
   }));
   const { pages } = view;
-  // The panel's state is held to the task's agents this Inbox read, whose Pull request tabs alone the panel draws, an archived one's among them.
+  // The panel's state is held to the task's agents this page read, whose Pull request tabs alone the panel draws, an archived one's among them.
   const { onTaskAgents } = view;
   const taskAgents = agents.agents;
   const { heldIds } = agents;
@@ -394,7 +242,7 @@ function InboxShown({
       heldIds,
     );
   }, [taskId, taskAgents, heldIds, onTaskAgents]);
-  // A channel's thread as the Inbox lists it, with what holds it, so its post names its agent and the pane reads it through its holder.
+  // A channel's thread as it is read, with what holds it, so its post names its agent and the pane reads it through its holder.
   const listedById = new Map(
     standing.flatMap(({ holder, items }) =>
       items.map((item) => [item.id, { holder, item }] as const),
@@ -409,9 +257,8 @@ function InboxShown({
       (holder.task.ownerId === tasks.me || holder.task.assignee?.userId === tasks.me)
     );
   };
-  // A post's press opens its thread beside the stream, chosen as the Inbox chooses an item, by its holder where it is read.
+  // A post's press opens its thread beside the stream, chosen by its holder where it is read.
   const openThread = (thread: ChannelThread) => {
-    compose.onEnd();
     const listedThread = listedOf(thread.id);
     view.onChoose({
       ...(listedThread === undefined
@@ -419,7 +266,7 @@ function InboxShown({
         : choiceOf(listedThread)),
       opened: true,
     });
-    channelPlace.onOpenThread(thread.id);
+    onOpenThread(thread.id);
   };
   // A channel pressed on a phone's list opens on its stream, never on a thread left open in it.
   const openChannel = (channelId: string) => {
@@ -441,7 +288,7 @@ function InboxShown({
     });
     if (target === undefined || panelFor === undefined) return false;
     // A link pressed with ⌘ goes to its task, opening what it names there as a tab of its own, as against a
-    // plain press, which opens it beside the item as the panel's preview, so reading an item leaves no tab
+    // plain press, which opens it beside the thread as the panel's preview, so reading a thread leaves no tab
     // standing on its task but the one last read.
     const going = taskId !== undefined && pressedWithCommand() ? taskId : undefined;
     switch (target.kind) {
@@ -458,7 +305,7 @@ function InboxShown({
         else sidePanel.onPreview({ changes: target.agentId });
         return true;
       case INBOX_PANEL_TARGET.AGENT:
-        // An agent of the item's task reads beside the item as the panel's preview; pressed with ⌘, or archived, which its task alone draws, it goes to the task on its tab.
+        // An agent of the item's task reads beside the thread as the panel's preview; pressed with ⌘, or archived, which its task alone draws, it goes to the task on its tab.
         if (going === undefined && named.agentIds?.includes(target.agentId) === true) {
           sidePanel.onPreview({ transcript: target.agentId });
           return true;
@@ -498,167 +345,53 @@ function InboxShown({
               active={tasks.shown && !sideFocused}
               hidden={sidePanel.fullScreen}
             >
-              <div
-                className={streaming ? CHANNELS_VIEW : INBOX_VIEW}
-                ref={columns.ref}
-                data-columns={streaming ? undefined : columns.shown}
-                data-thread={threadBeside ? "" : undefined}
-              >
-                {streaming ? (
-                  channel === undefined ? (
-                    channels.failed ? (
-                      <ErrorState
-                        placement={ERROR_STATE_PLACEMENT.CENTRED}
-                        onRetry={channels.onRefresh}
-                      >
-                        {CHANNELS_NOT_READ}
-                      </ErrorState>
-                    ) : (
-                      <NoteLine look={NOTE_LINE_LOOK.CENTRED} status>
-                        {channels.channels === undefined ? CHANNELS_READING : CHANNELS_NONE}
-                      </NoteLine>
-                    )
-                  ) : channelsListed ? (
-                    <ChannelList channels={channels.channels ?? []} onOpen={openChannel} />
+              <div className={CHANNELS_VIEW} data-thread={threadBeside ? "" : undefined}>
+                {channel === undefined ? (
+                  channels.failed ? (
+                    <ErrorState
+                      placement={ERROR_STATE_PLACEMENT.CENTRED}
+                      onRetry={channels.onRefresh}
+                    >
+                      {CHANNELS_NOT_READ}
+                    </ErrorState>
                   ) : (
-                    <ChannelStream
-                      key={channel.id}
-                      channel={channel}
-                      chosenId={chosen?.item.id}
-                      beside={threadBeside}
-                      hidden={threadShown && phone}
-                      readerId={tasks.me}
-                      now={now}
-                      shown={tasks.shown}
-                      listedOf={listedOf}
-                      ownTask={ownTask}
-                      onOpen={openThread}
-                      onLook={channels.onLook}
-                      onAnswered={channels.onRefresh}
-                    />
+                    <NoteLine look={NOTE_LINE_LOOK.CENTRED} status>
+                      {channels.channels === undefined ? CHANNELS_READING : CHANNELS_NONE}
+                    </NoteLine>
                   )
-                ) : paneOnly ? null : (
-                  <InboxList
-                    view={list}
-                    chosen={chosen?.item.id}
-                    columns={columns.shown}
-                    rows={columns.rows}
-                    head={{
-                      shown: tasks.shown,
-                      show: choices,
-                      view: { choices, folds },
-                      readAll: {
-                        unread: anyUnread(standing),
-                        onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
-                      },
-                      search,
-                      onCompose,
-                      phone:
-                        room === SHELL_ROOM.NARROW
-                          ? { start: <NewTaskButton tasks={tasks} /> }
-                          : undefined,
-                    }}
-                    models={named.models}
+                ) : channelsListed ? (
+                  <ChannelList channels={channels.channels ?? []} onOpen={openChannel} />
+                ) : (
+                  <ChannelStream
+                    key={channel.id}
+                    channel={channel}
+                    chosenId={chosen?.item.id}
+                    beside={threadBeside}
+                    hidden={(threadShown || goneShown) && phone}
                     readerId={tasks.me}
-                    reading={reading}
-                    note={
-                      <InboxListNote
-                        failed={failed}
-                        reading={reading}
-                        empty={listedItems(list).length === 0}
-                        alone={columns.shown === INBOX_COLUMNS.LIST}
-                        filteredOut={filteredOut ? choices : undefined}
-                        counts={counts}
-                        onList={columns.onList}
-                        onRetry={onRetry}
-                        searched={searched}
-                        onNewTask={newTask}
-                      />
-                    }
-                    onChoose={open}
-                    onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
-                    onClose={closeItem}
+                    now={now}
+                    shown={tasks.shown}
+                    listedOf={listedOf}
+                    ownTask={ownTask}
+                    onOpen={openThread}
+                    onLook={channels.onLook}
+                    onAnswered={channels.onRefresh}
                   />
                 )}
-                {streaming && !threadShown ? null : compose.on ? (
-                  <InboxCompose
-                    // Note that the pane is the listed workspace's, so another listed starts it afresh, its To and its agents read there.
-                    key={listedWorkspace?.id}
-                    hidden={columns.shown === INBOX_COLUMNS.LIST}
-                    workspace={
-                      listedWorkspace === undefined
-                        ? undefined
-                        : {
-                            workspace: listedWorkspace.slug ?? listedWorkspace.id,
-                            workspaceId: listedWorkspace.id,
-                          }
-                    }
-                    repositoryOf={(id) =>
-                      tasks.tasks.find((each) => each.id === id)?.repository ?? null
-                    }
-                    onShowMention={tasks.onShowMention}
-                    onBack={columns.onBack}
-                    readAgents={readWorkspaceAgents}
-                    to={chosen?.item.agentId}
-                    keywords={agents.keywords}
-                    start={agents.startInboxThread}
-                    onStarted={({ item, agent }) => {
-                      compose.onEnd();
-                      view.onChoose({
-                        ...(agent.task === undefined
-                          ? { agentId: agent.id }
-                          : { taskId: agent.task.id }),
-                        itemId: item.id,
-                        opened: true,
-                      });
-                    }}
-                    onDiscard={compose.onEnd}
-                    phone={room === SHELL_ROOM.NARROW}
-                    onRestore={() => onCompose?.()}
-                  />
-                ) : chosen === undefined ? (
-                  <section
-                    className={INBOX_VIEW_ITEMS}
-                    aria-label="Inbox"
-                    // Note that with the list in the sidebar this is the whole place, so its empty state and its missing item's notice always stand.
-                    hidden={
-                      paneOnly
-                        ? false
-                        : missing
-                          ? columns.shown === INBOX_COLUMNS.LIST
-                          : columns.shown !== INBOX_COLUMNS.BOTH
-                    }
-                  >
+                {goneShown ? (
+                  <section className={INBOX_VIEW_ITEMS} aria-label="Thread">
                     <Toolbar />
-                    {missing ? (
-                      <NotFound
-                        thing={NOT_FOUND_THING.INBOX_ITEM}
-                        action={
-                          columns.onBack === undefined
-                            ? undefined
-                            : { label: BACK_TO_INBOX, onClick: columns.onBack }
-                        }
-                      />
-                    ) : failed ? (
-                      // Note that the list beside says the read failed, so only a pane standing alone draws it, never the empty state.
-                      paneOnly ? (
-                        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetry}>
-                          {INBOX_NOT_READ}
-                        </ErrorState>
-                      ) : null
-                    ) : reading || filteredOut || searched !== undefined ? null : (
-                      // Note that the list says what the filter or its search left out, so the pane beside it stands bare.
-                      <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
-                        {NEEDS_YOU.NONE}
-                      </EmptyState>
-                    )}
+                    <NotFound
+                      thing={NOT_FOUND_THING.INBOX_ITEM}
+                      action={{ label: BACK_TO_CHANNEL, onClick: closeThread }}
+                    />
                   </section>
-                ) : (
+                ) : threadShown && chosen !== undefined && channel !== undefined ? (
                   <OpenHereProvider value={openHere}>
                     <SkillFiles
                       source={agents.readSkills}
                       onOpen={(skill) => {
-                        // Note that a skill's file opens in the panel beside the Inbox, as a file the item names does, and on GitHub where the item has no plan's panel to open it in.
+                        // Note that a skill's file opens in the panel beside the thread, as a file the item names does, and on GitHub where the item has no plan's panel to open it in.
                         if (place === undefined) return;
                         const url = encodeMention(
                           { kind: MENTION_KIND.FILE, path: skill.path },
@@ -676,20 +409,14 @@ function InboxShown({
                             item={chosen.item}
                             control={live}
                             agents={named}
-                            hidden={!streaming && columns.shown === INBOX_COLUMNS.LIST}
-                            onBack={streaming ? (phone ? closeThread : undefined) : columns.onBack}
-                            pager={
-                              !streaming && columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined
-                            }
-                            next={streaming ? undefined : next}
+                            hidden={false}
+                            onBack={phone ? closeThread : undefined}
+                            pager={undefined}
+                            next={undefined}
                             mentions={mentions}
-                            channel={
-                              threadShown && channel !== undefined
-                                ? { name: channel.name, onClose: closeThread }
-                                : undefined
-                            }
+                            channel={{ name: channel.name, onClose: closeThread }}
                             phone={
-                              room === SHELL_ROOM.NARROW
+                              phone
                                 ? {
                                     onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle,
                                   }
@@ -710,7 +437,7 @@ function InboxShown({
                       </LinkWorkspaceProvider>
                     </SkillFiles>
                   </OpenHereProvider>
-                )}
+                ) : null}
               </div>
             </PageFind>
             {drawing.panel ? (
@@ -726,7 +453,7 @@ function InboxShown({
                 views={views}
                 mentions={mentions}
                 phone={
-                  room === SHELL_ROOM.NARROW && chosen !== undefined
+                  phone && chosen !== undefined
                     ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
                     : undefined
                 }

@@ -191,27 +191,13 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Video calls", "Keyframe"]) {
     assert.deepEqual(experimentalFound(query, true), ["Video calls"], query);
   }
-  for (const query of ["Inbox-first", "inbox's items under their tasks"]) {
-    assert.deepEqual(experimentalFound(query, true), ["Inbox-first sidebar"], query);
-  }
-  for (const query of ["threads by topic", "a stream your agents post to"]) {
-    assert.deepEqual(experimentalFound(query, true), ["Channels"], query);
-  }
   for (const query of ["operator", "steers them"]) {
     assert.deepEqual(experimentalFound(query, true), ["Luke, your operator"], query);
   }
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      [
-        "Channels",
-        "Memory",
-        "Luke, your operator",
-        "Inbox-first sidebar",
-        "Code review",
-        "Browser tab",
-        "Video calls",
-      ],
+      ["Memory", "Luke, your operator", "Code review", "Browser tab", "Video calls"],
       query,
     );
   }

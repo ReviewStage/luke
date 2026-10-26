@@ -41,9 +41,8 @@ import {
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
 import { LIVE_STATUS } from "@luke/live";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { experimentsOn } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { PENDING_LIMIT } from "@luke/ui/pending-values";
@@ -91,7 +90,6 @@ import {
   DESKTOP_CAPABILITIES,
   deliveryOf,
   handCapabilities,
-  handState,
   stateWith,
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -2663,30 +2661,6 @@ test("an account with nothing yet rests on no page, its welcome standing, and ne
     tasks: { ...listRead([listed()]), listStatus: TASKS_READ.READING },
   });
   assert.equal(reading.control().inboxView.open, false);
-});
-
-test("under the inbox-first sidebar the window rests on the newest item waiting, and on the Tasks page where nothing waits", async () => {
-  handState(experimentsOn(EXPERIMENT.INBOX_FIRST));
-  const older = { id: "older", agentId: "agent-1", title: "Older", postedAt: 1 };
-  const newer = { id: "newer", agentId: "agent-1", title: "Newer", postedAt: 2 };
-  const waiting = mount(
-    {
-      shown: true,
-      tasks: listRead([listed()]),
-      inboxWaiting: [{ taskId: TASK.id, items: [older, newer] }],
-    },
-    {},
-    AtomRegistryModule.make(),
-  );
-  await settle();
-  assert.equal(waiting.control().inboxView.open, true);
-  assert.deepEqual(waiting.control().inboxView.chosen, { taskId: TASK.id, itemId: "newer" });
-
-  const none = mount({ shown: true, tasks: listRead([listed()]) }, {}, AtomRegistryModule.make());
-  await settle();
-  assert.equal(none.control().boardView.open, true);
-  assert.equal(none.control().inboxView.open, false);
-  handState({});
 });
 
 test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {

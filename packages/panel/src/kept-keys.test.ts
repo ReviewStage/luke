@@ -12,8 +12,6 @@ import {
   useFileTreeWidth,
   useFoldedGroups,
   useInboxListWidth,
-  useInboxTaskFolds,
-  useInboxViewChoices,
   useRunsPanel,
   useTaskInboxShow,
 } from "./desktop/folded-groups.js";
@@ -21,6 +19,7 @@ import { SIDEBAR_WIDTH, useSidebarCollapse } from "./desktop/sidebar-collapse.js
 import { useTaskListView } from "./desktop/task-list-view.js";
 import { useSummaryPin } from "./desktop/task-summary.js";
 import { useConversationFilters } from "./tasks/conversation-filters.js";
+import { useChannelPlace } from "./tasks/use-channels.js";
 
 /**
  * kept-keys.test.ts -- a view choice kept before it moved onto `useKept` is
@@ -109,65 +108,27 @@ test("a fixture run's folds keep nothing", () => {
   expect(kept("luke.sidebarFoldedGroups")).toBeNull();
 });
 
-test("the Inbox's task folds are read from the name tasks had before they were named", () => {
-  keep("luke.inboxFoldedPlans", '["t1"]');
-  const folds = draw(() => useInboxTaskFolds());
-  expect(folds.now().folded("t1")).toBe(true);
-  act(() => folds.now().toggle("t2"));
-  expect(kept("luke.inboxFoldedTasks")).toBe('["t1","t2"]');
-});
-
-test("the Inbox's scope is read from a tab, or a button's press, kept before the scopes", () => {
-  keep("luke.inboxShow", '"needs-you"');
-  expect(draw(() => useInboxViewChoices()).now().show).toBe("to-do");
+test("a task's Inbox's scope is read from a tab, or a button's press, kept before the scopes", () => {
+  keep("luke.taskInboxShow", '"needs-you"');
+  expect(draw(() => useTaskInboxShow()).now().show).toBe("to-do");
   act(() => root?.unmount());
-  keep("luke.inboxShow", '"open"');
-  expect(draw(() => useInboxViewChoices()).now().show).toBe("all");
+  keep("luke.taskInboxShow", '"open"');
+  expect(draw(() => useTaskInboxShow()).now().show).toBe("all");
   act(() => root?.unmount());
-  window.localStorage.removeItem("luke.inboxShow");
-  keep("luke.inboxWaitingOnly", "false");
-  expect(draw(() => useInboxViewChoices()).now().show).toBe("all");
+  window.localStorage.removeItem("luke.taskInboxShow");
+  keep("luke.taskInboxWaitingOnly", "false");
+  expect(draw(() => useTaskInboxShow()).now().show).toBe("all");
   act(() => root?.unmount());
-  keep("luke.inboxWaitingOnly", "true");
-  expect(draw(() => useInboxViewChoices()).now().show).toBe("to-do");
+  keep("luke.taskInboxWaitingOnly", "true");
+  expect(draw(() => useTaskInboxShow()).now().show).toBe("to-do");
   act(() => root?.unmount());
   window.localStorage.clear();
-  expect(draw(() => useInboxViewChoices()).now().show).toBe("to-do");
+  expect(draw(() => useTaskInboxShow()).now().show).toBe("to-do");
 });
 
-test("an Inbox scope kept as null reads the Needs you press kept beside it, as it did before", () => {
-  keep("luke.inboxShow", "null");
-  keep("luke.inboxWaitingOnly", "false");
+test("a task's Inbox scope kept as null reads the Needs you press kept beside it, as it did before", () => {
   keep("luke.taskInboxShow", "null");
   keep("luke.taskInboxWaitingOnly", "false");
-  const shown = draw(() => ({ window: useInboxViewChoices(), task: useTaskInboxShow() }));
-  expect(shown.now().window.show).toBe("all");
-  expect(shown.now().task.show).toBe("all");
-});
-
-test("the Inbox's choices are read as they were kept, and an earlier sort as the one that replaced it", () => {
-  keep("luke.inboxShow", '"all"');
-  keep("luke.inboxGrouping", '"plan"');
-  keep("luke.inboxSort", '"waiting"');
-  keep("luke.inboxWhose", '{"kind":"person","userId":"u1","name":"Ana"}');
-  keep("luke.inboxMediaPreviews", "true");
-  keep("luke.inboxSecondLine", "false");
-  const choices = draw(() => useInboxViewChoices());
-  expect(choices.now().show).toBe("all");
-  expect(choices.now().grouping).toBe("plan");
-  expect(choices.now().sort).toBe("oldest");
-  expect(choices.now().whose).toEqual({ kind: "person", userId: "u1", name: "Ana" });
-  expect(choices.now().mediaPreviews).toBe(true);
-  expect(choices.now().secondLine).toBe(false);
-  act(() => choices.now().onShow("to-do"));
-  act(() => choices.now().onSort("latest"));
-  expect(kept("luke.inboxShow")).toBe('"to-do"');
-  expect(kept("luke.inboxSort")).toBe('"latest"');
-});
-
-test("a task's own Inbox keeps its scope apart from the window's", () => {
-  keep("luke.taskInboxShow", '"all"');
-  keep("luke.inboxShow", '"to-do"');
   expect(draw(() => useTaskInboxShow()).now().show).toBe("all");
 });
 
@@ -236,6 +197,14 @@ test("the chosen workspace is read from the id it was kept as", () => {
   expect(chosen.now().chosen?.id).toBe("w2");
   act(() => chosen.now().choose("w1"));
   expect(kept("luke.chosenWorkspace")).toBe('"w1"');
+});
+
+test("Channels opens on the channel last chosen, read from the id it was kept as, and a channel chosen is kept under it", () => {
+  keep("luke.channel", "c2");
+  const place = draw(() => useChannelPlace());
+  expect(place.now().channelId).toBe("c2");
+  act(() => place.now().onChoose("c1"));
+  expect(kept("luke.channel")).toBe("c1");
 });
 
 test("the call's video stands as tall as it was kept, held to its bounds", () => {

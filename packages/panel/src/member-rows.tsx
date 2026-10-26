@@ -2,7 +2,6 @@ import { readFailedWords, TERM, VERB } from "@luke/features/words";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { MENU_DETAIL } from "@luke/ui";
 import { memberActor, type PersonActor } from "@luke/ui/actor-model";
-import { UserIcon, UsersIcon } from "lucide-react";
 import { ACTOR_SIZE, ActorMark, PersonCard } from "./actor-ref.js";
 import type { MenuAction } from "./desktop/action-menu.js";
 import type { Directory } from "./member-directory.js";
@@ -22,12 +21,6 @@ import type { Directory } from "./member-directory.js";
 
 /** What a person's row says of the reader in their email's place. */
 export const YOU_WORD = "You";
-
-/** What a filter by person calls its two fixed choices: no one in particular, and the reader. */
-export const PEOPLE_FILTER_WORDS = {
-  ANYONE: "Anyone",
-  ME: "Me",
-} as const;
 
 /**
  * The row standing last in a people menu while the members are read or could
@@ -97,75 +90,4 @@ export function memberRows(
       card: <PersonCard actor={actor} />,
     };
   });
-}
-
-/** What a filter by person keeps: anyone's, the reader's own, or one teammate's. */
-export const PEOPLE_FILTER = {
-  ANYONE: "anyone",
-  ME: "me",
-  PERSON: "person",
-} as const;
-
-/** A filter by person's choice, a teammate named by their account id and their name. */
-export type PeopleFilter =
-  | { readonly kind: typeof PEOPLE_FILTER.ANYONE }
-  | { readonly kind: typeof PEOPLE_FILTER.ME }
-  | { readonly kind: typeof PEOPLE_FILTER.PERSON; readonly userId: string; readonly name: string };
-
-/**
- * A filter by person's choices: Anyone, then the reader as Me, then each
- * other member as `memberRows` draws them, their email beside their name and
- * their card beside the row, the one chosen checked, a teammate by their id
- * alone. Me stands where the reader's id is known, or where the caller keeps
- * the reader's own apart from any id (`meWithoutId`), as the Inbox reads an
- * item waiting on nobody it can name as the reader's.
- */
-export function peopleFilterActions({
-  members,
-  readerId,
-  chosen,
-  onChoose,
-  meWithoutId = false,
-}: {
-  members: readonly WorkspaceMember[] | undefined;
-  readerId: string | undefined;
-  chosen: PeopleFilter | { readonly kind: typeof PEOPLE_FILTER.PERSON; readonly userId: string };
-  onChoose: (filter: PeopleFilter) => void;
-  meWithoutId?: boolean;
-}): MenuAction[] {
-  const rows = memberRows(members, readerId);
-  const mine = rows.find((row) => row.actor.you);
-  const me: MenuAction[] =
-    readerId === undefined && !meWithoutId
-      ? []
-      : [
-          {
-            label: PEOPLE_FILTER_WORDS.ME,
-            icon: mine?.icon ?? <UserIcon />,
-            card: mine?.card,
-            checked: chosen.kind === PEOPLE_FILTER.ME,
-            onSelect: () => onChoose({ kind: PEOPLE_FILTER.ME }),
-          },
-        ];
-  return [
-    {
-      label: PEOPLE_FILTER_WORDS.ANYONE,
-      icon: <UsersIcon />,
-      checked: chosen.kind === PEOPLE_FILTER.ANYONE,
-      onSelect: () => onChoose({ kind: PEOPLE_FILTER.ANYONE }),
-    },
-    ...me,
-    ...rows
-      .filter((row) => !row.actor.you)
-      .map((row) => ({
-        label: row.label,
-        icon: row.icon,
-        detail: row.detail,
-        detailPlace: MENU_DETAIL.BESIDE,
-        card: row.card,
-        checked: chosen.kind === PEOPLE_FILTER.PERSON && chosen.userId === row.member.userId,
-        onSelect: () =>
-          onChoose({ kind: PEOPLE_FILTER.PERSON, userId: row.member.userId, name: row.label }),
-      })),
-  ];
 }

@@ -28,7 +28,7 @@ import {
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -359,7 +359,7 @@ test("a Settings page standing alone on a phone is named by its bar, opens a sec
 
   const places = the(page, 'nav[aria-label="Places"]');
   assert.deepEqual([...places.querySelectorAll("button")].map(controlName), [
-    "Inbox",
+    "Channels",
     "Tasks",
     "More",
   ]);

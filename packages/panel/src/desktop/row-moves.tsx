@@ -1,8 +1,6 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon } from "@luke/ui";
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
-import { flushSync } from "react-dom";
-import { useAppCommand } from "../app-commands.js";
+import { createContext, useContext } from "react";
 import type { MenuAction, MenuEntry } from "./action-menu.js";
 
 /**
@@ -42,17 +40,6 @@ export type RowRun = (typeof ROW_RUN)[keyof typeof ROW_RUN];
 
 const RowPlaceContext = createContext<RowPlace | undefined>(undefined);
 
-/** Hands the row inside it its place in its list, which its menu offers to move it from. */
-export function RowPlaced({
-  place,
-  children,
-}: {
-  place: RowPlace | undefined;
-  children: ReactNode;
-}): React.JSX.Element {
-  return <RowPlaceContext.Provider value={place}>{children}</RowPlaceContext.Provider>;
-}
-
 /** The place the list around this row handed it, if it stands in one that reorders. */
 export function useRowPlace(): RowPlace | undefined {
   return useContext(RowPlaceContext);
@@ -89,63 +76,4 @@ export function withRowMoves(
 ): readonly (readonly MenuEntry[])[] {
   const moves = rowMoveActions(place, run);
   return moves.length === 0 ? groups : [moves, ...groups];
-}
-
-/** What a list that moves its rows wears, so a row's focus is read by the list it stands directly in and not one of the lists nested in its rows. */
-const MOVE_LIST = "data-row-moves";
-
-/** A list's rows that move; one on its way out (`ListMotion`) is no longer one of them, as `use-row-drag.ts` counts them. */
-const MOVING_ROW = ":scope > li:not([data-leaving])";
-
-/** A press of a key in what is typed into belongs to the field, so a row's own name being edited keeps ⇧⌘↑ for its text. */
-const TYPING = "input, textarea, select, [contenteditable]";
-
-/**
- * Offers ⇧⌘↑ and ⇧⌘↓ while a row of the list has the keyboard, moving that
- * row one place by the same move a drop makes, and keeping it focused so the
- * chord can be pressed again. The list wears what this returns. `move` is the
- * list's move; none, for a list whose rows stay put, offers nothing.
- *
- * Note that the move is drawn before focus is put back, because moving the
- * focused row in the document takes the focus from it, as the tab strip's
- * step finds (`tabs.tsx`).
- */
-export function useRowMoveKeys(move: ((from: number, to: number) => void) | undefined): {
-  ref: (list: HTMLElement | null) => void;
-  [MOVE_LIST]: "";
-} {
-  const [list, setList] = useState<HTMLElement | null>(null);
-  const [held, setHeld] = useState(false);
-  useEffect(() => {
-    if (list === null) return;
-    // Note that only a target whose nearest moving list is this one counts, because a section's own tasks stand in a list inside the section's row.
-    const ownTarget = (target: EventTarget | null) =>
-      target instanceof Element && target.closest(`[${MOVE_LIST}]`) === list;
-    const focusIn = (event: FocusEvent) => {
-      if (!ownTarget(event.target)) return;
-      setHeld(!(event.target instanceof Element && event.target.matches(TYPING)));
-    };
-    const focusOut = (event: FocusEvent) => {
-      if (ownTarget(event.target)) setHeld(false);
-    };
-    list.addEventListener("focusin", focusIn);
-    list.addEventListener("focusout", focusOut);
-    return () => {
-      list.removeEventListener("focusin", focusIn);
-      list.removeEventListener("focusout", focusOut);
-    };
-  }, [list]);
-  const step = (by: -1 | 1) => {
-    const control = document.activeElement;
-    if (list === null || move === undefined || !(control instanceof HTMLElement)) return;
-    const rows = [...list.querySelectorAll<HTMLElement>(MOVING_ROW)];
-    const at = rows.findIndex((row) => row.contains(control));
-    if (at < 0 || at + by < 0 || at + by >= rows.length) return;
-    flushSync(() => move(at, at + by));
-    if (control.isConnected && document.activeElement !== control) control.focus();
-  };
-  const offered = held && move !== undefined;
-  useAppCommand(APP_COMMAND.MOVE_ROW_UP, offered ? () => step(-1) : undefined);
-  useAppCommand(APP_COMMAND.MOVE_ROW_DOWN, offered ? () => step(1) : undefined);
-  return { ref: setList, [MOVE_LIST]: "" };
 }

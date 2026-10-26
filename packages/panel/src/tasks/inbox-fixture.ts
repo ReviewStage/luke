@@ -1,9 +1,8 @@
 /**
- * inbox-fixture.ts -- the synthetic Inbox a fixture run's Inbox and person profiles draw, and the answers its items and agents are read by in place of the service's.
+ * inbox-fixture.ts -- the synthetic inbox items a fixture run's person profile draws, and the answers its items and agents are read by in place of the service's.
  *
- * A fixture run signs in to nothing and follows no inbox, so the window's
- * Inbox says only that nothing needs you, an item never opens, and a
- * person's page has no tasks to list. Under these profiles the window's
+ * A fixture run signs in to nothing and follows no inbox, so a person's
+ * page has no tasks to list. Under this profile the window's
  * document holds a synthetic account signed in, the owner of the fixture's
  * first workspace, and main's read of the account names the tasks holding
  * items; each of those tasks' inboxes is pushed whole when it is followed,
@@ -56,10 +55,7 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 /** The profiles this fixture stages. */
-const STAGED_PROFILES: ReadonlySet<string> = new Set<string>([
-  RUN_PROFILE.INBOX,
-  RUN_PROFILE.PERSON,
-]);
+const STAGED_PROFILES: ReadonlySet<string> = new Set<string>([RUN_PROFILE.PERSON]);
 
 /** The account signed in: the owner of the fixture's first workspace, which is named for it. */
 const ADA = { userId: "user-ada", name: "Ada Lovelace" } as const;
@@ -615,9 +611,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     pushedOnce(follow.kind === AUTOMATION_FOLLOW.WORKSPACE ? NO_AUTOMATIONS : { runs: [] }),
   // Note that a mark is taken as the service takes one, the item's state echoed, though nothing here moves: the window's own mark stands over every read (`inbox-settling.ts`).
   [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
-  [ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: () => ({
-    marked: [...INBOXES.values()].flat().filter(({ unread }) => unread === true).length,
-  }),
 };
 
 /**

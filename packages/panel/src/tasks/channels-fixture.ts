@@ -6,7 +6,8 @@
  * infra, and threads in each channel, open asks of each kind and notices,
  * some settled on earlier days. `channels` reads it as Dean, and
  * `channels-teammate` as Charles, his teammate, so the two windows can be
- * set side by side. Every profile turns Channels on. Nothing is read from
+ * set side by side. Every other profile's sidebar reads the same channels,
+ * as Dean, so a capture of any place draws them. Nothing is read from
  * an account; every name and address here is invented.
  */
 
@@ -37,7 +38,6 @@ import {
 } from "@luke/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
-import { EXPERIMENT } from "@luke/settings";
 import { threadNeedsReader } from "./channels-model.js";
 
 const LANDED = Date.now();
@@ -909,26 +909,7 @@ export function channelsReader(profile: string): string | undefined {
   return READERS.get(profile)?.userId;
 }
 
-/** Main's settings with Channels on, one object for each of main's. */
-const STAGED_SETTINGS = new WeakMap<
-  NonNullable<AppStateSnapshot["settings"]>,
-  NonNullable<AppStateSnapshot["settings"]>
->();
-
-function stagedSettings(
-  settings: NonNullable<AppStateSnapshot["settings"]>,
-): NonNullable<AppStateSnapshot["settings"]> {
-  const held = STAGED_SETTINGS.get(settings);
-  if (held !== undefined) return held;
-  const staged = {
-    ...settings,
-    experiments: { ...settings.experiments, [EXPERIMENT.CHANNELS]: true },
-  };
-  STAGED_SETTINGS.set(settings, staged);
-  return staged;
-}
-
-/** Main's document under the channels profiles: the reader signed in, what waits on them, and Channels on. */
+/** Main's document under the channels profiles: the reader signed in, and what waits on them. */
 export function channelsAppState(state: AppStateSnapshot): AppStateSnapshot {
   const reader = READERS.get(state.run.profile);
   if (reader === undefined) return state;
@@ -937,7 +918,6 @@ export function channelsAppState(state: AppStateSnapshot): AppStateSnapshot {
     ...state,
     account: accountOf(READER),
     inbox: { ...state.inbox, waiting: waiting(), tasks: holdings() },
-    ...(state.settings === undefined ? undefined : { settings: stagedSettings(state.settings) }),
   };
 }
 
@@ -1057,13 +1037,24 @@ function replied(
   return item;
 }
 
-/** What the channels profiles answer an act with, in place of main; none for any other kind or profile. */
+/** The kinds every signed-in profile answers from these channels, since every window's sidebar lists them. */
+const CHANNEL_READS: ReadonlySet<PortActKind> = new Set<PortActKind>([
+  ACT_KIND.CHANNELS_LIST,
+  ACT_KIND.CHANNELS_THREADS,
+  ACT_KIND.CHANNELS_LOOK,
+]);
+
+/**
+ * What the channels profiles answer an act with, in place of main, and what
+ * any other profile answers a read of the channels with, read as Dean; none
+ * for any other kind.
+ */
 export function channelsActAnswer(
   profile: string,
   kind: PortActKind,
   payload: PortActPayload<PortActKind>,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
-  if (!READERS.has(profile)) return undefined;
+  if (!READERS.has(profile) && !CHANNEL_READS.has(kind)) return undefined;
   // SAFETY: the table is keyed by kind, each answer taking that kind's payload and answering its
   // result, or a follow's pushes, which its caller iterates as the port's stream.
   const answer = ANSWERS[kind] as StagedAnswer<PortActKind> | undefined;

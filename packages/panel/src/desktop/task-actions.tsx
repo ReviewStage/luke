@@ -74,7 +74,7 @@ import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
-import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
+import { moveToSectionEntry, useSectionDialogs } from "./section-dialogs.js";
 import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME, TaskRowMark, taskCardOf } from "./task-card.js";
 
 /**
@@ -107,7 +107,7 @@ import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME, TaskRowMark, taskCardOf } fro
  * and what the move does (`move-task-dialog.tsx`), offered on a task the
  * reader started. Move to section, beside Pin and Mark done while the account
  * has sections on, puts the task in one of the reader's own sections, a new
- * one, or none (`sidebar-sections.tsx`).
+ * one, or none (`section-dialogs.tsx`).
  * Permanently delete cannot be undone, so choosing it asks first in a dialog
  * over the window that names the task and offers Mark done as the way to
  * keep it, whichever door it was chosen from. Under the items, pressed by nothing,

@@ -94,7 +94,6 @@ import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { newTaskAction } from "../tasks/inbox-list.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import { TaskIssueTagChip } from "../tasks/task-issue-links.js";
 import {
@@ -114,6 +113,7 @@ import {
   groupNewTaskWords,
   groupStanding,
   NewTaskInButton,
+  newTaskAction,
   quickAddInto,
 } from "./new-task-button.js";
 import { type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";

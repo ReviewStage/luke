@@ -715,8 +715,6 @@ export type CodingAgentInboxMessagedView = typeof codingAgentInboxMessagedViewSc
 /** A thread the window starts with one agent: the start request the service takes whole, its key the window's own. It is heard as a message on a thread is (`codingAgentInboxMessagedViewSchema`). */
 export const codingAgentInboxStartParamsSchema = inboxStartRequestSchema;
 
-export type CodingAgentInboxStartParams = typeof codingAgentInboxStartParamsSchema.Type;
-
 /** One item marked read or unread for the account, as the window asks it: the item, and whether it is to read as unread. */
 export const codingAgentInboxReadStateParamsSchema = EffectSchema.Struct({
   itemId: EffectSchema.NonEmptyString,
@@ -734,7 +732,7 @@ export const codingAgentInboxReadStateViewSchema = EffectSchema.Union([
 export type CodingAgentInboxReadStateView = typeof codingAgentInboxReadStateViewSchema.Type;
 
 /** Every item of the Inbox marked read, as the window hears it: how many were unread, or why there is no answer. */
-export const codingAgentInboxReadAllViewSchema = EffectSchema.Union([inboxReadAllSchema, failed]);
+const codingAgentInboxReadAllViewSchema = EffectSchema.Union([inboxReadAllSchema, failed]);
 
 export type CodingAgentInboxReadAllView = typeof codingAgentInboxReadAllViewSchema.Type;
 

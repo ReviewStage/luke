@@ -13,16 +13,10 @@
  * is pressed or a link asks for it. An Inbox whose
  * list holds nothing but the item has no way back, there being no list worth
  * going back to. The line is drawn by the Inbox's own width rather than the
- * window's, because the window's Inbox and a task's own Inbox tab stand in
- * columns of their own, beside a sidebar, a side panel, or neither. An Inbox
- * narrowed keeps the item it shows, as Material's list-detail layout does,
- * and one that splits again forgets that the list was asked for, so it
- * narrows onto its item again. Whether the list was asked for is the
- * Inbox's own, unless its holder keeps it (`InboxListing`), as the window
- * keeps its Inbox's, so its history can go back to the list; such a holder
- * hears whether the Inbox shows one column too, so its history holds the
- * list and the item as steps of their own by this line rather than by the
- * window's room, which is narrower.
+ * window's, because a task's Inbox tab stands in the side panel's column. An
+ * Inbox narrowed keeps the item it shows, as Material's list-detail layout
+ * does, and one that splits again forgets that the list was asked for, so it
+ * narrows onto its item again.
  */
 
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -146,21 +140,6 @@ export function listHeadControl(list: ParentNode | null): HTMLElement | null {
   );
 }
 
-/** Whether the list was asked for, kept by the Inbox's holder rather than the Inbox, and the way to ask for it or give it up. */
-export interface InboxListing {
-  readonly asked: boolean;
-  readonly onAsk: (asked: boolean) => void;
-  /** Hears whether the Inbox shows one column, by its own width, so a holder's history steps between the list and the item exactly while they stand apart. */
-  readonly onSingle?: ((single: boolean) => void) | undefined;
-}
-
-/** Whether the list was asked for, held by the Inbox itself where its holder keeps none: asked from the start in a narrow room, where the list is the place. */
-function useListing(kept: InboxListing | undefined): InboxListing {
-  const phone = usePhoneRoom();
-  const [asked, setAsked] = useState(phone);
-  return kept ?? { asked, onAsk: setAsked };
-}
-
 /** Which columns stand: both where split, else the item unless the list was asked for and is worth going back to, or nothing is chosen. */
 function shownColumns(
   single: boolean,
@@ -184,18 +163,16 @@ function shownColumns(
  * never left in what cannot be seen. K and J hand it to the row of the item
  * they step to while the list stands, so ↑↓ go on from there, and leave it
  * where it is while the item stands alone. Note that the keyboard is moved before
- * the window paints, while the hidden control still holds it. `kept` is
- * whether the list was asked for where the holder keeps it.
+ * the window paints, while the hidden control still holds it. Whether the
+ * list was asked for is the Inbox's own, asked from the start in a narrow
+ * room, where the list is the place.
  */
-export function useInboxColumns(
-  chosen: string | undefined,
-  backable: boolean,
-  kept?: InboxListing,
-): InboxColumns {
+export function useInboxColumns(chosen: string | undefined, backable: boolean): InboxColumns {
   // Note that the Inbox is neither one column nor split until it is measured, which lays it out split.
   const { ref: measure, single: measured } = useColumnSplit();
   const single = measured === true;
-  const { asked: listAsked, onAsk: setListAsked } = useListing(kept);
+  const phone = usePhoneRoom();
+  const [listAsked, setListAsked] = useState(phone);
   // Note that Show all is counted, because it takes its own button away while what stands and what is chosen may stay as they were.
   const [showAlls, setShowAlls] = useState(0);
   const view = useRef<HTMLElement | null>(null);
@@ -216,10 +193,6 @@ export function useInboxColumns(
     if (split && listAsked) setListAsked(false);
   }, [split, listAsked, setListAsked]);
   const shown = shownColumns(single, chosen, listAsked, backable);
-  const onSingle = kept?.onSingle;
-  useLayoutEffect(() => {
-    onSingle?.(single);
-  }, [single, onSingle]);
 
   useLayoutEffect(() => {
     const held = view.current;

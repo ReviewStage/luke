@@ -18,7 +18,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { INBOX_COLUMNS, useInboxRowPresses } from "./inbox-columns.js";
 import { InboxList } from "./inbox-list.js";
-import { INBOX_GROUPING, INBOX_HOLDER, type InboxListView } from "./inbox-model.js";
+import { INBOX_HOLDER, type InboxListView } from "./inbox-model.js";
 
 /**
  * inbox-list-selectable.test.ts -- the Inbox's list chooses its items as
@@ -72,7 +72,6 @@ function item(number: number): InboxItem {
 
 const VIEW: InboxListView = {
   readerId: undefined,
-  grouping: INBOX_GROUPING.NONE,
   items: [1, 2, 3, 4, 5].map((number) => ({
     holder: { kind: INBOX_HOLDER.TASK, task: TASK },
     item: item(number),
@@ -99,7 +98,7 @@ function mount() {
       head: {
         shown: true,
         show: { show: "all", onShow: () => undefined } as never,
-        view: undefined,
+        search: { query: "", onQuery: () => undefined },
       },
       note: null,
       columns: INBOX_COLUMNS.BOTH,

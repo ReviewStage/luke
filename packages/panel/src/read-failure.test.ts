@@ -6,23 +6,18 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChangesAnswerView,
 } from "@luke/features/coding-agent-view";
-import { PLAN_ACTOR, type PlanRevisionLine, type TaskSummary } from "@luke/features/task-wire";
+import { PLAN_ACTOR, type PlanRevisionLine } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { UPDATE_STATUS } from "@luke/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { DesktopInbox } from "./desktop/desktop-inbox.js";
-import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop/desktop-version-history.js";
 import { SIDEBAR_OVERLAY } from "./desktop/sidebar-collapse.js";
-import { PANEL_TAB } from "./panel-tabs.js";
 import { AgentAuthSection } from "./settings/agent-auth-section.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
 import { SHELL_ROOM } from "./shell-room.js";
-import { useInboxListing } from "./tasks/use-inbox-listing.js";
 import { HISTORY_READ } from "./tasks/use-plan-history.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
@@ -43,15 +38,6 @@ import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
 
 const ignore = () => undefined;
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
-
-const TASK: TaskSummary = {
-  id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
-  workspaceId: "workspace-personal",
-  name: "Billing usage alerts",
-  createdAt: 1,
-  updatedAt: 2,
-  repository: "acme/relay",
-};
 
 /** Whether the service answers a read, rather than failing it, as a Retry finds it once it is back. */
 let answering = false;
@@ -129,93 +115,6 @@ function assertSaidAlike(failure: ReturnType<typeof readFailure>, words: string)
   assert.deepEqual(failure.presses, ["Retry"]);
 }
 
-test("the sidebar's plans that could not be read say so, and Retry reads the list again", async () => {
-  let retried = 0;
-  const page = await mount(
-    createElement(DesktopSidebar, {
-      sidebar: {
-        collapsed: false,
-        compact: false,
-        overlay: SIDEBAR_OVERLAY.CLOSED,
-        width: 264,
-        onToggle: ignore,
-        onOverlay: ignore,
-        onResize: ignore,
-        staged: false,
-      },
-      history: {
-        canGoBack: false,
-        canGoForward: false,
-        onBack: ignore,
-        onForward: ignore,
-        steps: { back: [], forward: [] },
-        onGoTo: ignore,
-      },
-      tasks: tasksControl({
-        listFailed: true,
-        onRetryList: () => {
-          retried += 1;
-        },
-      }),
-      tab: PANEL_TAB.TASKS,
-      onTabChange: ignore,
-      onPressWithin: ignore,
-      account: {
-        status: ACCOUNT_STATUS.SIGNED_IN,
-        email: "dev@example.com",
-        name: "Dev",
-        provider: "github",
-      },
-      updates: {
-        update: {
-          status: UPDATE_STATUS.IDLE,
-          currentVersion: "1.0.0",
-          installSupported: true,
-          upToDate: false,
-        },
-        build: { packaged: false },
-        onCheck: () => Promise.resolve(),
-        onInstall: ignore,
-        onOpenLatest: ignore,
-      },
-      onSignOut: () => Promise.resolve(),
-    }),
-  );
-  const failure = readFailure(page);
-  assertSaidAlike(failure, "Your tasks could not be read.");
-  failure.retry();
-  assert.equal(retried, 1);
-});
-
-test("the Inbox's list says a plan it could not read as the sidebar does, and Retry lists what the plan holds", async () => {
-  const page = await mount(
-    createElement(DesktopInbox, {
-      tasks: tasksControl({
-        tasks: [TASK],
-        inboxTasks: [{ taskId: TASK.id, items: 1, updatedAt: 2 }],
-        inboxView: {
-          open: true,
-          chosen: undefined,
-          onOpen: ignore,
-          onClose: ignore,
-          onChoose: ignore,
-          onOpenItem: () => undefined,
-          listed: false,
-          onListed: ignore,
-          pages: undefined,
-          onTaskAgents: () => undefined,
-        },
-      }),
-    }),
-  );
-  const failure = readFailure(page);
-  assertSaidAlike(failure, "Some items could not be read.");
-  answering = true;
-  failure.retry();
-  await settle();
-  assert.equal(page.querySelector('[role="alert"]'), null, "the read landed, so nothing fails");
-});
-
 test("a side panel tab whose read failed says so alike, and Retry reads them again", async () => {
   let reads = 0;
   const readChanges = (): Promise<CodingAgentChangesAnswerView> => {
@@ -265,62 +164,6 @@ test("Settings says a page's failed read alike in its card's place, the keys and
   const workspacesFailure = readFailure(workspaces);
   assertSaidAlike(workspacesFailure, "Your workspaces could not be read.");
   workspacesFailure.retry();
-  assert.equal(retried, 1);
-});
-
-/** The Inbox page as the tests draw it: open, nothing chosen. */
-const INBOX_VIEW = {
-  open: true,
-  chosen: undefined,
-  onOpen: ignore,
-  onClose: ignore,
-  onChoose: ignore,
-  onOpenItem: () => undefined,
-  listed: false,
-  onListed: ignore,
-  pages: undefined,
-  onTaskAgents: () => undefined,
-} as const;
-
-/** The Inbox whose sidebar lists it, so the page shows the chosen item alone. */
-function PanedInbox({ tasks }: { tasks: ReturnType<typeof tasksControl> }): React.JSX.Element {
-  const listing = useInboxListing(tasks);
-  return createElement(DesktopInbox, { tasks, listing });
-}
-
-test("an Inbox whose task list could not be read says so, never that nothing needs you, and Retry reads the list again", async () => {
-  let retried = 0;
-  const tasks = tasksControl({
-    listFailed: true,
-    onRetryList: () => {
-      retried += 1;
-    },
-    inboxView: INBOX_VIEW,
-  });
-  const page = await mount(createElement(DesktopInbox, { tasks }));
-  const failure = readFailure(page);
-  assertSaidAlike(failure, "Some items could not be read.");
-  assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u);
-  assert.equal(page.querySelector('[role="status"]'), null, "no loading placeholder");
-  failure.retry();
-  assert.equal(retried, 1);
-});
-
-test("an Inbox the sidebar lists says a failed read across its page, never that nothing needs you, and Retry reads again", async () => {
-  let retried = 0;
-  const tasks = tasksControl({
-    listFailed: true,
-    onRetryList: () => {
-      retried += 1;
-    },
-    inboxView: INBOX_VIEW,
-  });
-  const page = await mount(createElement(PanedInbox, { tasks }));
-  const failure = readFailure(page);
-  assertSaidAlike(failure, "Some items could not be read.");
-  assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u);
-  assert.equal(page.querySelector('[role="status"]'), null, "no loading placeholder");
-  failure.retry();
   assert.equal(retried, 1);
 });
 

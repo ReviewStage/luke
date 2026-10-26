@@ -69,11 +69,9 @@ import {
   type CodingAgentInboxCloseParams,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
-  type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateParams,
   type CodingAgentInboxReadStateView,
   type CodingAgentInboxScope,
-  type CodingAgentInboxStartParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -120,7 +118,6 @@ import {
   codingAgentInboxAttachmentViewSchema,
   codingAgentInboxChangedSchema,
   codingAgentInboxMessagedViewSchema,
-  codingAgentInboxReadAllViewSchema,
   codingAgentInboxReadStateViewSchema,
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
@@ -162,7 +159,6 @@ import {
   planTemplateRevisionsAnswerViewSchema,
   providerKeysAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
-import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillContentView,
@@ -917,16 +913,10 @@ export interface HostOperator {
   codingAgentInboxMessage(
     params: CodingAgentInboxMessageParams,
   ): Effect.Effect<CodingAgentInboxMessagedView>;
-  /** A thread started with one agent, its subject and first message; the thread as it then stands, its message on it, or why there is no answer. */
-  codingAgentInboxStart(
-    params: CodingAgentInboxStartParams,
-  ): Effect.Effect<CodingAgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
   codingAgentInboxReadState(
     params: CodingAgentInboxReadStateParams,
   ): Effect.Effect<CodingAgentInboxReadStateView>;
-  /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
-  codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<CodingAgentInboxReadAllView>;
   /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
   codingAgentAccountInboxFollow(): Effect.Effect<void>;
   /** The account inbox let go: nothing more is heard of it until it is followed again. */
@@ -2354,17 +2344,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(codingAgentInboxMessagedViewSchema, CODING_AGENT_UNANSWERED),
       ),
-    codingAgentInboxStart: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_START, {
-          agentId: params.agentId,
-          ...(params.title === undefined ? undefined : { title: params.title }),
-          text: params.text,
-          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
-          clientKey: params.clientKey,
-        }),
-        answerOf(codingAgentInboxMessagedViewSchema, CODING_AGENT_UNANSWERED),
-      ),
     codingAgentInboxReadState: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, {
@@ -2372,14 +2351,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           unread: params.unread,
         }),
         answerOf(codingAgentInboxReadStateViewSchema, CODING_AGENT_UNANSWERED),
-      ),
-    codingAgentInboxReadAll: (params) =>
-      Effect.map(
-        client.call(
-          GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL,
-          params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
-        ),
-        answerOf(codingAgentInboxReadAllViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentAccountInboxFollow: () =>
       fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW, {})),

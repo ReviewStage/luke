@@ -29,6 +29,7 @@ import {
   fakeActs,
 } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
+import { CHANNEL_PROCEDURES } from "../testing/channels.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -174,11 +175,18 @@ async function inbox(options: {
       }
     },
   });
-  fakeActPort({ ...fakeActPortCalls(), ...host.procedures });
+  fakeActPort({ ...fakeActPortCalls(), ...host.procedures, ...CHANNEL_PROCEDURES });
   const sweep = options.sweep;
-  // The Inbox's own choice is held as the plans tab holds it, so the item it stands chosen is drawn.
+  // The item opens as a link to it does, beside #general's stream: the plan's first, else the agent's with no plan.
+  const [first] = options.taskItems;
+  const opened: InboxChoice | undefined =
+    first !== undefined
+      ? { taskId: TASK.id, itemId: first.id, opened: true }
+      : sweep === undefined
+        ? undefined
+        : { agentId: sweep.item.agentId, itemId: sweep.item.id, opened: true };
   function Page() {
-    const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
+    const [chosen, setChosen] = useState<InboxChoice | undefined>(opened);
     // Whether the list was asked for, which the window keeps as the Tasks tab does.
     const [listed, setListed] = useState(false);
     return createElement(DesktopInbox, {
@@ -251,7 +259,7 @@ test("a plan's item in the window's Inbox reads its links through the plan's wor
 test("an item of a workspace an older service answered with no slug still reads its links through that workspace, by its id", async () => {
   const { slug: _slug, ...unslugged } = GLOBEX;
   const { container, asked } = await inbox({
-    listed: undefined,
+    listed: unslugged,
     taskItems: [],
     sweep: {
       item: item("a1b2c3d4-0000-4000-8000-000000000004", SWEEP_AGENT, `Opened ${LEDGER_PULL}.`),
@@ -264,9 +272,9 @@ test("an item of a workspace an older service answered with no slug still reads 
   assert.deepEqual(readThrough(asked), ["workspace-globex globex/ledger#5"]);
 });
 
-test("an item of an agent with no plan reads its links through the agent's own workspace, not the one the Inbox lists", async () => {
+test("an item of an agent with no plan reads its links through the agent's own workspace", async () => {
   const { container, asked } = await inbox({
-    listed: undefined,
+    listed: GLOBEX,
     taskItems: [],
     sweep: {
       item: item("a1b2c3d4-0000-4000-8000-000000000002", SWEEP_AGENT, `Opened ${LEDGER_PULL}.`),
