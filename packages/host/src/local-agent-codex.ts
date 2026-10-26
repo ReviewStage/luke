@@ -80,7 +80,22 @@ const fetchCodex = Effect.fnUntraced(function* (folder: string) {
     .get(CODEX_MAC_PIN.ARCHIVE)
     .pipe(Effect.timeout(CODEX_FETCH.TIMEOUT));
   if (response.status !== HTTP_OK) return yield* Effect.fail("fetch refused");
-  const archive = new Uint8Array(yield* response.arrayBuffer);
+  // Note that the archive is read into a buffer of the pin's size and no larger, so an answer
+  // longer than the pinned archive is refused as it arrives rather than held whole.
+  const archive = new Uint8Array(CODEX_MAC_PIN.BYTES);
+  const received = yield* response.stream.pipe(
+    Stream.runFoldEffect(
+      () => 0,
+      (filled, chunk: Uint8Array) =>
+        filled + chunk.length > archive.length
+          ? Effect.fail("too large")
+          : Effect.sync(() => {
+              archive.set(chunk, filled);
+              return filled + chunk.length;
+            }),
+    ),
+  );
+  if (received !== archive.length) return yield* Effect.fail("short");
   const digest = yield* Effect.tryPromise(() => crypto.subtle.digest("SHA-256", archive));
   // Note that nothing of an archive whose digest is not the pin's is written anywhere.
   if (Hex.encode(new Uint8Array(digest)) !== CODEX_MAC_PIN.SHA256) {

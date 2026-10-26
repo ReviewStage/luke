@@ -35,7 +35,7 @@ import { macAgentLine } from "@luke/database/schemas/mac-agent";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "@luke/database/testing";
 import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
-import { macAgentLayout } from "@luke/features/mac-agent-wire";
+import { macAgentLaunchSecretsSchema, macAgentLayout } from "@luke/features/mac-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -43,7 +43,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
+import { DateTime, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
@@ -314,12 +314,14 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
                 Effect.provide(Layer.succeed(HostedEnvironment, NO_KEYS)),
               ),
             );
-            assert.ok(claimed.secrets !== undefined);
-            const [config] = claimed.secrets.stdin
+            assert.ok("secrets" in claimed);
+            const secrets = Schema.decodeUnknownSync(macAgentLaunchSecretsSchema)(claimed.secrets);
+            const [config] = secrets.stdin
               .trimEnd()
               .split("\n")
-              .map((line) => JSON.parse(line));
-            return { stored: JSON.stringify(row), secrets: claimed.secrets, config };
+              .map((line: string): CodexConfig => JSON.parse(line));
+            assert.ok(config !== undefined);
+            return { stored: JSON.stringify(row), secrets, config };
           });
         const folder = macAgentLayout(MAC_DEVICE_LAYOUT.home, "").folder;
 

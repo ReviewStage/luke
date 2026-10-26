@@ -24,6 +24,7 @@
 import type { RunnerTokenAnswer } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
+  readCodingAgent,
   readCodingAgentHeaderOfConversation,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
@@ -51,7 +52,7 @@ import {
 } from "../../http/http-effect.js";
 import { makeRateBrake, type RateBrake } from "../../http/rate-brake.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
-import { CODEX_TOKEN_MARGIN } from "../coder-host/codex-sessions.js";
+import { CODEX_TOKEN_MARGIN, onMacCodexLogin } from "../coder-host/codex-sessions.js";
 import { admitRunnerBearer, presentedBearer } from "../luke-mcp/bearer.js";
 
 /** The path a runner's token command posts to. */
@@ -77,6 +78,17 @@ const REFUSAL_OF_ACCESS = {
   [CHATGPT_ACCESS.LIMIT_REACHED]: HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED,
   [CHATGPT_ACCESS.INELIGIBLE]: HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE,
 } as const satisfies Record<Exclude<ChatGptAccess["outcome"], "ready">, HostedRefusal>;
+
+/** Whether the agent runs on its Mac's own Codex sign-in now; an agent the store does not hold reads as so, and is handed nothing. */
+const onMacLoginNow = (userId: string, agentId: string) =>
+  hostedStoreOrUnavailable(
+    Effect.flatMap(readCodingAgent(userId, agentId), (agent) =>
+      Option.match(agent, {
+        onNone: () => Effect.succeed(true),
+        onSome: (found) => onMacCodexLogin(userId, found),
+      }),
+    ),
+  );
 
 /** POST: the plan's access token, for the Codex agent on the plan the bearer stands for. */
 const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")(function* (
@@ -104,15 +116,18 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
     readCodingAgentRouting(target.userId, agent.value.id),
   );
   // Note that only an agent its starter's plan pays for, on Codex, is handed the plan's token: one
-  // started on the plan, or a local one started on its Mac's own sign-in, which turns to the plan
-  // once that Mac signs out (`codex-sessions.ts`'s `savedPayer`).
-  const onPlan = Option.exists(
-    routing,
-    (row) =>
-      row.runtime === CONVERSATION_RUNTIME.CODEX &&
-      (row.payer === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION ||
-        row.payer === CODING_AGENT_PAYER.MAC_SIGN_IN),
+  // started on the plan, or a local one started on its Mac's own sign-in while that Mac is signed
+  // out of Codex, the one case its launch runs on the plan (`codex-sessions.ts`'s `savedPayer`).
+  const payer = Option.getOrUndefined(
+    Option.flatMap(
+      Option.filter(routing, (row) => row.runtime === CONVERSATION_RUNTIME.CODEX),
+      (row) => Option.fromNullishOr(row.payer),
+    ),
   );
+  const onPlan =
+    payer === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION ||
+    (payer === CODING_AGENT_PAYER.MAC_SIGN_IN &&
+      !(yield* onMacLoginNow(target.userId, agent.value.id)));
   if (!onPlan) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   if (!(yield* brake.check(agent.value.id))) {
     return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);

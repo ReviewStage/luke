@@ -141,6 +141,19 @@ function homeOf(agent: CodingAgent): Readonly<Record<string, string>> {
   return agent.machine === CODING_AGENT_MACHINE.MAC ? {} : { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
 }
 
+/**
+ * Whether the agent runs on its starter's Mac and that Mac last said Codex
+ * there holds a sign-in of its own (`mac_device.signed_in`), as a launch's
+ * `config` reads it off the layout too (`onMacLoginOf`); the token route asks
+ * it as well, since such an agent's launch runs on no plan of the account's.
+ */
+export const onMacCodexLogin = (userId: string, agent: CodingAgent) =>
+  agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null
+    ? Effect.succeed(false)
+    : Effect.map(macDeviceLayout(userId, agent.deviceId), (device) =>
+        Option.exists(device, (standing) => onMacLoginOf(agent, standing.signedIn)),
+      );
+
 /** Codex as the shared launch drives it, for one account. */
 function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: string }> {
   const { userId, tokenUrl } = options;
@@ -178,17 +191,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
       Option.getOrUndefined(Option.flatMapNullishOr(routing, (row) => row.payer)),
     );
 
-  /**
-   * Whether the agent runs on its starter's Mac and that Mac last said Codex
-   * there holds a sign-in of its own (`mac_device.signed_in`), as `config`
-   * reads it off the layout too (`onMacLoginOf`).
-   */
-  const onMacLogin = (agent: CodingAgent) =>
-    agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null
-      ? Effect.succeed(false)
-      : Effect.map(macDeviceLayout(userId, agent.deviceId), (device) =>
-          Option.exists(device, (standing) => onMacLoginOf(agent, standing.signedIn)),
-        );
+  const onMacLogin = (agent: CodingAgent) => onMacCodexLogin(userId, agent);
 
   /**
    * Where the account's saved credential pays for the agent: its own API key
