@@ -1,4 +1,4 @@
-import { Schema as EffectSchema } from "effect";
+import { Duration, Schema as EffectSchema } from "effect";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "./device-agent-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -16,6 +16,8 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * bearer, and every call of a host, its enroll included, carries its
  * daemon's version (`HOST_WIRE.VERSION_HEADER`); one below the service's
  * floor is refused as needing an upgrade (`hostUpgradeNeededDataSchema`).
+ * A host has no developer's git login, so it asks the same way for a GitHub
+ * token for each agent it runs (`hostGithubTokenRequestSchema`).
  */
 
 export const HOST_WIRE = {
@@ -50,6 +52,35 @@ export function hostVersionMeets(version: string, floor: string): boolean {
   }
   return true;
 }
+
+/**
+ * How often a GitHub token handed for an agent's repository is renewed: the
+ * cloud's sandbox credential (`CODER.GITHUB_TOKEN_REFRESH`) and a host's
+ * agents alike. Fifty minutes, since an installation token lasts an hour and
+ * a turn can last a day.
+ */
+export const GITHUB_TOKEN_REFRESH = Duration.minutes(50);
+
+/**
+ * A host's ask for a GitHub token for one of its agents, posted to
+ * `HOSTED_SERVICE_PATH.RUNNER_TOKEN` on its device secret: the agent's id.
+ * The service answers only for the host's own member's agent that runs on
+ * that very host.
+ */
+export const hostGithubTokenRequestSchema = EffectSchema.Struct({ agentId: wireUuidSchema });
+
+export type HostGithubTokenRequest = typeof hostGithubTokenRequestSchema.Type;
+
+/**
+ * What it answers: a GitHub App installation token cut to the agent's
+ * repository, good for an hour from its mint, which the host signs the
+ * agent's own `gh` in with and renews every `GITHUB_TOKEN_REFRESH`.
+ */
+export const hostGithubTokenAnswerSchema = EffectSchema.Struct({
+  githubToken: EffectSchema.String.check(EffectSchema.isMinLength(1)),
+});
+
+export type HostGithubTokenAnswer = typeof hostGithubTokenAnswerSchema.Type;
 
 /** A secret of the prefix given: the prefix and at least 32 more characters of base64url. */
 function secretOf(prefix: string) {
