@@ -45,11 +45,25 @@
  * alone. A launch whose environment holds `OPENAI_API_KEY` (one the
  * account's OpenAI API key pays for) asks no token: app-server reads the key
  * from there, the provider's documented `env_key`, and no command it runs
- * inherits it.
+ * inherits it. A launch on the Mac's own sign-in (`ownLogin`) names no
+ * provider of Luke's at all: app-server runs OpenAI's own on the login
+ * `codex login` keeps under the user's `CODEX_HOME`, refreshed by Codex
+ * itself, after `account/read` says there is one
+ * (https://learn.chatgpt.com/docs/app-server, Authentication).
+ *
+ * Sandbox. Every command Codex runs is under its own sandbox in
+ * `workspace-write` with approval `never` (https://learn.chatgpt.com/docs/sandboxing),
+ * set as the thread starts and again as the `sandboxPolicy` of each
+ * `turn/start`, as app-server documents: the checkout writable, its Git
+ * directory, the folders the machine grants (a local agent's own folder),
+ * and on a Mac the toolchains' caches, with the network on. On a Mac that
+ * sandbox is Codex's Seatbelt, never `danger-full-access` or
+ * `externalSandbox`.
  */
 
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { delimiter, dirname, join } from "node:path";
 import { Duration, Effect, Exit, Option, Queue, Schema, Scope, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import {
@@ -58,11 +72,19 @@ import {
   type AppServerListener,
   spawnAppServer,
 } from "./app-server.js";
-import type { ThreadStartParams, TurnStatus, UserInput } from "./codex-protocol/v2/index.js";
+import type {
+  SandboxPolicy,
+  ThreadStartParams,
+  TurnStatus,
+  UserInput,
+} from "./codex-protocol/v2/index.js";
 import {
+  gitCommonDir,
   installedSkillsPath,
   type LaunchContext,
   type LaunchOutcome,
+  MAC_TOOLCHAIN_CACHES,
+  ON_MAC,
   type RunnerSelf,
 } from "./launch.js";
 import {
@@ -141,6 +163,7 @@ const CLIENT_INFO = {
 const METHOD = {
   INITIALIZE: "initialize",
   INITIALIZED: "initialized",
+  ACCOUNT_READ: "account/read",
   SKILLS_EXTRA_ROOTS_SET: "skills/extraRoots/set",
   THREAD_START: "thread/start",
   THREAD_RESUME: "thread/resume",
@@ -209,7 +232,10 @@ const TurnsPageSchema = Schema.Struct({
   ),
   nextCursor: Schema.NullOr(Schema.String),
 });
+/** What `account/read` answers, as the launch on the Mac's own sign-in reads it: whether Codex holds an account. */
+const AccountAnswerSchema = Schema.Struct({ account: Schema.NullOr(Schema.Unknown) });
 const decodeThreadAnswer = Schema.decodeUnknownOption(ThreadAnswerSchema);
+const decodeAccountAnswer = Schema.decodeUnknownOption(AccountAnswerSchema);
 const decodeTurnsPage = Schema.decodeUnknownOption(TurnsPageSchema);
 const decodeTurnAnswer = Schema.decodeUnknownOption(TurnAnswerSchema);
 const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSchema));
@@ -249,40 +275,108 @@ const API_KEY_PROVIDER = {
   NAME: "OpenAI API key",
 } as const;
 
+/** Which credential a launch's app-server runs on. */
+const CODEX_AUTH = {
+  /** The account's ChatGPT plan, its token asked of Luke through the runner's token command. */
+  TOKEN_COMMAND: "token_command",
+  /** The account's OpenAI API key, in the launch's environment. */
+  API_KEY: "api_key",
+  /** The Mac's own Codex sign-in, under the user's `CODEX_HOME`. */
+  OWN_LOGIN: "own_login",
+} as const;
+
+type CodexAuth =
+  | { readonly kind: typeof CODEX_AUTH.TOKEN_COMMAND; readonly command: TokenCommand }
+  | { readonly kind: typeof CODEX_AUTH.API_KEY }
+  | { readonly kind: typeof CODEX_AUTH.OWN_LOGIN };
+
 /**
- * How the provider is handed its token: from the runner's token command on
- * the plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API key.
+ * How Luke's provider is handed its token: from the runner's token command
+ * on the plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API
+ * key; and its own name. None on the Mac's own sign-in, which runs OpenAI's
+ * own provider on Codex's login.
  */
-function providerAuth(provider: string, command: TokenCommand | undefined) {
-  if (command === undefined)
-    return [[`${provider}.env_key`, toml(RUNNER_ENV.OPENAI_API_KEY)]] as const;
-  const args = [command.self.script, CODEX_TOKEN_COMMAND, command.tokenUrl].map(toml).join(", ");
+function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
+  if (auth.kind === CODEX_AUTH.OWN_LOGIN) return [];
+  const named = auth.kind === CODEX_AUTH.API_KEY ? API_KEY_PROVIDER : CHATGPT_PROVIDER;
+  const provider = `model_providers.${named.ID}`;
+  const credential: (readonly [string, string])[] =
+    auth.kind === CODEX_AUTH.API_KEY
+      ? [[`${provider}.env_key`, toml(RUNNER_ENV.OPENAI_API_KEY)]]
+      : [
+          [`${provider}.auth.command`, toml(auth.command.self.executable)],
+          [
+            `${provider}.auth.args`,
+            `[${[auth.command.self.script, CODEX_TOKEN_COMMAND, auth.command.tokenUrl].map(toml).join(", ")}]`,
+          ],
+          [`${provider}.auth.timeout_ms`, String(TOKEN_COMMAND.TIMEOUT_MS)],
+          [`${provider}.auth.refresh_interval_ms`, String(TOKEN_COMMAND.REFRESH_INTERVAL_MS)],
+        ];
   return [
-    [`${provider}.auth.command`, toml(command.self.executable)],
-    [`${provider}.auth.args`, `[${args}]`],
-    [`${provider}.auth.timeout_ms`, String(TOKEN_COMMAND.TIMEOUT_MS)],
-    [`${provider}.auth.refresh_interval_ms`, String(TOKEN_COMMAND.REFRESH_INTERVAL_MS)],
-  ] as const;
+    ["model_provider", toml(named.ID)],
+    [`${provider}.name`, toml(named.NAME)],
+    [`${provider}.base_url`, toml(CHATGPT_PROVIDER.BASE_URL)],
+    ...credential,
+    [`${provider}.wire_api`, toml("responses")],
+    [`${provider}.requires_openai_auth`, "false"],
+    [`${provider}.supports_websockets`, "false"],
+    // On an API key a fast version runs on the `fast` tier, which the documented feature turns on
+    // (https://learn.chatgpt.com/docs/agent-configuration/speed); the plan's launch runs none.
+    ...(auth.kind === CODEX_AUTH.API_KEY ? ([["features.fast_mode", "true"]] as const) : []),
+  ];
 }
 
 /**
- * App-server's argv: the documented ChatGPT-plan provider, its token from the
- * runner's token command (`providerAuth`), the Luke MCP
+ * Every folder the agent's commands may write beside the checkout, which
+ * `workspace-write` keeps writable itself: the checkout's Git directory, the
+ * folders its machine grants, and on a Mac the toolchains' caches under the
+ * developer's home. Each is absolute, as app-server's `writableRoots` are.
+ */
+function writableRoots(config: CodexConfig, env: LaunchContext<CodexConfig>["env"]): string[] {
+  const home = env.HOME;
+  const caches =
+    ON_MAC && home !== undefined && home !== ""
+      ? MAC_TOOLCHAIN_CACHES.map((cache) => join(home, cache))
+      : [];
+  return [
+    gitCommonDir(config.cwd) ?? join(config.cwd, ".git"),
+    ...(config.writableRoots ?? []),
+    ...caches,
+  ];
+}
+
+/**
+ * The sandbox every turn runs under, as `turn/start`'s documented
+ * `sandboxPolicy`: workspace-write over the roots given, the network on, and
+ * the temp folders writable as Codex keeps them.
+ */
+function sandboxPolicy(roots: readonly string[]): SandboxPolicy {
+  return {
+    type: "workspaceWrite",
+    writableRoots: [...roots],
+    networkAccess: true,
+    excludeTmpdirEnvVar: false,
+    excludeSlashTmp: false,
+  };
+}
+
+/**
+ * App-server's argv: Luke's provider and its credential where the launch
+ * runs on one of Luke's (`providerOverrides`), the Luke MCP
  * server and each integration's beside it with the bearer read from the environment and their tools approved up
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
- * every MCP call, as P16 found) and given as long as Luke runs a call, the sandbox with network on and the
- * checkout's `.git` writable, and commands inheriting the core variables
- * without the bearer. Nothing in argv is secret.
+ * every MCP call, as P16 found) and given as long as Luke runs a call, the sandbox with network on and its
+ * writable roots (`writableRoots`), and commands inheriting the core variables
+ * without the bearer or the key. Nothing in argv is secret.
  *
  * Note that workspace-write keeps `.git` read-only under every writable root
  * (openai/codex#15505), and with `never` nothing escalates, so without its
- * own writable root an agent could not commit. Granting `.git` itself keeps
+ * own writable root an agent could not commit. Granting the Git directory
+ * itself, a Mac worktree's shared one among them, keeps
  * the sandbox on: commands still never see the token, and app-server's own
  * git calls run with hooks and fsmonitor disabled.
  */
-function appServerArgs(config: CodexConfig, command: TokenCommand | undefined): string[] {
-  const named = command === undefined ? API_KEY_PROVIDER : CHATGPT_PROVIDER;
-  const provider = `model_providers.${named.ID}`;
+function appServerArgs(config: CodexConfig, auth: CodexAuth, roots: readonly string[]): string[] {
   const mcp = `mcp_servers.${MCP_SERVER}`;
   // Each integration the agent is handed is a server of its own on the same bearer, its tools approved and bounded as Luke's are.
   const integrations = (config.integrations ?? [])
@@ -297,17 +391,12 @@ function appServerArgs(config: CodexConfig, command: TokenCommand | undefined): 
         [`${server}.tool_timeout_sec`, MCP_TOOL_TIMEOUT_SECONDS.toFixed(1)],
       ];
     });
+  const excluded = [
+    RUNNER_ENV.BEARER,
+    ...(auth.kind === CODEX_AUTH.API_KEY ? [RUNNER_ENV.OPENAI_API_KEY] : []),
+  ];
   const overrides: (readonly [string, string])[] = [
-    ["model_provider", toml(named.ID)],
-    [`${provider}.name`, toml(named.NAME)],
-    [`${provider}.base_url`, toml(CHATGPT_PROVIDER.BASE_URL)],
-    ...providerAuth(provider, command),
-    [`${provider}.wire_api`, toml("responses")],
-    [`${provider}.requires_openai_auth`, "false"],
-    [`${provider}.supports_websockets`, "false"],
-    // On an API key a fast version runs on the `fast` tier, which the documented feature turns on
-    // (https://learn.chatgpt.com/docs/agent-configuration/speed); the plan's launch runs none.
-    ...(command === undefined ? ([["features.fast_mode", "true"]] as const) : []),
+    ...providerOverrides(auth),
     [`${mcp}.url`, toml(config.mcpUrl)],
     [`${mcp}.bearer_token_env_var`, toml(RUNNER_ENV.BEARER)],
     [`${mcp}.default_tools_approval_mode`, toml("approve")],
@@ -316,13 +405,10 @@ function appServerArgs(config: CodexConfig, command: TokenCommand | undefined): 
     ["approval_policy", toml("never")],
     ["sandbox_mode", toml("workspace-write")],
     ["sandbox_workspace_write.network_access", "true"],
-    ["sandbox_workspace_write.writable_roots", `[${toml(join(config.cwd, ".git"))}]`],
+    ["sandbox_workspace_write.writable_roots", `[${roots.map(toml).join(", ")}]`],
     ["shell_environment_policy.inherit", toml("core")],
     ["shell_environment_policy.ignore_default_excludes", "false"],
-    [
-      "shell_environment_policy.exclude",
-      `[${[RUNNER_ENV.BEARER, ...(command === undefined ? [RUNNER_ENV.OPENAI_API_KEY] : [])].map(toml).join(", ")}]`,
-    ],
+    ["shell_environment_policy.exclude", `[${excluded.map(toml).join(", ")}]`],
   ];
   return [
     "app-server",
@@ -373,8 +459,10 @@ interface CodexLaunch {
   waiting: Outgoing[];
   /** Luke's lines this launch has said app-server took, each said once. */
   readonly accepted: Set<string>;
-  /** The token command app-server runs; none where it reads the account's API key from its environment. */
-  readonly tokenCommand: TokenCommand | undefined;
+  /** The credential app-server runs on. */
+  readonly auth: CodexAuth;
+  /** The folders the agent's commands may write beside its checkout (`writableRoots`), which every turn's sandbox names. */
+  readonly roots: readonly string[];
   model: string;
   effort: CodexEffort | undefined;
   /** Whether the next turn runs on the `fast` service tier: a fast version on an API key alone. */
@@ -431,7 +519,7 @@ function listenerFor(seen: ThreadSeen): AppServerListener {
  * otherwise. Answers the server, its scope, and the thread's id.
  */
 const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
-  launch: Pick<CodexLaunch, "context" | "signals" | "model" | "tokenCommand">,
+  launch: Pick<CodexLaunch, "context" | "signals" | "model" | "auth" | "roots">,
   threadId: string | undefined,
 ) {
   const { config, env } = launch.context;
@@ -442,16 +530,33 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   const server = yield* spawnAppServer(
     {
       executable: config.executable,
-      args: appServerArgs(config, launch.tokenCommand),
+      args: appServerArgs(config, launch.auth, launch.roots),
       cwd: config.cwd,
       // Note that Claude Code's credentials, were they set, are no business of Codex's.
-      env: { ...env, [RUNNER_ENV.CLAUDE_TOKEN]: undefined, [RUNNER_ENV.API_KEY]: undefined },
+      env: {
+        ...env,
+        PATH: pathWithCodexTools(config.executable, env.PATH),
+        [RUNNER_ENV.CLAUDE_TOKEN]: undefined,
+        [RUNNER_ENV.API_KEY]: undefined,
+      },
     },
     listenerFor(seen),
   ).pipe(Scope.provide(serverScope));
   const opened = Effect.gen(function* () {
     yield* server.request(METHOD.INITIALIZE, { clientInfo: CLIENT_INFO, capabilities: null });
     yield* server.notify(METHOD.INITIALIZED);
+    // Note that a launch on the Mac's own sign-in goes no further where Codex holds none, rather than fail its first turn.
+    if (launch.auth.kind === CODEX_AUTH.OWN_LOGIN) {
+      const account = decodeAccountAnswer(
+        yield* server.request(METHOD.ACCOUNT_READ, { refreshToken: false }),
+      );
+      if (Option.isNone(account) || account.value.account === null) {
+        return yield* new AppServerError({
+          method: METHOD.ACCOUNT_READ,
+          detail: "Codex on this Mac is not signed in",
+        });
+      }
+    }
     // The member's installed skills, beside the checkout's `.agents/skills`, before the thread lists them.
     const skills = installedSkillsPath(config.installedSkills, INSTALLED_SKILLS.SKILLS);
     if (skills !== undefined) {
@@ -561,8 +666,12 @@ const startTurn = Effect.fn("agent-runner/startTurn")(function* (
       input: [...outgoing.input],
       model: launch.model,
       effort: launch.effort ?? null,
+      approvalPolicy: "never",
+      sandboxPolicy: sandboxPolicy(launch.roots),
       // Note that a null tier is the standard one, which a fast version turned off goes back to.
-      ...(onApiKey(launch.context) ? { serviceTier: launch.fast ? FAST_TIER : null } : undefined),
+      ...(launch.auth.kind === CODEX_AUTH.API_KEY
+        ? { serviceTier: launch.fast ? FAST_TIER : null }
+        : undefined),
     }),
   );
   if (Option.isNone(answer)) {
@@ -731,11 +840,31 @@ function onApiKey(context: LaunchContext<CodexConfig>): boolean {
   return key !== undefined && key !== "";
 }
 
-/** The token command a launch's app-server runs: on the plan, where the runner knows its own bundle. */
-function commandOf(context: LaunchContext<CodexConfig>): TokenCommand | undefined {
-  return context.self === undefined || onApiKey(context)
-    ? undefined
-    : { self: context.self, tokenUrl: context.config.tokenUrl };
+/**
+ * The credential a launch's app-server runs on: the Mac's own sign-in where
+ * the config says so, the account's API key where the environment holds it,
+ * and the plan's token command otherwise, where the runner knows its own
+ * bundle; none where it does not.
+ */
+function authOf(context: LaunchContext<CodexConfig>): CodexAuth | undefined {
+  if (context.config.ownLogin === true) return { kind: CODEX_AUTH.OWN_LOGIN };
+  if (onApiKey(context)) return { kind: CODEX_AUTH.API_KEY };
+  if (context.self === undefined) return undefined;
+  return {
+    kind: CODEX_AUTH.TOKEN_COMMAND,
+    command: { self: context.self, tokenUrl: context.config.tokenUrl },
+  };
+}
+
+/**
+ * The PATH app-server runs with: the one given, behind the folder of tools
+ * Codex's own package keeps beside its binary (`codex-path`, its `rg`) where
+ * the binary stands in one, as Codex's npm launcher puts it first.
+ */
+function pathWithCodexTools(executable: string, path: string | undefined): string | undefined {
+  const tools = join(dirname(executable), "..", "codex-path");
+  if (!existsSync(tools)) return path;
+  return path === undefined || path === "" ? tools : `${tools}${delimiter}${path}`;
 }
 
 /**
@@ -746,17 +875,18 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   context: LaunchContext<CodexConfig>,
 ) {
   const { config, sink } = context;
-  const tokenCommand = commandOf(context);
-  if (tokenCommand === undefined && !onApiKey(context)) {
+  const auth = authOf(context);
+  if (auth === undefined) {
     return ended(RUNNER_END.FAILED, "the runner was not started from its bundle");
   }
+  const roots = writableRoots(config, context.env);
   const signals = yield* Queue.unbounded<Signal>();
   yield* sink.undelivered.pipe(
     Effect.andThen(Queue.offer(signals, { kind: SIGNAL.UNDELIVERED })),
     Effect.forkScoped,
   );
   const opened = yield* openAppServer(
-    { context, signals, model: config.model, tokenCommand },
+    { context, signals, model: config.model, auth, roots },
     config.threadId,
   ).pipe(Effect.result);
   if (opened._tag === "Failure") {
@@ -777,7 +907,8 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     sent: new Map(),
     waiting: [],
     accepted: new Set(),
-    tokenCommand,
+    auth,
+    roots,
     model: config.model,
     effort: config.effort,
     fast: config.fast === true,
