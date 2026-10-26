@@ -86,7 +86,7 @@ body,
 /* Scrollbars ---------------------------------------------------------------- */
 
 /* Every scroller in the window draws the one scrollbar a Mac app does: a thin
-   rounded thumb in the muted `--luke-color-scrollbar` ink and no track at all, faded in
+   rounded thumb in the muted `--luke-color-scrollbar` ink and no track at all, shown
    while the pointer is over the scroller or focus is in it. Note that the
    track is named transparent rather than left to the engine, because macOS
    set to always show scroll bars (or a mouse attached) draws Chromium's
@@ -95,13 +95,15 @@ body,
    them after, as it does in any Mac app. No scroller sets its own: the
    colour inherits, so it reaches into Pierre's tree through its shadow root
    too, where it stands in for that tree's own `::-webkit-scrollbar` thumb.
-   In the `base` layer with the element resets (base.css), so a component's
-   own `transition`, or a utility's, still wins on its element. */
+   In the `base` layer with the element resets (base.css). Note that the
+   thumb is not faded in, because a transition on every element starts one
+   on each element whose hover or focus changes, and a commit that moves
+   focus (opening a task) then pays for all of them on every style read:
+   seconds on a long agent's task. */
 @layer base {
   * {
     scrollbar-color: transparent transparent;
     scrollbar-width: thin;
-    transition: scrollbar-color var(--luke-duration-quick) var(--luke-motion-exit);
   }
 
   *:hover,
@@ -529,34 +531,13 @@ body,
 }
 
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its
-   controls give way before its tabs do: Start draws its glyph alone, named
-   still, and where the column is narrowest it leaves its model menu to the
-   new agent's own composer, which chooses a model as well, and the agents'
-   Retry draws its glyph alone. */
-@container luke-toolbar (width < 480px) {
-  .start-agent {
-    --luke-fold: folded;
-  }
-}
-
-/* off-scale: 320px, where Start's model menu goes to the composer */
+   controls give way before its tabs do: where the column is narrowest the
+   agents' Retry draws its glyph alone (`FoldingButton`). */
+/* off-scale: 320px, the column's narrowest */
 @container luke-toolbar (width < 320px) {
-  /* Start's glyph alone, its model menu left to the composer (`SplitButton`). */
-  .start-agent {
-    --luke-fold: bare;
-  }
-
-  /* The agents' Retry folds to its glyph (`FoldingButton`). */
   .main-tabs {
     --luke-fold: folded;
   }
-}
-
-/* A narrow room's bar has its tabs on a row of their own, and a phone has
-   no hover to name a glyph, so Start keeps its word there however narrow
-   the bar (`SplitButton`). */
-:where(:root)[data-luke-room="narrow"] .desktop-shell .desktop-task-main .start-agent {
-  --luke-fold: worded;
 }
 
 [data-luke-profile="desktop"] .luke-button,

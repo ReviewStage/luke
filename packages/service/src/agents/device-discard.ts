@@ -43,10 +43,18 @@ const discardedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/** As `discardedWhileArchived`, a failure logged by its kind alone and never answered, so an archive never fails on its device. */
+/**
+ * As `discardedWhileArchived`, a failure logged by its kind alone and never
+ * answered, so an archive never fails on its device: whether nothing failed,
+ * so a caller that can ask again later knows to.
+ */
 export const discardedOrLogged = (agent: Pick<CodingAgent, "id" | "userId">) =>
   discardedWhileArchived(agent).pipe(
+    Effect.as(true),
     Effect.catch((failure) =>
-      Effect.logWarning(`an archived agent was not discarded from its device: ${failure._tag}`),
+      Effect.as(
+        Effect.logWarning(`an archived agent was not discarded from its device: ${failure._tag}`),
+        false,
+      ),
     ),
   );

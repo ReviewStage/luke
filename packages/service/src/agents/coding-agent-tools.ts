@@ -1837,7 +1837,10 @@ const archiveChange = (
       if (outcome === IDLE_ARCHIVE.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
       if (outcome === IDLE_ARCHIVE.WORKING) return UPDATE_AGENT_REFUSAL.WORKING;
       // A local agent archived now is let go of on its device, as an archive by hand lets it go.
-      if (outcome === IDLE_ARCHIVE.ARCHIVED) yield* discardedOrLogged({ id: agent.id, userId });
+      // Note that the agent's line is queued under its starter, whoever archived it.
+      if (outcome === IDLE_ARCHIVE.ARCHIVED) {
+        yield* discardedOrLogged({ id: agent.id, userId: agent.userId });
+      }
       return undefined;
     }
     if (agent.archivedAt === null) return undefined;

@@ -65,6 +65,8 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.CHANNEL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
+  [HOSTED_API_ERROR.HOST_STILL_ENROLLED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -79,6 +81,7 @@ export type HostedRefusal = {
   readonly skillName?: string;
   readonly skillRefusal?: InstalledSkillFilesRefusal;
   readonly localAgentRefusal?: LocalAgentRefusal;
+  readonly minimumVersion?: string;
 };
 
 /**
@@ -161,6 +164,10 @@ export const HOSTED_REFUSAL = {
   CHANNEL_NAME_TAKEN: { error: HOSTED_API_ERROR.CHANNEL_NAME_TAKEN },
   /** A Start on This Mac was refused (`localAgentRefused`, which names why); nothing was written. */
   LOCAL_AGENT_REFUSED: { error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED },
+  /** A host's daemon is below the service's floor (`hostUpgradeNeeded`, which names the floor); nothing was read or written. */
+  HOST_UPGRADE_NEEDED: { error: HOSTED_API_ERROR.HOST_UPGRADE_NEEDED },
+  /** An enroll named a host of the token's member that is still enrolled; nothing was written. */
+  HOST_STILL_ENROLLED: { error: HOSTED_API_ERROR.HOST_STILL_ENROLLED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */
@@ -173,6 +180,11 @@ export function planLimitReached(resetsAt: number | undefined): HostedRefusal {
 /** A Start on This Mac refused, named so the words can say why. */
 export function localAgentRefused(localAgentRefusal: LocalAgentRefusal): HostedRefusal {
   return { ...HOSTED_REFUSAL.LOCAL_AGENT_REFUSED, localAgentRefusal };
+}
+
+/** A host's daemon below the floor given, named so the daemon can say which version to upgrade to. */
+export function hostUpgradeNeeded(minimumVersion: string): HostedRefusal {
+  return { ...HOSTED_REFUSAL.HOST_UPGRADE_NEEDED, minimumVersion };
 }
 
 /** No credential of the account's pays for a coding agent on the provider's models, named so the words can say which to connect. */

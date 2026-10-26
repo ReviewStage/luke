@@ -18,7 +18,7 @@ import {
   type DeviceSignedIn,
   deviceSignedInSchema,
 } from "@luke/features/device-agent-wire";
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import { DateTime, Effect, type Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
@@ -158,7 +158,15 @@ const findSeen = SqlSchema.findAll({
           codexExecutable: device.codexExecutable,
         })
         .from(device)
-        .where(and(eq(device.userId, userId), gte(device.lastSeenAt, since)))
+        .where(
+          and(
+            eq(device.userId, userId),
+            gte(device.lastSeenAt, since),
+            // Note that a host that has not registered yet, or was removed, takes no agent.
+            isNotNull(device.home),
+            isNull(device.removedAt),
+          ),
+        )
         .orderBy(desc(device.lastSeenAt)),
     ),
 });
@@ -194,7 +202,15 @@ const findLayout = SqlSchema.findOneOption({
           signedIn: device.signedIn,
         })
         .from(device)
-        .where(and(eq(device.id, id), eq(device.userId, userId))),
+        .where(
+          and(
+            eq(device.id, id),
+            eq(device.userId, userId),
+            isNotNull(device.home),
+            isNotNull(device.claudeExecutable),
+            isNull(device.removedAt),
+          ),
+        ),
     ),
 });
 

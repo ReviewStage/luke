@@ -351,42 +351,6 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(tab.control().draft, undefined, "the started draft is let go");
   await tab.stand({ taskId: OTHER_TASK });
   assert.equal(tab.control().draft?.id, other, "another plan's draft stands");
-  assert.equal(tab.control().start.note, undefined, "the toolbar's Start says nothing of it");
-});
-
-test("the toolbar's Start is told it succeeded only by its own Start landing, never by a draft's send, which holds it busy too", async () => {
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  tab.answer(
-    ACT_KIND.CODING_AGENTS_LIST,
-    { agents: [] },
-    { agents: [STARTED] },
-    { agents: [STARTED] },
-  );
-  tab.answer(
-    ACT_KIND.CODING_AGENTS_START,
-    { agent: STARTED },
-    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-  );
-  await tab.mount();
-
-  act(() => tab.control().start.onPress());
-  await settle();
-  const afterOwn = tab.control().start.succeeded;
-  let draft = "";
-  act(() => {
-    draft = tab.control().onNewDraft();
-  });
-  await act(async () => {
-    await tab.control().startPrompt(draft, "Rename the invite email's subject.", undefined, []);
-  });
-
-  assert.equal(afterOwn, true, "its own Start landed");
-  assert.equal(tab.control().start.busy, false);
-  assert.equal(
-    tab.control().start.succeeded,
-    false,
-    "a draft's failed send is no landing of its own",
-  );
 });
 
 test("a plan's Start stands its agent's tab at once under the press's key, which gives way to the agent once made, without reading the list again, or to nothing where it was refused", async () => {
@@ -402,7 +366,9 @@ test("a plan's Start stands its agent's tab at once under the press's key, which
   );
   await tab.mount();
 
-  act(() => tab.control().start.onPress({ model: "openai/gpt-6.1-sol", effort: "xhigh" }));
+  act(() => {
+    void tab.control().start.onPress({ model: "openai/gpt-6.1-sol", effort: "xhigh" });
+  });
   await settle();
   assert.deepEqual(tab.control().start.pending, { key: "key-1", model: "openai/gpt-6.1-sol" });
   assert.deepEqual(tab.control().agentIds, ["key-1"]);
@@ -419,11 +385,17 @@ test("a plan's Start stands its agent's tab at once under the press's key, which
     "the list already read is joined the agent rather than read again",
   );
 
-  act(() => tab.control().start.onPress());
-  await settle();
+  let refused: Failure | undefined;
+  await act(async () => {
+    refused = await tab.control().start.onPress();
+  });
   assert.equal(tab.control().start.pending, undefined);
   assert.deepEqual(tab.control().agentIds, [AGENT], "a refused Start leaves no tab");
-  assert.ok(tab.control().start.note !== undefined, "and says why beside Start");
+  assert.equal(
+    refused?.text,
+    "That model isn't offered any more. Choose another.",
+    "and answers why",
+  );
 });
 
 test("a plan's Start on a task whose list did not read stands its tab at once, and every agent Starts made among the task's agents until a read lands", async () => {
@@ -438,7 +410,9 @@ test("a plan's Start on a task whose list did not read stands its tab at once, a
   await tab.mount();
   assert.equal(tab.control().listFailed, true, "the list did not read");
 
-  act(() => tab.control().start.onPress());
+  act(() => {
+    void tab.control().start.onPress();
+  });
   await settle();
   assert.deepEqual(tab.control().agentIds, ["key-1"]);
 
@@ -455,7 +429,9 @@ test("a plan's Start on a task whose list did not read stands its tab at once, a
   // A second Start while the list still does not read stands beside the first.
   const second = { ...STARTED, id: "9d2b7b5e-4e3f-4e9c-9c77-7a5d8b3f4c32", createdAt: 2 };
   tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: second });
-  act(() => tab.control().start.onPress());
+  act(() => {
+    void tab.control().start.onPress();
+  });
   await settle();
   assert.deepEqual(tab.control().agentIds, [AGENT, second.id]);
 
@@ -1124,7 +1100,6 @@ test("continuing an agent starts on the task from its whole transcript under the
     [SOURCE],
     "the new agent joins the list, naming what it continues",
   );
-  assert.equal(tab.control().start.note, undefined, "the toolbar's Start says nothing of it");
 });
 
 test("a continue carries the developer's words and files as its note, other words or a refusal minting a key of their own, and each agent continued keeps its own key", async () => {

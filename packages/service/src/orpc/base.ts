@@ -1,5 +1,5 @@
 /**
- * base.ts -- the implementer every hosted procedure is built from, and the three ways a caller is resolved.
+ * base.ts -- the implementer every hosted procedure is built from, and the ways a caller is resolved.
  *
  * A request reaches a procedure with the web runtime's services as
  * `effect/context`, read once per function instance by the web route, and
@@ -30,6 +30,12 @@ import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect
 import { implement } from "@orpc/server";
 import type { ResponseHeadersHandlerPluginContext } from "@orpc/server/plugins";
 import { Effect, Option, Result } from "effect";
+import {
+  admittedHostVersion,
+  hostCallerOf,
+  presentedHostVersion,
+  presentedInstallToken,
+} from "../auth/device-secret.js";
 import { sessionCredential } from "../auth/session-credential.js";
 import { HostedEnvironment } from "../environment.js";
 import {
@@ -83,6 +89,55 @@ export function bearerOnlyMiddleware(resolveUserId: UserIdResolver) {
     return yield* next({ context: { userId: account.value } });
   });
 }
+
+/** A device's caller: its account, and where a host called on its device secret, that host's device, which is the one device it may act for. */
+export interface DeviceCaller extends HostedCaller {
+  readonly hostDeviceId: string | undefined;
+}
+
+/**
+ * The caller as a device: a host by its device secret
+ * (`auth/device-secret.ts`'s `hostCallerOf`, which refuses a secret no
+ * standing host holds and a daemon below the floor), and otherwise a desktop
+ * by its bearer alone, on `bearerOnlyMiddleware`'s terms.
+ */
+export function deviceMiddleware(resolveUserId: UserIdResolver) {
+  return middlewareGen<HostedContext, DeviceCaller>(function* ({ context, next }) {
+    if (!hostedCarriesBearer(context.request))
+      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+    const host = yield* hostCallerOf(context.request);
+    if (Option.isSome(host)) {
+      return yield* next({
+        context: { userId: host.value.userId, hostDeviceId: host.value.deviceId },
+      });
+    }
+    const account = yield* resolveUserId(context.request);
+    if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+    return yield* next({ context: { userId: account.value, hostDeviceId: undefined } });
+  });
+}
+
+/** An enroll's caller: the install token its bearer carries, and its daemon's version, at or past the floor. */
+export interface EnrollingHost {
+  readonly installToken: string;
+  readonly hostVersion: string;
+}
+
+/**
+ * The caller as a box enrolling: an install token as its bearer, or refused
+ * as unauthenticated, as every other procedure refuses a caller that names
+ * no credential; then its daemon's version, refused as needing an upgrade
+ * below the floor. Whether the token stands is the enroll's to read.
+ */
+export const installTokenMiddleware = middlewareGen<HostedContext, EnrollingHost>(function* ({
+  context,
+  next,
+}) {
+  const installToken = presentedInstallToken(context.request);
+  if (installToken === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  const hostVersion = yield* admittedHostVersion(presentedHostVersion(context.request));
+  return yield* next({ context: { installToken, hostVersion } });
+});
 
 /** The deployment's ring, handed on as the procedure's, or the request refused as unavailable where it holds none it can parse. */
 export const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: KeyRing }>(

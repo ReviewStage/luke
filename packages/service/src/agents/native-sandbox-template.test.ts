@@ -10,7 +10,7 @@ import { Duration, Effect, Fiber, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { commandRead } from "../testing/runner-sandbox-fake.js";
 import { sandboxListRefusal } from "../testing/vercel-sandbox-fake.js";
-import { PREPARE_SCRIPT } from "./agent-runtime/sandbox-image.js";
+import { PREPARE_STAGES } from "./agent-runtime/sandbox-image.js";
 import {
   AgentSandboxImage,
   agentSandboxImageFromTemplate,
@@ -283,8 +283,8 @@ it.effect(
         fake.commands.map((command) => command.args),
         [[build.entry]],
       );
-      // The preparation's own script is among the steps the entry runs.
-      assert.ok([...uploaded.values()].includes(PREPARE_SCRIPT));
+      // Every stage of the preparation's own script is among the steps the entry runs.
+      for (const stage of PREPARE_STAGES) assert.ok([...uploaded.values()].includes(stage));
       assert.ok(uploaded.get(build.entry)?.includes("bash /tmp/luke-template/step-"));
       assert.equal((yield* advanceTemplate(api, build)).state, TEMPLATE_STATE.PREPARING);
 

@@ -1,6 +1,6 @@
 {
   "name": "@luke/database",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "private": true,
   "type": "module",
   "description": "The hosted store's Drizzle schema, queries, and migrations, and the test databases",
@@ -35,6 +35,7 @@
     "./models/device-agent-store": "./src/models/device-agent-store.js",
     "./models/mac-command-store": "./src/models/mac-command-store.js",
     "./models/device-store": "./src/models/device-store.js",
+    "./models/host-store": "./src/models/host-store.js",
     "./models/memory-store": "./src/models/memory-store.js",
     "./models/native-call-keys": "./src/models/native-call-keys.js",
     "./models/native-projection-store": "./src/models/native-projection-store.js",

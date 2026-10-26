@@ -444,7 +444,7 @@ test("a sidebar task Luke or a coding agent made wears who is on it rather than 
   unmountAll();
 });
 
-test("Start and the task's ⋯ stand in the task's toolbar whichever tab its column shows", () => {
+test("the task's ⋯ stands in the task's toolbar whichever tab its column shows", () => {
   const drawn = (tab: MainTab | undefined) => {
     const container = mount(
       createElement(DesktopTasks, {
@@ -454,14 +454,14 @@ test("Start and the task's ⋯ stand in the task's toolbar whichever tab its col
       }),
     );
     const toolbar = container.querySelector(".luke-toolbar");
-    const shown = ["Start a coding agent", "Task actions"].filter(
+    const shown = ["Task actions"].filter(
       (label) => toolbar?.querySelector(`[aria-label="${label}"]`) !== null,
     );
     unmountAll();
     return shown;
   };
 
-  assert.deepEqual(drawn(undefined), ["Start a coding agent", "Task actions"]);
+  assert.deepEqual(drawn(undefined), ["Task actions"]);
 });
 
 /** Dean's own workspace, with no GitHub connected, and the team's, whose GitHub reaches acme-corp's repositories. */

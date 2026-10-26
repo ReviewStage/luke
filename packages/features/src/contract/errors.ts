@@ -16,6 +16,7 @@
 import type { ErrorMapItem } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { localAgentRefusalSchema } from "../coding-agent-wire.js";
+import { hostUpgradeNeededDataSchema } from "../host-wire.js";
 import { installedSkillRefusedDataSchema } from "../installed-skill-route-wire.js";
 import { modelProviderSchema } from "../models-wire.js";
 import { repositoryUnreachedSchema } from "../repository-reach-wire.js";
@@ -82,6 +83,11 @@ const credentialMissingData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(credentialMissingDataSchema),
 );
 
+/** What an upgrade-needed refusal carries beside its slug: the lowest daemon version the service takes, which the daemon prints. */
+const hostUpgradeNeededData = EffectSchema.toStandardSchemaV1(
+  EffectSchema.flip(hostUpgradeNeededDataSchema),
+);
+
 /** What a refused install or update carries beside its slug: which skill, and why its files were refused. */
 const installedSkillRefusedData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(installedSkillRefusedDataSchema),
@@ -126,4 +132,6 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: { data: installedSkillRefusedData },
   [HOSTED_API_ERROR.CHANNEL_NAME_TAKEN]: {},
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: { data: localAgentRefusedData },
+  [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: { data: hostUpgradeNeededData },
+  [HOSTED_API_ERROR.HOST_STILL_ENROLLED]: {},
 } as const satisfies Record<HostedApiError, ErrorMapItem>;

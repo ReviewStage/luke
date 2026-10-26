@@ -10,7 +10,8 @@ import { loadModule, type RepositoryGuard, readJson, record, text } from "./guar
  * The runner bundles the Agent SDK `CLAUDE_CODE_PIN` names, and the image
  * checks for the `claude` that SDK carries; the Codex protocol types were
  * generated from the Codex `CODEX_PIN` installs; and the coding agent's
- * sandbox template starts from the base image of the eve the service runs.
+ * sandbox template, and the OCI image built from the same preparation, start
+ * from the base images of the eve the service runs.
  * A pin moved on one side alone builds, typechecks, and fails only in a
  * hosted sandbox.
  */
@@ -19,6 +20,7 @@ const SDK = "@anthropic-ai/claude-agent-sdk";
 const RUNNER = "packages/agent-runner";
 const SERVICE = "packages/service";
 const EVE_BASE_IMAGE_REPOSITORY = "vcr.vercel.com/vercel/eve/base";
+const EVE_PUBLIC_IMAGE_REPOSITORY = "ghcr.io/vercel/eve";
 
 /** The versions each side states, as the guard reads them. */
 export interface AgentPins {
@@ -30,6 +32,7 @@ export interface AgentPins {
   readonly codexProtocol: string;
   readonly pinnedCodex: string;
   readonly eveBaseImage: string;
+  readonly ociBaseImage: string;
   readonly installedEve: string;
 }
 
@@ -56,8 +59,18 @@ export function pinProblems(pins: AgentPins): readonly string[] {
   );
   differ("CODEX_PROTOCOL_VERSION against CODEX_PIN.VERSION", pins.codexProtocol, pins.pinnedCodex);
   // Note that an eve version may carry build metadata (`+…`), which no image tag does.
-  const eveTag = `${EVE_BASE_IMAGE_REPOSITORY}:${pins.installedEve.split("+")[0] ?? ""}`;
-  differ("EVE_BASE_IMAGE against the installed eve", pins.eveBaseImage, eveTag);
+  const eveVersion = pins.installedEve.split("+")[0] ?? "";
+  differ(
+    "EVE_BASE_IMAGE against the installed eve",
+    pins.eveBaseImage,
+    `${EVE_BASE_IMAGE_REPOSITORY}:${eveVersion}`,
+  );
+  // The OCI image's base is pinned to a digest too, which no release names, so its tag is what agrees.
+  differ(
+    "SANDBOX_OCI_IMAGE.BASE against the installed eve",
+    pins.ociBaseImage.split("@")[0],
+    `${EVE_PUBLIC_IMAGE_REPOSITORY}:${eveVersion}`,
+  );
   return problems;
 }
 
@@ -76,6 +89,7 @@ async function readPins(root: string): Promise<AgentPins> {
   const codex = record(pins.CODEX_PIN, "CODEX_PIN");
   const generated = await loadModule(root, `${RUNNER}/src/codex-protocol/generated-from.ts`);
   const template = await loadModule(root, `${SERVICE}/src/agents/native-sandbox-template.ts`);
+  const oci = await loadModule(root, `${SERVICE}/src/agents/sandbox-oci-image.ts`);
   const runner = record(readJson(root, `${RUNNER}/package.json`).dependencies, "dependencies");
   const sdk = installedManifest(root, RUNNER, SDK);
   const eveManifest = createRequire(path.join(root, SERVICE, "package.json")).resolve(
@@ -92,6 +106,10 @@ async function readPins(root: string): Promise<AgentPins> {
     codexProtocol: text(generated.CODEX_PROTOCOL_VERSION, "CODEX_PROTOCOL_VERSION"),
     pinnedCodex: text(codex.VERSION, "CODEX_PIN.VERSION"),
     eveBaseImage: text(template.EVE_BASE_IMAGE, "EVE_BASE_IMAGE"),
+    ociBaseImage: text(
+      record(oci.SANDBOX_OCI_IMAGE, "SANDBOX_OCI_IMAGE").BASE,
+      "SANDBOX_OCI_IMAGE.BASE",
+    ),
     installedEve: text(eve.version, "eve's version"),
   };
 }
