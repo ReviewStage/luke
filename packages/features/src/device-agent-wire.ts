@@ -312,15 +312,16 @@ const deviceField = { deviceId: wireUuidSchema };
  * bundles, both absolute, the Codex binary it checked against the pin
  * (`@luke/agent-runner/pins`' `CODEX_MAC_PIN`), absent until it has one,
  * which harnesses it is signed in to, its platform and architecture, and
- * how it runs its agents. A sandboxed device names each executable by its
- * path where its agents run, inside the VM.
+ * how it runs its agents, absent for one that runs them bare, as every
+ * desktop from before the field does. A sandboxed device names each
+ * executable by its path where its agents run, inside the VM.
  */
 export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
   ...deviceField,
   name: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(200)),
   platform: EffectSchema.Literals(Object.values(DEVICE_PLATFORM)),
   arch: EffectSchema.Literals(Object.values(DEVICE_ARCH)),
-  isolation: EffectSchema.Literals(Object.values(DEVICE_ISOLATION)),
+  isolation: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_ISOLATION))),
   home: macPath,
   claudeExecutable: macPath,
   codexExecutable: EffectSchema.optionalKey(macPath),

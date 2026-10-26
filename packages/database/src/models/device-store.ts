@@ -61,7 +61,7 @@ type DeviceLayout = typeof DeviceLayoutSchema.Type;
 export type DeviceRegistration = Omit<DeviceLayout, "codexExecutable"> & {
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
-  readonly isolation: DeviceIsolation;
+  readonly isolation?: DeviceIsolation | undefined;
   readonly codexExecutable?: string | undefined;
   readonly signedIn?: DeviceSignedIn | undefined;
 };
@@ -215,6 +215,8 @@ export function registerDevice(
         ...registered,
         // Note that a register naming no Codex clears the last one, since the Mac checks it on every start.
         codexExecutable: registered.codexExecutable ?? null,
+        // Likewise a register naming no isolation runs its agents bare, as every desktop from before the field does.
+        isolation: registered.isolation ?? DEVICE_ISOLATION.BARE,
         signedIn: registered.signedIn ?? {},
         now,
       }),

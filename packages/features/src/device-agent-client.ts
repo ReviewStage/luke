@@ -3,6 +3,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
 import {
   DEVICE_AGENT_REQUEST_KIND,
+  DEVICE_ISOLATION,
   type DeviceAgentAnswer,
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLine,
@@ -72,12 +73,14 @@ export class HostedDeviceAgentClient {
     deviceId: string,
     device: DeviceAgentDevice,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    const { codexExecutable, ...rest } = device;
+    const { codexExecutable, isolation, ...rest } = device;
     // Note that a Mac with no Codex checked names none, which the service reads as no Codex.
+    // Likewise a device running bare names no isolation, so a service from before the field still takes its register.
     const input = {
       deviceId,
       ...rest,
       ...(codexExecutable === undefined ? undefined : { codexExecutable }),
+      ...(isolation === DEVICE_ISOLATION.BARE ? undefined : { isolation }),
     };
     return askHosted(this.#hosted.deviceAgents.register, input).pipe(
       Effect.as(true),

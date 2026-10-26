@@ -86,7 +86,7 @@ it.layer(getTestDB())("the device store", (it) => {
     }),
   );
 
-  it.effect("a launch reads the isolation the Mac last registered", () =>
+  it.effect("a launch reads the isolation the Mac last registered, bare where it named none", () =>
     Effect.gen(function* () {
       const { owner } = yield* openAccounts;
       const id = randomUUID();
@@ -101,16 +101,12 @@ it.layer(getTestDB())("the device store", (it) => {
         isolation: DEVICE_ISOLATION.SANDBOX,
       });
       const sandboxed = yield* isolationNow;
-      yield* registerDevice(owner, {
-        id,
-        name: "Studio",
-        ...DEVICE_LAYOUT,
-        isolation: DEVICE_ISOLATION.BARE,
-      });
-      const bare = yield* isolationNow;
+      // A desktop from before the field names none.
+      yield* registerDevice(owner, { id, name: "Studio", ...DEVICE_LAYOUT });
+      const unnamed = yield* isolationNow;
 
       assert.deepEqual(sandboxed, Option.some(DEVICE_ISOLATION.SANDBOX));
-      assert.deepEqual(bare, Option.some(DEVICE_ISOLATION.BARE), "a register again moves it");
+      assert.deepEqual(unnamed, Option.some(DEVICE_ISOLATION.BARE), "a register again moves it");
     }),
   );
 
