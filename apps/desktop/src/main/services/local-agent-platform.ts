@@ -90,8 +90,6 @@ export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
     devicePlatform: DEVICE_PLATFORM.DARWIN,
     deviceArch: DEVICE_ARCH.ARM64,
     worktreeScript,
-    // Note that an agent on This Mac pushes on the developer's own git login, as they would.
-    githubFromLuke: false,
   };
   return packaged
     ? {

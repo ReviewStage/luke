@@ -148,8 +148,6 @@ export const DEVICE_AGENT_FOLDER = {
   ATTACHMENTS: "attachments",
   /** The skills the member installed into Luke, as the harness's local plugin. */
   INSTALLED_SKILLS: "installed-skills",
-  /** The agent's own `gh` sign-in on a host (`GH_CONFIG_DIR`), which no read of the agent's tools answers from. */
-  GITHUB_CONFIG: "gh",
 } as const;
 
 /** Where a local agent's things stand on a Mac, every path absolute. */
@@ -158,7 +156,6 @@ export interface DeviceAgentLayout {
   readonly checkoutPath: string;
   readonly attachments: string;
   readonly installedSkills: string;
-  readonly githubConfig: string;
 }
 
 /** The agent's folder and what stands in it, under the Mac's home folder given. */
@@ -172,7 +169,6 @@ export function deviceAgentLayout(home: string, agentId: string): DeviceAgentLay
     checkoutPath: [folder, DEVICE_AGENT_FOLDER.REPOSITORY].join("/"),
     attachments: [folder, DEVICE_AGENT_FOLDER.ATTACHMENTS].join("/"),
     installedSkills: [folder, DEVICE_AGENT_FOLDER.INSTALLED_SKILLS].join("/"),
-    githubConfig: [folder, DEVICE_AGENT_FOLDER.GITHUB_CONFIG].join("/"),
   };
 }
 

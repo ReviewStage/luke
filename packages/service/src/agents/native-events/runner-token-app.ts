@@ -29,8 +29,8 @@
  * the cloud's checkout mints its sandbox's (`coder-host/checkout.ts`'s
  * `agentRepositoryToken`): good for an hour, cut to that one repository. A
  * member's own classic token, which does not expire, never leaves for a
- * host. The host signs the agent's own `gh` in with it, and renews it every
- * `GITHUB_TOKEN_REFRESH`; it is braked per agent with the Codex token.
+ * host. The host signs the agent's own `gh` in with it and asks again well
+ * inside the hour; it is braked per agent with the Codex token.
  */
 
 import type { RunnerTokenAnswer } from "@luke/agent-runner/protocol";

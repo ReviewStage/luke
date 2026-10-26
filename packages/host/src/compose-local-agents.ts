@@ -12,7 +12,6 @@ import {
   deviceAgentLayout,
   deviceAgentStdinPayloadSchema,
 } from "@luke/features/device-agent-wire";
-import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
 import {
   Config,
   Duration,
@@ -81,20 +80,6 @@ import type { RunMode } from "./run-mode.js";
  * worktree could not be made is settled with the script's failure, and the
  * runner never starts.
  *
- * A host has no developer's Git login (`githubFromLuke`), so there each
- * agent working in a repository gets a `gh` sign-in of its own, in a config
- * folder inside its folder (`GH_CONFIG_DIR`): before its worktree is made,
- * and again every `GITHUB_TOKEN_REFRESH` while its runner runs, the host
- * asks the service for an installation token for the agent's repository and
- * signs `gh` in there with it (`gh auth login --with-token`), since such a
- * token lasts an hour and a turn can last a day. Git reads the same token
- * through gh's own credential helper (`gh auth git-credential`, as `gh auth
- * setup-git` sets it), named in the environment the worktree's script and
- * the runner start with, so no file of the developer's and no wrapper of
- * any command stands in. The token goes to `gh`'s stdin and its config
- * folder alone, never an argument, a log, or a report. This Mac keeps the
- * developer's own login and does none of it.
- *
  * Every launch this Mac claimed is kept in the host's state by its line's
  * id, no secret beside it, until its runner's exit settles it. A launch
  * still kept as the gate opens had its runner end with the app, or with the
@@ -138,13 +123,6 @@ const STATE_FILE = "local-agents.json";
 const TEMP_FOLDER = "tmp";
 /** The exit code a launch is settled with where its worktree could not be made or its runner started. */
 const NOT_STARTED = 1;
-/** The GitHub host an agent's `gh` signs in to, and whose HTTPS remotes git's credential helper answers for. */
-const GITHUB = {
-  HOST: "github.com",
-  CREDENTIAL_HELPER_KEY: "credential.https://github.com.helper",
-} as const;
-/** How soon a sign-in that failed is tried again, well inside the hour the last token lasts. */
-const GITHUB_SIGN_IN_RETRY = Duration.minutes(1);
 
 const VARIABLE = {
   HOME: "HOME",
@@ -154,29 +132,6 @@ const VARIABLE = {
   LANG: "LANG",
   PATH: "PATH",
 } as const;
-
-/** A word quoted for a POSIX shell, as git runs a `!` credential helper through one. */
-function shellQuoted(word: string): string {
-  return `'${word.replaceAll("'", `'\\''`)}'`;
-}
-
-/**
- * What a host adds to an agent's environment so its git and its `gh` read
- * the one token Luke signed `gh` in with: gh's config folder, and gh's own
- * credential helper for GitHub over git's environment-borne config, the
- * empty helper first so no helper of the box's stands before it, as `gh auth
- * setup-git` writes it into a file.
- */
-function githubEnvironment(configFolder: string, gh: string): Readonly<Record<string, string>> {
-  return {
-    GH_CONFIG_DIR: configFolder,
-    GIT_CONFIG_COUNT: "2",
-    GIT_CONFIG_KEY_0: GITHUB.CREDENTIAL_HELPER_KEY,
-    GIT_CONFIG_VALUE_0: "",
-    GIT_CONFIG_KEY_1: GITHUB.CREDENTIAL_HELPER_KEY,
-    GIT_CONFIG_VALUE_1: `!${shellQuoted(gh)} auth git-credential`,
-  };
-}
 
 /** The variables of the developer's own a runner and a command are started with, read from the app's environment; nothing else of Luke's is handed on. */
 const HANDED_ON = [VARIABLE.HOME, VARIABLE.SHELL, VARIABLE.USER, VARIABLE.LOGNAME, VARIABLE.LANG];
@@ -211,7 +166,6 @@ type LocalAgentClient = Pick<
   | "requests"
   | "claimRequest"
   | "answerRequest"
-  | "githubToken"
 >;
 
 export interface LocalAgentsDependencies {
@@ -536,12 +490,11 @@ export function composeLocalAgents(
         const settle = (id: string, exitCode?: number) =>
           asked(client.settleLine(deviceId, id, exitCode));
 
-        /** The agent's worktree made where it has none, on the agent's GitHub sign-in where the host gave it one: a folder for an agent with no repository, and Luke's shared clone's worktree otherwise. */
+        /** The agent's worktree made where it has none: a folder for an agent with no repository, and Luke's shared clone's worktree otherwise. */
         const madeWorktree = (
           layout: DeviceAgentLayout,
           repository: string | null,
           branch: string | null,
-          github: Readonly<Record<string, string>> | undefined,
         ) =>
           Effect.gen(function* () {
             if (yield* fileSystem.exists(path.join(layout.checkoutPath, ".git"))) return true;
@@ -559,7 +512,6 @@ export function composeLocalAgents(
               Effect.flatMap(
                 ChildProcess.make("/bin/bash", ["-c", script], {
                   cwd: folder,
-                  ...(github === undefined ? undefined : { env: { ...github }, extendEnv: true }),
                   stdin: "ignore",
                   stdout: "ignore",
                   stderr: "ignore",
@@ -569,64 +521,6 @@ export function composeLocalAgents(
             );
             return Number(code) === 0;
           }).pipe(Effect.orElseSucceed(() => false));
-
-        /**
-         * The agent's `gh` signed in, in its own config folder, with a fresh
-         * token for its repository from the service; whether it was. A token
-         * refused or unanswered, or a sign-in that failed, is reported in
-         * those words alone.
-         */
-        const signedInToGithub = (agentId: string, configFolder: string, gh: string) =>
-          Effect.gen(function* () {
-            const token = yield* asked(client.githubToken(agentId));
-            if (token === undefined) return false;
-            yield* fileSystem.makeDirectory(configFolder, { recursive: true, mode: 0o700 });
-            const code = yield* Effect.scoped(
-              Effect.flatMap(
-                ChildProcess.make(
-                  gh,
-                  [
-                    "auth",
-                    "login",
-                    "--hostname",
-                    GITHUB.HOST,
-                    "--with-token",
-                    // Note that the token is kept in the agent's own config folder, never a keyring every agent on the box shares.
-                    "--insecure-storage",
-                  ],
-                  {
-                    env: { ...shellVariables, GH_CONFIG_DIR: configFolder },
-                    extendEnv: false,
-                    stdin: { stream: Stream.make(new TextEncoder().encode(token)) },
-                    stdout: "ignore",
-                    stderr: "ignore",
-                  },
-                ),
-                (handle) => handle.exitCode,
-              ),
-            );
-            return Number(code) === 0;
-          }).pipe(
-            Effect.orElseSucceed(() => false),
-            Effect.tap((signedIn) =>
-              signedIn
-                ? Effect.void
-                : Effect.sync(() => report("a host agent's GitHub sign-in failed")),
-            ),
-          );
-
-        /** The agent's `gh` signed in again every `GITHUB_TOKEN_REFRESH`, or a minute after a sign-in that failed, for as long as it runs. */
-        const renewingGithub = (
-          agentId: string,
-          configFolder: string,
-          gh: string,
-          signedIn: boolean,
-        ): Effect.Effect<never, never, ChildProcessSpawner.ChildProcessSpawner> =>
-          Effect.flatMap(Effect.sleep(signedIn ? GITHUB_TOKEN_REFRESH : GITHUB_SIGN_IN_RETRY), () =>
-            Effect.flatMap(signedInToGithub(agentId, configFolder, gh), (again) =>
-              renewingGithub(agentId, configFolder, gh, again),
-            ),
-          );
 
         /** The runner started for a launch line, its first lines written, and its exit settling the line; the line settled as not started where it cannot be. */
         const launched = (
@@ -646,17 +540,10 @@ export function composeLocalAgents(
             ) {
               return yield* settle(line.id, NOT_STARTED);
             }
-            // Note that a host signs the agent's own gh in before its worktree is made, since the clone reads the token too.
-            const gh = platform.bundled.gh ?? "gh";
-            const configFolder = layout.githubConfig;
-            const signsIn = platform.githubFromLuke && payload.value.repository !== null;
-            const github = signsIn ? githubEnvironment(configFolder, gh) : undefined;
-            const signedIn = signsIn && (yield* signedInToGithub(agentId, configFolder, gh));
             const made = yield* madeWorktree(
               layout,
               payload.value.repository,
               payload.value.startBranch,
-              github,
             );
             if (!made) return yield* settle(line.id, NOT_STARTED);
             // Note that a Codex the Mac registered and lost since is had again before the runner starts, so a Codex agent's launch finds it.
@@ -682,7 +569,6 @@ export function composeLocalAgents(
                 ...shellVariables,
                 TMPDIR: temp,
                 ...platform.runnerEnv,
-                ...github,
                 ...secrets.env,
               },
             });
@@ -705,12 +591,6 @@ export function composeLocalAgents(
               return yield* settle(line.id, NOT_STARTED);
             }
             const handle = started.value;
-            if (signsIn) {
-              yield* Effect.forkIn(
-                renewingGithub(agentId, configFolder, gh, signedIn),
-                runnerScope,
-              );
-            }
             yield* keepLaunch(userId, line.id);
             yield* Queue.offer(stdin, secrets.stdin);
             // Note that the launch is forgotten only once the service took its settle, asked again
@@ -871,13 +751,9 @@ export function composeLocalAgents(
             );
             if (claimed === undefined || !("agentId" in claimed)) return;
             const layout = deviceAgentLayout(folder, claimed.agentId);
-            // Note that a host's command reads the agent's GitHub sign-in as its runner does, never the token itself.
             const env = {
               ...shellVariables,
               TMPDIR: path.join(layout.folder, TEMP_FOLDER),
-              ...(platform.githubFromLuke
-                ? githubEnvironment(layout.githubConfig, platform.bundled.gh ?? "gh")
-                : undefined),
             };
             const answer = yield* answeredLocalAgentRequest(layout, claimed, env).pipe(
               Effect.provideContext(services),
