@@ -63,7 +63,7 @@ const SHOWN_STANDING = {
 
 /** What the tab says where the narrowing leaves no run. */
 const NONE_SHOWN = {
-  [RUNS_SHOWN.ALL]: "No runs yet. A run lands here as soon as an automation fires.",
+  [RUNS_SHOWN.ALL]: "No runs yet.",
   [RUNS_SHOWN.RUNNING]: "Nothing is running.",
   [RUNS_SHOWN.FAILED]: "No run failed.",
 } as const satisfies Record<RunsShown, string>;
