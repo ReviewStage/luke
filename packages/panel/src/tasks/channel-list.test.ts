@@ -137,7 +137,7 @@ test("while the channels are read the list stands placeholders under a + that ma
   act(() => root.unmount());
 });
 
-test("a row's menu copies its link, marks it read, and edits it, and #general's offers no Archive", () => {
+test("a row's menu, by right-click or the menu key, copies its link, marks it read, and edits it, and #general's offers no Archive", () => {
   const looks: string[] = [];
   const edits: string[] = [];
   const host = document.body.appendChild(document.createElement("div"));
@@ -167,13 +167,13 @@ test("a row's menu copies its link, marks it read, and edits it, and #general's 
       ),
     ),
   );
-  const menuOf = (name: string) => {
+  const menuOf = (name: string, opening: Event) => {
     const row = [...host.querySelectorAll("button")].find((each) =>
       each.textContent?.startsWith(name),
     );
     assert.ok(row, `#${name} is listed`);
     act(() => {
-      row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 4, clientY: 4 }));
+      row.dispatchEvent(opening);
     });
     const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
     return {
@@ -183,12 +183,18 @@ test("a row's menu copies its link, marks it read, and edits it, and #general's 
     };
   };
 
-  const app = menuOf("app");
+  const app = menuOf(
+    "app",
+    new MouseEvent("contextmenu", { bubbles: true, clientX: 4, clientY: 4 }),
+  );
   assert.deepEqual(app.labels, ["Copy link", "Mark as read", "Edit…", "Archive…"]);
   app.press("Mark as read");
   assert.deepEqual(looks, ["c-app"]);
 
-  const general = menuOf("general");
+  const general = menuOf(
+    "general",
+    new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+  );
   assert.deepEqual(general.labels, ["Copy link", "Mark as read", "Edit…"]);
   general.press("Edit…");
   assert.deepEqual(edits, ["c-general"]);

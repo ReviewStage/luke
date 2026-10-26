@@ -44,8 +44,8 @@ import { needsYouNoun } from "./places-waiting.js";
  * its row is marked while it stands there. While the channels are first
  * read, each section stands a few rows' blocks in its rows' place
  * (`SidebarChannelRowsSkeleton`), and where that read failed, the Channels
- * section says so with Retry. A right-click offers the channel's menu
- * (`channel-menu.tsx`): Copy link, Mark as read, and Edit on every channel,
+ * section says so with Retry. A right-click, or the menu key or ⇧F10 on
+ * the row, offers the channel's menu (`channel-menu.tsx`): Copy link, Mark as read, and Edit on every channel,
  * #general's name staying as it is, and Archive on any but #general, which
  * is never archived. Making and editing ask through `channel-dialog.tsx`; archiving
  * the channel shown moves the window to #general (`use-channels.ts`).
@@ -89,6 +89,7 @@ function ChannelRow({
           tone: STATUS_TONE.ATTENTION,
         }}
         contextMenu={menu.contextMenu()}
+        onKeyDown={menu.keyMenu}
         roving
         onClick={onOpen}
       >
