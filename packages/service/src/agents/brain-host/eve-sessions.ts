@@ -260,6 +260,8 @@ export const RUNTIME_REFUSAL = {
   NOT_HERE: "not_here",
   /** The harness's sandbox image is still being prepared; the same call a little later is taken. */
   IMAGE_PREPARING: "image_preparing",
+  /** The agent's device is a host its account removed; no message reaches it again. */
+  DEVICE_REMOVED: "device_removed",
 } as const;
 
 export type RuntimeRefusal = (typeof RUNTIME_REFUSAL)[keyof typeof RUNTIME_REFUSAL];

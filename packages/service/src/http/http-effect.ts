@@ -67,6 +67,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
   [HOSTED_API_ERROR.HOST_STILL_ENROLLED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.DEVICE_REMOVED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -168,6 +169,8 @@ export const HOSTED_REFUSAL = {
   HOST_UPGRADE_NEEDED: { error: HOSTED_API_ERROR.HOST_UPGRADE_NEEDED },
   /** An enroll named a host of the token's member that is still enrolled; nothing was written. */
   HOST_STILL_ENROLLED: { error: HOSTED_API_ERROR.HOST_STILL_ENROLLED },
+  /** The agent ran on a host its starter removed; nothing was sent. */
+  DEVICE_REMOVED: { error: HOSTED_API_ERROR.DEVICE_REMOVED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */

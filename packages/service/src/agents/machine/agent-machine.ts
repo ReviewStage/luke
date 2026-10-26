@@ -171,6 +171,8 @@ export class LaunchRefused extends Data.TaggedError("LaunchRefused")<{
   readonly keyRefusal?: KeyRefusal | undefined;
   /** When a reached limit resets, in epoch milliseconds, where the provider said. */
   readonly planResetsAt?: number | undefined;
+  /** Whether the agent's device is a host its account removed, which no message brings back. */
+  readonly deviceRemoved?: true | undefined;
 }> {}
 
 /** What an open asks: the session the place is opened under, the agent whose repository it checks out, and the reads run beside it. */

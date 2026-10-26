@@ -12,6 +12,7 @@ import {
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
 import { devicesNamed } from "@luke/database/models/device-store";
+import { hostRemoved } from "@luke/database/models/host-store";
 import { listAccountProviderKeyRows } from "@luke/database/models/provider-key-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
 import {
@@ -1064,7 +1065,7 @@ const IN_THE_CLOUD: StartMachine = { asked: { machine: CODING_AGENT_MACHINE.VERC
  * `start_agent`, and the automation's owner for an automation's run. A
  * device runs only its owner's agents, so a Start by anyone else runs in
  * the cloud and says why; a device whose row is gone is refused as away,
- * and one that is the starter's goes on to the runtime and machine choices,
+ * a host its starter removed is refused by name, and one that is the starter's goes on to the runtime and machine choices,
  * which refuse it by name where it is away, the experiment is off, or it
  * runs no harness for the model. Nothing falls back to the cloud silently.
  */
@@ -1087,6 +1088,9 @@ const machineOfStart = Effect.fnUntraced(function* (
     return yield* Effect.fail(localAgentRefused(LOCAL_AGENT_REFUSAL.MAC_AWAY));
   }
   if (device.userId === userId) {
+    if (yield* hostedStoreOrUnavailable(hostRemoved(userId, device.id))) {
+      return yield* Effect.fail(HOSTED_REFUSAL.DEVICE_REMOVED);
+    }
     return { asked: { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: device.id } };
   }
   const owner = (yield* hostedStoreOrUnavailable(readAccountNames([device.userId]))).get(

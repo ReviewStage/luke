@@ -126,6 +126,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
   PLAN_REFUSAL,
+  RUNTIME_REFUSAL,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import {
@@ -767,6 +768,9 @@ export const runnerSessions = <
             : undefined),
           ...(failure instanceof LaunchRefused && failure.keyRefusal !== undefined
             ? { keyRefusal: failure.keyRefusal }
+            : undefined),
+          ...(failure instanceof LaunchRefused && failure.deviceRemoved === true
+            ? { runtimeRefusal: RUNTIME_REFUSAL.DEVICE_REMOVED }
             : undefined),
         } as const,
       );

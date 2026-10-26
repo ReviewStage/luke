@@ -17,7 +17,7 @@ import {
   type DeviceArch,
   type DevicePlatform,
 } from "@luke/features/device-agent-wire";
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { Data, DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
@@ -210,6 +210,25 @@ const findHostAgents = SqlSchema.findAll({
     ),
 });
 
+const findRemoved = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, id: Schema.String }),
+  Result: KeptSchema,
+  execute: ({ userId, id }) =>
+    Database.use((db) =>
+      db
+        .select({ id: device.id })
+        .from(device)
+        .where(
+          and(
+            eq(device.id, id),
+            eq(device.userId, userId),
+            eq(device.kind, DEVICE_KIND.HOST),
+            isNotNull(device.removedAt),
+          ),
+        ),
+    ),
+});
+
 const findBySecret = SqlSchema.findOneOption({
   Request: Schema.Struct({ secretHash: Schema.String }),
   Result: HostCallerSchema,
@@ -365,4 +384,9 @@ export function hostAgentConversations(
   return Effect.map(findHostAgents({ userId, deviceId }), (rows) =>
     rows.map((row) => row.conversationId),
   );
+}
+
+/** Whether the account removed its host of the id given, so an agent pinned to it is refused by name rather than as unavailable. */
+export function hostRemoved(userId: string, id: string): HostEffect<boolean> {
+  return Effect.map(findRemoved({ userId, id }), (rows) => rows.length > 0);
 }

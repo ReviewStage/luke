@@ -408,6 +408,8 @@ export const START_CODING_AGENT_REFUSAL = {
     "Not started: no subscription or API key of its starter's pays for that model, and Luke's key pays for no coding agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
   API_KEY_UNREADABLE:
     "Not started: the API key that would pay for it is saved but cannot be read here; its starter saves it again in Settings › Agents.",
+  DEVICE_REMOVED:
+    "Not started: the host it would run on was removed. Continue it in the cloud, or ask the member to add the host again.",
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -456,6 +458,7 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, START_CODING_AGENT_REFUSAL.PLAN_INELIGIBLE],
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING, START_CODING_AGENT_REFUSAL.CREDENTIAL_MISSING],
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE, START_CODING_AGENT_REFUSAL.API_KEY_UNREADABLE],
+  [HOSTED_API_ERROR.DEVICE_REMOVED, START_CODING_AGENT_REFUSAL.DEVICE_REMOVED],
 ]);
 
 /** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for. */
