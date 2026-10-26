@@ -109,6 +109,8 @@ const CHANNEL = {
   INFRA: fixtureId("f6000006", 3),
   GENERAL: fixtureId("f6000006", 4),
   CHANNELS: fixtureId("f6000006", 5),
+  DESIGN_REVIEW: fixtureId("f6000006", 6),
+  LAUNCH_SITE: fixtureId("f6000006", 7),
 } as const;
 
 /** A channel as the service keeps it, before what it counts for a reader. */
@@ -767,11 +769,15 @@ function needsReader(each: InboxItem): boolean {
   return threadNeedsReader(each, READER.userId);
 }
 
-/** The workspace's channels as the reader reads them: each with what waits on them in it and when they last looked. */
+/** The workspace's channels as the reader reads them: each with what waits on them in it, when they last looked, and when its latest thread was posted. */
 function channelsRead(): readonly Channel[] {
   const looked = LAST_LOOKED.get(READER.userId);
   return CHANNELS.map((channel) => {
     const at = looked?.get(channel.id);
+    const posted = THREADS.filter((each) => each.channelId === channel.id).map(
+      (each) => each.item.postedAt,
+    );
+    const latest = posted.length === 0 ? undefined : Math.max(...posted);
     const { createdBy, ...rest } = channel;
     return {
       ...rest,
@@ -779,6 +785,7 @@ function channelsRead(): readonly Channel[] {
       waiting: THREADS.filter((each) => each.channelId === channel.id && needsReader(each.item))
         .length,
       ...(at === undefined ? {} : { lookedAt: at }),
+      ...(latest === undefined ? {} : { latestPostedAt: latest }),
     };
   });
 }
@@ -960,6 +967,38 @@ function channelsAnswer() {
   return { channels: channelsRead() };
 }
 
+/** The workspace's archived channels, the latest archived first; an archive or an unarchive here moves them for the run. */
+let ARCHIVED: readonly (ChannelSeed & { readonly archivedAt: number })[] = [
+  {
+    id: CHANNEL.LAUNCH_SITE,
+    name: "launch-site",
+    purpose: "Project: the marketing site's October launch",
+    project: true,
+    createdAt: LANDED - 40 * DAY,
+    createdBy: CHARLES,
+    archivedAt: LANDED - 3 * DAY,
+  },
+  {
+    id: CHANNEL.DESIGN_REVIEW,
+    name: "design-review",
+    purpose: "Screens waiting on a design pass",
+    project: false,
+    createdAt: LANDED - 60 * DAY,
+    createdBy: DEAN,
+    archivedAt: LANDED - 9 * DAY,
+  },
+];
+
+/** The archived channels as the service reads them. */
+function archivedAnswer() {
+  return {
+    channels: ARCHIVED.map(({ createdBy, ...rest }) => ({
+      ...rest,
+      ...(createdBy === undefined ? {} : { createdBy: createdBy.userId }),
+    })),
+  };
+}
+
 /** A channel's stored row changed by `change`, where it is one this run holds. */
 function changed(channelId: string, change: (channel: ChannelSeed) => ChannelSeed | undefined) {
   CHANNELS = CHANNELS.flatMap((channel) => {
@@ -1006,7 +1045,28 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     return channelsAnswer();
   },
   [ACT_KIND.CHANNELS_FOLLOW]: () => pushedOnce({ moved: [] }),
-  [ACT_KIND.CHANNELS_ARCHIVED]: () => ({ channels: [] }),
+  [ACT_KIND.CHANNELS_ARCHIVED]: () => archivedAnswer(),
+  [ACT_KIND.CHANNELS_UNARCHIVE]: ({ channelId }) => {
+    const archived = ARCHIVED.find((channel) => channel.id === channelId);
+    if (archived === undefined) return { failure: "not-found" };
+    if (CHANNELS.some((channel) => channel.name === archived.name)) {
+      return { failure: "name-taken" };
+    }
+    const { archivedAt: _at, ...open } = archived;
+    ARCHIVED = ARCHIVED.filter((channel) => channel.id !== channelId);
+    CHANNELS = [...CHANNELS, open].toSorted((a, b) => a.name.localeCompare(b.name));
+    return channelsAnswer();
+  },
+  [ACT_KIND.CHANNELS_MOVE]: ({ threadId, channelId }) => {
+    const at = THREADS.findIndex((each) => each.item.id === threadId);
+    const moved = THREADS[at];
+    if (moved === undefined || !CHANNELS.some((channel) => channel.id === channelId)) {
+      return { failure: "not-found" };
+    }
+    THREADS[at] = { ...moved, channelId };
+    const thread = threadsOf(channelId).find((each) => each.id === threadId);
+    return thread === undefined ? { failure: "not-found" } : { thread };
+  },
   [ACT_KIND.CHANNELS_EDIT]: ({ channelId, name, purpose }) => {
     const standing = CHANNELS.find((channel) => channel.id === channelId);
     if (standing === undefined) return { failure: "not-found" };
@@ -1025,7 +1085,10 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   },
   [ACT_KIND.CHANNELS_ARCHIVE]: ({ channelId }) => {
     if (channelId === CHANNEL.GENERAL) return { failure: "not-permitted" };
-    changed(channelId, () => undefined);
+    changed(channelId, (channel) => {
+      ARCHIVED = [{ ...channel, archivedAt: Date.now() }, ...ARCHIVED];
+      return undefined;
+    });
     return channelsAnswer();
   },
 };

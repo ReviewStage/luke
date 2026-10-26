@@ -5685,7 +5685,7 @@ test("no row draws the attention mark, which an open item nearly always would: t
       mark: meta?.querySelector(".attention-mark") !== null,
       face: meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
       said: meta?.querySelector(".luke-visually-hidden")?.textContent,
-      dot: row.querySelector(".inbox-row-unread") !== null,
+      dot: row.querySelector(".luke-unread-dot") !== null,
       unread: row.closest("li")?.dataset.unread === "true",
     };
   };
@@ -5768,7 +5768,7 @@ test("a teammate's open item of an agent with no plan is listed under the automa
 function unreadOf(page: HTMLElement, title: string): boolean | "?" {
   const row = rowNamed(page, title);
   const marks = [
-    row.querySelector(".inbox-row-gutter .inbox-row-unread") !== null,
+    row.querySelector(".luke-unread-gutter .luke-unread-dot") !== null,
     row.closest("li")?.dataset.unread === "true",
     [...row.querySelectorAll(".luke-list-row-meta .luke-visually-hidden")].some(
       (each) => each.textContent === "Unread",
@@ -9497,6 +9497,73 @@ const GENERAL: Channel = {
   createdAt: 1,
   waiting: 0,
 };
+
+test("an unread post wears the dot, and its ⋯ offers the thread's acts, its Move to channel moving it to the channel picked", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  const moves: { threadId: string; channelId: string }[] = [];
+  const previous = fakeActsAnswer();
+  const done = (value: unknown): Promise<FakeActAnswer> =>
+    Promise.resolve({ status: FAKE_ANSWER.DONE, value } as FakeActAnswer);
+  const threads = [
+    { ...THRESHOLD, unread: true, channelId: GENERAL.id },
+    { ...EXPIRY, channelId: GENERAL.id },
+  ];
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.CHANNELS_LIST) {
+        return done({ channels: [GENERAL, APP_CHANNEL] });
+      }
+      if (request.kind === ACT_KIND.CHANNELS_THREADS) return done({ threads });
+      if (request.kind === ACT_KIND.CHANNELS_MOVE) {
+        moves.push(request.payload);
+        return done({ thread: { ...threads[0], channelId: request.payload.channelId } });
+      }
+      return previous(request);
+    },
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  const post = (title: string) =>
+    [...page.querySelectorAll<HTMLElement>(".channel-stream [data-channel-post]")].find((each) =>
+      each.textContent?.includes(title),
+    ) ?? assert.fail(`the post ${title} is drawn`);
+  assert.ok(
+    post(THRESHOLD.title).querySelector(".luke-unread-dot"),
+    "the unread post wears the dot",
+  );
+  assert.equal(post(EXPIRY.title).querySelector(".luke-unread-dot"), null, "a read one does not");
+
+  act(() =>
+    (
+      post(THRESHOLD.title).querySelector<HTMLElement>('button[aria-label="Thread actions"]') ??
+      assert.fail("the post has its ⋯")
+    ).click(),
+  );
+  assert.deepEqual(menuWords(), [
+    "Mark as read",
+    "—",
+    "Copy link",
+    "—",
+    `Open task${BILLING.name}`,
+    "Open agent",
+    "—",
+    "Move to channel…",
+    "—",
+    "Resolve without answering",
+  ]);
+  act(() => menuItem("Move to channel…").click());
+  await settle();
+  const move =
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.textContent === "Move to #app",
+    ) ?? assert.fail("the dialog offers the other channel");
+  act(() => move.click());
+  await settle();
+  assert.deepEqual(moves, [{ threadId: THRESHOLD.id, channelId: APP_CHANNEL.id }]);
+});
 
 test("a post pressed in a channel's stream opens its thread in the side panel, another post's press swaps the panel to its thread, and hiding the panel closes the thread while the stream stands as it stood, its look not yet stamped", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));

@@ -16,10 +16,19 @@ import {
   TOOLBAR_INSET,
   Toolbar,
   Tooltip,
+  useMenu,
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { needsYouNoun } from "../desktop/places-waiting.js";
-import { CHANNEL_SECTIONS, type ChannelSectionLook, sectionChannels } from "./channels-model.js";
+import { useChannelMenu } from "./channel-menu.js";
+import {
+  CHANNEL_SECTIONS,
+  type ChannelSectionLook,
+  channelUnread,
+  sectionChannels,
+} from "./channels-model.js";
+import type { ChannelsControl } from "./use-channels.js";
 
 /**
  * channel-list.tsx -- a phone's list of a workspace's channels, the screen its bar's Channels opens, as Slack's Home lists them (STAG-547).
@@ -30,7 +39,10 @@ import { CHANNEL_SECTIONS, type ChannelSectionLook, sectionChannels } from "./ch
  * row is a channel's glyph, its name, its purpose after it, and at its end
  * how many open asks in it wait on the reader, in the attention's tone; the
  * standing channels come first and the projects' under their heading, each
- * in the service's order (`CHANNEL_SECTIONS`). A press opens the channel's
+ * in the service's order (`CHANNEL_SECTIONS`). A channel something was
+ * posted in since the reader last looked stands in the unread weight, as
+ * the sidebar's row does, and a long press offers the same menu its row's
+ * right-click does (`channel-menu.tsx`). A press opens the channel's
  * stream, and the bar's "+" asks for a channel to make, as the sidebar's
  * does, opening it once made. While the channels are first read, each
  * section stands a few rows' blocks in its rows' place
@@ -46,27 +58,44 @@ const CHANNELS_NOT_READ = "Could not read this workspace's channels.";
 /** The standing channels' section, which makes a standing channel from the bar's "+". */
 const STANDING = CHANNEL_SECTIONS[0];
 
-/** One channel's row. */
+/** One channel's row and its menu. */
 function ChannelListRow({
   channel,
+  shown,
+  groups,
   onOpen,
 }: {
   channel: Channel;
+  shown: boolean;
+  groups: MenuAction[][];
   onOpen: (channelId: string) => void;
 }): React.JSX.Element {
+  const menu = useMenu(shown);
   return (
-    <NavItem
-      icon={<GLYPH.CHANNEL />}
-      detail={channel.purpose}
-      count={{
-        value: channel.waiting,
-        noun: needsYouNoun(channel.waiting),
-        tone: STATUS_TONE.ATTENTION,
-      }}
-      onClick={() => onOpen(channel.id)}
-    >
-      {channel.name}
-    </NavItem>
+    <>
+      <NavItem
+        icon={<GLYPH.CHANNEL />}
+        detail={channel.purpose}
+        unread={channelUnread(channel)}
+        count={{
+          value: channel.waiting,
+          noun: needsYouNoun(channel.waiting),
+          tone: STATUS_TONE.ATTENTION,
+        }}
+        contextMenu={menu.contextMenu()}
+        onClick={() => onOpen(channel.id)}
+      >
+        {channel.name}
+      </NavItem>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={`#${channel.name} actions`}
+          menu={menu.drawn}
+          groups={groups}
+          onClose={menu.close}
+        />
+      )}
+    </>
   );
 }
 
@@ -138,26 +167,29 @@ export function ChannelListSkeleton(): React.JSX.Element {
   );
 }
 
-/** The list; see the module's head. `channels` is none until first read, and `failed` whether that read failed. */
+/** The list; see the module's head. Its channels are none until first read, and `failed` says whether that read failed. */
 export function ChannelList({
-  channels,
-  failed,
+  workspaceId,
+  channels: control,
+  shown,
   onOpen,
   onNew,
-  onRetry,
 }: {
-  channels: readonly Channel[] | undefined;
-  failed: boolean;
+  workspaceId: string | undefined;
+  channels: ChannelsControl;
+  /** Whether the list is in sight, which its menus and questions close with. */
+  shown: boolean;
   onOpen: (channelId: string) => void;
   /** Asks for a channel to make. */
   onNew: () => void;
-  onRetry: () => void;
 }): React.JSX.Element {
+  const menu = useChannelMenu({ workspaceId, channels: control, shown, onRename: undefined });
+  const { channels, failed } = control;
   if (channels === undefined && !failed) return <ChannelListSkeleton />;
   return (
     <ChannelListFrame onNew={channels === undefined ? undefined : onNew}>
       {channels === undefined ? (
-        <ErrorState placement={ERROR_STATE_PLACEMENT.ROWS} onRetry={onRetry}>
+        <ErrorState placement={ERROR_STATE_PLACEMENT.ROWS} onRetry={control.onRefresh}>
           {CHANNELS_NOT_READ}
         </ErrorState>
       ) : (
@@ -167,13 +199,20 @@ export function ChannelList({
             <ChannelListSection key={section.label} section={section}>
               <SidebarPlaces label={section.label}>
                 {rows.map((channel) => (
-                  <ChannelListRow key={channel.id} channel={channel} onOpen={onOpen} />
+                  <ChannelListRow
+                    key={channel.id}
+                    channel={channel}
+                    shown={shown}
+                    groups={menu.groups(channel)}
+                    onOpen={onOpen}
+                  />
                 ))}
               </SidebarPlaces>
             </ChannelListSection>
           );
         })
       )}
+      {menu.dialog}
     </ChannelListFrame>
   );
 }

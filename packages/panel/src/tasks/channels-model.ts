@@ -19,7 +19,9 @@ import {
  * the threads of their own tasks, those asking them, and those they wrote
  * in; Everyone, every thread; and Needs me, the open asks addressed to them
  * alone. A thread needs the reader while its ask stands open and it waits
- * on them, which the stream marks on the attention tint and nothing else.
+ * on them, which the stream marks on the attention tint and nothing else. A
+ * channel reads as unread while something was posted in it since the
+ * reader last looked, which its row says in the unread weight.
  */
 
 /** The channel every thread that names none goes to, which is never renamed or archived; the service mints it under this name (`GENERAL_CHANNEL`). */
@@ -236,6 +238,17 @@ export function sectionChannels(
   section: ChannelSectionLook,
 ): readonly Channel[] {
   return channels.filter((channel) => channel.project === section.project);
+}
+
+/**
+ * Whether a channel reads as unread to the reader: something they may read
+ * was posted in it since they last looked, or they never looked at one that
+ * holds a thread.
+ */
+export function channelUnread(channel: Channel): boolean {
+  const { latestPostedAt, lookedAt } = channel;
+  if (latestPostedAt === undefined) return false;
+  return lookedAt === undefined || latestPostedAt > lookedAt;
 }
 
 /** Whether a channel may be renamed or archived: any but #general. */

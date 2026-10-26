@@ -33,6 +33,7 @@ import {
   ChannelMissing,
   ChannelReading,
   ChannelStream,
+  type PostMenuDoors,
   useChannelStream,
 } from "../tasks/channel-stream.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
@@ -470,6 +471,18 @@ function InboxShown({
     });
     channelPlace.onOpenThread(thread.id);
   };
+  // A post's ⋯ marks, closes, and moves its thread, and opens its task or its agent where the pane's crumbs would.
+  const postMenu: PostMenuDoors = {
+    onMark: markItem,
+    onClose: closeItem,
+    onOpenTask: tasks.onShowTask,
+    onOpenAgent: (thread, holder) =>
+      holder?.kind === INBOX_HOLDER.TASK
+        ? tasks.onShowAgent(holder.task.id, thread.agentId)
+        : tasks.agentView.onOpen(thread.agentId),
+    onMove: channels.onMove,
+    channels: channels.channels ?? [],
+  };
   // A channel pressed on a phone's list opens on its stream, never on a thread left open in it.
   const openChannel = (channelId: string) => {
     channelPlace.onChoose(channelId);
@@ -634,11 +647,11 @@ function InboxShown({
                 {streaming ? (
                   channelsListed ? (
                     <ChannelList
-                      channels={channels.channels}
-                      failed={channels.failed}
+                      workspaceId={tasks.workspace?.id}
+                      channels={channels}
+                      shown={tasks.shown}
                       onOpen={openChannel}
                       onNew={() => making.askNew(false)}
-                      onRetry={channels.onRefresh}
                     />
                   ) : channelState.kind === CHANNEL_SHOWN.MISSING ? (
                     <ChannelMissing
@@ -658,6 +671,7 @@ function InboxShown({
                       shown={tasks.shown}
                       agents={named}
                       listedOf={listedOf}
+                      menuDoors={postMenu}
                       onOpen={openThread}
                       onLook={channels.onLook}
                       onAnswered={channels.onRefresh}
