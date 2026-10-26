@@ -927,7 +927,7 @@ test(
 );
 
 test(
-  "a discard finds work in an agent's worktree only where it is changed, ahead of its upstream, or on no remote branch",
+  "a discard finds work in an agent's worktree only where it is changed, ahead of its upstream, on no remote branch, or has files and no repository",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
@@ -953,6 +953,9 @@ test(
 
     assert.equal(found(), "", "a clean worktree on GitHub's head holds nothing");
 
+    // Note that the developer's own Git setting that hides untracked files must not hide them here.
+    git(worktree, ["config", "status.showUntrackedFiles", "no"]);
+
     writeFileSync(path.join(worktree, "notes.md"), "unsaved\n");
     assert.match(found(), /changes not committed/u);
     git(worktree, ["add", "--all"]);
@@ -969,6 +972,19 @@ test(
     assert.equal(found(), "", "a branch with no upstream and no commits of its own holds nothing");
     commit("local.md");
     assert.match(found(), /no remote branch/u);
+
+    const plain = path.join(scratch, "agents", "plain", "repository");
+    mkdirSync(plain, { recursive: true });
+    assert.equal(
+      runEnded(scratch, shell, agentUnsavedWorkScript({ worktree: plain })).printed,
+      "",
+      "an empty folder holds nothing",
+    );
+    writeFileSync(path.join(plain, "report.md"), "written by an agent with no repository\n");
+    assert.match(
+      runEnded(scratch, shell, agentUnsavedWorkScript({ worktree: plain })).printed,
+      /no repository/u,
+    );
 
     const missing = path.join(scratch, "agents", "none", "repository");
     assert.deepEqual(

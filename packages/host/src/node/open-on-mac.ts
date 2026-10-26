@@ -419,8 +419,9 @@ export function agentWorktreeScript(input: {
  * prints one line, and exits 0, when the worktree holds work that is nowhere
  * else, changes `git status --porcelain` shows, or commits its upstream does
  * not hold, or, with no upstream, commits on no remote branch of Luke's
- * shared clone nor a head it fetched. It prints nothing and exits 0 for a
- * worktree with nothing to lose, or none at all, and exits 1 where Git could
+ * shared clone nor a head it fetched, or files in a folder with no
+ * repository. It prints nothing and exits 0 for a worktree with nothing to
+ * lose, or none at all, and exits 1 where Git could
  * not say, which the caller takes as work to keep.
  */
 export function agentUnsavedWorkScript(input: { readonly worktree: string }): string {
@@ -429,9 +430,16 @@ export function agentUnsavedWorkScript(input: { readonly worktree: string }): st
     'PATH="$("${SHELL:-/bin/zsh}" -l -c \'printf %s "$PATH"\' 2>/dev/null || printf %s "$PATH")"',
     "export PATH",
     `worktree=${shellQuoted(input.worktree)}`,
-    '[ -e "$worktree/.git" ] || exit 0',
+    '[ -d "$worktree" ] || exit 0',
     'cd "$worktree" || exit 1',
-    'changes="$(git status --porcelain)" || exit 1',
+    // Note that a folder with no repository, as an agent with none gets, holds what the agent wrote and nothing else has a copy.
+    "if [ ! -e .git ]; then",
+    '  files="$(ls -A)" || exit 1',
+    '  [ -z "$files" ] || echo "it has files and no repository"',
+    "  exit 0",
+    "fi",
+    // Note that untracked files are asked for by name, since the developer's own `status.showUntrackedFiles` would hide them.
+    'changes="$(git status --porcelain --untracked-files=all)" || exit 1',
     'if [ -n "$changes" ]; then',
     '  echo "it has changes not committed"',
     "  exit 0",
