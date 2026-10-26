@@ -1523,17 +1523,18 @@ function MenuSheet({
     [roving.ref, hold, openOnChecked],
   );
   // Each page lands focus as it stands: the first page on its start, or on the row of the submenu just left.
+  // Note that it is keyed by the submenu's name, never the submenu its owner draws anew, so a value toggled where it stays keeps focus.
   useEffect(() => {
     if (list === null || leaving) return;
     const back =
-      page === undefined && backTo.current !== undefined
+      opened === undefined && backTo.current !== undefined
         ? [...list.querySelectorAll<HTMLElement>(`[${SUBMENU_ATTRIBUTE}]`)].find(
             (row) => row.getAttribute(SUBMENU_ATTRIBUTE) === backTo.current,
           )
         : undefined;
     backTo.current = undefined;
-    (back ?? startOf(list, openOnChecked && page === undefined))?.focus({ preventScroll: true });
-  }, [list, page, leaving, openOnChecked]);
+    (back ?? startOf(list, openOnChecked && opened === undefined))?.focus({ preventScroll: true });
+  }, [list, opened, leaving, openOnChecked]);
 
   const back = () => {
     backTo.current = page?.label;

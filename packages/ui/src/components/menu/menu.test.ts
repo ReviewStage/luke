@@ -1057,14 +1057,22 @@ test("Escape or a press on the dimmed window puts a sheet away and hands focus b
   expect(document.activeElement).toBe(more);
 });
 
-/** A ⋯ whose menu holds a Status submenu of one filter value, Todo, toggled on and off where it stays. */
+/** A ⋯ whose menu holds a Status submenu of two filter values, Todo and Done, each toggled on and off where it stays. */
 function FilterHarness(): React.JSX.Element {
-  const [todo, setTodo] = useState(false);
-  const toggle = { label: "Todo", checked: todo, stays: true, onSelect: () => setTodo(!todo) };
-  return createElement(Harness, { groups: [[{ label: "Status", items: [toggle] }]] });
+  const [on, setOn] = useState<readonly string[]>([]);
+  const toggle = (label: string) => ({
+    label,
+    checked: on.includes(label),
+    stays: true,
+    onSelect: () =>
+      setOn(on.includes(label) ? on.filter((each) => each !== label) : [...on, label]),
+  });
+  return createElement(Harness, {
+    groups: [[{ label: "Status", items: [toggle("Todo"), toggle("Done")] }]],
+  });
 }
 
-test("in a sheet a submenu's value that stays reads and toggles as its owner now draws it", () => {
+test("in a sheet a submenu's value that stays reads and toggles as its owner now draws it, keeping focus", () => {
   vi.stubGlobal("ResizeObserver", StandInResizeObserver);
   inPhoneLayout();
   mount(createElement(FilterHarness));
@@ -1074,6 +1082,10 @@ test("in a sheet a submenu's value that stays reads and toggles as its owner now
   expect(button("Todo").getAttribute("aria-checked")).toBe("true");
   press(button("Todo"));
   expect(button("Todo").getAttribute("aria-checked")).toBe("false");
+  key("ArrowDown");
+  pressFocused();
+  expect(button("Done").getAttribute("aria-checked")).toBe("true");
+  expect(focused()).toBe("Done");
 });
 
 test("a choice in a sheet acts with focus already back on what opened it, so a dialog it opens hands focus back there", () => {
