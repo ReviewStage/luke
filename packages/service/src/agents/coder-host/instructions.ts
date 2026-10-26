@@ -266,7 +266,9 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     glob: "your shell (`rg --files`, or `ls`)",
     searchWeb: "Search the public web with Codex's own web search",
     skills: `A word like \`/name\` in the developer's message names one of your skills, which Codex finds under the checkout's \`.agents/skills\`, or, for one your developer installed into Luke, under \`${NATIVE_SKILLS_PATH.INSTALLED}/${INSTALLED_SKILLS.SKILLS}\`: read that skill's \`SKILL.md\` before anything else, and follow what it says. Where neither has such a skill, read \`.agents/skills/<name>/SKILL.md\` or \`.claude/skills/<name>/SKILL.md\` on the default branch, and follow that instead.`,
-    installedSkills: `A word like \`/name\` in the developer's message names one of the skills your developer installed into Luke, which Codex finds under \`${NATIVE_SKILLS_PATH.INSTALLED}/${INSTALLED_SKILLS.SKILLS}\`: read that skill's \`SKILL.md\` before anything else, and follow what it says.`,
+    // Note that no path is named, because a local agent's Mac keeps the installed skills in a folder of its own, which Codex lists beside each skill.
+    installedSkills:
+      "A word like `/name` in the developer's message names one of the skills your developer installed into Luke, which Codex lists among your skills: read that skill's `SKILL.md` before anything else, and follow what it says.",
     browser: browserWords("your shell"),
     todos:
       "For work of more than a couple of steps, keep your to-dos with Codex's plan tool (`update_plan`), which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",
