@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
+  REPLAY_SENDER,
   REPLAY_STEP_KIND,
   REPLAY_TOOL_STATE,
   type ReplayStep,
@@ -82,7 +83,7 @@ const said = (at: number, size = 1_000): ReplayStep => ({
 });
 
 /** A model answering each call by `answer`, or never where it answers nothing, keeping each prompt it was asked. */
-function scripted(answer: (prompt: string) => string | undefined) {
+function scripted(answer: (prompt: string) => string | undefined, finish = "stop") {
   const asked: string[] = [];
   const bounds: (number | undefined)[] = [];
   const model = new MockLanguageModelV4({
@@ -94,7 +95,7 @@ function scripted(answer: (prompt: string) => string | undefined) {
       if (text === undefined) return new Promise<never>(() => {});
       return {
         content: [{ type: "text", text }],
-        finishReason: { unified: "stop", raw: "stop" },
+        finishReason: { unified: finish as "stop" | "length", raw: finish },
         usage: {
           inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
           outputTokens: { total: 1, text: 1, reasoning: 0 },
@@ -126,6 +127,31 @@ it.effect(
 
       assert.deepEqual(written, Option.some({ text: "Whole recap.", steps: 6 }));
       assert.equal(asked.length, 4, "three chunks of two steps, then the combining call");
+    }),
+);
+
+it.effect("a summary cut off at its token limit is not handed over as whole", () =>
+  Effect.gen(function* () {
+    const { summary } = scripted(() => "Half a recap that stops mid", "length");
+    const written = yield* summarizeSteps(summary, [said(0)], 200_000);
+
+    assert.deepEqual(written, Option.none());
+  }),
+);
+
+it.effect(
+  "each line the summary call reads names its sender, and the call is told its budget",
+  () =>
+    Effect.gen(function* () {
+      const { summary, asked } = scripted(() => "Recap.");
+      const fromGithub: ReplayStep = { ...said(1), sender: { kind: REPLAY_SENDER.GITHUB } };
+      yield* summarizeSteps(summary, [said(0), fromGithub], 200_000);
+
+      assert.match(asked[0] ?? "", /\[from github\] Said: Step 1\./u);
+      assert.match(
+        asked[0] ?? "",
+        new RegExp(`within ${REPLAY_FIT.SUMMARY_OUTPUT_TOKENS} tokens`, "u"),
+      );
     }),
 );
 
