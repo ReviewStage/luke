@@ -172,9 +172,12 @@ export const RETIRED_TOOL = {
  * Claude Code's own tools, by the names its CLI calls them, which a coding
  * agent running on Claude Code calls in place of Luke's shell, file, search,
  * todo, delegation, skill, and web tools, and waits with (background Bash,
- * `Monitor`, `ScheduleWakeup`). Its transcript stores each call under this
- * name; a call to Luke's own MCP server is stored under Luke's tool's name
- * (`CLAUDE_CODE_LUKE_TOOL_PREFIX`).
+ * `Monitor`, `ScheduleWakeup`). Its to-dos are the CLI's task list, one
+ * task created, updated, listed, and read at a time (the four `Task*`
+ * tools, which replaced `TodoWrite`'s whole list in CLI 2.1.304; an older
+ * transcript still names `TodoWrite`). Its transcript stores each call under
+ * this name; a call to Luke's own MCP server is stored under Luke's tool's
+ * name (`CLAUDE_CODE_LUKE_TOOL_PREFIX`).
  */
 export const CLAUDE_CODE_TOOL = {
   BASH: "Bash",
@@ -187,6 +190,10 @@ export const CLAUDE_CODE_TOOL = {
   WEB_FETCH: "WebFetch",
   WEB_SEARCH: "WebSearch",
   TODO_WRITE: "TodoWrite",
+  TASK_CREATE: "TaskCreate",
+  TASK_UPDATE: "TaskUpdate",
+  TASK_LIST: "TaskList",
+  TASK_GET: "TaskGet",
   AGENT: "Agent",
   SKILL: "Skill",
   MONITOR: "Monitor",
