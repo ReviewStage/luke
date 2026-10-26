@@ -258,6 +258,33 @@ test("a scroll up a script asks for takes the log off its newest line", () => {
   assert.deepEqual(layout.writes, [], "the line the script scrolled to stands");
 });
 
+test("the way back to the newest line floats over the log without changing how its box is drawn", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(
+        Conversation,
+        null,
+        createElement(ConversationContent, null, createElement("p", null, "one")),
+        createElement(ConversationScrollButton),
+      ),
+    ),
+  );
+  const box = container.querySelector<HTMLElement>("[role=log]") ?? assert.fail("the log");
+  layOut(box, { height: 300, room: 100, writes: [] });
+  scroll(box, 200);
+  const drawn = () => box.getAttributeNames().map((name) => [name, box.getAttribute(name)]);
+  const atNewest = drawn();
+  readerScroll(box, 0);
+  assert.ok(
+    container.querySelector("[aria-label='Scroll to the newest line']"),
+    "the way back shows",
+  );
+  assert.deepEqual(drawn(), atNewest, "the log's box, its fade among it, is drawn as it was");
+});
+
 /** Stands in for each line's place in the log: 50px a line, one under another. */
 function linesLaidOut(): void {
   vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (
