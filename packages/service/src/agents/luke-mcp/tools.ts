@@ -53,7 +53,7 @@ import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { pictureTypeSchema } from "@luke/features/picture-wire";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Exit, Option, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
@@ -341,11 +341,16 @@ function runAgentBrowser(admitted: AdmittedConversation, input: UnparsedWireValu
  * the door as eve hands its session's, and the reservation settled to what
  * was taken once the door answers. A conversation with no turn running
  * holds no count, so its call is held to the cap alone. Note that the
- * three run uninterruptibly, because a request that goes away mid-save
- * would otherwise leave its reservation counted against notes never taken,
- * or a save taken but never settled; and that a settle that fails is logged
- * and the door's answer stands, because the notes are saved by then and a
- * retry would take them twice, so the turn only counts the reservation whole.
+ * settle is the reservation's release, because a call interrupted mid-save,
+ * by a Stop or a request gone away, must not leave notes never taken counted
+ * for the rest of the turn; the door itself stays interruptible, since its
+ * read of the sandbox waits on no bound of its own. An interrupted call gives
+ * its whole reservation back: a save it cut short rolls back, and one that
+ * had just committed goes uncounted, which costs the cap one call's notes at
+ * most. And a settle that
+ * fails is logged and the door's answer stands, because the notes are saved
+ * by then and a retry would take them twice, so the turn only counts the
+ * reservation whole.
  */
 function runTurnCappedEditPlan(
   admitted: AdmittedConversation,
@@ -354,19 +359,24 @@ function runTurnCappedEditPlan(
 ) {
   const { userId, conversationId } = admitted.target;
   const requested = requestedNotes(input);
-  return Effect.uninterruptible(
-    Effect.gen(function* () {
-      const turn = yield* reserveTurnPlanNotes(userId, conversationId, requested);
-      if (Option.isNone(turn)) return yield* runAgentEditPlan(admitted, input, 0, sandbox);
-      const { turnId, taken } = turn.value;
-      const answer = yield* runAgentEditPlan(admitted, input, taken - requested, sandbox);
-      const saved = answer.status === ACTION_RESULT_STATUS.ACCEPTED ? answer.taken : 0;
-      yield* settleTurnPlanNotes(userId, turnId, requested, saved).pipe(
+  return Effect.acquireUseRelease(
+    reserveTurnPlanNotes(userId, conversationId, requested),
+    (turn) =>
+      runAgentEditPlan(
+        admitted,
+        input,
+        Option.isSome(turn) ? turn.value.taken - requested : 0,
+        sandbox,
+      ),
+    (turn, exit) => {
+      if (Option.isNone(turn)) return Effect.void;
+      const answer = Exit.isSuccess(exit) ? exit.value : undefined;
+      const saved = answer?.status === ACTION_RESULT_STATUS.ACCEPTED ? answer.taken : 0;
+      return settleTurnPlanNotes(userId, turn.value.turnId, requested, saved).pipe(
         Effect.tapError(logStoreFailure),
         Effect.ignore,
       );
-      return answer;
-    }),
+    },
   ).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
