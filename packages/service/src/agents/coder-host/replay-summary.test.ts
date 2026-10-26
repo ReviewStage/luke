@@ -139,20 +139,26 @@ it.effect("a summary cut off at its token limit is not handed over as whole", ()
   }),
 );
 
-it.effect(
-  "each line the summary call reads names its sender, and the call is told its budget",
-  () =>
-    Effect.gen(function* () {
-      const { summary, asked } = scripted(() => "Recap.");
-      const fromGithub: ReplayStep = { ...said(1), sender: { kind: REPLAY_SENDER.GITHUB } };
-      yield* summarizeSteps(summary, [said(0), fromGithub], 200_000);
+it.effect("each line the summary call reads names its sender where it has one", () =>
+  Effect.gen(function* () {
+    const { summary, asked } = scripted(() => "Recap.");
+    const fromGithub: ReplayStep = { ...said(1), sender: { kind: REPLAY_SENDER.GITHUB } };
+    yield* summarizeSteps(summary, [said(0), fromGithub], 200_000);
 
-      assert.match(asked[0] ?? "", /\[from github\] Said: Step 1\./u);
-      assert.match(
-        asked[0] ?? "",
-        new RegExp(`within ${REPLAY_FIT.SUMMARY_OUTPUT_TOKENS} tokens`, "u"),
-      );
-    }),
+    assert.match(asked[0] ?? "", /\[from github\] Said: Step 1\./u);
+  }),
+);
+
+it.effect("each summary call is told the output budget it is held to", () =>
+  Effect.gen(function* () {
+    const { summary, asked } = scripted(() => "Recap.");
+    yield* summarizeSteps(summary, [said(0)], 200_000);
+
+    assert.match(
+      asked[0] ?? "",
+      new RegExp(`within ${REPLAY_FIT.SUMMARY_OUTPUT_TOKENS} tokens`, "u"),
+    );
+  }),
 );
 
 it.effect(
