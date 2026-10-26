@@ -342,7 +342,10 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
  * rather than running for a day; answers how many this call settled. The
  * turn the native projection holds is dropped with them, so the next
  * launch's events open a turn of their own rather than one already ended.
- * A launch that failed before its runner ran names why in `detail`.
+ * A launch that failed before its runner ran names why in `detail`. Where
+ * `only` is given, just the turns it names are settled, so a caller that
+ * read which turns were lost at one instant (`runningTurnIds`) leaves alone
+ * a turn begun since.
  */
 export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunnerLostTurns")(
   function* (
@@ -350,8 +353,10 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
     conversationId: string,
     now: number,
     detail: string = RUNNER_LOST_DETAIL,
+    only?: ReadonlySet<string>,
   ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
-    const lost = yield* agentRunningTurns({ conversationId });
+    const running = yield* agentRunningTurns({ conversationId });
+    const lost = only === undefined ? running : running.filter((turn) => only.has(turn.id));
     let settled = 0;
     for (const { cancelRequestedAt, ...turn } of lost) {
       const written = yield* settledLost(
@@ -375,3 +380,10 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
     return settled;
   },
 );
+
+/** The ids of the turns still queued or running of the coding agent's conversation named, for a later settle of just those (`settleRunnerLostTurns`'s `only`). */
+export function runningTurnIds(
+  conversationId: string,
+): Effect.Effect<readonly string[], QueryError | Schema.SchemaError, DatabaseServices> {
+  return Effect.map(agentRunningTurns({ conversationId }), (rows) => rows.map((row) => row.id));
+}

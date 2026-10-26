@@ -15,7 +15,7 @@
  * install and upgrade commands name (`@luke/features/host-wire`).
  */
 
-import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
+import { runningTurnIds, settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import { accountExperimentOn } from "@luke/database/models/account-store";
 import {
   hostAgentConversations,
@@ -65,7 +65,10 @@ const HOST_REMOVED_DETAIL = "the host this agent ran on was removed";
  * removed as lost, as a runner gone without its end is settled
  * (`settleRunnerLostTurns`): the host's secret is refused from now on, so no
  * runner there can end them, and without this they would read as running
- * until `TURN_ABANDON`. Note that a failure here is logged and the remove
+ * until `TURN_ABANDON`. Note that every agent's running turns are read once,
+ * before any is settled, and only those are settled, because a removed host
+ * may enroll again under its id and begin a turn while this runs, and that
+ * turn is the new enrollment's. A failure here is logged and the remove
  * still answers done, because the host is already removed and a retry would
  * find no host to remove; the sweep's bound settles whatever was left.
  */
@@ -73,10 +76,14 @@ const endedHostAgents = (userId: string, deviceId: string) =>
   Effect.gen(function* () {
     const conversations = yield* hostAgentConversations(userId, deviceId);
     if (conversations.length === 0) return;
+    const lost = yield* Effect.forEach(conversations, (conversationId) =>
+      Effect.map(runningTurnIds(conversationId), (ids) => ({ conversationId, ids })),
+    );
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const now = yield* Clock.currentTimeMillis;
-    for (const conversationId of conversations) {
-      yield* settleRunnerLostTurns(writer, conversationId, now, HOST_REMOVED_DETAIL);
+    for (const { conversationId, ids } of lost) {
+      if (ids.length === 0) continue;
+      yield* settleRunnerLostTurns(writer, conversationId, now, HOST_REMOVED_DETAIL, new Set(ids));
     }
   }).pipe(
     Effect.catch((failure) =>

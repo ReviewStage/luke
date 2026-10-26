@@ -18,6 +18,7 @@ import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  runningTurnIds,
   settleEndedSession,
   settleEndedSessionTurn,
   settleRunnerLostTurns,
@@ -313,6 +314,29 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
           { now: stoppedAt + TURN_ABANDON.CANCEL_AFTER_MS + 1 },
         );
         assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.CANCELLED, null]);
+      }),
+  );
+
+  it.effect(
+    "a lost-runner settle given the turns read earlier settles just those, and leaves a turn begun since",
+    () =>
+      Effect.gen(function* () {
+        const writer = yield* storeWriter({ tools: {} });
+        const agent = yield* openAgentConversation;
+        yield* turnIn(writer, agent, TURN_STATUS.RUNNING);
+        const readBefore = yield* runningTurnIds(agent.conversationId);
+        const begunSince = yield* turnIn(writer, agent, TURN_STATUS.QUEUED);
+
+        const settled = yield* settleRunnerLostTurns(
+          writer,
+          agent.conversationId,
+          STARTED_AT + 10,
+          undefined,
+          new Set(readBefore),
+        );
+
+        assert.equal(settled, 1);
+        assert.deepEqual(yield* runningTurnIds(agent.conversationId), [begunSince]);
       }),
   );
 });
