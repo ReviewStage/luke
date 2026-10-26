@@ -5,13 +5,8 @@ import { Clock, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { getTestDB, MAC_DEVICE_LAYOUT } from "../../testing/index.js";
-import {
-  beatMacDevice,
-  macDevicesNamed,
-  macDevicesSeenSince,
-  registerMacDevice,
-} from "../mac-device-store.js";
+import { DEVICE_LAYOUT, getTestDB } from "../../testing/index.js";
+import { beatDevice, devicesNamed, devicesSeenSince, registerDevice } from "../device-store.js";
 
 /**
  * An account's Macs, over a real dialect: a Mac is registered, beaten, and
@@ -30,31 +25,31 @@ const openAccounts = Effect.gen(function* () {
   return { owner, other };
 });
 
-it.layer(getTestDB())("the Mac device store", (it) => {
+it.layer(getTestDB())("the device store", (it) => {
   it.effect("another account neither takes over, beats, nor reads an account's Mac", () =>
     Effect.gen(function* () {
       const { owner, other } = yield* openAccounts;
       const id = randomUUID();
       const since = new Date(0);
 
-      const registered = yield* registerMacDevice(owner, {
+      const registered = yield* registerDevice(owner, {
         id,
         name: "Studio",
-        ...MAC_DEVICE_LAYOUT,
+        ...DEVICE_LAYOUT,
       });
-      const takenOver = yield* registerMacDevice(other, {
+      const takenOver = yield* registerDevice(other, {
         id,
         name: "Not yours",
-        ...MAC_DEVICE_LAYOUT,
+        ...DEVICE_LAYOUT,
       });
-      const beatenByOther = yield* beatMacDevice(other, id);
+      const beatenByOther = yield* beatDevice(other, id);
 
       assert.equal(registered, true);
       assert.equal(takenOver, false, "an id another account holds is not moved");
       assert.equal(beatenByOther, false);
-      assert.deepEqual(yield* macDevicesSeenSince(other, since), []);
+      assert.deepEqual(yield* devicesSeenSince(other, since), []);
       assert.deepEqual(
-        (yield* macDevicesSeenSince(owner, since)).map((device) => device.name),
+        (yield* devicesSeenSince(owner, since)).map((device) => device.name),
         ["Studio"],
         "the owner's Mac keeps its name",
       );
@@ -65,14 +60,14 @@ it.layer(getTestDB())("the Mac device store", (it) => {
     Effect.gen(function* () {
       const { owner } = yield* openAccounts;
       const id = randomUUID();
-      yield* registerMacDevice(owner, { id, name: "Laptop", ...MAC_DEVICE_LAYOUT });
+      yield* registerDevice(owner, { id, name: "Laptop", ...DEVICE_LAYOUT });
       // Note that the cutoff is measured from the clock's reading, which the layer's clock carries from test to test.
       const cutoff = new Date((yield* Clock.currentTimeMillis) + 45_000);
       yield* TestClock.adjust("60 seconds");
 
-      const staleRead = yield* macDevicesSeenSince(owner, cutoff);
-      const beaten = yield* beatMacDevice(owner, id);
-      const freshRead = yield* macDevicesSeenSince(owner, cutoff);
+      const staleRead = yield* devicesSeenSince(owner, cutoff);
+      const beaten = yield* beatDevice(owner, id);
+      const freshRead = yield* devicesSeenSince(owner, cutoff);
 
       assert.deepEqual(staleRead, [], "a Mac silent past the cutoff is not there");
       assert.equal(beaten, true);
@@ -89,11 +84,11 @@ it.layer(getTestDB())("the Mac device store", (it) => {
       Effect.gen(function* () {
         const { owner, other } = yield* openAccounts;
         const [studio, laptop, unnamed] = [randomUUID(), randomUUID(), randomUUID()];
-        yield* registerMacDevice(owner, { id: studio, name: "Studio", ...MAC_DEVICE_LAYOUT });
-        yield* registerMacDevice(other, { id: laptop, name: "Laptop", ...MAC_DEVICE_LAYOUT });
-        yield* registerMacDevice(owner, { id: unnamed, name: "Spare", ...MAC_DEVICE_LAYOUT });
+        yield* registerDevice(owner, { id: studio, name: "Studio", ...DEVICE_LAYOUT });
+        yield* registerDevice(other, { id: laptop, name: "Laptop", ...DEVICE_LAYOUT });
+        yield* registerDevice(owner, { id: unnamed, name: "Spare", ...DEVICE_LAYOUT });
 
-        const named = yield* macDevicesNamed([studio, laptop, studio, randomUUID()]);
+        const named = yield* devicesNamed([studio, laptop, studio, randomUUID()]);
 
         assert.deepEqual([...named.values()].map((device) => device.name).sort(), [
           "Laptop",

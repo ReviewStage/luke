@@ -24,7 +24,7 @@
  * write to the runner's stdin go through the agent's machine
  * (`../machine/agent-machine.ts`: Vercel Sandbox in
  * `../machine/vercel-machine.ts`, or the starter's Mac in
- * `../machine/mac-machine.ts`, which the agent's row picks). A launch mints
+ * `../machine/device-machine.ts`, which the agent's row picks). A launch mints
  * the runner's bearer and records its digest on the agent's row, and starts
  * the runner with the harness's credential and the bearer in its
  * environment and nowhere else: never in its argv, its config line, a file,

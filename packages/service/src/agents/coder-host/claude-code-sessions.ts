@@ -29,7 +29,7 @@ import {
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
 import { type CodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
-import { macDeviceLayout } from "@luke/database/models/mac-device-store";
+import { deviceLayout } from "@luke/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
@@ -120,16 +120,16 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
 
   /**
    * Whether the agent runs on its starter's Mac and that Mac last said it is
-   * signed in to Claude Code itself (`mac_device.signed_in`), so its launch
+   * signed in to Claude Code itself (`device.signed_in`), so its launch
    * carries no credential of the account's and the CLI there falls back to
    * its own Keychain login (https://code.claude.com/docs/en/authentication,
    * "Authentication precedence", 7), its config folder left as the
    * developer's, which that login is kept under.
    */
   const onMacLogin = (agent: CodingAgent) =>
-    agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null
+    agent.machine !== CODING_AGENT_MACHINE.DEVICE || agent.deviceId == null
       ? Effect.succeed(false)
-      : Effect.map(macDeviceLayout(userId, agent.deviceId), (device) =>
+      : Effect.map(deviceLayout(userId, agent.deviceId), (device) =>
           Option.exists(device, (standing) => standing.signedIn.claudeCode === true),
         );
 

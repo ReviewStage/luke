@@ -25,13 +25,13 @@ import {
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
 import { AgentMachine, type AgentMachineService, type MachineLifecycle } from "./agent-machine.js";
-import { type MacMachineService, macMachine } from "./mac-machine.js";
+import { type DeviceMachineService, deviceMachine } from "./device-machine.js";
 import { type VercelMachineOptions, vercelLifecycle, vercelMachine } from "./vercel-machine.js";
 
 /** The lifecycle of whichever machine answers for the session, or for the place or runner named. */
-function routedLifecycle(cloud: MachineLifecycle, mac: MacMachineService): MachineLifecycle {
+function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): MachineLifecycle {
   const of = (machine: CodingAgentMachine): MachineLifecycle =>
-    machine === CODING_AGENT_MACHINE.MAC ? mac : cloud;
+    machine === CODING_AGENT_MACHINE.DEVICE ? mac : cloud;
   const bySession = <A>(
     session: string,
     call: (machine: MachineLifecycle) => Effect.Effect<A, SandboxUnavailable>,
@@ -55,9 +55,9 @@ function routedLifecycle(cloud: MachineLifecycle, mac: MacMachineService): Machi
 }
 
 /** Both machines behind one, as above. */
-function routedMachine(cloud: AgentMachineService, mac: MacMachineService): AgentMachineService {
+function routedMachine(cloud: AgentMachineService, mac: DeviceMachineService): AgentMachineService {
   const of = (machine: CodingAgentMachine | undefined): AgentMachineService =>
-    machine === CODING_AGENT_MACHINE.MAC ? mac : cloud;
+    machine === CODING_AGENT_MACHINE.DEVICE ? mac : cloud;
   return {
     ...routedLifecycle(cloud, mac),
     layout: (agent) => of(agent.machine).layout(agent),
@@ -73,7 +73,7 @@ export const deploymentLifecycle: Effect.Effect<
   HttpClient.HttpClient | DatabaseServices
 > = Effect.gen(function* () {
   const api = yield* vercelSandboxApi(deploymentOidcToken);
-  return routedLifecycle(vercelLifecycle(api), yield* macMachine);
+  return routedLifecycle(vercelLifecycle(api), yield* deviceMachine);
 });
 
 /** The deployment's machines behind one, Vercel asked under the token given and its checkout run through the edge's runner. */
@@ -84,7 +84,7 @@ export function agentMachinesLayer(
     AgentMachine,
     Effect.gen(function* () {
       const api = yield* vercelSandboxApi(options.readToken);
-      return routedMachine(vercelMachine(api, options.run), yield* macMachine);
+      return routedMachine(vercelMachine(api, options.run), yield* deviceMachine);
     }),
   );
 }

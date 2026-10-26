@@ -1093,7 +1093,7 @@ export function useCodingAgents(input: {
       idempotencyKey: key,
       ...(choice === undefined ? undefined : choiceRequest(choice)),
       // Note that the cloud is what a Start with no machine runs in, so only a Mac is named, by its id.
-      ...(deviceId === undefined ? undefined : { machine: CODING_AGENT_MACHINE.MAC, deviceId }),
+      ...(deviceId === undefined ? undefined : { machine: CODING_AGENT_MACHINE.DEVICE, deviceId }),
     }).then((answer) => {
       setPressed((was) => (was?.starting.key === key ? undefined : was));
       if ("failure" in answer) {

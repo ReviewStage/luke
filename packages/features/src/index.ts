@@ -28,6 +28,13 @@ export {
   type HostedCodingAgentClientOptions,
 } from "./coding-agent-client.js";
 export {
+  DEVICE_AGENT_NOT_CLAIMED,
+  type DeviceAgentClaimedLine,
+  type DeviceAgentDevice,
+  HostedDeviceAgentClient,
+  type HostedDeviceAgentClientOptions,
+} from "./device-agent-client.js";
+export {
   GITHUB_CONNECTION_CALL_FAILURE,
   type GitHubConnectionCallFailure,
   type GitHubConnectionCallResult,
@@ -118,13 +125,6 @@ export {
   VOICE_SERVICE_ORIGIN_VARIABLE,
   webSocketOrigin,
 } from "./live-contract.js";
-export {
-  HostedMacAgentClient,
-  type HostedMacAgentClientOptions,
-  MAC_AGENT_NOT_CLAIMED,
-  type MacAgentClaimedLine,
-  type MacAgentDevice,
-} from "./mac-agent-client.js";
 export {
   HostedMacCommandClient,
   type HostedMacCommandClientOptions,

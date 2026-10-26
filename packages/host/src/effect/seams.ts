@@ -6,6 +6,7 @@
  * taking a kernel that holds all of them.
  */
 import type { OpenConsent } from "@luke/credentials";
+import type { DeviceArch, DevicePlatform } from "@luke/features/device-agent-wire";
 import type { OpenSocket } from "@luke/voice/live-socket";
 import { type ConfigProvider, Context, Layer, Logger, type Stream } from "effect";
 import type { AccountSourceSeam } from "../account-source.js";
@@ -143,6 +144,9 @@ export interface LocalAgentPlatformSeam {
     readonly codex?: string | undefined;
   };
   readonly deviceName: string;
+  /** The platform and architecture the device registers as. */
+  readonly devicePlatform: DevicePlatform;
+  readonly deviceArch: DeviceArch;
   readonly worktreeScript: (input: {
     readonly home: string;
     readonly repository: string;

@@ -33,7 +33,7 @@ import { Redacted, Result, Schema } from "effect";
  *
  * A local agent's launch secrets, its runner's bearer and its harness's
  * credential with the first lines it is handed, are sealed the same way for
- * the seconds their launch line waits for its Mac (`mac_agent_line`), with
+ * the seconds their launch line waits for its Mac (`device_agent_line`), with
  * purposes of their own (`luke/mac-launch/*`) and the account and the agent
  * bound beside them, so the seal opens for no other agent's line. The
  * rewrap does not visit those rows, which the Mac's claim clears.

@@ -20,7 +20,7 @@
  */
 
 import path from "node:path";
-import { macAgentLayout } from "@luke/features/mac-agent-wire";
+import { deviceAgentLayout } from "@luke/features/device-agent-wire";
 import {
   MAC_TERMINAL_PORT_MESSAGE,
   type MacTerminalOpenParams,
@@ -57,7 +57,7 @@ export interface MacTerminalActsDependencies {
   host: Pick<HostOperator, "macRepositories" | "setMacRepository">;
   /** Where every Luke install keeps its clones and worktrees (`worktreesRoot`). */
   worktreesRoot: string;
-  /** This Mac's home folder, under which a local agent's worktree stands (`macAgentLayout`). */
+  /** This Mac's home folder, under which a local agent's worktree stands (`deviceAgentLayout`). */
   home: string;
   /** Where Luke keeps its application data, which an earlier Luke kept its clones and worktrees under. */
   stateRoot: string;
@@ -293,7 +293,7 @@ export function macTerminalProcedures(
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       // Note that the worktree is the host's to make, as it takes the agent's launch, so one not made yet is refused rather than made here.
-      const folder = macAgentLayout(home, input.agentId).checkoutPath;
+      const folder = deviceAgentLayout(home, input.agentId).checkoutPath;
       if (!exists(folder)) return yield* Effect.fail(errors.REFUSED());
       openInTerminal(folder);
     }),

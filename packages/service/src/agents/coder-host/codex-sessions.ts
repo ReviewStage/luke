@@ -53,12 +53,12 @@ import {
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
 import { type CodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
-import { macDeviceLayout } from "@luke/database/models/mac-device-store";
+import { deviceLayout } from "@luke/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
-import type { MacSignedIn } from "@luke/features/mac-agent-wire";
+import type { DeviceSignedIn } from "@luke/features/device-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { Duration, Effect, Option, Redacted, Result } from "effect";
@@ -130,8 +130,8 @@ const MAC_LOGIN: { readonly env: Readonly<Record<string, string>>; readonly ownL
  * said of it: the one rule the launch's environment and its config are both
  * written by.
  */
-function onMacLoginOf(agent: CodingAgent, signedIn: MacSignedIn): boolean {
-  return agent.machine === CODING_AGENT_MACHINE.MAC && signedIn.codex === true;
+function onMacLoginOf(agent: CodingAgent, signedIn: DeviceSignedIn): boolean {
+  return agent.machine === CODING_AGENT_MACHINE.DEVICE && signedIn.codex === true;
 }
 
 /**
@@ -141,18 +141,18 @@ function onMacLoginOf(agent: CodingAgent, signedIn: MacSignedIn): boolean {
  * (https://learn.chatgpt.com/docs/auth).
  */
 function homeOf(agent: CodingAgent): Readonly<Record<string, string>> {
-  return agent.machine === CODING_AGENT_MACHINE.MAC ? {} : { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
+  return agent.machine === CODING_AGENT_MACHINE.DEVICE ? {} : { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
 }
 
 /**
  * Whether the agent runs on its starter's Mac and that Mac last said Codex
- * there holds a sign-in of its own (`mac_device.signed_in`), as a launch's
+ * there holds a sign-in of its own (`device.signed_in`), as a launch's
  * `config` reads it off the layout too (`onMacLoginOf`).
  */
 const onMacCodexLogin = (userId: string, agent: CodingAgent) =>
-  agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null
+  agent.machine !== CODING_AGENT_MACHINE.DEVICE || agent.deviceId == null
     ? Effect.succeed(false)
-    : Effect.map(macDeviceLayout(userId, agent.deviceId), (device) =>
+    : Effect.map(deviceLayout(userId, agent.deviceId), (device) =>
         Option.exists(device, (standing) => onMacLoginOf(agent, standing.signedIn)),
       );
 
@@ -284,7 +284,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     Effect.gen(function* () {
       const model = codexModelOf(agent);
       if (model === undefined) return yield* new LaunchRefused({ reason: "model" });
-      const local = agent.machine === CODING_AGENT_MACHINE.MAC;
+      const local = agent.machine === CODING_AGENT_MACHINE.DEVICE;
       // Note that a Mac runs only the Codex it checked against the pin, and one that checked none runs no Codex agent.
       if (local && layout.codexExecutable === undefined) {
         return yield* new LaunchRefused({ reason: "no codex" });

@@ -152,7 +152,7 @@ export function agentForkDoors(input: {
   // Note that an agent with no task is forked and continued as a task's is, its draft on its own page.
   const drafts = control.onUnarchive === undefined;
   // Note that a local agent has no sandbox snapshot to fork from, so it offers no fork.
-  const forkable = onFork !== undefined && drafts && agent.machine !== CODING_AGENT_MACHINE.MAC;
+  const forkable = onFork !== undefined && drafts && agent.machine !== CODING_AGENT_MACHINE.DEVICE;
   const open =
     onOpenTarget === undefined
       ? undefined

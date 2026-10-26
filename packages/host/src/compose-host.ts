@@ -4,9 +4,9 @@ import {
   HostedAutomationClient,
   HostedChannelClient,
   HostedCodingAgentClient,
+  HostedDeviceAgentClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
-  HostedMacAgentClient,
   HostedMacCommandClient,
   HostedTaskClient,
   HostedTerminalClient,
@@ -276,7 +276,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             ),
             Effect.orElseSucceed(() => false),
           ),
-          client: new HostedMacAgentClient({
+          client: new HostedDeviceAgentClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             credential: account.credential,
           }),

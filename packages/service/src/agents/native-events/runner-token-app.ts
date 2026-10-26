@@ -27,11 +27,11 @@ import {
   readCodingAgentHeaderOfConversation,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
-import { latestMacAgentLaunch } from "@luke/database/models/mac-agent-store";
+import { latestDeviceAgentLaunch } from "@luke/database/models/device-agent-store";
 import { parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
-import { macAgentLaunchPayloadSchema } from "@luke/features/mac-agent-wire";
+import { deviceAgentLaunchPayloadSchema } from "@luke/features/device-agent-wire";
 import { HTTP_METHOD } from "@luke/wire";
 import { Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
@@ -80,7 +80,7 @@ const REFUSAL_OF_ACCESS = {
   [CHATGPT_ACCESS.INELIGIBLE]: HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE,
 } as const satisfies Record<Exclude<ChatGptAccess["outcome"], "ready">, HostedRefusal>;
 
-const decodeLaunchPayload = Schema.decodeUnknownOption(macAgentLaunchPayloadSchema);
+const decodeLaunchPayload = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
 
 /**
  * Whether the agent's newest launch runs on its Mac's own sign-in, as its
@@ -90,7 +90,7 @@ const decodeLaunchPayload = Schema.decodeUnknownOption(macAgentLaunchPayloadSche
  */
 const launchedOnMacLogin = (userId: string, agentId: string) =>
   hostedStoreOrUnavailable(
-    Effect.map(latestMacAgentLaunch(userId, agentId), (launch) =>
+    Effect.map(latestDeviceAgentLaunch(userId, agentId), (launch) =>
       Option.match(
         Option.flatMap(launch, (line) => decodeLaunchPayload(line.payload)),
         {

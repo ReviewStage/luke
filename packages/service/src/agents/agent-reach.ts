@@ -105,7 +105,7 @@ export function controlsAgent(
   agent: Pick<CodingAgent, "userId" | "githubAccess" | "machine">,
 ): boolean {
   if (agent.userId === userId) return true;
-  return agent.githubAccess !== GITHUB_ACCESS.TOKEN && agent.machine !== CODING_AGENT_MACHINE.MAC;
+  return agent.githubAccess !== GITHUB_ACCESS.TOKEN && agent.machine !== CODING_AGENT_MACHINE.DEVICE;
 }
 
 /** The name of the member who alone controls the agent, as a refusal says it: their name now, or who they were where their account is gone. */
