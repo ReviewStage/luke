@@ -28,17 +28,20 @@ const PLAYWRIGHT_VERSION = "1.64.1";
 
 /**
  * GitHub's own `gh stack` extension (github/gh-stack), pinned to a release
- * and to the SHA-256 GitHub publishes for its Linux x86-64 binary, the
- * Vercel sandbox's architecture.
+ * and to the SHA-256 GitHub publishes for each Linux build the image is made
+ * for: x86-64, the Vercel sandbox's architecture, and arm64, which the OCI
+ * image (`../sandbox-oci-image.ts`) is built for too.
  */
 const GH_STACK = {
   VERSION: "v0.2.1",
-  SHA256: "ffe9d48b6342faffc3b0cb420202ff1df32e24faf32693debd7423274bbdf859",
+  AMD64_SHA256: "ffe9d48b6342faffc3b0cb420202ff1df32e24faf32693debd7423274bbdf859",
+  ARM64_SHA256: "25ec261a391261a1462d38f85c230b0e0b14ae3547926130996541f62f25f78b",
   DIRECTORY: "/usr/local/lib/gh-stack",
 } as const;
 
 /**
- * Installs `gh stack`, `$SUDO` as `PREPARE_TMUX` set it. `gh extension
+ * Installs `gh stack` for the machine's architecture, `$SUDO` as
+ * `PREPARE_TMUX` set it. `gh extension
  * install github/gh-stack` cannot run here: it reaches GitHub's API with
  * `gh`'s token, and while the image is prepared no credential stands at the
  * firewall, so GitHub would refuse the wrapper's placeholder. So the pinned
@@ -48,9 +51,10 @@ const GH_STACK = {
  * run changes nothing.
  */
 const INSTALL_GH_STACK = [
-  `if ! echo '${GH_STACK.SHA256}  ${GH_STACK.DIRECTORY}/gh-stack' | sha256sum --check --status >/dev/null 2>&1; then`,
-  `  curl -fsSL -o /tmp/gh-stack https://github.com/github/gh-stack/releases/download/${GH_STACK.VERSION}/linux-amd64`,
-  `  echo '${GH_STACK.SHA256}  /tmp/gh-stack' | sha256sum --check --quiet`,
+  `case "$(uname -m)" in aarch64) GH_STACK_BUILD=linux-arm64 GH_STACK_SHA256=${GH_STACK.ARM64_SHA256} ;; *) GH_STACK_BUILD=linux-amd64 GH_STACK_SHA256=${GH_STACK.AMD64_SHA256} ;; esac`,
+  `if ! echo "$GH_STACK_SHA256  ${GH_STACK.DIRECTORY}/gh-stack" | sha256sum --check --status >/dev/null 2>&1; then`,
+  `  curl -fsSL -o /tmp/gh-stack "https://github.com/github/gh-stack/releases/download/${GH_STACK.VERSION}/$GH_STACK_BUILD"`,
+  `  echo "$GH_STACK_SHA256  /tmp/gh-stack" | sha256sum --check --quiet`,
   `  $SUDO install -D -m 755 /tmp/gh-stack ${GH_STACK.DIRECTORY}/gh-stack`,
   "  rm -f /tmp/gh-stack",
   "fi",
@@ -97,14 +101,17 @@ const CLAUDE_CODE = CLAUDE_CODE_PIN;
 /**
  * Installs the SDK where its binary does not already print the pin, links
  * the binary as `claude`, and checks that it prints the pin, `$SUDO` as
- * `PREPARE_TMUX` set it. Note that root's npm reads root's home, never the
- * default user's configuration.
+ * `PREPARE_TMUX` set it. The binary is the one npm installs for the
+ * machine's architecture: `CLAUDE_EXECUTABLE` on x86-64, the arm64 build's
+ * beside it where the OCI image is built for arm64. Note that root's npm
+ * reads root's home, never the default user's configuration.
  */
 const INSTALL_CLAUDE_CODE = [
-  `if ! ${CLAUDE_CODE.DIRECTORY}/${CLAUDE_CODE.BINARY} --version 2>/dev/null | grep -q '^${CLAUDE_CODE.VERSION} '; then`,
+  `case "$(uname -m)" in aarch64) CLAUDE_BINARY=${CLAUDE_CODE.DIRECTORY}/${CLAUDE_CODE.ARM64_BINARY} ;; *) CLAUDE_BINARY=${CLAUDE_EXECUTABLE} ;; esac`,
+  `if ! "$CLAUDE_BINARY" --version 2>/dev/null | grep -q '^${CLAUDE_CODE.VERSION} '; then`,
   `  $SUDO env HOME=/root npm install --prefix ${CLAUDE_CODE.DIRECTORY} --no-audit --no-fund --save-exact @anthropic-ai/claude-agent-sdk@${CLAUDE_CODE.SDK_VERSION}`,
   "fi",
-  `$SUDO ln -sfn ${CLAUDE_EXECUTABLE} ${CLAUDE_CODE.LINK}`,
+  `$SUDO ln -sfn "$CLAUDE_BINARY" ${CLAUDE_CODE.LINK}`,
   "claude --version",
   `claude --version | grep -q '^${CLAUDE_CODE.VERSION} ' || { echo 'claude does not print ${CLAUDE_CODE.VERSION}' >&2; exit 1; }`,
 ];

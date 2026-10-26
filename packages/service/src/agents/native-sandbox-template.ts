@@ -97,7 +97,7 @@ const TEMPLATE_TAG = {
 } as const;
 
 /** Where the recorded preparation is uploaded and run from: the default user's own `/tmp`. */
-const BUILD_DIRECTORY = "/tmp/luke-template";
+export const BUILD_DIRECTORY = "/tmp/luke-template";
 
 /** Where eve's session resolves a relative path, as its template's preparation saw it. */
 const WORKSPACE = REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE;
