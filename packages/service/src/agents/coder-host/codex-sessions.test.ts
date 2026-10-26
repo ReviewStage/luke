@@ -16,6 +16,7 @@ import {
   recordCodingAgentNativeSession,
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
+import { beatMacDevice, registerMacDevice } from "@luke/database/models/mac-device-store";
 import {
   type KeyRing,
   parseKeyRing,
@@ -30,15 +31,18 @@ import {
 } from "@luke/database/models/provider-key-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { macAgentLine } from "@luke/database/schemas/mac-agent";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "@luke/database/testing";
+import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { macAgentLayout } from "@luke/features/mac-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { eq } from "drizzle-orm";
 import { DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
@@ -56,6 +60,8 @@ import {
   PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
+import { claimedMacAgentLine } from "../mac-agent.js";
+import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
 import { type CodexSessionsOptions, codexSessions } from "./codex-sessions.js";
@@ -68,10 +74,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * REST API and of OpenAI's token endpoint, over a real store: on the plan,
  * the runner launched naming Luke's token route and handed no token, the
  * account's token renewed first where less than forty-five minutes are left;
- * without the route, the runner launched on the account's ChatGPT access
- * token, with the token and the bearer in its environment alone, and a
- * renewed token handed to a running runner as a token line ahead of the
- * next message, and only then; a stop and a reset; a
+ * a local agent's launch on its Mac, sealed in its line with no token in it,
+ * on the plan's route or on the Mac's own Codex sign-in; a stop and a reset; a
  * relaunch on Codex's thread after the sandbox stopped; and a sign-in OpenAI
  * signed out, or none at all, failing the launch with that refusal and
  * opening nothing. Synthetic accounts, tokens, and snapshot ids throughout.
@@ -249,6 +253,97 @@ afterEach(() => {
 });
 
 it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
+  it.effect(
+    "a local agent's launch on its Mac runs the Codex the Mac checked in its folder, sealed in its line with no token in it: on the plan, naming the token route; on the Mac's own sign-in, with nothing of the account's at all",
+    () =>
+      Effect.gen(function* () {
+        const userId = `user-${randomUUID()}`;
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+        );
+        yield* signIn(userId, 60);
+        const deviceId = randomUUID();
+        const codexExecutable = "/Users/fixture/Library/Application Support/Luke/codex/bin/codex";
+        yield* registerMacDevice(userId, {
+          id: deviceId,
+          name: "Studio",
+          ...MAC_DEVICE_LAYOUT,
+          codexExecutable,
+        });
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const localAgent = (payer: (typeof CODING_AGENT_PAYER)[keyof typeof CODING_AGENT_PAYER]) =>
+          Effect.map(
+            createCodingAgent(userId, {
+              taskId: task.id,
+              idempotencyKey: randomUUID(),
+              model: "openai/gpt-6.1-sol",
+              effort: "xhigh",
+              planSnapshot: "# Teammate invitations\n",
+              prompt: null,
+              repository: null,
+              runtime: CONVERSATION_RUNTIME.CODEX,
+              payer,
+              machine: CODING_AGENT_MACHINE.MAC,
+              deviceId,
+            }),
+            (started) => Option.getOrThrow(started).agent,
+          );
+        const http = fakeHttpClientLayer(() => assert.fail("a local launch reaches no network"));
+        const machines = agentMachinesLayer({
+          readToken: deploymentOidcToken,
+          run: (effect) => Effect.runPromise(effect),
+        }).pipe(Layer.provide(http));
+        /** The agent's launch, its line's row as stored and its secrets as the Mac's claim opens them. */
+        const launched = (agent: CodingAgent) =>
+          Effect.gen(function* () {
+            // Note that the machines are provided innermost, so the Mac's machine answers rather than the fake sandbox's.
+            const sessions = yield* sessionsFor(userId).pipe(
+              Effect.provide(machines),
+              Effect.provide(services(runnerSandboxApi())),
+            );
+            const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+            assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+            const db = yield* Database;
+            const [row] = yield* db
+              .select()
+              .from(macAgentLine)
+              .where(eq(macAgentLine.agentId, agent.id));
+            assert.ok(row !== undefined);
+            const claimed = Option.getOrThrow(
+              yield* claimedMacAgentLine(userId, deviceId, row.id).pipe(
+                Effect.provide(Layer.succeed(HostedEnvironment, NO_KEYS)),
+              ),
+            );
+            assert.ok(claimed.secrets !== undefined);
+            const [config] = claimed.secrets.stdin
+              .trimEnd()
+              .split("\n")
+              .map((line) => JSON.parse(line));
+            return { stored: JSON.stringify(row), secrets: claimed.secrets, config };
+          });
+        const folder = macAgentLayout(MAC_DEVICE_LAYOUT.home, "").folder;
+
+        const onPlan = yield* localAgent(CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION);
+        const plan = yield* launched(onPlan);
+        assert.deepEqual(Object.keys(plan.secrets.env), [RUNNER_ENV.BEARER]);
+        assert.equal(plan.config.executable, codexExecutable);
+        assert.equal(plan.config.tokenUrl, TOKEN_URL);
+        assert.deepEqual(plan.config.writableRoots, [`${folder}${onPlan.id}`]);
+        assert.equal(plan.config.ownLogin, undefined);
+        const bearer = plan.secrets.env[RUNNER_ENV.BEARER] ?? "";
+        // The bearer is sealed in the row, and no token of the plan's is in the row or the launch at all.
+        for (const secret of ["access-0", "refresh-0", "id-token-0", bearer]) {
+          assert.equal(plan.stored.includes(secret), false, "a secret in the row in the clear");
+        }
+        assert.equal(JSON.stringify(plan.secrets).includes("access-0"), false);
+
+        yield* beatMacDevice(userId, deviceId, { codex: true });
+        const own = yield* launched(yield* localAgent(CODING_AGENT_PAYER.MAC_SIGN_IN));
+        assert.deepEqual(Object.keys(own.secrets.env), [RUNNER_ENV.BEARER]);
+        assert.equal(own.config.ownLogin, true);
+      }),
+  );
+
   it.effect(
     "open launches the runner in its Codex mode on the account's plan, naming the token route, with the bearer in its environment alone",
     () =>

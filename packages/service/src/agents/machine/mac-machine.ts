@@ -207,6 +207,9 @@ function macMachineOver(
         skillsUpload: folders.installedSkills,
         attachments: folders.attachments,
         claudeExecutable: device.value.claudeExecutable,
+        codexExecutable: device.value.codexExecutable ?? undefined,
+        writableRoots: [folders.folder],
+        signedIn: device.value.signedIn,
       };
       return layout;
     });

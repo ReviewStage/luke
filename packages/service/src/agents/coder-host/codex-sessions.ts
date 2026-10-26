@@ -1,5 +1,5 @@
 /**
- * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks Luke's token route for.
+ * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks Luke's token route for, or on a local agent's Mac's own Codex sign-in.
  *
  * The `codex` implementation of `AgentSessions`
  * (`brain-host/eve-sessions.ts`), on the launch machinery every native
@@ -32,6 +32,14 @@
  *   plan, and a key gone or unreadable refuses the launch.
  * - A `model` line with the agent's model and effort as they stand goes
  *   ahead of every message, as on Claude Code.
+ * - A local agent runs the Codex its Mac checked against the pin, in its
+ *   folder there, its commands under Codex's own sandbox writing that
+ *   folder (`@luke/agent-runner`'s `codex.ts`), and `CODEX_HOME` left as
+ *   the developer's. Where its Mac said Codex holds a sign-in of its own,
+ *   the launch hands it nothing of the account's and Codex runs and
+ *   refreshes that sign-in itself; otherwise it runs on the account's saved
+ *   credential as a cloud agent does, the plan's token asked of the route
+ *   over HTTPS, so no token ever travels through the Mac's queue.
  */
 
 import { CODEX_PIN } from "@luke/agent-runner/pins";
@@ -45,10 +53,12 @@ import {
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
 import { type CodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
+import { macDeviceLayout } from "@luke/database/models/mac-device-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import type { MacSignedIn } from "@luke/features/mac-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { Duration, Effect, Option, Redacted, Result } from "effect";
@@ -109,6 +119,28 @@ function codexModelOf(agent: CodingAgent): string | undefined {
   return model?.provider === MODEL_PROVIDER.OPENAI ? model.modelId : undefined;
 }
 
+/** A launch on its Mac's own Codex sign-in: nothing of the account's in its environment, and `CODEX_HOME` left as the developer's. */
+const MAC_LOGIN: { readonly env: Readonly<Record<string, string>> } = { env: {} };
+
+/**
+ * Whether a local agent runs on its Mac's own Codex sign-in, by what the Mac
+ * said of it: the one rule the launch's environment and its config are both
+ * written by.
+ */
+function onMacLoginOf(agent: CodingAgent, signedIn: MacSignedIn): boolean {
+  return agent.machine === CODING_AGENT_MACHINE.MAC && signedIn.codex === true;
+}
+
+/**
+ * Where Codex keeps its threads: in a sandbox, the home the image made on its
+ * persisted disk; on a Mac, the developer's own default, which the launch
+ * leaves alone, since Codex's own sign-in is kept there
+ * (https://learn.chatgpt.com/docs/auth).
+ */
+function homeOf(agent: CodingAgent): Readonly<Record<string, string>> {
+  return agent.machine === CODING_AGENT_MACHINE.MAC ? {} : { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
+}
+
 /** Codex as the shared launch drives it, for one account. */
 function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: string }> {
   const { userId, tokenUrl } = options;
@@ -140,11 +172,50 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     }
   });
 
-  /** Whether the agent was started on its starter's own OpenAI API key rather than the plan, as recorded as it started. */
-  const onApiKey = (agent: CodingAgent) =>
+  /** Who pays for the agent, as recorded as it started; none for an agent from before payers were. */
+  const payerOf = (agent: CodingAgent) =>
     Effect.map(readCodingAgentRouting(userId, agent.id), (routing) =>
-      Option.exists(routing, (row) => row.payer === CODING_AGENT_PAYER.API_KEY),
+      Option.getOrUndefined(Option.flatMapNullishOr(routing, (row) => row.payer)),
     );
+
+  /**
+   * Whether the agent runs on its starter's Mac and that Mac last said Codex
+   * there holds a sign-in of its own (`mac_device.signed_in`), as `config`
+   * reads it off the layout too (`onMacLoginOf`).
+   */
+  const onMacLogin = (agent: CodingAgent) =>
+    agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null
+      ? Effect.succeed(false)
+      : Effect.map(macDeviceLayout(userId, agent.deviceId), (device) =>
+          Option.exists(device, (standing) => onMacLoginOf(agent, standing.signedIn)),
+        );
+
+  /**
+   * Where the account's saved credential pays for the agent: its own API key
+   * for an agent started on it; for one started on its Mac's sign-in, signed
+   * out since, the plan where the account keeps a ChatGPT sign-in, its key
+   * where it keeps only that, and the plan's refusal where it keeps neither;
+   * the plan for every other.
+   */
+  const savedPayer = (agent: CodingAgent) =>
+    Effect.gen(function* () {
+      const payer = yield* payerOf(agent);
+      if (payer === CODING_AGENT_PAYER.API_KEY) return CODING_AGENT_PAYER.API_KEY;
+      if (payer !== CODING_AGENT_PAYER.MAC_SIGN_IN) return CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION;
+      const openai = (rows: readonly { readonly provider: string }[]) =>
+        rows.some((row) => row.provider === PROVIDER_KEY_PROVIDER.OPENAI);
+      if (openai(yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH))) {
+        return CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION;
+      }
+      // Note that an account that saved neither is refused in the plan's words, as signed out, which its Mac now is.
+      return openai(yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY))
+        ? CODING_AGENT_PAYER.API_KEY
+        : CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION;
+    });
+
+  /** Whether the agent's saved credential is its starter's own OpenAI API key rather than the plan. */
+  const onApiKey = (agent: CodingAgent) =>
+    Effect.map(savedPayer(agent), (payer) => payer === CODING_AGENT_PAYER.API_KEY);
 
   /**
    * The account's OpenAI API key opened, as `OPENAI_API_KEY`, which the
@@ -152,41 +223,51 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
    * token command; refused where the key is gone or unreadable, and never
    * turned to the plan.
    */
-  const apiKeyEnv = Effect.gen(function* () {
-    const environment = yield* HostedEnvironment;
-    const ring = environment.providerKeyEncryptionKeys;
-    const parsed = ring === undefined ? undefined : parseKeyRing(ring);
-    if (parsed === undefined || Result.isFailure(parsed)) {
-      return yield* new LaunchRefused({ reason: "no key ring" });
-    }
-    const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
-    const row = rows.find((each) => each.provider === PROVIDER_KEY_PROVIDER.OPENAI);
-    if (row === undefined) {
-      return yield* new LaunchRefused({ reason: "no API key", keyRefusal: KEY_REFUSAL.MISSING });
-    }
-    const opened = openProviderKey(
-      parsed.success,
-      { userId, provider: PROVIDER_KEY_PROVIDER.OPENAI, kind: PROVIDER_KEY_KIND.API_KEY },
-      row,
-    );
-    if (Result.isFailure(opened)) {
-      return yield* new LaunchRefused({
-        reason: "API key unreadable",
-        keyRefusal: KEY_REFUSAL.UNREADABLE,
-      });
-    }
-    const env: Readonly<Record<string, string>> = {
-      [CODEX_HOME_ENV]: CODEX_PATH.HOME,
-      [RUNNER_ENV.OPENAI_API_KEY]: Redacted.value(opened.success),
-    };
-    return { env };
-  });
+  const apiKeyEnv = (agent: CodingAgent) =>
+    Effect.gen(function* () {
+      const environment = yield* HostedEnvironment;
+      const ring = environment.providerKeyEncryptionKeys;
+      const parsed = ring === undefined ? undefined : parseKeyRing(ring);
+      if (parsed === undefined || Result.isFailure(parsed)) {
+        return yield* new LaunchRefused({ reason: "no key ring" });
+      }
+      const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
+      const row = rows.find((each) => each.provider === PROVIDER_KEY_PROVIDER.OPENAI);
+      if (row === undefined) {
+        return yield* new LaunchRefused({ reason: "no API key", keyRefusal: KEY_REFUSAL.MISSING });
+      }
+      const opened = openProviderKey(
+        parsed.success,
+        { userId, provider: PROVIDER_KEY_PROVIDER.OPENAI, kind: PROVIDER_KEY_KIND.API_KEY },
+        row,
+      );
+      if (Result.isFailure(opened)) {
+        return yield* new LaunchRefused({
+          reason: "API key unreadable",
+          keyRefusal: KEY_REFUSAL.UNREADABLE,
+        });
+      }
+      const env: Readonly<Record<string, string>> = {
+        ...homeOf(agent),
+        [RUNNER_ENV.OPENAI_API_KEY]: Redacted.value(opened.success),
+      };
+      return { env };
+    });
 
-  const planLaunch: Readonly<Record<string, string>> = { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
-  const planEnv = Effect.as(standingPlan, { env: planLaunch });
+  const planEnv = (agent: CodingAgent) => Effect.as(standingPlan, { env: homeOf(agent) });
 
+  /**
+   * The credential a launch starts with, chosen here alone: on a Mac whose
+   * Codex holds a sign-in of its own, that sign-in, with nothing of the
+   * account's in the environment, so no token is ever handed to the Mac;
+   * otherwise the account's saved credential (`savedPayer`), its key in the
+   * environment or the plan's token asked of Luke's route over HTTPS.
+   */
   const launch = (agent: CodingAgent) =>
-    Effect.flatMap(onApiKey(agent), (keyed) => (keyed ? apiKeyEnv : planEnv));
+    Effect.gen(function* () {
+      if (yield* onMacLogin(agent)) return MAC_LOGIN;
+      return yield* (yield* onApiKey(agent)) ? apiKeyEnv(agent) : planEnv(agent);
+    });
 
   const config = (
     agent: CodingAgent,
@@ -198,11 +279,16 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     Effect.gen(function* () {
       const model = codexModelOf(agent);
       if (model === undefined) return yield* new LaunchRefused({ reason: "model" });
+      const local = agent.machine === CODING_AGENT_MACHINE.MAC;
+      // Note that a Mac runs only the Codex it checked against the pin, and one that checked none runs no Codex agent.
+      if (local && layout.codexExecutable === undefined) {
+        return yield* new LaunchRefused({ reason: "no codex" });
+      }
       const effort = effortOf(agent.effort);
       const written: CodexConfig = {
         harness: RUNNER_HARNESS.CODEX,
         cwd: layout.checkoutPath,
-        executable: CODEX_PATH.EXECUTABLE,
+        executable: layout.codexExecutable ?? CODEX_PATH.EXECUTABLE,
         model,
         ...(effort === undefined ? undefined : { effort }),
         ...(providerModelOf(agent.model)?.fast === true ? { fast: true } : undefined),
@@ -215,6 +301,10 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         integrations: yield* options.integrations(agent),
         tokenUrl,
         installedSkills: layout.installedSkills,
+        ...(layout.writableRoots.length === 0
+          ? undefined
+          : { writableRoots: layout.writableRoots }),
+        ...(onMacLoginOf(agent, layout.signedIn) ? { ownLogin: true } : undefined),
         // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
         warm: true,
       };
@@ -232,8 +322,12 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         : { model, fast: providerModelOf(agent.model)?.fast === true }),
       ...(effort === undefined ? undefined : { effort }),
     };
-    // Note that an agent on its API key has no plan to ask, and its runner holds the key it launched with.
-    const asked = Effect.flatMap(onApiKey(agent), (keyed) => (keyed ? Effect.void : standingPlan));
+    // Note that an agent on its Mac's sign-in or its API key has no plan to ask, and its runner holds what it launched with.
+    const asked = Effect.gen(function* () {
+      if (yield* onMacLogin(agent)) return;
+      if (yield* onApiKey(agent)) return;
+      yield* standingPlan;
+    });
     return Effect.as(asked, { lines: [choice] });
   };
 

@@ -18,18 +18,23 @@ type MacDeviceEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 const DeviceKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
-/** One Mac as Start reads it: its id, its name, when it last beat, and which harnesses it is signed in to. */
+/** One Mac as Start reads it: its id, its name, when it last beat, which harnesses it is signed in to, and the Codex it checked, where it has one. */
 const MacDeviceSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   lastSeenAt: Schema.Date,
   signedIn: macSignedInSchema,
+  codexExecutable: Schema.NullOr(Schema.String),
 });
 
 export type MacDevice = typeof MacDeviceSchema.Type;
 
-/** Where a Mac keeps what its local agents need: its home folder and the CLI it bundles. */
-const DeviceLayoutSchema = Schema.Struct({ home: Schema.String, claudeExecutable: Schema.String });
+/** Where a Mac keeps what its local agents need: its home folder, the CLI it bundles, and the Codex it checked, none where it has none. */
+const DeviceLayoutSchema = Schema.Struct({
+  home: Schema.String,
+  claudeExecutable: Schema.String,
+  codexExecutable: Schema.NullOr(Schema.String),
+});
 
 /** A Mac's layout and which harnesses it is signed in to, as a local agent's launch reads them. */
 const DeviceStandingSchema = Schema.Struct({
@@ -41,6 +46,12 @@ export type MacDeviceStanding = typeof DeviceStandingSchema.Type;
 
 export type MacDeviceLayout = typeof DeviceLayoutSchema.Type;
 
+/** What a Mac registers with beside its id and name: its layout, its Codex where it checked one, and which harnesses it is signed in to where it says. */
+export type MacDeviceRegistration = Omit<MacDeviceLayout, "codexExecutable"> & {
+  readonly codexExecutable?: string | undefined;
+  readonly signedIn?: MacSignedIn | undefined;
+};
+
 const upsertDevice = SqlSchema.findAll({
   Request: Schema.Struct({
     ...DeviceKeySchema.fields,
@@ -49,14 +60,23 @@ const upsertDevice = SqlSchema.findAll({
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, id, name, home, claudeExecutable, signedIn, now }) =>
+  execute: ({ userId, id, name, home, claudeExecutable, codexExecutable, signedIn, now }) =>
     Database.use((db) =>
       db
         .insert(macDevice)
-        .values({ id, userId, name, home, claudeExecutable, signedIn, lastSeenAt: now })
+        .values({
+          id,
+          userId,
+          name,
+          home,
+          claudeExecutable,
+          codexExecutable,
+          signedIn,
+          lastSeenAt: now,
+        })
         .onConflictDoUpdate({
           target: macDevice.id,
-          set: { name, home, claudeExecutable, signedIn, lastSeenAt: now },
+          set: { name, home, claudeExecutable, codexExecutable, signedIn, lastSeenAt: now },
           // Moved only where the account registering it is the one holding it.
           setWhere: eq(macDevice.userId, userId),
         })
@@ -92,6 +112,7 @@ const findSeen = SqlSchema.findAll({
           name: macDevice.name,
           lastSeenAt: macDevice.lastSeenAt,
           signedIn: macDevice.signedIn,
+          codexExecutable: macDevice.codexExecutable,
         })
         .from(macDevice)
         .where(and(eq(macDevice.userId, userId), gte(macDevice.lastSeenAt, since)))
@@ -125,6 +146,7 @@ const findLayout = SqlSchema.findOneOption({
         .select({
           home: macDevice.home,
           claudeExecutable: macDevice.claudeExecutable,
+          codexExecutable: macDevice.codexExecutable,
           signedIn: macDevice.signedIn,
         })
         .from(macDevice)
@@ -139,13 +161,18 @@ const findLayout = SqlSchema.findOneOption({
  */
 export function registerMacDevice(
   userId: string,
-  device: { readonly id: string; readonly name: string } & MacDeviceLayout & {
-      readonly signedIn?: MacSignedIn | undefined;
-    },
+  device: { readonly id: string; readonly name: string } & MacDeviceRegistration,
 ): MacDeviceEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(
-      upsertDevice({ userId, ...device, signedIn: device.signedIn ?? {}, now }),
+      upsertDevice({
+        userId,
+        ...device,
+        // Note that a register naming no Codex clears the last one, since the Mac checks it on every start.
+        codexExecutable: device.codexExecutable ?? null,
+        signedIn: device.signedIn ?? {},
+        now,
+      }),
       (rows) => rows.length > 0,
     ),
   );

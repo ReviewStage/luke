@@ -10,7 +10,8 @@ import { wireUuidSchema } from "./service-wire.js";
  * (`MAC_AGENT_REQUEST_KIND`) as rows under the account and the Mac the agent
  * is pinned to (`packages/database/src/schemas/mac-agent.ts`); the Mac
  * follows them, as it follows `run_on_mac`'s commands, claims each by its
- * id, and settles or answers it.
+ * id, and settles or answers it. It runs Claude Code or Codex, each
+ * the binary the Mac registered.
  *
  * The Mac's side, under its sign-in token and never a cookie, naming its
  * device id on every call (`contract/mac-agents.ts`): it registers on every
@@ -242,6 +243,13 @@ export const macAgentCommandArgsSchema = EffectSchema.Struct({
 export const macSignedInSchema = EffectSchema.Struct({
   /** Claude Code's own login on the Mac, as `claude auth status` answers it for the CLI the Mac bundles. */
   claudeCode: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
+   * Codex's own sign-in on the Mac, a managed ChatGPT login or an API key
+   * `codex login` stored under the user's default `CODEX_HOME`, as
+   * app-server's `account/read` answers it for the Codex the Mac checked
+   * (https://learn.chatgpt.com/docs/app-server).
+   */
+  codex: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type MacSignedIn = typeof macSignedInSchema.Type;
@@ -249,12 +257,18 @@ export type MacSignedIn = typeof macSignedInSchema.Type;
 /** The device a call names, by the id the desktop minted once. */
 const deviceField = { deviceId: wireUuidSchema };
 
-/** A register: the Mac's id, its name, its home folder, and the CLI it bundles, both absolute, and which harnesses it is signed in to. */
+/**
+ * A register: the Mac's id, its name, its home folder, and the CLI it
+ * bundles, both absolute, the Codex binary it checked against the pin
+ * (`@luke/agent-runner/pins`' `CODEX_MAC_PIN`), absent until it has one, and
+ * which harnesses it is signed in to.
+ */
 export const macAgentRegisterRequestSchema = EffectSchema.Struct({
   ...deviceField,
   name: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(200)),
   home: macPath,
   claudeExecutable: macPath,
+  codexExecutable: EffectSchema.optionalKey(macPath),
   signedIn: EffectSchema.optionalKey(macSignedInSchema),
 });
 

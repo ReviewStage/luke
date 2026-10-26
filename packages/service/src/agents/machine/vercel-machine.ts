@@ -153,6 +153,9 @@ const SANDBOX_LAYOUT: MachineLayout = {
   skillsUpload: NATIVE_SKILLS_PATH.UPLOAD,
   attachments: ATTACHMENT_DIRECTORY,
   claudeExecutable: undefined,
+  codexExecutable: undefined,
+  writableRoots: [],
+  signedIn: {},
 };
 
 /** What a sandbox Luke opens is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */

@@ -12,7 +12,9 @@
  * The bearer is admitted as the events route admits it (`../luke-mcp/bearer.ts`):
  * a bearer no standing coding agent's conversation holds, a retired one's
  * among them, is refused. So is one whose agent does not run on Codex on its
- * starter's ChatGPT plan, and one past the brake, which is kept per agent.
+ * starter's ChatGPT plan, and one past the brake, which is kept per agent. A
+ * local agent's runner asks here from its Mac as a sandbox's does, so no
+ * token travels through the Mac's queue.
  * What this answers is the token the runner's launch was already handed as
  * the plan's payer, to the same sandbox the same bearer already reaches
  * Luke's MCP server from. The token is never logged, and travels in the
@@ -101,12 +103,15 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   const routing = yield* hostedStoreOrUnavailable(
     readCodingAgentRouting(target.userId, agent.value.id),
   );
-  // Note that only an agent its starter's plan pays for, on Codex, is handed the plan's token.
+  // Note that only an agent its starter's plan pays for, on Codex, is handed the plan's token: one
+  // started on the plan, or a local one started on its Mac's own sign-in, which turns to the plan
+  // once that Mac signs out (`codex-sessions.ts`'s `savedPayer`).
   const onPlan = Option.exists(
     routing,
     (row) =>
       row.runtime === CONVERSATION_RUNTIME.CODEX &&
-      row.payer === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+      (row.payer === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION ||
+        row.payer === CODING_AGENT_PAYER.MAC_SIGN_IN),
   );
   if (!onPlan) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   if (!(yield* brake.check(agent.value.id))) {
