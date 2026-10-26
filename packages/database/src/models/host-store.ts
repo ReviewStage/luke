@@ -156,8 +156,8 @@ const upsertHost = SqlSchema.findAll({
         .onConflictDoUpdate({
           target: device.id,
           set: { name, platform, arch, version, secretHash, removedAt: null, lastSeenAt: now },
-          // Note that only the account's own host is re-keyed: neither another account's device nor its own desktop.
-          setWhere: sql`${device.userId} = ${userId} and ${device.kind} = ${DEVICE_KIND.HOST}`,
+          // Note that only the account's own removed host is keyed again: never a standing host, whose secret a token holder could otherwise take over, another account's device, or its own desktop.
+          setWhere: sql`${device.userId} = ${userId} and ${device.kind} = ${DEVICE_KIND.HOST} and ${device.removedAt} is not null`,
         })
         .returning({ id: device.id }),
     ),
@@ -254,11 +254,13 @@ export function revokeHostInstallToken(userId: string, id: string): HostEffect<b
 /**
  * Trades an install token for a host: the box, under the token's account,
  * as a device of kind host keyed by the id it minted, with the new secret's
- * hash, seen now. The same id enrolled again under the same account is the
- * same host re-keyed, brought back where it was removed, and its old secret
- * refused from then on. Answers the account, or nothing where the token is
- * unknown, revoked, or expired, or the id is another account's device or
- * the account's own desktop, and then nothing was written.
+ * hash, seen now. The id of a host the account removed may be enrolled
+ * again, which brings that host back with the new secret, so a box is never
+ * listed twice; a standing host's id may not, so a token alone never takes
+ * over a box already enrolled. Answers the account, or nothing where the
+ * token is unknown, revoked, or expired, or the id is a standing host,
+ * another account's device, or the account's own desktop, and then nothing
+ * was written.
  */
 export function enrollHost(
   tokenHash: string,

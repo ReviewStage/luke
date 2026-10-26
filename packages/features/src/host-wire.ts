@@ -80,8 +80,9 @@ export type HostEnrollRequest = typeof hostEnrollRequestSchema.Type;
 
 /**
  * What an enroll answers: the device's id, and its secret, answered this
- * once and kept by the service only as a hash. Enrolling the same id again
- * under the same member answers a new secret, and the old one is refused.
+ * once and kept by the service only as a hash. The id of a host the member
+ * removed may be enrolled again, which brings it back with a new secret; a
+ * standing host's id is refused, so a token alone never takes over a box.
  */
 export const hostEnrollAnswerSchema = EffectSchema.Struct({
   deviceId: wireUuidSchema,

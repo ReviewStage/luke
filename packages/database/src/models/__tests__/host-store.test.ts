@@ -22,7 +22,8 @@ import {
  * An account's install tokens and hosts, over a real dialect: a token
  * enrolls boxes under its own account alone, an expired or revoked one
  * enrolls none while the boxes it enrolled go on, a removed host's secret
- * resolves nothing, enrolling an id again re-keys the one host, and no
+ * resolves nothing, a standing host's id enrolls nothing while a removed
+ * host's brings that one host back with a new secret, and no
  * account reads, revokes, removes, or starts on another's host.
  * Synthetic accounts, hashes, and boxes throughout.
  */
@@ -126,20 +127,26 @@ it.layer(getTestDB())("the host store", (it) => {
   );
 
   it.effect(
-    "a removed host's secret resolves nothing, and enrolling its id again re-keys the one host",
+    "a token keys no standing host again; a removed host's secret resolves nothing, and enrolling its id brings the one host back",
     () =>
       Effect.gen(function* () {
         const { owner } = yield* openAccounts;
         const token = yield* mintedToken(owner);
         const enrolled = box("fra-01");
         yield* enrollHost(token.tokenHash, enrolled);
+        const takeover = { ...enrolled, name: "not-yours", secretHash: `secret-${randomUUID()}` };
 
+        const takenOver = yield* enrollHost(token.tokenHash, takeover);
+        const standingAfterTakeover = yield* hostBySecret(enrolled.secretHash);
         const removed = yield* removeHost(owner, enrolled.id);
         const afterRemove = yield* hostBySecret(enrolled.secretHash);
         const listedAfterRemove = yield* hostsOf(owner);
         const rekeyed = { ...enrolled, secretHash: `secret-${randomUUID()}` };
         yield* enrollHost(token.tokenHash, rekeyed);
 
+        assert.deepEqual(takenOver, Option.none(), "a standing host's id is refused");
+        assert.ok(Option.isSome(standingAfterTakeover), "the standing host keeps its secret");
+        assert.ok(Option.isNone(yield* hostBySecret(takeover.secretHash)));
         assert.equal(removed, true);
         assert.ok(Option.isNone(afterRemove), "a removed host's secret is refused");
         assert.deepEqual(listedAfterRemove, []);

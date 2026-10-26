@@ -32,7 +32,8 @@ import { user } from "./auth.js";
  * `home` or `claude_executable`, and no agent is offered or launched on it.
  * Removing a host stamps `removed_at` and clears its secret, so the box is
  * refused at once while its agents keep the name they ran under; enrolling
- * the same id again under the same account brings it back with a new secret.
+ * that id again under the same account brings it back with a new secret,
+ * and a standing host's id is never enrolled again.
  */
 export const device = pgTable(
   "device",

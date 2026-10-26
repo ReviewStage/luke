@@ -26,7 +26,7 @@ import { CREDENTIAL_HEADER } from "./session-credential.js";
  * through, the device-agents procedures and the runner token route alike:
  * a bearer that is no device secret is none of its business, and answers
  * nothing so the route reads the desktop's sign-in instead; a device secret
- * that names no standing host (unknown, re-keyed, or its host removed) is
+ * that names no standing host (unknown, or its host removed) is
  * refused at once; and a host whose daemon is below `HOST_VERSION.FLOOR`,
  * or sent no version, is refused as needing an upgrade, after its version
  * was recorded, so its Hosts row says which it runs.
