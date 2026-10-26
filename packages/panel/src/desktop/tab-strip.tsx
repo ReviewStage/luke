@@ -112,32 +112,32 @@ export function TabStrip({
 export function MenuTab({
   groups,
   ...tab
-}: Omit<React.ComponentProps<typeof Tab>, "contextMenu" | "onMenu" | "hint"> & {
+}: Omit<React.ComponentProps<typeof Tab>, "contextMenu" | "onMenu" | "menu" | "hint"> & {
   groups: MenuAction[][];
 }): React.JSX.Element {
   const menu = useMenu(true);
   const placeOf = useContext(TabPlaceContext);
   return (
-    <>
-      <Tab
-        {...tab}
-        hint={TabTooltip}
-        onSelect={() => {
-          menu.close(false);
-          tab.onSelect();
-        }}
-        // A menu key the system turned into a right-click says no point of its own, and hangs the menu under the whole tab.
-        contextMenu={menu.contextMenu(undefined, tabMenuPlacement)}
-        onMenu={menu.show}
-      />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={`${tab.label} actions`}
-          menu={menu.drawn}
-          groups={withRowMoves(groups, placeOf?.(menu.drawn.opener), ROW_RUN.ALONG)}
-          onClose={menu.close}
-        />
-      )}
-    </>
+    <Tab
+      {...tab}
+      hint={TabTooltip}
+      onSelect={() => {
+        menu.close(false);
+        tab.onSelect();
+      }}
+      // A menu key the system turned into a right-click says no point of its own, and hangs the menu under the whole tab.
+      contextMenu={menu.contextMenu(undefined, tabMenuPlacement)}
+      onMenu={menu.show}
+      menu={
+        menu.drawn === undefined ? undefined : (
+          <ActionMenu
+            label={`${tab.label} actions`}
+            menu={menu.drawn}
+            groups={withRowMoves(groups, placeOf?.(menu.drawn.opener), ROW_RUN.ALONG)}
+            onClose={menu.close}
+          />
+        )
+      }
+    />
   );
 }
