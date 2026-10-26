@@ -6,8 +6,9 @@
  * but never renames or archives its #general (`channel-store.ts`), and every
  * write on a channel answers the workspace's channels as they then stand,
  * each with how many open asks wait on the reader there (`inbox-store.ts`'s
- * `WAITS_ON`), when they last looked at it, and when its latest thread was
- * posted. A member moves any thread they may read into another open channel
+ * `WAITS_ON`), when they last looked at it, how many of its threads they
+ * may read, and when the latest was posted; an archived channel carries the
+ * same but the look. A member moves any thread they may read into another open channel
  * of its workspace. A workspace the account is not in, a channel none of
  * its own, or a thread they may not read, is not found.
  */
@@ -36,7 +37,8 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import {
-  channelLatestPosts,
+  type ChannelPostTally,
+  channelPostTallies,
   channelThreads,
   channelWaitingCounts,
   moveChannelThread,
@@ -75,6 +77,13 @@ const workspaceOfChannel = /* @__PURE__ */ Effect.fnUntraced(function* (
   return workspace.value;
 });
 
+/** What a channel holds of the threads the reader may read, as the wire carries it: none and no latest post where it holds none. */
+function tallied(tally: ChannelPostTally | undefined): Pick<Channel, "threads" | "latestPostedAt"> {
+  return tally === undefined
+    ? { threads: 0 }
+    : { threads: tally.threads, latestPostedAt: tally.latestPostedAt };
+}
+
 /**
  * The workspace's open channels as the reader reads them, its #general
  * minted first where it has none yet; not found where the account is not a
@@ -85,19 +94,18 @@ const channelsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   organizationId: string,
 ) {
   const now = yield* DateTime.nowAsDate;
-  const [rows, waiting, looks, latest] = yield* hostedStoreOrUnavailable(
+  const [rows, waiting, looks, tallies] = yield* hostedStoreOrUnavailable(
     Effect.all([
       openChannels(userId, organizationId, now),
       channelWaitingCounts(userId, organizationId),
       listChannelLooks(userId, organizationId),
-      channelLatestPosts(userId, organizationId),
+      channelPostTallies(userId, organizationId),
     ]),
   );
   if (rows.length === 0) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const lookedAt = new Map(looks.map((look) => [look.channelId, look.lookedAt]));
   const channels = rows.map((row): Channel => {
     const looked = lookedAt.get(row.id);
-    const posted = latest.get(row.id);
     return {
       id: row.id,
       name: row.name,
@@ -107,15 +115,19 @@ const channelsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       createdAt: row.createdAt,
       waiting: waiting.get(row.id) ?? 0,
       ...(looked === undefined ? undefined : { lookedAt: looked }),
-      ...(posted === undefined ? undefined : { latestPostedAt: posted }),
+      ...tallied(tallies.get(row.id)),
     };
   });
   const answer: ChannelsAnswer = { channels };
   return answer;
 });
 
-/** An archived channel as the wire carries it. */
-function archivedChannel(row: ArchivedChannelRow): ArchivedChannel {
+/** An archived channel as the wire carries it, with what waits on the reader in it and what it holds for them. */
+function archivedChannel(
+  row: ArchivedChannelRow,
+  waiting: number,
+  tally: ChannelPostTally | undefined,
+): ArchivedChannel {
   return {
     id: row.id,
     name: row.name,
@@ -124,6 +136,8 @@ function archivedChannel(row: ArchivedChannelRow): ArchivedChannel {
     ...(row.createdBy === null ? undefined : { createdBy: row.createdBy }),
     createdAt: row.createdAt,
     archivedAt: row.archivedAt,
+    waiting,
+    ...tallied(tally),
   };
 }
 
@@ -175,10 +189,18 @@ export function channelsProcedures(seams: ChannelsProcedureSeams) {
         isWorkspaceMember(context.userId, workspaceId),
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const rows = yield* hostedStoreOrUnavailable(
-        listArchivedChannels(context.userId, workspaceId),
+      const [rows, waiting, tallies] = yield* hostedStoreOrUnavailable(
+        Effect.all([
+          listArchivedChannels(context.userId, workspaceId),
+          channelWaitingCounts(context.userId, workspaceId),
+          channelPostTallies(context.userId, workspaceId),
+        ]),
       );
-      return { channels: rows.map(archivedChannel) };
+      return {
+        channels: rows.map((row) =>
+          archivedChannel(row, waiting.get(row.id) ?? 0, tallies.get(row.id)),
+        ),
+      };
     }),
     look: signedIn.look.effect(function* ({ input, context }) {
       const { workspaceId, channelId } = input;

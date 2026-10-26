@@ -36,9 +36,14 @@ import {
   threadNeedsReader,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksView } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
+import {
+  WORKSPACE_ROLE,
+  type Workspace,
+  type WorkspaceMember,
+} from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   type AppInboxTask,
@@ -124,6 +129,7 @@ const CHANNEL = {
   CHANNELS: fixtureId("f6000006", 5),
   DESIGN_REVIEW: fixtureId("f6000006", 6),
   LAUNCH_SITE: fixtureId("f6000006", 7),
+  DESIGN: fixtureId("f6000006", 8),
 } as const;
 
 /** A channel as the service keeps it, before what it counts for a reader. */
@@ -147,6 +153,14 @@ let CHANNELS: readonly ChannelSeed[] = [
     purpose: "Project: threads read by topic, archived when it ships",
     project: true,
     createdAt: LANDED - 2 * DAY,
+    createdBy: DEAN,
+  },
+  {
+    id: CHANNEL.DESIGN,
+    name: "design",
+    purpose: "UI polish, design audits, and phone layouts",
+    project: false,
+    createdAt: LANDED - 30 * DAY,
     createdBy: DEAN,
   },
   {
@@ -492,7 +506,7 @@ const THREADS: ThreadSeed[] = [
       agentSaid(
         106,
         70 * MINUTE,
-        "A project channel can stand under Projects in the order it was made, or by name like the standing channels.",
+        `A project channel can stand under Projects in the order it was made, or by name like the standing channels. ${mentionMarkdown({ kind: MENTION_KIND.CHANNEL, channelId: CHANNEL.LAUNCH_SITE }, "launch-site", { workspace: WORKSPACE_SLUG, repository: REPOSITORY })} stood last until it was archived.`,
         {
           type: INBOX_ASK.DECIDE,
           options: [
@@ -804,6 +818,42 @@ THREADS.push(
   ]),
 );
 
+/** A settled thread in #design, so one standing channel waits on nobody and its card dates its corner by its latest post. */
+THREADS.push(
+  thread(
+    22,
+    seed(TASK.POLISH),
+    CHANNEL.DESIGN,
+    "Sidebar rows now line up with the tab strip",
+    [
+      agentSaid(
+        127,
+        2 * DAY,
+        "The sidebar's rows and the tab strip now share one inset, so their glyphs sit on one column.",
+      ),
+    ],
+    { status: INBOX_STATUS.ANSWERED, settledAt: LANDED - 2 * DAY },
+  ),
+);
+
+/** A settled thread in the archived #launch-site, which its card counts and dates its corner by. */
+THREADS.push(
+  thread(
+    21,
+    seed(TASK.RELEASE),
+    CHANNEL.LAUNCH_SITE,
+    "Shipped: the launch site is live",
+    [
+      agentSaid(
+        126,
+        3 * DAY + 2 * HOUR,
+        "The October launch site is live on its own domain, with redirects from the old pages.",
+      ),
+    ],
+    { status: INBOX_STATUS.ANSWERED, settledAt: LANDED - 3 * DAY },
+  ),
+);
+
 /** When each reader last looked at each channel, so the stream draws its New line before what came after. */
 const LAST_LOOKED: ReadonlyMap<string, Map<string, number>> = new Map([
   [
@@ -857,23 +907,28 @@ function needsReader(each: InboxItem): boolean {
   return threadNeedsReader(each, READER.userId);
 }
 
-/** The workspace's channels as the reader reads them: each with what waits on them in it, when they last looked, and when its latest thread was posted. */
+/** What a channel holds for the reader: what waits on them in it, how many threads, and when the latest was posted. */
+function tallyOf(channelId: string): Pick<Channel, "waiting" | "threads" | "latestPostedAt"> {
+  const threads = THREADS.filter((each) => each.channelId === channelId);
+  const posted = threads.map((each) => each.item.postedAt);
+  return {
+    waiting: threads.filter((each) => needsReader(each.item)).length,
+    threads: threads.length,
+    ...(posted.length === 0 ? {} : { latestPostedAt: Math.max(...posted) }),
+  };
+}
+
+/** The workspace's channels as the reader reads them: each with what it holds for them, and when they last looked. */
 function channelsRead(): readonly Channel[] {
   const looked = LAST_LOOKED.get(READER.userId);
   return CHANNELS.map((channel) => {
     const at = looked?.get(channel.id);
-    const posted = THREADS.filter((each) => each.channelId === channel.id).map(
-      (each) => each.item.postedAt,
-    );
-    const latest = posted.length === 0 ? undefined : Math.max(...posted);
     const { createdBy, ...rest } = channel;
     return {
       ...rest,
       ...(createdBy === undefined ? {} : { createdBy: createdBy.userId }),
-      waiting: THREADS.filter((each) => each.channelId === channel.id && needsReader(each.item))
-        .length,
+      ...tallyOf(channel.id),
       ...(at === undefined ? {} : { lookedAt: at }),
-      ...(latest === undefined ? {} : { latestPostedAt: latest }),
     };
   });
 }
@@ -1005,6 +1060,26 @@ function taskSummary(task: TaskSeed): TaskSummary {
 
 /* ----- The doors the loader lays over the tasks fixture ----- */
 
+/** The fixture's first workspace as the channels profiles draw it: Stage, of the reader's and their teammate. */
+function stage(workspace: Workspace): Workspace {
+  const { personal: _personal, ...rest } = workspace;
+  return {
+    ...rest,
+    name: "Stage",
+    slug: WORKSPACE_SLUG,
+    memberCount: MEMBERS.length,
+    github: { login: "ReviewStage", active: true },
+  };
+}
+
+/** Stage where main's document lists no workspace, as a fixture run's does, so a link written under it is read in it. */
+const STAGE: Workspace = stage({
+  id: FIXTURE_IDS.WORKSPACE,
+  name: "Stage",
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+});
+
 /** The list as the channels profiles draw it: the first workspace named Stage, holding Luke's tasks alone. */
 export function channelsTasksView(profile: string, list: TasksView): TasksView {
   if (!READERS.has(profile)) return list;
@@ -1012,13 +1087,7 @@ export function channelsTasksView(profile: string, list: TasksView): TasksView {
     ...list,
     workspaces: list.workspaces
       .filter((workspace) => workspace.id === FIXTURE_IDS.WORKSPACE)
-      .map(({ personal: _personal, ...workspace }) => ({
-        ...workspace,
-        name: "Stage",
-        slug: WORKSPACE_SLUG,
-        memberCount: MEMBERS.length,
-        github: { login: "ReviewStage", active: true },
-      })),
+      .map(stage),
     tasks: TASKS.map(taskSummary),
   };
 }
@@ -1047,7 +1116,7 @@ function stagedSettings(
   return staged;
 }
 
-/** Main's document under the channels profiles: the reader signed in, what waits on them, and Channels on. */
+/** Main's document under the channels profiles: the reader signed in, what waits on them, Stage among the workspaces, and Channels on. */
 export function channelsAppState(state: AppStateSnapshot): AppStateSnapshot {
   const reader = READERS.get(state.run.profile);
   if (reader === undefined) return state;
@@ -1056,6 +1125,9 @@ export function channelsAppState(state: AppStateSnapshot): AppStateSnapshot {
     ...state,
     account: accountOf(READER),
     inbox: { ...state.inbox, waiting: waiting(), tasks: holdings(), taskless: taskless() },
+    ...(state.tasks === undefined || state.tasks.workspaces.length > 0
+      ? undefined
+      : { tasks: { ...state.tasks, workspaces: [STAGE] } }),
     ...(state.settings === undefined ? undefined : { settings: stagedSettings(state.settings) }),
   };
 }
@@ -1103,6 +1175,7 @@ function archivedAnswer() {
     channels: ARCHIVED.map(({ createdBy, ...rest }) => ({
       ...rest,
       ...(createdBy === undefined ? {} : { createdBy: createdBy.userId }),
+      ...tallyOf(rest.id),
     })),
   };
 }

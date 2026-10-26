@@ -71,7 +71,7 @@ import {
   answerInboxAsk,
   CHANNEL_MOVE_REFUSAL,
   type ChannelThreadPage,
-  channelLatestPosts,
+  channelPostTallies,
   channelThreads,
   channelWaitingCounts,
   closeInboxItem,
@@ -2181,10 +2181,11 @@ it.layer(getTestDB())("a thread's channel", (it) => {
           asks.map((ask) => pages[0]?.threads.some((thread) => thread.id === ask.id)),
           [true, true],
         );
-        assert.equal(
-          (yield* channelLatestPosts(owner, workspaceId)).get(app),
-          at(notices - 1).getTime(),
-        );
+        assert.deepEqual((yield* channelPostTallies(owner, workspaceId)).get(app), {
+          latestPostedAt: at(notices - 1).getTime(),
+          threads: notices + asks.length,
+        });
+        assert.equal((yield* channelPostTallies(outsider, workspaceId)).size, 0);
         assert.deepEqual(yield* channelThreads(outsider, app, pages[0]?.older), Option.none());
       }),
   );

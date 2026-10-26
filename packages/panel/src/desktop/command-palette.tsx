@@ -168,6 +168,7 @@ import {
   settingsSearchEntries,
 } from "../settings-search.js";
 import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../tasks/agent-ref.js";
+import { ChannelCard } from "../tasks/channel-card.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
@@ -1028,15 +1029,17 @@ function peopleRows(
   }));
 }
 
-/** The listed workspace's open channels, each by its glyph and name, as the sidebar lists it, and its purpose, which choosing opens on its stream; `#app` typed finds it too. */
+/** The listed workspace's open channels, each by its glyph and name, as the sidebar lists it, and its purpose, hanging the channel's card as its sidebar row does, which choosing opens on its stream; `#app` typed finds it too. */
 function channelRows(
   channels: readonly Channel[],
+  workspaceId: string | undefined,
   open: (channelId: string) => void,
 ): readonly PaletteRow[] {
   return channels.map((channel) => ({
     icon: <GLYPH.CHANNEL />,
     label: channel.name,
     detail: channel.purpose,
+    card: <ChannelCard channel={channel} workspaceId={workspaceId} />,
     terms: [channel.name, `#${channel.name}`, channel.purpose],
     onChoose: () => open(channel.id),
   }));
@@ -2067,7 +2070,7 @@ export function CommandPalette({
         : [],
     ],
     [PALETTE_FILTER.CHANNELS]: () => [
-      channelRows(channels.channels ?? [], (channelId) =>
+      channelRows(channels.channels ?? [], tasks.workspace?.id, (channelId) =>
         onTasks(() => tasks.inboxView.onOpenChannel(channelId)),
       ),
     ],

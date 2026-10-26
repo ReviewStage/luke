@@ -447,6 +447,25 @@ export function useHeldChannels(): ReadonlyMap<string, readonly Channel[]> {
   return useSyncExternalStore(subscribe, heldNow, heldNow);
 }
 
+/**
+ * A channel of a workspace as the window holds it, open or archived, which
+ * it reads nothing to learn: from the lists the sidebar and the archived
+ * channels' surfaces hold; none where neither names it, as for a channel
+ * of another workspace.
+ */
+export function useHeldChannel(
+  workspaceId: string | undefined,
+  channelId: string,
+): Channel | ArchivedChannel | undefined {
+  const open = useSyncExternalStore(subscribe, heldNow, heldNow);
+  const archived = useSyncExternalStore(subscribe, heldArchivedNow, heldArchivedNow);
+  if (workspaceId === undefined) return undefined;
+  return (
+    open.get(workspaceId)?.find((each) => each.id === channelId) ??
+    archived.get(workspaceId)?.find((each) => each.id === channelId)
+  );
+}
+
 /** What the Inbox's place shows with Channels on: the channel its stream shows, open or archived, and the thread opened in it, by its item's id. */
 export interface ShownChannel {
   readonly channel: Pick<Channel, "id" | "name">;
