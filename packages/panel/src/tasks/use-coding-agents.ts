@@ -13,7 +13,6 @@ import {
   type CodingAgentReviewOptionsAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
-  CODING_AGENT_MACHINE,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
   type CodingAgentChangesPeople,
@@ -1092,8 +1091,6 @@ export function useCodingAgents(input: {
     askStart(taskId, {
       idempotencyKey: key,
       ...(choice === undefined ? undefined : choiceRequest(choice)),
-      // Note that the cloud is what a Start with no machine runs in, so only a Mac is named, by its id.
-      ...(deviceId === undefined ? undefined : { machine: CODING_AGENT_MACHINE.DEVICE, deviceId }),
     }).then((answer) => {
       setPressed((was) => (was?.starting.key === key ? undefined : was));
       if ("failure" in answer) {

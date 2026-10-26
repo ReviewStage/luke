@@ -2,13 +2,16 @@ import { Schema as EffectSchema } from "effect";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_KIND,
+  CODING_AGENT_MACHINE,
   CODING_AGENT_STATUS,
   codingAgentStartRequestFields,
   codingAgentSummarySchema,
+  localAgentRefusalSchema,
   PULL_REQUEST_STATE,
   startBrief,
   tasklessAgentSchema,
 } from "./coding-agent-wire.js";
+import { DEVICE_KIND } from "./device-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { linearIssueIdSchema } from "./linear-wire.js";
 import { modelProviderSchema } from "./models-wire.js";
@@ -199,6 +202,24 @@ export type PlanDocument = typeof planDocumentSchema.Type;
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
 
 /**
+ * Where a task's coding agents run, as a request names it: the cloud, or one
+ * of the asking member's own devices (a Mac's desktop app or a host) by its
+ * id, which the service checks is theirs, beat lately, and runs some model
+ * before it keeps it. It decides where every agent started on the task
+ * afterwards runs (`startCodingAgent`'s resolver); an agent already started
+ * keeps where it runs.
+ */
+export const taskRunsOnRequestSchema = EffectSchema.Union([
+  EffectSchema.Struct({ machine: EffectSchema.Literal(CODING_AGENT_MACHINE.VERCEL) }),
+  EffectSchema.Struct({
+    machine: EffectSchema.Literal(CODING_AGENT_MACHINE.DEVICE),
+    deviceId: wireUuidSchema,
+  }),
+]);
+
+export type TaskRunsOnRequest = typeof taskRunsOnRequestSchema.Type;
+
+/**
  * The coding agent a task's start starts on it: an agent Start's own fields
  * (`coding-agent-wire.ts`), its key, which a retry carries again, the choice,
  * a prompt and its files, and the servers switched off, held to the same
@@ -260,7 +281,9 @@ function issuesNamedOnce(request: {
  * is kept rather than refused, and goes unread until a call is opened on the
  * task, since that start opens none. A task starts to do and unweighed
  * unless `status` and `priority` say otherwise, and assigned to no one
- * unless `assigneeId` names a member of its workspace.
+ * unless `assigneeId` names a member of its workspace. Its agents run in the
+ * cloud unless `runsOn` names one of the starter's devices, kept on the task
+ * before the agent the start asks for starts, so that agent runs there too.
  */
 export const taskCreateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(
@@ -276,6 +299,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   ),
   planning: EffectSchema.optionalKey(EffectSchema.Boolean),
   agent: EffectSchema.optionalKey(taskAgentStartSchema),
+  runsOn: EffectSchema.optionalKey(taskRunsOnRequestSchema),
   brief: EffectSchema.optionalKey(
     EffectSchema.Trim.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BRIEF_CHARS)),
   ),
@@ -304,6 +328,7 @@ function updateNamesAChange(update: {
   status?: TaskStatus;
   priority?: TaskPriority;
   assigneeId?: string | null;
+  runsOn?: TaskRunsOnRequest;
 }): boolean {
   return Object.keys(update).length > 0;
 }
@@ -323,6 +348,8 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
  * member of the task's workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
  * the task's repository, and lets its assignee go where they are no member there.
+ * Where its agents run (`runsOn`) is checked as a start's is, against the
+ * asking member's own devices, and moves only the agents started after it.
  */
 export const taskUpdateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
@@ -334,6 +361,7 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
+  runsOn: EffectSchema.optionalKey(taskRunsOnRequestSchema),
 }).check(EffectSchema.makeFilter(updateNamesAChange), EffectSchema.makeFilter(positionIsPinned));
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
@@ -428,6 +456,30 @@ const taskOriginSchema = EffectSchema.Struct({
 
 export type TaskOrigin = typeof taskOriginSchema.Type;
 
+/**
+ * Where a task's agents run, said only of a task that runs them on a
+ * device: which one by its id, whose it is, since only that member's agents
+ * run on it and a teammate's run in the cloud, and the name it registered
+ * with, what kind of device it is, and the epoch milliseconds it last beat,
+ * which a reader holds against its own clock (`macOnline`). The device and
+ * its owner are absent once the device's row is gone, where a start on the
+ * task is refused until it is changed.
+ */
+const taskRunsOnSchema = EffectSchema.Struct({
+  machine: EffectSchema.Literal(CODING_AGENT_MACHINE.DEVICE),
+  deviceId: EffectSchema.optionalKey(wireUuidSchema),
+  owner: EffectSchema.optionalKey(memberRefSchema),
+  device: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      name: EffectSchema.String,
+      kind: EffectSchema.Literals(Object.values(DEVICE_KIND)),
+      seenAt: countedNumber,
+    }),
+  ),
+});
+
+export type TaskRunsOn = typeof taskRunsOnSchema.Type;
+
 const taskSummaryFields = {
   id: wireUuidSchema,
   /** The workspace the task belongs to. */
@@ -486,6 +538,8 @@ const taskSummaryFields = {
    * be assigned.
    */
   assignee: EffectSchema.optionalKey(memberRefSchema),
+  /** Where the task's agents run: absent for the cloud, and from a service before tasks said. */
+  runsOn: EffectSchema.optionalKey(taskRunsOnSchema),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
@@ -722,11 +776,13 @@ export const taskRestoreAnswerSchema = EffectSchema.Struct({
  * Note that it carries no `unreached`, because the start confirmed the
  * repository reachable as it made the task.
  */
-/** Why the agent a start asked for was refused, when a plan's reached limit resets where that is why and the provider said, and the provider whose credential is missing where that is why. */
+/** Why the agent a start asked for was refused, when a plan's reached limit resets where that is why and the provider said, the provider whose credential is missing where that is why, and why the task's device would not take it where that is why. */
 const taskAgentRefusalSchema = EffectSchema.Struct({
   error: EffectSchema.String,
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
   provider: EffectSchema.optionalKey(modelProviderSchema),
+  /** Why the task's device would not take the agent, where that is why. */
+  localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
 });
 
 export type TaskAgentRefusal = typeof taskAgentRefusalSchema.Type;
@@ -740,6 +796,8 @@ export type TaskAgentRefusal = typeof taskAgentRefusalSchema.Type;
 export const taskStartAnswerSchema = EffectSchema.Struct({
   plan: taskSchema,
   agent: EffectSchema.optionalKey(codingAgentSummarySchema),
+  /** Why the agent runs in the cloud on a task that runs on a device, in plain words (`codingAgentAnswerSchema`'s). */
+  notice: EffectSchema.optionalKey(EffectSchema.String),
   agentRefusal: EffectSchema.optionalKey(taskAgentRefusalSchema),
   txid: EffectSchema.optionalKey(taskTxidSchema),
 });
