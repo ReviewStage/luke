@@ -928,6 +928,56 @@ const markTurnFastRefused = SqlSchema.void({
     ),
 });
 
+/** The turn a reservation of plan notes is held against, as the subquery of the update names it apart from the row it updates. */
+const runningTurn = alias(turns, "running_turn");
+
+const reserveTurnNotes = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    requested: Schema.Int,
+  }),
+  Result: Schema.Struct({ turnId: Schema.String, taken: Schema.Int }),
+  execute: ({ userId, conversationId, requested }) =>
+    Database.use((db) =>
+      db
+        .update(turns)
+        .set({ planNotesTaken: sql`${turns.planNotesTaken} + ${requested}` })
+        .where(
+          and(
+            eq(turns.userId, userId),
+            inArray(
+              turns.id,
+              db
+                .select({ id: runningTurn.id })
+                .from(runningTurn)
+                .where(
+                  and(
+                    eq(runningTurn.userId, userId),
+                    eq(runningTurn.conversationId, conversationId),
+                    eq(runningTurn.status, TURN_STATUS.RUNNING),
+                  ),
+                )
+                .orderBy(desc(runningTurn.queuedAt), desc(runningTurn.id))
+                .limit(1),
+            ),
+          ),
+        )
+        .returning({ turnId: turns.id, taken: turns.planNotesTaken }),
+    ),
+});
+
+const releaseTurnNotes = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, turnId: Schema.String, released: Schema.Int }),
+  execute: ({ userId, turnId, released }) =>
+    Database.use((db) =>
+      db
+        .update(turns)
+        .set({ planNotesTaken: sql`greatest(0, ${turns.planNotesTaken} - ${released})` })
+        .where(and(eq(turns.userId, userId), eq(turns.id, turnId))),
+    ),
+});
+
 const updateAgentTitle = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -2437,6 +2487,38 @@ export function recordTurnFastRefused(
   turnId: string,
 ): CodingAgentStoreEffect<void> {
   return markTurnFastRefused({ userId, turnId });
+}
+
+/** A turn's count of plan notes, as a reservation left it: the turn, and every note it has taken or holds reserved, the reservation's own among them. */
+export interface TurnPlanNotes {
+  readonly turnId: string;
+  readonly taken: number;
+}
+
+/**
+ * Reserves a call's plan notes against the conversation's running turn
+ * before its save goes out, and answers the turn and its count with them;
+ * nothing where no turn of the conversation runs, or the account does not
+ * hold it. Note that the count is raised in one statement, because a
+ * native agent's calls of one step run at once, and each must see the
+ * other's reservation, as eve's session state does (`plan-edit.ts`).
+ */
+export function reserveTurnPlanNotes(
+  userId: string,
+  conversationId: string,
+  requested: number,
+): CodingAgentStoreEffect<Option.Option<TurnPlanNotes>> {
+  return reserveTurnNotes({ userId, conversationId, requested });
+}
+
+/** Settles a reservation once its save answered: the notes it reserved and did not take given back, which is all of them for a refused call. */
+export function settleTurnPlanNotes(
+  userId: string,
+  turnId: string,
+  requested: number,
+  saved: number,
+): CodingAgentStoreEffect<void> {
+  return releaseTurnNotes({ userId, turnId, released: requested - saved });
 }
 
 /** The agent under another title, or none, which its tab shows in place of the model's name; nothing for an agent of a workspace the account is not in. */

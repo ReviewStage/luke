@@ -25,14 +25,16 @@
  * `connection_execute`, since each integration the agent is handed is an
  * MCP server of its own beside this one (`app.ts`).
  *
- * Two things eve's tool files keep in the session's own state have none
- * here, since the server keeps no session: a call's id, which the agent
- * tools key a start or a message on, is the key the store holds for the
+ * Two things eve's tool files keep in the session's own state are kept
+ * otherwise here, since the server keeps no session: a call's id, which the
+ * agent tools key a start or a message on, is the key the store holds for the
  * agent's conversation, the tool, and the input within a window
  * (`call-key.ts`), so the call a harness retries after a timeout starts or
- * sends once, as eve's run again does; and the turn's count of plan notes,
- * which each call starts from nothing, so that cap holds per call. The list is narrowed per agent as eve narrows its
- * own (`offeredLukeMcpTool`), and a tool left out is still refused by its
+ * sends once, as eve's run again does; and the turn's count of plan notes is
+ * kept on the running turn's row in the store (`runTurnCappedEditPlan`), so
+ * the cap holds per turn as eve's does. The list is narrowed per agent as
+ * eve narrows its own (`offeredLukeMcpTool`), `remember` and `recall` by its
+ * starter's Memory among it, and a tool left out is still refused by its
  * door where a harness calls it anyway. A tool whose words differ by
  * workspace, `post_thread`'s naming its open channels, is described for
  * the agent as the list is made (`describe`), as eve describes it at each
@@ -40,17 +42,22 @@
  */
 
 import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  reserveTurnPlanNotes,
+  settleTurnPlanNotes,
+} from "@luke/database/models/coding-agent-store";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { pictureTypeSchema } from "@luke/features/picture-wire";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
+import { logStoreFailure } from "../../http/store-failure.js";
 import type {
   IntegrationConnect,
   WorkspaceLinearConnect,
@@ -107,7 +114,12 @@ import { MESSAGE_AGENT_TOOL } from "../coder-host/agent-message.js";
 import { INBOX_TOOLS } from "../coder-host/inbox.js";
 import { postThreadWords, runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
-import { EDIT_PLAN_TOOL } from "../coder-host/plan-edit.js";
+import {
+  EDIT_PLAN_TOOL,
+  PLAN_EDIT_REFUSAL,
+  planEditRejected,
+  requestedNotes,
+} from "../coder-host/plan-edit.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
 import {
@@ -323,6 +335,40 @@ function runAgentBrowser(admitted: AdmittedConversation, input: UnparsedWireValu
   return runBrowserTool(call, input);
 }
 
+/**
+ * One `edit_plan` call under the turn's cap: its notes reserved against the
+ * conversation's running turn in the store, the count before them handed to
+ * the door as eve hands its session's, and the reservation settled to what
+ * was taken once the door answers. A conversation with no turn running
+ * holds no count, so its call is held to the cap alone. Note that a
+ * settle that fails is logged and the door's answer stands, because the
+ * notes are saved by then and a retry would take them twice; the turn only
+ * counts the reservation whole.
+ */
+function runTurnCappedEditPlan(
+  admitted: AdmittedConversation,
+  input: UnparsedWireValue,
+  sandbox: InboxSandboxDoor,
+) {
+  const { userId, conversationId } = admitted.target;
+  const requested = requestedNotes(input);
+  return Effect.gen(function* () {
+    const turn = yield* reserveTurnPlanNotes(userId, conversationId, requested);
+    if (Option.isNone(turn)) return yield* runAgentEditPlan(admitted, input, 0, sandbox);
+    const { turnId, taken } = turn.value;
+    const answer = yield* runAgentEditPlan(admitted, input, taken - requested, sandbox);
+    const saved = answer.status === ACTION_RESULT_STATUS.ACCEPTED ? answer.taken : 0;
+    yield* settleTurnPlanNotes(userId, turnId, requested, saved).pipe(
+      Effect.tapError(logStoreFailure),
+      Effect.ignore,
+    );
+    return answer;
+  }).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
+  );
+}
+
 /** The tools served, by name, in the order `tools/list` names them. */
 export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, LukeMcpTool>([
   // The threads, posted to the workspace's channels, and the channels themselves.
@@ -350,7 +396,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   // The pull request, the plan, and pages and pictures.
   entry(OPEN_PULL_REQUEST_TOOL, (admitted, input) => runAgentOpenPullRequest(admitted, input)),
   entry(EDIT_PLAN_TOOL, (admitted, input, { sandbox }) =>
-    runAgentEditPlan(admitted, input, 0, sandbox),
+    runTurnCappedEditPlan(admitted, input, sandbox),
   ),
   entry(
     LOOK_AT_PICTURE_TOOL,
@@ -415,8 +461,12 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
 export type LukeMcpOfferedTo = Pick<CodingAgent, "taskId" | "repository" | "kind" | "machine">;
 
-/** The tools eve offers some agents and not others: each one some agent's task, repository, or kind withholds. */
+/** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/remember.ts`'s `memoryOffered`). */
+const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL];
+
+/** The tools eve offers some agents and not others: each one some agent's task, repository, kind, or starter's Memory withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
+  ...MEMORY_TOOLS,
   ...taskToolsOf({ taskId: "any" }),
   ...repositoryToolsOf({ repository: "any" }),
   ...kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }),
@@ -427,12 +477,17 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
 /**
  * Whether the server lists a tool to an agent: every tool eve offers every
  * agent, and each narrowed one where eve offers it to this agent, by its
- * task, its repository, and its kind, the same rules eve's tool files read
- * at each turn. Note that a harness reads the list as its launch begins, so
- * an agent is narrowed launch by launch, as eve's is turn by turn.
+ * task, its repository, its kind, and whether its starter has Memory on
+ * (`memoryOn`), the same rules eve's tool files read at each turn. Note that
+ * a harness reads the list as its launch begins, so an agent is narrowed
+ * launch by launch, as eve's is turn by turn.
  */
-export function offeredLukeMcpTool(agent: LukeMcpOfferedTo): (name: string) => boolean {
+export function offeredLukeMcpTool(
+  agent: LukeMcpOfferedTo,
+  memoryOn: boolean,
+): (name: string) => boolean {
   const offered: ReadonlySet<string> = new Set<string>([
+    ...(memoryOn ? MEMORY_TOOLS : []),
     ...taskToolsOf(agent),
     ...repositoryToolsOf(agent),
     ...kindToolsOf(agent),

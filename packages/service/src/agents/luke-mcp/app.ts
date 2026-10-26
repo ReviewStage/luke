@@ -71,6 +71,7 @@ import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
+import { memoryOnFor } from "../memory-tools.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
 import { lukeMcpCallKey } from "./call-key.js";
 import { lukeMcpDoorSeams } from "./door-seams.js";
@@ -320,8 +321,8 @@ function callLukeTool(
 
 /**
  * The tools listed to the admitted agent: those eve offers it, by its task,
- * its repository, and its kind (`offeredLukeMcpTool`), each in the words it
- * is shown them with (`describe`); those eve offers
+ * its repository, its kind, and its starter's Memory (`offeredLukeMcpTool`),
+ * each in the words it is shown them with (`describe`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
  * carry out a call for an agent that no longer stands.
  */
@@ -330,8 +331,17 @@ function listLukeTools(
 ): Effect.Effect<RpcAnswer, never, LukeMcpServices> {
   const { userId, conversationId } = admitted.target;
   return readCodingAgentOfConversation(userId, conversationId).pipe(
-    Effect.flatMap((found) => {
-      const offered = offeredLukeMcpTool(Option.getOrElse(found, () => NO_AGENT_OFFERED));
+    Effect.flatMap((found) =>
+      Effect.map(
+        Option.isSome(found) ? memoryOnFor(found.value.userId) : Effect.succeed(false),
+        (memoryOn) =>
+          offeredLukeMcpTool(
+            Option.getOrElse(found, () => NO_AGENT_OFFERED),
+            memoryOn,
+          ),
+      ),
+    ),
+    Effect.flatMap((offered) => {
       const listed = [...LUKE_MCP_TOOLS].filter(([name]) => offered(name));
       return Effect.map(
         Effect.forEach(listed, ([name, tool]) =>
