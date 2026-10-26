@@ -1,24 +1,26 @@
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
-import { askHosted, HOSTED_DEADLINE, type HostedClient, hostedClient } from "./hosted-link.js";
 import {
-  MAC_AGENT_REQUEST_KIND,
-  type MacAgentAnswer,
-  type MacAgentLaunchSecrets,
-  type MacAgentLine,
-  type MacAgentRequest,
-  type MacSignedIn,
-} from "./mac-agent-wire.js";
+  DEVICE_AGENT_REQUEST_KIND,
+  type DeviceAgentAnswer,
+  type DeviceAgentLaunchSecrets,
+  type DeviceAgentLine,
+  type DeviceAgentRequest,
+  type DeviceArch,
+  type DevicePlatform,
+  type DeviceSignedIn,
+} from "./device-agent-wire.js";
+import { askHosted, HOSTED_DEADLINE, type HostedClient, hostedClient } from "./hosted-link.js";
 
 /**
- * mac-agent-client.ts -- a local agent's Mac as it asks the service (`contract/mac-agents.ts`): it registers and beats, holds a read for its lines and one for its requests, claims each by its id, and settles a line or answers a request.
+ * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, holds a read for its lines and one for its requests, claims each by its id, and settles a line or answers a request.
  *
  * Each is a procedure of the hosted contract over the one account call, so
  * the bearer is read fresh per attempt and a 401 is renewed and retried
  * once. No call fails: a held read the service did not answer is nothing,
  * which the caller asks again after a pause; a claim refused is
- * `MAC_AGENT_NOT_CLAIMED` (another claim took it, its caller withdrew it,
+ * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, its caller withdrew it,
  * or the account's experiment is off) and one unanswered nothing; a
  * register, a beat, a settle, or an answer not taken is false.
  */
@@ -27,34 +29,36 @@ import {
 const encodeBytes = Schema.encodeSync(Schema.Uint8ArrayFromBase64);
 
 /** What a claim the service refused answers. */
-export const MAC_AGENT_NOT_CLAIMED = { claimed: false } as const;
+export const DEVICE_AGENT_NOT_CLAIMED = { claimed: false } as const;
 
 /** A launch line claimed, with the secrets its claim handed over once, where it is one. */
-export interface MacAgentClaimedLine {
-  readonly line: MacAgentLine;
-  readonly secrets?: MacAgentLaunchSecrets | undefined;
+export interface DeviceAgentClaimedLine {
+  readonly line: DeviceAgentLine;
+  readonly secrets?: DeviceAgentLaunchSecrets | undefined;
 }
 
-/** What a Mac registers as: its name, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, and which harnesses it is signed in to. */
-export interface MacAgentDevice {
+/** What a Mac registers as: its name, its platform and architecture, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, and which harnesses it is signed in to. */
+export interface DeviceAgentDevice {
   readonly name: string;
+  readonly platform: DevicePlatform;
+  readonly arch: DeviceArch;
   readonly home: string;
   readonly claudeExecutable: string;
   readonly codexExecutable?: string | undefined;
-  readonly signedIn: MacSignedIn;
+  readonly signedIn: DeviceSignedIn;
 }
 
-export interface HostedMacAgentClientOptions {
+export interface HostedDeviceAgentClientOptions {
   /** What authorizes each call on the signed-in account, read fresh for every attempt. */
   credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
 }
 
-export class HostedMacAgentClient {
+export class HostedDeviceAgentClient {
   readonly #hosted: HostedClient;
 
-  constructor(options: HostedMacAgentClientOptions) {
+  constructor(options: HostedDeviceAgentClientOptions) {
     this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
       credential: options.credential,
@@ -64,7 +68,7 @@ export class HostedMacAgentClient {
   /** This Mac registered under its id; whether the service took it. */
   register(
     deviceId: string,
-    device: MacAgentDevice,
+    device: DeviceAgentDevice,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     const { codexExecutable, ...rest } = device;
     // Note that a Mac with no Codex checked names none, which the service reads as no Codex.
@@ -73,7 +77,7 @@ export class HostedMacAgentClient {
       ...rest,
       ...(codexExecutable === undefined ? undefined : { codexExecutable }),
     };
-    return askHosted(this.#hosted.macAgents.register, input).pipe(
+    return askHosted(this.#hosted.deviceAgents.register, input).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );
@@ -82,9 +86,9 @@ export class HostedMacAgentClient {
   /** That this Mac is here now, and which harnesses it is signed in to; whether the service took it. */
   beat(
     deviceId: string,
-    signedIn: MacSignedIn,
+    signedIn: DeviceSignedIn,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.macAgents.beat, { deviceId, signedIn }).pipe(
+    return askHosted(this.#hosted.deviceAgents.beat, { deviceId, signedIn }).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );
@@ -93,9 +97,9 @@ export class HostedMacAgentClient {
   /** The lines waiting for this Mac, held by the service until one does; nothing where it did not answer. */
   lines(
     deviceId: string,
-  ): Effect.Effect<readonly MacAgentLine[] | undefined, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.macAgents.lines, { deviceId }, HOSTED_DEADLINE.HELD).pipe(
-      Effect.map((answer): readonly MacAgentLine[] => answer.lines),
+  ): Effect.Effect<readonly DeviceAgentLine[] | undefined, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.deviceAgents.lines, { deviceId }, HOSTED_DEADLINE.HELD).pipe(
+      Effect.map((answer): readonly DeviceAgentLine[] => answer.lines),
       Effect.orElseSucceed(() => undefined),
     );
   }
@@ -105,14 +109,14 @@ export class HostedMacAgentClient {
     deviceId: string,
     id: string,
   ): Effect.Effect<
-    MacAgentClaimedLine | typeof MAC_AGENT_NOT_CLAIMED | undefined,
+    DeviceAgentClaimedLine | typeof DEVICE_AGENT_NOT_CLAIMED | undefined,
     never,
     HttpClient.HttpClient
   > {
-    return askHosted(this.#hosted.macAgents.claimLine, { deviceId, id }).pipe(
-      Effect.map((answer): MacAgentClaimedLine => answer),
+    return askHosted(this.#hosted.deviceAgents.claimLine, { deviceId, id }).pipe(
+      Effect.map((answer): DeviceAgentClaimedLine => answer),
       Effect.catch((failed) =>
-        Effect.succeed(failed._tag === "HostedRefused" ? MAC_AGENT_NOT_CLAIMED : undefined),
+        Effect.succeed(failed._tag === "HostedRefused" ? DEVICE_AGENT_NOT_CLAIMED : undefined),
       ),
     );
   }
@@ -123,7 +127,7 @@ export class HostedMacAgentClient {
     id: string,
     exitCode?: number,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.macAgents.settleLine, {
+    return askHosted(this.#hosted.deviceAgents.settleLine, {
       deviceId,
       id,
       ...(exitCode === undefined ? {} : { exitCode }),
@@ -136,9 +140,9 @@ export class HostedMacAgentClient {
   /** The requests waiting for this Mac, held by the service until one does; nothing where it did not answer. */
   requests(
     deviceId: string,
-  ): Effect.Effect<readonly MacAgentRequest[] | undefined, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.macAgents.requests, { deviceId }, HOSTED_DEADLINE.HELD).pipe(
-      Effect.map((answer): readonly MacAgentRequest[] => answer.requests),
+  ): Effect.Effect<readonly DeviceAgentRequest[] | undefined, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.deviceAgents.requests, { deviceId }, HOSTED_DEADLINE.HELD).pipe(
+      Effect.map((answer): readonly DeviceAgentRequest[] => answer.requests),
       Effect.orElseSucceed(() => undefined),
     );
   }
@@ -148,14 +152,14 @@ export class HostedMacAgentClient {
     deviceId: string,
     id: string,
   ): Effect.Effect<
-    MacAgentRequest | typeof MAC_AGENT_NOT_CLAIMED | undefined,
+    DeviceAgentRequest | typeof DEVICE_AGENT_NOT_CLAIMED | undefined,
     never,
     HttpClient.HttpClient
   > {
-    return askHosted(this.#hosted.macAgents.claimRequest, { deviceId, id }).pipe(
-      Effect.map((answer): MacAgentRequest => answer.request),
+    return askHosted(this.#hosted.deviceAgents.claimRequest, { deviceId, id }).pipe(
+      Effect.map((answer): DeviceAgentRequest => answer.request),
       Effect.catch((failed) =>
-        Effect.succeed(failed._tag === "HostedRefused" ? MAC_AGENT_NOT_CLAIMED : undefined),
+        Effect.succeed(failed._tag === "HostedRefused" ? DEVICE_AGENT_NOT_CLAIMED : undefined),
       ),
     );
   }
@@ -164,13 +168,13 @@ export class HostedMacAgentClient {
   answerRequest(
     deviceId: string,
     id: string,
-    answer: MacAgentAnswer,
+    answer: DeviceAgentAnswer,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     const wire =
-      answer.kind === MAC_AGENT_REQUEST_KIND.READ_FILE
+      answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
         ? { ...answer, bytes: answer.bytes === null ? null : encodeBytes(answer.bytes) }
         : answer;
-    return askHosted(this.#hosted.macAgents.answerRequest, { deviceId, id, answer: wire }).pipe(
+    return askHosted(this.#hosted.deviceAgents.answerRequest, { deviceId, id, answer: wire }).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );

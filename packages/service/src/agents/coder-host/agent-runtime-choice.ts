@@ -47,7 +47,7 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { accountExperimentOn } from "@luke/database/models/account-store";
-import { type MacDevice, macDevicesSeenSince } from "@luke/database/models/mac-device-store";
+import { type Device, devicesSeenSince } from "@luke/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
   listAccountProviderKeyRows,
@@ -259,7 +259,7 @@ export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
 const MAC_PROVIDERS: readonly ModelProvider[] = [MODEL_PROVIDER.ANTHROPIC, MODEL_PROVIDER.OPENAI];
 
 /** Whether the Mac runs Codex agents: it registered a Codex it checked against the pin. */
-const runsCodex = (device: MacDevice): boolean => device.codexExecutable !== null;
+const runsCodex = (device: Device): boolean => device.codexExecutable !== null;
 
 /**
  * Whether the Mac runs a Start of the provider's models: Claude Code's
@@ -267,7 +267,7 @@ const runsCodex = (device: MacDevice): boolean => device.codexExecutable !== nul
  * harness in Luke (`paid`), or the Mac is signed in to it itself.
  */
 function macRunsProvider(
-  device: MacDevice,
+  device: Device,
   provider: ModelProvider,
   paid: readonly ModelProvider[],
 ): boolean {
@@ -313,7 +313,7 @@ const paidMacProviders = Effect.fnUntraced(function* (
 const freshMacs = (userId: string) =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
-    return yield* macDevicesSeenSince(userId, new Date(now - Duration.toMillis(THIS_MAC.FRESH)));
+    return yield* devicesSeenSince(userId, new Date(now - Duration.toMillis(THIS_MAC.FRESH)));
   });
 
 /**

@@ -6,7 +6,7 @@ import {
   codingAgentBriefOf,
   codingAgentLineOf,
 } from "@luke/database/models/coding-agent-store";
-import type { MacDevice } from "@luke/database/models/mac-device-store";
+import type { Device } from "@luke/database/models/device-store";
 import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import {
@@ -261,12 +261,12 @@ function archivedByOf(
 }
 
 /** No Mac read: a summary built from it names no Mac. */
-const NO_MACS: ReadonlyMap<string, MacDevice> = new Map();
+const NO_MACS: ReadonlyMap<string, Device> = new Map();
 
 /** The Mac a local agent runs on as its summary names it, by its name and when it last beat; none for an agent in a sandbox or whose Mac was not read. */
 function macOf(
   agent: Pick<CodingAgentLine, "machine" | "deviceId">,
-  macs: ReadonlyMap<string, MacDevice>,
+  macs: ReadonlyMap<string, Device>,
 ): CodingAgentSummary["mac"] {
   if (agent.machine !== CODING_AGENT_MACHINE.MAC || agent.deviceId == null) return undefined;
   const device = macs.get(agent.deviceId);
@@ -275,7 +275,7 @@ function macOf(
     : { name: device.name, seenAt: device.lastSeenAt.getTime() };
 }
 
-/** The Macs a read's local agents are pinned to, by id, which `macDevicesNamed` reads. */
+/** The Macs a read's local agents are pinned to, by id, which `devicesNamed` reads. */
 export function summaryDevices(
   agents: readonly Pick<CodingAgentLine, "machine" | "deviceId">[],
 ): readonly string[] {
@@ -291,7 +291,7 @@ function summaryFields(
   now: number,
   names: ReadonlyMap<string, string>,
   continuedBy: readonly CodingAgentStartedFromIt[],
-  macs: ReadonlyMap<string, MacDevice>,
+  macs: ReadonlyMap<string, Device>,
 ): Omit<CodingAgentSummary, "id" | "planId"> {
   const starter = names.get(agent.userId);
   const mac = macOf(agent, macs);
@@ -360,7 +360,7 @@ export function codingAgentSummary(
   now: number,
   names: ReadonlyMap<string, string>,
   continuedBy: readonly CodingAgentStartedFromIt[] = [],
-  macs: ReadonlyMap<string, MacDevice> = NO_MACS,
+  macs: ReadonlyMap<string, Device> = NO_MACS,
 ): CodingAgentSummary {
   const line = "brief" in agent ? agent : codingAgentLineOf(agent);
   return {
@@ -426,7 +426,7 @@ export function codingAgentPage(
   now: number,
   names: ReadonlyMap<string, string>,
   continuedBy: readonly CodingAgentStartedFromIt[] = [],
-  macs: ReadonlyMap<string, MacDevice> = NO_MACS,
+  macs: ReadonlyMap<string, Device> = NO_MACS,
 ): CodingAgentPage {
   return {
     id: agent.id,

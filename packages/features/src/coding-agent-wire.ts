@@ -164,7 +164,7 @@ export const CODING_AGENT_PAYER = {
   CHATGPT_SUBSCRIPTION: "chatgpt_plan",
   API_KEY: "api_key",
   LUKE: "luke",
-  /** A local agent's own Mac, by its harness's login there (`macSignedInSchema`), with the account's saved credential as the fallback. */
+  /** A local agent's own Mac, by its harness's login there (`deviceSignedInSchema`), with the account's saved credential as the fallback. */
   MAC_SIGN_IN: "mac_sign_in",
 } as const;
 
@@ -208,7 +208,7 @@ export type CodingAgentKind = (typeof CODING_AGENT_KIND)[keyof typeof CODING_AGE
 /**
  * Where an agent's runner and checkout live: a Vercel Sandbox, as every
  * agent from before the column does, or the starter's own Mac, which takes
- * its work as rows it follows (`@luke/features/mac-agent-wire`).
+ * its work as rows it follows (`@luke/features/device-agent-wire`).
  */
 export const CODING_AGENT_MACHINE = {
   VERCEL: "vercel",

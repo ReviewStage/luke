@@ -6,8 +6,8 @@ import {
   createCodingAgent,
   recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
-import { queueMacAgentLine } from "@luke/database/models/mac-agent-store";
-import { beatMacDevice, registerMacDevice } from "@luke/database/models/mac-device-store";
+import { queueDeviceAgentLine } from "@luke/database/models/device-agent-store";
+import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
@@ -16,13 +16,13 @@ import {
 } from "@luke/database/models/provider-key-store";
 import { user } from "@luke/database/schemas/auth";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
-import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "@luke/database/testing";
+import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
 import {
   CODING_AGENT_MACHINE,
   CODING_AGENT_PAYER,
   type CodingAgentPayer,
 } from "@luke/features/coding-agent-wire";
-import { MAC_AGENT_LINE_KIND } from "@luke/features/mac-agent-wire";
+import { DEVICE_AGENT_LINE_KIND } from "@luke/features/device-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -136,10 +136,10 @@ const agentOn = (
     const task = yield* startTask(userId, { name: "Teammate invitations" });
     const deviceId = randomUUID();
     if (onMac !== undefined) {
-      yield* registerMacDevice(userId, {
+      yield* registerDevice(userId, {
         id: deviceId,
         name: "Studio",
-        ...MAC_DEVICE_LAYOUT,
+        ...DEVICE_LAYOUT,
         signedIn: { codex: onMac.codex },
       });
     }
@@ -285,9 +285,9 @@ it.layer(getTestDB())("the runner's token route", (it) => {
         yield* signIn(agent.userId, 60);
         /** A launch line of the agent's, as its Mac's machine queues one, on the Mac's sign-in or not. */
         const launched = (ownLogin: boolean) =>
-          queueMacAgentLine(agent.userId, {
+          queueDeviceAgentLine(agent.userId, {
             agentId: agent.agentId,
-            kind: MAC_AGENT_LINE_KIND.LAUNCH,
+            kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
             payload: {
               checkoutPath: "/Users/fixture/.luke/agents/a/repository",
               repository: null,
@@ -304,7 +304,7 @@ it.layer(getTestDB())("the runner's token route", (it) => {
 
         // The Mac signed out and the agent relaunched on the plan; the Mac signing in again mid-turn cuts that launch's turn no short.
         yield* launched(false);
-        yield* beatMacDevice(agent.userId, agent.deviceId, { codex: true });
+        yield* beatDevice(agent.userId, agent.deviceId, { codex: true });
         assert.deepEqual((yield* ask(agent.bearer)).body, { accessToken: "access-0" });
       }),
   );

@@ -35,9 +35,9 @@ import {
 import { type AgentsProcedureSeams, agentsProcedures } from "../agents/agents-procedures.js";
 import { instancePublishedCache } from "../agents/coder-host/published.js";
 import {
-  type MacAgentsProcedureSeams,
-  macAgentsProcedures,
-} from "../agents/mac-agents-procedures.js";
+  type DeviceAgentsProcedureSeams,
+  deviceAgentsProcedures,
+} from "../agents/device-agents-procedures.js";
 import {
   type MacCommandsProcedureSeams,
   macCommandsProcedures,
@@ -119,7 +119,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   InstalledSkillsProcedureSeams &
   IntegrationsProcedureSeams &
   LiveProcedureSeams &
-  MacAgentsProcedureSeams &
+  DeviceAgentsProcedureSeams &
   MacCommandsProcedureSeams &
   MessagesProcedureSeams &
   ModelsProcedureSeams &
@@ -156,7 +156,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     installedSkills: installedSkillsProcedures(seams),
     integrations: integrationsProcedures(seams),
     live: liveProcedures(seams),
-    macAgents: macAgentsProcedures(seams),
+    deviceAgents: deviceAgentsProcedures(seams),
     macCommands: macCommandsProcedures(seams),
     messages: messagesProcedures(seams),
     models: modelsProcedures(seams),

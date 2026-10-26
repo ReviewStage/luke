@@ -10,7 +10,7 @@ import {
   RUNNING_TURN_STATUSES,
 } from "@luke/database/models/coding-agent-store";
 import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
-import { macDevicesNamed } from "@luke/database/models/mac-device-store";
+import { devicesNamed } from "@luke/database/models/device-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import type { TaskStandingAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
@@ -167,7 +167,7 @@ export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const standing = yield* standingsOf([agent.conversationId]);
   const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
   const continuedBy = yield* continuedByOf(userId, [agent.id]);
-  const macs = yield* hostedStoreOrUnavailable(macDevicesNamed(summaryDevices([agent])));
+  const macs = yield* hostedStoreOrUnavailable(devicesNamed(summaryDevices([agent])));
   return codingAgentSummary(
     agent,
     standing(agent.conversationId),

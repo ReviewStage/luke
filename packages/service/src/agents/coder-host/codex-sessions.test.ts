@@ -16,7 +16,7 @@ import {
   recordCodingAgentNativeSession,
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
-import { beatMacDevice, registerMacDevice } from "@luke/database/models/mac-device-store";
+import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import {
   type KeyRing,
   parseKeyRing,
@@ -31,11 +31,14 @@ import {
 } from "@luke/database/models/provider-key-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
-import { macAgentLine } from "@luke/database/schemas/mac-agent";
+import { deviceAgentLine } from "@luke/database/schemas/device-agent";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "@luke/database/testing";
+import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
-import { macAgentLaunchSecretsSchema, macAgentLayout } from "@luke/features/mac-agent-wire";
+import {
+  deviceAgentLaunchSecretsSchema,
+  deviceAgentLayout,
+} from "@luke/features/device-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -59,8 +62,8 @@ import {
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
+import { claimedDeviceAgentLine } from "../device-agent.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
-import { claimedMacAgentLine } from "../mac-agent.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
@@ -268,10 +271,10 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         yield* signIn(userId, 60);
         const deviceId = randomUUID();
         const codexExecutable = "/Users/fixture/Library/Application Support/Luke/codex/bin/codex";
-        yield* registerMacDevice(userId, {
+        yield* registerDevice(userId, {
           id: deviceId,
           name: "Studio",
-          ...MAC_DEVICE_LAYOUT,
+          ...DEVICE_LAYOUT,
           codexExecutable,
         });
         const task = yield* startTask(userId, { name: "Teammate invitations" });
@@ -310,16 +313,18 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
             const db = yield* Database;
             const [row] = yield* db
               .select()
-              .from(macAgentLine)
-              .where(eq(macAgentLine.agentId, agent.id));
+              .from(deviceAgentLine)
+              .where(eq(deviceAgentLine.agentId, agent.id));
             assert.ok(row !== undefined);
             const claimed = Option.getOrThrow(
-              yield* claimedMacAgentLine(userId, deviceId, row.id).pipe(
+              yield* claimedDeviceAgentLine(userId, deviceId, row.id).pipe(
                 Effect.provide(Layer.succeed(HostedEnvironment, NO_KEYS)),
               ),
             );
             assert.ok("secrets" in claimed);
-            const secrets = Schema.decodeUnknownSync(macAgentLaunchSecretsSchema)(claimed.secrets);
+            const secrets = Schema.decodeUnknownSync(deviceAgentLaunchSecretsSchema)(
+              claimed.secrets,
+            );
             const [config] = secrets.stdin
               .trimEnd()
               .split("\n")
@@ -327,7 +332,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
             assert.ok(config !== undefined);
             return { stored: JSON.stringify(row), payload: row.payload, secrets, config };
           });
-        const folder = macAgentLayout(MAC_DEVICE_LAYOUT.home, "").folder;
+        const folder = deviceAgentLayout(DEVICE_LAYOUT.home, "").folder;
 
         const onPlan = yield* localAgent(CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION);
         const plan = yield* launched(onPlan);
@@ -344,7 +349,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         }
         assert.equal(JSON.stringify(plan.secrets).includes("access-0"), false);
 
-        yield* beatMacDevice(userId, deviceId, { codex: true });
+        yield* beatDevice(userId, deviceId, { codex: true });
         const own = yield* launched(yield* localAgent(CODING_AGENT_PAYER.MAC_SIGN_IN));
         assert.deepEqual(Object.keys(own.secrets.env), [RUNNER_ENV.BEARER]);
         assert.equal(own.config.ownLogin, true);

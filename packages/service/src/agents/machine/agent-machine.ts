@@ -19,7 +19,7 @@
  * until a second machine needs it.
  *
  * Two machines answer it: Vercel Sandbox (`vercel-machine.ts`) and the
- * starter's Mac (`mac-machine.ts`), which the agent's row picks between
+ * starter's Mac (`device-machine.ts`), which the agent's row picks between
  * (`coding_agent.machine`, `agent-machines.ts`).
  *
  * A place is named by Luke's own runtime session id, which the conversation
@@ -36,7 +36,7 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { CodingAgentMachine } from "@luke/features/coding-agent-wire";
-import type { MacSignedIn } from "@luke/features/mac-agent-wire";
+import type { DeviceSignedIn } from "@luke/features/device-agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect } from "effect";
 import type { AgentSandboxImage } from "../agent-sandbox-image.js";
 import type { KeyRefusal, PlanRefusal } from "../brain-host/eve-sessions.js";
@@ -88,7 +88,7 @@ export interface MachineLayout {
   /** A local agent's own folder on its Mac; none in a sandbox, whose checkout is all it writes. */
   readonly writableRoots: readonly string[];
   /** The Mac's own logins, as it last said; none for a sandbox. */
-  readonly signedIn: MacSignedIn;
+  readonly signedIn: DeviceSignedIn;
 }
 
 /** What a later call reads of a launch: its first event number, and what it was started with, as a digest (`runner-sessions.ts`'s `launchFingerprint`). */

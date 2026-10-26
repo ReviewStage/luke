@@ -26,7 +26,7 @@ import {
 import { createdAt, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { automation } from "./automation.js";
-import { macDevice } from "./mac-device.js";
+import { device } from "./device.js";
 import { conversations } from "./storage.js";
 import { task } from "./task.js";
 
@@ -117,7 +117,7 @@ import { task } from "./task.js";
  * (`CODING_AGENT_MACHINE`): a Vercel Sandbox, as every row from before the
  * column reads, or the starter's own Mac, named by `device_id`, which a
  * local agent is pinned to and every line and request for it goes to
- * (`./mac-agent.ts`); null for an agent in a sandbox, and once its Mac's row
+ * (`./device-agent.ts`); null for an agent in a sandbox, and once its Mac's row
  * is gone, which leaves the agent with no Mac to run on.
  *
  * `idempotency_key` is the Start request's own key, unique per account, so a
@@ -310,7 +310,7 @@ export const codingAgent = pgTable(
       .notNull()
       .default(CODING_AGENT_MACHINE.VERCEL),
     /** The Mac a local agent is pinned to; null for one in a sandbox. */
-    deviceId: uuid("device_id").references(() => macDevice.id, { onDelete: "set null" }),
+    deviceId: uuid("device_id").references(() => device.id, { onDelete: "set null" }),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },

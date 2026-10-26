@@ -1,6 +1,6 @@
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import { MAC_AGENT_REQUEST_KIND, macAgentLayout } from "@luke/features/mac-agent-wire";
+import { DEVICE_AGENT_REQUEST_KIND, deviceAgentLayout } from "@luke/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
@@ -19,7 +19,7 @@ const NODE = NodeChildProcessSpawner.layer.pipe(
 const staged = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const root = yield* temporaryDirectoryScoped("luke-local-agent-");
-  const layout = macAgentLayout(`${root}/home`, AGENT);
+  const layout = deviceAgentLayout(`${root}/home`, AGENT);
   yield* fileSystem.makeDirectory(layout.checkoutPath, { recursive: true });
   yield* fileSystem.writeFileString(`${layout.checkoutPath}/notes.txt`, "the agent's own");
   yield* fileSystem.writeFileString(`${root}/secret.txt`, "the developer's own");
@@ -27,11 +27,11 @@ const staged = Effect.gen(function* () {
   return { root, layout };
 });
 
-const read = (layout: ReturnType<typeof macAgentLayout>, path: string) =>
+const read = (layout: ReturnType<typeof deviceAgentLayout>, path: string) =>
   answeredLocalAgentRequest(
     layout,
     {
-      kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
+      kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
       args: { path, maxBytes: 1_024 },
     },
     SHELL,
@@ -43,7 +43,7 @@ describe("answeredLocalAgentRequest", () => {
       const { layout } = yield* staged;
       const answer = yield* read(layout, `${layout.checkoutPath}/notes.txt`);
       assert.deepStrictEqual(answer, {
-        kind: MAC_AGENT_REQUEST_KIND.READ_FILE,
+        kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
         bytes: new TextEncoder().encode("the agent's own"),
       });
     }).pipe(Effect.scoped, Effect.provide(NODE)),
@@ -64,7 +64,7 @@ describe("answeredLocalAgentRequest", () => {
     Effect.gen(function* () {
       const { root, layout } = yield* staged;
       const answer = yield* read(layout, path(root));
-      assert.deepStrictEqual(answer, { kind: MAC_AGENT_REQUEST_KIND.READ_FILE, bytes: null });
+      assert.deepStrictEqual(answer, { kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE, bytes: null });
     }).pipe(Effect.scoped, Effect.provide(NODE)),
   );
 
@@ -78,12 +78,12 @@ describe("answeredLocalAgentRequest", () => {
       const answer = yield* answeredLocalAgentRequest(
         layout,
         {
-          kind: MAC_AGENT_REQUEST_KIND.RUN_COMMAND,
+          kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
           args: { command: "touch ran" },
         },
         SHELL,
       );
-      assert.strictEqual(answer.kind, MAC_AGENT_REQUEST_KIND.RUN_COMMAND);
+      assert.strictEqual(answer.kind, DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND);
       assert.isFalse(yield* fileSystem.exists(`${root}/elsewhere/ran`));
     }).pipe(Effect.scoped, Effect.provide(NODE)),
   );

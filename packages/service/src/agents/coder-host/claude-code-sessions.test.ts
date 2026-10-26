@@ -22,8 +22,8 @@ import {
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
 import { readNativeRewind, rewindConversation } from "@luke/database/models/conversation-rewind";
+import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { installSkill } from "@luke/database/models/installed-skill-store";
-import { beatMacDevice, registerMacDevice } from "@luke/database/models/mac-device-store";
 import { unreadOperatorNotices, writeOperatorNotice } from "@luke/database/models/operator-notices";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
@@ -37,7 +37,7 @@ import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "@luke/database/testing";
+import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
 import {
   CODING_AGENT_FAILURE,
   CODING_AGENT_KIND,
@@ -752,10 +752,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
         );
         const deviceId = randomUUID();
-        yield* registerMacDevice(userId, {
+        yield* registerDevice(userId, {
           id: deviceId,
           name: "Studio",
-          ...MAC_DEVICE_LAYOUT,
+          ...DEVICE_LAYOUT,
           signedIn: { claudeCode: true },
         });
         const task = yield* startTask(userId, { name: "Teammate invitations" });
@@ -786,7 +786,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         assert.equal(command.env[RUNNER_ENV.API_KEY], undefined);
 
-        yield* beatMacDevice(userId, deviceId, { claudeCode: false });
+        yield* beatDevice(userId, deviceId, { claudeCode: false });
         const signedOut = runnerSandboxApi();
         const without = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(services(signedOut)),

@@ -1,21 +1,21 @@
 import type {
-  MacAgentLineKind,
-  MacAgentObject,
-  MacAgentRequestKind,
-} from "@luke/features/mac-agent-wire";
+  DeviceAgentLineKind,
+  DeviceAgentObject,
+  DeviceAgentRequestKind,
+} from "@luke/features/device-agent-wire";
 import { sql } from "drizzle-orm";
 import { bigint, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { bytea, createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
-import { macDevice } from "./mac-device.js";
+import { device } from "./device.js";
 
 /**
- * mac-agent.ts -- the work the service queues for a local agent's Mac: lines to its runner, and its tools' requests.
+ * device-agent.ts -- the work the service queues for a local agent's Mac: lines to its runner, and its tools' requests.
  *
  * Each row names the account, the agent, and the Mac the agent is pinned
  * to, and is claimed once, by that Mac, under that account
- * (`../models/mac-agent-store.ts`). A row stands only while its work does:
+ * (`../models/device-agent-store.ts`). A row stands only while its work does:
  * the expiry withdraws what no Mac claimed in time, and a request's caller
  * withdraws it once it read the answer. Every row goes with its agent, its
  * Mac, and its account alike.
@@ -36,8 +36,8 @@ import { macDevice } from "./mac-device.js";
  * as the Mac settled its launch line; null until then and for every other
  * kind.
  */
-export const macAgentLine = pgTable(
-  "mac_agent_line",
+export const deviceAgentLine = pgTable(
+  "device_agent_line",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     agentId: uuid("agent_id")
@@ -48,12 +48,12 @@ export const macAgentLine = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     deviceId: uuid("device_id")
       .notNull()
-      .references(() => macDevice.id, { onDelete: "cascade" }),
+      .references(() => device.id, { onDelete: "cascade" }),
     /** The line's place in the order every line was queued in. */
     seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity().notNull(),
-    kind: text("kind").$type<MacAgentLineKind>().notNull(),
+    kind: text("kind").$type<DeviceAgentLineKind>().notNull(),
     /** What the line says, which its kind's reader holds to a shape. */
-    payload: jsonb("payload").$type<MacAgentObject>().notNull(),
+    payload: jsonb("payload").$type<DeviceAgentObject>().notNull(),
     /** A launch line's secrets as the service sealed them; null for every other kind and once claimed. */
     sealedSecrets: text("sealed_secrets"),
     createdAt: createdAt(),
@@ -66,11 +66,11 @@ export const macAgentLine = pgTable(
   },
   (table) => [
     // A Mac reads its unclaimed lines.
-    index("mac_agent_line_device_waiting")
+    index("device_agent_line_device_waiting")
       .on(table.deviceId, table.seq)
       .where(sql`${table.claimedAt} is null`),
     // The expiry withdraws an account's lines by age.
-    index("mac_agent_line_user_created").on(table.userId, table.createdAt),
+    index("device_agent_line_user_created").on(table.userId, table.createdAt),
   ],
 );
 
@@ -80,11 +80,11 @@ export const macAgentLine = pgTable(
  * answered, what it answered. A read's answer is `bytes`, null where the Mac
  * read no such file; a command's is `exit_code`, `stdout`, and `stderr`,
  * each output held to the same bound as a read
- * (`MAC_AGENT_BOUNDS.MAX_ANSWER_BYTES`). `settled_at` is what says it was
+ * (`DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES`). `settled_at` is what says it was
  * answered.
  */
-export const macAgentRequest = pgTable(
-  "mac_agent_request",
+export const deviceAgentRequest = pgTable(
+  "device_agent_request",
   {
     id: uuid("id").primaryKey(),
     agentId: uuid("agent_id")
@@ -95,10 +95,10 @@ export const macAgentRequest = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     deviceId: uuid("device_id")
       .notNull()
-      .references(() => macDevice.id, { onDelete: "cascade" }),
-    kind: text("kind").$type<MacAgentRequestKind>().notNull(),
+      .references(() => device.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<DeviceAgentRequestKind>().notNull(),
     /** What the request names, such as the path to read, which its kind's reader holds to a shape. */
-    args: jsonb("args").$type<MacAgentObject>().notNull(),
+    args: jsonb("args").$type<DeviceAgentObject>().notNull(),
     /** A read's file; null before the answer, where the Mac read no such file, and for a command. */
     bytes: bytea("bytes"),
     /** A command's exit code; null before the answer and for a read. */
@@ -115,10 +115,10 @@ export const macAgentRequest = pgTable(
   },
   (table) => [
     // A Mac reads its unclaimed requests.
-    index("mac_agent_request_device_waiting")
+    index("device_agent_request_device_waiting")
       .on(table.deviceId, table.createdAt)
       .where(sql`${table.claimedAt} is null`),
     // The expiry withdraws an account's requests by age.
-    index("mac_agent_request_user_created").on(table.userId, table.createdAt),
+    index("device_agent_request_user_created").on(table.userId, table.createdAt),
   ],
 );
