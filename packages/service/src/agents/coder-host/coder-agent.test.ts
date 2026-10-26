@@ -260,7 +260,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
     "`delegate`",
     "task_wait",
   ];
-  const CLAUDE_CODES = ["TodoWrite", "WebSearch", "WebFetch", "Skill tool", "Agent tool"];
+  const CLAUDE_CODES = ["TaskCreate", "WebSearch", "WebFetch", "Skill tool", "Agent tool"];
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const repository of ["Acme/Relay", null]) {
       for (const memberToken of [false, true]) {
@@ -354,7 +354,7 @@ test("a Codex agent is told of Codex's own tools and never of Luke's it is not o
     "`delegate`",
     "task_wait",
   ];
-  const CLAUDE_CODES = ["TodoWrite", "WebSearch", "WebFetch", "Skill tool", "Agent tool", "Bash"];
+  const CLAUDE_CODES = ["TaskCreate", "WebSearch", "WebFetch", "Skill tool", "Agent tool", "Bash"];
   const CODEXES = [
     "`apply_patch`",
     "`update_plan`",

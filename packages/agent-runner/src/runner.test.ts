@@ -716,6 +716,17 @@ it.effect(
       assert.deepEqual(options.settingSources, ["project"]);
       assert.equal(options.permissionMode, "bypassPermissions");
       assert.equal(options.includePartialMessages, true);
+      // The tools the prompt names that CLI 2.1.304 leaves out of its default set, and the built-ins beside Luke's own.
+      for (const tool of ["Glob", "Grep", "TaskCreate", "TaskUpdate"]) {
+        assert.ok(options.allowedTools?.includes(tool), tool);
+      }
+      for (const tool of ["ListAgents", "CronCreate", "PushNotification", "AskUserQuestion"]) {
+        assert.ok(options.disallowedTools?.includes(tool), tool);
+      }
+      const worker = options.agents?.worker;
+      for (const tool of ["Edit", "Write", "mcp__luke"]) {
+        assert.ok(worker?.disallowedTools?.includes(tool), tool);
+      }
       const mcp = options.mcpServers?.luke;
       assert.equal(mcp?.type, "sdk");
       assert.ok(!JSON.stringify(options).includes(BEARER));

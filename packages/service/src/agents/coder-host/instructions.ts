@@ -1,4 +1,4 @@
-import { INSTALLED_SKILLS } from "@luke/agent-runner/protocol";
+import { CLAUDE_CODE_WORKER, INSTALLED_SKILLS } from "@luke/agent-runner/protocol";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { type CodingAgent, codingAgentBriefOf } from "@luke/database/models/coding-agent-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
@@ -162,6 +162,8 @@ interface ToolWords {
   readonly sandbox: string;
   /** How a server is kept running for a screenshot. */
   readonly serve: string;
+  /** What becomes of what the agent started, once its turn ends. */
+  readonly started: string;
   /** The tool a file or a picture is read with, and the one a folder is looked through with. */
   readonly readFile: string;
   readonly glob: string;
@@ -203,6 +205,18 @@ function browserWords(shell: string): string {
 `;
 }
 
+/** What eve and Codex tell an agent of what it started: their runners end it with the turn. */
+const STOPS_AT_TURN_END = "Everything you start stops when your turn ends.";
+
+/**
+ * How a Claude Code agent waits on its checks. Note that ScheduleWakeup's own
+ * description speaks of a /loop, which a Luke agent runs none of, so the
+ * words say what each field it requires takes here: the prompt the wakeup
+ * delivers, which wakes the agent's next turn (`runner.ts`'s `wakeupsOf`).
+ */
+const SCHEDULE_WAKEUP_WORDS =
+  "wait with ScheduleWakeup for about as long as the checks usually take, though its description speaks of a /loop you are not in: its `prompt` is what to do once it fires, such as `Read the checks on pull request #<number>`, its `noop` is false, and its `reason` is one short sentence";
+
 /**
  * Each harness's words. eve's are Luke's own tools. Claude Code owns the
  * shell, the files, the web, skills, to-dos, waiting, and its subagents
@@ -223,6 +237,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     sandbox: `Every \`bash\` command starts in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in, in a fresh shell; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from it, and an absolute path is taken as written.`,
     serve:
       "Start the app with `bash`, which keeps a server running in the background while your turn lasts",
+    started: STOPS_AT_TURN_END,
     readFile: "`read_file`",
     glob: "`glob`",
     searchWeb: `Search the public web with \`${CODER_TOOL.WEB_SEARCH}\` and read a page it found with \`${CODER_TOOL.READ_WEB_PAGE}\``,
@@ -238,27 +253,30 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     checkout: `Your own tools start there: every Bash command runs in the checkout, and Read, Edit, Write, Glob, and Grep resolve a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION} The checkout holds the repository's whole history.`,
     sandbox: `Your own tools start in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in: every Bash command runs there, and Read, Write, Glob, and Grep resolve a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION}`,
     serve:
-      "Start the app with Bash in the background (`run_in_background`), which keeps a server running while your turn lasts",
+      "Start the app with Bash in the background (`run_in_background`), which keeps a server running until you stop it",
+    started:
+      "Stop every background task you started, a server or a Monitor among them, with TaskStop before you end your turn, because one left running holds your session open.",
     readFile: "Read",
     glob: "Glob",
     searchWeb: "Search the public web with WebSearch and read a page with WebFetch",
     skills: `A word like \`/name\` in the developer's message names one of your skills: the repository's, or one your developer installed into Luke, which Claude Code lists as \`${INSTALLED_SKILLS.PLUGIN}:<name>\`. Load it with Claude Code's Skill tool before anything else, and follow what it answers. Where it knows no such skill, read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on the default branch, and follow that instead.`,
     browser: browserWords("Bash"),
     todos:
-      "For work of more than a couple of steps, keep your to-dos with TodoWrite, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",
+      "For work of more than a couple of steps, keep your to-dos with TaskCreate, one task per item, and TaskUpdate: create them all before you start, keep exactly one in progress, and mark each completed as it finishes.",
     checks: {
-      readable: `After you push and open or update a pull request, wait on its checks rather than watching them: ${CHECKS_WAIT.NEVER_WATCH}, and wait with ScheduleWakeup for about as long as the checks usually take. ${CHECKS_WAIT.TOLD_AS_TURN} Then, or once the wakeup comes without that message, read them once with \`gh pr checks <number>\`, and where some are still running, wait again. When a check fails, read why with \`gh run view <run-id> --log-failed\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
-      rest: `After you push and open or update a pull request, wait on its checks rather than watching them: ${CHECKS_WAIT.NEVER_WAIT}, and wait with ScheduleWakeup for about as long as the checks usually take. ${CHECKS_WAIT.TOLD_AS_TURN} Then, or once the wakeup comes without that message, read its checks on the commit you pushed once with \`gh api repos/{owner}/{repo}/commits/<sha>/check-runs\` and \`gh api repos/{owner}/{repo}/commits/<sha>/status\`, and where some are still running, wait again. When a check fails, read why with \`gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs\`, its job listed by \`gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>"\` and \`gh api repos/{owner}/{repo}/actions/runs/<run-id>/jobs\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
+      readable: `After you push and open or update a pull request, wait on its checks rather than watching them: ${CHECKS_WAIT.NEVER_WATCH}, and ${SCHEDULE_WAKEUP_WORDS}. ${CHECKS_WAIT.TOLD_AS_TURN} Then, or once the wakeup comes without that message, read them once with \`gh pr checks <number>\`, and where some are still running, wait again. When a check fails, read why with \`gh run view <run-id> --log-failed\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
+      rest: `After you push and open or update a pull request, wait on its checks rather than watching them: ${CHECKS_WAIT.NEVER_WAIT}, and ${SCHEDULE_WAKEUP_WORDS}. ${CHECKS_WAIT.TOLD_AS_TURN} Then, or once the wakeup comes without that message, read its checks on the commit you pushed once with \`gh api repos/{owner}/{repo}/commits/<sha>/check-runs\` and \`gh api repos/{owner}/{repo}/commits/<sha>/status\`, and where some are still running, wait again. When a check fails, read why with \`gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs\`, its job listed by \`gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>"\` and \`gh api repos/{owner}/{repo}/actions/runs/<run-id>/jobs\`, or the failing check's own details, fix the cause, push, and wait again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
     },
-    worker: () =>
-      "Claude Code's Agent tool hands a scoped job to a worker, which Claude Code calls a subagent, runs on a Claude model, and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself. A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
+    worker: ({ readOnly }) =>
+      `Claude Code's Agent tool hands a scoped job to a worker, which Claude Code calls a subagent: give it \`subagent_type: "${CLAUDE_CODE_WORKER}"\`, Luke's worker, which runs on your model and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${readOnly} A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.`,
     integrations: NATIVE_INTEGRATION_WORDS,
   },
   [CODER_HARNESS.CODEX]: {
-    checkout: `Your own tools start there: every shell command runs in the checkout, and \`apply_patch\` resolves a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION} The checkout holds the repository's whole history.`,
-    sandbox: `Your own tools start in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in: every shell command runs there, and \`apply_patch\` resolves a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION}`,
+    checkout: `Your own tools start there: every shell command runs in the checkout, and \`apply_patch\` resolves a relative path from it. The checkout holds the repository's whole history.`,
+    sandbox: `Your own tools start in \`${CODER.CHECKOUT_PATH}\`, an empty folder that is yours to work in: every shell command runs there, and \`apply_patch\` resolves a relative path from it.`,
     serve:
       "Start the app from your shell in the background (with `&` and its output sent to a file), which keeps a server running while your turn lasts",
+    started: STOPS_AT_TURN_END,
     readFile: "your shell (`cat`, or `sed -n` for a range), or Codex's `view_image` for a picture",
     glob: "your shell (`rg --files`, or `ls`)",
     searchWeb: "Search the public web with Codex's own web search",
@@ -270,8 +288,8 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
       readable: `After you push and open or update a pull request, watch its checks with \`gh pr checks <number> --watch --fail-fast\` from your shell, which waits on the command for as long as it runs, rather than checking every few seconds or polling in a loop of your own. When a check fails, read why with \`gh run view <run-id> --log-failed\`, or the failing check's own details, fix the cause, push, and watch again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
       rest: `After you push and open or update a pull request, read its checks on the commit you pushed with \`gh api repos/{owner}/{repo}/commits/<sha>/check-runs\` and \`gh api repos/{owner}/{repo}/commits/<sha>/status\`, waiting between reads with \`sleep <seconds>\` in your shell for about as long as the checks usually take rather than checking every few seconds. When a check fails, read why with \`gh api repos/{owner}/{repo}/actions/jobs/<job-id>/logs\`, its job listed by \`gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>"\` and \`gh api repos/{owner}/{repo}/actions/runs/<run-id>/jobs\`, or the failing check's own details, fix the cause, push, and read again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. ${CHECKS_STOP}`,
     },
-    worker: () =>
-      "Codex's own subagents are your workers: each takes a scoped job, runs on a GPT model, and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself. A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
+    worker: ({ readOnly }) =>
+      `Codex's own subagents are your workers: each takes a scoped job, runs on a GPT model, and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${readOnly} A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.`,
     integrations: NATIVE_INTEGRATION_WORDS,
   },
 };
@@ -532,9 +550,9 @@ function checkoutReachWords(machine: CoderMachine): string {
 /** How the agent looks at what it built before it publishes: on the sandbox's Playwright, display, and browser, or on the developer's Mac with whatever the repository runs. */
 function seeingWords(tools: ToolWords, machine: CoderMachine): string {
   if (machine.local) {
-    return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with whatever the repository or the Mac has for it, such as Playwright from the shell, look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words; a WebM of a flow plays there too, kept under 4 MB. Everything you start stops when your turn ends.`;
+    return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with whatever the repository or the Mac has for it, such as Playwright from the shell, look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words; a WebM of a flow plays there too, kept under 4 MB. ${tools.started}`;
   }
-  return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with Playwright, whose \`playwright\` command, package, and Chromium are installed: \`playwright screenshot --wait-for-timeout=2000 http://localhost:3000 /tmp/home.png\`, or, for a page that needs a click, a viewport, or a dark color scheme, a short CommonJS script of your own that requires \`playwright\`, run with \`NODE_PATH="$(npm root -g)" node shot.cjs\` so it finds the installed package rather than one of the checkout's. An Electron app runs here too, on the X display \`xvfb-run -a\` gives it: fetch its binary first, which an install on Linux often skips, with \`node node_modules/electron/install.js\` from the app's own folder, then start it with \`--disable-gpu\`, without which its window never draws, or drive it from such a script with Playwright's \`_electron.launch\`, choosing its window by URL, since the first one open may be a hidden one. Look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words. Where what you built is a flow rather than a screen, such as a form to fill in and submit, record it as a video: in your browser, \`record\` before the flow and \`stop_recording\` with a caption after it, which keeps the video in your transcript; or, in such a script, its \`browser.newContext({ recordVideo: { dir: "/tmp/video", size: { width: 1280, height: 800 } } })\` writes a WebM of each page once the context closes, which \`${CODER_TOOL.SHOW_IMAGE}\` plays in your transcript; keep it to the steps that matter, under 4 MB. Everything you start stops when your turn ends.`;
+  return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with Playwright, whose \`playwright\` command, package, and Chromium are installed: \`playwright screenshot --wait-for-timeout=2000 http://localhost:3000 /tmp/home.png\`, or, for a page that needs a click, a viewport, or a dark color scheme, a short CommonJS script of your own that requires \`playwright\`, run with \`NODE_PATH="$(npm root -g)" node shot.cjs\` so it finds the installed package rather than one of the checkout's. An Electron app runs here too, on the X display \`xvfb-run -a\` gives it: fetch its binary first, which an install on Linux often skips, with \`node node_modules/electron/install.js\` from the app's own folder, then start it with \`--disable-gpu\`, without which its window never draws, or drive it from such a script with Playwright's \`_electron.launch\`, choosing its window by URL, since the first one open may be a hidden one. Look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words. Where what you built is a flow rather than a screen, such as a form to fill in and submit, record it as a video: in your browser, \`record\` before the flow and \`stop_recording\` with a caption after it, which keeps the video in your transcript; or, in such a script, its \`browser.newContext({ recordVideo: { dir: "/tmp/video", size: { width: 1280, height: 800 } } })\` writes a WebM of each page once the context closes, which \`${CODER_TOOL.SHOW_IMAGE}\` plays in your transcript; keep it to the steps that matter, under 4 MB. ${tools.started}`;
 }
 
 /** Where an agent with a repository works: its checkout, its branch, its commits, its pull request, and its checks. */

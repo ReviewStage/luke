@@ -67,6 +67,32 @@ export const INSTALLED_SKILLS = {
   PLUGIN: "luke",
 } as const;
 
+/**
+ * Claude Code's built-in tools a launch adds to and takes from the CLI's
+ * default set, by the names the CLI gives them, which Luke's prompt names in
+ * turn. Note that CLI 2.1.304's default set holds neither Glob, Grep, nor a
+ * to-do tool (TaskCreate and its siblings replaced TodoWrite), so each is
+ * listed to be offered; and that a tool beside one of Luke's own, or one no
+ * headless agent can use, is denied, so the agent has one way to do each
+ * thing. SendMessage stays, because the Agent tool continues a subagent
+ * with it.
+ */
+export const CLAUDE_CODE_TOOLS = {
+  ADDED: ["Glob", "Grep", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"],
+  DENIED: [
+    "ListAgents",
+    "CronCreate",
+    "CronDelete",
+    "CronList",
+    "RemoteTrigger",
+    "PushNotification",
+    "AskUserQuestion",
+  ],
+} as const;
+
+/** The read-only subagent a Claude Code launch defines, by the `subagent_type` the Agent tool takes. */
+export const CLAUDE_CODE_WORKER = "worker";
+
 /** The harness a launch runs, spelled as `conversations.runtime` spells it. */
 export const RUNNER_HARNESS = {
   CLAUDE_CODE: "claude_code",
