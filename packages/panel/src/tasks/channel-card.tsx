@@ -57,23 +57,23 @@ const THREAD_NOUN: CountNoun = { one: "thread", many: "threads" };
 /** What parts the kind from the size in a card's sub, and the maker from the day at its foot. */
 const PART = " · ";
 
-/** A workspace's channels, open and archived, as the service answered them; none where it refused, or the read did not land. */
+/** The channels a read answered; none where it refused, or did not land. */
+function listed<C>(
+  answer: { readonly channels: readonly C[] } | { readonly failure: unknown } | undefined,
+): readonly C[] {
+  return answer === undefined || "failure" in answer ? [] : answer.channels;
+}
+
+/** A workspace's channels, open and archived, as the service answered them, each list standing whether or not the other was read. */
 function workspaceChannels(
   workspaceId: string,
-): Effect.Effect<readonly (Channel | ArchivedChannel)[] | undefined> {
+): Effect.Effect<readonly (Channel | ArchivedChannel)[]> {
   const landed = <A,>(asked: Promise<A>) => asked.catch(() => undefined);
   return Effect.promise(() =>
     Promise.all([
       landed(askAct(ACT_KIND.CHANNELS_LIST, { workspaceId })),
       landed(askAct(ACT_KIND.CHANNELS_ARCHIVED, { workspaceId })),
-    ]).then(([open, archived]) =>
-      open === undefined || "failure" in open
-        ? undefined
-        : [
-            ...open.channels,
-            ...(archived === undefined || "failure" in archived ? [] : archived.channels),
-          ],
-    ),
+    ]).then(([open, archived]) => [...listed(open), ...listed(archived)]),
   );
 }
 
@@ -194,7 +194,7 @@ function ReadChannelChipCard({
   const read = useAtomValue(workspaceChannelsAtom(workspaceId));
   if (AsyncResult.isInitial(read)) return reading;
   const channel = AsyncResult.isSuccess(read)
-    ? read.value?.find((each) => each.id === channelId)
+    ? read.value.find((each) => each.id === channelId)
     : undefined;
   if (channel === undefined) return fallback;
   return <ChannelCard channel={channel} workspaceId={workspaceId} />;

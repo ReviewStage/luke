@@ -8,6 +8,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
+import { CHANNEL_CALL_FAILURE } from "@luke/features/channel-view";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
@@ -329,6 +330,9 @@ const SWEPT: InboxItem = {
 /** Whether the host refuses the inbox streams, as it does while the service cannot be reached. */
 let inboxRefused = false;
 
+/** Whether the read of the workspace's open channels is refused, as a service that cannot answer it does. */
+let openChannelsRefused = false;
+
 /** The host's side of the inbox streams: the plan's items and the agent on no task's, each followed as a chip's glyph or card reads them. */
 const inboxes = followedInboxes((scope) => {
   if (inboxRefused) return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
@@ -360,6 +364,7 @@ afterEach(() => {
   automationReads.length = 0;
   agentPageReads.length = 0;
   inboxRefused = false;
+  openChannelsRefused = false;
   vi.useRealTimers();
 });
 
@@ -410,7 +415,11 @@ async function drawn(
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) =>
       Promise.resolve(workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS),
     [ACT_KIND.CHANNELS_LIST]: () =>
-      Promise.resolve({ channels: [BILLING, LAUNCH_WEEK, GENERAL_CHANNEL] }),
+      Promise.resolve(
+        openChannelsRefused
+          ? { failure: CHANNEL_CALL_FAILURE.UNANSWERED }
+          : { channels: [BILLING, LAUNCH_WEEK, GENERAL_CHANNEL] },
+      ),
     [ACT_KIND.CHANNELS_ARCHIVED]: () => Promise.resolve({ channels: [PRICING_PAGE] }),
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       automationReads.push(payload.workspaceId);
@@ -837,4 +846,12 @@ test("an archived project's card says when it was archived in its size's place",
   const card = await channelCard(PRICING_PAGE);
 
   assert.equal(card.sub, "Project · archived Oct 26");
+});
+
+test("an archived channel's chip hangs its card where the read of the open channels was refused", async () => {
+  openChannelsRefused = true;
+
+  const card = await channelCard(PRICING_PAGE);
+
+  assert.deepEqual([card.card, card.sub], ["data-channel-card", "Project · archived Oct 26"]);
 });
