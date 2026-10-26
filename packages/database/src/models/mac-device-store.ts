@@ -44,7 +44,7 @@ const DeviceStandingSchema = Schema.Struct({
 
 export type MacDeviceStanding = typeof DeviceStandingSchema.Type;
 
-export type MacDeviceLayout = typeof DeviceLayoutSchema.Type;
+type MacDeviceLayout = typeof DeviceLayoutSchema.Type;
 
 /** What a Mac registers with beside its id and name: its layout, its Codex where it checked one, and which harnesses it is signed in to where it says. */
 export type MacDeviceRegistration = Omit<MacDeviceLayout, "codexExecutable"> & {
