@@ -1,6 +1,6 @@
 import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
 import { agentSandboxDoors } from "@luke/service/agents/luke-mcp/sandbox-door";
-import { vercelMachineLayer } from "@luke/service/agents/machine/vercel-machine";
+import { agentMachinesLayer } from "@luke/service/agents/machine/agent-machines";
 import { deploymentOidcToken } from "@luke/service/agents/vercel-sandbox-api";
 import { AfterResponse } from "@luke/service/http/after-response";
 import { sentryLayer } from "@luke/service/observability/sentry";
@@ -58,14 +58,14 @@ export function webServicesWith(
 }
 
 /**
- * The doors to a native agent's sandbox, for Luke's MCP server's tools that
- * read a file the agent names or run `show_code` in its checkout: their calls run on this runtime, under the
- * function's own OIDC token, as every other call of Luke's to Vercel
- * Sandbox is made.
+ * The doors to a native agent's machine, for Luke's MCP server's tools that
+ * read a file the agent names or run `show_code` in its checkout: their calls run on this runtime, a
+ * sandbox's under the function's own OIDC token, as every other call of
+ * Luke's to Vercel Sandbox is made, and a local agent's as requests its Mac answers.
  */
 export const webAgentSandboxDoor = agentSandboxDoors(
   runWeb,
-  vercelMachineLayer({ readToken: deploymentOidcToken, run: runWeb }),
+  agentMachinesLayer({ readToken: deploymentOidcToken, run: runWeb }),
 );
 
 /**

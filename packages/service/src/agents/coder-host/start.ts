@@ -26,7 +26,7 @@ import type {
   StoredAutomationOrigin,
   StoredStartedFrom,
 } from "@luke/database/schemas/coding-agent";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { type ConversationRuntime, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   firstMessageText,
   type NoteFiles,
@@ -43,6 +43,7 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
   type CodingAgentKind,
+  type CodingAgentMachine,
   type CodingAgentStartFrom,
   type CodingAgentStartRequest,
   type CodingAgentSummary,
@@ -76,6 +77,7 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  localAgentRefused,
 } from "../../http/http-effect.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import {
@@ -101,7 +103,9 @@ import {
   type AccountKeyRows,
   AgentCredentialMissing,
   accountFastOffer,
+  agentMachineChoice,
   agentRuntimeChoice,
+  LocalAgentRefused,
   markedUnconnected,
 } from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
@@ -408,6 +412,8 @@ export type StartAsk = StartPlace & {
   readonly branch?: string | undefined;
   /** Whether a call is opened into the agent as it lands; it runs where any Start would (`startRuntimeOf`). */
   readonly call?: boolean | undefined;
+  /** Where the agent runs: its starter's Mac where This Mac is asked for (`agentMachineChoice`); a sandbox where none is named. */
+  readonly machine?: CodingAgentMachine | undefined;
   /** The repository the task's own start reached in the same request, which the agent's Start takes rather than asking GitHub again; none for every other Start. */
   readonly reached?: StartReach | undefined;
   /** The task the task's own start made in the same request, as it was made, which the agent's Start lands on rather than reading it again; none for every other Start. */
@@ -962,6 +968,23 @@ function startRuntimeOf(userId: string, model: string, keys: AccountKeyRows) {
 }
 
 /**
+ * Where a new agent runs (`agentMachineChoice`): a sandbox, or its starter's
+ * Mac where This Mac is asked for and offered; refused by name where it is
+ * not, and nothing is written.
+ */
+function startMachineOf(
+  userId: string,
+  asked: CodingAgentMachine | undefined,
+  runtime: ConversationRuntime,
+) {
+  return Effect.catch(agentMachineChoice(userId, asked, runtime), (failure) =>
+    failure instanceof LocalAgentRefused
+      ? Effect.fail(localAgentRefused(failure.reason))
+      : hostedStoreOrUnavailable(Effect.fail(failure)),
+  );
+}
+
+/**
  * The first message of a native agent's Start, written as the line awaiting
  * its turn under a fresh key, as a steer's is (`steer.ts`), and its line id,
  * which the runner is handed and names back as it takes the line. Its
@@ -1105,6 +1128,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   // The runtime and the payer are decided as the agent is made, by the starter's account and model, and never change.
   const runtime = yield* startRuntimeOf(userId, choice.model, keys);
+  const placed = yield* startMachineOf(userId, ask.machine, runtime.runtime);
   const started = yield* hostedStoreOrUnavailable(
     createCodingAgent(userId, {
       ...brief,
@@ -1119,6 +1143,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       repository: landing.repository,
       runtime: runtime.runtime,
       payer: runtime.payer,
+      machine: placed.machine,
+      deviceId: placed.deviceId,
       githubAccess: reached?.access,
       startBranch: branch,
       disabledServers: ask.disabledServers ?? from?.disabledServers,
@@ -1287,6 +1313,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     note: note === "" ? undefined : note,
     blank: request.blank,
     call: request.call,
+    machine: request.machine,
     summaryModel,
     reached,
     landed,

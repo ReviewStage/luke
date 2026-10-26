@@ -15,7 +15,7 @@ import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { macAgentLine } from "../../schemas/mac-agent.js";
-import { getTestDB, startTask } from "../../testing/index.js";
+import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "../../testing/index.js";
 import { createCodingAgent } from "../coding-agent-store.js";
 import {
   answerMacAgentRequest,
@@ -59,7 +59,7 @@ const openAccount = (onMac = true) =>
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     const deviceId = randomUUID();
-    yield* registerMacDevice(userId, { id: deviceId, name: "Studio" });
+    yield* registerMacDevice(userId, { id: deviceId, name: "Studio", ...MAC_DEVICE_LAYOUT });
     const task = yield* startTask(userId, { name: "Invitations" });
     const started = yield* createCodingAgent(userId, {
       taskId: task.id,

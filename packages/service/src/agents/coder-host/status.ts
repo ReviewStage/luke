@@ -18,6 +18,7 @@ import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_KIND,
+  CODING_AGENT_MACHINE,
   CONTEXT_WINDOW,
   type CodingAgentArchivedBy,
   type CodingAgentFailure,
@@ -277,6 +278,8 @@ function summaryFields(
     title: agent.title,
     // Note that only an operator says its kind, so a coder's summary is as it was.
     ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
+    // Likewise only a local agent says where it runs, so a sandboxed agent's summary is as it was.
+    ...(agent.machine === CODING_AGENT_MACHINE.MAC ? { machine: agent.machine } : undefined),
     createdAt: agent.createdAt.getTime(),
     status: codingAgentStatusOf(standing.turn, {
       createdAt: agent.createdAt,

@@ -5,8 +5,9 @@
  * through which `post_thread`, `edit_plan`, `show_image`, and
  * `show_page` read a file the agent names by its path. A native harness runs
  * in a sandbox eve never opened, so the same door is made here, over the
- * agent's machine (`../machine/agent-machine.ts`): the place its session
- * runs in, and the one file asked for, read as the agent's own user, never
+ * agent's machine (`../machine/agent-machine.ts`, the one its row names, a
+ * sandbox or its starter's Mac): the place its session runs in, and the
+ * one file asked for, read as the agent's own user, never
  * as root, so a path the model was talked into naming (the runner's
  * environment, a private home) reads as no file. Nothing is resumed: the
  * agent calling the tool runs in that place, so a place not up has nothing
@@ -36,9 +37,9 @@ import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 /** The most of one file a door reads: past every bound a tool holds a file to, a page's HTML and a kept picture among them. */
 export const SANDBOX_DOOR_MAX_BYTES = 8 * 1024 * 1024;
 
-/** How the edge runs the door's effects, on its own runtime. */
-export type SandboxDoorRunner = <A, E>(
-  effect: Effect.Effect<A, E, HttpClient.HttpClient>,
+/** How the edge runs the door's effects, on its own runtime, which provides what the machine's layer needs. */
+export type SandboxDoorRunner<R = HttpClient.HttpClient> = <A, E>(
+  effect: Effect.Effect<A, E, R>,
 ) => Promise<A>;
 
 /** The doors to the admitted agent's sandbox: one to read a file through, and one to run a command in. */
@@ -63,9 +64,9 @@ function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
  * conversation that records no session has no sandbox to find, and its
  * doors fail, which each tool answers as a sandbox it could not reach.
  */
-export function agentSandboxDoors(
-  run: SandboxDoorRunner,
-  machine: Layer.Layer<AgentMachine, never, HttpClient.HttpClient>,
+export function agentSandboxDoors<R>(
+  run: SandboxDoorRunner<R>,
+  machine: Layer.Layer<AgentMachine, never, R>,
 ): (admitted: AdmittedConversation) => AgentSandboxDoors {
   /** One call of the agent's machine, run on the edge's runner. */
   const ask = <A, E>(call: (machine: AgentMachineService) => Effect.Effect<A, E>) =>

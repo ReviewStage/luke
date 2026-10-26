@@ -93,12 +93,15 @@ function skillFileOf(skill: AgentSkill): Uint8Array {
   return encoder.encode(`---\n${frontmatter}\n---\n\n${body}\n`);
 }
 
-/** The files the skills are uploaded as, under `UPLOAD`: the plugin's manifest and each skill's folder; none where there are no skills, so nothing is installed. */
-export function nativeSkillFiles(skills: readonly AgentSkill[]): readonly SandboxFile[] {
+/** The files the skills are uploaded as, under the machine's upload folder (`UPLOAD` in a sandbox): the plugin's manifest and each skill's folder; none where there are no skills, so nothing is installed. */
+export function nativeSkillFiles(
+  skills: readonly AgentSkill[],
+  upload: string,
+): readonly SandboxFile[] {
   if (skills.length === 0) return [];
-  const root = `${NATIVE_SKILLS_PATH.UPLOAD}/${INSTALLED_SKILLS.SKILLS}`;
+  const root = `${upload}/${INSTALLED_SKILLS.SKILLS}`;
   const manifest: SandboxFile = {
-    path: `${NATIVE_SKILLS_PATH.UPLOAD}/${INSTALLED_SKILLS.MANIFEST}`,
+    path: `${upload}/${INSTALLED_SKILLS.MANIFEST}`,
     contents: encoder.encode(`${JSON.stringify(MANIFEST, null, 2)}\n`),
     mode: FILE_MODE,
   };

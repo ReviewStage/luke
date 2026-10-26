@@ -25,7 +25,11 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_MACHINE,
+  CODING_AGENT_PAYER,
+  type CodingAgentPayer,
+} from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import {
@@ -93,13 +97,15 @@ export const reachedAgentById = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * Whether the account may message the agent, open or use a shell in its
  * sandbox, or start an agent from it: any member who reaches it, but only
- * its starter for one that runs on the starter's own GitHub token.
+ * its starter for one that runs on the starter's own GitHub token, or on
+ * the starter's own Mac, whose machine is theirs alone to drive.
  */
 export function controlsAgent(
   userId: string,
-  agent: Pick<CodingAgent, "userId" | "githubAccess">,
+  agent: Pick<CodingAgent, "userId" | "githubAccess" | "machine">,
 ): boolean {
-  return agent.githubAccess !== GITHUB_ACCESS.TOKEN || agent.userId === userId;
+  if (agent.userId === userId) return true;
+  return agent.githubAccess !== GITHUB_ACCESS.TOKEN && agent.machine !== CODING_AGENT_MACHINE.MAC;
 }
 
 /** The name of the member who alone controls the agent, as a refusal says it: their name now, or who they were where their account is gone. */

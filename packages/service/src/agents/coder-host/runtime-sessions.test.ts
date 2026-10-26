@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   type CodingAgent,
   createCodingAgent,
   readCodingAgentByKey,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
+import { registerMacDevice } from "@luke/database/models/mac-device-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
@@ -24,15 +26,21 @@ import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { messages } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, MAC_DEVICE_LAYOUT, openWorkspace } from "@luke/database/testing";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
-import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_MACHINE,
+  CODING_AGENT_PAYER,
+  type CodingAgentPayer,
+  LOCAL_AGENT_REFUSAL,
+} from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
@@ -42,7 +50,12 @@ import { TestClock } from "effect/testing";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
-import { credentialMissing, HOSTED_REFUSAL, type HostedRefusal } from "../../http/http-effect.js";
+import {
+  credentialMissing,
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  localAgentRefused,
+} from "../../http/http-effect.js";
 import { type ModelChoiceRefused, modelCatalogOf } from "../../providers/model-catalog.js";
 import {
   connectWorkspaceGitHub,
@@ -1230,6 +1243,91 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               each.name,
             );
             assert.deepEqual([heard(eve), heard(claudeCode)], [[], ["open"]], each.name);
+          }
+        }),
+    );
+
+    it.effect(
+      "a Start on This Mac runs only for an account with the experiment on and a Mac of its that beat lately, pinned to that Mac on Claude Code; Codex, the experiment off, or no Mac there is refused by name and leaves no agent",
+      () =>
+        Effect.gen(function* () {
+          const cases = [
+            {
+              name: "on, a Mac there, Claude",
+              on: true,
+              mac: true,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: undefined,
+            },
+            {
+              name: "the experiment off",
+              on: false,
+              mac: true,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: LOCAL_AGENT_REFUSAL.OFF,
+            },
+            {
+              name: "no Mac there",
+              on: true,
+              mac: false,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: LOCAL_AGENT_REFUSAL.MAC_AWAY,
+            },
+            {
+              name: "a GPT model on Codex",
+              on: true,
+              mac: true,
+              chatGpt: "signed_in",
+              model: "openai/gpt-5.5",
+              refused: LOCAL_AGENT_REFUSAL.CODEX,
+            },
+          ] as const;
+          for (const each of cases) {
+            const { owner, workspaceId } = yield* openStarter(true, each.chatGpt);
+            if (each.on) {
+              yield* writeAccountPreferences(owner, {
+                experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
+              });
+            }
+            const deviceId = randomUUID();
+            if (each.mac) {
+              yield* registerMacDevice(owner, {
+                id: deviceId,
+                name: "Studio",
+                ...MAC_DEVICE_LAYOUT,
+              });
+            }
+            const { eve, native } = runtimes();
+            const ask = { ...startIn(workspaceId, each.model), machine: CODING_AGENT_MACHINE.MAC };
+            const started = yield* Effect.result(
+              startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+                Effect.provide(
+                  Layer.mergeAll(
+                    githubReaching(INSTALLATIONS).layer,
+                    CATALOG,
+                    environment(),
+                    native,
+                  ),
+                ),
+              ),
+            );
+            const made = yield* readCodingAgentByKey(owner, ask.idempotencyKey);
+
+            if (each.refused !== undefined) {
+              assert.ok(Result.isFailure(started), each.name);
+              assert.deepEqual(started.failure, localAgentRefused(each.refused), each.name);
+              assert.ok(Option.isNone(made), each.name);
+              continue;
+            }
+            assert.ok(Result.isSuccess(started), each.name);
+            assert.deepEqual(
+              Option.map(made, (agent) => [agent.machine, agent.deviceId]),
+              Option.some([CODING_AGENT_MACHINE.MAC, deviceId]),
+              each.name,
+            );
           }
         }),
     );

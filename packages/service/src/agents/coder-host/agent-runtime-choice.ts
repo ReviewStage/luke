@@ -29,23 +29,42 @@
  * The choice is written on the agent as it is made and never changes: a
  * plan that later runs out or is disconnected pauses the agent, and never
  * moves it to another payer.
+ *
+ * Where the agent runs is chosen beside it (`agentMachineChoice`): a Vercel
+ * Sandbox, or, where the Start asks for This Mac, the starter's Mac, on the
+ * same runtime and payer a cloud agent would run on. This Mac is offered
+ * (`thisMacOffer`) only to an account with the `local-agents` experiment on
+ * and a Mac of its that beat within `THIS_MAC.FRESH`, and the agent is pinned
+ * to the Mac that beat last. A local agent runs Claude Code alone, so one on
+ * Codex, or on no harness at all, is refused by name.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import { accountExperimentOn } from "@luke/database/models/account-store";
+import { macDevicesSeenSince } from "@luke/database/models/mac-device-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
   listAccountProviderKeyRows,
   type ProviderKeyRow,
 } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
-import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_MACHINE,
+  CODING_AGENT_PAYER,
+  type CodingAgentMachine,
+  type CodingAgentPayer,
+  LOCAL_AGENT_REFUSAL,
+  type LocalAgentRefusal,
+  type ThisMacOffer,
+} from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
-import { Data, Effect, Option, type Redacted, Result } from "effect";
+import { EXPERIMENT } from "@luke/settings";
+import { Clock, Data, Duration, Effect, Option, type Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { type AccountFastOffer, providerModelOf } from "../../providers/model-catalog.js";
@@ -55,6 +74,27 @@ import { NativeAgentSessions } from "./runtime-sessions.js";
 export class AgentCredentialMissing extends Data.TaggedError("AgentCredentialMissing")<{
   readonly provider: ModelProvider;
 }> {}
+
+/** A Start on This Mac that cannot run there, and why. */
+export class LocalAgentRefused extends Data.TaggedError("LocalAgentRefused")<{
+  readonly reason: LocalAgentRefusal;
+}> {}
+
+export const THIS_MAC = {
+  /** How lately a Mac must have beaten for Start to offer it: one beat, and room for the next to arrive. */
+  FRESH: Duration.seconds(45),
+} as const;
+
+/** Where a new agent runs: its machine, and the Mac a local agent is pinned to. */
+export interface AgentMachineChoice {
+  readonly machine: CodingAgentMachine;
+  readonly deviceId: string | undefined;
+}
+
+const IN_A_SANDBOX: AgentMachineChoice = {
+  machine: CODING_AGENT_MACHINE.VERCEL,
+  deviceId: undefined,
+};
 
 /** What a new agent runs on, and who pays for it. The type keeps no payer readable for a row from before payers were recorded; a new agent always names one. */
 export interface AgentRuntimeChoice {
@@ -195,6 +235,54 @@ export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<AgentRuntimeChoice, StoreFailure | AgentCredentialMissing, DatabaseServices> {
   const provider = yield* providerOfModel(model);
   return yield* providerRuntimeChoice(userId, provider, yield* keyRowsOf(userId, rows));
+});
+
+/**
+ * The Mac the account may start a local agent on, as Start offers it: the
+ * one of its Macs that beat last, where it beat within `THIS_MAC.FRESH` and
+ * the account has the `local-agents` experiment on; none otherwise.
+ */
+export const thisMacOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+): Effect.fn.Return<Option.Option<ThisMacOffer>, StoreFailure, DatabaseServices> {
+  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return Option.none();
+  const now = yield* Clock.currentTimeMillis;
+  const seen = yield* macDevicesSeenSince(
+    userId,
+    new Date(now - Duration.toMillis(THIS_MAC.FRESH)),
+  );
+  return Option.map(Option.fromNullishOr(seen[0]), (device) => ({
+    deviceId: device.id,
+    name: device.name,
+  }));
+});
+
+/**
+ * Where a new agent of the account's runs on the runtime given, as its
+ * Start asks: a sandbox where it asks for none, or its starter's Mac that
+ * beat last, where This Mac is offered to it and the runtime is Claude
+ * Code's; refused by name otherwise, Codex among it.
+ */
+export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  asked: CodingAgentMachine | undefined,
+  runtime: ConversationRuntime,
+): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
+  if (asked !== CODING_AGENT_MACHINE.MAC) return IN_A_SANDBOX;
+  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) {
+    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.OFF });
+  }
+  if (runtime === CONVERSATION_RUNTIME.CODEX) {
+    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.CODEX });
+  }
+  if (runtime !== CONVERSATION_RUNTIME.CLAUDE_CODE) {
+    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });
+  }
+  const offer = yield* thisMacOffer(userId);
+  if (Option.isNone(offer)) {
+    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.MAC_AWAY });
+  }
+  return { machine: CODING_AGENT_MACHINE.MAC, deviceId: offer.value.deviceId };
 });
 
 /**

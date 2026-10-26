@@ -135,6 +135,18 @@ export const HOSTED_SERVICE_PATH = {
    * answer (`coding-agent-wire.ts`).
    */
   AGENTS: "/api/agents",
+  /** A local agent's Mac registered under the account, with its name, home folder, and bundled CLI (POST). `mac-agent-wire.ts` declares the bodies. */
+  MAC_AGENT_DEVICES: "/api/mac-agents/devices",
+  /** That a local agent's Mac is there now (POST), on a timer while it runs local agents. */
+  MAC_AGENT_PRESENCE: "/api/mac-agents/presence",
+  /** The lines waiting for a Mac's local agents, held open while none is (GET), and one claimed line settled (POST). */
+  MAC_AGENT_LINES: "/api/mac-agents/lines",
+  /** One waiting line, named by its id, claimed for the Mac, a launch line's secrets with it (POST). */
+  MAC_AGENT_LINE_CLAIM: "/api/mac-agents/lines/claim",
+  /** The requests of a Mac's local agents' tools, held open while none waits (GET), and one claimed request answered (POST). */
+  MAC_AGENT_REQUESTS: "/api/mac-agents/requests",
+  /** One waiting request, named by its id, claimed for the Mac (POST). */
+  MAC_AGENT_REQUEST_CLAIM: "/api/mac-agents/requests/claim",
   /**
    * The shell commands the account's agents asked to run on the developer's
    * Mac: the ones waiting, held open while none is, each claimed for the

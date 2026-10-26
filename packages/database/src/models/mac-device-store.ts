@@ -8,7 +8,7 @@
  */
 
 import { and, desc, eq, gte } from "drizzle-orm";
-import { DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, type Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { macDevice } from "../schemas/mac-device.js";
@@ -26,17 +26,27 @@ const MacDeviceSchema = Schema.Struct({
 
 export type MacDevice = typeof MacDeviceSchema.Type;
 
+/** Where a Mac keeps what its local agents need: its home folder and the CLI it bundles. */
+const DeviceLayoutSchema = Schema.Struct({ home: Schema.String, claudeExecutable: Schema.String });
+
+export type MacDeviceLayout = typeof DeviceLayoutSchema.Type;
+
 const upsertDevice = SqlSchema.findAll({
-  Request: Schema.Struct({ ...DeviceKeySchema.fields, name: Schema.String, now: Schema.Date }),
+  Request: Schema.Struct({
+    ...DeviceKeySchema.fields,
+    ...DeviceLayoutSchema.fields,
+    name: Schema.String,
+    now: Schema.Date,
+  }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, id, name, now }) =>
+  execute: ({ userId, id, name, home, claudeExecutable, now }) =>
     Database.use((db) =>
       db
         .insert(macDevice)
-        .values({ id, userId, name, lastSeenAt: now })
+        .values({ id, userId, name, home, claudeExecutable, lastSeenAt: now })
         .onConflictDoUpdate({
           target: macDevice.id,
-          set: { name, lastSeenAt: now },
+          set: { name, home, claudeExecutable, lastSeenAt: now },
           // Moved only where the account registering it is the one holding it.
           setWhere: eq(macDevice.userId, userId),
         })
@@ -70,21 +80,38 @@ const findSeen = SqlSchema.findAll({
     ),
 });
 
+const findLayout = SqlSchema.findOneOption({
+  Request: DeviceKeySchema,
+  Result: DeviceLayoutSchema,
+  execute: ({ userId, id }) =>
+    Database.use((db) =>
+      db
+        .select({ home: macDevice.home, claudeExecutable: macDevice.claudeExecutable })
+        .from(macDevice)
+        .where(and(eq(macDevice.id, id), eq(macDevice.userId, userId))),
+    ),
+});
+
 /**
- * Registers the Mac under the account, or renames and beats it where the
- * account holds it already; false where another account holds the id, and
- * nothing was written.
+ * Registers the Mac under the account, or renames, relocates, and beats it
+ * where the account holds it already; false where another account holds the
+ * id, and nothing was written.
  */
 export function registerMacDevice(
   userId: string,
-  device: { readonly id: string; readonly name: string },
+  device: { readonly id: string; readonly name: string } & MacDeviceLayout,
 ): MacDeviceEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(
-      upsertDevice({ userId, id: device.id, name: device.name, now }),
-      (rows) => rows.length > 0,
-    ),
+    Effect.map(upsertDevice({ userId, ...device, now }), (rows) => rows.length > 0),
   );
+}
+
+/** The account's Mac's home folder and bundled CLI, as it last registered them; nothing where the account holds no such Mac. */
+export function macDeviceLayout(
+  userId: string,
+  id: string,
+): MacDeviceEffect<Option.Option<MacDeviceLayout>> {
+  return findLayout({ userId, id });
 }
 
 /** Records that the account's Mac is there now; false where the account holds no such Mac. */

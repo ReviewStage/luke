@@ -31,7 +31,7 @@ import {
   macAgentAnswerSchema,
   macAgentObjectSchema,
 } from "@luke/features/mac-agent-wire";
-import { and, asc, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -39,6 +39,7 @@ import { Database, type DatabaseServices, type StoreFailure } from "../core/quer
 import { codingAgent } from "../schemas/coding-agent.js";
 import { macAgentLine, macAgentRequest } from "../schemas/mac-agent.js";
 import { macDevice } from "../schemas/mac-device.js";
+import { conversations } from "../schemas/storage.js";
 
 type MacAgentEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
@@ -109,8 +110,120 @@ function pinnedAgent(userId: string, agentId: string) {
   );
 }
 
+/** A local agent as its machine finds it: its starter, and the Mac it is pinned to, none once that Mac is gone. */
+const MacAgentPinSchema = Schema.Struct({
+  userId: Schema.String,
+  agentId: Schema.String,
+  deviceId: Schema.NullOr(Schema.String),
+});
+
+export type MacAgentPin = typeof MacAgentPinSchema.Type;
+
+/** An agent's newest launch line as its machine reads it: whether its Mac settled it, with what exit, and whether a stop line followed it. */
+const MacAgentLaunchSchema = Schema.Struct({
+  id: Schema.String,
+  payload: macAgentObjectSchema,
+  settled: Schema.Boolean,
+  exitCode: Schema.NullOr(Schema.Number),
+  stopped: Schema.Boolean,
+});
+
+export type MacAgentLaunch = typeof MacAgentLaunchSchema.Type;
+
+/** The columns a pin reads off an agent. */
+const PIN_COLUMNS = {
+  userId: codingAgent.userId,
+  agentId: codingAgent.id,
+  deviceId: codingAgent.deviceId,
+};
+
+const findPinOfSession = SqlSchema.findOneOption({
+  Request: Schema.Struct({ runtimeSessionId: Schema.String }),
+  Result: MacAgentPinSchema,
+  execute: ({ runtimeSessionId }) =>
+    Database.use((db) =>
+      db
+        .select(PIN_COLUMNS)
+        .from(conversations)
+        .innerJoin(codingAgent, eq(codingAgent.conversationId, conversations.id))
+        .where(
+          and(
+            eq(conversations.runtimeSessionId, runtimeSessionId),
+            eq(codingAgent.machine, CODING_AGENT_MACHINE.MAC),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
+const findPin = SqlSchema.findOneOption({
+  Request: Schema.Struct({ agentId: Schema.String }),
+  Result: MacAgentPinSchema,
+  execute: ({ agentId }) =>
+    Database.use((db) =>
+      db
+        .select(PIN_COLUMNS)
+        .from(codingAgent)
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.machine, CODING_AGENT_MACHINE.MAC))),
+    ),
+});
+
+/** A stop line queued for the agent after its launch line. */
+const stopLine = alias(macAgentLine, "stop_line");
+
+const findLatestLaunch = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: MacAgentLaunchSchema,
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: macAgentLine.id,
+          payload: macAgentLine.payload,
+          settled: sql<boolean>`${macAgentLine.settledAt} is not null`,
+          exitCode: macAgentLine.exitCode,
+          stopped: sql<boolean>`exists (${db
+            .select({ one: sql`1` })
+            .from(stopLine)
+            .where(
+              and(
+                eq(stopLine.agentId, macAgentLine.agentId),
+                eq(stopLine.kind, MAC_AGENT_LINE_KIND.STOP),
+                gt(stopLine.seq, macAgentLine.seq),
+              ),
+            )})`,
+        })
+        .from(macAgentLine)
+        .where(
+          and(
+            eq(macAgentLine.userId, userId),
+            eq(macAgentLine.agentId, agentId),
+            eq(macAgentLine.kind, MAC_AGENT_LINE_KIND.LAUNCH),
+          ),
+        )
+        .orderBy(desc(macAgentLine.seq))
+        .limit(1),
+    ),
+});
+
+const findLineStanding = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, id: Schema.String }),
+  Result: Schema.Struct({ settled: Schema.Boolean, exitCode: Schema.NullOr(Schema.Number) }),
+  execute: ({ userId, id }) =>
+    Database.use((db) =>
+      db
+        .select({
+          settled: sql<boolean>`${macAgentLine.settledAt} is not null`,
+          exitCode: macAgentLine.exitCode,
+        })
+        .from(macAgentLine)
+        .where(and(eq(macAgentLine.id, id), eq(macAgentLine.userId, userId))),
+    ),
+});
+
 const insertLine = SqlSchema.findAll({
   Request: Schema.Struct({
+    id: Schema.UndefinedOr(Schema.String),
     userId: Schema.String,
     agentId: Schema.String,
     kind: LineKindSchema,
@@ -119,13 +232,14 @@ const insertLine = SqlSchema.findAll({
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String, seq: Schema.Number }),
-  execute: ({ userId, agentId, kind, payload, sealedSecrets, now }) =>
+  execute: ({ id, userId, agentId, kind, payload, sealedSecrets, now }) =>
     Database.use((db) =>
       db
         .insert(macAgentLine)
         .select((qb) =>
           qb
             .select({
+              id: sql<string>`coalesce(${id ?? null}::uuid, gen_random_uuid())`.as("id"),
               agentId: sql<string>`${codingAgent.id}`.as("agent_id"),
               userId: sql<string>`${codingAgent.userId}`.as("user_id"),
               deviceId: sql<string>`${macDevice.id}`.as("device_id"),
@@ -424,6 +538,8 @@ const deleteExpiredRequests = SqlSchema.void({
 export function queueMacAgentLine(
   userId: string,
   line: {
+    /** The id its caller minted, so it can name the line before it is queued; a fresh one where none is named. */
+    readonly id?: string;
     readonly agentId: string;
     readonly kind: MacAgentLineKind;
     readonly payload: MacAgentObject;
@@ -433,6 +549,7 @@ export function queueMacAgentLine(
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(
       insertLine({
+        id: line.id,
         userId,
         agentId: line.agentId,
         kind: line.kind,
@@ -443,6 +560,39 @@ export function queueMacAgentLine(
       (rows) => Option.fromNullishOr(rows[0]),
     ),
   );
+}
+
+/**
+ * The local agent whose conversation runs in the session named, its starter
+ * and its Mac; nothing where no agent on a Mac runs in it. Read with no
+ * account in hand, because a machine is asked by the session alone; only
+ * for a session id the service minted, which answers nothing a member wrote.
+ */
+export function macAgentOfSession(
+  runtimeSessionId: string,
+): MacAgentEffect<Option.Option<MacAgentPin>> {
+  return findPinOfSession({ runtimeSessionId });
+}
+
+/** The local agent under the id, its starter and its Mac; nothing for an agent in a sandbox. Read with no account in hand, as above, only for an id a machine's place carries. */
+export function macAgentPin(agentId: string): MacAgentEffect<Option.Option<MacAgentPin>> {
+  return findPin({ agentId });
+}
+
+/** The account's agent's newest launch line, as its machine reads whether its runner runs; nothing where none stands. */
+export function latestMacAgentLaunch(
+  userId: string,
+  agentId: string,
+): MacAgentEffect<Option.Option<MacAgentLaunch>> {
+  return findLatestLaunch({ userId, agentId });
+}
+
+/** Whether the account's line was settled, and with what exit; nothing where no such line stands. */
+export function macAgentLineStanding(
+  userId: string,
+  id: string,
+): MacAgentEffect<Option.Option<{ readonly settled: boolean; readonly exitCode: number | null }>> {
+  return findLineStanding({ userId, id });
 }
 
 /** The lines waiting for the account's Mac, in the order they were queued, without their secrets. */

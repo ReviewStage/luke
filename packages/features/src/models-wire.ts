@@ -1,5 +1,9 @@
 import { Schema as EffectSchema } from "effect";
-import { CODING_AGENT_BOUNDS, contextWindowSchema } from "./coding-agent-wire.js";
+import {
+  CODING_AGENT_BOUNDS,
+  contextWindowSchema,
+  thisMacOfferSchema,
+} from "./coding-agent-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -102,9 +106,10 @@ export const catalogModelSchema = EffectSchema.Struct({
 
 export type CatalogModel = typeof catalogModelSchema.Type;
 
-/** The models the service offers (GET). */
+/** The models the service offers (GET), and the Mac a Start may run its agent on, where the account has the `local-agents` experiment on and a Mac of its beat lately; absent otherwise, and from a service older than it. */
 export const modelsAnswerSchema = EffectSchema.Struct({
   models: EffectSchema.Array(catalogModelSchema),
+  thisMac: EffectSchema.optionalKey(thisMacOfferSchema),
 });
 
 /** A model, an effort, and the context window where it is not the default long one, as a Start names them and the account's default stores them. */

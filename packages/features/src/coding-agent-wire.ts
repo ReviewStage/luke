@@ -214,6 +214,30 @@ export const CODING_AGENT_MACHINE = {
 
 export type CodingAgentMachine = (typeof CODING_AGENT_MACHINE)[keyof typeof CODING_AGENT_MACHINE];
 
+/** Why a Start on This Mac was refused, which the refusal names (`local-agent-refused`). */
+export const LOCAL_AGENT_REFUSAL = {
+  /** The account has the `local-agents` experiment off. */
+  OFF: "off",
+  /** No Mac of the account's beat lately, so none would take the agent. */
+  MAC_AWAY: "mac-away",
+  /** The model runs on Codex, which a Mac does not run yet: a local agent runs Claude Code alone. */
+  CODEX: "codex",
+  /** The model runs on no native harness here, so no runner would launch on the Mac. */
+  NO_HARNESS: "no-harness",
+} as const;
+
+export type LocalAgentRefusal = (typeof LOCAL_AGENT_REFUSAL)[keyof typeof LOCAL_AGENT_REFUSAL];
+
+export const localAgentRefusalSchema = EffectSchema.Literals(Object.values(LOCAL_AGENT_REFUSAL));
+
+/** The Mac an account may start a local agent on, as Start offers it: the one that beat last, by its id and name. */
+export const thisMacOfferSchema = EffectSchema.Struct({
+  deviceId: wireUuidSchema,
+  name: EffectSchema.String,
+});
+
+export type ThisMacOffer = typeof thisMacOfferSchema.Type;
+
 /**
  * The whole of what an operator answers a heartbeat that found nothing for
  * its member: a turn whose reply is exactly this, and nothing more, is a
@@ -485,6 +509,8 @@ export const codingAgentStartRequestFields = {
   note: EffectSchema.optionalKey(messageWordsSchema),
   blank: EffectSchema.optionalKey(EffectSchema.Boolean),
   call: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /** Where the agent runs: the starter's Mac, where Start offered This Mac (`thisMacOfferSchema`); a sandbox where absent. */
+  machine: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_MACHINE))),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
@@ -704,6 +730,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   title: EffectSchema.NullOr(EffectSchema.String),
   /** What kind of agent it is, said only of a member's operator, which the panel draws as Luke in a row of his own; absent for a coder, and from a service before operators. */
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
+  /** Where its runner runs, said only of a local agent on its starter's Mac; absent for one in a sandbox, and from a service older than it. */
+  machine: EffectSchema.optionalKey(EffectSchema.Literal(CODING_AGENT_MACHINE.MAC)),
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
