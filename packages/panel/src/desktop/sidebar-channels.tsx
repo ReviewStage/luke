@@ -238,7 +238,7 @@ export function SidebarChannels({
               ? "New project channel"
               : "New channel"
         }
-        describedBy={bodyId}
+        describedBy={renaming ? undefined : bodyId}
         busy={form.settling}
         refused={form.refusal !== undefined}
         initialFocus={field}
@@ -255,15 +255,15 @@ export function SidebarChannels({
           />
         }
       >
-        <Text id={bodyId} tone={TEXT_TONE.MUTED}>
-          {renaming
-            ? "Agents post to it under its new name from now on."
-            : "Everyone in the workspace sees it, and agents choose it by its purpose."}
-        </Text>
+        {renaming ? null : (
+          <Text id={bodyId} tone={TEXT_TONE.MUTED}>
+            Everyone in the workspace sees it.
+          </Text>
+        )}
         <Stack>
           <FormField
             label="Name"
-            description="Lowercase, with dashes, as agents write it after #."
+            description="Lowercase, with dashes."
             count={{ length: name.length, limit: CHANNEL_BOUNDS.MAX_NAME_CHARS }}
           >
             {(control) => (
