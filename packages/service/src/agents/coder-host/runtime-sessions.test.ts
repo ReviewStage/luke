@@ -11,6 +11,7 @@ import {
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
 import { registerDevice } from "@luke/database/models/device-store";
+import { removeHost } from "@luke/database/models/host-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
@@ -25,6 +26,7 @@ import {
 } from "@luke/database/models/recorded-session";
 import { createTask, updateTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { device } from "@luke/database/schemas/device";
 import { messages } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
@@ -35,6 +37,7 @@ import {
   type CodingAgentPayer,
   LOCAL_AGENT_REFUSAL,
 } from "@luke/features/coding-agent-wire";
+import { DEVICE_KIND } from "@luke/features/device-agent-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -1535,6 +1538,22 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const retried = yield* start(owner, ownedAsk);
           assert.ok(Result.isSuccess(retried));
           assert.equal(retried.success.agent.id, owned.success.agent.id);
+
+          // A continue from an agent on a host its starter removed is refused by name, not as away, and no agent is made.
+          const db = yield* Database;
+          yield* db.update(device).set({ kind: DEVICE_KIND.HOST }).where(eq(device.id, deviceId));
+          assert.equal(yield* removeHost(owner, deviceId), true);
+          const fromRemoved = {
+            taskId: task.id,
+            prompt: undefined,
+            idempotencyKey: randomUUID(),
+            choice: undefined,
+            from: { agentId: owned.success.agent.id },
+          };
+          const removed = yield* start(owner, fromRemoved);
+          assert.ok(Result.isFailure(removed));
+          assert.deepEqual(removed.failure, HOSTED_REFUSAL.DEVICE_REMOVED);
+          assert.ok(Option.isNone(yield* readCodingAgentByKey(owner, fromRemoved.idempotencyKey)));
         }),
     );
 

@@ -443,7 +443,7 @@ const START_RETIRED = "This agent has ended. Start a new one.";
 /** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
 const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
 
-/** What a message to an agent whose host its starter removed says, wherever it is drawn: only a new agent goes on from here. */
+/** What a message to an agent whose host its starter removed says, and a Start that would run there, wherever it is drawn: only the cloud or the host added again goes on from here. */
 const HOST_REMOVED = "This host was removed. Continue in the cloud or add it again.";
 
 /** What a message that did not reach the agent says of itself, which a surface without Retry follows with Try again. */
@@ -976,9 +976,9 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
       return "The agent could not be started.";
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
-    // Note that a Start names no device on main, so no Start is refused for a removed one; a continue's words read as a retired source's.
-    case CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED:
       return START_RETIRED;
+    case CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED:
+      return HOST_REMOVED;
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
