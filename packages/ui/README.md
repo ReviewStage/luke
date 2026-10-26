@@ -423,6 +423,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `pointer-cursor` | `cursor: pointer` or `cursor-pointer`, and any cursor set under a `data-luke-profile` selector or variant | A control reads `cursor-press` (`--luke-cursor-press`: the Mac's arrow on the desktop, the hand on the web), a real link `cursor-link` (`--luke-cursor-link`: the hand on both); a control that takes no press is `cursor-default`, a busy one `cursor-progress` |
 | `literal-spacing` | A `px` or `rem` literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in `packages/panel/src/styles/*.css`; `0`, `auto` and `1px` pass | Read the spacing role (`--luke-list-gap`, `--luke-tight-gap`, `--luke-control-gap`, `--luke-row-inset`, `--luke-section-gap`, `--luke-page-section-gap`) or, where no role fits, a `--luke-space-*` step |
 | `crumb-width` | A `min-width` above zero on a path's crumb (`.luke-breadcrumbs … li`), or a crumb that takes a share of the room in a sheet that never caps its crumbs at `max-width: max-content` | Give a crumb its floor as its flex basis, `flex: 1 0 <floor>`, capped at `max-width: max-content`, so a short crumb stands as wide as its words and the next chevron follows it |
+| `bar-corner` | A corner radius on a bar's own box (`.luke-pane-bar`, `.luke-toolbar`), in a stylesheet or as a `rounded-*` beside its class | Nothing: a bar standing at a sheet's top takes the sheet's radius from the one rule in `packages/panel/src/styles/shell.css` ("The sheet's top"). Where a bar there runs square, fix how that rule reads the sheet's top (a layout laying columns side by side joins its split list), never the page |
 
 No comment silences it, and it refuses one that asks to
 (`style-guard-disable`); the face's generated `face/face-motion.css` is the one
@@ -432,7 +433,7 @@ counts each file's places, and the guard fails on a file holding more than its
 count and on a count above what the file still holds. So the change that fixes a
 place lowers its count; `node tools/anti-slop/style-guard.ts --shrink` lowers
 every count to what the files hold and never raises one. A rule that started
-clean (`literal-duration`, `literal-picker-width`, `crumb-width`, `pointer-cursor`) takes no baseline at all, and a baseline is deleted
+clean (`literal-duration`, `literal-picker-width`, `crumb-width`, `pointer-cursor`, `bar-corner`) takes no baseline at all, and a baseline is deleted
 from nothing: once every count is gone, its file is `{}`.
 
 ### Folding in a narrow container

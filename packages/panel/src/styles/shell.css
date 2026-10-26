@@ -125,7 +125,8 @@
 /* Note that the sheet rounds its corners without clipping what it holds,
    because a menu hung in it may stand past its edge over the next column
    (an AnchoredPopover bounded by the window), and a clip would cut it off;
-   what is drawn into a corner rounds that corner itself (the side panel). */
+   what is drawn into a corner rounds that corner itself (a bar at the sheet's
+   top, below, and the plan's summary). */
 /* On the Mac the window's own ground is the system's sidebar material
    (`panel-manager.ts`), so the frame is a tint laid over it rather than a
    paint: the wallpaper frosts through the frame and the columns that stand
@@ -352,62 +353,100 @@
   padding-top: var(--luke-row-inset);
 }
 
-/* What paints the top of the side panel's sheet, the bar heading its tab
-   (`PaneBar`, or the Inbox item's `Toolbar` on the panel's ground), rounds
-   the sheet's top corners it stands in, since the sheet clips nothing. Split
-   beside an Inbox item, the list's bar stands in the left corner alone and
-   the item's in the right. */
+/* The sheet's top -----------------------------------------------------------
+
+   The sheet clips nothing (above), so a bar's fill standing in its top
+   corners would run square past the curve onto the frame. Rounding those
+   corners is the sheet's job, done once here for every page: a bar
+   (`PaneBar`, or a `Toolbar` on a ground of its own) standing at the top of
+   a sheet takes the sheet's radius at the corners it stands in, whatever
+   page put it there, and a bar lower down keeps square corners.
+
+   What stands at the top is read from the shape every sheet shares: down
+   from the sheet, each box that is the first its parent shows. A box left
+   `hidden` stands aside, as a side panel's other tabs and an Inbox's other
+   pane do, and so does the page's row on the frame above the sheet: the
+   side panel's tab strip, or elsewhere a `Toolbar`, which there is a row or
+   a head on no ground. In the side panel, and in Settings and a version
+   history, whose sheet has no row, a toolbar is a bar like any other. A
+   toolbar first in its box rounds too, and one drawing no ground shows
+   nothing of it. Columns laid side by side (a
+   split: a plan beside its summary, an Inbox's list beside its item, an
+   automation beside its runs) each stand at the top, the first shown
+   holding the left corner alone and the last shown the right. A layout
+   that lays columns side by side at a sheet's top joins the split's list
+   here, and nowhere else. */
 :where(:root):not([data-luke-room="narrow"])
-  .desktop-shell
-  > .desktop-main
-  .desktop-task
-  > .side-panel
-  .side-panel-keeps
-  > *
-  > :is(.luke-pane-bar, .luke-toolbar):first-child,
-:where(:root):not([data-luke-room="narrow"])
-  .desktop-shell
-  > .desktop-main
-  .desktop-task
-  > .side-panel
-  .side-panel-keeps
-  > *
-  > :first-child
-  > :is(.luke-pane-bar, .luke-toolbar):first-child,
-:where(:root):not([data-luke-room="narrow"])
-  .desktop-shell
-  > .desktop-main
-  .desktop-task
-  > .side-panel
-  .side-panel-keeps
-  > .inbox-view
-  > .inbox-view-items
-  > .luke-toolbar:first-child {
-  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  :is(
+    .desktop-shell > .desktop-main:not(:has(.desktop-task)),
+    .desktop-shell
+      > .desktop-main
+      .desktop-task
+      > :is(.desktop-task-main, .agent-page, .page-find, .side-panel),
+    .desktop-shell
+      > :is(.desktop-settings, .desktop-version-history)
+      > :is(.settings-page, .version-page)
+  )
+  :is(.luke-pane-bar, .luke-toolbar):is(
+    :nth-child(
+      1 of :not(
+        [hidden],
+        .side-panel-bar,
+        .luke-toolbar:not(:is(.side-panel, .settings-page, .version-page) *)
+      )
+    ),
+    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout) > *,
+    .luke-toolbar:nth-child(1 of :not([hidden]))
+  ):not(
+    :is(
+        .desktop-shell > .desktop-main:not(:has(.desktop-task)),
+        .desktop-shell
+          > .desktop-main
+          .desktop-task
+          > :is(.desktop-task-main, .agent-page, .page-find, .side-panel),
+        .desktop-shell
+          > :is(.desktop-settings, .desktop-version-history)
+          > :is(.settings-page, .version-page)
+      )
+      :not(
+        :nth-child(
+          1 of :not(
+            [hidden],
+            .side-panel-bar,
+            .luke-toolbar:not(:is(.side-panel, .settings-page, .version-page) *)
+          )
+        )
+      ):not(
+        :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout) > *
+      )
+      *
+  ) {
+  border-top-left-radius: var(--sheet-top-left-radius, var(--sheet-radius));
+  border-top-right-radius: var(--sheet-top-right-radius, var(--sheet-radius));
 }
 
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
-  > .desktop-main
-  .desktop-task
-  > .side-panel
-  .side-panel-keeps
-  > .inbox-view[data-columns="both"]
-  > .inbox-tasks
-  > .luke-pane-bar {
-  border-top-right-radius: 0;
+  :is(.luke-pane-bar, .luke-toolbar):is(
+    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+      > :not(:nth-child(1 of :not([hidden]))),
+    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+      > :not(:nth-child(1 of :not([hidden])))
+      *
+  ) {
+  --sheet-top-left-radius: 0px;
 }
 
 :where(:root):not([data-luke-room="narrow"])
   .desktop-shell
-  > .desktop-main
-  .desktop-task
-  > .side-panel
-  .side-panel-keeps
-  > .inbox-view[data-columns="both"]
-  > .inbox-view-items
-  > .luke-toolbar:first-child {
-  border-top-left-radius: 0;
+  :is(.luke-pane-bar, .luke-toolbar):is(
+    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+      > :not(:nth-last-child(1 of :not([hidden]))),
+    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+      > :not(:nth-last-child(1 of :not([hidden])))
+      *
+  ) {
+  --sheet-top-right-radius: 0px;
 }
 
 /* What paints the page's ground at its sheet's edge, the plan's summary,

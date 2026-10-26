@@ -23,6 +23,7 @@ export const STYLE_RULE = {
   CURSOR: "pointer-cursor",
   CRUMB_WIDTH: "crumb-width",
   HAS_OVER_ANY: "has-over-any",
+  BAR_CORNER: "bar-corner",
 } as const;
 export type StyleRule = (typeof STYLE_RULE)[keyof typeof STYLE_RULE];
 
@@ -73,6 +74,11 @@ export const STYLE_RULES: Readonly<
   [STYLE_RULE.HAS_OVER_ANY]: {
     refuses:
       "a `:has()` on an ancestor or an earlier sibling of a subject that is any element (`> *`, `> :not(.a)`): the browser then restyles the whole window for every element added under it, so the state is said on the subject's parent or by an attribute the component sets",
+    backlog: false,
+  },
+  [STYLE_RULE.BAR_CORNER]: {
+    refuses:
+      "a corner radius on a bar's own box (`.luke-pane-bar`, `.luke-toolbar`), in a stylesheet or as a `rounded-*` beside its class: the sheet rounds the bar standing at its top, once, in `packages/panel/src/styles/shell.css` (\"The sheet's top\"), so no page rounds its own",
     backlog: false,
   },
   [STYLE_RULE.CRUMB_WIDTH]: {
@@ -572,6 +578,77 @@ function widensCrumb(declaration: CssDeclaration, block: CssBlock, capped: boole
   return !capped && grow !== undefined && /^\d*\.?\d+$/u.test(grow) && Number(grow) > 0;
 }
 
+/** The classes a bar's own box wears: `PaneBar`'s and `Toolbar`'s. */
+const BAR_CLASS = /\.luke-(?:pane-bar|toolbar)(?![\w-])/u;
+
+/** The sheet that rounds a bar at a sheet's top, and the radius its one rule publishes there. */
+const SHEET_CORNER_FILE = "packages/panel/src/styles/shell.css";
+const SHEET_CORNER_VALUE = /^var\(--sheet-top-(?:left|right)-radius, var\(--sheet-radius\)\)$/u;
+
+/** `text` cut at each `separator` that stands outside every parenthesis and bracket. */
+function splitTopLevel(text: string, separator: RegExp): readonly string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index] ?? "";
+    if (char === "(" || char === "[") depth += 1;
+    if (char === ")" || char === "]") depth -= 1;
+    if (depth === 0 && separator.test(char)) {
+      parts.push(text.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts.map((part) => part.trim()).filter((part) => part !== "");
+}
+
+/** A compound with each `:not()` and `:has()` taken out whole, however deep its own parentheses. */
+function withoutNegations(compound: string): string {
+  let out = "";
+  let index = 0;
+  while (index < compound.length) {
+    const opening = /^:(?:not|has)\(/u.exec(compound.slice(index));
+    if (opening === null) {
+      out += compound[index];
+      index += 1;
+      continue;
+    }
+    let depth = 0;
+    let end = index + opening[0].length - 1;
+    for (; end < compound.length; end += 1) {
+      if (compound[end] === "(") depth += 1;
+      if (compound[end] === ")") depth -= 1;
+      if (depth === 0) break;
+    }
+    index = end + 1;
+  }
+  return out;
+}
+
+/**
+ * Whether a block's selector draws a bar's own box: a bar's class in the
+ * last compound of one of its selectors, an `:is()` or `:where()` there
+ * included, and a `:not()` or `:has()` there aside, which name boxes the
+ * subject is not or holds.
+ */
+function isBarBox(block: CssBlock): boolean {
+  return splitTopLevel(selectorOf(block), /,/u).some((part) => {
+    const last = splitTopLevel(part, /[\s>+~]/u).at(-1) ?? "";
+    return BAR_CLASS.test(withoutNegations(last));
+  });
+}
+
+/**
+ * Whether a declaration rounds a bar by hand. Note that the one rule that
+ * rounds a bar, at a sheet's top, reads the radius the sheet publishes, so
+ * a copy of it elsewhere, or a page's own radius on its bar, is refused.
+ */
+function roundsBar(declaration: CssDeclaration, block: CssBlock, file: string): boolean {
+  if (!RADIUS_PROPERTY.test(declaration.property) || !isBarBox(block)) return false;
+  return !(file === SHEET_CORNER_FILE && SHEET_CORNER_VALUE.test(declaration.value.trim()));
+}
+
 function cssRuleOf(declaration: CssDeclaration, block: CssBlock): StyleRule | undefined {
   const { property, value } = declaration;
   const bare = bareValue(value);
@@ -711,10 +788,15 @@ function classViolations(
 ): readonly StyleViolation[] {
   if (!isClassList(classes)) return [];
   const violations: StyleViolation[] = [];
-  for (const token of classes.split(/\s+/u)) {
-    if (token.length === 0) continue;
+  const tokens = classes.split(/\s+/u).filter((token) => token.length > 0);
+  const bar = tokens.some((token) => BAR_CLASS.test(`.${token}`));
+  for (const token of tokens) {
     const rule = classRuleOf(token, names);
     if (rule !== undefined) violations.push({ rule, line, excerpt: token });
+    const rounded = RADIUS_UTILITY.exec(utilityOf(token));
+    if (bar && rounded !== null && rounded[1] !== "none") {
+      violations.push({ rule: STYLE_RULE.BAR_CORNER, line, excerpt: token });
+    }
   }
   return violations;
 }
@@ -807,7 +889,8 @@ export function styleViolations(
       for (const declaration of block.declarations) {
         const rule =
           cssRuleOf(declaration, block) ??
-          (widensCrumb(declaration, block, capped) ? STYLE_RULE.CRUMB_WIDTH : undefined);
+          (widensCrumb(declaration, block, capped) ? STYLE_RULE.CRUMB_WIDTH : undefined) ??
+          (roundsBar(declaration, block, file) ? STYLE_RULE.BAR_CORNER : undefined);
         if (rule === undefined) continue;
         violations.push({
           rule,
