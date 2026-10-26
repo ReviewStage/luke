@@ -6,7 +6,8 @@ import {
   type DevicePlatform,
   type DeviceSignedIn,
 } from "@luke/features/device-agent-wire";
-import { index, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -26,6 +27,16 @@ import { user } from "./auth.js";
  * (`coding_agent.device_id`), and every line and request for it names the
  * same Mac (`./device-agent.ts`). The row belongs to the account and leaves
  * with it.
+ *
+ * A host (`DEVICE_KIND.HOST`) joins instead by trading an install token
+ * (`./host-install-token.ts`) for a device secret of its own, which the row
+ * keeps only as its SHA-256 in `secret_hash` and which every later call of
+ * the host carries as its bearer. Until the host first registers, it has no
+ * `home` or `claude_executable`, and no agent is offered or launched on it.
+ * Removing a host stamps `removed_at` and clears its secret, so the box is
+ * refused at once while its agents keep the name they ran under; enrolling
+ * that id again under the same account brings it back with a new secret,
+ * and a standing host's id is never enrolled again.
  */
 export const device = pgTable(
   "device",
@@ -45,10 +56,10 @@ export const device = pgTable(
     arch: text("arch").$type<DeviceArch>().notNull(),
     /** How the device runs its agents, as it last registered (`DEVICE_ISOLATION`); a row from before the column runs them bare, as every Mac did. */
     isolation: text("isolation").$type<DeviceIsolation>().notNull().default(DEVICE_ISOLATION.BARE),
-    /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.luke/agents/<agent>`). */
-    home: text("home").notNull(),
-    /** The Claude Code CLI the desktop bundles, by its absolute path, which a local agent's launch names. */
-    claudeExecutable: text("claude_executable").notNull(),
+    /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.luke/agents/<agent>`); null for a host that has not registered yet. */
+    home: text("home"),
+    /** The Claude Code CLI the desktop bundles, by its absolute path, which a local agent's launch names; null for a host that has not registered yet. */
+    claudeExecutable: text("claude_executable"),
     /**
      * The Codex binary the desktop runs local agents' Codex with, by its
      * absolute path, once it checked that build against the pin, bundled or
@@ -62,10 +73,22 @@ export const device = pgTable(
      * the Mac's own login rather than the account's saved credential.
      */
     signedIn: jsonb("signed_in").$type<DeviceSignedIn>().notNull().default({}),
+    /** A host's device secret as its SHA-256 in hex, never the secret; null for a desktop, which calls on its sign-in, and for a removed host. */
+    secretHash: text("secret_hash"),
+    /** The daemon version a host last called with; null for a desktop. */
+    version: text("version"),
+    /** When the account removed the host; null while it stands. */
+    removedAt: timestamptz("removed_at"),
     createdAt: createdAt(),
     /** When the desktop last beat, or registered, the Mac. */
     lastSeenAt: timestamptz("last_seen_at").notNull(),
   },
-  // Start reads the account's Macs that beat lately.
-  (table) => [index("device_user_seen").on(table.userId, table.lastSeenAt)],
+  (table) => [
+    // Start reads the account's Macs that beat lately.
+    index("device_user_seen").on(table.userId, table.lastSeenAt),
+    // A host's call is resolved by its secret's hash alone.
+    uniqueIndex("device_secret_hash")
+      .on(table.secretHash)
+      .where(sql`${table.secretHash} is not null`),
+  ],
 );

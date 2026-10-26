@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "672d7dd5-a172-40db-b1be-dd5dc2a212c3",
+  "id": "d858b6a1-dc90-4d1d-b87d-0f93ba25c45a",
   "prevIds": [
-    "645e6049-9630-4fbf-9a87-5071e30807dc"
+    "68d10b9f-1f59-41d8-a89f-4a14454c3b52"
   ],
   "ddl": [
     {
@@ -231,6 +231,12 @@
     {
       "isRlsEnabled": false,
       "name": "github_repository_read",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "host_install_token",
       "entityType": "tables",
       "schema": "public"
     },
@@ -4673,20 +4679,7 @@
     {
       "type": "text",
       "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'bare'",
-      "generated": null,
-      "identity": null,
-      "name": "isolation",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "device"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -4699,7 +4692,7 @@
     {
       "type": "text",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -4731,6 +4724,45 @@
       "generated": null,
       "identity": null,
       "name": "signed_in",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "device"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "secret_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "device"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "version",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "device"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "removed_at",
       "entityType": "columns",
       "schema": "public",
       "table": "device"
@@ -5614,6 +5646,97 @@
       "entityType": "columns",
       "schema": "public",
       "table": "github_repository_read"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_install_token"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_install_token"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_install_token"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_install_token"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_install_token"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_used_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_install_token"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "revoked_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "host_install_token"
     },
     {
       "type": "uuid",
@@ -12229,6 +12352,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "secret_hash",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"secret_hash\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "device_secret_hash",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "device"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "device_id",
           "isExpression": false,
           "asc": true,
@@ -12378,6 +12522,48 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "github_installation"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "token_hash",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "host_install_token_hash",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "host_install_token"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "host_install_token_user",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "host_install_token"
     },
     {
       "nameExplicit": true,
@@ -15454,6 +15640,23 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
+      "name": "host_install_token_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "host_install_token"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
       "name": "inbox_item_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
@@ -17546,6 +17749,16 @@
       "name": "github_rate_hold_pkey",
       "schema": "public",
       "table": "github_rate_hold",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "host_install_token_pkey",
+      "schema": "public",
+      "table": "host_install_token",
       "entityType": "pks"
     },
     {
