@@ -128,7 +128,7 @@ import type { MicrophoneStatus } from "@luke/voice/audio";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { VOICE_COMMAND, type VoiceCallAbout } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type ActHandle, toastActFailure } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
@@ -173,7 +173,13 @@ import { freshAccount, newestWaiting, RESTING_PAGE, restingPage } from "./restin
 import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
-import { useChannelPlace } from "./use-channels.js";
+import {
+  chooseChannel,
+  listChannelWorkspace,
+  openChannelThread,
+  standChannelPlace,
+  useChannelPlace,
+} from "./use-channels.js";
 import {
   type CodingAgentsControl,
   useCodingAgents,
@@ -281,11 +287,21 @@ interface InboxViewControl {
   readonly onChoose: (chosen: InboxChoice) => void;
   /**
    * Opens the Inbox on an item, from wherever the window stands: a row of
-   * the inbox-first sidebar's list, which stands while the Inbox does not.
-   * Asked first where leaving would lose unsaved work, as every door that
-   * moves the place is.
+   * the inbox-first sidebar's list, which stands while the Inbox does not,
+   * the command palette, a person's page, or a link. With Channels on it
+   * opens the item as a thread, in `channelId` where the caller knows it,
+   * and in the channel its item names once read otherwise. Asked first
+   * where leaving would lose unsaved work, as every door that moves the
+   * place is.
    */
-  readonly onOpenItem: (chosen: InboxChoice) => void;
+  readonly onOpenItem: (chosen: InboxChoice, channelId?: string) => void;
+  /**
+   * Opens the Inbox on a channel's stream with Channels on, from wherever
+   * the window stands: the sidebar's row, the command palette. A thread
+   * open in it stays open where it is the channel already shown, but on a
+   * phone, which shows the stream alone.
+   */
+  readonly onOpenChannel: (channelId: string) => void;
   /**
    * Whether the list stands alone rather than the item chosen, where the
    * Inbox shows one column (`inbox-columns.ts`): asked for by its way back or
@@ -1349,11 +1365,16 @@ export function useTasksTab(input: {
   const chooseListed = useCallback(
     (workspaceId: string) => {
       workspaceChoices.current += 1;
+      listChannelWorkspace(workspaceId);
       listWorkspace(workspaceId);
     },
     [listWorkspace],
   );
   const listedWorkspace = workspace.chosen;
+  // Note that a workspace listed by any other way, as the account's workspaces change, moves the channel place before the window paints.
+  useLayoutEffect(() => {
+    if (listedWorkspace !== undefined) listChannelWorkspace(listedWorkspace.id);
+  }, [listedWorkspace]);
   // A person's page is theirs in the workspace it opened in, so another listed in its
   // place, chosen or fallen back to as the account's workspaces change, closes it.
   if (standIn?.kind === STAND_IN.PERSON && standIn.workspaceId !== listedWorkspace?.id) {
@@ -2924,6 +2945,8 @@ export function useTasksTab(input: {
             ? viewed.tasks.find((task) => task.id === place.planId)?.workspaceId
             : undefined) ?? workspace,
         );
+        // Note that a link names the thread and not its channel, which its item names once read (`useThreadChannel`).
+        if (channelsOn) openChannelThread(place.itemId);
         standInFor({
           kind: STAND_IN.INBOX,
           chosen:
@@ -2933,6 +2956,21 @@ export function useTasksTab(input: {
           listed: false,
         });
         return;
+      // A channel's link opens its stream in the Inbox's place, on no thread; one archived or unknown says so there (`desktop-inbox.tsx`).
+      case LINK_PLACE.CHANNEL: {
+        const workspaceId = listLinked(workspace);
+        if (!channelsOn) return;
+        standChannelPlace(place.channelId, undefined);
+        standInFor({
+          kind: STAND_IN.INBOX,
+          chosen: rememberedChoice(lastInboxChoice.current, {
+            account: input.account,
+            workspaceId,
+          }),
+          listed: false,
+        });
+        return;
+      }
       case LINK_PLACE.AUTOMATIONS:
         listLinked(workspace);
         standInFor({ kind: STAND_IN.AUTOMATIONS, place: AUTOMATIONS_LIST });
@@ -3345,14 +3383,32 @@ export function useTasksTab(input: {
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (chosen) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, chosen } : held)),
-      onOpenItem: guard((chosen: InboxChoice) => {
+      onOpenItem: guard((chosen: InboxChoice, channelId?: string) => {
         setHistoryFor(undefined);
+        if (channelsOn) openChannelThread(chosen.itemId, channelId);
         // An item opened by a press is a place of its own, as a link's is, not the Inbox rested on.
         setRested(undefined);
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX
             ? { ...held, chosen, listed: false }
             : { kind: STAND_IN.INBOX, chosen, listed: false },
+        );
+      }),
+      onOpenChannel: guard((channelId: string) => {
+        setHistoryFor(undefined);
+        if (input.room === SHELL_ROOM.NARROW) standChannelPlace(channelId, undefined);
+        else chooseChannel(channelId);
+        setStandIn((held) =>
+          held?.kind === STAND_IN.INBOX
+            ? { ...held, listed: false }
+            : {
+                kind: STAND_IN.INBOX,
+                chosen: rememberedChoice(lastInboxChoice.current, {
+                  account: input.account,
+                  workspaceId: listedWorkspaceId,
+                }),
+                listed: false,
+              },
         );
       }),
       listed: inboxView?.listed ?? false,

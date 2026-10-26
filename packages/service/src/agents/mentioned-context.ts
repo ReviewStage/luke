@@ -324,6 +324,8 @@ function handedMention(mention: Mention, task: Task | undefined): Handed | undef
     case MENTION_KIND.LUKE:
     // A date's words are the date in full, which is all there is to hand.
     case MENTION_KIND.DATE:
+    // A channel's link names it, which the agent posts to by name; nothing more is handed.
+    case MENTION_KIND.CHANNEL:
       return undefined;
   }
 }

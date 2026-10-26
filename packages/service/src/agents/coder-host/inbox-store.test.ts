@@ -1877,6 +1877,20 @@ it.layer(getTestDB())("a thread's channel", (it) => {
   );
 
   it.effect(
+    "an item read names the channel its thread lives in, so a link to it opens it there",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const app = yield* channelIn(agent.userId, workspaceId, "app");
+        const item = yield* post(agent, { ...SETTINGS, channelId: app });
+
+        const read = yield* taskInboxItems(agent.userId, agent.taskId ?? "");
+
+        assert.equal(read.find((each) => each.id === item.id)?.channelId, app);
+      }),
+  );
+
+  it.effect(
     "a thread goes to #general where it names no channel, moves only to a channel it names, and is refused one archived or of another workspace, or an addressee outside its workspace",
     () =>
       Effect.gen(function* () {

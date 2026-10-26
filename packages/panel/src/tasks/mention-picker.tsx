@@ -62,6 +62,7 @@ import {
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
+import { GLYPH } from "@luke/ui/icons";
 import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@luke/ui/search-score";
 import { searchTokens } from "@luke/ui/search-tokens";
 import type { SkillOption } from "@luke/ui/skill-mention";
@@ -1046,6 +1047,8 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
       ) : (
         <ActorMark actor={row.actor} size={ACTOR_SIZE.INLINE} />
       );
+    case MENTION_KIND.CHANNEL:
+      return <GLYPH.CHANNEL />;
     case MENTION_KIND.LUKE:
       return <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />;
     case MENTION_KIND.DATE:

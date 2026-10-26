@@ -1054,6 +1054,17 @@ test("a date written bare is named by its date in full, and is no address a past
   assert.equal(pastedLinkMention("luke://date/2026-10-20", REPOSITORY), undefined);
 });
 
+test("a channel is mentioned by its Luke link under the workspace, read back by either scheme, pasted bare as its mention, and a step past its id names nothing", () => {
+  const channel: Mention = { kind: MENTION_KIND.CHANNEL, channelId: "c1000001-6d9f-4ab7" };
+  const link = "https://tryluke.dev/acme/channel/c1000001-6d9f-4ab7";
+
+  assert.equal(encodeMention(channel, PLACE), link);
+  assert.deepEqual(decodeMention(link.replace("https:", "tryluke:"), null), channel);
+  assert.deepEqual(linkMention("#app", link, null), { mention: channel, name: "#app" });
+  assert.deepEqual(pastedLinkMention(link, REPOSITORY), { mention: channel, name: "Channel" });
+  assert.equal(decodeMention(`${link}/threads`, null), undefined);
+});
+
 test("words that are one member's mention link, written whole or as its address, name that member, and a task, a Luke, a handle, or more words name none", () => {
   const person = { kind: MENTION_KIND.PERSON, userId: "user-1" } as const;
   const address = encodeMention(person, PLACE);

@@ -238,6 +238,7 @@ const THING_MARK: ThingMarks = {
   [THING_KIND.MESSAGE]: () => <MessageSquareIcon aria-hidden="true" />,
   [THING_KIND.INBOX]: () => <GLYPH.INBOX />,
   [THING_KIND.INBOX_ITEM]: (item) => <InboxItemChipGlyph place={item} />,
+  [THING_KIND.CHANNEL]: () => <GLYPH.CHANNEL />,
   [THING_KIND.AUTOMATIONS]: () => <GLYPH.AUTOMATION />,
   [THING_KIND.AUTOMATION]: AUTOMATION_MARK,
   [THING_KIND.AUTOMATION_RUN]: AUTOMATION_MARK,

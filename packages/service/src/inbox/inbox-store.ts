@@ -420,6 +420,7 @@ const INBOX_ITEM_COLUMNS = {
   postedAt: inboxItem.postedAt,
   settledAt: SETTLED_AT,
   updatedAt: inboxItem.updatedAt,
+  channelId: inboxItem.channelId,
 };
 
 const FileRowSchema = Schema.Struct({
@@ -484,6 +485,7 @@ const InboxRowSchema = Schema.Struct({
   settledAt: Schema.NullOr(Schema.Number),
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
+  channelId: Schema.String,
 });
 
 type InboxRow = typeof InboxRowSchema.Type;
@@ -520,6 +522,7 @@ function storedItem(row: InboxRow): StoredInboxItem {
       ...(row.settledAt === null ? undefined : { settledAt: row.settledAt }),
       updatedAt: row.updatedAt.getTime(),
       unread: row.unread,
+      channelId: row.channelId,
     },
     answerKey: row.answerKey,
   };
@@ -1531,6 +1534,7 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
             closedByName: INBOX_ITEM_COLUMNS.closedByName,
             openAskMessageId: inboxItem.openAskMessageId,
             unread: unreadFor(scope.userId),
+            channelId: inboxItem.channelId,
           },
           {
             postedAt: inboxItem.postedAt,

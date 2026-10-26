@@ -64,7 +64,7 @@ import { useInboxItemTitle } from "./inbox-item-chip.js";
 import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
 import { branchNote, thingCard } from "./thing-card.js";
 import { type AgentTiles, thingMark } from "./thing-mark.js";
-import { useKnownNames, useTaskKeyTargets, useTaskNameCatchUp } from "./use-known-names.js";
+import { useKnownNames, useTaskNameCatchUp, useWordTargets } from "./use-known-names.js";
 import { type LinkStanding, useLinkStanding, useWordsWorkspaceId } from "./use-link-standing.js";
 import { useOpenLink } from "./use-open-link.js";
 import { useWordsDates } from "./words-dates.js";
@@ -280,10 +280,11 @@ function pressOf(
             ? mention
             : { kind: MENTION_KIND.TASK, taskId: mention.taskId },
         );
-    // A page or an agent opens its tab as its Luke link does, through the window's opener, under the workspace it was written in.
+    // A page, an agent, a person, or a channel opens as its Luke link does, through the window's opener, under the workspace it was written in.
     case MENTION_KIND.PAGE:
     case MENTION_KIND.AGENT:
     case MENTION_KIND.PERSON:
+    case MENTION_KIND.CHANNEL:
       return () => openLink(target);
     // Luke has no tab of his own on a task, so his chip opens the task he thinks about.
     case MENTION_KIND.LUKE:
@@ -558,7 +559,7 @@ function MentionChip({
   const heading = useSectionHeading(section?.taskId, section?.anchor ?? "");
   useTaskNameCatchUp(mention.kind === MENTION_KIND.TASK ? mention.taskId : undefined);
   // Note that a plan written as its own key (`ACME-42`) says the key, as the words wrote it, and one labelled with another task's key its name.
-  const keys = useTaskKeyTargets();
+  const keys = useWordTargets();
   const keyTarget = keys.get(written);
   const keyNames =
     keyTarget === undefined ? undefined : decodeMention(keyTarget, doors.place.repository);

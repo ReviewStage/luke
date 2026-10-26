@@ -1,5 +1,5 @@
 /**
- * workspace-key.ts -- the key a window names a workspace's numbered thing by: its workspace's prefix and its number, as `ACME-42`.
+ * workspace-key.ts -- the key a window names a workspace's numbered thing by: its workspace's prefix and its number, as `ACME-42`; and the words that name a thing among other words, a task by its key and a channel by its name, `#app`.
  *
  * The prefix is read off the workspace's name rather than kept, so it
  * follows a rename: the initials of a name of several words, or the head of
@@ -45,6 +45,15 @@ export function taskKey(workspaceName: string, number: number): string {
 const KEY_IN_WORDS =
   /(?<![\p{L}\p{N}_\-/.#@])[\p{Lu}\p{N}]{1,4}-\d+(?![\p{L}\p{N}_/#]|[-.][\p{L}\p{N}])/gu;
 
+/**
+ * What may be a channel's name among words: `#` and a channel's name,
+ * lowercase words joined by hyphens, standing as a word of its own, on the
+ * same terms as a key: one in a path or an address (`docs/#app`,
+ * `page#app`), or joined to more words, is none.
+ */
+const CHANNEL_IN_WORDS =
+  /(?<![\p{L}\p{N}_\-/.#@&])#[a-z0-9]+(?:-[a-z0-9]+)*(?![\p{L}\p{N}_/#]|[-.][\p{L}\p{N}])/gu;
+
 /** One key found among words: the key, and where it stands in them. */
 export interface KeySpan<Known> {
   readonly key: string;
@@ -53,13 +62,17 @@ export interface KeySpan<Known> {
   readonly known: Known;
 }
 
-/** Each key `known` holds standing among the words, in order; a word shaped like a key that `known` does not hold, `UTF-8` say, is left as words. */
+/**
+ * Each task's key and each channel's name, `#app`, that `known` holds
+ * standing among the words, in order; a word shaped like either that
+ * `known` does not hold, `UTF-8` or `#1` say, is left as words.
+ */
 export function keySpansIn<Known>(
   words: string,
   known: ReadonlyMap<string, Known>,
 ): readonly KeySpan<Known>[] {
   const spans: KeySpan<Known>[] = [];
-  for (const match of words.matchAll(KEY_IN_WORDS)) {
+  for (const match of [...words.matchAll(KEY_IN_WORDS), ...words.matchAll(CHANNEL_IN_WORDS)]) {
     const held = known.get(match[0]);
     if (held === undefined) continue;
     spans.push({
@@ -69,7 +82,7 @@ export function keySpansIn<Known>(
       known: held,
     });
   }
-  return spans;
+  return spans.toSorted((one, other) => one.start - other.start);
 }
 
 /** Whether the words typed are a task's key whole, as `stag-422` is STAG-422: the case and the space around them aside. */

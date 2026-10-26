@@ -34,6 +34,8 @@ import { parsedUrl } from "./parsed-url.js";
  * - the Inbox, `/inbox`, and an item in it under the task or the agent with
  *   no task that holds it, `/plan/<id>/inbox/<itemId>` or
  *   `/agent/<agentId>/inbox/<itemId>`, since the Inbox is read by its holders;
+ * - a channel of the workspace, `/channel/<channelId>`, whose threads are
+ *   those Inbox items, each still linked under its holder;
  * - the Automations page, `/automations`, an automation,
  *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
  * - a page of Settings, `/settings[/<page>]`;
@@ -100,6 +102,7 @@ export const LINK_PLACE = {
   MESSAGE: "message",
   INBOX: "inbox",
   INBOX_ITEM: "inbox-item",
+  CHANNEL: "channel",
   AUTOMATIONS: "automations",
   AUTOMATION: "automation",
   AUTOMATION_RUN: "automation-run",
@@ -146,6 +149,7 @@ const STEP = {
   MESSAGE: "message",
   FILES: "files",
   INBOX: "inbox",
+  CHANNEL: "channel",
   AUTOMATIONS: "automations",
   AUTOMATION: "automation",
   RUN: "run",
@@ -362,6 +366,7 @@ const linkPlaceSchema = EffectSchema.Union([
     agentId: idSchema,
     itemId: idSchema,
   }),
+  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.CHANNEL), channelId: idSchema }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.AUTOMATIONS) }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.AUTOMATION),
@@ -519,6 +524,10 @@ function placeFields(steps: readonly string[]) {
       return id === undefined ? undefined : agentFields(undefined, id, rest);
     case STEP.INBOX:
       return id === undefined ? { kind: LINK_PLACE.INBOX } : undefined;
+    case STEP.CHANNEL:
+      return id === undefined || rest.length > 0
+        ? undefined
+        : { kind: LINK_PLACE.CHANNEL, channelId: id };
     case STEP.AUTOMATIONS:
       return id === undefined ? { kind: LINK_PLACE.AUTOMATIONS } : undefined;
     case STEP.AUTOMATION:
@@ -604,6 +613,8 @@ function placePath(place: LinkPlace): readonly string[] {
       return "planId" in place
         ? [STEP.PLAN, place.planId, STEP.INBOX, place.itemId]
         : [STEP.AGENT, place.agentId, STEP.INBOX, place.itemId];
+    case LINK_PLACE.CHANNEL:
+      return [STEP.CHANNEL, place.channelId];
     case LINK_PLACE.AUTOMATIONS:
       return [STEP.AUTOMATIONS];
     case LINK_PLACE.AUTOMATION:
@@ -643,6 +654,11 @@ export function linkOf(place: LinkPlace, workspace: string): string {
     return `${link}?${new URLSearchParams({ [COMMENT_QUERY]: place.threadId })}`;
   }
   return link;
+}
+
+/** The place a channel of the workspace is linked by, which a menu's Copy link copies. */
+export function channelPlace(channelId: string): LinkPlace {
+  return { kind: LINK_PLACE.CHANNEL, channelId };
 }
 
 /**
