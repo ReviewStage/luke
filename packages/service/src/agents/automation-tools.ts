@@ -170,7 +170,7 @@ const PROMPT = describeWire(
   automationActionSchema.fields.prompt,
   "What each run's new coding agent is told to do, as its first message, at most " +
     `${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS} characters: whole and standing alone, since no one ` +
-    "watches a run and it remembers no run before it. Luke adds a line beneath it saying what " +
+    "watches a run and, unless agentId is set, it remembers no run before it. Luke adds a line beneath it saying what " +
     "fired the run.",
 );
 

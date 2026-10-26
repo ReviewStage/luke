@@ -1,5 +1,5 @@
 import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
-import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
+import { describeWire, readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
@@ -1752,11 +1752,30 @@ export const codingAgentCallIdSchema = trimmedText(CODING_AGENT_BOUNDS.MAX_CALL_
  * each absent where the agent left it to its own.
  */
 export const codingAgentDelegationInputSchema = EffectSchema.Struct({
-  task: EffectSchema.String,
-  model: EffectSchema.optionalKey(EffectSchema.String),
-  effort: EffectSchema.optionalKey(EffectSchema.String),
-  /** Whether the agent keeps working while the worker runs rather than waiting for its answer; waiting where unset. */
-  background: EffectSchema.optionalKey(EffectSchema.Boolean),
+  task: describeWire(
+    EffectSchema.String,
+    "The worker's whole job in Markdown, since it knows nothing else: the goal in one sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
+  ),
+  model: EffectSchema.optionalKey(
+    describeWire(
+      EffectSchema.String,
+      "The id of the model the worker runs on, from Luke's catalog; your own where left out.",
+    ),
+  ),
+  effort: EffectSchema.optionalKey(
+    describeWire(
+      EffectSchema.String,
+      "The reasoning effort the worker runs at, one the model lists; your own where left out.",
+    ),
+  ),
+  // Note that we still accept the field nothing reads, because a session keeps the prompt it
+  // started under for its life, and an older one tells its agent to set it.
+  background: EffectSchema.optionalKey(
+    describeWire(
+      EffectSchema.Boolean,
+      "Ignored: the worker's answer reaches you on its own either way.",
+    ),
+  ),
 });
 
 /** What a settled delegation's tool part carries as its output: the model and effort the worker ran on, and its answer. */
