@@ -87,7 +87,9 @@ component, factored out of the surface where it builds the box by hand.
   integration trigger's event (a Sentry issue or alert as Luke's Sentry
   integration delivers it), may reach that run's agent task, transcript and
   traces. And an automation webhook secret may be shown once, in the window that
-  minted it, at creation or rotation; never anywhere else. And the Keyframe
+  minted it, at creation or rotation; never anywhere else. And a host install
+  token may be shown once, in the window that minted it, inside the install
+  command; never anywhere else. And the Keyframe
   session token for a call's own avatar may reach the panel window, which runs
   that session, and never the voice window, a Gateway answer or event, app
   state, a counted event, a trace, or a fixture. And an agent's cloud browser, a
