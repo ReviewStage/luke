@@ -30,6 +30,7 @@ import { Clock, Effect, Layer, Option } from "effect";
 import { Base64 } from "effect/encoding";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import type {
@@ -88,6 +89,7 @@ import {
   lukeMcpApp,
 } from "./app.js";
 import { admitRunnerBearer, runnerTokenDigest } from "./bearer.js";
+import { NATIVE_CALL_KEY_WINDOW_MS } from "./call-key.js";
 import { lukeMcpDoorSeams } from "./door-seams.js";
 import { LUKE_MCP_TOOLS, type LukeMcpServices, refusedByDoor } from "./tools.js";
 
@@ -711,6 +713,30 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
           assert.equal(called.isError, refusedByDoor(direct), name);
         }
         yield* Effect.promise(() => client.close());
+      }),
+  );
+
+  it.effect(
+    "the same agent-tool input sent twice within the window runs under one key, so what the call makes is made once; past the window it is a call of its own",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentWithBearer;
+        const client = yield* connected(fetch, agent.bearer);
+        // Note that a task's row is keyed on the call as a start and a message are (`CodingAgentCall`'s `clientKey`), and needs no eve to be made; on no repository, since no GitHub stands here to reach one.
+        const create = (input: Readonly<Record<string, string | null>>) =>
+          Effect.promise(() => client.callTool({ name: "create_task", arguments: input }));
+        const name = "Expire stale invitations";
+
+        const first = yield* create({ name, brief: "After a week.", repository: null });
+        const retried = yield* create({ repository: null, brief: "After a week.", name });
+        yield* TestClock.adjust(NATIVE_CALL_KEY_WINDOW_MS);
+        const later = yield* create({ name, brief: "After a week.", repository: null });
+        yield* Effect.promise(() => client.close());
+
+        assert.equal(first.isError, false, JSON.stringify(first));
+        assert.equal(firstJson(retried).task.id, firstJson(first).task.id);
+        assert.notEqual(firstJson(later).task.id, firstJson(first).task.id);
       }),
   );
 
