@@ -97,7 +97,7 @@ const TEMPLATE_TAG = {
 } as const;
 
 /** Where the recorded preparation is uploaded and run from: the default user's own `/tmp`. */
-const BUILD_DIRECTORY = "/tmp/luke-template";
+export const BUILD_DIRECTORY = "/tmp/luke-template";
 
 /** Where eve's session resolves a relative path, as its template's preparation saw it. */
 const WORKSPACE = REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE;
@@ -106,7 +106,7 @@ const WORKSPACE = REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE;
  * What eve's base setup does before it prepares a template: the workspace
  * made, here owned by the default user, who writes the checkout into it.
  */
-const BASE_SETUP = [
+export const BASE_SETUP = [
   `if ! mkdir -p ${WORKSPACE} 2>/dev/null || [ ! -w ${WORKSPACE} ]; then`,
   `  sudo -n install -d -o "$(id -u)" -g "$(id -g)" ${WORKSPACE}`,
   "fi",
@@ -132,6 +132,12 @@ type TemplateState =
 const PREPARING: TemplateState = { state: TEMPLATE_STATE.PREPARING };
 const FAILED: TemplateState = { state: TEMPLATE_STATE.FAILED };
 
+/** One command of the preparation, as `prepareImage` ran it: its script's path, and the files written since the command before it. */
+export interface RecordedStep {
+  readonly script: string;
+  readonly writes: readonly { readonly file: string; readonly destination: string }[];
+}
+
 /** The preparation as recorded: the template's key, its name, and the files that run it. */
 export interface ImageBuild {
   readonly key: string;
@@ -139,6 +145,13 @@ export interface ImageBuild {
   readonly files: readonly { readonly path: string; readonly contents: Uint8Array }[];
   /** The script that runs the preparation, whose path the files hold. */
   readonly entry: string;
+  /** Each command in order, with the writes that came before it, which the OCI image replays a layer each (`sandbox-oci-image.ts`). */
+  readonly steps: readonly RecordedStep[];
+}
+
+/** The shell line that puts a recorded file where the preparation wrote it. */
+export function replayWrite(file: string, destination: string): string {
+  return `mkdir -p "$(dirname '${destination}')" && cp ${file} '${destination}'`;
 }
 
 /** `prepareImage` threw while it was being recorded, which a recording that answers every command as passed never makes it do. */
@@ -151,6 +164,8 @@ type TemplateRead = Effect.Effect<TemplateState, SandboxUnavailable>;
 export const recordImageBuild = Effect.fn("web/recordImageBuild")(function* () {
   const writes: { path: string; content: string }[] = [];
   const commands: string[] = [];
+  // How many files had been written when each command ran, so each step knows the writes before it.
+  const writtenBefore: number[] = [];
   const resolvePath = (path: string) => (path.startsWith("/") ? path : `${WORKSPACE}/${path}`);
   const recording: Pick<SandboxSession, "resolvePath" | "writeTextFile" | "run"> = {
     resolvePath,
@@ -159,6 +174,7 @@ export const recordImageBuild = Effect.fn("web/recordImageBuild")(function* () {
     },
     run: async (options) => {
       commands.push(options.command);
+      writtenBefore.push(writes.length);
       return { exitCode: 0, stdout: "", stderr: "" } as Awaited<ReturnType<SandboxSession["run"]>>;
     },
   };
@@ -180,10 +196,7 @@ export const recordImageBuild = Effect.fn("web/recordImageBuild")(function* () {
   const entry = [
     "set -e",
     BASE_SETUP,
-    ...writes.map(
-      (write, index) =>
-        `mkdir -p "$(dirname '${write.path}')" && cp ${BUILD_DIRECTORY}/file-${index} '${write.path}'`,
-    ),
+    ...writes.map((write, index) => replayWrite(`${BUILD_DIRECTORY}/file-${index}`, write.path)),
     ...steps.map((step) => `bash ${step.path}`),
   ].join("\n");
   const digest = createHash("sha256").update(EVE_BASE_IMAGE).update("\0");
@@ -194,11 +207,22 @@ export const recordImageBuild = Effect.fn("web/recordImageBuild")(function* () {
   digest.update(entry).update("\0");
   const key = digest.digest("hex").slice(0, 16);
   const entryFile = { path: `${BUILD_DIRECTORY}/build.sh`, contents: Buffer.from(entry, "utf8") };
+  const recorded = steps.map((step, index): RecordedStep => {
+    const from = writtenBefore[index - 1] ?? 0;
+    return {
+      script: step.path,
+      writes: writes.slice(from, writtenBefore[index]).map((write, offset) => ({
+        file: `${BUILD_DIRECTORY}/file-${from + offset}`,
+        destination: write.path,
+      })),
+    };
+  });
   return {
     key,
     name: `${NATIVE_TEMPLATE.NAME_PREFIX}${key}`,
     files: [...files, ...steps, entryFile],
     entry: entryFile.path,
+    steps: recorded,
   } satisfies ImageBuild;
 });
 

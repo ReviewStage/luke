@@ -71,7 +71,7 @@ const TMUX_SETTINGS: readonly string[] = [
 ];
 
 /** `sudo` where the sandbox's user is not root, so an install and the settings file reach the system as the image is prepared. */
-const SUDO_LINE = 'SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo -n"';
+export const SUDO_LINE = 'SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo -n"';
 
 /** Installs tmux with the system's own package manager, `$SUDO` as `SUDO_LINE` set it. */
 const INSTALL_TMUX =

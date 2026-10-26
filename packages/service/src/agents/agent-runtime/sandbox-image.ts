@@ -21,24 +21,27 @@ import {
 import { installCodeTooling } from "eve/extensions/code/sandbox";
 import type { SandboxSession } from "eve/sandbox";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
-import { PREPARE_TMUX } from "../terminal/tmux.js";
+import { PREPARE_TMUX, SUDO_LINE } from "../terminal/tmux.js";
 
 /** The Playwright the image carries, pinned so a rebuilt snapshot holds the same browser. */
 const PLAYWRIGHT_VERSION = "1.64.1";
 
 /**
  * GitHub's own `gh stack` extension (github/gh-stack), pinned to a release
- * and to the SHA-256 GitHub publishes for its Linux x86-64 binary, the
- * Vercel sandbox's architecture.
+ * and to the SHA-256 GitHub publishes for each Linux build the image is made
+ * for: x86-64, the Vercel sandbox's architecture, and arm64, which the OCI
+ * image (`../sandbox-oci-image.ts`) is built for too.
  */
 const GH_STACK = {
   VERSION: "v0.2.1",
-  SHA256: "ffe9d48b6342faffc3b0cb420202ff1df32e24faf32693debd7423274bbdf859",
+  AMD64_SHA256: "ffe9d48b6342faffc3b0cb420202ff1df32e24faf32693debd7423274bbdf859",
+  ARM64_SHA256: "25ec261a391261a1462d38f85c230b0e0b14ae3547926130996541f62f25f78b",
   DIRECTORY: "/usr/local/lib/gh-stack",
 } as const;
 
 /**
- * Installs `gh stack`, `$SUDO` as `PREPARE_TMUX` set it. `gh extension
+ * Installs `gh stack` for the machine's architecture, `$SUDO` as
+ * `STAGE_HEAD` set it. `gh extension
  * install github/gh-stack` cannot run here: it reaches GitHub's API with
  * `gh`'s token, and while the image is prepared no credential stands at the
  * firewall, so GitHub would refuse the wrapper's placeholder. So the pinned
@@ -48,9 +51,10 @@ const GH_STACK = {
  * run changes nothing.
  */
 const INSTALL_GH_STACK = [
-  `if ! echo '${GH_STACK.SHA256}  ${GH_STACK.DIRECTORY}/gh-stack' | sha256sum --check --status >/dev/null 2>&1; then`,
-  `  curl -fsSL -o /tmp/gh-stack https://github.com/github/gh-stack/releases/download/${GH_STACK.VERSION}/linux-amd64`,
-  `  echo '${GH_STACK.SHA256}  /tmp/gh-stack' | sha256sum --check --quiet`,
+  `case "$(uname -m)" in aarch64) GH_STACK_BUILD=linux-arm64 GH_STACK_SHA256=${GH_STACK.ARM64_SHA256} ;; *) GH_STACK_BUILD=linux-amd64 GH_STACK_SHA256=${GH_STACK.AMD64_SHA256} ;; esac`,
+  `if ! echo "$GH_STACK_SHA256  ${GH_STACK.DIRECTORY}/gh-stack" | sha256sum --check --status >/dev/null 2>&1; then`,
+  `  curl -fsSL -o /tmp/gh-stack "https://github.com/github/gh-stack/releases/download/${GH_STACK.VERSION}/$GH_STACK_BUILD"`,
+  `  echo "$GH_STACK_SHA256  /tmp/gh-stack" | sha256sum --check --quiet`,
   `  $SUDO install -D -m 755 /tmp/gh-stack ${GH_STACK.DIRECTORY}/gh-stack`,
   "  rm -f /tmp/gh-stack",
   "fi",
@@ -60,7 +64,7 @@ const INSTALL_GH_STACK = [
 
 /**
  * Installs GTK 3 with the system's own package manager, `$SUDO` as
- * `PREPARE_TMUX` set it. Electron's binary links it where Playwright's
+ * `STAGE_HEAD` set it. Electron's binary links it where Playwright's
  * Chromium does not, and it is the one library `--with-deps` leaves an
  * Electron app missing; Ubuntu since 24.04 names it with the `t64` suffix.
  */
@@ -78,7 +82,7 @@ const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock
 
 /**
  * Installs bubblewrap and socat, which Claude Code's command sandbox runs
- * each command under on Linux, `$SUDO` as `PREPARE_TMUX` set it.
+ * each command under on Linux, `$SUDO` as `STAGE_HEAD` set it.
  */
 const INSTALL_BUBBLEWRAP = [
   "if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y bubblewrap socat; else $SUDO apt-get install -y --no-install-recommends bubblewrap socat; fi",
@@ -97,14 +101,17 @@ const CLAUDE_CODE = CLAUDE_CODE_PIN;
 /**
  * Installs the SDK where its binary does not already print the pin, links
  * the binary as `claude`, and checks that it prints the pin, `$SUDO` as
- * `PREPARE_TMUX` set it. Note that root's npm reads root's home, never the
- * default user's configuration.
+ * `STAGE_HEAD` set it. The binary is the one npm installs for the
+ * machine's architecture: `CLAUDE_EXECUTABLE` on x86-64, the arm64 build's
+ * beside it where the OCI image is built for arm64. Note that root's npm
+ * reads root's home, never the default user's configuration.
  */
 const INSTALL_CLAUDE_CODE = [
-  `if ! ${CLAUDE_CODE.DIRECTORY}/${CLAUDE_CODE.BINARY} --version 2>/dev/null | grep -q '^${CLAUDE_CODE.VERSION} '; then`,
+  `case "$(uname -m)" in aarch64) CLAUDE_BINARY=${CLAUDE_CODE.DIRECTORY}/${CLAUDE_CODE.ARM64_BINARY} ;; *) CLAUDE_BINARY=${CLAUDE_EXECUTABLE} ;; esac`,
+  `if ! "$CLAUDE_BINARY" --version 2>/dev/null | grep -q '^${CLAUDE_CODE.VERSION} '; then`,
   `  $SUDO env HOME=/root npm install --prefix ${CLAUDE_CODE.DIRECTORY} --no-audit --no-fund --save-exact @anthropic-ai/claude-agent-sdk@${CLAUDE_CODE.SDK_VERSION}`,
   "fi",
-  `$SUDO ln -sfn ${CLAUDE_EXECUTABLE} ${CLAUDE_CODE.LINK}`,
+  `$SUDO ln -sfn "$CLAUDE_BINARY" ${CLAUDE_CODE.LINK}`,
   "claude --version",
   `claude --version | grep -q '^${CLAUDE_CODE.VERSION} ' || { echo 'claude does not print ${CLAUDE_CODE.VERSION}' >&2; exit 1; }`,
 ];
@@ -112,7 +119,7 @@ const INSTALL_CLAUDE_CODE = [
 /**
  * Creates `agent` where it is missing, with a home only it reads, and in
  * the default user's group, so the checkout can be shared with it, `$SUDO`
- * as `PREPARE_TMUX` set it. Note that the Sandbox SDK's own user creation is
+ * as `STAGE_HEAD` set it. Note that the Sandbox SDK's own user creation is
  * not used, because the homes it makes are readable by the default user's
  * group, so a Terminal could read what Claude Code keeps there.
  */
@@ -134,7 +141,7 @@ const CODEX = CODEX_PIN;
 
 /**
  * Installs Codex where it does not already print the pin, links it as
- * `codex`, and checks that it prints the pin, `$SUDO` as `PREPARE_TMUX` set
+ * `codex`, and checks that it prints the pin, `$SUDO` as `STAGE_HEAD` set
  * it; then makes `agent`'s `CODEX_HOME`, which only `agent` reads.
  */
 const INSTALL_CODEX = [
@@ -191,9 +198,26 @@ const CHECK_CAPABILITY_DROP = [
   `${WITHOUT_CAPABILITIES.COMMAND} ${WITHOUT_CAPABILITIES.ARGS.join(" ")} grep -q '^CapEff:[[:space:]]*0*$' /proc/self/status || { echo 'a command without capabilities still holds one' >&2; exit 1; }`,
 ];
 
-/** The commands `prepare` runs on the snapshot, after the code extension's tooling; the Claude Code probe (`tools/claude-code-probe`) prepares its sandbox from the same script. */
-export const PREPARE_SCRIPT = [
-  "set -e",
+/**
+ * The first lines of every stage, which runs as a command of its own: it
+ * stops at its first failure, and sets `$SUDO` as `PREPARE_TMUX` does, since
+ * no shell variable outlives the command that set it.
+ */
+const STAGE_HEAD = ["set -e", SUDO_LINE];
+
+/** A stage as the one command it runs as. */
+function stage(lines: readonly string[]): string {
+  return [...STAGE_HEAD, ...lines].join("\n");
+}
+
+/**
+ * What the system gives the image, which changes rarely: its packages,
+ * Playwright's browser and the libraries it needs, the `agent` user, the
+ * runner's directory, and sudo's contract. The code extension's tooling
+ * follows it, then the tools Luke pins, which change often
+ * (`PREPARE_STAGES`).
+ */
+const SYSTEM_STAGE = stage([
   "git --version",
   "node --version",
   WAIT_FOR_DPKG_LOCK,
@@ -214,16 +238,40 @@ export const PREPARE_SCRIPT = [
   "playwright install --with-deps chromium",
   // After Playwright, whose `--with-deps` has just refreshed the package lists and installed Xvfb.
   INSTALL_GTK,
-  ...INSTALL_GH_STACK,
   ...INSTALL_BUBBLEWRAP,
-  ...INSTALL_CLAUDE_CODE,
   ...CREATE_AGENT_USER,
-  ...INSTALL_CODEX,
   ...MAKE_RUNNER_DIRECTORY,
   ...KEEP_SUDO_ENVIRONMENT,
-  // Last, once everything is in place.
-  ...CHECK_CAPABILITY_DROP,
-].join("\n");
+]);
+
+/**
+ * The image's preparation in the stages `prepareImage` runs, from what
+ * changes rarely to what changes often, each one command, with the code
+ * extension's tooling between the first and the rest. The OCI image
+ * (`../sandbox-oci-image.ts`) builds each as a layer of its own, so a box
+ * that pulls it again after a pin moved pulls only the stages from that pin
+ * on. `gh stack` follows the tooling, which installs the `gh` it extends;
+ * Codex follows the `agent` user, whose home holds its `CODEX_HOME`; and
+ * the capability check comes last, once everything is in place.
+ */
+export const PREPARE_STAGES: readonly string[] = [
+  SYSTEM_STAGE,
+  stage(INSTALL_GH_STACK),
+  stage(INSTALL_CLAUDE_CODE),
+  stage(INSTALL_CODEX),
+  stage(CHECK_CAPABILITY_DROP),
+];
+
+/** Every stage as one script, which the Claude Code probe (`tools/claude-code-probe`) prepares its sandbox from. */
+export const PREPARE_SCRIPT = PREPARE_STAGES.join("\n");
+
+/** One stage run, failing the preparation where it fails. */
+async function runStage(sandbox: SandboxSession, command: string): Promise<void> {
+  const prepared = await sandbox.run({ command });
+  if (prepared.exitCode !== 0) {
+    throw new Error(`the sandbox image could not be prepared: ${prepared.stderr}`);
+  }
+}
 
 /**
  * What the image is prepared with, once per build, on the snapshot every
@@ -231,9 +279,8 @@ export const PREPARE_SCRIPT = [
  * from the same image.
  */
 export async function prepareImage(sandbox: SandboxSession): Promise<void> {
+  const [system, ...tools] = PREPARE_STAGES;
+  if (system !== undefined) await runStage(sandbox, system);
   await installCodeTooling(sandbox);
-  const prepared = await sandbox.run({ command: PREPARE_SCRIPT });
-  if (prepared.exitCode !== 0) {
-    throw new Error(`the sandbox image could not be prepared: ${prepared.stderr}`);
-  }
+  for (const command of tools) await runStage(sandbox, command);
 }
