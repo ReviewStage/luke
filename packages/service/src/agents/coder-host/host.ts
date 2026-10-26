@@ -110,7 +110,12 @@ import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 import { flushDue, type TurnHanded } from "./turn-context.js";
-import { type CoderTurn, type CoderTurnMessage, coderTurnMessage } from "./turn-message.js";
+import {
+  type CoderTurn,
+  type CoderTurnMessage,
+  coderTurnMessage,
+  deskHandedRead,
+} from "./turn-message.js";
 
 /**
  * host.ts -- the coding-agent host composed over eve and the store: what the coder project's authored files call.
@@ -916,7 +921,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         );
         if (Result.isFailure(found)) return { text: undefined, handed };
         const agent = found.success;
-        return yield* coderTurnMessage(
+        const message = yield* coderTurnMessage(
           admitted,
           agent,
           turn,
@@ -924,6 +929,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           seams.now(),
           flushOf(agent, handed),
         );
+        // The turn has started, so the message is delivered, and the desk's notices are read.
+        yield* deskHandedRead(agent, message);
+        return { text: message.text, handed: message.handed };
       }),
 
     showPage: (admitted, input, sandbox) => runAgentShowPage(admitted, input, sandbox),

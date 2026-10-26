@@ -156,8 +156,12 @@ import type { RunnerBundle } from "./runner-bundle.js";
 import { type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
 import { nativeSkills } from "./skills.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
-import type { TurnHanded } from "./turn-context.js";
-import { coderTurnMessage, readNativeTurnHanded, recordNativeTurnHanded } from "./turn-message.js";
+import {
+  coderTurnMessage,
+  deskHandedRead,
+  readNativeTurnHanded,
+  recordNativeTurnHanded,
+} from "./turn-message.js";
 
 /** What the sessions reach: the store, GitHub, Vercel, the agent's machine, the image, the runner's bundle, and the deployment's key ring. */
 export type RunnerServices =
@@ -283,10 +287,11 @@ interface RunnerMessage {
   readonly timeZone: string | undefined;
 }
 
-/** The message line as the runner takes it, the turn's own words ahead of the developer's, and what the session has handed once it is. */
+/** The message line as the runner takes it, the turn's own words ahead of the developer's, and what to keep once the runner took it. */
 interface OpenedLine {
   readonly line: InputLine;
-  readonly handed: TurnHanded;
+  /** What the session has handed once the line is, written on the row, and the desk's notices it showed marked read; run only once the runner took the line, so one it never took leaves both for the next. */
+  readonly taken: Effect.Effect<void, never, DatabaseServices>;
 }
 
 /** A file's name as the sandbox's path holds it: a single segment of safe characters, cut short, its extension kept. */
@@ -581,7 +586,6 @@ export const runnerSessions = <
       alongside: Effect.Effect<void, AE, AR>,
     ) =>
       Effect.gen(function* () {
-        const target: ConversationTarget = { userId, conversationId: agent.conversationId };
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
         const recorded = {
           machine: place.running.machine,
@@ -650,7 +654,7 @@ export const runnerSessions = <
           abandon: (made) => launching(made.firstSequence),
         });
         // The runner took the first message, so what its words handed is kept for the next.
-        yield* recordNativeTurnHanded(target, opening.handed);
+        yield* opening.taken;
         if (rewind !== undefined) {
           yield* clearNativeRewindHanded(agent.conversationId, rewind).pipe(
             Effect.tapError(() =>
@@ -722,7 +726,11 @@ export const runnerSessions = <
         const { content } = sent.line;
         const ahead: readonly ContentBlock[] =
           opened.text === undefined ? [] : [{ type: "text", text: opened.text }];
-        return { line: { ...sent.line, content: [...ahead, ...content] }, handed: opened.handed };
+        const taken = Effect.andThen(
+          recordNativeTurnHanded(target, opened.handed),
+          deskHandedRead(agent, opened),
+        );
+        return { line: { ...sent.line, content: [...ahead, ...content] }, taken };
       });
 
     /** The files a message names written into the running place, before its line names them. */
@@ -936,7 +944,7 @@ export const runnerSessions = <
               ),
             );
           if (wrote) {
-            yield* recordNativeTurnHanded(target, opened.handed);
+            yield* opened.taken;
             // The installation token lives an hour, so each message sets a fresh one, after the
             // write rather than ahead of it: the model takes seconds to reach its first command, and
             // the agent hears the message a GitHub mint and a policy update sooner. Note that a

@@ -24,6 +24,7 @@ import {
 import { readNativeRewind, rewindConversation } from "@luke/database/models/conversation-rewind";
 import { installSkill } from "@luke/database/models/installed-skill-store";
 import { beatMacDevice, registerMacDevice } from "@luke/database/models/mac-device-store";
+import { unreadOperatorNotices, writeOperatorNotice } from "@luke/database/models/operator-notices";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
   removeProviderKey,
@@ -35,7 +36,7 @@ import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, MAC_DEVICE_LAYOUT, startTask } from "@luke/database/testing";
 import {
   CODING_AGENT_FAILURE,
@@ -2385,7 +2386,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "an operator's first message opens with its desk, and a later message hands it again only where it changed",
+    "an operator's first message opens with its desk, a notice reaches the message the runner took and is read once, and a later message hands the desk again only where it changed",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2397,15 +2398,32 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         const opened = yield* sessions.open(message(operator, "What stands?"));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        // The member's agent settled a turn, which the desk tells of once. The runner is gone by
+        // the time the next write lands, so the message relaunches it: the notice goes with the
+        // message the new runner takes, not with the line the old one never took.
+        yield* writeOperatorNotice(
+          { agentId: agent.id },
+          OPERATOR_NOTICE_KIND.TURN_SETTLED,
+          new Date(yield* Clock.currentTimeMillis),
+        );
+        api.failStdin.remaining = 1;
+        api.failStdin.status = 404;
 
         const sent = yield* sessions.send(opened.sessionId, message(operator, "And now?"));
+        const again = yield* sessions.send(opened.sessionId, message(operator, "Anything else?"));
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        const [first, later] = textsOf(api.commands[0]);
+        assert.equal(again.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.commands.length, 2);
+        const [first] = textsOf(api.commands[0]);
+        const [told, later] = textsOf(api.commands[1]);
         assert.ok(first?.[0]?.includes(DESK_LEAD), first?.[0] ?? "");
         assert.deepEqual(first?.slice(1), ["What stands?"]);
+        assert.ok(told?.[0]?.includes("New since your last turn"), told?.[0] ?? "");
+        assert.deepEqual(told?.slice(1), ["And now?"]);
         assert.ok(!later?.[0]?.includes(DESK_LEAD), later?.[0] ?? "");
-        assert.deepEqual(later?.slice(1), ["And now?"]);
+        assert.deepEqual(later?.slice(1), ["Anything else?"]);
+        assert.deepEqual(yield* unreadOperatorNotices(operator.id, 10), []);
       }),
   );
 
