@@ -1536,6 +1536,19 @@ function MenuSheet({
     (back ?? startOf(list, openOnChecked && opened === undefined))?.focus({ preventScroll: true });
   }, [list, opened, leaving, openOnChecked]);
 
+  // Note that a choice that stays may take its own row away (Retry turning
+  // to a dimmed Reading…), which drops focus on nothing; it goes back to the
+  // page's start, or to the sheet where no row applies now, so the keys still
+  // walk the rows.
+  useEffect(() => {
+    if (list === null || leaving) return;
+    const now = document.activeElement;
+    if (now instanceof HTMLElement && now !== document.body && now.isConnected) return;
+    (startOf(list, false) ?? list.closest<HTMLElement>(".luke-dialog"))?.focus({
+      preventScroll: true,
+    });
+  });
+
   const back = () => {
     backTo.current = page?.label;
     setPage(undefined);

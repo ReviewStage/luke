@@ -1098,3 +1098,24 @@ test("a choice in a sheet acts with focus already back on what opened it, so a d
   press(button("Delete"));
   expect(held).toEqual([more]);
 });
+
+/** A ⋯ whose menu offers Retry, which stays and turns to a dimmed Reading… as it reads again, beside Archive. */
+function RetryHarness(): React.JSX.Element {
+  const [reading, setReading] = useState(false);
+  const stand = reading
+    ? { label: "Reading…", disabled: true, onSelect: () => undefined }
+    : { label: "Retry", stays: true, onSelect: () => setReading(true) };
+  return createElement(Harness, {
+    groups: [[stand], [{ label: "Archive", onSelect: () => undefined }]],
+  });
+}
+
+test("in a sheet a choice that stays and takes its own row away leaves focus on the sheet's first row, not on nothing", () => {
+  inPhoneLayout();
+  mount(createElement(RetryHarness));
+  press(button("More"));
+  expect(focused()).toBe("Retry");
+  pressFocused();
+  expect(sheet()).not.toBeNull();
+  expect(focused()).toBe("Archive");
+});
