@@ -16,11 +16,11 @@
  */
 
 import { failureKind } from "@luke/runtime/effect";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import {
   accountFastOffer,
+  macOffers,
   markedUnconnected,
-  thisMacOffer,
 } from "../agents/coder-host/agent-runtime-choice.js";
 import {
   HOSTED_REFUSAL,
@@ -51,10 +51,10 @@ export function modelsProcedures(seams: ModelsProcedureSeams) {
       );
       const fastOffer = yield* hostedStoreOrUnavailable(accountFastOffer(context.userId));
       const offered = offeredToAccount(models, fastOffer);
-      const thisMac = yield* hostedStoreOrUnavailable(thisMacOffer(context.userId));
+      const macs = yield* hostedStoreOrUnavailable(macOffers(context.userId));
       return {
         models: yield* hostedStoreOrUnavailable(markedUnconnected(context.userId, offered)),
-        ...(Option.isSome(thisMac) ? { thisMac: thisMac.value } : {}),
+        ...(macs.length > 0 ? { macs } : {}),
       };
     }),
   };

@@ -93,6 +93,7 @@ function fixture(
           Effect.succeed(repositories === undefined ? undefined : { repositories }),
       },
       worktreesRoot: "/home/.luke",
+      home: "/home",
       stateRoot: "/state",
       openInTerminal: (folder) => void terminalOpenedIn.push(folder),
       exists: (folder) => standing.has(folder),
@@ -291,6 +292,24 @@ it.effect(
 
       assert.deepEqual(before.terminalOpenedIn, [worktree]);
       assert.deepEqual(unmade.terminalOpenedIn, [clone]);
+    }),
+);
+
+it.effect(
+  "a local agent's Terminal opens its worktree under ~/.luke/agents, and refuses before it is made",
+  () =>
+    Effect.gen(function* () {
+      const worktree = `/home/.luke/agents/${AGENT_ID}/repository`;
+      const local = { kind: ACT_KIND.MAC_TERMINAL_LOCAL_AGENT, payload: { agentId: AGENT_ID } };
+      const unmade = fixture([SET]);
+      const refused = yield* unmade.actPort.perform(local, panelOf());
+      assert.ok("refused" in refused);
+
+      const made = fixture([SET], Effect.void, new Set([worktree]));
+      yield* made.actPort.perform(local, panelOf());
+
+      assert.deepEqual(unmade.terminalOpenedIn, []);
+      assert.deepEqual(made.terminalOpenedIn, [worktree]);
     }),
 );
 

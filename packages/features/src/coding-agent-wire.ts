@@ -230,13 +230,15 @@ export type LocalAgentRefusal = (typeof LOCAL_AGENT_REFUSAL)[keyof typeof LOCAL_
 
 export const localAgentRefusalSchema = EffectSchema.Literals(Object.values(LOCAL_AGENT_REFUSAL));
 
-/** The Mac an account may start a local agent on, as Start offers it: the one that beat last, by its id and name. */
-export const thisMacOfferSchema = EffectSchema.Struct({
-  deviceId: wireUuidSchema,
-  name: EffectSchema.String,
-});
+export const MAC_PRESENCE = {
+  /** How lately a Mac must have beaten to count as there: one beat, and room for the next to arrive. */
+  FRESH_MS: 45_000,
+} as const;
 
-export type ThisMacOffer = typeof thisMacOfferSchema.Type;
+/** Whether a Mac that last beat at `seenAt` is there at `now`, both epoch milliseconds. */
+export function macOnline(seenAt: number, now: number): boolean {
+  return seenAt >= now - MAC_PRESENCE.FRESH_MS;
+}
 
 /**
  * The whole of what an operator answers a heartbeat that found nothing for
@@ -509,8 +511,10 @@ export const codingAgentStartRequestFields = {
   note: EffectSchema.optionalKey(messageWordsSchema),
   blank: EffectSchema.optionalKey(EffectSchema.Boolean),
   call: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** Where the agent runs: the starter's Mac, where Start offered This Mac (`thisMacOfferSchema`); a sandbox where absent. */
+  /** Where the agent runs: one of the starter's Macs, the one `deviceId` names; a sandbox where absent. */
   machine: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_MACHINE))),
+  /** The Mac a Start on a Mac runs on, one Start offered (`@luke/features/models-wire`'s `macOfferSchema`), which the service checks is the starter's and there before it pins the agent to it. */
+  deviceId: EffectSchema.optionalKey(wireUuidSchema),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
@@ -732,6 +736,17 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
   /** Where its runner runs, said only of a local agent on its starter's Mac; absent for one in a sandbox, and from a service older than it. */
   machine: EffectSchema.optionalKey(EffectSchema.Literal(CODING_AGENT_MACHINE.MAC)),
+  /**
+   * The Mac a local agent runs on, by its own name, and the epoch
+   * milliseconds it last beat, which a reader holds against its own clock
+   * (`macOnline`), so a Mac that goes quiet while the agent stands on screen
+   * reads offline without another read; absent for an agent in a sandbox,
+   * for one whose Mac is gone, from a read that does not name it, and from a
+   * service older than it.
+   */
+  mac: EffectSchema.optionalKey(
+    EffectSchema.Struct({ name: EffectSchema.String, seenAt: countedNumber }),
+  ),
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),

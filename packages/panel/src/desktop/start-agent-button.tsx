@@ -1,5 +1,6 @@
 import { FAILURE_REASON, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
-import type { ModelChoice } from "@luke/features/models-wire";
+import type { MacOffer, ModelChoice, ModelProvider } from "@luke/features/models-wire";
+import { EXPERIMENT } from "@luke/settings";
 import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -14,6 +15,7 @@ import { choiceLabel } from "../tasks/coding-agent-model.js";
 import { ModelMenu, settledChoice } from "../tasks/model-menu.js";
 import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import { useExperiment } from "../use-app-state.js";
 
 /**
  * start-agent-button.tsx -- the task toolbar's Start: a split button that starts a coding agent on the task.
@@ -25,7 +27,12 @@ import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
  * the plan's tab stays open (the button is drawn afresh for each task and
  * each return to its plan, so a pick never outlives the Start it was made
  * for by much), and is never kept as the account's default, which only
- * Settings changes. The models and the default are read as the
+ * Settings changes. While local agents are on and the service offers any
+ * of the account's Macs, the menu's Run on picks Cloud or one of them by
+ * its name, the cloud by default, and a Start on a Mac says its name on
+ * hover after the model and asks the service to run the agent there, by
+ * the Mac's id. Run on lists only the Macs that run the chosen model's
+ * provider, as each offer lists them, and stands at Cloud where none does. The models and the default are read as the
  * button mounts and again as the menu opens, so the menu shows the catalog
  * as it stands and the default as Settings last wrote it. A
  * task with no repository has nothing for an agent to check out, so Start
@@ -38,6 +45,18 @@ import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
  * `SplitButton`.
  */
 
+/** Why Run on stands at Cloud for a model no Mac of the reader's runs. */
+const NO_MAC_RUNS_MODEL = "No Mac of yours can run this model's agents yet.";
+
+/** The Macs offered that run a model of `provider`: each one where the provider is not read yet. */
+function macsRunning(
+  macs: readonly MacOffer[] | undefined,
+  provider: ModelProvider | undefined,
+): readonly MacOffer[] {
+  if (macs === undefined) return [];
+  return provider === undefined ? macs : macs.filter((each) => each.providers.includes(provider));
+}
+
 export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
   const { start } = control;
   const repositoryRemedy = useRepositoryRemedy();
@@ -46,6 +65,9 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
   /** What the menu picked, which Start runs on in place of the default; nothing until a pick. */
   const [picked, setPicked] = useState<ModelChoice | undefined>(undefined);
+  /** The Mac the menu's Run on said to start on, by its device id; none for the cloud, until a Mac is picked. */
+  const [runOn, setRunOn] = useState<string | undefined>(undefined);
+  const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const menuId = useId();
   const chevron = useRef<HTMLButtonElement>(null);
   const latest = useRef(control);
@@ -73,8 +95,19 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   };
 
   const models = control.models;
+  // Note that Run on is offered only while local agents are on and the service offers a Mac of
+  // theirs, so a Mac that went away, or the experiment turned off, starts in the cloud whatever
+  // was picked.
+  const macs =
+    localAgents && control.macs !== undefined && control.macs.length > 0 ? control.macs : undefined;
   // A default effort the model no longer lists falls to the model's first.
   const chosen = settledChoice(models, picked ?? choice);
+  // Each Mac runs the providers it lists, so Run on offers only those that run the model chosen,
+  // and stands at Cloud where none does.
+  const provider = models?.find((each) => each.id === chosen?.model)?.provider;
+  const running = macsRunning(macs, provider);
+  const macUnavailable = macs !== undefined && running.length === 0 ? NO_MAC_RUNS_MODEL : undefined;
+  const mac = running.find((each) => each.deviceId === runOn);
   const unavailable = !start.available;
 
   const press = () => {
@@ -83,12 +116,14 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     // Note that only a pick names its choice; with none the service runs the default as it holds it.
     // A pick the catalog no longer settles is sent as picked, so the service refuses it rather than
     // the agent quietly running on the default.
-    start.onPress(picked === undefined ? undefined : (chosen ?? picked));
+    start.onPress(picked === undefined ? undefined : (chosen ?? picked), mac?.deviceId);
   };
 
+  const modelHint =
+    models !== undefined && chosen !== undefined ? choiceLabel(chosen, models) : undefined;
   const hint =
     start.reason ??
-    (models !== undefined && chosen !== undefined ? choiceLabel(chosen, models) : undefined);
+    (modelHint !== undefined && mac !== undefined ? `${modelHint} on ${mac.name}` : modelHint);
 
   const note = start.note;
   const remedyWords = note === undefined ? undefined : remedyLabel(note);
@@ -155,7 +190,23 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           onRetry={control.readModels}
           chosen={chosen}
           startsNew
-          onChoose={setPicked}
+          runOn={
+            macs === undefined
+              ? undefined
+              : {
+                  macs: running,
+                  deviceId: mac?.deviceId,
+                  onChoose: setRunOn,
+                  unavailable: macUnavailable,
+                }
+          }
+          onChoose={(next) => {
+            setPicked(next);
+            // A model the Mac picked cannot run lets go of it, so a later pick it runs starts in the cloud.
+            const nextProvider = models?.find((each) => each.id === next.model)?.provider;
+            const kept = macsRunning(macs, nextProvider).some((each) => each.deviceId === runOn);
+            if (!kept) setRunOn(undefined);
+          }}
           onClose={close}
           onLeave={(left) => {
             // Focus moving within the menu, or to the chevron whose own press toggles it, keeps it open.

@@ -1,6 +1,6 @@
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { remedyLabel } from "@luke/features/failure-remedy";
-import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import type { CatalogModel, MacOffer, ModelChoice } from "@luke/features/models-wire";
 import { readingWords } from "@luke/features/words";
 import {
   ErrorState,
@@ -12,6 +12,7 @@ import {
   SearchableMenu,
   Spinner,
 } from "@luke/ui";
+import { ExperimentTag } from "../experiment-marks.js";
 import { HarnessMark } from "../harness-marks.js";
 import { OPEN_SETTINGS_LABEL } from "../open-settings.js";
 import {
@@ -72,7 +73,9 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  * checks it as it checks any. What the owner does with a choice is its
  * own: the Start button starts on it, the chip
  * changes its agent, and under the pinned rows says what the agent has
- * cost.
+ * cost. The Start button's alone heads its pinned rows with Run on, Cloud
+ * or one of the reader's Macs by its name, the Experimental tag beside it,
+ * while local agents are on and the service offers any Mac of theirs.
  */
 
 /** What the menu says in the list's place. */
@@ -83,11 +86,32 @@ const MENU_NOTE = {
 
 /** The rows pinned under the list. */
 const FOOT_ROW = {
+  RUN_ON: "run-on",
   EFFORT: "effort",
   CONTEXT: "context",
   FAST: "fast",
   CONNECT: "connect",
 } as const;
+
+/** What the Run on row and its cloud choice are called; each Mac is called by its own name. */
+const RUN_ON_WORDS = {
+  ROW: "Run on",
+  CLOUD: "Cloud",
+} as const;
+
+/** The Run on row's choice, where the menu offers one: the account's Macs a Start may run on, and the one chosen now, none for the cloud. */
+export interface RunOnChoice {
+  /** The Macs offered (`macOfferSchema`), each a choice by its name. */
+  readonly macs: readonly MacOffer[];
+  /** The Mac chosen, by its device id; none for the cloud. */
+  readonly deviceId: string | undefined;
+  readonly onChoose: (deviceId: string | undefined) => void;
+  /** Why no Mac can be chosen for the model standing now, which the row says on hover, standing at Cloud; none where one can. */
+  readonly unavailable?: string | undefined;
+}
+
+/** The id the Run on row's cloud choice is picked by, which no device id is. */
+const CLOUD_ROW = "cloud";
 
 /**
  * The menu's rows: each base model under the mark of the harness that runs
@@ -164,6 +188,8 @@ export function ModelMenu(props: {
   planNote?: React.ReactNode;
   /** Whether the choice is what a new agent would start on, on the reader's own credentials, so one nothing of theirs pays for says it cannot run: the Start button's and an automation's. */
   startsNew?: boolean | undefined;
+  /** The Run on row heading the pinned rows, its Experimental tag beside it: only the Start button's, while local agents are on and the service offers this Mac. */
+  runOn?: RunOnChoice | undefined;
   /** The menu is on its way out (`SearchableMenu`'s). */
   leaving?: boolean | undefined;
   /** Hands the menu's element to the hold its owner draws it through its exit with. */
@@ -266,11 +292,42 @@ export function ModelMenu(props: {
     ];
   };
 
+  /** The Run on row, where the menu offers one: Cloud, or one of the account's Macs by its name, closing the menu on a pick; muted at Cloud where the model standing runs on no Mac. */
+  const runOnRow = (): FootRow[] => {
+    const runOn = props.runOn;
+    if (runOn === undefined) return [];
+    const mac = runOn.macs.find((each) => each.deviceId === runOn.deviceId);
+    return [
+      {
+        id: FOOT_ROW.RUN_ON,
+        label: RUN_ON_WORDS.ROW,
+        tag: <ExperimentTag />,
+        detail: mac?.name ?? RUN_ON_WORDS.CLOUD,
+        disabled: runOn.unavailable,
+        submenu: {
+          label: RUN_ON_WORDS.ROW,
+          rows: [
+            { id: CLOUD_ROW, label: RUN_ON_WORDS.CLOUD },
+            ...runOn.macs.map((each) => ({ id: each.deviceId, label: each.name })),
+          ],
+          value: mac?.deviceId ?? CLOUD_ROW,
+          onPick: (picked) => {
+            onClose();
+            runOn.onChoose(
+              runOn.macs.some((each) => each.deviceId === picked) ? picked : undefined,
+            );
+          },
+        },
+      },
+    ];
+  };
+
   const foot: FootRow[] | undefined =
     chosen === undefined || read === undefined || models === undefined
       ? undefined
       : [
           ...connectRow(),
+          ...runOnRow(),
           {
             id: FOOT_ROW.EFFORT,
             label: "Effort",

@@ -1,16 +1,33 @@
-import type { CodingAgentLatestTurn } from "@luke/database/models/coding-agent-store";
-import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import type {
+  CodingAgentLatestTurn,
+  CodingAgentLine,
+} from "@luke/database/models/coding-agent-store";
+import {
+  CODING_AGENT_BRIEF,
+  CODING_AGENT_FAILURE,
+  CODING_AGENT_KIND,
+  CODING_AGENT_MACHINE,
+  CODING_AGENT_STATUS,
+  CONTEXT_WINDOW,
+} from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Duration } from "effect";
 import { expect, test } from "vitest";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
 import { CODER } from "./bounds.js";
-import { codingAgentActivityAt, codingAgentFailureOf, codingAgentStatusOf } from "./status.js";
+import {
+  codingAgentActivityAt,
+  codingAgentFailureOf,
+  codingAgentStatusOf,
+  codingAgentSummary,
+} from "./status.js";
 
 /**
  * status.test.ts -- when a coding agent last did something settled: started,
  * handed a message, or its turn ended, and never a moment a turn streams;
  * how long a line of the developer's awaiting its turn reads it running; and
- * why a failed turn failed, a prompt past the model's window told apart.
+ * why a failed turn failed, a prompt past the model's window told apart;
+ * and the Mac a local agent's summary names, and when it last beat.
  */
 
 const LINE_GRACE_MS = Duration.toMillis(CODER.LINE_GRACE);
@@ -126,4 +143,49 @@ test("a prompt the provider refused as longer than the window reads as a context
   expect(codingAgentFailureOf(refused)).toBe(CODING_AGENT_FAILURE.CONTEXT_OVERFLOW);
   expect(codingAgentFailureOf(openAi)).toBe(CODING_AGENT_FAILURE.CONTEXT_OVERFLOW);
   expect(codingAgentFailureOf(overloaded)).toBe(CODING_AGENT_FAILURE.MODEL);
+});
+
+test("a local agent's summary names its Mac and when it last beat; an agent in a sandbox names none", () => {
+  const DEVICE = "device-1";
+  const line: CodingAgentLine = {
+    id: "agent-1",
+    userId: "user-1",
+    taskId: null,
+    organizationId: "workspace-1",
+    automationId: null,
+    automationName: null,
+    startedFrom: null,
+    conversationId: "conversation-1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    contextWindow: CONTEXT_WINDOW.LONG,
+    brief: CODING_AGENT_BRIEF.BLANK,
+    repository: null,
+    branch: null,
+    startBranch: null,
+    title: null,
+    archivedAt: null,
+    archivedBy: null,
+    disabledServers: [],
+    author: null,
+    githubAccess: GITHUB_ACCESS.APP,
+    kind: CODING_AGENT_KIND.CODER,
+    createdAt: STARTED,
+    machine: CODING_AGENT_MACHINE.MAC,
+    deviceId: DEVICE,
+  };
+  const now = 100_000;
+  const seen = (lastSeenAt: number) =>
+    codingAgentSummary(
+      line,
+      { turn: undefined, awaitingLineAt: undefined },
+      now,
+      new Map(),
+      [],
+      new Map([
+        [DEVICE, { id: DEVICE, name: "Charles's MacBook Pro", lastSeenAt: new Date(lastSeenAt) }],
+      ]),
+    ).mac;
+
+  expect(seen(now - 44_000)).toEqual({ name: "Charles's MacBook Pro", seenAt: now - 44_000 });
 });

@@ -54,6 +54,7 @@ import {
   updateCodingAgentChoice,
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
+import { macDevicesNamed } from "@luke/database/models/mac-device-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
@@ -112,6 +113,7 @@ import {
   pageAccounts,
   startedBlank,
   summaryAccounts,
+  summaryDevices,
 } from "./coder-host/status.js";
 import {
   continuedByOf,
@@ -171,10 +173,18 @@ const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
     userId,
     agents.map((agent) => agent.id),
   );
+  const macs = yield* hostedStoreOrUnavailable(macDevicesNamed(summaryDevices(agents)));
   const now = yield* Clock.currentTimeMillis;
   return {
     agents: agents.map((agent) =>
-      codingAgentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id)),
+      codingAgentSummary(
+        agent,
+        standing(agent.conversationId),
+        now,
+        names,
+        continuedBy(agent.id),
+        macs,
+      ),
     ),
   };
 });
@@ -439,6 +449,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const standing = yield* standingsOf([agent.conversationId]);
       const names = yield* hostedStoreOrUnavailable(readAccountNames(pageAccounts(agent)));
       const continuedBy = yield* continuedByOf(userId, [agent.id]);
+      const macs = yield* hostedStoreOrUnavailable(macDevicesNamed(summaryDevices([agent])));
       const now = yield* Clock.currentTimeMillis;
       return {
         agent: codingAgentPage(
@@ -447,6 +458,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           now,
           names,
           continuedBy(agent.id),
+          macs,
         ),
       };
     }),

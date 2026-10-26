@@ -46,6 +46,15 @@ export interface ExperimentEntry {
  */
 export const EXPERIMENTS = [
   {
+    key: EXPERIMENT.LOCAL_AGENTS,
+    name: "Local agents",
+    detail:
+      "Run a coding agent on this Mac, in a worktree, with your own tools. " +
+      "Its transcript and the files its tools read still reach Luke.",
+    owner: "Charles",
+    since: "2026-10-25",
+  },
+  {
     key: EXPERIMENT.CHANNELS,
     name: "Channels",
     detail:

@@ -31,11 +31,11 @@
  * moves it to another payer.
  *
  * Where the agent runs is chosen beside it (`agentMachineChoice`): a Vercel
- * Sandbox, or, where the Start asks for This Mac, the starter's Mac, on the
- * same runtime and payer a cloud agent would run on. This Mac is offered
- * (`thisMacOffer`) only to an account with the `local-agents` experiment on
- * and a Mac of its that beat within `THIS_MAC.FRESH`, and the agent is pinned
- * to the Mac that beat last. A local agent runs Claude Code alone, so one on
+ * Sandbox, or, where the Start names one of the starter's Macs, that Mac, on
+ * the same runtime and payer a cloud agent would run on. Its Macs are offered
+ * (`macOffers`) only to an account with the `local-agents` experiment on,
+ * each that beat within `THIS_MAC.FRESH`, and the agent is pinned to the one
+ * the Start named, once it is checked to be among them. A local agent runs Claude Code alone, so one on
  * Codex, or on no harness at all, is refused by name.
  */
 
@@ -55,9 +55,9 @@ import {
   type CodingAgentPayer,
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
-  type ThisMacOffer,
+  MAC_PRESENCE,
 } from "@luke/features/coding-agent-wire";
-import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
+import { type MacOffer, MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -82,7 +82,7 @@ export class LocalAgentRefused extends Data.TaggedError("LocalAgentRefused")<{
 
 export const THIS_MAC = {
   /** How lately a Mac must have beaten for Start to offer it: one beat, and room for the next to arrive. */
-  FRESH: Duration.seconds(45),
+  FRESH: Duration.millis(MAC_PRESENCE.FRESH_MS),
 } as const;
 
 /** Where a new agent runs: its machine, and the Mac a local agent is pinned to. */
@@ -237,52 +237,97 @@ export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* providerRuntimeChoice(userId, provider, yield* keyRowsOf(userId, rows));
 });
 
+/** The model providers a Mac may run a Start of: Claude Code's alone, since a Mac runs no Codex yet. */
+const MAC_PROVIDERS: readonly ModelProvider[] = [MODEL_PROVIDER.ANTHROPIC];
+
+/** The provider whose models a native runtime runs, which the Mac a Start names must list. */
+const RUNTIME_PROVIDER = {
+  [CONVERSATION_RUNTIME.CLAUDE_CODE]: MODEL_PROVIDER.ANTHROPIC,
+  [CONVERSATION_RUNTIME.CODEX]: MODEL_PROVIDER.OPENAI,
+} as const;
+
+/** The native runtime that runs a provider's models: the harness a Mac launches for it. */
+const RUNTIME_OF = {
+  [MODEL_PROVIDER.ANTHROPIC]: CONVERSATION_RUNTIME.CLAUDE_CODE,
+  [MODEL_PROVIDER.OPENAI]: CONVERSATION_RUNTIME.CODEX,
+} as const satisfies Record<ModelProvider, ConversationRuntime>;
+
 /**
- * The Mac the account may start a local agent on, as Start offers it: the
- * one of its Macs that beat last, where it beat within `THIS_MAC.FRESH` and
- * the account has the `local-agents` experiment on; none otherwise.
+ * The providers a Start on any of the account's Macs runs, as the account
+ * can pay for them: each of `MAC_PROVIDERS` whose model a Start of the
+ * account's would run on that provider's own harness, on a plan or a key
+ * it keeps in Luke, and none it cannot pay for.
  */
-export const thisMacOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
+const paidMacProviders = Effect.fnUntraced(function* (
   userId: string,
-): Effect.fn.Return<Option.Option<ThisMacOffer>, StoreFailure, DatabaseServices> {
-  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return Option.none();
+): Effect.fn.Return<readonly ModelProvider[], StoreFailure, DatabaseServices> {
+  const rows = yield* keyRowsOf(userId, undefined);
+  const paid: ModelProvider[] = [];
+  for (const provider of MAC_PROVIDERS) {
+    const choice = yield* Effect.result(providerRuntimeChoice(userId, provider, rows));
+    if (Result.isSuccess(choice) && choice.success.runtime === RUNTIME_OF[provider]) {
+      paid.push(provider);
+    }
+  }
+  return paid;
+});
+
+/**
+ * The Macs the account may start a local agent on, as Start offers them:
+ * each of its Macs that beat within `THIS_MAC.FRESH`, the latest first,
+ * with the providers a Start on it runs that the account can pay for
+ * (`paidMacProviders`), where the account has the `local-agents`
+ * experiment on; none otherwise.
+ * Note that Start offers every one by name rather than one as This Mac,
+ * because the service cannot tell which Mac the asking window runs on, and
+ * a web tab runs on none.
+ */
+export const macOffers = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+): Effect.fn.Return<readonly MacOffer[], StoreFailure, DatabaseServices> {
+  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return [];
   const now = yield* Clock.currentTimeMillis;
   const seen = yield* macDevicesSeenSince(
     userId,
     new Date(now - Duration.toMillis(THIS_MAC.FRESH)),
   );
-  return Option.map(Option.fromNullishOr(seen[0]), (device) => ({
-    deviceId: device.id,
-    name: device.name,
-  }));
+  if (seen.length === 0) return [];
+  const providers = yield* paidMacProviders(userId);
+  return seen.map((device) => ({ deviceId: device.id, name: device.name, providers }));
 });
 
 /**
  * Where a new agent of the account's runs on the runtime given, as its
- * Start asks: a sandbox where it asks for none, or its starter's Mac that
- * beat last, where This Mac is offered to it and the runtime is Claude
- * Code's; refused by name otherwise, Codex among it.
+ * Start asks: a sandbox where it asks for none, or the Mac it names, where
+ * that Mac is one Start offers the account (`macOffers`) and lists the
+ * provider the runtime runs; refused by name otherwise: a Mac that is
+ * another account's or is not there as away, Codex on a Mac that runs none,
+ * and a runtime with no harness.
  */
 export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  asked: CodingAgentMachine | undefined,
+  asked: {
+    readonly machine?: CodingAgentMachine | undefined;
+    readonly deviceId?: string | undefined;
+  },
   runtime: ConversationRuntime,
 ): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
-  if (asked !== CODING_AGENT_MACHINE.MAC) return IN_A_SANDBOX;
+  if (asked.machine !== CODING_AGENT_MACHINE.MAC) return IN_A_SANDBOX;
   if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.OFF });
   }
-  if (runtime === CONVERSATION_RUNTIME.CODEX) {
-    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.CODEX });
-  }
-  if (runtime !== CONVERSATION_RUNTIME.CLAUDE_CODE) {
+  if (runtime !== CONVERSATION_RUNTIME.CLAUDE_CODE && runtime !== CONVERSATION_RUNTIME.CODEX) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });
   }
-  const offer = yield* thisMacOffer(userId);
-  if (Option.isNone(offer)) {
+  const offer = (yield* macOffers(userId)).find((each) => each.deviceId === asked.deviceId);
+  if (offer === undefined) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.MAC_AWAY });
   }
-  return { machine: CODING_AGENT_MACHINE.MAC, deviceId: offer.value.deviceId };
+  // Note that a Mac runs only the providers it lists, so Codex on one that lists none of OpenAI's is refused by name.
+  if (!offer.providers.includes(RUNTIME_PROVIDER[runtime])) {
+    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.CODEX });
+  }
+  return { machine: CODING_AGENT_MACHINE.MAC, deviceId: offer.deviceId };
 });
 
 /**

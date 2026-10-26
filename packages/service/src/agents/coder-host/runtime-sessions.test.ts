@@ -78,6 +78,7 @@ import {
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
 import { deploymentEveForAccounts } from "../deployment-eve.js";
+import { macOffers } from "./agent-runtime-choice.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import { rewoundAgent } from "./rewind.js";
 import {
@@ -1248,7 +1249,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start on This Mac runs only for an account with the experiment on and a Mac of its that beat lately, pinned to that Mac on Claude Code; Codex, the experiment off, or no Mac there is refused by name and leaves no agent",
+      "a Start on a Mac runs only for an account with the experiment on and the Mac it names among its own that beat lately, pinned to that Mac on Claude Code; Codex, the experiment off, or that Mac not there is refused by name and leaves no agent",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1272,6 +1273,15 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               name: "no Mac there",
               on: true,
               mac: false,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: LOCAL_AGENT_REFUSAL.MAC_AWAY,
+            },
+            {
+              name: "a Mac there, but another named",
+              on: true,
+              mac: true,
+              named: randomUUID(),
               chatGpt: "none",
               model: "anthropic/claude-opus-5.5",
               refused: LOCAL_AGENT_REFUSAL.MAC_AWAY,
@@ -1301,7 +1311,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               });
             }
             const { eve, native } = runtimes();
-            const ask = { ...startIn(workspaceId, each.model), machine: CODING_AGENT_MACHINE.MAC };
+            const ask = {
+              ...startIn(workspaceId, each.model),
+              machine: CODING_AGENT_MACHINE.MAC,
+              deviceId: "named" in each ? each.named : deviceId,
+            };
             const started = yield* Effect.result(
               startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
                 Effect.provide(
@@ -1327,6 +1341,32 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               Option.map(made, (agent) => [agent.machine, agent.deviceId]),
               Option.some([CODING_AGENT_MACHINE.MAC, deviceId]),
               each.name,
+            );
+          }
+        }),
+    );
+
+    it.effect(
+      "a Mac is offered as running Claude's models only to an account that pays for Claude Code in Luke, and as running none otherwise",
+      () =>
+        Effect.gen(function* () {
+          for (const plan of [true, false]) {
+            const { owner } = yield* openStarter(plan);
+            yield* writeAccountPreferences(owner, {
+              experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
+            });
+            yield* registerMacDevice(owner, {
+              id: randomUUID(),
+              name: "Studio",
+              ...MAC_DEVICE_LAYOUT,
+            });
+            const offers = yield* macOffers(owner).pipe(
+              Effect.provide(Layer.mergeAll(environment(), runtimes().native)),
+            );
+            assert.deepEqual(
+              offers.map((offer) => [offer.name, offer.providers]),
+              [["Studio", plan ? [MODEL_PROVIDER.ANTHROPIC] : []]],
+              plan ? "a Claude plan" : "no Claude credential",
             );
           }
         }),

@@ -1,10 +1,6 @@
 import { Schema as EffectSchema } from "effect";
-import {
-  CODING_AGENT_BOUNDS,
-  contextWindowSchema,
-  thisMacOfferSchema,
-} from "./coding-agent-wire.js";
-import { countedNumber } from "./service-wire.js";
+import { CODING_AGENT_BOUNDS, contextWindowSchema } from "./coding-agent-wire.js";
+import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
  * models-wire.ts -- the models a coding agent may run on, and the account's default among them, as the desktop reads and writes them.
@@ -106,10 +102,24 @@ export const catalogModelSchema = EffectSchema.Struct({
 
 export type CatalogModel = typeof catalogModelSchema.Type;
 
-/** The models the service offers (GET), and the Mac a Start may run its agent on, where the account has the `local-agents` experiment on and a Mac of its beat lately; absent otherwise, and from a service older than it. */
+/**
+ * One of the account's Macs a Start may run a local agent on, as Start
+ * offers it: one that beat lately, by its id and name, and the model
+ * providers a Start on that Mac runs, which Run on lists it for and the
+ * service checks a Start against.
+ */
+export const macOfferSchema = EffectSchema.Struct({
+  deviceId: wireUuidSchema,
+  name: EffectSchema.String,
+  providers: EffectSchema.Array(modelProviderSchema),
+});
+
+export type MacOffer = typeof macOfferSchema.Type;
+
+/** The models the service offers (GET), and the account's Macs a Start may run its agent on, each one that beat lately, where the account has the `local-agents` experiment on and any did; absent otherwise, and from a service older than it. */
 export const modelsAnswerSchema = EffectSchema.Struct({
   models: EffectSchema.Array(catalogModelSchema),
-  thisMac: EffectSchema.optionalKey(thisMacOfferSchema),
+  macs: EffectSchema.optionalKey(EffectSchema.Array(macOfferSchema)),
 });
 
 /** A model, an effort, and the context window where it is not the default long one, as a Start names them and the account's default stores them. */

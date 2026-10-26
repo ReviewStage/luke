@@ -46,7 +46,7 @@ import {
   inboxStartRequestSchema,
 } from "./inbox-wire.js";
 import { memoriesAnswerSchema, memoryIdSchema } from "./memory-wire.js";
-import { catalogModelSchema, modelChoiceSchema, modelProviderSchema } from "./models-wire.js";
+import { modelChoiceSchema, modelProviderSchema, modelsAnswerSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
   planTemplateRevisionAnswerSchema,
@@ -156,11 +156,8 @@ const failedReaching = EffectSchema.Struct({
   provider: EffectSchema.optionalKey(modelProviderSchema),
 });
 
-/** The models the service offers, as the window hears them: the list, or why there is none. */
-export const codingAgentModelsAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ models: EffectSchema.Array(catalogModelSchema) }),
-  failed,
-]);
+/** The models the service offers, as the window hears them: the list and the Mac a Start may run on where it offers one (`modelsAnswerSchema`), or why there is none. */
+export const codingAgentModelsAnswerSchema = EffectSchema.Union([modelsAnswerSchema, failed]);
 
 export type CodingAgentModelsAnswer = typeof codingAgentModelsAnswerSchema.Type;
 

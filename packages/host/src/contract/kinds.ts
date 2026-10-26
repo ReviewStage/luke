@@ -425,6 +425,8 @@ export const MAC_TERMINAL_ACT_KIND = {
   MAC_TERMINAL_CLOSE: "macTerminal.close",
   MAC_TERMINAL_STOP: "macTerminal.stop",
   MAC_TERMINAL_REVEAL: "macTerminal.reveal",
+  /** A local agent's own worktree, which the Mac's host made under `~/.luke/agents`, opened in the Mac's Terminal. */
+  MAC_TERMINAL_LOCAL_AGENT: "macTerminal.localAgent",
 } as const;
 
 /**
