@@ -38,6 +38,29 @@ published() {
     docker buildx imagetools inspect "$1" >/dev/null 2>&1
 }
 
+# Prints the size of each layer of the image in an OCI layout, as a box
+# downloads it and as it unpacks, and adds the table to the run's summary,
+# so what a change costs a box that pulls it again can be read off.
+layers() {
+    local layout=$1 manifest table digest size unpacked index=0
+    manifest=$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).manifests[0].digest.slice(7)' "$layout/index.json")
+    table=$'| Layer | Download | Unpacked |\n| --- | --- | --- |\n'
+    # Note that eve's own layers are zstd, and the ones built here gzip.
+    while read -r digest size media; do
+        if [[ $media == *zstd ]]; then
+            unpacked=$(zstd -dc "$layout/blobs/sha256/$digest" | wc -c)
+        else
+            unpacked=$(gzip -dc "$layout/blobs/sha256/$digest" | wc -c)
+        fi
+        table+=$(printf '| %s | %s MB | %s MB |' "$index" "$((size / 1000000))" "$((unpacked / 1000000))")$'\n'
+        index=$((index + 1))
+    done < <(node -e 'for (const l of JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).layers) console.log(l.digest.slice(7), l.size, l.mediaType)' "$layout/blobs/sha256/$manifest")
+    printf '%s\n' "$table"
+    if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
+        printf '%s, layers bottom first:\n\n%s\n' "$2" "$table" >>"$GITHUB_STEP_SUMMARY"
+    fi
+}
+
 output() {
     printf '%s=%s\n' "$1" "$2"
     if [[ -n ${GITHUB_OUTPUT:-} ]]; then
@@ -76,12 +99,27 @@ if [[ $command == build ]]; then
         docker buildx create --name "$BUILDER" --driver docker-container \
             --buildkitd-flags '--allow-insecure-entitlement security.insecure' >/dev/null
     fi
+    # Each step is a layer that a box pulls again only once it changes, which
+    # holds only where an unchanged step is the very layer the build before
+    # wrote: so every build reads BuildKit's cache from the registry, and a
+    # publishing one writes it back. Its tag names it a cache, never an image,
+    # and no host resolves it.
+    cache="$repository:buildkit-cache-$(architecture "$platform")"
+    caching=(--cache-from "type=registry,ref=$cache")
+    if [[ $push == true ]]; then
+        caching+=(--cache-to "type=registry,ref=$cache,mode=max,image-manifest=true,oci-mediatypes=true")
+    fi
     # Note that provenance and SBOM manifests are left out, so each platform's
-    # tag is one plain image manifest, which the publish step joins into the index.
+    # tag is one plain image manifest, which the publish step joins into the
+    # index. The image is written as an OCI layout too, which `layers` reads.
+    layout=$(mktemp -d)
+    trap 'rm -rf "$context" "$layout"' EXIT
     docker buildx build --builder "$BUILDER" --platform "$platform" \
-        --allow security.insecure --provenance=false --sbom=false \
+        --allow security.insecure --provenance=false --sbom=false "${caching[@]}" \
         --output "type=image,name=$reference-$(architecture "$platform"),push=$push" \
+        --output "type=oci,dest=$layout,tar=false" \
         --file "$context/Dockerfile" "$context"
+    layers "$layout" "$reference-$(architecture "$platform")"
     exit 0
 fi
 

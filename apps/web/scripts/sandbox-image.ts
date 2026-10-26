@@ -22,9 +22,10 @@ const program = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const build = yield* recordOciImageBuild();
-  yield* fs.makeDirectory(directory, { recursive: true });
   for (const file of build.files) {
-    yield* fs.writeFile(path.join(directory, file.path), file.contents);
+    const destination = path.join(directory, file.path);
+    yield* fs.makeDirectory(path.dirname(destination), { recursive: true });
+    yield* fs.writeFile(destination, file.contents);
   }
   yield* Effect.sync(() =>
     process.stdout.write(`key=${build.key}\nreference=${build.reference}\n`),
