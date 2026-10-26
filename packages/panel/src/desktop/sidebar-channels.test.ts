@@ -22,8 +22,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
  * sidebar-channels.test.ts -- the sidebar's channels: a row posted in since
  * the reader looked stands in the unread weight, and a section's Browse
  * archived channels lists that section's archived channels, each opened
- * again by its Unarchive, or opened to read by a press; and Edit asks for a
- * channel's name and purpose, #general's name locked, sending what changed.
+ * again by its Unarchive, or opened to read by a press; and Edit, from the
+ * row's menu on ⇧F10, asks for a channel's name and purpose, #general's name locked, sending what changed.
  *
  * The service is a script at the act boundary; synthetic channels throughout.
  */
@@ -177,14 +177,16 @@ test("Browse archived channels lists the section's archived channels, Unarchive 
   assert.deepEqual(opened, ["c-old"]);
 });
 
-test("Edit on #general fills in its purpose, keeps its name locked, and sends only the purpose changed", async () => {
+test("Edit on #general, its menu opened by ⇧F10, fills in its purpose, keeps its name locked, and sends only the purpose changed", async () => {
   const sidebar = mount([channel("c-general", "general")], []);
   const row =
     [...sidebar.querySelectorAll<HTMLElement>("button")].find((each) =>
       each.textContent?.startsWith("general"),
     ) ?? assert.fail("#general is listed");
   act(() => {
-    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 4, clientY: 4 }));
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true, cancelable: true }),
+    );
   });
   act(() =>
     (

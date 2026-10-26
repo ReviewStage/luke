@@ -41,8 +41,8 @@ import type { ChannelsControl } from "./use-channels.js";
  * standing channels come first and the projects' under their heading, each
  * in the service's order (`CHANNEL_SECTIONS`). A channel something was
  * posted in since the reader last looked stands in the unread weight, as
- * the sidebar's row does, and a long press offers the same menu its row's
- * right-click does (`channel-menu.tsx`). A press opens the channel's
+ * the sidebar's row does, and a long press, or the menu key or ⇧F10,
+ * offers the same menu its row's right-click does (`channel-menu.tsx`). A press opens the channel's
  * stream, and the bar's "+" asks for a channel to make, as the sidebar's
  * does, opening it once made. While the channels are first read, each
  * section stands a few rows' blocks in its rows' place
@@ -83,6 +83,7 @@ function ChannelListRow({
           tone: STATUS_TONE.ATTENTION,
         }}
         contextMenu={menu.contextMenu()}
+        onKeyDown={menu.keyMenu}
         onClick={() => onOpen(channel.id)}
       >
         {channel.name}
