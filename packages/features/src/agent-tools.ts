@@ -11,6 +11,7 @@
  */
 
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "./board-vocabulary.js";
+import { CHANNEL_TOOL } from "./channel-wire.js";
 import {
   AGENT_MESSAGE_TOOL,
   CODING_AGENT_DELEGATE_TOOL,
@@ -79,6 +80,10 @@ export const AGENT_TOOL = {
   POST_THREAD: INBOX_TOOL.POST,
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
   READ_THREADS: INBOX_TOOL.READ,
+  // The workspace's channels, made, changed, and a thread moved between them, as a member does.
+  CREATE_CHANNEL: CHANNEL_TOOL.CREATE,
+  UPDATE_CHANNEL: CHANNEL_TOOL.UPDATE,
+  MOVE_THREAD: CHANNEL_TOOL.MOVE,
   // Every open inbox ask to an operator's member, across all their agents, the operator's alone.
   LIST_OPEN_ASKS: "list_open_asks",
   OPEN_PULL_REQUEST: "open_pull_request",

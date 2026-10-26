@@ -1,12 +1,29 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
+  archiveChannel,
   CHANNEL_NAME_REFUSAL,
+  CHANNEL_WRITE_REFUSAL,
   type ChannelRow,
+  type ChannelWriteRefusal,
+  createChannel,
+  editChannel,
+  listArchivedChannels,
   openChannels,
   resolveChannel,
+  unarchiveChannel,
 } from "@luke/database/models/channel-store";
+import { GENERAL_CHANNEL } from "@luke/database/schemas/channel";
 import { OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
+import { isWireUuid } from "@luke/features";
+import {
+  CHANNEL_BOUNDS,
+  CHANNEL_TOOL,
+  type ChannelUpdateInput,
+  channelCreateInputSchema,
+  channelUpdateInputSchema,
+  threadMoveInputSchema,
+} from "@luke/features/channel-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ANSWER_LEAD,
@@ -35,16 +52,20 @@ import { LINK_PLACE, linkOf, mentionMarkdownLink } from "@luke/features/link-gra
 import { decodeMention, MENTION_KIND, mentionLinksIn } from "@luke/features/mention-link";
 import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
 import { readEither } from "@luke/wire/effect";
-import { DateTime, Effect, Option, Result } from "effect";
+import { Data, DateTime, Effect, Option, Result } from "effect";
+import { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
 import { logStoreFailure, type StoreFailure } from "../../http/store-failure.js";
 import {
   agentInboxItems,
+  agentThreadId,
+  CHANNEL_MOVE_REFUSAL,
   closeInboxItem,
   INBOX_POST_REFUSAL,
   type InboxAgent,
   type InboxBodyPicture,
   type InboxPostRefusal,
+  moveChannelThread,
   postInboxThread,
 } from "../../inbox/inbox-store.js";
 import { noticedForOperator } from "../operator-notice.js";
@@ -57,7 +78,7 @@ import {
 } from "./inbox-image.js";
 
 /**
- * inbox.ts -- the coding agent's three thread tools: post a message on a thread in one of its workspace's channels, withdraw a thread's open ask, and read every thread back.
+ * inbox.ts -- the coding agent's thread and channel tools: post a message on a thread in one of its workspace's channels, withdraw a thread's open ask, read every thread back, make or change a channel, and move a thread into one.
  *
  * What an agent cannot do or decide alone, a product choice, an approval
  * of a risky step, a question, or something only the developer can do by
@@ -91,6 +112,19 @@ import {
  * holds its threads whatever its context has lost to compaction. A worker
  * gets none of these tools, because the developer answers the agent it
  * works for.
+ *
+ * An agent keeps its workspace's channels as a member does, on the
+ * developer's account, and is refused as they are (`channel-store.ts`): it
+ * makes one, renames it, edits its purpose, archives or unarchives it, each
+ * naming the channel by its name rather than its id, and moves any thread
+ * it may read into an open one, one of its own by its key, the same move a
+ * member makes and a later post naming a channel makes
+ * (`inbox-store.ts`'s `moveChannelThread`). Their words steer it to post
+ * in the channels that stand, since a channel made per task is the noise
+ * Chat was: a new one only for a lasting topic or a project of weeks no
+ * open one covers, its purpose one line, and a project's archived once it
+ * ships. A write answers the open channels as they then stand, and a move
+ * the thread and where it now lives.
  */
 
 /** The inbox's picture bound in megabytes, as the words the model reads say it. */
@@ -110,6 +144,7 @@ const POST_THREAD_WORDS =
   "channel is the open channel the thread goes to, by its name, such as general: choose one for each thread by what belongs in it. " +
   "A thread that names none goes to #general, and a later post under its key that names none leaves it where it stands; " +
   "a name no open channel of your workspace goes by, or an archived channel's, is refused. " +
+  `Post to a channel that stands: make one with ${CHANNEL_TOOL.CREATE} only for a lasting topic none of them covers, rename, edit, or archive one with ${CHANNEL_TOOL.UPDATE}, and move a thread elsewhere with ${CHANNEL_TOOL.MOVE}. ` +
   "to is the member the thread's ask is addressed to, by their mention link, the [@Name](link) you name a member by, and the ask waits on them; " +
   "without it, it waits on the task's assignee, or on the developer who started you. " +
   `body is the message, one Markdown body of at most ${INBOX_BOUNDS.MAX_MESSAGE_CHARS} characters. ` +
@@ -141,6 +176,37 @@ const POST_THREAD_WORDS =
 
 /** One open channel as the tool's words list it: its name and what belongs in it. */
 type ListedChannel = Pick<ChannelRow, "name" | "purpose">;
+
+/** What `create_channel`'s words say. */
+const CREATE_CHANNEL_WORDS =
+  "Make an open channel in your workspace, which every member reads and every agent may post to, as a member makes one. " +
+  `Prefer a channel that stands: ${INBOX_TOOL.POST}'s words list the open ones with what belongs in each, and a thread goes in the one it fits best, or #general. ` +
+  "Make a channel only for a lasting topic, or a project of several weeks, that none of them covers: never one per task, pull request, or thread, " +
+  "and never one an open channel already covers under another name. " +
+  `name is a lowercase slug of words joined by hyphens, such as release-notes, at most ${CHANNEL_BOUNDS.MAX_NAME_CHARS} characters, which no open channel goes by. ` +
+  `purpose is one plain line of at most ${CHANNEL_BOUNDS.MAX_PURPOSE_CHARS} characters saying what belongs in it, which members and agents choose it by. ` +
+  `project is true for one project's channel, which you archive with ${CHANNEL_TOOL.UPDATE} once the project ships; leave it out for a standing topic. ` +
+  "The call answers with your workspace's open channels as they then stand.";
+
+/** What `update_channel`'s words say. */
+const UPDATE_CHANNEL_WORDS =
+  "Change one channel of your workspace, open or archived, as a member does; what you leave out stands. " +
+  "channel names it by its name, # or not; where an open channel and an archived one go by the same name, it names the open one, " +
+  "so rename that first to reach the archived one. name renames it, to a lowercase slug no open channel goes by; " +
+  "purpose replaces what belongs in it, in one plain line. " +
+  "archived true archives it: its threads stay where they are, still readable, and its name is freed; archived false opens an archived channel again under its own name, " +
+  "and an archived channel is renamed or given a purpose only in the call that opens it again. " +
+  "Archive a project's channel once the project ships, and a channel nobody needs any more, rather than leaving it open. " +
+  "#general, where every thread that names no channel goes, is never renamed or archived; its purpose may be edited. " +
+  "The call answers with your workspace's open channels as they then stand.";
+
+/** What `move_thread`'s words say. */
+const MOVE_THREAD_WORDS =
+  "Move a thread into another open channel of your workspace, where it belongs better, as a member moves one; its messages and asks stay as they are. " +
+  `thread is one of your own threads by its key, or any thread you may read by its id, which ${INBOX_TOOL.READ} answers for each of yours and a thread's mention link ends with. ` +
+  "channel names the open channel by its name, # or not. " +
+  `A later ${INBOX_TOOL.POST} under your own thread's key that names a channel moves it too. ` +
+  "The call answers with the thread and the channel it now lives in.";
 
 /**
  * The words `post_thread` is shown with: how to post, then the workspace's
@@ -190,6 +256,21 @@ export const INBOX_TOOLS = {
       "take it as their not wanting what the ask asked. Read it before you rely on a do you posted without waits being done.",
     inputSchema: inboxReadInputSchema,
   },
+  CREATE_CHANNEL: {
+    name: CHANNEL_TOOL.CREATE,
+    description: CREATE_CHANNEL_WORDS,
+    inputSchema: channelCreateInputSchema,
+  },
+  UPDATE_CHANNEL: {
+    name: CHANNEL_TOOL.UPDATE,
+    description: UPDATE_CHANNEL_WORDS,
+    inputSchema: channelUpdateInputSchema,
+  },
+  MOVE_THREAD: {
+    name: CHANNEL_TOOL.MOVE,
+    description: MOVE_THREAD_WORDS,
+    inputSchema: threadMoveInputSchema,
+  },
 } as const;
 
 /**
@@ -212,8 +293,10 @@ interface AgentThreadLine {
   readonly answers?: Omit<InboxAnswers, "ask">;
 }
 
-/** One thread as the agent reads it back: its key, title, its mention, where it stands, whether the agent waits on its open ask, and its messages in order. */
+/** One thread as the agent reads it back: its id and key, title, its mention, where it stands, whether the agent waits on its open ask, and its messages in order. */
 interface AgentInboxLine {
+  /** The thread's id, which `move_thread` names it by as well as by its key. */
+  readonly id: string;
   readonly key: string;
   readonly title: string;
   /** The thread as the agent names it in its words, `[@title](link)`, which Luke draws as its chip; none where the member reads its workspace no longer. */
@@ -247,6 +330,31 @@ export type InboxToolResult =
       readonly inbox?: readonly AgentInboxLine[];
     };
 
+/** One open channel as a channel tool answers it: its name, what belongs in it, and whether it is one project's. */
+type AgentChannelLine = Pick<ChannelRow, "name" | "purpose" | "project">;
+
+/** A thread a move answers: its id and title, and the channel it now lives in, by name. */
+interface MovedThreadLine {
+  readonly id: string;
+  readonly title: string;
+  readonly channel: string;
+}
+
+/** What a channel tool's call answers, as the model reads it: the open channels as they then stand, the thread a move moved, or why the call did nothing. */
+export type ChannelToolResult =
+  | {
+      readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED;
+      readonly channels: readonly AgentChannelLine[];
+    }
+  | {
+      readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED;
+      readonly thread: MovedThreadLine;
+    }
+  | {
+      readonly status: typeof ACTION_RESULT_STATUS.REJECTED;
+      readonly reason: string;
+    };
+
 /** Why a call did nothing, in the words the model reads. */
 export const INBOX_REFUSAL = {
   UNREADABLE_POST:
@@ -278,6 +386,29 @@ export const INBOX_REFUSAL = {
   NO_ADDRESSEE: "Not posted: the member you addressed is not in your workspace.",
   NO_AGENT: "Not done: this conversation is no coding agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
+} as const;
+
+/** Why a channel tool's call did nothing, in the words the model reads. Nothing was written. */
+export const CHANNEL_REFUSAL = {
+  UNREADABLE_CREATE:
+    `Not made: name is a lowercase slug of words joined by hyphens, such as release-notes, of at most ${CHANNEL_BOUNDS.MAX_NAME_CHARS} characters, ` +
+    `and purpose one line of at most ${CHANNEL_BOUNDS.MAX_PURPOSE_CHARS}.`,
+  UNREADABLE_UPDATE:
+    "Not changed: channel names the channel by its name; name is a lowercase slug of words joined by hyphens, " +
+    `purpose one line of at most ${CHANNEL_BOUNDS.MAX_PURPOSE_CHARS} characters, and archived true or false.`,
+  NO_CHANGE: "Not changed: name, purpose, or archived says what changes.",
+  UNREADABLE_MOVE:
+    "Not moved: thread is your own thread's key or a thread's id, and channel an open channel's name.",
+  NAME_TAKEN:
+    "Not done: an open channel of your workspace already goes by that name; post to it, or choose another name.",
+  UNKNOWN_CHANNEL: `Not done: no channel of your workspace goes by that name; ${INBOX_TOOL.POST}'s words list the open ones.`,
+  ARCHIVED_CHANNEL: `Not changed: that channel is archived; set archived false in the same call to open it again.`,
+  MOVE_ARCHIVED: `Not moved: that channel is archived; name an open one ${INBOX_TOOL.POST}'s words list, or open it again with ${CHANNEL_TOOL.UPDATE} first.`,
+  GENERAL: `Not changed: #${GENERAL_CHANNEL.NAME} is never renamed or archived; only its purpose may be edited.`,
+  NO_THREAD: "Not moved: no thread you may read goes by that key or id.",
+  OTHER_WORKSPACE:
+    "Not moved: that thread is another workspace's, and moves only between that workspace's channels.",
+  NO_WORKSPACE: "Not done: the developer is no longer a member of this workspace.",
 } as const;
 
 /** How many of a settled thread's latest messages its read carries: enough to see what came of it. */
@@ -398,6 +529,7 @@ function lineOf(item: InboxItem, mention: string | undefined): AgentInboxLine {
   const told = open ? messages : settledMessages(messages);
   const earlier = messages.length - told.length;
   return {
+    id: item.id,
     key: item.key,
     title: item.title,
     ...(mention === undefined ? undefined : { mention }),
@@ -564,6 +696,11 @@ function bodyPictures(
   });
 }
 
+/** A channel's name as an agent writes it, its ends trimmed and a leading `#` dropped. */
+function channelNameOf(written: string): string {
+  return written.trim().replace(/^#/u, "");
+}
+
 /** Where a post goes and whom it waits on, as the store takes them: the channel's id and the member's account, each absent where the post names none. */
 interface ThreadPlace {
   readonly channelId?: string;
@@ -604,8 +741,11 @@ function placeOf(
     }
     const addressed = addresseeId === undefined ? {} : { addresseeId };
     if (post.channel === undefined) return Result.succeed(addressed);
-    const name = post.channel.trim().replace(/^#/u, "");
-    const found = yield* resolveChannel(agent.userId, agent.organizationId, name);
+    const found = yield* resolveChannel(
+      agent.userId,
+      agent.organizationId,
+      channelNameOf(post.channel),
+    );
     if (Result.isFailure(found)) {
       return Result.fail(
         found.failure === CHANNEL_NAME_REFUSAL.ARCHIVED
@@ -697,4 +837,233 @@ export function readOwnInbox(
   agent: InboxAgent,
 ): Effect.Effect<InboxToolResult, never, DatabaseServices> {
   return accepted(agent);
+}
+
+const readCreate = readEither(channelCreateInputSchema, { excess: EXCESS_KEYS.DROP });
+const readUpdate = readEither(channelUpdateInputSchema, { excess: EXCESS_KEYS.DROP });
+const readMove = readEither(threadMoveInputSchema, { excess: EXCESS_KEYS.DROP });
+
+/** A channel change refused inside its transaction, its words for the model, which takes every write of the change back. */
+class ChannelChangeRefused extends Data.TaggedError("ChannelChangeRefused")<{
+  readonly reason: string;
+}> {}
+
+function channelRejected(reason: string): ChannelToolResult {
+  return { status: ACTION_RESULT_STATUS.REJECTED, reason };
+}
+
+/** What the store's refusal of a channel write reads as to the model. */
+function writeRefusal(refusal: ChannelWriteRefusal): string {
+  switch (refusal) {
+    case CHANNEL_WRITE_REFUSAL.NOT_FOUND:
+      return CHANNEL_REFUSAL.UNKNOWN_CHANNEL;
+    case CHANNEL_WRITE_REFUSAL.NAME_TAKEN:
+      return CHANNEL_REFUSAL.NAME_TAKEN;
+    case CHANNEL_WRITE_REFUSAL.GENERAL:
+      return CHANNEL_REFUSAL.GENERAL;
+  }
+}
+
+/** A store write's outcome inside a change, its refusal failing the change so nothing of it stands. */
+function written<A>(
+  outcome: Result.Result<A, ChannelWriteRefusal>,
+): Effect.Effect<A, ChannelChangeRefused> {
+  return Result.isFailure(outcome)
+    ? Effect.fail(new ChannelChangeRefused({ reason: writeRefusal(outcome.failure) }))
+    : Effect.succeed(outcome.success);
+}
+
+/** The workspace's open channels as a channel tool answers them, #general minted first where it has none yet. */
+function channelsAnswered(
+  agent: ThreadPoster,
+): Effect.Effect<ChannelToolResult, StoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    const rows = yield* openChannels(agent.userId, agent.organizationId, now);
+    return {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      channels: rows.map(({ name, purpose, project }) => ({ name, purpose, project })),
+    };
+  });
+}
+
+/** A channel tool's run with its refusals answered as the model reads them, and a store failure as the service's own. */
+function settled(
+  run: Effect.Effect<ChannelToolResult, StoreFailure | ChannelChangeRefused, DatabaseServices>,
+): Effect.Effect<ChannelToolResult, never, DatabaseServices> {
+  return run.pipe(
+    Effect.catchTag("ChannelChangeRefused", (refused) =>
+      Effect.succeed(channelRejected(refused.reason)),
+    ),
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() => Effect.succeed(channelRejected(INBOX_REFUSAL.UNAVAILABLE))),
+  );
+}
+
+/** Runs one `create_channel`: the channel made in the agent's workspace, and its open channels answered, or why not. */
+export function createAgentChannel(
+  agent: ThreadPoster,
+  input: UnparsedWireValue,
+): Effect.Effect<ChannelToolResult, never, DatabaseServices> {
+  const read = readCreate(input);
+  if (Result.isFailure(read)) {
+    return Effect.succeed(channelRejected(CHANNEL_REFUSAL.UNREADABLE_CREATE));
+  }
+  const { name, purpose, project = false } = read.success;
+  return settled(
+    Effect.gen(function* () {
+      const now = yield* DateTime.nowAsDate;
+      const draft = { name, purpose, project };
+      const made = yield* createChannel(agent.userId, agent.organizationId, draft, now);
+      if (Result.isFailure(made)) {
+        return channelRejected(
+          made.failure === CHANNEL_WRITE_REFUSAL.NOT_FOUND
+            ? CHANNEL_REFUSAL.NO_WORKSPACE
+            : writeRefusal(made.failure),
+        );
+      }
+      return yield* channelsAnswered(agent);
+    }),
+  );
+}
+
+/** A channel of the agent's workspace by the name it wrote: its id, and whether it is archived, the latest archived where only archived ones go by it; nothing where none does. */
+function namedChannel(
+  agent: ThreadPoster,
+  name: string,
+): Effect.Effect<
+  Option.Option<{ readonly id: string; readonly archived: boolean }>,
+  StoreFailure,
+  DatabaseServices
+> {
+  return Effect.gen(function* () {
+    const open = yield* resolveChannel(agent.userId, agent.organizationId, name);
+    if (Result.isSuccess(open)) return Option.some({ id: open.success.id, archived: false });
+    if (open.failure === CHANNEL_NAME_REFUSAL.UNKNOWN) return Option.none();
+    const archived = yield* listArchivedChannels(agent.userId, agent.organizationId);
+    const latest = archived.find((channel) => channel.name === name);
+    return latest === undefined ? Option.none() : Option.some({ id: latest.id, archived: true });
+  });
+}
+
+/**
+ * Every change an update asks of the channel, written in one transaction,
+ * so either all of it stands or none does: an archived channel opened
+ * first, where it asks, since only an open one is edited, then its name and
+ * purpose, then its archive. Note that an edit of an archived channel the
+ * call does not open is refused, and so is an archive of #general before
+ * its edit is written.
+ */
+function changeChannel(
+  agent: ThreadPoster,
+  channel: { readonly id: string; readonly archived: boolean; readonly name: string },
+  update: ChannelUpdateInput,
+): Effect.Effect<void, StoreFailure | ChannelChangeRefused, DatabaseServices> {
+  const { userId, organizationId } = agent;
+  const { name, purpose, archived } = update;
+  const edits = name !== undefined || purpose !== undefined;
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        if (channel.archived && archived !== false) {
+          if (edits) {
+            return yield* new ChannelChangeRefused({ reason: CHANNEL_REFUSAL.ARCHIVED_CHANNEL });
+          }
+          return;
+        }
+        if (archived === true && channel.name === GENERAL_CHANNEL.NAME) {
+          return yield* new ChannelChangeRefused({ reason: CHANNEL_REFUSAL.GENERAL });
+        }
+        if (channel.archived) {
+          yield* written(yield* unarchiveChannel(userId, organizationId, channel.id));
+        }
+        if (edits) {
+          yield* written(yield* editChannel(userId, organizationId, channel.id, { name, purpose }));
+        }
+        if (archived === true) {
+          const now = yield* DateTime.nowAsDate;
+          yield* written(yield* archiveChannel(userId, organizationId, channel.id, now));
+        }
+      }),
+    ),
+  );
+}
+
+/** Runs one `update_channel`: the channel the name names, open or archived, renamed, given a purpose, archived, or opened again, and the open channels answered, or why not. */
+export function updateAgentChannel(
+  agent: ThreadPoster,
+  input: UnparsedWireValue,
+): Effect.Effect<ChannelToolResult, never, DatabaseServices> {
+  const read = readUpdate(input);
+  if (Result.isFailure(read)) {
+    return Effect.succeed(channelRejected(CHANNEL_REFUSAL.UNREADABLE_UPDATE));
+  }
+  const update = read.success;
+  if (update.name === undefined && update.purpose === undefined && update.archived === undefined) {
+    return Effect.succeed(channelRejected(CHANNEL_REFUSAL.NO_CHANGE));
+  }
+  const name = channelNameOf(update.channel);
+  return settled(
+    Effect.gen(function* () {
+      const found = yield* namedChannel(agent, name);
+      if (Option.isNone(found)) return channelRejected(CHANNEL_REFUSAL.UNKNOWN_CHANNEL);
+      yield* changeChannel(agent, { ...found.value, name }, update);
+      return yield* channelsAnswered(agent);
+    }),
+  );
+}
+
+/**
+ * The id of the thread a move names: the agent's own under the key, or else
+ * the thread the words name by its id, whether the agent may read it being
+ * the move's own to say; nothing where the words are neither. Note that an
+ * id is held to a UUID's shape, since the id column refuses any other text.
+ */
+function movedThreadId(
+  agent: ThreadPoster,
+  written: string,
+): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
+  const thread = written.trim();
+  return Effect.map(agentThreadId(agent, thread), (own) => {
+    if (Option.isSome(own)) return own;
+    const id = thread.toLowerCase();
+    return isWireUuid(id) ? Option.some(id) : Option.none();
+  });
+}
+
+/** Runs one `move_thread`: the thread the agent may read moved into the open channel the name names, and the thread answered where it now lives, or why not. */
+export function moveAgentThread(
+  agent: ThreadPoster,
+  input: UnparsedWireValue,
+): Effect.Effect<ChannelToolResult, never, DatabaseServices> {
+  const read = readMove(input);
+  if (Result.isFailure(read)) {
+    return Effect.succeed(channelRejected(CHANNEL_REFUSAL.UNREADABLE_MOVE));
+  }
+  const name = channelNameOf(read.success.channel);
+  return settled(
+    Effect.gen(function* () {
+      const channel = yield* resolveChannel(agent.userId, agent.organizationId, name);
+      if (Result.isFailure(channel)) {
+        return channelRejected(
+          channel.failure === CHANNEL_NAME_REFUSAL.ARCHIVED
+            ? CHANNEL_REFUSAL.MOVE_ARCHIVED
+            : CHANNEL_REFUSAL.UNKNOWN_CHANNEL,
+        );
+      }
+      const itemId = yield* movedThreadId(agent, read.success.thread);
+      if (Option.isNone(itemId)) return channelRejected(CHANNEL_REFUSAL.NO_THREAD);
+      const moved = yield* moveChannelThread(agent.userId, itemId.value, channel.success.id);
+      if (Result.isFailure(moved)) {
+        // Note that the channel was found open in the agent's workspace, so one the move refuses is not the thread's.
+        return channelRejected(
+          moved.failure === CHANNEL_MOVE_REFUSAL.NO_THREAD
+            ? CHANNEL_REFUSAL.NO_THREAD
+            : CHANNEL_REFUSAL.OTHER_WORKSPACE,
+        );
+      }
+      const thread = { id: moved.success.id, title: moved.success.title, channel: name };
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, thread };
+    }),
+  );
 }

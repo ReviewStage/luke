@@ -39,6 +39,7 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { pictureTypeSchema } from "@luke/features/picture-wire";
@@ -314,7 +315,7 @@ function runAgentBrowser(admitted: AdmittedConversation, input: UnparsedWireValu
 
 /** The tools served, by name, in the order `tools/list` names them. */
 export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, LukeMcpTool>([
-  // The threads, posted to the workspace's channels.
+  // The threads, posted to the workspace's channels, and the channels themselves.
   described(
     entry(INBOX_TOOLS.POST, (admitted, input, { sandbox }) =>
       runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox }),
@@ -326,6 +327,15 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   ),
   entry(INBOX_TOOLS.WITHDRAW, (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
+  ),
+  entry(INBOX_TOOLS.CREATE_CHANNEL, (admitted, input) =>
+    runAgentInbox(admitted, { tool: CHANNEL_TOOL.CREATE, input }),
+  ),
+  entry(INBOX_TOOLS.UPDATE_CHANNEL, (admitted, input) =>
+    runAgentInbox(admitted, { tool: CHANNEL_TOOL.UPDATE, input }),
+  ),
+  entry(INBOX_TOOLS.MOVE_THREAD, (admitted, input) =>
+    runAgentInbox(admitted, { tool: CHANNEL_TOOL.MOVE, input }),
   ),
   // The pull request, the plan, and pages and pictures.
   entry(OPEN_PULL_REQUEST_TOOL, (admitted, input) => runAgentOpenPullRequest(admitted, input)),

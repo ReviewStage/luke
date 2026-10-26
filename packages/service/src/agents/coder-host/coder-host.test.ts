@@ -1668,8 +1668,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           });
 
           assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
-          // The thread's mention is spelled out in `coder-inbox.test.ts`; here it is only carried.
-          const [{ mention, ...line } = { mention: undefined }] = read.inbox ?? [];
+          // The thread's id and mention are spelled out in `coder-inbox.test.ts`; here they are only carried.
+          const [{ mention, id: _id, ...line } = { mention: undefined, id: undefined }] =
+            "inbox" in read ? read.inbox : [];
           assert.match(mention ?? "", /^\[@Which region\?\]\(https:\/\/tryluke\.dev\//u);
           assert.deepEqual(
             { ...read, inbox: [line] },

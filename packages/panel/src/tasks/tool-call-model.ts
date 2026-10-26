@@ -1042,6 +1042,12 @@ const AGENT_TOOL_VIEWS = {
   [AGENT_TOOL.POST_THREAD]: READ_INBOX_CALL,
   [AGENT_TOOL.WITHDRAW_ASK]: READ_INBOX_CALL,
   [AGENT_TOOL.READ_THREADS]: READ_INBOX_CALL,
+  [AGENT_TOOL.CREATE_CHANNEL]: ({ input, output }) =>
+    namedCall(CALL_KIND.CREATE_CHANNEL, input, output, "name"),
+  [AGENT_TOOL.UPDATE_CHANNEL]: ({ input, output }) =>
+    namedCall(CALL_KIND.UPDATE_CHANNEL, input, output, "channel"),
+  [AGENT_TOOL.MOVE_THREAD]: ({ input, output }) =>
+    namedCall(CALL_KIND.MOVE_THREAD, input, output, "channel"),
   [AGENT_TOOL.LIST_OPEN_ASKS]: ({ input, output }) =>
     namedCall(CALL_KIND.LIST_OPEN_ASKS, input, output, undefined),
   [AGENT_TOOL.OPEN_PULL_REQUEST]: ({ input, output }) => openedPullRequestView(input, output),

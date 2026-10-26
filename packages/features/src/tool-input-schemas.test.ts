@@ -2,6 +2,11 @@ import { jsonSchemaGoldenRoot, settleJsonSchemaGolden } from "@luke/wire/testing
 import type { Schema } from "effect";
 import { test } from "vitest";
 import {
+  channelCreateInputSchema,
+  channelUpdateInputSchema,
+  threadMoveInputSchema,
+} from "./channel-wire.js";
+import {
   codingAgentDelegationInputSchema,
   codingAgentTodosInputSchema,
 } from "./coding-agent-wire.js";
@@ -13,7 +18,7 @@ import {
 
 /**
  * The schemas this package declares that a model is shown whole as a tool's
- * input: the coder's thread, delegation, and to-do tools. A model
+ * input: the coder's thread, channel, delegation, and to-do tools. A model
  * provider keys its prompt cache on the text of a request, so these bytes are
  * recorded and move only under `LUKE_UPDATE_FIXTURES=1`. A schema no model is
  * shown as a tool's input is not recorded.
@@ -25,6 +30,9 @@ const TOOL_INPUTS: readonly (readonly [string, Schema.Top])[] = [
   ["inbox-wire-inboxThreadPostInputSchema", inboxThreadPostInputSchema],
   ["inbox-wire-inboxWithdrawInputSchema", inboxWithdrawInputSchema],
   ["inbox-wire-inboxReadInputSchema", inboxReadInputSchema],
+  ["channel-wire-channelCreateInputSchema", channelCreateInputSchema],
+  ["channel-wire-channelUpdateInputSchema", channelUpdateInputSchema],
+  ["channel-wire-threadMoveInputSchema", threadMoveInputSchema],
   ["coding-agent-wire-codingAgentDelegationInputSchema", codingAgentDelegationInputSchema],
   ["coding-agent-wire-codingAgentTodosInputSchema", codingAgentTodosInputSchema],
 ];

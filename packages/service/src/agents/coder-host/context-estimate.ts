@@ -130,6 +130,18 @@ const AUTHORED_TOOLS = {
     description: INBOX_TOOLS.READ.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
   },
+  [CODER_TOOL.CREATE_CHANNEL]: {
+    description: INBOX_TOOLS.CREATE_CHANNEL.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.CREATE_CHANNEL.inputSchema),
+  },
+  [CODER_TOOL.UPDATE_CHANNEL]: {
+    description: INBOX_TOOLS.UPDATE_CHANNEL.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.UPDATE_CHANNEL.inputSchema),
+  },
+  [CODER_TOOL.MOVE_THREAD]: {
+    description: INBOX_TOOLS.MOVE_THREAD.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.MOVE_THREAD.inputSchema),
+  },
   [CODER_TOOL.LIST_OPEN_ASKS]: {
     description: LIST_OPEN_ASKS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_OPEN_ASKS_TOOL.inputSchema),
