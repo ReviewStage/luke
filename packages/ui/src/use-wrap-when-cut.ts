@@ -5,13 +5,16 @@
  * as what shows of it reads (`--luke-title-floor`); once one row would show
  * less, and less than the whole title, the bar stands the title on a row of
  * its own, and goes back to one row only once it is again as wide as that
- * row then needed. The bar is read two frames after each render and each
- * resize, once anything inside it that answers its width on its own (a
- * path's fold) has settled. A host with no resize observer lays nothing out,
- * so its bar never wraps.
+ * row then needed. The bar is read two frames after each render, each
+ * resize, and each time the page's fonts finish loading, which moves the
+ * title's words inside a bar that keeps its width, once anything inside it
+ * that answers its width on its own (a path's fold) has settled; a title
+ * wrapped in the font before is stood on one row again to be read afresh. A host
+ * with no resize observer lays nothing out, so its bar never wraps.
  */
 
 import { type RefObject, useLayoutEffect, useRef, useState } from "react";
+import { onFontsSettled } from "./fonts-settled.js";
 
 /** Where a bar's title stands on one row: the room it is cut by, and its words, both found inside the bar. */
 export interface TitleSeat {
@@ -72,9 +75,12 @@ export function useWrapWhenCut(
     settled();
     const observer = new ResizeObserver(settled);
     observer.observe(bar);
+    // Note that a wrapped title stands on one row again to be read once the fonts load, because the width it needed was read in the font before.
+    const stopFonts = onFontsSettled(() => (wrapped ? setWrapped(false) : settled()));
     return () => {
       cancelAnimationFrame(frameId);
       observer.disconnect();
+      stopFonts();
     };
   });
   return on && wrapped;
