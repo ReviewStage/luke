@@ -35,11 +35,12 @@ export interface MacAgentClaimedLine {
   readonly secrets?: MacAgentLaunchSecrets | undefined;
 }
 
-/** What a Mac registers as: its name, its home folder, the Claude Code CLI it bundles, and which harnesses it is signed in to. */
+/** What a Mac registers as: its name, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, and which harnesses it is signed in to. */
 export interface MacAgentDevice {
   readonly name: string;
   readonly home: string;
   readonly claudeExecutable: string;
+  readonly codexExecutable?: string | undefined;
   readonly signedIn: MacSignedIn;
 }
 
@@ -65,7 +66,14 @@ export class HostedMacAgentClient {
     deviceId: string,
     device: MacAgentDevice,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.macAgents.register, { deviceId, ...device }).pipe(
+    const { codexExecutable, ...rest } = device;
+    // Note that a Mac with no Codex checked names none, which the service reads as no Codex.
+    const input = {
+      deviceId,
+      ...rest,
+      ...(codexExecutable === undefined ? undefined : { codexExecutable }),
+    };
+    return askHosted(this.#hosted.macAgents.register, input).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );

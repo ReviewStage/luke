@@ -5,15 +5,14 @@
  * service that launches the runner (P08) and the route that takes its events
  * (P09) import it without the SDK behind it. Every line on stdin is one JSON
  * object: the first is the config, each later one a message, a stop, a model
- * change, or, for Codex, a refreshed access token.
+ * change, or a retire.
  *
  * The config says which harness the launch runs: Claude Code (P05), or Codex
- * through `codex app-server` (P20). Secrets never travel in argv. The runner's
- * bearer and the plan's first token are in its environment; the one secret a
- * stdin line carries is the token line's, because a ChatGPT access token
- * lives an hour and a running launch has no other way to take its
- * replacement. The runner never logs, echoes or posts that line, and takes
- * the token out of every event it posts.
+ * through `codex app-server` (P20). Secrets never travel in argv or on
+ * stdin: the runner's bearer and the harness's credential are in its
+ * environment, and Codex asks Luke for each ChatGPT access token over HTTPS
+ * through the runner's token command (`codex-token.ts`), so no line carries
+ * one, on a Mac's queue (`@luke/features/mac-agent-wire`) or anywhere else.
  */
 
 import type {
@@ -229,13 +228,28 @@ export const CodexConfigSchema = Schema.Struct({
    * runner's `codex-token` command (Codex's provider `auth`), which Codex runs
    * again as its cached token ages and after a 401, so a turn outlives any
    * one token. Not asked where the launch's environment holds
-   * `OPENAI_API_KEY`: the account's API key pays, and app-server reads it.
+   * `OPENAI_API_KEY`: the account's API key pays, and app-server reads it;
+   * nor where it runs on the Mac's own sign-in (`ownLogin`).
    */
   tokenUrl: Schema.String,
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), whose `skills/` is set as an extra skills root where it is there. */
-  installedSkills: Schema.optionalKey(
-    Schema.String,
-  ) /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */,
+  installedSkills: Schema.optionalKey(Schema.String),
+  /**
+   * The folders the agent's machine lets its commands write beside the
+   * checkout and its Git directory, absolute: a local agent's own folder on
+   * its Mac; none in a sandbox, whose checkout is all it writes.
+   */
+  writableRoots: Schema.optionalKey(Schema.Array(Schema.String)),
+  /**
+   * Whether app-server runs on the Mac's own Codex sign-in, the managed
+   * ChatGPT login or API key `codex login` keeps under the user's default
+   * `CODEX_HOME`, which Codex refreshes itself
+   * (https://learn.chatgpt.com/docs/auth): no provider of Luke's, no token
+   * command, and no key in the environment. A launch whose Mac turns out
+   * signed out fails rather than turning to another payer.
+   */
+  ownLogin: Schema.optionalKey(Schema.Boolean),
+  /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */
   warm: Schema.optionalKey(Schema.Boolean),
 });
 export type CodexConfig = typeof CodexConfigSchema.Type;

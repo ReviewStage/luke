@@ -223,7 +223,7 @@ export const LOCAL_AGENT_REFUSAL = {
   OFF: "off",
   /** No Mac of the account's beat lately, so none would take the agent. */
   MAC_AWAY: "mac-away",
-  /** The model runs on Codex, which a Mac does not run yet: a local agent runs Claude Code alone. */
+  /** The model runs on Codex, which the Mac has none of checked yet: an app from before Codex on the Mac, or one whose download has not finished. */
   CODEX: "codex",
   /** The model runs on no native harness here, so no runner would launch on the Mac. */
   NO_HARNESS: "no-harness",

@@ -1,4 +1,4 @@
-import { CLAUDE_CODE_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
+import { CLAUDE_CODE_MAC_PIN, CODEX_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
 import type { HostedMacAgentClient, MacAgentClaimedLine } from "@luke/features";
 import {
   MAC_AGENT_LINE_KIND,
@@ -39,6 +39,7 @@ import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
+import { localCodexSignedIn } from "./local-agent-codex.js";
 import { localAgentTool } from "./local-agent-tools.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -57,7 +58,10 @@ import type { RunMode } from "./run-mode.js";
  * beats every `BEAT_EVERY` while it follows. A local agent on a harness its
  * Mac is signed in to launches on that login, so its launch line carries no
  * credential of the account's; the check is the harness's own CLI's, never
- * the credential, made under the environment a runner starts with. It holds
+ * the credential, made under the environment a runner starts with. Codex
+ * is had apart, off the follow, through its own pin, and the Mac registers
+ * it, with Codex's own sign-in, once it is checked, so Start offers Codex on
+ * this Mac only then, and a Mac runs Claude Code agents meanwhile. It holds
  * one read for its lines and one for its requests, each answered by the
  * service as soon as one waits, and claims each by its id.
  *
@@ -335,6 +339,29 @@ export function composeLocalAgents(
       return fetched;
     });
 
+    /** The Codex this Mac checked against its pin (`CODEX_MAC_PIN`), once had; none until then. */
+    const codex = yield* Ref.make(Option.none<string>());
+    const fetchingCodex = yield* Semaphore.make(1);
+
+    /**
+     * Codex for this Mac's local agents, apart from what a runner needs to
+     * start, so the Mac registers and runs Claude Code agents while it is
+     * fetched: the one had already where it still stands, or had now through
+     * its pin (`localAgentTool`), the app's copy first. A fetch that fails is
+     * reported, and tried again as the gate next opens or a launch finds the
+     * Codex the Mac registered gone.
+     */
+    const codexHad = fetchingCodex.withPermit(
+      Effect.gen(function* () {
+        const kept = yield* Ref.get(codex);
+        if (Option.isSome(kept) && (yield* fileSystem.exists(kept.value))) return kept;
+        const had = yield* localAgentTool(kernel.stateRoot, CODEX_MAC_PIN, platform.bundled.codex);
+        if (Option.isNone(had)) report("Codex for local agents could not be had");
+        yield* Ref.set(codex, had);
+        return had;
+      }).pipe(Effect.orElseSucceed(() => Option.none<string>())),
+    );
+
     // -- the gate --------------------------------------------------------------
 
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
@@ -414,12 +441,31 @@ export function composeLocalAgents(
         Effect.orElseSucceed(() => false),
       );
 
+    /**
+     * Whether Codex is signed in on this Mac by itself, as app-server's
+     * `account/read` answers it for the Codex the Mac checked, under the
+     * environment a runner starts with and the developer's own default
+     * `CODEX_HOME` (`local-agent-codex.ts`); not said at all while the Mac has
+     * no Codex yet, nor where Codex did not answer.
+     */
+    const codexSignedIn = (env: Readonly<Record<string, string>>) =>
+      Effect.gen(function* () {
+        const executable = yield* Ref.get(codex);
+        if (Option.isNone(executable)) return Option.none<boolean>();
+        return yield* localCodexSignedIn(executable.value, env);
+      });
+
     /** Which harnesses this Mac is signed in to by itself, each checked as its own CLI answers. */
     const signedInNow = (had: LocalAgentTools, env: Readonly<Record<string, string>>) =>
-      Effect.map(
-        claudeCodeSignedIn(had.claude, env),
-        (claudeCode): MacSignedIn => ({ claudeCode }),
-      );
+      Effect.gen(function* () {
+        const claudeCode = yield* claudeCodeSignedIn(had.claude, env);
+        const said = yield* codexSignedIn(env);
+        const signedIn: MacSignedIn = Option.match(said, {
+          onNone: () => ({ claudeCode }),
+          onSome: (each) => ({ claudeCode, codex: each }),
+        });
+        return signedIn;
+      });
 
     // -- one account's follow --------------------------------------------------
 
@@ -431,6 +477,7 @@ export function composeLocalAgents(
       shellVariables: Readonly<Record<string, string>>,
       had: LocalAgentTools,
       checkedSignIn: MacSignedIn,
+      registered: (signedIn: MacSignedIn) => Effect.Effect<boolean, never, HttpClient.HttpClient>,
     ) =>
       Effect.gen(function* () {
         const workers = yield* FiberMap.make<string>();
@@ -497,6 +544,14 @@ export function composeLocalAgents(
               payload.value.startBranch,
             );
             if (!made) return yield* settle(line.id, NOT_STARTED);
+            // Note that a Codex the Mac registered and lost since is had again before the runner starts, so a Codex agent's launch finds it.
+            const kept = yield* Ref.get(codex);
+            if (
+              Option.isSome(kept) &&
+              !(yield* Effect.orElseSucceed(fileSystem.exists(kept.value), () => false))
+            ) {
+              yield* codexHad;
+            }
             const temp = path.join(layout.folder, TEMP_FOLDER);
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
             const runnerScope = yield* Scope.fork(agentScope);
@@ -724,7 +779,15 @@ export function composeLocalAgents(
           let signedIn = checkedSignIn;
           let sinceBeat = Duration.toMillis(BEAT_EVERY);
           let sinceCheck = 0;
+          let registeredCodex = yield* Ref.get(codex);
           while ((yield* gateOpen) && dependencies.accountId() === userId) {
+            // A Codex had since the Mac registered is registered now, with its sign-in, so Start offers it.
+            const hadCodex = yield* Ref.get(codex);
+            if (Option.getOrUndefined(hadCodex) !== Option.getOrUndefined(registeredCodex)) {
+              signedIn = yield* signedInNow(had, shellVariables);
+              if (yield* asked(registered(signedIn))) registeredCodex = hadCodex;
+              sinceCheck = 0;
+            }
             if (
               Object.values(signedIn).some((each) => each === true) &&
               sinceCheck >= Duration.toMillis(SIGN_IN_EVERY)
@@ -745,6 +808,8 @@ export function composeLocalAgents(
 
         yield* Effect.forkScoped(linesFollowed);
         yield* Effect.forkScoped(requestsFollowed);
+        // Note that Codex is had as the gate opens, off the follow, since a fetch takes far longer than a beat.
+        yield* Effect.forkScoped(codexHad);
         yield* presence;
       });
 
@@ -768,21 +833,25 @@ export function composeLocalAgents(
       const deviceId = yield* deviceOf(userId);
       const shellVariables = yield* shellEnvironment;
       const signedIn = yield* signedInNow(had.value, shellVariables);
-      const registered = yield* asked(
-        client.register(deviceId, {
-          name: platform.deviceName,
-          home: home.value,
-          claudeExecutable: had.value.claude,
-          signedIn,
-        }),
-      );
+      /** The Mac registered, with the Codex it checked where it has one, and its sign-ins given. */
+      const registration = (said: MacSignedIn) =>
+        Effect.flatMap(Ref.get(codex), (checked) =>
+          client.register(deviceId, {
+            name: platform.deviceName,
+            home: home.value,
+            claudeExecutable: had.value.claude,
+            codexExecutable: Option.getOrUndefined(checked),
+            signedIn: said,
+          }),
+        );
+      const registered = yield* asked(registration(signedIn));
       if (!registered) return yield* Effect.sleep(IDLE);
       const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
       for (const launch of left) {
         if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
       }
       yield* Effect.scoped(
-        follow(userId, deviceId, home.value, shellVariables, had.value, signedIn),
+        follow(userId, deviceId, home.value, shellVariables, had.value, signedIn, registration),
       );
     });
 

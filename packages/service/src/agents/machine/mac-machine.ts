@@ -207,6 +207,9 @@ function macMachineOver(
         skillsUpload: folders.installedSkills,
         attachments: folders.attachments,
         claudeExecutable: device.value.claudeExecutable,
+        codexExecutable: device.value.codexExecutable ?? undefined,
+        writableRoots: [folders.folder],
+        signedIn: device.value.signedIn,
       };
       return layout;
     });
@@ -416,6 +419,7 @@ function macMachineOver(
             startBranch: agent.value.startBranch,
             firstSequence: mark.firstSequence,
             ...(mark.fingerprint === undefined ? {} : { fingerprint: mark.fingerprint }),
+            ...(mark.ownLogin === true ? { ownLogin: true } : {}),
           };
           yield* queued(pin, {
             id,

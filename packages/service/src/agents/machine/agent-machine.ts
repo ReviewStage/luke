@@ -36,6 +36,7 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { CodingAgentMachine } from "@luke/features/coding-agent-wire";
+import type { MacSignedIn } from "@luke/features/mac-agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect } from "effect";
 import type { AgentSandboxImage } from "../agent-sandbox-image.js";
 import type { KeyRefusal, PlanRefusal } from "../brain-host/eve-sessions.js";
@@ -71,8 +72,10 @@ export interface MachinePlace {
  * a launch names them before the machine is asked anything: its checkout,
  * where the harness starts and the instructions name, where the member's
  * installed skills are installed and where they are written for that, the
- * folder a message's files are written under, and the Claude Code CLI a
- * launch runs, none where the harness's own default stands.
+ * folder a message's files are written under, the Claude Code CLI and the
+ * Codex a launch runs, none where the harness's own default stands, the
+ * folders the agent's commands may write beside its checkout, and which
+ * harnesses the machine is signed in to by itself.
  */
 export interface MachineLayout {
   readonly checkoutPath: string;
@@ -80,6 +83,12 @@ export interface MachineLayout {
   readonly skillsUpload: string;
   readonly attachments: string;
   readonly claudeExecutable: string | undefined;
+  /** None on a Mac that checked no Codex yet, which runs no Codex agent, as on a sandbox, which runs the image's. */
+  readonly codexExecutable: string | undefined;
+  /** A local agent's own folder on its Mac; none in a sandbox, whose checkout is all it writes. */
+  readonly writableRoots: readonly string[];
+  /** The Mac's own logins, as it last said; none for a sandbox. */
+  readonly signedIn: MacSignedIn;
 }
 
 /** What a later call reads of a launch: its first event number, and what it was started with, as a digest (`runner-sessions.ts`'s `launchFingerprint`). */
@@ -87,6 +96,8 @@ export interface RunnerMark {
   readonly firstSequence: number;
   /** None for a launch from before fingerprints were recorded. */
   readonly fingerprint?: string;
+  /** Whether the launch runs on its Mac's own sign-in rather than a credential of the account's; nothing secret, and none for any other launch. */
+  readonly ownLogin?: boolean;
 }
 
 /** A runner as its machine recorded it: the handle a later call writes to, and its launch's mark. */
@@ -281,9 +292,10 @@ export interface AgentMachineService {
   /**
    * Text appended to the runner's stdin after whatever it already took;
    * `NOT_FOUND_STATUS` where the runner has ended. Note that a line written
-   * here is not sealed, so a line that carries a secret (Codex's token
-   * refresh, `@luke/agent-runner/protocol`) must be sealed on a machine that
-   * keeps its lines, once Codex runs on one.
+   * here is not sealed, and a Mac keeps its lines in the store until it
+   * takes them, so no line may carry a secret: Codex asks Luke for each
+   * access token over HTTPS through the runner's token command
+   * (`@luke/agent-runner`'s `codex-token.ts`) rather than taking it on stdin.
    */
   readonly writeLine: (
     handle: RunnerHandle,

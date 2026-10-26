@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 25 October 2026
+Last updated: 26 October 2026
 
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
@@ -509,9 +509,17 @@ it expire. The sandbox of each session a task's own Luke ran, before tasks
 lost him, is deleted the same way, shortly after his conversation is removed.
 
 **A local agent on your Mac.** For the accounts in the early test of local
-agents, a coding agent you start on This Mac runs Claude Code on your Mac
-rather than in a sandbox, and its transcript, its events, and the files its
-tools read still reach our service as any coding agent's do.
+agents, a coding agent you start on This Mac runs Claude Code, or Codex for a
+GPT model, on your Mac rather than in a sandbox, and its transcript, its
+events, and the files its tools read still reach our service as any coding
+agent's do. Where Claude Code or Codex on your Mac is signed in by itself, the
+agent runs on that sign-in, which stays on your Mac: Luke learns only whether
+there is one, never the credential. Otherwise it runs on the plan or key you
+saved in Luke, as a sandbox's agent does; a Codex agent then asks our service
+for your ChatGPT plan's access token over HTTPS as it needs one, so no token
+waits in our database for your Mac. To run Codex, the app downloads OpenAI's
+Codex from npm once, the release our sandboxes run, and keeps it in Luke's own
+folder on your Mac only once it matches the checksum Luke pins.
 
 **A coding agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, a coding agent your Claude plan pays for runs on
