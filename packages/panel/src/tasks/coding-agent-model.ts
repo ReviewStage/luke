@@ -2338,8 +2338,8 @@ type SentLineState = (typeof SENT_LINE_STATE)[keyof typeof SENT_LINE_STATE];
 
 /**
  * A line the developer sent that the transcript has not read back yet:
- * drawn as theirs the moment it goes, and let go once the service's own
- * row for it lands.
+ * drawn as theirs the moment it goes, and let go once the service took it
+ * and its own row for it landed.
  */
 export interface SentLine {
   /**
@@ -2359,6 +2359,8 @@ export interface SentLine {
   readonly state: SentLineState;
   /** The developer's line it was written in place of, by its message id, which the agent is taken back to just before as it goes; none for a line sent after the rest. */
   readonly rewinds?: string | undefined;
+  /** Whether the service answered that the agent took it; until it does, a row read back may still be withdrawn. */
+  readonly taken?: boolean | undefined;
 }
 
 /** The ids the developer's rows of a transcript were written under, which a sent line's row is one of once it lands. */
@@ -2384,6 +2386,22 @@ export function unreadSentLines(
 ): readonly SentLine[] {
   const landed = landedLines(messages);
   return sent.filter((line) => line.state === SENT_LINE_STATE.UNDELIVERED || !landed.has(line.id));
+}
+
+/**
+ * The sent lines the box still holds: all but those the service took whose
+ * row has landed. Note that a line whose row was read back is held, undrawn,
+ * until its answer comes, because the service writes the row before the agent
+ * is handed the line and withdraws it where the agent did not take it, so a
+ * refusal may follow the row; and a line refused is held until Retry sends
+ * it again, since its row, still drawn as the refusal lands, is on its way out.
+ */
+export function heldSentLines(
+  sent: readonly SentLine[],
+  messages: readonly CodingAgentMessage[],
+): readonly SentLine[] {
+  const landed = landedLines(messages);
+  return sent.filter((line) => line.taken !== true || !landed.has(line.id));
 }
 
 /**
