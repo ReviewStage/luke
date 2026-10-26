@@ -69,6 +69,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
+import type { TaskRunsOnRequest } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Clock, Data, Duration, Effect, Option, type Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
@@ -426,6 +427,33 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   // Note that a Mac runs only the providers it lists, so Codex on one that lists none of OpenAI's is refused by name.
   if (!offer.providers.includes(RUNTIME_PROVIDER[runtime])) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.CODEX });
+  }
+  return { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: offer.deviceId };
+});
+
+/**
+ * Where a task of the account's runs its agents, as a request to set it
+ * asks: the cloud, or one of the account's own devices that beat within
+ * `THIS_MAC.FRESH` and runs some model's harness; refused by name
+ * otherwise: the experiment off, and a device that is another account's,
+ * was never registered, or is away, as away. The device the task keeps is
+ * checked again as each agent starts (`agentMachineChoice`), since it may
+ * be away by then or not run that agent's model.
+ */
+export const taskRunsOnChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  asked: TaskRunsOnRequest,
+): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
+  if (asked.machine === CODING_AGENT_MACHINE.VERCEL) return IN_A_SANDBOX;
+  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) {
+    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.OFF });
+  }
+  const offer = yield* freshOffer(userId, asked.deviceId);
+  if (offer === undefined) {
+    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.MAC_AWAY });
+  }
+  if (offer.providers.length === 0) {
+    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });
   }
   return { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: offer.deviceId };
 });

@@ -75,10 +75,16 @@ import {
   type TaskIssueLinkAnswer,
   type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
-import type { Task, TaskAgentStart, TaskStartAnswer } from "@luke/features/task-wire";
+import type {
+  Task,
+  TaskAgentStart,
+  TaskRunsOnRequest,
+  TaskStartAnswer,
+} from "@luke/features/task-wire";
 import { Data, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
+import { LocalAgentRefused, taskRunsOnChoice } from "../agents/coder-host/agent-runtime-choice.js";
 import { type StartReach, startRequestedAgent } from "../agents/coder-host/start.js";
 import {
   type EveReach,
@@ -100,6 +106,7 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  localAgentRefused,
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
@@ -363,10 +370,12 @@ const startedAgentOn = (
     Effect.flatMap((started) =>
       Effect.map(
         taskAfterStart(userId, task),
-        (plan): TaskStartAnswer =>
-          started.txid === undefined
-            ? { plan, agent: started.agent }
-            : { plan, agent: started.agent, txid: started.txid },
+        (plan): TaskStartAnswer => ({
+          plan,
+          agent: started.agent,
+          ...(started.txid === undefined ? undefined : { txid: started.txid }),
+          ...(started.notice === undefined ? undefined : { notice: started.notice }),
+        }),
       ),
     ),
     Effect.catch((refusal) =>
@@ -383,6 +392,9 @@ const startedAgentOn = (
           error: refusal.error,
           ...(refusal.resetsAt === undefined ? undefined : { resetsAt: refusal.resetsAt }),
           ...(refusal.provider === undefined ? undefined : { provider: refusal.provider }),
+          ...(refusal.localAgentRefusal === undefined
+            ? undefined
+            : { localAgentRefusal: refusal.localAgentRefusal }),
         };
         return { plan: task, agentRefusal } satisfies TaskStartAnswer;
       }),
@@ -401,6 +413,24 @@ const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, Host
 const EDIT_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
   [PLAN_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
 ]);
+
+/**
+ * Where a task runs its agents as a start or a change asks it, checked
+ * against the asking member's own devices (`taskRunsOnChoice`) before
+ * anything is written; a device refused is answered as a Start on it would
+ * be, naming why.
+ */
+const runsOnAsked = (userId: string, asked: TaskRunsOnRequest) =>
+  Effect.map(
+    taskRunsOnChoice(userId, asked).pipe(
+      Effect.catch((failure) =>
+        failure instanceof LocalAgentRefused
+          ? Effect.fail(localAgentRefused(failure.reason))
+          : hostedStoreOrUnavailable(Effect.fail(failure)),
+      ),
+    ),
+    (choice) => ({ machine: choice.machine, deviceId: choice.deviceId ?? null }),
+  );
 
 /** The plans resource, every procedure to a signed-in caller. */
 export function tasksProcedures(seams: TasksProcedureSeams) {
@@ -447,6 +477,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
       }
       const organizationId = yield* startingWorkspace(seams, userId, input.workspaceId);
+      // Where its agents run is checked before anything is written, so a device refused starts no task.
+      const runsOn =
+        input.runsOn === undefined ? undefined : yield* runsOnAsked(userId, input.runsOn);
       const before =
         agent === undefined
           ? Option.none()
@@ -476,6 +509,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ...(input.status === undefined ? undefined : { status: input.status }),
         ...(input.priority === undefined ? undefined : { priority: input.priority }),
         ...(input.assigneeId === undefined ? undefined : { assigneeId: input.assigneeId }),
+        ...(runsOn === undefined ? undefined : { runsOn }),
       }).pipe(
         Effect.catch((failure) =>
           failure._tag === "TaskAssigneeNotMember"
@@ -570,6 +604,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         );
         if (!member) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
+      // Where its agents run is checked against the asking member's own devices before anything is stopped.
+      const runsOn =
+        changes.runsOn === undefined ? undefined : yield* runsOnAsked(userId, changes.runsOn);
       const archiving = changes.archived === true;
       if (archiving) {
         const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
@@ -605,6 +642,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ...(status === undefined ? undefined : { status }),
           ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
           ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
+          ...(runsOn === undefined ? undefined : { runsOn }),
         },
         organizationId === undefined ? undefined : movedRepositoryReached(organizationId, userId),
       ).pipe(
