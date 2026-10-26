@@ -15,6 +15,7 @@ import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-draf
 import {
   type AgentRun,
   closesComposer,
+  heldSentLines,
   messageFailureNote,
   SENT_LINE_STATE,
   type SentLine,
@@ -30,7 +31,10 @@ import {
  * under a key of its own, minted here, and the line is drawn under the id
  * the service writes its row under, which the key names (`sentLineId`), so
  * the row lands in the line's place, whichever of the row and the answer
- * comes first (`unreadSentLines`). The service's answer is the agent as it
+ * comes first (`unreadSentLines`). The line is held until both have, since
+ * the service withdraws the row of a line the agent did not take, so a
+ * refusal that lands after its row still says the line did not go
+ * (`heldSentLines`). The service's answer is the agent as it
  * then stands, which is running, and the tab's status takes it, so a
  * message to an agent that had finished turns its status back and starts
  * the transcript reading again.
@@ -260,12 +264,13 @@ export function useAgentComposer(input: {
   // Each agent's sends as one queue, the next going once the one before it answered.
   const queues = useRef(new Map<string, Promise<void>>());
 
-  // A line the transcript has read back is let go in the service's favour.
+  // A line the transcript has read back is drawn as its row, and let go once the service took it too.
   const sent = unreadSentLines(held.sent, messages);
+  const standing = heldSentLines(held.sent, messages);
   useEffect(() => {
-    if (sent.length === held.sent.length) return;
-    setHeld((was) => ({ ...was, sent: unreadSentLines(was.sent, latest.current.messages) }));
-  }, [sent.length, held.sent.length]);
+    if (standing.length === held.sent.length) return;
+    setHeld((was) => ({ ...was, sent: heldSentLines(was.sent, latest.current.messages) }));
+  }, [standing.length, held.sent.length]);
 
   // A rewind's cut is let go once the transcript reads back without the messages it dropped.
   const cutStands = held.cut !== undefined && messages.some((message) => held.cut?.has(message.id));
@@ -313,11 +318,17 @@ export function useAgentComposer(input: {
       if (rewound !== undefined && "failure" in rewound)
         ours((was) => ({ ...was, cut: undefined }));
       if (!("failure" in answer)) {
+        ours((was) => ({
+          ...was,
+          sent: heldSentLines(
+            was.sent.map((each) => (each.id === line.id ? { ...each, taken: true } : each)),
+            latest.current.messages,
+          ),
+        }));
         latest.current.onStatus(agentId, answer.agent);
         return;
       }
-      // A line a row has already read back reached the agent whatever the answer said: the
-      // row stands, so there is nothing to send again and nothing to put back in the box.
+      // A line the tab no longer holds, its agent's tab drawn afresh meanwhile, is nobody's to mark.
       if (!heldNow.current.sent.some((each) => each.id === line.id)) return;
       const note = messageFailureNote(
         answer,
