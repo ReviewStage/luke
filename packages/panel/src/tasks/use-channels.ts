@@ -123,6 +123,16 @@ const KEPT_CHANNEL = keptKey<Readonly<Record<string, string>>>(
 /** No channel kept in any workspace. */
 const NOTHING_KEPT: Readonly<Record<string, string>> = {};
 
+/** The place as it stands, which a server's render reads as the window's does. */
+function placeNow(): ChannelPlace {
+  return place;
+}
+
+/** Every workspace's channels read, as they stand, which a server's render reads as the window's does. */
+function heldNow(): ReadonlyMap<string, readonly Channel[]> {
+  return heldChannels;
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -291,11 +301,11 @@ export interface ChannelsControl {
 export function useChannels(workspaceId: string | undefined, shown: boolean): ChannelsControl {
   const { act } = useAct();
   const toast = useToast();
-  const standing = useSyncExternalStore(subscribe, () =>
-    workspaceId === undefined ? NOTHING_HELD : (held.get(workspaceId) ?? NOTHING_HELD),
-  );
+  const heldHere = () =>
+    workspaceId === undefined ? NOTHING_HELD : (held.get(workspaceId) ?? NOTHING_HELD);
+  const standing = useSyncExternalStore(subscribe, heldHere, heldHere);
   const [kept, , changeKept] = useKept(KEPT_CHANNEL, NOTHING_KEPT);
-  const { channelId: chosen } = useSyncExternalStore(subscribe, () => place);
+  const { channelId: chosen } = useSyncExternalStore(subscribe, placeNow, placeNow);
   const listed = placeWorkspace === undefined || placeWorkspace === workspaceId;
   useLayoutEffect(() => {
     const { channels } = standing;
@@ -391,7 +401,7 @@ export interface ChannelPlaceControl extends ChannelPlace {
 
 /** The channel the window shows and the thread opened in it, the window's own while it runs. */
 export function useChannelPlace(): ChannelPlaceControl {
-  const standing = useSyncExternalStore(subscribe, () => place);
+  const standing = useSyncExternalStore(subscribe, placeNow, placeNow);
   return useMemo(
     () => ({
       ...standing,
@@ -412,7 +422,7 @@ export function useChannelPlace(): ChannelPlaceControl {
 export function useThreadChannel(
   item: { readonly id: string; readonly channelId?: string } | undefined,
 ): void {
-  const standing = useSyncExternalStore(subscribe, () => place);
+  const standing = useSyncExternalStore(subscribe, placeNow, placeNow);
   const id = item?.id;
   const channelId = item?.channelId;
   const misplaced =
@@ -427,7 +437,7 @@ export function useThreadChannel(
 
 /** Every workspace's channels the window holds, by the workspace's id, which it reads nothing to learn. */
 export function useHeldChannels(): ReadonlyMap<string, readonly Channel[]> {
-  return useSyncExternalStore(subscribe, () => heldChannels);
+  return useSyncExternalStore(subscribe, heldNow, heldNow);
 }
 
 /** What the Inbox's place shows with Channels on: the channel its stream shows, and the thread opened in it, by its item's id. */
