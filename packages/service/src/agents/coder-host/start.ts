@@ -49,6 +49,7 @@ import {
   type CodingAgentStartFrom,
   type CodingAgentStartRequest,
   type CodingAgentSummary,
+  LOCAL_AGENT_REFUSAL,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubAccess } from "@luke/features/github-repositories-wire";
 import { decodeMention, mentionMarkdown } from "@luke/features/mention-link";
@@ -415,10 +416,6 @@ export type StartAsk = StartPlace & {
   readonly branch?: string | undefined;
   /** Whether a call is opened into the agent as it lands; it runs where any Start would (`startRuntimeOf`). */
   readonly call?: boolean | undefined;
-  /** Where the agent runs: the starter's Mac `deviceId` names, where a Mac is asked for (`agentMachineChoice`); a sandbox where none is named. */
-  readonly machine?: CodingAgentMachine | undefined;
-  /** The Mac a Start on a Mac names, one of those Start offered the starter. */
-  readonly deviceId?: string | undefined;
   /** The repository the task's own start reached in the same request, which the agent's Start takes rather than asking GitHub again; none for every other Start. */
   readonly reached?: StartReach | undefined;
   /** The task the task's own start made in the same request, as it was made, which the agent's Start lands on rather than reading it again; none for every other Start. */
@@ -437,6 +434,8 @@ export interface CodingAgentStart {
   readonly created: boolean;
   /** The transaction the agent's row was written in, where this Start wrote it. */
   readonly txid?: string;
+  /** Why the agent runs in the cloud on a task or from an agent that runs on a device, in plain words (`machineOfStart`); none otherwise. */
+  readonly notice?: string;
 }
 
 /** What a Start reaches: the store, the catalog, GitHub through the App on the developer's standing, and the network to eve. */
@@ -1046,6 +1045,63 @@ const openingLine = (
     return sentLineId(clientKey);
   });
 
+/** Where a Start's agent runs, as `machineOfStart` decides it: the machine and device it asks the runtime and machine choices for, and why it runs in the cloud on a device's task, in plain words, where that is why. */
+interface StartMachine {
+  readonly asked: { readonly machine: CodingAgentMachine; readonly deviceId?: string | undefined };
+  readonly notice?: string;
+}
+
+/** A Start's agent in a sandbox, the one place that needs no device. */
+const IN_THE_CLOUD: StartMachine = { asked: { machine: CODING_AGENT_MACHINE.VERCEL } };
+
+/**
+ * Where a new agent runs, one rule for every Start: where the agent it is
+ * started from runs, for a continue or a fork, `start_agent` from another
+ * agent among them, so a local agent goes on locally; else where its task
+ * runs (`task.runsOn`); else, with no task, as the member's operator and
+ * an agent with no plan are, in the cloud. The starter is the account the
+ * Start is made for: a member's own, the calling agent's starter for
+ * `start_agent`, and the automation's owner for an automation's run. A
+ * device runs only its owner's agents, so a Start by anyone else runs in
+ * the cloud and says why; a device whose row is gone is refused as away,
+ * and one that is the starter's goes on to the runtime and machine choices,
+ * which refuse it by name where it is away, the experiment is off, or it
+ * runs no harness for the model. Nothing falls back to the cloud silently.
+ */
+const machineOfStart = Effect.fnUntraced(function* (
+  userId: string,
+  source: CodingAgent | undefined,
+  task: Task | undefined,
+): Effect.fn.Return<StartMachine, HostedRefusal, DatabaseServices> {
+  const fromSource = source !== undefined;
+  const machine = fromSource
+    ? (source.machine ?? CODING_AGENT_MACHINE.VERCEL)
+    : (task?.runsOn?.machine ?? CODING_AGENT_MACHINE.VERCEL);
+  if (machine === CODING_AGENT_MACHINE.VERCEL) return IN_THE_CLOUD;
+  const deviceId = fromSource ? source.deviceId : task?.runsOn?.deviceId;
+  const device =
+    deviceId === null || deviceId === undefined
+      ? undefined
+      : (yield* hostedStoreOrUnavailable(devicesNamed([deviceId]))).get(deviceId);
+  if (device === undefined) {
+    return yield* Effect.fail(localAgentRefused(LOCAL_AGENT_REFUSAL.MAC_AWAY));
+  }
+  if (device.userId === userId) {
+    return { asked: { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: device.id } };
+  }
+  const owner = (yield* hostedStoreOrUnavailable(readAccountNames([device.userId]))).get(
+    device.userId,
+  );
+  return { ...IN_THE_CLOUD, notice: cloudNotice(fromSource, device.name, owner) };
+});
+
+/** Why a Start on a teammate's device runs in the cloud, in plain words, naming the device and whose it is. */
+function cloudNotice(fromSource: boolean, device: string, owner: string | undefined): string {
+  const runner = fromSource ? "the agent it was started from" : "this task";
+  const whose = owner === undefined ? "its owner's" : `${owner}'s`;
+  return `Runs in the cloud: ${runner} runs on ${device}, which only ${whose} agents use.`;
+}
+
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
   eve: Effect.Effect<
@@ -1147,16 +1203,10 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   // A continue is named after its source where the ask names nothing; a fork is named as it starts.
   const continued = from !== undefined && from.told.messageId === undefined;
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
-  // The runtime and the payer are decided as the agent is made, by the starter's account and model, and never change.
-  const runtime = yield* startRuntimeOf(userId, choice.model, keys, {
-    machine: ask.machine,
-    deviceId: ask.deviceId,
-  });
-  const placed = yield* startMachineOf(
-    userId,
-    { machine: ask.machine, deviceId: ask.deviceId },
-    runtime.runtime,
-  );
+  // Where it runs, the runtime, and the payer are decided as the agent is made, by the starter's account, its source or task, and its model, and never change.
+  const where = yield* machineOfStart(userId, from?.source, landing.task);
+  const runtime = yield* startRuntimeOf(userId, choice.model, keys, where.asked);
+  const placed = yield* startMachineOf(userId, where.asked, runtime.runtime);
   const started = yield* hostedStoreOrUnavailable(
     createCodingAgent(userId, {
       ...brief,
@@ -1183,11 +1233,15 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { agent, created, txid } = started.value;
-  if (!created) return { agent, created };
+  const notice = where.notice === undefined ? undefined : { notice: where.notice };
+  if (!created) return { agent, created, ...notice };
   // The session opens with the plan or the prompt as its first message; an eve that did not take
   // it leaves no agent behind, so the retry under the same key starts afresh. A blank agent opens
   // none: its first words open its session as they reach it (`steer.ts`).
-  const handed = brief.prompt ?? brief.planSnapshot;
+  // A Start sent to the cloud from a device's task says why in its first message too, so its transcript and the agent both read it.
+  const briefed = brief.prompt ?? brief.planSnapshot;
+  const handed =
+    briefed === null || where.notice === undefined ? briefed : `${briefed}\n\n${where.notice}`;
   if (handed !== null) {
     const sessions = yield* eve;
     // Each image is kept beside the new agent's conversation first, so the agent is told its id; one the
@@ -1271,7 +1325,9 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     is_from_automation: ask.automationId !== undefined && ask.automationId !== null,
     has_task: ask.taskId !== null,
   });
-  return committed === undefined ? { agent, created } : { agent, created, txid: committed };
+  return committed === undefined
+    ? { agent, created, ...notice }
+    : { agent, created, txid: committed, ...notice };
 });
 
 /** A Start as a request reached the service, answered: the agent's summary, and whether this request made it or found it under its key. */
@@ -1280,6 +1336,8 @@ export interface RequestedStart {
   readonly created: boolean;
   /** The transaction the agent's row was written in, where this request wrote it. */
   readonly txid?: string;
+  /** Why the agent runs in the cloud on a device's task, in plain words (`machineOfStart`); none otherwise. */
+  readonly notice?: string;
 }
 
 /**
@@ -1330,7 +1388,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<RequestedStart, HostedRefusal, StartServices> {
   const { note } = request;
   const choice = yield* requestedChoice(request);
-  const { agent, created, txid } = yield* startCodingAgent(eve, userId, {
+  const { agent, created, txid, notice } = yield* startCodingAgent(eve, userId, {
     ...whereOf(where),
     idempotencyKey: request.idempotencyKey,
     choice,
@@ -1345,7 +1403,8 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     reached,
     landed,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
-  if (!created) return { agent: yield* summaryOf(userId, agent), created };
+  const noticed = notice === undefined ? undefined : { notice };
+  if (!created) return { agent: yield* summaryOf(userId, agent), created, ...noticed };
   const [names, runtimes, macs] = yield* hostedStoreOrUnavailable(
     Effect.all(
       [
@@ -1371,5 +1430,6 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
     created,
     ...(txid === undefined ? undefined : { txid }),
+    ...noticed,
   };
 });
