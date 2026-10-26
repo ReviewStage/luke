@@ -2866,7 +2866,7 @@ test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no
 
   assert.deepEqual(
     filterOptions().map((option) => option.textContent),
-    ["All", "Tasks", "This task", "Inbox", "People", "Files", "Commands", "Settings"],
+    ["All", "Tasks", "This task", "Inbox", "Channels", "People", "Files", "Commands", "Settings"],
   );
 });
 

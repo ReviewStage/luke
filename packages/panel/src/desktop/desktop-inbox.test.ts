@@ -76,7 +76,7 @@ import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { type ChannelPlaceControl, useChannelPlace } from "../tasks/use-channels.js";
+import { type ChannelPlaceControl, chooseChannel, useChannelPlace } from "../tasks/use-channels.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -707,6 +707,7 @@ function mount(
         },
         onChoose: setChosen,
         onOpenItem: setChosen,
+        onOpenChannel: chooseChannel,
         listed: listAsked,
         onListed: setListAsked,
         onSingle: (single: boolean) => {

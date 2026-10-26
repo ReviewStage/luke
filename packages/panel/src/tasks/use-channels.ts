@@ -7,14 +7,23 @@ import {
 import type { ArchivedChannel, Channel, ChannelThread } from "@luke/features/channel-wire";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { STATUS_TONE } from "@luke/ui";
 import { Schema } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { askAct, useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
+import { readKept, writeKept } from "../kept-storage.js";
 import { TOAST_HOLD, type ToastNotice, useToast } from "../toast.js";
+import { useExperiment } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { CHANNEL_VIEW, type ChannelView, generalChannel } from "./channels-model.js";
+import {
+  CHANNEL_SHOWN,
+  CHANNEL_VIEW,
+  type ChannelView,
+  channelShown,
+  generalChannel,
+} from "./channels-model.js";
 
 /**
  * use-channels.ts -- a workspace's channels as the window holds them, the channel chosen, one channel's threads page by page, and its archived channels, each read through the act port (STAG-547).
@@ -30,11 +39,14 @@ import { CHANNEL_VIEW, type ChannelView, generalChannel } from "./channels-model
  * moved, the channels are read again, and so is a channel's stream that
  * shows one of them, as far back as the older pages it loaded reached. Which channel the
  * window shows, and whether a thread stands open beside it, is the
- * window's own while it runs; which view the stream shows, Mine by
- * default, is kept on this Mac as the Inbox's view choices are. A channel
- * made answers its id, so whoever made it opens it; archiving the channel
- * the window shows moves the window to #general and says so, where an
- * archive by someone else leaves the stream to say the channel is gone.
+ * window's own while it runs; the channel last shown in each workspace is
+ * kept on this Mac, and shown again on launch once the workspace's channels
+ * are read and it still stands among them, #general standing in otherwise.
+ * Which view the stream shows, Mine by default, is kept on this Mac as the
+ * Inbox's view choices are. A channel made answers its id, so whoever made
+ * it opens it; archiving the channel the window shows moves the window to
+ * #general and says so, where an archive by someone else leaves the stream
+ * to say the channel is gone.
  */
 
 /** A workspace's channels as last read: none until a read answers, and whether the last read failed. */
@@ -89,6 +101,15 @@ const KEPT_VIEW = keptKey<ChannelView>(
   Schema.fromJsonString(Schema.Literals(Object.values(CHANNEL_VIEW))),
 );
 
+/** Where the channel last shown in each workspace is kept on this Mac, by the workspace's id. */
+const KEPT_CHANNEL = keptKey<Readonly<Record<string, string>>>(
+  "luke.shownChannel",
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.String)),
+);
+
+/** No channel kept in any workspace. */
+const NOTHING_KEPT: Readonly<Record<string, string>> = {};
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -98,7 +119,12 @@ function told(): void {
   for (const listener of listeners) listener();
 }
 
-/** Holds a workspace's channels as an answer says, a failure keeping what was held. */
+/**
+ * Holds a workspace's channels as an answer says, a failure keeping what
+ * was held. Note that the first read with no channel chosen yet, as at
+ * launch, shows the channel last shown in the workspace where it still
+ * stands among them, so an archived or unknown one leaves #general standing in.
+ */
 function hold(workspaceId: string, view: ChannelsView | undefined): void {
   const was = held.get(workspaceId) ?? NOTHING_HELD;
   held.set(
@@ -107,7 +133,24 @@ function hold(workspaceId: string, view: ChannelsView | undefined): void {
       ? { channels: was.channels, failed: true }
       : { channels: view.channels, failed: false },
   );
+  if (view !== undefined && !("failure" in view) && place.channelId === undefined) {
+    const kept = readKept(KEPT_CHANNEL.name, KEPT_CHANNEL.schema, NOTHING_KEPT)[workspaceId];
+    if (view.channels.some((channel) => channel.id === kept)) {
+      place = { channelId: kept, threadId: undefined };
+    }
+  }
   told();
+}
+
+/** Keeps a channel shown as its workspace's last, where the window holds the workspace it is of. */
+function keepShown(channelId: string): void {
+  const workspaceId = [...held].find(([, each]) =>
+    each.channels?.some((channel) => channel.id === channelId),
+  )?.[0];
+  if (workspaceId === undefined) return;
+  const kept = readKept(KEPT_CHANNEL.name, KEPT_CHANNEL.schema, NOTHING_KEPT);
+  if (kept[workspaceId] === channelId) return;
+  writeKept(KEPT_CHANNEL.name, KEPT_CHANNEL.schema, { ...kept, [workspaceId]: channelId });
 }
 
 /** Reads a workspace's channels again and holds the answer. */
@@ -152,11 +195,34 @@ function holdFollow(workspaceId: string): () => void {
   };
 }
 
-/** Moves the window's place, telling every surface drawing it. */
+/** Moves the window's place, telling every surface drawing it, and keeps the channel it shows. */
 function moveTo(next: ChannelPlace): void {
   if (next.channelId === place.channelId && next.threadId === place.threadId) return;
   place = next;
+  if (next.channelId !== undefined) keepShown(next.channelId);
   told();
+}
+
+/** Shows a channel, the thread open in it kept only where it is the channel already shown; a door any surface or link opens a channel by. */
+export function chooseChannel(channelId: string): void {
+  moveTo({ channelId, threadId: channelId === place.channelId ? place.threadId : undefined });
+}
+
+/**
+ * Opens a thread, in its channel where that is known and in the channel
+ * shown otherwise, until its item is read (`useThreadChannel`); the one
+ * door every surface opening a thread goes through (`onOpenItem`).
+ */
+export function openChannelThread(itemId: string, channelId?: string): void {
+  moveTo({ channelId: channelId ?? place.channelId, threadId: itemId });
+}
+
+/** Stands the channel and the thread as a step of the window's history held them. */
+export function standChannelPlace(
+  channelId: string | undefined,
+  threadId: string | undefined,
+): void {
+  moveTo({ channelId: channelId ?? place.channelId, threadId });
 }
 
 /**
@@ -298,15 +364,56 @@ export function useChannelPlace(): ChannelPlaceControl {
   return useMemo(
     () => ({
       ...standing,
-      onChoose: (channelId) =>
-        moveTo({
-          channelId,
-          threadId: channelId === place.channelId ? place.threadId : undefined,
-        }),
-      onOpenThread: (itemId) => moveTo({ ...place, threadId: itemId }),
+      onChoose: chooseChannel,
+      onOpenThread: (itemId) => openChannelThread(itemId),
       onCloseThread: () => moveTo({ ...place, threadId: undefined }),
     }),
     [standing],
+  );
+}
+
+/**
+ * Moves the stream to the channel the open thread lives in once its item
+ * is read, as for a thread opened by a link, which names its item and
+ * not its channel; nothing for any other item, or one read from a service
+ * that names no channel.
+ */
+export function useThreadChannel(
+  item: { readonly id: string; readonly channelId?: string } | undefined,
+): void {
+  const standing = useSyncExternalStore(subscribe, () => place);
+  const id = item?.id;
+  const channelId = item?.channelId;
+  const misplaced =
+    id !== undefined &&
+    channelId !== undefined &&
+    standing.threadId === id &&
+    standing.channelId !== channelId;
+  useEffect(() => {
+    if (misplaced) moveTo({ channelId, threadId: id });
+  }, [misplaced, channelId, id]);
+}
+
+/** What the Inbox's place shows with Channels on: the channel its stream shows, and the thread opened in it, by its item's id. */
+export interface ShownChannel {
+  readonly channel: Channel;
+  readonly threadId: string | undefined;
+}
+
+/**
+ * The channel a workspace's stream shows and the thread opened in it, as
+ * the window holds its channels, which it reads nothing to learn; none with
+ * Channels off, before the channels are read, or where the workspace holds none.
+ */
+export function useShownChannel(workspaceId: string | undefined): ShownChannel | undefined {
+  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const { channels } = useChannels(channelsOn ? workspaceId : undefined, false);
+  const { channelId, threadId } = useChannelPlace();
+  const shown = channelShown(channels, channelId);
+  const channel = shown.kind === CHANNEL_SHOWN.CHANNEL ? shown.channel : undefined;
+  return useMemo(
+    () => (channel === undefined ? undefined : { channel, threadId }),
+    [channel, threadId],
   );
 }
 

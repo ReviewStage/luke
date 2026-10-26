@@ -860,6 +860,11 @@ export const inboxItemSchema = EffectSchema.Struct({
    * which the desktop reads as read.
    */
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
+   * The channel of its workspace the thread lives in (`channel-wire.ts`),
+   * which a link to the item opens it in. Absent from a service before it.
+   */
+  channelId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type InboxItem = typeof inboxItemSchema.Type;

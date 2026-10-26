@@ -187,6 +187,7 @@ function mount(
         onClose: ignore,
         onChoose: ignore,
         onOpenItem: () => undefined,
+        onOpenChannel: () => undefined,
         listed: false,
         onListed: ignore,
         pages: undefined,

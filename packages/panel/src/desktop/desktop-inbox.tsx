@@ -65,7 +65,7 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
-import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
+import { useChannelPlace, useChannels, useThreadChannel } from "../tasks/use-channels.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { choiceOf, type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
@@ -278,6 +278,8 @@ function InboxShown({
   const threadOpen =
     streaming &&
     ((chosen !== undefined && channelPlace.threadId === chosen.item.id) || threadMissing);
+  // A thread opened by a link or from another channel moves the stream to its own channel once its item is read.
+  useThreadChannel(streaming ? chosen?.item : undefined);
   const threadShown = threadOpen && channel !== undefined && !channelsListed;
   const threadBeside = threadOpen && !phone;
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.

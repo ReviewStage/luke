@@ -73,6 +73,7 @@ import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
 import { INBOX_HOLDER, type InboxListed, NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark } from "../tasks/tab-look.js";
 import { readAgentById } from "../tasks/use-coding-agents.js";
+import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
@@ -647,12 +648,8 @@ function PersonColumn({
       (inboxWaitsOn(item)?.userId ?? agentStarter(holder.task, item.agentId)) === userId,
   );
   const { inboxView } = tasks;
-  const openItem = ({ holder, item }: InboxListed) =>
-    inboxView.onOpenItem(
-      holder.kind === INBOX_HOLDER.TASK
-        ? { taskId: holder.task.id, itemId: item.id }
-        : { agentId: item.agentId, itemId: item.id },
-    );
+  const openItem = (listed: InboxListed) =>
+    inboxView.onOpenItem(choiceOf(listed), listed.item.channelId);
   // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
