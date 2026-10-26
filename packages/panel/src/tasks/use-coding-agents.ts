@@ -13,7 +13,6 @@ import {
   type CodingAgentReviewOptionsAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
-  CODING_AGENT_MACHINE,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
   type CodingAgentChangesPeople,
@@ -23,12 +22,7 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import type {
-  CatalogModel,
-  MacOffer,
-  ModelChoice,
-  ModelProvider,
-} from "@luke/features/models-wire";
+import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
@@ -110,7 +104,7 @@ const CHAPTERS_UNANSWERED: PullRequestChaptersAnswerView = {
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
 /**
- * use-coding-agents.ts -- the open task's coding agents as one control: the agents and their status, the Start button, a draft agent started on a prompt, the Stop, a message to one, a change of one's model, and the models the menus offer.
+ * use-coding-agents.ts -- the open task's coding agents as one control: the agents and their status, a Start, a draft agent started on a prompt, the Stop, a message to one, a change of one's model, and the models the menus offer.
  *
  * The agents are read when a task opens, again after a Start or a Stop,
  * and as the task's column's "+" opens, and never on a clock; an agent's status moves between those reads only
@@ -194,7 +188,7 @@ export interface HeldPeople {
   readonly people: CodingAgentChangesPeople;
 }
 
-/** Everything the Start button, the tabs, and the agent tab draw and press. */
+/** Everything the "+" menu, the tabs, and the agent tab draw and press. */
 export interface CodingAgentsControl {
   /** The signed-in account's id, whose own agents carry no "Started by"; none while signed out, or for an identity stored without one. */
   me: string | undefined;
@@ -222,8 +216,6 @@ export interface CodingAgentsControl {
   models: readonly CatalogModel[] | undefined;
   /** Whether the last read of the models did not land, so the menu says so with Retry rather than reading for ever. */
   modelsFailed: boolean;
-  /** The account's Macs a Start may run its agent on, as the last read of the models offered them; nothing where it offered none, or before the first read. */
-  macs: readonly MacOffer[] | undefined;
   /** Reads the models now, for a menu opening or the menu's Retry. */
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
@@ -323,12 +315,8 @@ export interface CodingAgentsControl {
     reason: string | undefined;
     /** Whether a Start is out. */
     busy: boolean;
-    /** Why the last Start did not start, or the last change of model did not take, said beside the button until the next. */
-    note: Failure | undefined;
-    /** Whether this button's own last Start started its agent, so a draft's or a call's start, which hold it busy too, never reads as its own. */
-    succeeded: boolean;
-    /** Starts an agent on the choice given, or on the account's default with none, on the starter's Mac `deviceId` names where one is given, else in the cloud. */
-    onPress: (choice?: ModelChoice, deviceId?: string) => void;
+    /** Starts an agent on the choice given, or on the account's default with none, saying why on a toast where it did not start. */
+    onPress: (choice?: ModelChoice) => void;
     /** The agent a Start on the open task is still making, its tab standing under the press's key until the service answers; none while none is out. */
     pending?: StartingAgent | undefined;
   };
@@ -569,7 +557,6 @@ interface PendingStart {
   taskId: string;
   key: string;
   choice: ModelChoice | undefined;
-  deviceId: string | undefined;
 }
 
 /** Starts a new agent on the open task from one of its agents' whole transcript, with the developer's words and the files attached to them as its note where given; answers why it did not start, or nothing once it did. */
@@ -819,7 +806,6 @@ export function useCodingAgents(input: {
     was.taskId === taskId && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [modelsFailed, setModelsFailed] = useState(false);
-  const [macs, setMacs] = useState<readonly MacOffer[] | undefined>(undefined);
   const [starting, setStarting] = useState(false);
   // Where a Start from an agent and a draft stand: the open task, or the page's agent where no task
   // is open, whose Start the service puts where that agent is (its task, or its workspace).
@@ -833,8 +819,6 @@ export function useCodingAgents(input: {
   const keptDraft = useNewAgentDraft(startsOn, heldDraft?.id);
   const writer = useDraftWriter();
   const draft = startsOn === undefined ? undefined : taskDraft(heldDraft, keptDraft);
-  const [note, setNote] = useState<{ taskId: string; note: Failure } | undefined>(undefined);
-  const [startLanded, setStartLanded] = useState(false);
   const [reads, setReads] = useState(0);
   // The agent New task last started, its task, and the line it was started on.
   const [started, setStarted] = useState<
@@ -1004,7 +988,6 @@ export function useCodingAgents(input: {
         if ("failure" in answer) setModelsFailed(true);
         else {
           setModels(answer.models);
-          setMacs(answer.macs);
           setModelsFailed(false);
         }
       },
@@ -1039,8 +1022,6 @@ export function useCodingAgents(input: {
     asked: Omit<PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">,
   ): Promise<CodingAgentAgentAnswer> => {
     setStarting(true);
-    // Note that every Start holds the toolbar's busy, so each lets go of the last one's landing; only the toolbar's own sets it again.
-    setStartLanded(false);
     // Note that a Start from the page's agent names no task, so the service puts it where that agent is.
     const where = on === taskId ? { taskId: on } : undefined;
     return act(ACT_KIND.CODING_AGENTS_START, { ...where, ...asked })
@@ -1071,42 +1052,32 @@ export function useCodingAgents(input: {
     readAgain();
   };
 
-  const pressStart = (choice?: ModelChoice, deviceId?: string) => {
+  const pressStart = (choice?: ModelChoice) => {
     if (taskId === undefined || repository === null || starting) return;
     // The key is the press's own, and a press asked again after the service
     // did not answer carries the one it minted, so the service answers the
     // agent it may already have started rather than a second one.
     const held = pending.current;
     const key =
-      held !== undefined &&
-      held.taskId === taskId &&
-      sameChoice(held.choice, choice) &&
-      held.deviceId === deviceId
+      held !== undefined && held.taskId === taskId && sameChoice(held.choice, choice)
         ? held.key
         : mintKey();
-    pending.current = { taskId, key, choice, deviceId };
-    setNote(undefined);
+    pending.current = { taskId, key, choice };
     // The agent's tab opens on the press, under its key, and gives way to the agent once it is made.
     setPressed({ taskId, starting: { key, model: choice?.model } });
     latest.current.onStarted(key);
     askStart(taskId, {
       idempotencyKey: key,
       ...(choice === undefined ? undefined : choiceRequest(choice)),
-      // Note that the cloud is what a Start with no machine runs in, so only a Mac is named, by its id.
-      ...(deviceId === undefined ? undefined : { machine: CODING_AGENT_MACHINE.MAC, deviceId }),
     }).then((answer) => {
       setPressed((was) => (was?.starting.key === key ? undefined : was));
       if ("failure" in answer) {
         // Only a service that never answered is asked again under the same key.
         if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
-        setNote({ taskId, note: startFailureNote(answer, taskId) });
-        // The note waits beside the task's Start; a developer who left the
-        // task while it was out hears of it now.
-        if (latest.current.taskId !== taskId) failed(START_FAILED_AWAY);
+        failed(startFailureNote(answer, taskId).text);
         return;
       }
       pending.current = undefined;
-      setStartLanded(true);
       landed(taskId, answer.agent);
     });
   };
@@ -1916,7 +1887,6 @@ export function useCodingAgents(input: {
     onRetryList: readAgain,
     models,
     modelsFailed,
-    macs,
     readModels,
     readDefault,
     onUnarchive: undefined,
@@ -1925,8 +1895,6 @@ export function useCodingAgents(input: {
       available: taskId !== undefined && repository !== null,
       reason: startReason(taskId, repository),
       busy: starting,
-      note: note !== undefined && note.taskId === taskId ? note.note : undefined,
-      succeeded: startLanded,
       onPress: pressStart,
       pending: pressedHere,
     },

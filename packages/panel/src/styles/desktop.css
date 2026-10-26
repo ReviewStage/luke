@@ -529,34 +529,13 @@ body,
 }
 
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its
-   controls give way before its tabs do: Start draws its glyph alone, named
-   still, and where the column is narrowest it leaves its model menu to the
-   new agent's own composer, which chooses a model as well, and the agents'
-   Retry draws its glyph alone. */
-@container luke-toolbar (width < 480px) {
-  .start-agent {
-    --luke-fold: folded;
-  }
-}
-
-/* off-scale: 320px, where Start's model menu goes to the composer */
+   controls give way before its tabs do: where the column is narrowest the
+   agents' Retry draws its glyph alone (`FoldingButton`). */
+/* off-scale: 320px, the column's narrowest */
 @container luke-toolbar (width < 320px) {
-  /* Start's glyph alone, its model menu left to the composer (`SplitButton`). */
-  .start-agent {
-    --luke-fold: bare;
-  }
-
-  /* The agents' Retry folds to its glyph (`FoldingButton`). */
   .main-tabs {
     --luke-fold: folded;
   }
-}
-
-/* A narrow room's bar has its tabs on a row of their own, and a phone has
-   no hover to name a glyph, so Start keeps its word there however narrow
-   the bar (`SplitButton`). */
-:where(:root)[data-luke-room="narrow"] .desktop-shell .desktop-task-main .start-agent {
-  --luke-fold: worded;
 }
 
 [data-luke-profile="desktop"] .luke-button,

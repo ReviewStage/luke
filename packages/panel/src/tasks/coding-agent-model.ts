@@ -108,7 +108,7 @@ import {
 } from "./tool-call-model.js";
 
 /**
- * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
+ * coding-agent-model.ts -- what the agent tabs, a Start, and an agent's transcript draw, decided from what the service answered.
  *
  * Pure decisions over the wire's shapes: how an agent is named on its tab,
  * what its tab's glyph says of where it stands, what line ends a transcript whose turn failed
@@ -408,7 +408,7 @@ export function agentStateWords(status: CodingAgentStatus): string | undefined {
   return glyphStateWords(agentGlyphState(status), status === CODING_AGENT_STATUS.CANCELLED);
 }
 
-/** What the Start button says while it cannot start: the task names no repository yet. */
+/** Why a Start cannot run, said on the "+" menu's New agent: the task names no repository yet. */
 export const START_NEEDS_REPOSITORY = "Choose a repository";
 
 /** What the refusals a Start and a message meet alike say, worded once. */

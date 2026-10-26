@@ -158,8 +158,6 @@ async function mount(input: {
         available: input.cannotStart === undefined,
         reason: input.cannotStart,
         busy: false,
-        note: undefined,
-        succeeded: false,
         onPress: () => input.started?.(),
       },
     }),

@@ -598,8 +598,6 @@ test("a draft New task handed over after its agent was refused sends nothing by 
       available: true,
       reason: undefined,
       busy: false,
-      note: undefined,
-      succeeded: false,
       onPress: () => {},
     },
     onDraftChange: (change) => marks.push(change),
