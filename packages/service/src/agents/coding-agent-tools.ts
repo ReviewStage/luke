@@ -139,7 +139,13 @@ import {
 } from "./coder-host/status.js";
 import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { STEWARD_ACT, type StewardAct, stewardRefusal } from "./steward.js";
+import {
+  STEWARD_ACT,
+  type StewardAct,
+  stewardContinuedRefusal,
+  stewardRefusal,
+  stewardTaskRefusal,
+} from "./steward.js";
 import {
   assigneeIdOf,
   assigneeMentionOf,
@@ -784,7 +790,8 @@ export const START_AGENT_TOOL = {
     "that failed, ended, or ran out of context, which is handed over and stopped, or fork one " +
     "at a messageId to try another direction while it goes on. An agent already continued may " +
     "be continued again, and the answer then names the earlier continuations by their id and " +
-    "mention (earlierContinuations). A start from another agent " +
+    "mention (earlierContinuations); the developer's operator continues an agent once, and a " +
+    "second continuation of it is refused. A start from another agent " +
     "copies its work and summarizes its transcript, so it may take a minute to answer.",
   inputSchema: START_AGENT_INPUT,
 } as const;
@@ -816,7 +823,8 @@ export const UPDATE_TASK_TOOL = {
     "one call. Mark a task whose work is " +
     "done Done, with status done, as the menu's Mark done does, such as one whose pull requests " +
     "merged, or one the developer asked you to clean up; never a teammate's " +
-    "task still in use unless the developer asked for it. A task is never archived: a settled " +
+    "task still in use unless the developer asked for it, and as the developer's operator never " +
+    "a teammate's task at all, which is refused. A task is never archived: a settled " +
     `one stands Done or Canceled, which ${AGENT_TOOL.LIST_TASKS} lists by status. Answers \`accepted\` with the task as ` +
     "it now stands, the issues it links where the call changed them, `already` true where every " +
     "change named already stood, or `rejected` and why. Then say which tasks you changed and how.",
@@ -831,7 +839,8 @@ export const STOP_AGENT_TOOL = {
     "available, its transcript and branch kept, and a later message starts a new turn. Stop " +
     "an agent you or the developer started that is going the wrong way, or one the developer " +
     "asked you to stop; never a teammate's agent still in use unless the developer asked for " +
-    "it. No agent stops itself, and an archived one is refused. Answers `accepted` with the " +
+    "it, and as the developer's operator never a teammate's agent at all, which is refused. No " +
+    "agent stops itself, and an archived one is refused. Answers `accepted` with the " +
     "agent's status now and whether it was stopped, `stopped` false for an agent already " +
     "idle, which changes nothing, or `rejected` and why. Then say which agent you stopped and why.",
   inputSchema: READ_AGENT_INPUT,
@@ -995,7 +1004,8 @@ export const UPDATE_AGENT_TOOL = {
     "whose pull request merged, or one the developer asked you to clean up, with a short reason " +
     "its archived banner shows beside your name; one still starting or working is refused, and " +
     "no agent archives itself. Change a teammate's agent still in use only where the developer " +
-    "asked for it. Answers `accepted` with the agent as it then stands, whether archived among " +
+    "asked for it, and as the developer's operator never, which is refused. Answers `accepted` " +
+    "with the agent as it then stands, whether archived among " +
     "it, or `rejected` and why; a rejected model or effort lists the choices. Then say which " +
     "agent you changed and how.",
   inputSchema: UPDATE_AGENT_INPUT,
@@ -1046,7 +1056,8 @@ export const LIST_TASKS_TOOL = {
     "workspace's sidebar, each with its id and title. Narrow it by words of a task's name with " +
     `nameContains, by where it stands with status, and by who it is assigned to with assignee. Call it to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s ` +
     `taskId, to narrow ${AGENT_TOOL.LIST_AGENTS} to one, or to find the task and the section ` +
-    `${AGENT_TOOL.UPDATE_TASK}'s sectionId and ${AGENT_TOOL.DELETE_SECTION} name.`,
+    `${AGENT_TOOL.UPDATE_TASK}'s sectionId names, and ${AGENT_TOOL.DELETE_SECTION} where you ` +
+    "are offered it.",
   inputSchema: LIST_TASKS_INPUT,
 } as const;
 
@@ -1247,6 +1258,25 @@ function stewardRefused(
   act: StewardAct,
 ): string | undefined {
   return stewardRefusal(caller.kind === AGENT_CALLER.AGENT ? caller.agent : undefined, agent, act);
+}
+
+/** Why the caller may not change the task under Steward (`steward.ts`): an operator changes only its member's own tasks. */
+function stewardTaskRefused(
+  caller: AgentCaller,
+  task: { readonly ownerId: string },
+): string | undefined {
+  return stewardTaskRefusal(caller.kind === AGENT_CALLER.AGENT ? caller.agent : undefined, task);
+}
+
+/** Why the caller may not continue the agent again under Steward (`steward.ts`): an operator continues an agent once. */
+function stewardContinuedRefused(
+  caller: AgentCaller,
+  continuedBefore: boolean,
+): string | undefined {
+  return stewardContinuedRefusal(
+    caller.kind === AGENT_CALLER.AGENT ? caller.agent : undefined,
+    continuedBefore,
+  );
 }
 
 /** A refusal's words, with when a plan's reached limit resets where the provider said, and which harness to connect where a credential is missing. */
@@ -1568,13 +1598,17 @@ const sourceLanding = (
     }
     // A continue takes over work that has ended; one already continued is
     // continued again, since a continuation may itself fail or go wrong, and
-    // the answer names the earlier ones so the caller knows they stand.
+    // the answer names the earlier ones so the caller knows they stand; an
+    // operator alone is refused the second (`steward.ts`).
     const { status } = (yield* standingsOf([source]))(source);
     if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
       return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_RUNNING);
     }
     const at = { userId: callerUserId(caller), workspaceId, taskId: source.taskId };
-    return Result.succeed({ place, continuedBy: yield* earlierContinuationsOf(at, source.id) });
+    const continuedBy = yield* earlierContinuationsOf(at, source.id);
+    const continued = stewardContinuedRefused(caller, continuedBy.length > 0);
+    if (continued !== undefined) return Result.fail(continued);
+    return Result.succeed({ place, continuedBy });
   });
 
 /** What a continue's answer adds where other agents already continued its source: those agents, oldest first, the one it started left out; nothing otherwise. */
@@ -1956,7 +1990,8 @@ export const reachedRepository = (
  * runs), for the member the caller acts for, its repository confirmed first
  * as the PATCH confirms one, or why not. Note that the task is read first, on
  * that member's standing, both to hold it to the caller's workspace and to
- * tell a change already standing, which the store keeps as it stood; and
+ * tell a change already standing, which the store keeps as it stood; that an
+ * operator is refused a teammate's task under Steward (`../steward.ts`); and
  * that the caller never archives the task it works on.
  */
 export function runUpdateTask(
@@ -2006,6 +2041,8 @@ export function runUpdateTask(
       ) {
         return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
       }
+      const steward = stewardTaskRefused(caller, read.value);
+      if (steward !== undefined) return agentToolRejected(steward);
       // Where it is asked to stand in the sidebar is read before anything is written.
       const placing =
         sectionId === undefined

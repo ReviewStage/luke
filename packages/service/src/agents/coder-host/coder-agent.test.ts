@@ -6,6 +6,7 @@ import {
   CODING_AGENT_KIND,
   type CodingAgentBrief,
   type CodingAgentKind,
+  OPERATOR_QUIET_REPLY,
 } from "@luke/features/coding-agent-wire";
 import { Duration, Redacted, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
@@ -882,16 +883,28 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
     "## Never",
     "Never merge or close a pull request yourself, and never ask an agent to merge or close one on your own initiative.",
     `When the developer asks you in this conversation to merge or close a pull request, tell the agent that owns it to do it, with \`${CODER_TOOL.MESSAGE_AGENT}\``,
-    "and messaging the developer's own agents. To reach a teammate's agent, ask the developer.",
+    `and messaging any agent of the workspace with \`${CODER_TOOL.MESSAGE_AGENT}\`, a teammate's included.`,
+    "once, and never a second time for the same agent, which the service refuses",
     "Never delete anything.",
     "Never answer a thread's ask for the developer",
     "Never change Settings, keys, or integrations.",
-    "Never act on a teammate's agent beyond reading it:",
+    "Never act on a teammate's agent beyond reading and messaging it:",
+    "Never change a teammate's task, which you read and nothing more.",
+    "Never put what is the developer's own, such as what you keep as a private memory, into a thread",
     "Report each action you took unasked as a line of its own in your reply",
     "ask the developer in a thread",
     `reports back to you with \`${CODER_TOOL.MESSAGE_AGENT}\``,
+    `Your heartbeat is an automation of the developer's, Luke's heartbeat, that hands you a turn twice each weekday`,
+    `you change it with \`${CODER_TOOL.UPDATE_AUTOMATION}\`, such as its hours, or run it with \`${CODER_TOOL.RUN_AUTOMATION}\`, only when the developer asks`,
     "## Your opening",
+    "with your desk beside it, read fresh. Say in a few lines what stands from the desk",
     `\`${CODER_TOOL.LIST_OPEN_ASKS}\``,
+    "and never a teammate's agent, which the service refuses you; then say which agent you archived and why.",
+    "and never a teammate's task, which the service refuses you; a task is never archived",
+    "and never a teammate's agent, which the service refuses you; then say which agent you stopped and why.",
+    "otherwise only where work they asked you for splits into tasks of its own and you start an agent on each",
+    "Your messages are read by the developer alone, in Luke's own window as a transcript",
+    `exactly ${OPERATOR_QUIET_REPLY} alone.`,
   ]) {
     assert.ok(operator.includes(told), told);
   }
@@ -901,7 +914,11 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
     `\`${CODER_TOOL.DELETE_SECTION}\``,
     "and never ask an agent to.",
     "and messaging any agent.",
-    "beyond reading it and messaging it",
+    "To reach a teammate's agent, ask the developer.",
+    `Read their open work with \`${CODER_TOOL.LIST_AGENTS}\``,
+    "unless the developer asked",
+    "since its agents start on your own task",
+    "what you changed, what you ran, and what you published or why not",
   ]) {
     assert.ok(!operator.includes(untold), untold);
   }
@@ -910,4 +927,8 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
   assert.ok(!coder.includes("## What you may do unasked"));
   assert.ok(coder.includes(`\`${CODER_TOOL.DELETE_SECTION}\``));
   assert.ok(!coder.includes(`\`${CODER_TOOL.LIST_OPEN_ASKS}\``));
+  assert.ok(coder.includes("and never a teammate's agent still in use unless the developer asked"));
+  assert.ok(coder.includes("since its agents start on your own task"));
+  assert.ok(coder.includes("what you changed, what you ran, and what you published or why not"));
+  assert.ok(!coder.includes("Luke's heartbeat"));
 });
