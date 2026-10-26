@@ -15,7 +15,8 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * region) is an `alert`, so a reader hears it land, and its way on is Retry.
  *
  * Every empty state is one layout: the glyph, a heading where the line alone
- * would not say what the place is, the line, and under it, where one is
+ * would not say what the place is, the line, left out where the heading
+ * says all there is and a line would only restate it, and under it, where one is
  * given, the one way on from the place as a quiet button, or the primary
  * one where that press is the whole point of the place (`look`), as a
  * Generate is where nothing stands until it is pressed. It fills the room
@@ -72,7 +73,7 @@ export interface EmptyStateAction {
 
 /**
  * A place with nothing in it yet: `icon`, the place's own glyph (left out only
- * where a place has none to say), drawn large and muted over `title` where one is given, over the line `children` says,
+ * where a place has none to say), drawn large and muted over `title` where one is given, over the line `children` says where one is given,
  * over `action` where one is given; one alert where `alert` says a failure
  * left it empty.
  */
@@ -90,7 +91,7 @@ export function EmptyState({
   /** A second way on, under the first, where the place offers two (Retry, then Close). */
   secondary?: EmptyStateAction | undefined;
   alert?: boolean | undefined;
-  children: ReactNode;
+  children?: ReactNode;
 }): React.JSX.Element {
   return (
     <div className={ROOM}>
@@ -102,7 +103,7 @@ export function EmptyState({
               {title}
             </Text>
           )}
-          <Text tone={TEXT_TONE.MUTED}>{children}</Text>
+          {children === undefined ? null : <Text tone={TEXT_TONE.MUTED}>{children}</Text>}
         </EmptyHeader>
         {[action, secondary].map((way) =>
           way === undefined ? null : (
