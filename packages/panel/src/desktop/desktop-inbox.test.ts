@@ -77,9 +77,8 @@ import { useDraftsOwner } from "../composer-drafts.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { type ChannelPlaceControl, chooseChannel, useChannelPlace } from "../tasks/use-channels.js";
-import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
-import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -119,7 +118,6 @@ import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
-import { SidebarInbox } from "./sidebar-inbox.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
@@ -616,7 +614,6 @@ function mount(
     listUnread = false,
     standing = [BILLING, INVITES],
     room,
-    sidebar = false,
     panel,
     holding: firstHolding = HOLDING,
     withSidebar = false,
@@ -627,8 +624,6 @@ function mount(
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
     room?: ShellRoom;
-    /** Whether the inbox-first sidebar lists the Inbox, read once for it and the page, which then shows the chosen item alone. */
-    sidebar?: boolean;
     /** The side panel the Inbox opens what its item names in, where the test records what it opened. */
     panel?: SidePanelControl;
     /** Main's first word of the tasks holding items. */
@@ -710,9 +705,6 @@ function mount(
         onOpenChannel: chooseChannel,
         listed: listAsked,
         onListed: setListAsked,
-        onSingle: (single: boolean) => {
-          toldSingle.push(single);
-        },
         pages: undefined,
         onTaskAgents: () => undefined,
       },
@@ -731,7 +723,6 @@ function mount(
         onClose: () => undefined,
       },
     });
-    if (sidebar) return createElement(SharedListing, { tasks: control });
     const inbox = createElement(DesktopInbox, { tasks: control, room: room ?? SHELL_ROOM.WIDE });
     return withSidebar
       ? createElement(Fragment, null, createElement(DesktopSidebar, sidebarProps(control)), inbox)
@@ -790,29 +781,6 @@ function useThreadPanel(chosen: InboxChoice | undefined): SidePanelControl {
   );
   threadPanelNow = panel;
   return panel;
-}
-
-/** What the Inbox told the window of whether it shows one column, in order. */
-let toldSingle: boolean[] = [];
-
-/** The Inbox as the inbox-first shell draws it: read once, listed in the sidebar, and its chosen item alone in the plan's place. */
-function SharedListing({ tasks }: { tasks: TasksControl }) {
-  const listing = useInboxListing(tasks);
-  return createElement(
-    Fragment,
-    null,
-    createElement(
-      "aside",
-      { className: "desktop-sidebar" },
-      createElement(SidebarInbox, {
-        tasks,
-        listing,
-        shown: true,
-        onOpen: tasks.inboxView.onOpenItem,
-      }),
-    ),
-    createElement("main", null, createElement(DesktopInbox, { tasks, listing })),
-  );
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -7262,20 +7230,6 @@ test("a teammate's notice is left open as it is opened, since acknowledging it s
   assert.deepEqual(messaged, []);
 });
 
-test("with the inbox-first sidebar, opening the reader's own notice from the sidebar acknowledges it", async () => {
-  const notice = noticeItem({ id: EXPIRY.id });
-  inboxes.set(INVITES.id, [notice]);
-  const { answered } = noticeWrites();
-  const { page } = mount([], { sidebar: true });
-  await settle();
-  assert.deepEqual(answered, [], "the item standing chosen is no notice");
-  act(() => rowNamed(page, notice.title).click());
-  await settle();
-  assert.deepEqual(answersOf(answered), [
-    { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED },
-  ]);
-});
-
 test("a reply leaves its box the moment it is sent, the box and the ask standing empty and open while it is out, so a second Enter sends nothing; refused, its words and files come back into the box, which says why", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
@@ -8466,65 +8420,6 @@ test("an item's card shows a to-do naming no steps of its own its title as its o
   );
 });
 
-test("with the inbox-first sidebar the sidebar lists the Inbox's items, read once with the page, and the page shows the chosen item alone, a press on a row choosing it", async () => {
-  const { page } = mount([], { sidebar: true });
-  await settle();
-  const sidebar =
-    page.querySelector("aside.desktop-sidebar") ?? assert.fail("the sidebar is drawn");
-  assert.ok(
-    sidebar.querySelector('.inbox-tasks[data-placement="sidebar"]'),
-    "the sidebar lists the Inbox",
-  );
-  assert.equal(
-    page.querySelector("main .inbox-tasks"),
-    null,
-    "the page draws no list of its own beside the item",
-  );
-  assert.deepEqual(listed(page), [
-    "# Billing usage alerts",
-    "How is a failed email retried?",
-    "▸ *Alert at 80%?",
-    "# Invites",
-    "*Expire after 7 days?",
-  ]);
-  assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
-
-  act(() => rowNamed(page, "Expire after 7 days?").click());
-  await settle();
-  assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
-  assert.equal(
-    rowNamed(page, "Expire after 7 days?").getAttribute("aria-current"),
-    "page",
-    "the item shown is the sidebar's current row",
-  );
-  assert.equal(
-    page.querySelector('main .inbox-view-items header button[aria-label="Back to inbox"]'),
-    null,
-    "the item offers no way back to a list that stays in sight",
-  );
-});
-
-test("with the inbox-first sidebar the item shown stands alone for the window's history and links, and an item a link names that no read holds is not found in the place, the sidebar's list choosing nothing", async () => {
-  toldSingle = [];
-  const { page } = mount([], { sidebar: true });
-  await settle();
-  // Note that before an item stands the Inbox is told no column, since a list step there would be one no column shows, and Back would land on it.
-  assert.equal(toldSingle[0], false, "no list step stands before the first item");
-  assert.equal(toldSingle.at(-1), true, "the item stands alone, whatever the room's width");
-  act(() =>
-    chooseFromOutside({
-      taskId: "0f0e0d0c-0000-4000-8000-00000000dead",
-      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
-      opened: true,
-    }),
-  );
-  await settle();
-  const place = page.querySelector<HTMLElement>("main .inbox-view-items");
-  assert.ok(place !== null && !place.hidden, "the place stands in sight");
-  assert.match(place.textContent ?? "", /Not found/u);
-  assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
-});
-
 /** Types `words` into the list's search, as a reader's keys put them in its field. */
 function searchList(page: HTMLElement, words: string): void {
   const input = page.querySelector<HTMLInputElement>(
@@ -8537,15 +8432,6 @@ function searchList(page: HTMLElement, words: string): void {
     setValue?.call(input, words);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-}
-
-/** The magnifier in the sidebar's list head that unfolds its search. */
-function sidebarMagnifier(page: HTMLElement): HTMLButtonElement {
-  return (
-    page.querySelector<HTMLButtonElement>(
-      '.desktop-sidebar .luke-group-header-head button[aria-label="Search inbox"]',
-    ) ?? assert.fail("the sidebar's head offers the search")
-  );
 }
 
 /** The title of the item the pane shows. */
@@ -8641,60 +8527,6 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
     "*Expire after 7 days?",
   ]);
   assert.equal(document.activeElement, input, "the caret stays in the field");
-});
-
-test("with the inbox-first sidebar, the sidebar's list head offers the same search, which narrows the sidebar's list", async () => {
-  const { page } = mount([], { sidebar: true });
-  await settle();
-
-  act(() => sidebarMagnifier(page).click());
-  searchList(page, "expire");
-
-  assert.deepEqual(listed(page), ["# Invites", "*Expire after 7 days?"]);
-});
-
-test("with the inbox-first sidebar, a press on View options while the search stands empty folds the search and opens the menu at once", async () => {
-  const { page } = mount([], { sidebar: true });
-  await settle();
-  act(() => sidebarMagnifier(page).click());
-  const options = page.querySelector<HTMLButtonElement>(
-    '.desktop-sidebar .luke-group-header-head button[aria-label="View options"]',
-  );
-  assert.ok(options, "the head keeps the view's menu beside the field");
-
-  // Note that the press moves the focus first, which folds the empty search before the click lands.
-  act(() => options.focus());
-  act(() => options.click());
-
-  assert.equal(options.isConnected, true, "the button pressed is the one still standing");
-  assert.equal(viewItem("For you").getAttribute("role")?.startsWith("menuitem"), true);
-});
-
-test("with the inbox-first sidebar, New thread keeps its place as the search unfolds, and a press on it while the search stands empty folds the search and opens the draft", async () => {
-  listedWorkspace = ACME;
-  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const { page } = mount([], { sidebar: true });
-  await settle();
-  const head = () =>
-    sidebarMagnifier(page).closest<HTMLElement>(".luke-group-header-head") ??
-    assert.fail("the sidebar's list head stands");
-  const buttons = () =>
-    [...head().querySelectorAll("button")].map((each) => each.getAttribute("aria-label"));
-  const before = buttons();
-  const compose =
-    head().querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-    assert.fail("the head offers New thread");
-
-  act(() => sidebarMagnifier(page).click());
-  assert.deepEqual(buttons(), before, "every button keeps its place under the open search");
-
-  // Note that the press moves the focus first, which folds the empty search before the click lands.
-  act(() => compose.focus());
-  act(() => compose.click());
-  await settle();
-
-  assert.equal(compose.isConnected, true, "the button pressed is the one still standing");
-  assert.equal(itemPane(page).getAttribute("aria-label"), "New thread");
 });
 
 /** The thread a New thread starts, as the service hands it back: the reader's words its first message, settled on their own nod. */

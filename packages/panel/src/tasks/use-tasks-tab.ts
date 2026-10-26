@@ -169,7 +169,7 @@ import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { SectionReveal } from "./plan-body.js";
 import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
-import { freshAccount, newestWaiting, RESTING_PAGE, restingPage } from "./resting-page.js";
+import { freshAccount, RESTING_PAGE, restingPage } from "./resting-page.js";
 import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
@@ -286,9 +286,8 @@ interface InboxViewControl {
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
   /**
-   * Opens the Inbox on an item, from wherever the window stands: a row of
-   * the inbox-first sidebar's list, which stands while the Inbox does not,
-   * the command palette, a person's page, or a link. With Channels on it
+   * Opens the Inbox on an item, from wherever the window stands: the
+   * command palette, a person's page, or a link. With Channels on it
    * opens the item as a thread, in `channelId` where the caller knows it,
    * and in the channel its item names once read otherwise. Asked first
    * where leaving would lose unsaved work, as every door that moves the
@@ -2210,11 +2209,10 @@ export function useTasksTab(input: {
   });
 
   // With no task open the window rests on a page of its own rather than on
-  // nothing: the Inbox, the inbox-first sidebar's newest thread or the Tasks
-  // page, or a new account's welcome, which is the page with no task open
-  // drawn bare (`resting-page.ts`). Note that it waits for the list, and for
-  // a launch reopening the task last open, so neither flashes before it.
-  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
+  // nothing: the Inbox, or a new account's welcome, which is the page with
+  // no task open drawn bare (`resting-page.ts`). Note that it waits for the
+  // list, and for a launch reopening the task last open, so neither flashes
+  // before it.
   const fresh = freshAccount({
     tasks: sidebar,
     taskless: input.inboxTaskless,
@@ -2223,16 +2221,14 @@ export function useTasksTab(input: {
   // A list that could not be read says so on the page rested on, and leaves no account new.
   const listSettled =
     tasks.listStatus === TASKS_READ.READY || tasks.listStatus === TASKS_READ.FAILED;
-  // The page last rested on, while it stands: the sidebar turning to or
-  // from the Inbox's threads, another workspace listed, or another account
-  // signing in rests the window again rather than leave it on a page chosen
-  // for the other sidebar, workspace, or account. Note that it is held by its kind, so a choice made
+  // The page last rested on, while it stands: another workspace listed, or
+  // another account signing in rests the window again rather than leave it
+  // on a page chosen for the other workspace or account. Note that it is held by its kind, so a choice made
   // in the Inbox rested on keeps it rested on, and any other page standing
   // in its place lets it go.
   const [rested, setRested] = useState<
     | {
         readonly kind: StandIn["kind"];
-        readonly inboxFirst: boolean;
         readonly workspaceId: string | undefined;
         readonly account: string | undefined;
       }
@@ -2240,12 +2236,7 @@ export function useTasksTab(input: {
   >(undefined);
   const resting = rested !== undefined && standIn?.kind === rested.kind && boundFor === undefined;
   if (rested !== undefined && !resting && standIn !== undefined) setRested(undefined);
-  if (
-    resting &&
-    (rested.inboxFirst !== inboxFirst ||
-      rested.workspaceId !== listedWorkspaceId ||
-      rested.account !== input.account)
-  ) {
+  if (resting && (rested.workspaceId !== listedWorkspaceId || rested.account !== input.account)) {
     setRested(undefined);
     setStandIn(undefined);
   } else if (
@@ -2258,28 +2249,18 @@ export function useTasksTab(input: {
   ) {
     const rest = restingPage({
       fresh: fresh && tasks.listStatus === TASKS_READ.READY,
-      inboxFirst,
       remembered: rememberedChoice(lastInboxChoice.current, {
         account: input.account,
         workspaceId: listedWorkspaceId,
-      }),
-      newest: newestWaiting({
-        tasks: listedInbox.inbox,
-        taskless: input.inboxTaskless,
-        workspaceId: listedWorkspaceId,
-        readerId: input.accountId,
       }),
     });
     const on: StandIn | undefined =
       rest.kind === RESTING_PAGE.INBOX
         ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: input.room === SHELL_ROOM.NARROW }
-        : rest.kind === RESTING_PAGE.TASKS
-          ? { kind: STAND_IN.BOARD }
-          : undefined;
+        : undefined;
     if (on !== undefined) {
       setRested({
         kind: on.kind,
-        inboxFirst,
         workspaceId: listedWorkspaceId,
         account: input.account,
       });

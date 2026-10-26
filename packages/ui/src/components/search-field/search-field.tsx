@@ -54,7 +54,7 @@ import type { ComboboxField } from "../combobox/use-combobox-field.js";
  * label already does, and its button is another component's to vendor. The
  * parts are drawn in Tailwind utilities over the theme's field roles, and
  * the well, its field, and its clear keep the `luke-search-field` names a
- * test and a folding search (`folding-search.css`) find them by.
+ * test finds them by.
  */
 
 /** How a search stands: a well among other controls, or a menu's head row. */
@@ -91,7 +91,7 @@ const SEARCH_SHORTCUT =
 /**
  * The clear, nested in the well as far inside its edge on every side as from the end; it grows in and shrinks out.
  * Note that it runs neither inside a container that is itself leaving, whose own exit
- * (`folding-search.css`) is what it rides, since a utility would outrank that rule.
+ * is what it rides, since a utility would outrank that rule.
  */
 const SEARCH_CLEAR =
   "luke-search-field-clear m-0 inline-flex size-search-clear flex-none not-in-data-[leaving=true]:animate-pop-in cursor-default items-center justify-center rounded-control-compact border-0 bg-transparent p-0 text-muted-foreground transition-[background-color] duration-(--luke-duration-hover) ease-plain hover:bg-fill-selected hover:text-foreground active:bg-fill-pressed not-in-data-[leaving=true]:data-[leaving=true]:animate-pop-out [&>svg]:size-control-icon";

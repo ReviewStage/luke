@@ -7,7 +7,6 @@ import {
   DisclosureScope,
   useDisclosureFold,
 } from "../disclosure/disclosure.js";
-import { FoldingSearch } from "../folding-search/folding-search.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { NAV_COUNT_SHOWN, type NavCount } from "../nav-item/nav-item.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
@@ -66,11 +65,6 @@ import { Tooltip } from "../tooltip/hint.js";
  * never passes for the whole of it. A right-click on the head is the ⋯'s
  * second door (`contextMenu`), and the head stays ringed while the menu it
  * opened stands (`menuOpen`).
- *
- * A head that is too tight for a search of its own may offer one (`search`):
- * a magnifier after the label unfolds a field laid over the label and the
- * magnifier alone, so the actions beside it stay under the pointer as it
- * opens and folds.
  *
  * A label is words, or a placeholder block while the group is read, so a
  * skeleton draws through the head its loaded state draws.
@@ -152,7 +146,7 @@ const FADE = "transition-[opacity] duration-(--luke-duration-hover) ease-plain";
  * stays disclosure.css's one turn.
  */
 const PART = {
-  HEADING: "luke-group-header-heading m-0 flex min-w-0 [font:inherit]",
+  HEADING: "luke-group-header-heading m-0 flex min-w-0 flex-auto [font:inherit]",
   LEAD: "luke-group-header-lead group/lead m-0 flex h-control min-w-0 flex-auto items-center gap-icon-gap rounded-control border-0 bg-transparent px-row-inset py-0 text-left font-ui text-muted-foreground",
   GLYPH:
     "luke-group-header-glyph grid min-h-control-icon min-w-control-icon flex-none place-items-center *:[grid-area:1/1]",
@@ -163,9 +157,6 @@ const PART = {
   /* Each action waits for the pointer or the keyboard on its own (`group-header.css`). */
   ACTIONS: "luke-group-header-actions flex flex-none items-center",
 } as const;
-
-/** The heading's share of the head, which a search's name hands it instead where the head offers one (`folding-search.css`). */
-const HEADING_SHARE = "flex-auto";
 
 /** A head that folds is pressed as a row is, so it wears a row's hover; and it gives the one press cursor, the Mac's arrow on the desktop as a Mac's list does, the hand on the web. */
 const PRESSED_AS_ROW = {
@@ -289,7 +280,6 @@ export function GroupHeader({
   count,
   actions,
   actionsShown = GROUP_ACTIONS.ON_HOVER,
-  search,
   fold,
   standing,
   tooltip,
@@ -314,8 +304,6 @@ export function GroupHeader({
   actions?: ReactNode;
   /** Whether the actions wait for the pointer or the keyboard, or stand at rest. */
   actionsShown?: GroupActions;
-  /** A search the head offers, named `label`, which narrows the caller's list as it is typed in. */
-  search?: { label: string; value: string; onChange: (value: string) => void } | undefined;
   /** How the group folds; left out, the head folds nothing and the rows always stand. */
   fold?: GroupFold | undefined;
   /** What a folded group leaves drawn under its head once its rows have faded; nothing is drawn while the group stands open. */
@@ -377,7 +365,7 @@ export function GroupHeader({
   );
   const subgrid = rowsStand === GROUP_ROWS.SUBGRID;
   const named = (
-    <Heading className={`${PART.HEADING} ${search === undefined ? HEADING_SHARE : ""}`}>
+    <Heading className={PART.HEADING}>
       {hint === undefined ? (
         control
       ) : (
@@ -406,7 +394,7 @@ export function GroupHeader({
           data-menu-open={menuOpen ? "true" : undefined}
           {...withContextMenu<HTMLDivElement>(contextMenu, {})}
         >
-          {search === undefined ? named : <FoldingSearch {...search}>{named}</FoldingSearch>}
+          {named}
           {said(actions) ? (
             <span className={PART.ACTIONS} data-shown={actionsShown}>
               {actions}

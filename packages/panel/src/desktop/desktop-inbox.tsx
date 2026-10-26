@@ -46,7 +46,7 @@ import {
   useInboxColumns,
 } from "../tasks/inbox-columns.js";
 import { InboxCompose } from "../tasks/inbox-compose.js";
-import { INBOX_NOT_READ, InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
+import { InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   INBOX_HOLDER,
@@ -74,7 +74,7 @@ import {
   useThreadChannel,
 } from "../tasks/use-channels.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
-import { choiceOf, type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
+import { choiceOf, useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
 import {
@@ -156,11 +156,7 @@ import { taskCardOf } from "./task-card.js";
  * workspace's says so in the stream's place, with the way to #general. A
  * phone's list of channels makes one from its "+", as the sidebar does.
  *
- * Its items are read and listed by `use-inbox-listing.ts`. While the account
- * has the inbox-first sidebar on, the shell reads them once and hands the
- * listing to the sidebar, which lists them (`sidebar-inbox.tsx`), and here,
- * where the chosen item then stands alone across the place, with no list of
- * its own and no way back to one, the list being always in sight.
+ * Its items are read and listed by `use-inbox-listing.ts`.
  */
 
 /** The page's grid while it is a channel's stream, which stands alone, its thread opening in the side panel beside it; a narrow room draws no title bar's buttons, so its bars start where their column's words do, as a phone's own row does (`phone-head.tsx`). */
@@ -192,43 +188,11 @@ const NO_OPEN_AGENTS: readonly string[] = [];
 /** The window's Inbox, in the task's place: every task's items and every automation's, and the chosen one read beside them. */
 export function DesktopInbox({
   tasks,
-  listing,
   room = SHELL_ROOM.WIDE,
 }: {
   tasks: TasksControl;
-  /** The Inbox as the inbox-first sidebar lists it, where the sidebar holds the list and the page shows the chosen item alone; none where the page reads and lists it itself. */
-  listing?: InboxListing | undefined;
   /** The room the stage gives; narrow, a phone's, the list is headed as a phone's page is (`phone-head.tsx`). */
   room?: ShellRoom;
-}): React.JSX.Element {
-  return listing === undefined ? (
-    <ListedInbox tasks={tasks} room={room} />
-  ) : (
-    <InboxShown tasks={tasks} listing={listing} paneOnly room={room} />
-  );
-}
-
-/** The Inbox page reading its own items, its list and the chosen item side by side. */
-function ListedInbox({ tasks, room }: { tasks: TasksControl; room: ShellRoom }): React.JSX.Element {
-  const listing = useInboxListing(tasks);
-  return <InboxShown tasks={tasks} listing={listing} paneOnly={false} room={room} />;
-}
-
-/**
- * The Inbox as read: its list and the chosen item beside it, or, where the
- * sidebar lists it (`paneOnly`), the chosen item alone across the place,
- * with no way back to a list that is always in sight.
- */
-function InboxShown({
-  tasks,
-  listing,
-  paneOnly,
-  room,
-}: {
-  tasks: TasksControl;
-  listing: InboxListing;
-  paneOnly: boolean;
-  room: ShellRoom;
 }): React.JSX.Element {
   const {
     view,
@@ -259,12 +223,12 @@ function InboxShown({
     closeItem,
     onRetry,
     compose,
-  } = listing;
+  } = useInboxListing(tasks);
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
   const now = useMinute();
   // Note that with Channels on the page is a channel's stream, its thread in the side panel once one is opened, rather than the Inbox's list.
-  const streaming = useExperiment(EXPERIMENT.CHANNELS) && !paneOnly;
+  const streaming = useExperiment(EXPERIMENT.CHANNELS);
   const channelPlace = useChannelPlace();
   const channels = useChannels(streaming ? tasks.workspace?.id : undefined, tasks.shown);
   // A channel chosen that is open no more is looked for among the archived ones, read only then, and shown to read where it is one.
@@ -310,22 +274,13 @@ function InboxShown({
     channelPlace.onCloseThread();
     channels.onRefresh();
   };
-  const pageColumns = useInboxColumns(
+  const columns = useInboxColumns(
     compose.on ? COMPOSE_COLUMN : (chosen?.item.id ?? (missing ? asked?.itemId : undefined)),
-    !paneOnly,
-    { asked: listed, onAsk: onListed, onSingle: paneOnly ? undefined : onSingle },
+    true,
+    { asked: listed, onAsk: onListed, onSingle },
     // Note that Back's chord and Escape close a stream's thread, so a phone goes back to the stream rather than to its list of channels.
     streaming ? { onClose: threadOpen ? closeThread : undefined } : undefined,
   );
-  // Note that the Inbox reports one column only once an item stands, since its list lives in the sidebar and a list step would show nothing new.
-  const itemStands = chosen !== undefined;
-  useLayoutEffect(() => {
-    if (paneOnly) onSingle?.(itemStands);
-  }, [paneOnly, onSingle, itemStands]);
-  // Note that with the list in the sidebar the place shows the item alone, measured by nothing, with no way back to a list that stays in sight.
-  const columns = paneOnly
-    ? { ...pageColumns, ref: undefined, shown: INBOX_COLUMNS.ITEM, onBack: undefined }
-    : pageColumns;
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
     compose.onEnd();
@@ -720,7 +675,7 @@ function InboxShown({
                       {CHANNELS_NONE}
                     </NoteLine>
                   )
-                ) : paneOnly ? null : (
+                ) : (
                   <InboxList
                     view={list}
                     chosen={chosen?.item.id}
@@ -805,13 +760,10 @@ function InboxShown({
                   <section
                     className={INBOX_VIEW_ITEMS}
                     aria-label="Inbox"
-                    // Note that with the list in the sidebar this is the whole place, so its empty state and its missing item's notice always stand.
                     hidden={
-                      paneOnly
-                        ? false
-                        : missing
-                          ? columns.shown === INBOX_COLUMNS.LIST
-                          : columns.shown !== INBOX_COLUMNS.BOTH
+                      missing
+                        ? columns.shown === INBOX_COLUMNS.LIST
+                        : columns.shown !== INBOX_COLUMNS.BOTH
                     }
                   >
                     <Toolbar />
@@ -824,15 +776,8 @@ function InboxShown({
                             : { label: BACK_TO_INBOX, onClick: columns.onBack }
                         }
                       />
-                    ) : failed ? (
-                      // Note that the list beside says the read failed, so only a pane standing alone draws it, never the empty state.
-                      paneOnly ? (
-                        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetry}>
-                          {INBOX_NOT_READ}
-                        </ErrorState>
-                      ) : null
-                    ) : reading || filteredOut || searched !== undefined ? null : (
-                      // Note that the list says what the filter or its search left out, so the pane beside it stands bare.
+                    ) : failed || reading || filteredOut || searched !== undefined ? null : (
+                      // Note that the list says the read failed, or what the filter or its search left out, so the pane beside it stands bare.
                       <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
                         {NEEDS_YOU.NONE}
                       </EmptyState>

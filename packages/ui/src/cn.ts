@@ -202,8 +202,8 @@ const PANEL_WINDOW = {
 
 /**
  * The names the rows and navigation block of the theme adds (list row, nav
- * item, disclosure, bar item, pane bar, toolbar, over pane, folding search,
- * searchable menu), by the group tailwind-merge reads each in.
+ * item, disclosure, bar item, pane bar, toolbar, over pane, searchable
+ * menu), by the group tailwind-merge reads each in.
  */
 const ROWS_NAVIGATION = {
   text: ["dialog-size", "tag-size"],

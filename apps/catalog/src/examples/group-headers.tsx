@@ -24,7 +24,7 @@ import { CatalogSection } from "../section";
  * with its glyph, a pin, a count shown at rest or under the pointer, and
  * its actions beside the fold; a group its holder keeps; a head with no
  * glyph, whose chevron stands at rest; heads that fold nothing; a list's head
- * with a search and its buttons standing; a list's head whose buttons wait,
+ * with its buttons standing; a list's head whose buttons wait,
  * a filter that is on standing with its dot; and the count on a wide page and
  * in a narrow column.
  */
@@ -132,9 +132,8 @@ function Surfaces(): React.JSX.Element {
   );
 }
 
-/** A list's own head: its buttons standing at rest, and a search a magnifier unfolds over its label. */
-function Searched(): React.JSX.Element {
-  const [query, setQuery] = useState("");
+/** A list's own head: its buttons standing at rest. */
+function Standing(): React.JSX.Element {
   return (
     <div className="catalog-narrow">
       <GroupHeader
@@ -142,7 +141,6 @@ function Searched(): React.JSX.Element {
         heading={GROUP_HEADING.NONE}
         actionsShown={GROUP_ACTIONS.AT_REST}
         actions={<MoreButton thing="Tasks" onClick={ignore} />}
-        search={{ label: "Search tasks", value: query, onChange: setQuery }}
       />
     </div>
   );
@@ -186,11 +184,8 @@ function GroupHeaders(): React.JSX.Element {
       <CatalogSection id="group-header-still" title="Heads that fold nothing">
         <Still />
       </CatalogSection>
-      <CatalogSection
-        id="group-header-search"
-        title="A list's head, with a search and standing buttons"
-      >
-        <Searched />
+      <CatalogSection id="group-header-standing" title="A list's head, with standing buttons">
+        <Standing />
       </CatalogSection>
       <CatalogSection
         id="group-header-filtered"

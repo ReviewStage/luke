@@ -148,10 +148,9 @@ import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { CHANNEL_SHOWN, channelShown, channelStep } from "../tasks/channels-model.js";
 import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
-import type { InboxListing } from "../tasks/use-inbox-listing.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
-import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
@@ -170,7 +169,6 @@ import { SidebarChannels } from "./sidebar-channels.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
-import { SidebarInbox } from "./sidebar-inbox.js";
 import { SidebarLuke } from "./sidebar-luke.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 import {
@@ -1625,8 +1623,6 @@ interface DesktopSidebarProps {
   onPressWithin: () => void;
   /** The room the panel's stage gives; narrow, the sidebar is a phone's drawer. Wide where left out. */
   room?: ShellRoom | undefined;
-  /** The window's Inbox as the shell read it, which the sidebar lists in its task list's place while the account has the inbox-first sidebar on; none while it is off. */
-  inboxListing?: InboxListing | undefined;
 }
 
 /**
@@ -1732,7 +1728,6 @@ function SidebarColumn({
   onSignOut,
   onPressWithin,
   room = SHELL_ROOM.WIDE,
-  inboxListing,
 }: DesktopSidebarProps): React.JSX.Element {
   const onTasks = tab === PANEL_TAB.TASKS;
   // Whether a row of the column is lifted into a drag, while which an empty Pinned stands to take it.
@@ -1769,7 +1764,6 @@ function SidebarColumn({
     inBoard ||
     inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
-  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   // With Channels on, the channels stand where the Inbox's row, the pins, and the task list stood, and a channel shows in the Inbox's place.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const channels = useChannels(
@@ -1784,8 +1778,6 @@ function SidebarColumn({
   );
   const shownChannelId =
     channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel.id : undefined;
-  // With the inbox-first sidebar on, the Inbox's items stand where the task list stood, under the pins, and the tasks are a page of their own.
-  const listsInbox = inboxFirst && tasks.signedIn && inboxListing !== undefined;
   const waiting = useInboxWaiting(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
@@ -1803,10 +1795,6 @@ function SidebarColumn({
   const openPinnedTab = (pin: PinnedTab) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.onOpenPinnedTab(pin);
-  };
-  const openInboxItem = (choice: InboxChoice) => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.inboxView.onOpenItem(choice);
   };
   const openInbox = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
@@ -1900,7 +1888,7 @@ function SidebarColumn({
   );
   const markedPin = pinMarked?.kind === TASK_ROW.TASK ? pinMarked.pin : undefined;
   // The account's own sections stand while a workspace is listed.
-  const sectionsShown = tasks.signedIn && tasks.workspace !== undefined && !listsInbox;
+  const sectionsShown = tasks.signedIn && tasks.workspace !== undefined;
   const sectioned = sectionedTasks(
     tasks,
     sectionsShown ? tasks.workspace?.id : undefined,
@@ -2113,7 +2101,7 @@ function SidebarColumn({
         >
           Search
         </NavItem>
-        {listsInbox || channelsOn ? null : (
+        {channelsOn ? null : (
           <SidebarInboxRow
             waiting={waiting}
             current={inInbox}
@@ -2217,13 +2205,6 @@ function SidebarColumn({
                     onOpen={chosen(openChannel)}
                   />
                 ) : null
-              ) : listsInbox && inboxListing !== undefined ? (
-                <SidebarInbox
-                  tasks={tasks}
-                  listing={inboxListing}
-                  shown={tasks.shown && overlay.inSight}
-                  onOpen={chosen(openInboxItem)}
-                />
               ) : (
                 <>
                   <SidebarSections
