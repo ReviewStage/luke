@@ -405,6 +405,8 @@ export function composeLocalAgents(
     /** Whether the device had what its VMs run on as it last asked, and whether it asked since the gate last opened. */
     const readied = yield* Ref.make(false);
     const readyTried = yield* Ref.make(false);
+    /** Whether the service took the register saying the device's setup failed, so it may go on beating. */
+    const failureListed = yield* Ref.make(false);
 
     /**
      * Whether the device has what its VMs run on (`LocalAgentSandbox.ready`),
@@ -417,7 +419,9 @@ export function composeLocalAgents(
      * registers why and beats for as long as the opening stands, so it is
      * listed as not set up rather than away. `registered` registers the
      * device with where its setup stands, a register the service may refuse
-     * from a build before the field, which costs only the listing.
+     * from a build before the field; then the device beats nothing until it
+     * registers ready, since a beat would keep fresh the ready row it
+     * registered before, and that service would take an agent on it.
      */
     const readyForOpening = (
       userId: string,
@@ -428,7 +432,7 @@ export function composeLocalAgents(
     ) =>
       Effect.gen(function* () {
         if (!(yield* Ref.get(readied)) && (yield* Ref.getAndSet(readyTried, true))) {
-          yield* presence(userId, deviceId);
+          if (yield* Ref.get(failureListed)) yield* presence(userId, deviceId);
           return false;
         }
         const readying = yield* Effect.forkChild(Effect.result(platform.sandbox.ready));
@@ -437,8 +441,10 @@ export function composeLocalAgents(
           ? answered.value
           : yield* Effect.scoped(
               Effect.gen(function* () {
-                yield* asked(registered({ setup: DEVICE_SETUP.PREPARING }));
-                yield* Effect.forkScoped(presence(userId, deviceId));
+                // Note that it beats only once the service took the setup, since a beat after a refused register keeps an earlier ready row fresh.
+                if (yield* asked(registered({ setup: DEVICE_SETUP.PREPARING }))) {
+                  yield* Effect.forkScoped(presence(userId, deviceId));
+                }
                 return yield* Fiber.join(readying);
               }),
             );
@@ -446,10 +452,11 @@ export function composeLocalAgents(
         if (Result.isSuccess(ready)) return true;
         report("the local agents' smolvm or sandbox image could not be had");
         // Note that the device stays listed with why, beating until the gate shuts, which lets the next opening try again.
-        yield* asked(
+        const listed = yield* asked(
           registered({ setup: DEVICE_SETUP.FAILED, setupFailure: ready.failure.detail }),
         );
-        yield* presence(userId, deviceId);
+        yield* Ref.set(failureListed, listed);
+        if (listed) yield* presence(userId, deviceId);
         return false;
       });
 

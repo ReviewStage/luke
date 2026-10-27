@@ -76,7 +76,12 @@ const until = (holds: () => boolean) =>
  */
 const followingDevice = (
   ready: Effect.Effect<void, LocalAgentSandboxUnavailable>,
-  options: { readonly madeBare?: boolean; readonly formerlyDirect?: boolean } = {},
+  options: {
+    readonly madeBare?: boolean;
+    readonly formerlyDirect?: boolean;
+    /** The service refuses a register naming a setup, as one from before the field does. */
+    readonly refusesSetup?: boolean;
+  } = {},
 ) =>
   Effect.gen(function* () {
     const spawner = scriptedSpawner((program, args) => {
@@ -95,7 +100,9 @@ const followingDevice = (
     let launched = false;
     const client = {
       register: (_deviceId: string, device: DeviceAgentDevice) =>
-        Effect.sync(() => registered.push(device)).pipe(Effect.as(true)),
+        Effect.sync(() => registered.push(device)).pipe(
+          Effect.as(options.refusesSetup !== true || device.setup === undefined),
+        ),
       beat: () => Effect.sync(() => beats.push(registered.length)).pipe(Effect.as(true)),
       lines: () =>
         launched
@@ -247,6 +254,33 @@ it.effect(
         );
         // Note that it beat while preparing, so the menus kept it listed through the fetch.
         assert.ok(beats.filter((after) => after === 1).length >= 10, `beats ${beats.join(",")}`);
+        yield* TestClock.adjust(Duration.seconds(1));
+      }),
+    ),
+);
+
+it.effect(
+  "a device whose getting-ready register a service refuses beats nothing while it fetches, so its earlier ready row ages away, then registers ready",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { registered, beats, spawned } = yield* followingDevice(
+          Effect.sleep(Duration.minutes(3)),
+          { refusesSetup: true },
+        );
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* until(() => registered.length > 0);
+        yield* TestClock.adjust(Duration.minutes(3));
+        yield* until(() => spawned.some((each) => each.program === VM_EXEC));
+
+        assert.deepEqual(
+          registered.map((each) => each.setup),
+          [DEVICE_SETUP.PREPARING, undefined],
+        );
+        assert.deepEqual(
+          beats.filter((after) => after === 1),
+          [],
+        );
         yield* TestClock.adjust(Duration.seconds(1));
       }),
     ),
