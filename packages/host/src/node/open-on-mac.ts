@@ -434,7 +434,14 @@ export function agentWorktreeScript(input: {
     '  head="$(git rev-parse --verify --quiet "$fetched^{commit}")" || return 1',
     '  mkdir -p "$(dirname "$worktree")" || return 1',
     ...(input.own === true
-      ? ['  made_own || { rm -rf "$worktree/.git"; return 1; }']
+      ? [
+          '  making="$worktree.making"',
+          '  rm -rf "$making" || return 1',
+          // Note that the repository is made beside its place and moved in whole, so one left half made never stands where the next launch would make it again.
+          '  ( worktree="$making"; made_own ) || { rm -rf "$making"; return 1; }',
+          '  if [ -e "$worktree" ]; then rmdir "$worktree" || { rm -rf "$making"; return 1; }; fi',
+          '  mv "$making" "$worktree"',
+        ]
       : [
           // Note that a worktree folder deleted by hand is still registered, which would refuse it being made again.
           "  git worktree prune --expire now || return 1",

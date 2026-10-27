@@ -205,10 +205,10 @@ export interface LocalAgentSandbox {
   readonly signalled: (
     agentId: string,
   ) => Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner>;
-  /** The agent's VM stopped, with everything still running in it. */
+  /** The agent's VM stopped, with everything still running in it, killed at once where a graceful stop failed; whether it stopped. */
   readonly stopped: (
     agentId: string,
-  ) => Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner>;
+  ) => Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner>;
   /** The agent's VM deleted, and the token kept for it beside it; its folder is the follower's to remove. */
   readonly deleted: (
     agentId: string,

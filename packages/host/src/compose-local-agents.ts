@@ -785,7 +785,13 @@ export function composeLocalAgents(
             if (sandbox !== undefined) {
               yield* Scope.addFinalizer(
                 runnerScope,
-                Effect.provideContext(sandbox.stopped(agentId), services),
+                Effect.provideContext(sandbox.stopped(agentId), services).pipe(
+                  Effect.flatMap((down) =>
+                    down
+                      ? Effect.void
+                      : Effect.sync(() => report("a local agent's VM could not be stopped")),
+                  ),
+                ),
               );
             }
             const stdin = yield* Queue.unbounded<string>();

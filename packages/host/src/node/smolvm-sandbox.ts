@@ -354,8 +354,16 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
         ),
       ),
 
+    // Note that a graceful stop that fails is followed by one that kills the workload at once, so a later launch never finds the agent's leftovers still running.
     stopped: (agentId) =>
-      Effect.asVoid(ran(["machine", "stop", "--name", machineOf(agentId)], STOP_TIMEOUT)),
+      Effect.gen(function* () {
+        const name = machineOf(agentId);
+        if (yield* succeeded(["machine", "stop", "--name", name], STOP_TIMEOUT)) return true;
+        return yield* succeeded(
+          ["machine", "stop", "--name", name, "--timeout", "0"],
+          STOP_TIMEOUT,
+        );
+      }),
 
     deleted: (agentId) =>
       Effect.gen(function* () {
