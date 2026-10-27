@@ -89,10 +89,10 @@ function mountSidebar(tasks: readonly TaskSummary[]) {
     );
   };
   draw(tasks);
-  const aside = container.querySelector(".desktop-sidebar");
-  assert.ok(aside !== null);
-  pointerCross(document.body, aside);
-  return { container, draw, leave: () => pointerCross(aside, document.body) };
+  const tasksNav = container.querySelector('nav[aria-label="Tasks"]');
+  assert.ok(tasksNav !== null);
+  pointerCross(document.body, tasksNav);
+  return { container, draw, leave: () => pointerCross(tasksNav, document.body) };
 }
 
 /** The names of the tasks drawn under Tasks, in the order drawn. */
