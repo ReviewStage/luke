@@ -1,5 +1,5 @@
 /**
- * compose-local-agents.test.ts -- the follower as the operating system sees it run agents in VMs: a device registered as sandboxed, signed in to nothing, only once its sandbox is ready, an agent launched in its VM with a GitHub token from Luke, and, on This Mac alone, an agent that ran directly on it before refused with why.
+ * compose-local-agents.test.ts -- the follower as the operating system sees it run agents in VMs: a device registered as sandboxed, signed in to nothing, getting ready while it fetches its sandbox and ready to take an agent only once it has it, or why it could not have it, an agent launched in its VM with a GitHub token from Luke, and, on This Mac alone, an agent that ran directly on it before refused with why.
  *
  * The follower runs over a scripted spawner, a fake sandbox, a file system
  * that holds nothing but what a test names, and a fake service that hands
@@ -17,6 +17,7 @@ import {
   DEVICE_ISOLATION,
   DEVICE_LAUNCH_REFUSAL,
   DEVICE_PLATFORM,
+  DEVICE_SETUP,
   type DeviceLaunchRefusal,
   deviceAgentLayout,
 } from "@luke/features/device-agent-wire";
@@ -25,7 +26,12 @@ import { ConfigProvider, Duration, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
-import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
+import {
+  Environment,
+  LocalAgentPlatform,
+  LocalAgentSandboxUnavailable,
+  Reporter,
+} from "./effect/seams.js";
 import { fakeSandbox, VM_EXEC, VM_TOOLS } from "./testing/fake-sandbox.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
@@ -63,13 +69,13 @@ const until = (holds: () => boolean) =>
 
 /**
  * The follower on a device whose agents run in VMs, This Mac unless
- * `formerlyDirect` says it is a host, with its sandbox ready as `ready`
- * says; one launch line is handed. `madeBare` says the agent's checkout
+ * `formerlyDirect` says it is a host, with its sandbox ready once `ready`
+ * succeeds; one launch line is handed. `madeBare` says the agent's checkout
  * already stands, as a launch from before the record left it. With what it
  * registered, spawned, asked, handed the sandbox, settled, and reported.
  */
 const followingDevice = (
-  ready: boolean,
+  ready: Effect.Effect<void, LocalAgentSandboxUnavailable>,
   options: { readonly madeBare?: boolean; readonly formerlyDirect?: boolean } = {},
 ) =>
   Effect.gen(function* () {
@@ -83,13 +89,14 @@ const followingDevice = (
     });
     const registered: DeviceAgentDevice[] = [];
     const asked: string[] = [];
+    const beats: number[] = [];
     const reported: string[] = [];
     const settled: { id: string; exitCode?: number; refusal?: DeviceLaunchRefusal }[] = [];
     let launched = false;
     const client = {
       register: (_deviceId: string, device: DeviceAgentDevice) =>
         Effect.sync(() => registered.push(device)).pipe(Effect.as(true)),
-      beat: () => Effect.succeed(true),
+      beat: () => Effect.sync(() => beats.push(registered.length)).pipe(Effect.as(true)),
       lines: () =>
         launched
           ? Effect.never
@@ -161,6 +168,7 @@ const followingDevice = (
     yield* composer.lifetime;
     return {
       registered,
+      beats,
       spawned: spawner.spawned,
       asked,
       tokens: vm.tokens,
@@ -174,7 +182,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { registered, spawned, asked, tokens } = yield* followingDevice(true);
+        const { registered, spawned, asked, tokens } = yield* followingDevice(Effect.void);
         yield* until(() => spawned.some((each) => each.program === VM_EXEC));
 
         // Note that no login of the device's reaches a VM, so the service pays with the sign-in saved in Luke, or refuses.
@@ -212,15 +220,60 @@ it.effect(
 );
 
 it.effect(
-  "a device registers nothing until its sandbox is ready, and says what it could not have",
+  "a device fetching its sandbox registers as getting ready and beats while it fetches, then registers ready and follows",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { registered, reported } = yield* followingDevice(false);
+        const { registered, beats, spawned } = yield* followingDevice(
+          Effect.sleep(Duration.minutes(3)),
+        );
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* until(() => registered.length > 0);
+
+        assert.deepEqual(
+          registered.map((each) => each.setup),
+          [DEVICE_SETUP.PREPARING],
+        );
+        assert.equal(
+          spawned.some((each) => each.program === VM_EXEC),
+          false,
+        );
+        yield* TestClock.adjust(Duration.minutes(3));
+        yield* until(() => spawned.some((each) => each.program === VM_EXEC));
+
+        assert.deepEqual(
+          registered.map((each) => each.setup),
+          [DEVICE_SETUP.PREPARING, undefined],
+        );
+        // Note that it beat while preparing, so the menus kept it listed through the fetch.
+        assert.ok(beats.filter((after) => after === 1).length >= 10, `beats ${beats.join(",")}`);
+        yield* TestClock.adjust(Duration.seconds(1));
+      }),
+    ),
+);
+
+it.effect(
+  "a device whose sandbox could not be had registers why and goes on beating, taking no agent, and says what it could not have",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { registered, beats, spawned, reported } = yield* followingDevice(
+          Effect.fail(
+            new LocalAgentSandboxUnavailable({ detail: "smolvm couldn't be downloaded" }),
+          ),
+        );
         yield* until(() => reported.length > 0);
         yield* TestClock.adjust(Duration.minutes(1));
 
-        assert.deepEqual(registered, []);
+        assert.deepEqual(
+          registered.map((each) => [each.setup, each.setupFailure]),
+          [[DEVICE_SETUP.FAILED, "smolvm couldn't be downloaded"]],
+        );
+        assert.ok(beats.length >= 4, `beats ${beats.join(",")}`);
+        assert.equal(
+          spawned.some((each) => each.program === VM_EXEC),
+          false,
+        );
         assert.deepEqual(reported, ["the local agents' smolvm or sandbox image could not be had"]);
       }),
     ),
@@ -231,7 +284,9 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { spawned, settled, reported } = yield* followingDevice(true, { madeBare: true });
+        const { spawned, settled, reported } = yield* followingDevice(Effect.void, {
+          madeBare: true,
+        });
         yield* until(() => settled.some((each) => each.id === LINE_ID));
 
         assert.deepEqual(settled, [
@@ -253,7 +308,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { spawned, settled } = yield* followingDevice(true, {
+        const { spawned, settled } = yield* followingDevice(Effect.void, {
           madeBare: true,
           formerlyDirect: false,
         });

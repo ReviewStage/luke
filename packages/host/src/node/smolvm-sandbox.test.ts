@@ -26,7 +26,7 @@ import {
 } from "@luke/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { ConfigProvider, Duration, Effect, Layer } from "effect";
+import { ConfigProvider, Duration, Effect, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "../compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "../effect/seams.js";
@@ -498,16 +498,19 @@ it.effect(
 
       const refused = yield* vm.sandbox.ready.pipe(
         Effect.provide(fakeHttpClientLayer(() => new Response(tampered))),
+        Effect.result,
       );
       const ready = yield* vm.sandbox.ready.pipe(
         Effect.provide(fakeHttpClientLayer(() => new Response(archive))),
+        Effect.result,
       );
       const again = yield* vm.sandbox.ready.pipe(
         Effect.provide(fakeHttpClientLayer(() => new Response("never asked", { status: 500 }))),
+        Effect.result,
       );
 
       const smolvm = `${stateRoot}/agent-tools/smolvm/9.9.9/smolvm`;
-      assert.deepEqual([refused, ready, again], [false, true, true]);
+      assert.deepEqual([refused, ready, again].map(Result.isSuccess), [false, true, true]);
       assert.deepEqual(readFileSync(calls, "utf8").trim().split("\n"), [
         `${smolvm} machine run --net --image ${IMAGE} -- true`,
       ]);

@@ -472,6 +472,10 @@ const LOCAL_AGENT_REFUSAL_WORDS = {
     "Not started: the device this task runs its agents on has no Codex set up yet, so it cannot run this model. Start on a Claude model, or ask the member to change where the task runs.",
   [LOCAL_AGENT_REFUSAL.NO_HARNESS]:
     "Not started: the device this task runs its agents on cannot run this model. Start on another model, or ask the member to change where the task runs.",
+  [LOCAL_AGENT_REFUSAL.PREPARING]:
+    "Not started: the device this task runs its agents on is still getting ready for local agents, downloading its sandbox. Try again in a few minutes.",
+  [LOCAL_AGENT_REFUSAL.SETUP_FAILED]:
+    "Not started: the device this task runs its agents on couldn't set up local agents, since its sandbox download failed. Ask the member to turn Run agents on this Mac off and on in Settings › Agents to try again, or to change where the task runs.",
 } as const satisfies Record<LocalAgentRefusal, string>;
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */

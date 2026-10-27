@@ -1,5 +1,5 @@
 import { CODING_AGENT_MACHINE, macOnline } from "@luke/features/coding-agent-wire";
-import { DEVICE_KIND, type DeviceKind } from "@luke/features/device-agent-wire";
+import { DEVICE_KIND, DEVICE_SETUP, type DeviceKind } from "@luke/features/device-agent-wire";
 import type { MacOffer } from "@luke/features/models-wire";
 import type { TaskRunsOn, TaskRunsOnRequest } from "@luke/features/task-wire";
 import { CHIP_WIDTH, type MenuRow, POPOVER_ALIGN, useSecond } from "@luke/ui";
@@ -18,10 +18,12 @@ import { keptKey, useKept } from "../use-kept.js";
  * same menu: Cloud first, then each device the member registered, as the
  * models answer lists them, by its name under the glyph of its kind, a Mac
  * running Luke or a host, each saying whether it is online, held against
- * the window's own clock. An offline device is listed but not picked, since
- * the service refuses a task set to one that has not beat lately. New task's chip
+ * the window's own clock, or, online, that it is still getting ready for
+ * local agents or couldn't set them up. A device offline or not ready is
+ * listed but not picked, since the service refuses a task set to one that
+ * has not beat lately or is not set up yet. New task's chip
  * starts on the member's last pick, kept in this window, and on Cloud where
- * that device is no longer listed or is offline, which the card then holds
+ * that device is no longer listed or takes no agent now, which the card then holds
  * until a pick, so a device coming back mid-compose never moves it; it wears the Experimental
  * tag; it stands only while the member has a device to pick. The task's
  * control stands with its status and priority, saying the device it runs on
@@ -37,6 +39,8 @@ const RUNS_ON_WORDS = {
   CLOUD: "Cloud",
   ONLINE: "Online",
   OFFLINE: "Offline",
+  GETTING_READY: "Getting ready…",
+  SETUP_FAILED: "Couldn't set up",
   REMOVED: "Removed device",
   NO_MATCH: "No devices match",
   HINT: "A change applies to agents started from now on.",
@@ -61,20 +65,32 @@ function offerOnline(device: MacOffer, now: number): boolean {
   return device.seenAt === undefined || macOnline(device.seenAt, now);
 }
 
-/** Cloud, then each device by name under its kind's glyph, an online one saying so and an offline one muted, unpicked. */
+/** Why a device offered takes no agent at `now`: offline, or online but still getting ready or not set up; none for one that takes an agent. */
+function offerUnready(device: MacOffer, now: number): string | undefined {
+  if (!offerOnline(device, now)) return RUNS_ON_WORDS.OFFLINE;
+  switch (device.setup) {
+    case DEVICE_SETUP.PREPARING:
+      return RUNS_ON_WORDS.GETTING_READY;
+    case DEVICE_SETUP.FAILED:
+      return RUNS_ON_WORDS.SETUP_FAILED;
+    case undefined:
+      return undefined;
+  }
+}
+
+/** Cloud, then each device by name under its kind's glyph, one that takes an agent saying it is online and any other muted, unpicked, saying why. */
 function runsOnRows(devices: readonly MacOffer[], now: number): readonly MenuRow[] {
   return [
     { id: CLOUD_ROW, label: RUNS_ON_WORDS.CLOUD, icon: <GLYPH.CLOUD /> },
-    ...devices.map(
-      (device): MenuRow => ({
+    ...devices.map((device): MenuRow => {
+      const unready = offerUnready(device, now);
+      return {
         id: device.deviceId,
         label: device.name,
         icon: <DeviceGlyph kind={device.kind} />,
-        ...(offerOnline(device, now)
-          ? { detail: RUNS_ON_WORDS.ONLINE }
-          : { disabled: RUNS_ON_WORDS.OFFLINE }),
-      }),
-    ),
+        ...(unready === undefined ? { detail: RUNS_ON_WORDS.ONLINE } : { disabled: unready }),
+      };
+    }),
   ];
 }
 
@@ -85,7 +101,7 @@ function runsOnOf(id: string): TaskRunsOnRequest {
 
 /**
  * New task's pick, starting on the member's last where that device is listed
- * and online, else Cloud, and kept as it changes. Answers the device picked,
+ * and takes an agent, else Cloud, and kept as it changes. Answers the device picked,
  * none for the cloud, and the setter.
  */
 export function useNewTaskRunsOn(
@@ -97,7 +113,7 @@ export function useNewTaskRunsOn(
   const [fellBackFrom, setFellBackFrom] = useState<string | undefined>(undefined);
   const now = useSecond();
   const picked = devices?.find((each) => each.deviceId === kept);
-  const usable = picked !== undefined && offerOnline(picked, now);
+  const usable = picked !== undefined && offerUnready(picked, now) === undefined;
   // Note that a list not yet read judges nothing, so the kept device stands once it arrives online.
   if (fellBackFrom === undefined && !usable && kept !== CLOUD_ROW && devices !== undefined) {
     setFellBackFrom(kept);

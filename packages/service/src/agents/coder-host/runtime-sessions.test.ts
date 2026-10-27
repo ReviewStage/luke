@@ -10,7 +10,7 @@ import {
   readCodingAgentByKey,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
-import { registerDevice } from "@luke/database/models/device-store";
+import { type DeviceRegistration, registerDevice } from "@luke/database/models/device-store";
 import { removeHost } from "@luke/database/models/host-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
@@ -37,7 +37,7 @@ import {
   type CodingAgentPayer,
   LOCAL_AGENT_REFUSAL,
 } from "@luke/features/coding-agent-wire";
-import { DEVICE_KIND } from "@luke/features/device-agent-wire";
+import { DEVICE_KIND, DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -1352,6 +1352,15 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               model: "openai/gpt-5.5",
               refused: LOCAL_AGENT_REFUSAL.CODEX,
             },
+            {
+              name: "the task's device there, but still getting ready",
+              on: true,
+              mac: true,
+              setup: DEVICE_SETUP.PREPARING,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: LOCAL_AGENT_REFUSAL.PREPARING,
+            },
           ] as const;
           for (const each of cases) {
             const plan = !("plan" in each) || each.plan;
@@ -1369,6 +1378,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 name: "Studio",
                 ...DEVICE_LAYOUT,
                 ...("codex" in each ? { codexExecutable: CODEX_EXECUTABLE } : undefined),
+                ...("setup" in each ? { setup: each.setup } : undefined),
                 signedIn,
               });
             }
@@ -1624,6 +1634,33 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               each.name,
             );
           }
+        }),
+    );
+
+    it.effect(
+      "a device is offered with where its setup stands while it gets ready or after it failed, and with none once it registers ready, as a desktop from before setups always does",
+      () =>
+        Effect.gen(function* () {
+          const { owner } = yield* openStarter(true, "none");
+          yield* writeAccountPreferences(owner, {
+            experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
+          });
+          const id = randomUUID();
+          const offered = Effect.map(
+            macOffers(owner).pipe(Effect.provide(Layer.mergeAll(environment(), runtimes().native))),
+            (offers) => offers.map((offer) => [offer.name, offer.setup, offer.setupFailure]),
+          );
+          const register = (setup: Partial<Pick<DeviceRegistration, "setup" | "setupFailure">>) =>
+            registerDevice(owner, { id, name: "Studio", ...DEVICE_LAYOUT, ...setup });
+
+          yield* register({ setup: DEVICE_SETUP.PREPARING });
+          assert.deepEqual(yield* offered, [["Studio", DEVICE_SETUP.PREPARING, undefined]]);
+          yield* register({ setup: DEVICE_SETUP.FAILED, setupFailure: "smolvm could not be had" });
+          assert.deepEqual(yield* offered, [
+            ["Studio", DEVICE_SETUP.FAILED, "smolvm could not be had"],
+          ]);
+          yield* register({});
+          assert.deepEqual(yield* offered, [["Studio", undefined, undefined]]);
         }),
     );
 

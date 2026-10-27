@@ -227,6 +227,10 @@ export const LOCAL_AGENT_REFUSAL = {
   CODEX: "codex",
   /** The model runs on no native harness here, so no runner would launch on the Mac. */
   NO_HARNESS: "no-harness",
+  /** The device is still fetching what its VMs run on, the first time (`DEVICE_SETUP.PREPARING`), so it takes no agent yet. */
+  PREPARING: "preparing",
+  /** The device could not fetch what its VMs run on (`DEVICE_SETUP.FAILED`), so it takes no agent until it tries again. */
+  SETUP_FAILED: "setup-failed",
 } as const;
 
 export type LocalAgentRefusal = (typeof LOCAL_AGENT_REFUSAL)[keyof typeof LOCAL_AGENT_REFUSAL];

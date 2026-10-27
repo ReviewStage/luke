@@ -73,6 +73,12 @@ import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
  * reference to its file there.
  */
 
+/** What a Mac says it could not have, as it registers its setup failed: words of Luke's own, never smolvm's. */
+const SETUP_FAILURE = {
+  SMOLVM: "smolvm couldn't be downloaded or didn't pass its check",
+  IMAGE: "the sandbox image couldn't be downloaded",
+} as const;
+
 /** The machine's workload: one that never exits, so `machine exec` always has a running container to run in. */
 const WORKLOAD = ["sh", "-c", "while true; do sleep 3600; done"] as const;
 
@@ -371,9 +377,10 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
     tools: { node: "node", claude: CLAUDE_CODE_PIN.LINK, codex: CODEX_PIN.LINK },
 
     ready: Effect.gen(function* () {
-      if (pinned === undefined) return true;
+      if (pinned === undefined) return;
       const had = yield* localAgentTool(options.stateRoot, pinned);
-      return Option.isSome(had) && (yield* imageSeeded);
+      if (Option.isNone(had)) return yield* unavailable(SETUP_FAILURE.SMOLVM);
+      if (!(yield* imageSeeded)) return yield* unavailable(SETUP_FAILURE.IMAGE);
     }),
 
     started: ({ agentId, folder, github }) =>

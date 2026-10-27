@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
-import { DEVICE_KIND } from "@luke/features/device-agent-wire";
+import { DEVICE_KIND, DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import { type MacOffer, MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskRunsOnRequest } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
@@ -25,7 +25,8 @@ import { NewTaskComposer } from "./new-task-composer.js";
 /**
  * new-task-composer-runs-on.test.ts -- New task's Runs on, with local agents
  * on and two of the member's devices offered, one offline: the task starts on
- * the device picked, by its id, and the offline one cannot be picked; and a
+ * the device picked, by its id, and the offline one cannot be picked, nor
+ * one online but getting ready or not set up, which says so; and a
  * card that fell back to Cloud stays there when the device comes back, but
  * takes a device picked in another card. Note
  * that it stands in a file of its own, because a window reads its document
@@ -153,6 +154,35 @@ test("a task starts on the device Runs on picked, by its id, and an offline devi
 
   assert.equal(chip().getAttribute("aria-label"), "Runs on: Studio");
   assert.deepEqual(starts, [{ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
+});
+
+test("a device online but still getting ready, or that couldn't set up, is listed saying so and not picked", async () => {
+  const [studio, builder] = devicesWith(Date.now(), Date.now());
+  assert.ok(studio !== undefined && builder !== undefined);
+  const { container } = await mount({
+    devices: [
+      { ...studio, setup: DEVICE_SETUP.PREPARING },
+      {
+        ...builder,
+        setup: DEVICE_SETUP.FAILED,
+        setupFailure: "the sandbox image couldn't be downloaded",
+      },
+    ],
+  });
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-label^="Runs on"]')?.click());
+  await settle();
+
+  assert.deepEqual(
+    [row("Studio"), row("Build host")].map((each) => [
+      each.getAttribute("aria-disabled"),
+      each.textContent?.includes("Getting ready…"),
+      each.textContent?.includes("Couldn't set up"),
+    ]),
+    [
+      ["true", true, false],
+      ["true", false, true],
+    ],
+  );
 });
 
 test("a card that fell back to Cloud for an offline last pick stays on Cloud once that device comes back", async () => {

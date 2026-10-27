@@ -655,6 +655,10 @@ export function localAgentRefusalWords(
       return `${name} can't run Codex agents yet. Wait for its Codex download to finish, choose a Claude model, ${RUN_IN_CLOUD}.`;
     case LOCAL_AGENT_REFUSAL.NO_HARNESS:
       return `${name} can't run this model's agents. Choose a Claude or Codex model, ${RUN_IN_CLOUD}.`;
+    case LOCAL_AGENT_REFUSAL.PREPARING:
+      return `${name} is still getting ready for local agents (downloading its sandbox). Try again in a few minutes.`;
+    case LOCAL_AGENT_REFUSAL.SETUP_FAILED:
+      return `${name} couldn't set up local agents. Turn Run agents on this Mac off and on in Settings › Agents to try again, ${RUN_IN_CLOUD}.`;
     case undefined:
       return `${name} couldn't take this agent. Try again, ${RUN_IN_CLOUD}.`;
   }

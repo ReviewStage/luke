@@ -1,6 +1,10 @@
 import { Schema as EffectSchema } from "effect";
 import { CODING_AGENT_BOUNDS, contextWindowSchema } from "./coding-agent-wire.js";
-import { DEVICE_KIND } from "./device-agent-wire.js";
+import {
+  DEVICE_KIND,
+  DEVICE_SETUP_FAILURE_MAX_CHARS,
+  deviceSetupSchema,
+} from "./device-agent-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -110,7 +114,10 @@ export type CatalogModel = typeof catalogModelSchema.Type;
  * against, what kind of device it is, and the epoch milliseconds it last
  * beat, which a reader holds against its own clock (`macOnline`); only a
  * device there now is taken. The kind and the beat are absent from a service
- * older than them, which offered only the devices there now.
+ * older than them, which offered only the devices there now. A device still
+ * setting itself up says where that stands (`DEVICE_SETUP`), and why for one
+ * that failed, and takes no agent until it is ready; both are absent for a
+ * ready one.
  */
 export const macOfferSchema = EffectSchema.Struct({
   deviceId: wireUuidSchema,
@@ -118,6 +125,10 @@ export const macOfferSchema = EffectSchema.Struct({
   providers: EffectSchema.Array(modelProviderSchema),
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_KIND))),
   seenAt: EffectSchema.optionalKey(countedNumber),
+  setup: EffectSchema.optionalKey(deviceSetupSchema),
+  setupFailure: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(DEVICE_SETUP_FAILURE_MAX_CHARS)),
+  ),
 });
 
 export type MacOffer = typeof macOfferSchema.Type;
