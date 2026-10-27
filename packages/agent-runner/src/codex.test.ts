@@ -416,6 +416,7 @@ it.effect(
         'shell_environment_policy.inherit="core"',
         "shell_environment_policy.ignore_default_excludes=false",
         'shell_environment_policy.exclude=["LUKE_RUNNER_TOKEN"]',
+        'shell_environment_policy.set={ PLAYWRIGHT_BROWSERS_PATH = "/ms-playwright" }',
       ]);
       // The bearer reaches app-server in its environment alone, never argv.
       assert.equal(process?.env[RUNNER_ENV.BEARER], BEARER);

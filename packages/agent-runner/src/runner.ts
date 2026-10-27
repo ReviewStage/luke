@@ -63,7 +63,7 @@ import {
   runsOnHost,
 } from "./launch.js";
 import { openMcpRelay } from "./mcp-relay.js";
-import { SHARED_FILES_DIRECTORY } from "./pins.js";
+import { SANDBOX_TOOL_ENV, SHARED_FILES_DIRECTORY } from "./pins.js";
 import { ProcessTable } from "./processes.js";
 import {
   CLAUDE_CODE_TOOLS,
@@ -227,9 +227,10 @@ function queryOptions(
     allowedTools: [...CLAUDE_CODE_TOOLS.ADDED],
     disallowedTools: [...CLAUDE_CODE_TOOLS.DENIED],
     agents: { [CLAUDE_CODE_WORKER]: WORKER },
-    // The CLI's environment is the runner's own, less the bearer, which only
-    // the runner uses; Node leaves an undefined one unset.
-    env: { ...env, [RUNNER_ENV.BEARER]: undefined },
+    // The CLI's environment is the runner's own and the image's tools'
+    // (`SANDBOX_TOOL_ENV`), less the bearer, which only the runner uses; Node
+    // leaves an undefined one unset.
+    env: { ...env, ...SANDBOX_TOOL_ENV, [RUNNER_ENV.BEARER]: undefined },
     // Note that the SDK puts an HTTP server's config, headers and all, in the
     // CLI's argv, which any process in the sandbox can read, so Luke's is an
     // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`), as is each integration's.

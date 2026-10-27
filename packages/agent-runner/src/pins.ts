@@ -26,6 +26,26 @@ export const AGENT_USER = "agent";
  */
 export const SHARED_FILES_DIRECTORY = "/tmp/luke";
 
+/**
+ * Playwright as the image installs it, where every user of every machine
+ * reaches it: the package and its `playwright` command under `/usr/local`,
+ * on every PATH and in `NODE_PATH`'s usual root, and its browsers in one
+ * world-readable folder, the one Playwright's own image uses, rather than
+ * the cache of the user who built the image, whose home neither the cloud's
+ * `agent` nor a device's own uid in its VM reads. Playwright looks for its
+ * browsers in its own user's cache unless `PLAYWRIGHT_BROWSERS_PATH` says
+ * otherwise, so the runner hands both harnesses' commands that variable
+ * (`SANDBOX_TOOL_ENV`).
+ */
+export const PLAYWRIGHT_PIN = {
+  VERSION: "1.64.1",
+  PREFIX: "/usr/local",
+  BROWSERS: "/ms-playwright",
+} as const;
+
+/** What every command a harness runs is handed of the image's tools, in the cloud and in a device's VM alike. */
+export const SANDBOX_TOOL_ENV = { PLAYWRIGHT_BROWSERS_PATH: PLAYWRIGHT_PIN.BROWSERS } as const;
+
 /** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. */
 export const RUNNER_DIRECTORY = "/opt/luke/agent-runner";
 

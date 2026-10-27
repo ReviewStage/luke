@@ -747,6 +747,8 @@ it.effect(
       assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
+      // A command's Playwright finds the image's browsers, not its own user's empty cache.
+      assert.equal(options.env?.PLAYWRIGHT_BROWSERS_PATH, "/ms-playwright");
     }),
 );
 
