@@ -2748,7 +2748,13 @@ function AgentTabView({
                       // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing, and gives way to a line on its way, which the working line stands for.
                       transcript.pages === 0 || lineGoing
                         ? undefined
-                        : endLineParts(agent.status, transcript.failure, starter, continuable)
+                        : endLineParts(
+                            agent.status,
+                            transcript.failure,
+                            starter,
+                            continuable,
+                            transcript.ranDirectly,
+                          )
                     }
                     endReason={endLineReason(transcript.failure, starter)}
                     keyProvider={keyProvider}

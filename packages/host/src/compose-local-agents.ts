@@ -2,11 +2,13 @@ import type { DeviceAgentClaimedLine, HostedDeviceAgentClient } from "@luke/feat
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ISOLATION,
+  DEVICE_LAUNCH_REFUSAL,
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLayout,
   type DeviceAgentLine,
   type DeviceAgentRequest,
   type DeviceIsolation,
+  type DeviceLaunchRefusal,
   type DeviceSignedIn,
   deviceAgentFilesPayloadSchema,
   deviceAgentLaunchPayloadSchema,
@@ -123,18 +125,16 @@ import type { RunMode } from "./run-mode.js";
  * in the VM rather than on the device, since the worktree is the agent's to
  * rig.
  *
- * This Mac runs its agents either way, as its sandbox setting says
- * (`LocalAgentsDependencies.sandboxed`): directly on the Mac, or on its
- * platform's sandboxed alternative, a VM per agent as on a host, on the
- * sign-ins saved in Luke and a GitHub token from Luke. The platform is read
- * as the gate opens and on every beat; a change ends the follow, and the
- * next one has what the other way runs on and registers the device so. Each
- * agent runs only the way it first ran, which the host keeps beside its
- * launches: one made directly keeps its Git folder in the shared clone no VM
- * mounts, and one made in a VM keeps its harness's sessions in the VM's own
- * home, so a launch the other way is settled unstarted and says why. A
- * discard deletes the VM of an agent that ran in one whichever way the Mac
- * runs agents now.
+ * This Mac runs every agent on its platform's sandboxed alternative
+ * (`LocalAgentPlatformSeam.sandboxed`), a VM per agent as on a host, on the
+ * sign-ins saved in Luke and a GitHub token from Luke. Each agent runs only
+ * the way it first ran, which the host keeps beside its launches, and every
+ * agent from before the record that has a checkout ran directly on the Mac:
+ * its Git folder is in the shared clone no VM mounts and its harness's
+ * sessions in the developer's own home, so its launch is settled unstarted,
+ * with the refusal that says so (`DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY`), which
+ * the service words as a session that cannot be reached again. A discard
+ * deletes the VM of an agent that ran in one.
  *
  * Every launch this Mac claimed is kept in the host's state by its line's
  * id, no secret beside it, until its runner's exit settles it. A launch
@@ -298,14 +298,6 @@ export interface LocalAgentsDependencies {
   deviceId?: string | undefined;
   /** Whether the account's Local agents experiment and Settings › This Mac's switch are both on, read every `IDLE` while the gate is open. */
   switchedOn: Effect.Effect<boolean>;
-  /**
-   * Whether the device's sandbox setting is on, where it has one (This
-   * Mac's `localAgentsSandbox`): its agents then run on the platform's
-   * `sandboxed` alternative. Read as the gate opens and every `IDLE` while
-   * it stands, so a change ends the follow and the next one registers the
-   * device the other way. None runs them on the platform as given.
-   */
-  sandboxed?: Effect.Effect<boolean> | undefined;
   client: LocalAgentClient;
 }
 
@@ -364,10 +356,8 @@ export function composeLocalAgents(
     const { kernel, account, switchedOn, client } = dependencies;
     const statePath = path.join(kernel.stateRoot, STATE_FILE);
 
-    /** The platform the device's agents run on now: its sandboxed alternative while the sandbox setting is on, the one given otherwise. */
-    const platformNow = Effect.map(dependencies.sandboxed ?? Effect.succeed(false), (sandboxed) =>
-      sandboxed ? (given.sandboxed ?? given) : given,
-    );
+    /** The platform the device's agents run on: its sandboxed alternative where it has one, as This Mac does, the one given otherwise. */
+    const platformNow = Effect.succeed(given.sandboxed ?? given);
 
     // -- the host's state ----------------------------------------------------
 
@@ -748,8 +738,8 @@ export function composeLocalAgents(
           });
         const answering = yield* FiberSet.make();
 
-        const settle = (id: string, exitCode?: number) =>
-          asked(client.settleLine(deviceId, id, exitCode));
+        const settle = (id: string, exitCode?: number, refusal?: DeviceLaunchRefusal) =>
+          asked(client.settleLine(deviceId, id, exitCode, refusal));
 
         /** The agent's worktree made where it has none, on the agent's GitHub sign-in where the host gave it one: a folder for an agent with no repository, and Luke's shared clone's worktree otherwise. */
         const madeWorktree = (
@@ -887,12 +877,14 @@ export function composeLocalAgents(
             // Note that an agent runs only the way it first ran here: one made directly on the Mac keeps its Git folder in the shared clone no VM mounts, and one made in a VM keeps its harness's sessions in the VM's own home.
             const ran = yield* ranAs(agentId, layout.checkoutPath);
             if (Option.isSome(ran) && ran.value !== platform.deviceIsolation) {
+              if (ran.value === DEVICE_ISOLATION.SANDBOX) {
+                report("a local agent that ran in a VM was not started directly on this device");
+                return yield* settle(line.id, NOT_STARTED);
+              }
               report(
-                ran.value === DEVICE_ISOLATION.SANDBOX
-                  ? "a local agent that ran in a VM was not started directly on this device; turn its sandbox setting back on to run it"
-                  : "a local agent that ran directly on this device was not started in a VM; turn its sandbox setting off to run it",
+                "a local agent that ran directly on this Mac was not started, since every agent here runs in a VM now",
               );
-              return yield* settle(line.id, NOT_STARTED);
+              return yield* settle(line.id, NOT_STARTED, DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
             }
             if (given.sandboxed !== undefined && Option.isNone(ran)) {
               yield* keepMode(agentId, platform.deviceIsolation);

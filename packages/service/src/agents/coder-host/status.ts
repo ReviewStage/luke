@@ -188,6 +188,26 @@ export const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly str
   ],
 ];
 
+/**
+ * What the turn of an agent its Mac refused to start records, the agent
+ * having run directly on that Mac, which now runs every agent in a VM,
+ * followed by the folder of its checkout there, which still holds its work.
+ */
+export const RAN_DIRECTLY_DETAIL =
+  "the agent ran directly on its Mac, which now runs every agent in a VM; its work is still in ";
+
+/** The folder an agent its Mac refused for having run directly on it left its work in, as its failed turn records it; nothing for any other turn. */
+export function ranDirectlyFolderOf(
+  turn: Pick<CodingAgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
+): string | undefined {
+  if (turn?.status !== TURN_STATUS.FAILED) return undefined;
+  if (turn.failure !== BRAIN_REQUEST_FAILURE.SESSION_ENDED) return undefined;
+  const detail = turn.failureDetail ?? "";
+  if (!detail.startsWith(RAN_DIRECTLY_DETAIL)) return undefined;
+  const folder = detail.slice(RAN_DIRECTLY_DETAIL.length);
+  return folder.length > 0 ? folder : undefined;
+}
+
 /** Why an agent read as failed failed, as the wire's word: its newest turn's failure, or a session that never started where no turn stands; nothing for a turn that did not fail. */
 export function codingAgentFailureOf(
   turn: Pick<CodingAgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,

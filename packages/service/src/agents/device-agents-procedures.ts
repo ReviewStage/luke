@@ -152,7 +152,13 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       yield* followed(context, input.deviceId);
       return yield* keptOrNotFound(
         yield* hostedStoreOrUnavailable(
-          settledDeviceAgentLine(context.userId, input.deviceId, input.id, input.exitCode),
+          settledDeviceAgentLine(
+            context.userId,
+            input.deviceId,
+            input.id,
+            input.exitCode,
+            input.refusal,
+          ),
         ),
       );
     }),

@@ -7,7 +7,7 @@ import {
   EVE_TOOL,
   RETIRED_TOOL,
 } from "@luke/features/agent-tools";
-import { agentFailureWords } from "@luke/features/coding-agent-failure-words";
+import { agentFailureWords, ranDirectlyWords } from "@luke/features/coding-agent-failure-words";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -349,7 +349,9 @@ export interface EndLineParts {
  * for an agent still writing or one that completed. A teammate's agent
  * names its starter's key, since it runs on theirs and not the reader's.
  * An agent whose tab offers Continue, or that another already continued
- * (`continuable`), is not told to start a new one.
+ * (`continuable`), is not told to start a new one. One that ran directly on
+ * its Mac, which refused to start it in a VM (`ranDirectly`), says so and
+ * where its work still is, in place of its failure's words.
  * Note that it names no price, because a price in the window means the
  * whole run's, which the model menu's foot says (`agentUsageLine`).
  */
@@ -358,11 +360,14 @@ export function endLineParts(
   failure: CodingAgentFailure | undefined,
   starter?: string,
   continuable = false,
+  ranDirectly?: { readonly folder: string },
 ): EndLineParts | undefined {
   switch (status) {
     case CODING_AGENT_STATUS.CANCELLED:
       return { words: "Stopped", failed: false };
     case CODING_AGENT_STATUS.FAILED: {
+      if (ranDirectly !== undefined)
+        return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true };
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);
       return { words: words === undefined ? "Failed" : `Failed: ${words}`, failed: true };

@@ -244,6 +244,7 @@ function transcriptAnswer(
     ...(page.subagents === undefined ? undefined : { subagents: page.subagents }),
     title,
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
+    ...(page.ranDirectly === undefined ? undefined : { ranDirectly: page.ranDirectly }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),
     ...(page.context === undefined ? undefined : { context: page.context }),
   };

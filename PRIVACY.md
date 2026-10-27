@@ -511,27 +511,21 @@ lost him, is deleted the same way, shortly after his conversation is removed.
 
 **A local agent on your Mac.** For the accounts in the early test of local
 agents, a coding agent you start on This Mac runs Claude Code, or Codex for a
-GPT model, on your Mac rather than in a sandbox, and its transcript, its
-events, and the files its tools read still reach our service as any coding
-agent's do. Where Claude Code or Codex on your Mac is signed in by itself, the
-agent runs on that sign-in, which stays on your Mac: Luke learns only whether
-there is one, never the credential. Otherwise it runs on the plan or key you
-saved in Luke, as a sandbox's agent does; a Codex agent then asks our service
-for your ChatGPT plan's access token over HTTPS as it needs one, so no token
-waits in our database for your Mac. To run Codex, the app downloads OpenAI's
-Codex from npm once, the release our sandboxes run, and keeps it in Luke's own
-folder on your Mac only once it matches the checksum Luke pins.
-
-Where your Mac is set to run its local agents in a sandbox, each agent runs
-instead in a virtual machine of its own (smolvm) on your Mac, which sees only
-that agent's folder. It runs on the plan or key you saved in Luke, never on
-the sign-in of Claude Code or Codex on your Mac, which the machine cannot
-reach, and it reaches GitHub with a short-lived token our service hands your
-Mac, as for a host below: the token stays on your Mac, outside the machine and
-every folder it can see, and the agent sees only a placeholder. To run them,
-the app downloads smolvm from its GitHub release once, keeps it in Luke's own
-folder on your Mac only once it matches the checksum Luke pins, and pulls the
-public sandbox image our hosts run.
+GPT model, on your Mac, each in a virtual machine of its own (smolvm) that sees
+only that agent's folder, and its transcript, its events, and the files its
+tools read still reach our service as any coding agent's do. It runs on the
+plan or key you saved in Luke, never on the sign-in of Claude Code or Codex on
+your Mac, which the machine cannot reach; a Codex agent asks our service for
+your ChatGPT plan's access token over HTTPS as it needs one, so no token waits
+in our database for your Mac. It reaches GitHub with a short-lived token our
+service hands your Mac, as for a host below: the token stays on your Mac,
+outside the machine and every folder it can see, and the agent sees only a
+placeholder. To run them, the app downloads smolvm from its GitHub release
+once, keeps it in Luke's own folder on your Mac only once it matches the
+checksum Luke pins, checks the files it runs against those checksums again
+before each use, and pulls the public sandbox image our hosts run. An agent
+that ran directly on your Mac before this is not started again; continue it
+into a new agent.
 
 **A local agent on a host.** A host is your own Linux server that you add
 to Luke to run your agents, as This Mac does. It has no git login of yours, so

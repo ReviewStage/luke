@@ -320,6 +320,28 @@ test("the end line's words and whether it tells of a failure come apart, and nam
     failed: false,
   });
   assert.equal(endLineParts(CODING_AGENT_STATUS.FAILED, undefined)?.words, "Failed");
+  // Note that an agent that ran directly on its Mac says why and where its work is, rather than its session's end.
+  assert.deepEqual(
+    endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.SESSION_ENDED, undefined, true, {
+      folder: "/Users/ada/.luke/agents/agent-1/repository",
+    }),
+    {
+      words:
+        "This agent ran directly on your Mac, which Luke no longer does. Its unpushed work is still in /Users/ada/.luke/agents/agent-1/repository. Continue in a new agent to carry on in a sandbox.",
+      failed: true,
+    },
+  );
+  // Note that a teammate is told whose Mac holds the work, not pointed at their own.
+  assert.equal(
+    endLineParts(
+      CODING_AGENT_STATUS.FAILED,
+      CODING_AGENT_FAILURE.SESSION_ENDED,
+      "Ada Lovelace",
+      true,
+      { folder: "/Users/ada/.luke/agents/agent-1/repository" },
+    )?.words,
+    "This agent ran directly on Ada Lovelace's Mac, which Luke no longer does. Its unpushed work is still in /Users/ada/.luke/agents/agent-1/repository there. Continue in a new agent to carry on in a sandbox.",
+  );
   for (const status of [
     CODING_AGENT_STATUS.STARTING,
     CODING_AGENT_STATUS.RUNNING,

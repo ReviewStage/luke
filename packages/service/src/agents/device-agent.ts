@@ -30,15 +30,20 @@ import {
 import { beatDevice, deviceLayout } from "@luke/database/models/device-store";
 import { openMacLaunchSecrets, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { storeWriter } from "@luke/database/models/writer";
+import { BRAIN_REQUEST_FAILURE } from "@luke/features/brain";
 import {
   DEVICE_AGENT_LINE_KIND,
+  DEVICE_LAUNCH_REFUSAL,
   type DeviceAgentLaunchSecrets,
+  type DeviceLaunchRefusal,
+  deviceAgentLaunchPayloadSchema,
   deviceAgentLaunchSecretsSchema,
 } from "@luke/features/device-agent-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Clock, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
 import { HostedEnvironment } from "../environment.js";
 import type { StoreFailure } from "../http/store-failure.js";
+import { RAN_DIRECTLY_DETAIL } from "./coder-host/status.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 export const DEVICE_AGENT_SERVICE = {
@@ -150,13 +155,27 @@ export function claimedDeviceAgentLine(userId: string, deviceId: string, id: str
   });
 }
 
+/** Where an agent's newest launch put its checkout, as its line's payload names it; nothing where it names none this service reads. */
+const decodeLaunchPayload = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
+
+/** Why a launch its device refused to start failed, kept on the turn: the words of the refusal, and the folder the agent's work is still in. */
+function refusalDetail(refusal: DeviceLaunchRefusal, checkoutPath: string | undefined): string {
+  switch (refusal) {
+    case DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY:
+      return `${RAN_DIRECTLY_DETAIL}${checkoutPath ?? ""}`;
+  }
+}
+
 /**
  * One line the account's Mac claimed, settled; whether it was. A launch
  * line that was the agent's newest settles its runner as gone, so a turn
  * of the agent's still under way, whose runner posted no END before it
  * ended, as when the app quit or the Mac's switch went off mid-turn, is
  * settled lost (`settleRunnerLostTurns`) and the agent offers Continue
- * rather than running until `TURN_ABANDON`. A turn the runner ended itself
+ * rather than running until `TURN_ABANDON`. A launch the Mac settled unstarted
+ * because the agent can never run there again (`refusal`) settles its turn
+ * as a session that ended, so the agent reads as one only a new agent goes
+ * on from. A turn the runner ended itself
  * is already settled, and is left as it stands. An older launch a newer one
  * replaced settles nothing of the newer one's turn.
  *
@@ -171,6 +190,7 @@ export function settledDeviceAgentLine(
   deviceId: string,
   id: string,
   exitCode?: number,
+  refusal?: DeviceLaunchRefusal,
 ) {
   return Effect.gen(function* () {
     const fresh = yield* settleDeviceAgentLine(userId, deviceId, id, exitCode);
@@ -188,11 +208,22 @@ export function settledDeviceAgentLine(
     const agent = yield* readCodingAgent(userId, agentId);
     if (Option.isNone(agent)) return true;
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-    yield* settleRunnerLostTurns(
-      writer,
-      agent.value.conversationId,
-      yield* Clock.currentTimeMillis,
-    );
+    const now = yield* Clock.currentTimeMillis;
+    yield* refusal === undefined
+      ? settleRunnerLostTurns(writer, agent.value.conversationId, now)
+      : settleRunnerLostTurns(
+          writer,
+          agent.value.conversationId,
+          now,
+          refusalDetail(
+            refusal,
+            Option.getOrUndefined(
+              Option.map(decodeLaunchPayload(newest.value.payload), (each) => each.checkoutPath),
+            ),
+          ),
+          undefined,
+          BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+        );
     return true;
   });
 }

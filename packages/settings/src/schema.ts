@@ -219,36 +219,13 @@ export const APP_SETTING_SCHEMA = {
     id: APP_SETTING_ID.LOCAL_AGENTS,
     label: "Run agents on this Mac",
     detail:
-      "Coding agents on tasks that run on this Mac run here, in a worktree under ~/.luke, with " +
-      "your own tools and Git login. Their transcript and the files their tools read still reach Luke.",
+      "Coding agents on tasks that run on this Mac run here, each in a Linux VM of its own that sees " +
+      "only its folder under ~/.luke, signed in through Luke. Their transcript and the files their " +
+      "tools read still reach Luke.",
     default: false,
     page: SETTINGS_PAGE.CODING_AGENTS,
     order: 1,
     visible: localAgentsDrawn,
-    // Nothing to run per write: the host reads the setting on every beat of its follow.
-    sideEffect: SETTING_SIDE_EFFECT.NONE,
-  }),
-  /*
-   * Whether this Mac runs each of its local agents in a smolvm VM of its own
-   * rather than directly on the Mac (`compose-local-agents.ts`'s sandboxed
-   * platform), off by default. Note that it is drawn nowhere yet: its row
-   * comes with the setting's own release, so a Mac runs its agents as it
-   * always has unless the settings file says otherwise. Read as the follow
-   * opens and on every beat, so a change ends the follow and the next one
-   * registers the Mac in the other mode.
-   */
-  localAgentsSandbox: toggleSetting({
-    field: "localAgentsSandbox",
-    id: APP_SETTING_ID.LOCAL_AGENTS_SANDBOX,
-    label: "Run agents in a sandbox",
-    detail:
-      "Each coding agent on this Mac runs in a Linux VM of its own that sees only its folder, " +
-      "signed in through Luke rather than this Mac's own logins. Turn it off to run agents " +
-      "directly on this Mac, for Xcode or iOS work.",
-    default: false,
-    page: SETTINGS_PAGE.CODING_AGENTS,
-    order: 2,
-    visible: () => false,
     // Nothing to run per write: the host reads the setting on every beat of its follow.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),

@@ -42,6 +42,17 @@ const MENDED_BY_NEW_AGENT: ReadonlySet<CodingAgentFailure> = new Set([
 ]);
 
 /**
+ * Why an agent that ran directly on its Mac failed there, and where its work
+ * still is, said whole in place of a failure's words: on the reader's own
+ * Mac where no one is named, else on the named starter's, whose Mac holds it.
+ */
+export function ranDirectlyWords(folder: string, starter: string | undefined): string {
+  const mac = starter === undefined ? "your Mac" : `${starter}'s Mac`;
+  const there = starter === undefined ? "" : " there";
+  return `This agent ran directly on ${mac}, which Luke no longer does. Its unpushed work is still in ${folder}${there}. Continue in a new agent to carry on in a sandbox.`;
+}
+
+/**
  * Why a turn failed, said of the key it ran on: the reader's own where no
  * one is named, else the named holder's, whose Settings the reader has no
  * way to mend, so the words name whose key it was and leave the way out.

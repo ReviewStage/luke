@@ -345,7 +345,10 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
  * A launch that failed before its runner ran names why in `detail`. Where
  * `only` is given, just the turns it names are settled, so a caller that
  * read which turns were lost at one instant (`runningTurnIds`) leaves alone
- * a turn begun since.
+ * a turn begun since. Where the runner can never be reached again, as for
+ * an agent its device will not start, the turns fail as a session that
+ * ended (`failure`), which leaves nothing awaiting a turn and offers only a
+ * new agent.
  */
 export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunnerLostTurns")(
   function* (
@@ -354,6 +357,9 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
     now: number,
     detail: string = RUNNER_LOST_DETAIL,
     only?: ReadonlySet<string>,
+    failure:
+      | typeof BRAIN_REQUEST_FAILURE.MODEL
+      | typeof BRAIN_REQUEST_FAILURE.SESSION_ENDED = BRAIN_REQUEST_FAILURE.MODEL,
   ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
     const running = yield* agentRunningTurns({ conversationId });
     const lost = only === undefined ? running : running.filter((turn) => only.has(turn.id));
@@ -363,11 +369,7 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
         writer,
         turn,
         cancelRequestedAt === null
-          ? {
-              status: BRAIN_REQUEST_STATUS.FAILED,
-              failure: BRAIN_REQUEST_FAILURE.MODEL,
-              failureDetail: detail,
-            }
+          ? { status: BRAIN_REQUEST_STATUS.FAILED, failure, failureDetail: detail }
           : { status: BRAIN_REQUEST_STATUS.CANCELLED },
         now,
       );
