@@ -16,7 +16,7 @@ import {
 import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { test } from "vitest";
-import { eveContent, receivedMessage } from "./attached-files.js";
+import { eveContent, receivedMessage, senderLabel } from "./attached-files.js";
 import {
   MENTIONED_BOUNDS,
   type MentionedAgent,
@@ -150,6 +150,29 @@ test("a line carrying what it mentioned is matched by eve's receipt of it, and r
   const words = `Do what ${section("Rollout")} says.`;
   const mentioned = mentionedContext(words, TASK);
   const handed = eveContent(words, [], mentioned);
+  assert.ok(Array.isArray(handed));
+  const receipt = receivedMessage({
+    message: words,
+    parts: handed.flatMap((part) =>
+      part.type === "text" ? [{ type: "text", text: part.text }] : [],
+    ),
+  });
+
+  const line = receivedPartsOf(lineParts(words, [], mentioned));
+
+  assert.equal(line?.join(COALESCED_LINE_SEPARATOR), receipt.text);
+  assert.equal(receipt.words, words);
+});
+
+test("a member's line handed behind the label naming them is matched by eve's receipt of it, and reads back as its words alone", () => {
+  const words = `Do what ${section("Rollout")} says.`;
+  const mentioned = mentionedContext(words, TASK);
+  const handed = eveContent(
+    words,
+    [],
+    mentioned,
+    senderLabel("[@Dean](https://tryluke.dev/acme/person/user-1)"),
+  );
   assert.ok(Array.isArray(handed));
   const receipt = receivedMessage({
     message: words,

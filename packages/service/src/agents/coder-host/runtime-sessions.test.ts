@@ -771,22 +771,29 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             }),
             STEER_OUTCOME.SENT,
           );
-          // The model reads a teammate's words as theirs, by a closing line linking them, and the starter's as they are.
-          const [fromTeammate, fromOwner] = eve.messages;
-          const handed = fromTeammate?.message;
-          assert.ok(typeof handed === "string");
-          assert.ok(handed.startsWith("Also the emails.\n\nSent by [@Test User]("));
-          assert.ok(handed.includes(teammate));
-          assert.ok(handed.endsWith(", a teammate, not the developer."));
-          assert.equal(fromOwner?.message, "Also the emails.");
-          // The row keeps the words eve was handed, which its receipt is matched by and a fresh session is seeded from.
+          // The model reads a teammate's line behind the label naming them by their link, and the starter's as it is.
+          const texts = eve.messages.map((sent) =>
+            Array.isArray(sent.message)
+              ? sent.message.flatMap((part) => (part.type === "text" ? [part.text] : []))
+              : [sent.message],
+          );
+          assert.match(
+            texts[0]?.[0] ?? "",
+            new RegExp(
+              `^\\[sender: \\[@Test User\\]\\(https://tryluke\\.dev/[^/]+/person/${teammate}\\), a teammate\\]$`,
+              "u",
+            ),
+          );
+          assert.deepEqual(texts[0]?.slice(1), ["Also the emails."]);
+          assert.equal(eve.messages[1]?.message, "Also the emails.");
+          // The row keeps the teammate's words as they typed them, its sender in its own column.
           const [kept] = yield* (yield* Database)
             .select({ parts: messages.parts })
             .from(messages)
             .where(eq(messages.clientId, sentLineId("key-teammate")));
           assert.deepEqual(
             kept?.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])),
-            [handed],
+            ["Also the emails."],
           );
 
           const payer = Option.getOrThrow(

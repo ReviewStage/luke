@@ -41,7 +41,6 @@ import {
   PART_CUT_FIELD,
   PULL_REQUEST_STATE,
   type PullRequestState,
-  teammateMessageWords,
 } from "@luke/features/coding-agent-wire";
 import { DEVICE_KIND, type DeviceKind } from "@luke/features/device-agent-wire";
 import {
@@ -2325,12 +2324,11 @@ export function workerLines(
   ];
 }
 
-/** A message's words: its text parts, one paragraph each, which is what a copy of a turn carries and what the developer's line reads as, a teammate's without the line naming them to the agent. */
+/** A message's words: its text parts, one paragraph each, which is what a copy of a turn carries and what the developer's line reads as. */
 export function messageWords(message: CodingAgentMessage): string {
-  const words = agentParts(message)
+  return agentParts(message)
     .flatMap((part) => (part.kind === AGENT_PART.TEXT ? [part.text] : []))
     .join("\n\n");
-  return message.role === MESSAGE_ROLE.USER ? teammateMessageWords(words) : words;
 }
 
 /** How many words a reply's lead holds at most, where its first sentence runs on. */

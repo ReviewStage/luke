@@ -186,7 +186,7 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import type { MessageReceivedPart } from "eve/client";
-import { afterEach, expect, type TestContext, vi } from "vitest";
+import { afterEach, type TestContext, vi } from "vitest";
 import { requestUserId } from "../auth/bearer.js";
 import {
   AssistantMessageBuilder,
@@ -328,14 +328,6 @@ const SAVED =
 
 /** The saved plan as Copy writes it, its name as a title over its text, which is what an agent started on the task is handed. */
 const SNAPSHOT = `# Teammate invitations\n\n${SAVED}`;
-
-/** A teammate's line as the row keeps it: their words, closed on the line naming them to the agent by their name and account. */
-function teammateLine(words: string, name: string, userId: string): RegExp {
-  return new RegExp(
-    `^${words.replaceAll(".", "\\.")}\\n\\nSent by \\[@${name}\\]\\(https://tryluke\\.dev/[^/]+/person/${userId}\\), a teammate, not the developer\\.$`,
-    "u",
-  );
-}
 
 const SOL = "openai/gpt-6.1-sol";
 
@@ -5349,14 +5341,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           eve.sent.map((each) => [each.authorization, each.sessionId]),
           [[`Bearer ${other}`, sessionId]],
         );
-        const shown = yield* transcript();
-        assert.equal(shown.status, CODING_AGENT_STATUS.RUNNING);
-        assert.equal(shown.lines[0], SNAPSHOT);
-        assert.match(
-          shown.lines[1] ?? "",
-          teammateLine("Rename the subject line too.", "Test User", other),
-        );
-        assert.equal(shown.lines.length, 2);
+        assert.deepEqual(yield* transcript(), {
+          lines: [SNAPSHOT, "Rename the subject line too."],
+          status: CODING_AGENT_STATUS.RUNNING,
+        });
       }),
   );
 
@@ -5875,14 +5863,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           yield* sentLineStands(owner, target.conversationId, sentLineId(clientKey)),
           true,
         );
-        const read = yield* transcript();
-        assert.equal(read.status, CODING_AGENT_STATUS.RUNNING);
-        assert.equal(read.lines[0], SNAPSHOT);
-        assert.match(
-          read.lines[1] ?? "",
-          teammateLine("Use seven days, not five.", "Test User", other),
-        );
-        assert.equal(read.lines.length, 2);
+        assert.deepEqual(yield* transcript(), {
+          lines: [SNAPSHOT, "Use seven days, not five."],
+          status: CODING_AGENT_STATUS.RUNNING,
+        });
 
         const again = readAnswer(
           codingAgentMessageAnswerSchema,
@@ -5945,8 +5929,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
               .messages.filter((message) => message.role === MESSAGE_ROLE.USER)
               .map((message) => [userTexts({ messages: [message] })[0], message.sentBy]),
           );
-        // Charles is a teammate, so his line closes on the line naming him to the agent.
-        const charles = teammateLine("Not five.", "Charles Pan", other);
 
         const named = [
           // The task the relay wrote as the turn received it keeps no sender.
@@ -5955,10 +5937,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             "Use seven days.",
             { userId: owner, name: "Dean Stratakos", kind: CODING_AGENT_SENDER.MEMBER },
           ],
-          [
-            expect.stringMatching(charles),
-            { userId: other, name: "Charles Pan", kind: CODING_AGENT_SENDER.MEMBER },
-          ],
+          ["Not five.", { userId: other, name: "Charles Pan", kind: CODING_AGENT_SENDER.MEMBER }],
           // Luke and an automation are named by kind, so the window draws each as itself.
           ["Rebase on main.", { name: "Luke", kind: CODING_AGENT_SENDER.LUKE }],
           [
@@ -5977,8 +5956,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             },
           ],
         ];
-        expect(yield* sendersAs(owner)).toEqual(named);
-        expect(yield* sendersAs(other)).toEqual(named);
+        assert.deepEqual(yield* sendersAs(owner), named);
+        assert.deepEqual(yield* sendersAs(other), named);
 
         // Every line names when it was sent, a minute apart where they were.
         const sentAts = readAnswer(
@@ -5992,9 +5971,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal((sentAts[2] ?? 0) - (sentAts[1] ?? 0), Duration.toMillis(Duration.minutes(1)));
 
         yield* Database.use((db) => db.delete(user).where(eq(user.id, other)));
-        const [formerWords, former] = (yield* sendersAs(owner))[2] ?? [];
-        assert.match(String(formerWords), charles);
-        assert.deepEqual(former, { name: "Former member", kind: CODING_AGENT_SENDER.FORMER });
+        assert.deepEqual((yield* sendersAs(owner))[2], [
+          "Not five.",
+          { name: "Former member", kind: CODING_AGENT_SENDER.FORMER },
+        ]);
       }),
   );
 

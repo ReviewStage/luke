@@ -25,11 +25,7 @@ import {
   type StoreWriter,
 } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentAttachment,
-  teammateMessageLine,
-} from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND, withoutMemberLinks } from "@luke/features/mention-link";
 import { causeKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
@@ -50,7 +46,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import { controlsAgent, writesToAgent } from "../agent-reach.js";
-import { eveContent, keptHandedImages } from "../attached-files.js";
+import { eveContent, keptHandedImages, senderLabel } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
   type AgentSessions,
@@ -98,10 +94,10 @@ import { codingAgentStatusOf } from "./status.js";
  * alone, for an agent on its starter's own GitHub token), while the line
  * lands in the agent's conversation under the member who started it,
  * naming what sent it: the member, Luke from a call, or an automation's run.
- * A member other than the starter is named in the words too, by a closing
- * line the row keeps, as another agent's message keeps its head, so eve's
- * receipt matches the row, a fresh session's seed names them, and the model
- * reads a teammate's words as theirs; the panel draws the words without it.
+ * A teammate's words, a member's other than the starter, are handed to eve
+ * behind a label naming them by their mention link (`attached-files.ts`'s
+ * `senderLabel`), which the row leaves out, since its sender is its own
+ * column, so the model never reads a teammate's words as the developer's.
  * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
@@ -198,12 +194,11 @@ const unreached = (failure: EveUnreachable) =>
 const FORMER_MEMBER = "A former member";
 
 /**
- * The member who sent the line, by their mention link under the agent's
- * workspace, where they are not the agent's starter, so the model never
- * reads a teammate's words as the developer's; nothing for the starter's own
- * words or any other sender's, whose lines already say who sent them.
+ * The label naming the teammate who sent the line, by their mention link
+ * under the agent's workspace; nothing for the starter's own words or any
+ * other sender's, whose line already says who sent it.
  */
-const teammateMention = (agent: CodingAgent, sender: LineSender) => {
+const teammateLabel = (agent: CodingAgent, sender: LineSender) => {
   if (sender.kind !== MESSAGE_SENDER.MEMBER || sender.userId === agent.userId) {
     return Effect.succeed(undefined);
   }
@@ -213,19 +208,15 @@ const teammateMention = (agent: CodingAgent, sender: LineSender) => {
       concurrency: "unbounded",
     }),
     ([names, step]) =>
-      writtenMention(
-        { kind: MENTION_KIND.PERSON, userId },
-        names.get(userId) ?? FORMER_MEMBER,
-        step,
+      senderLabel(
+        writtenMention(
+          { kind: MENTION_KIND.PERSON, userId },
+          names.get(userId) ?? FORMER_MEMBER,
+          step,
+        ),
       ),
   );
 };
-
-/** The words as eve is handed them and the row keeps them: a teammate's closed on the line naming who sent them, any other as they are. */
-function wordsHanded(text: string, teammate: string | undefined): string {
-  if (teammate === undefined) return text;
-  return [text, teammateMessageLine(teammate)].filter((part) => part.trim() !== "").join("\n\n");
-}
 
 /** The record claimed for the session just opened, forward only as its start would; a claim that fails is logged, and the session's own start claims it in time. */
 const claimedFor = (target: ConversationTarget, sessionId: string) =>
@@ -348,7 +339,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
       sessionId: Effect.result(hostedStoreOrUnavailable(recordedRuntimeSession(target))),
       // Read before eve is asked, so an ended session settles the turn it was running and never one begun since.
       running: Effect.result(runningTurnOf(agent)),
-      teammate: Effect.result(hostedStoreOrUnavailable(teammateMention(agent, line.sender))),
+      label: Effect.result(hostedStoreOrUnavailable(teammateLabel(agent, line.sender))),
     },
     { concurrency: "unbounded" },
   );
@@ -426,8 +417,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   const reads = yield* Effect.fromResult(reached.reads);
   const mentioned = reviewers ? undefined : mentionedContext(pointed, task, reads);
   const running = yield* Effect.fromResult(read.running);
-  // Note that the line naming a teammate is added after their words' mentions were read, so it mentions nothing of its own.
-  const text = wordsHanded(line.text, yield* Effect.fromResult(read.teammate));
+  const label = yield* Effect.fromResult(read.label);
   // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the
   // row names it; a repeat under the key was answered above, and the same bytes again keep nothing twice.
   const attachments = yield* hostedStoreOrUnavailable(
@@ -440,7 +430,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   const message = {
     conversationId: agent.conversationId,
     turn: BRAIN_HOST_TURN.TYPED,
-    message: eveContent(text, attachments, mentioned),
+    message: eveContent(line.text, attachments, mentioned, label),
     // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
     lineId: sentLineId(line.clientKey),
   };
@@ -509,7 +499,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   );
   const written = yield* hostedStoreOrUnavailable(
     Effect.flatMap(writer, (write) =>
-      write.writeAwaitingLine(target, { ...line, text, attachments, mentioned }, dispatch),
+      write.writeAwaitingLine(target, { ...line, attachments, mentioned }, dispatch),
     ),
   );
   if (Result.isFailure(written))

@@ -1720,33 +1720,6 @@ export const AGENT_MESSAGE_TOOL = "message_agent";
 /** How a message another coding agent sent opens, in the line that hands it to the agent it was sent to. */
 export const AGENT_MESSAGE_LEAD = "Message";
 
-/**
- * How the line naming a teammate opens, which closes a message a member
- * other than a coding agent's starter sent it, in what the agent is handed
- * and in the row alike; it is the model's alone, so a person reads the
- * words without it (`teammateMessageWords`).
- */
-export const TEAMMATE_MESSAGE_LEAD = "Sent by";
-
-/** What a teammate's message's closing line says after their mention link. */
-const TEAMMATE_MESSAGE_TAIL = ", a teammate, not the developer.";
-
-/** A teammate's message's closing line, naming who sent it by their mention link. */
-export function teammateMessageLine(mention: string): string {
-  return `${TEAMMATE_MESSAGE_LEAD} ${mention}${TEAMMATE_MESSAGE_TAIL}`;
-}
-
-/** A teammate's message's closing line as `teammateMessageLine` writes it, whole, at the words' end. */
-const TEAMMATE_MESSAGE_CLOSE = new RegExp(
-  `(?:^|\\n\\n)${TEAMMATE_MESSAGE_LEAD} \\[@[^\\n]*\\]\\([^)\\s]+\\)${TEAMMATE_MESSAGE_TAIL.replaceAll(".", "\\.")}$`,
-  "u",
-);
-
-/** A member's message as a person reads it: its words without the closing line naming a teammate, which is the model's alone; any other text as it is. */
-export function teammateMessageWords(text: string): string {
-  return text.replace(TEAMMATE_MESSAGE_CLOSE, "");
-}
-
 /** A message's closing line telling the agent how to answer the agent that sent it, by that agent's id. */
 export function agentMessageReplyLine(agentId: string): string {
   return `Reply with ${AGENT_MESSAGE_TOOL}({ agentId: "${agentId}", text }).`;
