@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  This Mac's login item: Luke's host daemon, run as the member at login,
+  whether or not the app is open, and started again after a crash. An exit
+  of 0, the daemon's answer to its machine being removed in Luke, leaves it
+  stopped until the next login. Registered and unregistered through
+  SMAppService by the app's luke-host command (HostLoginItem.swift), which
+  is also the program it runs, named relative to the app (BundleProgram).
+  No ProcessType, since a Background job's CPU and disk are throttled and
+  its agents' VMs are work the member asked for.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>dev.reviewstage.luke.host</string>
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/luke-host</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>luke-host</string>
+		<string>service</string>
+	</array>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>dev.reviewstage.luke</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+</dict>
+</plist>

@@ -1,11 +1,16 @@
 /**
- * main.ts -- the host daemon's process: `luke-host run` follows the box's local agents for as long as its service runs, `luke-host enroll` trades an install token for the box's device secret, and `luke-host version` prints the daemon's version.
+ * main.ts -- the host daemon's process: `luke-host run` follows the machine's local agents for as long as its service runs, `luke-host enroll` trades an install token for the machine's device secret, and `luke-host version` prints the daemon's version.
  *
  * Bundled into one file (`pnpm --filter @luke/host-daemon build`) that the
  * host's release carries at `lib/luke-host.mjs`, beside the runner's bundle
  * at `lib/agent-runner.mjs` (`host-platform.ts`), and runs on the release's
- * own Node, which every runner runs on too. Every command runs as the
- * `luke-host` user, whose home holds the daemon's state, `state/` under it.
+ * own Node. The same bundle runs on every OS, as `process.platform` says
+ * (`hostRuntime`). On Linux every command runs as the `luke-host` user,
+ * whose home holds the daemon's state, `state/` under it, and the box's
+ * systemd service runs `run`. On a Mac the release is a folder inside the
+ * desktop app (`Contents/Resources/luke-host`), every command runs as the
+ * member, whose app's own state folder is the daemon's, and the app's login
+ * item runs `run` (`apps/desktop/native/macos/HostLoginItem.swift`).
  *
  * `run` is the command the box's system service runs. A box
  * that never enrolled says so and reads its record again every
@@ -17,12 +22,13 @@
  * in a smolvm VM of its own (`hostPlatform`), on the image's own `gh`, with
  * `/dev/kvm` passed through where the box has it, through the `smolvm` the
  * install script put at a fixed path and named in the service's environment
- * (`LINUX_HOST`'s `smolvm`), never the one `PATH` happens to hold. Before it
- * follows anything it asks that `smolvm` for its `--version`
- * (`hostSmolvm`) and, where it is not the pinned release, says so and
- * exits `RUN_EXIT.SMOLVM_REFUSED`, which the service's
- * `RestartPreventExitStatus` leaves stopped, since a restart would only
- * repeat the refusal.
+ * (`LINUX_HOST`'s `smolvm`), never the one `PATH` happens to hold, or, on a
+ * Mac, the pinned release fetched and checked under its state
+ * (`DARWIN_HOST`'s). Before it follows anything on Linux it asks that
+ * `smolvm` for its `--version` (`hostSmolvm`) and, where it is not the
+ * pinned release, says so and exits `RUN_EXIT.SMOLVM_REFUSED`, which the
+ * service's `RestartPreventExitStatus` leaves stopped, since a restart would
+ * only repeat the refusal.
  *
  * `enroll` is run once as the box is set up: it reads the install token on stdin,
  * where `--token` gives none, prints the one line the script shows, and
@@ -41,14 +47,16 @@ import {
   NodeRuntime,
 } from "@effect/platform-node";
 import { HOST_ENROLL_OUTCOME } from "@luke/features";
+import { buildCarriesDeveloperIdSigning } from "@luke/host/app-identity";
 import {
   enrollHostDevice,
   type HostPlatformOptions,
+  type HostRuntime,
   hostArch,
   hostDaemon,
   hostPlatform,
+  hostRuntime,
   hostSmolvm,
-  LINUX_HOST,
   readHostDevice,
 } from "@luke/host/daemon";
 import { Environment, reporterLayer } from "@luke/host/effect";
@@ -58,9 +66,6 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 /** The daemon's version, which the release's build writes in; a development run is below every floor. */
 const VERSION = process.env.LUKE_HOST_VERSION ?? "0.0.0";
-
-/** The OS this bundle runs on, and what the daemon does differently there. */
-const HOST_OS = LINUX_HOST;
 
 /** The service a box enrolls with where its install script names none. */
 const DEFAULT_SERVICE_ORIGIN = "https://tryluke.dev";
@@ -85,9 +90,16 @@ const COMMAND = { RUN: "run", ENROLL: "enroll", VERSION: "version" } as const;
 /** The release's own folder: this bundle stands in its `lib/`. */
 const installFolder = path.resolve(path.dirname(process.argv[1] ?? "."), "..");
 
-/** The `luke-host` user's home, which systemd hands its service, and the daemon's state under it. */
-const home = process.env.HOME ?? os.homedir();
-const stateRoot = path.join(home, "state");
+/**
+ * The OS this bundle runs on, what the daemon does differently there, and
+ * where its state lives, under the home its service hands it: the
+ * `luke-host` user's from systemd, the member's from launchd.
+ */
+const runtime = hostRuntime({
+  platform: process.platform,
+  home: process.env.HOME ?? os.homedir(),
+  app: { developerIdSigned: buildCarriesDeveloperIdSigning() },
+});
 
 const nodeServices = Layer.mergeAll(
   NodeChildProcessSpawner.layer.pipe(
@@ -98,19 +110,21 @@ const nodeServices = Layer.mergeAll(
   Layer.succeed(Environment, ConfigProvider.fromEnv()),
 );
 
-/** The box's architecture, or a failure naming it where no release is built for it. */
-const arch = Effect.suspend(() => {
-  const read = hostArch(HOST_OS, process.arch);
-  return read === undefined
-    ? Effect.fail(
-        `Luke host runs on ${HOST_OS.arches.join(" and ")} ${HOST_OS.name}, not ${process.arch}.`,
-      )
-    : Effect.succeed(read);
-});
+/** The machine's architecture, or a failure naming it where no release for its OS is built for it. */
+const arch = ({ os: hostOs }: HostRuntime) =>
+  Effect.suspend(() => {
+    const read = hostArch(hostOs, process.arch);
+    return read === undefined
+      ? Effect.fail(
+          `Luke host runs on ${hostOs.arches.join(" and ")} ${hostOs.name}, not ${process.arch}.`,
+        )
+      : Effect.succeed(read);
+  });
 
 /** The daemon on the box's record, or a rest until there is one, its agents' VMs run by the `smolvm` given; it ends once Luke refuses the box's secret. */
-const follow = (smolvm: HostPlatformOptions["smolvm"]) =>
+const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
   Effect.gen(function* () {
+    const { stateRoot } = runtime;
     const device = yield* readHostDevice(stateRoot);
     if (Option.isNone(device)) {
       reportToStderr(
@@ -119,14 +133,14 @@ const follow = (smolvm: HostPlatformOptions["smolvm"]) =>
       yield* Effect.sleep(UNENROLLED_REST);
       return false;
     }
-    const boxArch = yield* arch;
+    const boxArch = yield* arch(runtime);
     const platform = hostPlatform({
-      os: HOST_OS,
+      os: runtime.os,
       installFolder,
       arch: boxArch,
       stateRoot,
       smolvm,
-      // Note that every command in an agent's VM runs as luke-host, which owns the agent's folder it mounts.
+      // Note that every command in an agent's VM runs as the daemon's user, luke-host or the member, which owns the agent's folder it mounts.
       user: { uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0 },
     });
     reportToStderr(
@@ -139,32 +153,35 @@ const follow = (smolvm: HostPlatformOptions["smolvm"]) =>
     return true;
   }).pipe(Effect.repeat({ until: (removed) => removed }));
 
-/** `luke-host run`: the daemon, once the box's `smolvm` is the pinned release; the exit code it ends with otherwise. */
-const run = Effect.gen(function* () {
-  const smolvm = yield* hostSmolvm(HOST_OS.smolvm, process.env);
-  if (Result.isFailure(smolvm)) {
-    reportToStderr(smolvm.failure);
-    return RUN_EXIT.SMOLVM_REFUSED;
-  }
-  yield* follow(smolvm.success);
-  return 0;
-});
+/** `luke-host run`: the daemon, once the machine's `smolvm` is the pinned release; the exit code it ends with otherwise. */
+const run = (runtime: HostRuntime) =>
+  Effect.gen(function* () {
+    const smolvm = yield* hostSmolvm(runtime.os.smolvm, process.env);
+    if (Result.isFailure(smolvm)) {
+      reportToStderr(smolvm.failure);
+      return RUN_EXIT.SMOLVM_REFUSED;
+    }
+    yield* follow(runtime, smolvm.success);
+    return 0;
+  });
 
 /** `luke-host enroll`: the install token traded for the box's secret, and the one line the install script shows. */
-const enroll = (token: string, name: string, origin: string) =>
+const enroll = (runtime: HostRuntime, token: string, name: string, origin: string) =>
   Effect.gen(function* () {
     const outcome = yield* enrollHostDevice({
-      stateRoot,
+      stateRoot: runtime.stateRoot,
       serviceOrigin: origin.replace(/\/+$/u, ""),
       installToken: token,
       name,
-      platform: HOST_OS.platform,
-      arch: yield* arch,
+      platform: runtime.os.platform,
+      arch: yield* arch(runtime),
       version: VERSION,
     });
     switch (outcome.outcome) {
       case HOST_ENROLL_OUTCOME.ENROLLED:
-        process.stdout.write(`Enrolled as ${name} (secret kept readable by luke-host only)\n`);
+        process.stdout.write(
+          `Enrolled as ${name} (secret kept readable by ${os.userInfo().username} only)\n`,
+        );
         return ENROLL_EXIT.ENROLLED;
       case HOST_ENROLL_OUTCOME.STILL_ENROLLED:
         process.stdout.write(`Kept this box's enrollment as ${name}: it is still enrolled\n`);
@@ -194,7 +211,12 @@ function main(argv: readonly string[]): Effect.Effect<number, unknown, HostServi
   if (command === COMMAND.VERSION) {
     return Effect.sync(() => process.stdout.write(`${VERSION}\n`)).pipe(Effect.as(0));
   }
-  if (command === COMMAND.RUN) return run;
+  if (runtime === undefined) {
+    return Effect.sync(() =>
+      process.stderr.write(`Luke host runs on Linux and macOS, not ${process.platform}.\n`),
+    ).pipe(Effect.as(1));
+  }
+  if (command === COMMAND.RUN) return run(runtime);
   if (command === COMMAND.ENROLL) {
     const { values } = parseArgs({
       args: [...rest],
@@ -212,8 +234,9 @@ function main(argv: readonly string[]): Effect.Effect<number, unknown, HostServi
       ).pipe(Effect.as(ENROLL_EXIT.USAGE));
     }
     return enroll(
+      runtime,
       token,
-      values.name ?? HOST_OS.deviceName(),
+      values.name ?? runtime.os.deviceName(),
       values.origin ?? DEFAULT_SERVICE_ORIGIN,
     );
   }

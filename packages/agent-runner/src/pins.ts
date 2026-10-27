@@ -203,6 +203,23 @@ export const NODE_LINUX_PINS: LinuxToolPins = {
 };
 
 /**
+ * The Node a Mac's `luke-host` runs on, the same release as a Linux host's,
+ * which the desktop app carries inside its bundle, signed with it
+ * (`apps/host/scripts/package.ts --os darwin`), since the app's own
+ * Electron may not run as Node.
+ */
+export const NODE_MAC_PIN: AgentToolPin = {
+  NAME: "node",
+  VERSION: NODE_VERSION,
+  ARCHIVE: `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-darwin-arm64.tar.gz`,
+  SHA256: "89c682593d76cd44233fa53b1563264e7de9cbb189cad169135c5b4fadfbc0a7",
+  BYTES: 53_062_778,
+  ROOT: `node-v${NODE_VERSION}-darwin-arm64`,
+  MEMBERS: ["bin/node"],
+  BINARY: "bin/node",
+};
+
+/**
  * smolvm on a host (`apps/host`), which runs every agent in a VM of its own: the
  * release the install script fetches and checks, by the SHA-256 of each
  * architecture's tarball as smolvm's own release lists them

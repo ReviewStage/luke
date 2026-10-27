@@ -3,6 +3,6 @@
  */
 export { hostDaemon } from "./host-daemon.js";
 export { enrollHostDevice, readHostDevice } from "./host-device.js";
-export { DARWIN_HOST, hostArch, LINUX_HOST } from "./host-os.js";
+export { DARWIN_HOST, type HostRuntime, hostArch, hostRuntime, LINUX_HOST } from "./host-os.js";
 export { type HostPlatformOptions, hostPlatform } from "./host-platform.js";
 export { hostSmolvm } from "./host-smolvm.js";

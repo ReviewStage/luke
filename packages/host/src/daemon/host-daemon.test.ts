@@ -1,5 +1,6 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { SMOLVM_MAC_PIN } from "@luke/agent-runner/pins";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
@@ -12,7 +13,7 @@ import { Environment, reporterLayer } from "../effect/seams.js";
 import { scriptedSpawner } from "../testing/scripted-spawner.js";
 import { hostDaemon } from "./host-daemon.js";
 import { enrollHostDevice, readHostDevice } from "./host-device.js";
-import { DARWIN_HOST, type HostOs, LINUX_HOST } from "./host-os.js";
+import { DARWIN_HOST, type HostOs, hostRuntime, LINUX_HOST } from "./host-os.js";
 import { hostPlatform } from "./host-platform.js";
 
 const SERVICE = "https://luke.test";
@@ -288,5 +289,32 @@ describe("a host's daemon", () => {
           `Luke host: upgrade needed: Luke no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sudo sh`,
         ]);
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+  );
+});
+
+describe("hostRuntime", () => {
+  it.each([
+    {
+      platform: "darwin",
+      home: "/Users/ada",
+      os: DARWIN_HOST,
+      stateRoot: "/Users/ada/Library/Application Support/Luke",
+      smolvm: { kind: "pin", pin: SMOLVM_MAC_PIN },
+    },
+    {
+      platform: "linux",
+      home: "/var/lib/luke-host",
+      os: LINUX_HOST,
+      stateRoot: "/var/lib/luke-host/state",
+      smolvm: { kind: "path", variable: "LUKE_HOST_SMOLVM" },
+    },
+  ])(
+    "runs $platform as its own OS, with its state where its app or service keeps it and its smolvm from where that OS takes it",
+    ({ platform, home, os, stateRoot, smolvm }) => {
+      const runtime = hostRuntime({ platform, home, app: { developerIdSigned: true } });
+      expect(runtime?.os).toBe(os);
+      expect(runtime?.stateRoot).toBe(stateRoot);
+      expect(runtime?.os.smolvm).toEqual(smolvm);
+    },
   );
 });
