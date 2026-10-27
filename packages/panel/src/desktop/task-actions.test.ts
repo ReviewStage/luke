@@ -516,25 +516,28 @@ test("a sidebar task's press says its status after its name, as a List row's doe
   assert.equal(said(OTHER), "Billing export");
 });
 
-test("a sidebar plan whose repository belongs to another of the account's workspaces wears the attention mark before its time, its card naming that workspace, until it is moved there", () => {
+test("a sidebar plan whose repository belongs to another of the account's workspaces says so before its time, in no mark a question waiting on the reader wears, its card naming that workspace, until it is moved there", () => {
   const { asked } = openTab();
   const tasks = tasksControl({ me: DEAN.userId, workspaces: [PERSONAL, STAGE] });
   const container = mount(sidebarTask(tasks, STRANDED, asked));
-  const mark = () => container.querySelector(".sidebar-task-time .attention-mark");
+  const says = () => /\(repository belongs to Stage\)/u.test(heard(container));
   const card = mount(taskCardOf(tasks, STRANDED, STRANDED.updatedAt));
 
-  assert.notEqual(mark(), null, "the row wears the attention mark");
-  assert.match(heard(container), /\(repository belongs to Stage\)/u);
+  assert.ok(says(), "the row says where its repository belongs");
+  assert.ok(
+    container.querySelector(".attention-mark") === null,
+    "the row wears no attention mark, which is a question waiting on the reader's",
+  );
   assert.deepEqual(
     [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(heard),
     ["acme-corp/relay", "Repository belongs to Stage"],
   );
 
   act(() => roots[0]?.render(sidebarTask(tasks, { ...STRANDED, workspaceId: STAGE.id }, asked)));
-  assert.equal(mark(), null, "moved to Stage, the row wears it no longer");
+  assert.ok(!says(), "moved to Stage, the row says it no longer");
 });
 
-test("no sidebar plan wears the attention mark where its own workspace reaches its repository, no other workspace does, or a teammate owns it", () => {
+test("no sidebar plan says its repository belongs elsewhere where its own workspace reaches its repository, no other workspace does, or a teammate owns it", () => {
   const { asked } = openTab();
   const reaching = { ...PERSONAL, github: { login: "acme-corp", active: true } };
   const cases: [TaskSummary, readonly Workspace[]][] = [
@@ -547,8 +550,8 @@ test("no sidebar plan wears the attention mark where its own workspace reaches i
     const row = mount(sidebarTask(tasks, task, asked));
     const card = mount(taskCardOf(tasks, task, task.updatedAt));
     const found = [
-      row.querySelector(".attention-mark") !== null,
-      card.querySelector(".attention-mark") !== null,
+      /repository belongs to/u.test(heard(row)),
+      /Repository belongs to/u.test(heard(card)),
     ];
     unmountAll();
     return found;

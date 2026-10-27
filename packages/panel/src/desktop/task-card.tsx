@@ -44,6 +44,7 @@ import { useTaskWork } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { WorkspaceRef } from "./workspace-ref.js";
+import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
 
 /**
  * task-card.tsx -- a sidebar task's agents at a glance: the one icon at its row's end, and the card its row hangs while the pointer rests on it.
@@ -93,10 +94,12 @@ export const TASK_MARK_GLYPH =
   "task-mark-glyph inline-block size-luke-12 flex-none text-muted-foreground";
 
 /**
- * The one icon at a task row's end, before its time: the attention mark on
- * a task whose repository belongs to another of the account's workspaces,
- * which its card names (`strandedHome`); else how its agents stand
- * (`TaskAgentsMark`).
+ * The one icon at a task row's end, before its time: on a task whose
+ * repository belongs to another of the account's workspaces, that
+ * workspace's tile, which its card names (`strandedHome`); else how its
+ * agents stand (`TaskAgentsMark`). Note that it is the workspace's own
+ * square and never the attention mark, because the orange disc is the one
+ * mark a row wears for a question waiting on the reader.
  */
 export function TaskRowStatus({
   task,
@@ -108,8 +111,8 @@ export function TaskRowStatus({
 }): React.JSX.Element | null {
   if (stranded === undefined) return <TaskAgentsMark agents={task.agents} />;
   return (
-    <span className="task-mark-attention mr-tight-gap [&_.attention-mark]:size-luke-12 [&_.attention-mark_svg]:size-attention-glyph-small">
-      <AttentionMark />
+    <span className="task-mark-stranded mr-tight-gap inline-flex">
+      <WorkspaceTile workspace={stranded} size={TILE_SIZE.INLINE} />
       <VisuallyHidden>{`(repository belongs to ${stranded.name})`}</VisuallyHidden>
     </span>
   );
