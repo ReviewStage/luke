@@ -1,3 +1,4 @@
+import childProcess from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { SMOLVM_MAC_PIN } from "@luke/agent-runner/pins";
@@ -48,10 +49,36 @@ function runnerPackage(): string {
   return path.resolve(app.getAppPath(), "..", "..", "packages", "agent-runner");
 }
 
-/** The Mac's name as Start offers it: its host name without the `.local` Bonjour adds. */
+/** How long the Mac's Computer Name is waited for, which `scutil` reads from the system's own configuration at once. */
+const COMPUTER_NAME_TIMEOUT_MS = 2_000;
+
+/** The Mac's Computer Name, as System Settings › General › About and Sharing say it; none where `scutil` answers nothing. */
+function computerName(): string {
+  try {
+    return childProcess
+      .execFileSync("/usr/sbin/scutil", ["--get", "ComputerName"], {
+        encoding: "utf8",
+        timeout: COMPUTER_NAME_TIMEOUT_MS,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+      .trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The Mac's name as Runs on and the agent's tab say it: its Computer Name,
+ * else its host name without the `.local` Bonjour adds, else "This Mac".
+ * Note that the Computer Name comes first, because the host name is often
+ * one the network or Bonjour generated ("Mac-1898.lan") that the member
+ * never chose.
+ */
 function deviceName(): string {
-  const name = os.hostname().replace(/\.local$/u, "");
-  return name.length > 0 ? name : "This Mac";
+  const chosen = computerName();
+  if (chosen.length > 0) return chosen;
+  const host = os.hostname().replace(/\.local$/u, "");
+  return host.length > 0 ? host : "This Mac";
 }
 
 export interface LocalAgentPlatformOptions {
