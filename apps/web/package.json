@@ -61,8 +61,6 @@
     "@orpc/contract": "catalog:",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
-    "@sentry/esbuild-plugin": "5.4.0",
-    "@sentry/vite-plugin": "5.4.0",
     "@types/mdast": "4.0.4",
     "@types/node": "catalog:",
     "@types/pg": "8.21.0",

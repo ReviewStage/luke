@@ -1,9 +1,7 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { RUNNER_BUNDLE_FILE } from "@luke/service/agents/coder-host/runner-bundle";
-import { sourceMapUploadToken } from "@luke/service/observability/source-maps";
-import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
-import { type BuildOptions, build } from "esbuild";
+import { build } from "esbuild";
 import {
   BUILD_OUTPUT_DIRECTORY,
   emitBuildOutput,
@@ -66,42 +64,6 @@ const AGENT_RUNNER = {
 /** Where `vite build` and `prerender.ts` leave the site, copied whole under the output's `static/`. */
 const SITE_DIRECTORY = "dist";
 
-/**
- * The bundles' source maps, uploaded to Sentry's `luke-web` project as its
- * esbuild guide sets it up, so a function's stack trace reads as the source.
- * The maps are written beside the bundles, uploaded, and deleted before the output is
- * emitted, so none ships in a function. Only a production build that holds
- * `SENTRY_AUTH_TOKEN` uploads; any other, a Preview's included, bundles as
- * before, since a Preview's traces are rarely read and the maps cost its build. The plugin names
- * the release from the deployment's commit and writes it into each bundle,
- * which is the release the SDK then reports under. A refused release or
- * upload is only logged, the plugin's default with no `errorHandler`, so
- * Sentry being down never fails the build; the maps are deleted after it
- * either way. A failed deletion still throws, so no map can ship.
- */
-function withSentrySourceMaps(options: BuildOptions): BuildOptions {
-  const authToken = sourceMapUploadToken(process.env);
-  if (!authToken) return options;
-  return {
-    ...options,
-    // Sentry's guide asks for "hidden" maps; esbuild spells that `external`,
-    // a map written beside the bundle and named by no comment in it.
-    sourcemap: "external",
-    plugins: [
-      ...(options.plugins ?? []),
-      // Sentry's plugin goes after all others.
-      sentryEsbuildPlugin({
-        org: "stage-review",
-        project: "luke-web",
-        authToken,
-        sourcemaps: {
-          filesToDeleteAfterUpload: [join(WEB, FUNCTION_BUNDLE_DIRECTORY, "**/*.map")],
-        },
-      }),
-    ],
-  };
-}
-
 const runnerBundle = await readFile(AGENT_RUNNER.BUNDLE).catch(() => {
   throw new Error(
     `${relative(WEB, AGENT_RUNNER.BUNDLE)} is missing: run \`pnpm --filter @luke/agent-runner build\` first`,
@@ -111,7 +73,7 @@ const runnerBundle = await readFile(AGENT_RUNNER.BUNDLE).catch(() => {
 const task = await functionBundlePlan(WEB);
 // Emptied first, so a bundle an earlier plan emitted can never sit beside the shipping ones and be read as one of them.
 await rm(join(WEB, FUNCTION_BUNDLE_DIRECTORY), { recursive: true, force: true });
-const result = await build({ ...withSentrySourceMaps(task.options), metafile: true, write: true });
+const result = await build({ ...task.options, metafile: true, write: true });
 
 const undeclared = undeclaredImports(result.metafile, WEB, task.externalPackages);
 if (undeclared.length > 0) {

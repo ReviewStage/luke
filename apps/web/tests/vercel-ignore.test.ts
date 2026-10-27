@@ -180,7 +180,6 @@ test("a push that changes anything a service installs or builds from is built", 
     "CHANGELOG.md",
     "PRIVACY.md",
     "vercel.json",
-    "scripts/eve-source-maps.sh",
     "scripts/vercel-deployed-paths.mjs",
   ]) {
     const root = await repository(t);

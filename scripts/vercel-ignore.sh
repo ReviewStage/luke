@@ -22,10 +22,9 @@
 # installs, and leaves out what no build reads in them (documents, tests,
 # their fixtures and goldens). Beside those it holds the dependency patches,
 # the install's own files, the shared compiler options, the documents the web
-# app prerenders, `vercel.json`, these two scripts, and the eve services'
-# source-map step (`eve-source-maps.sh`). `scripts/preview-address.sh` reads
-# the same list, so a skipped commit is known to serve what its nearest built
-# ancestor serves.
+# app prerenders, `vercel.json`, and these two scripts.
+# `scripts/preview-address.sh` reads the same list, so a skipped commit is
+# known to serve what its nearest built ancestor serves.
 #
 # Note that since the project's Root Directory became the repository root
 # (#2876), Vercel's own "not affected" skip sees every push as affecting it,
@@ -78,7 +77,6 @@ ROOT_PATHS=(
     :/vercel.json
     :/scripts/vercel-ignore.sh
     :/scripts/vercel-deployed-paths.mjs
-    :/scripts/eve-source-maps.sh
 )
 
 # Fills `DEPLOYED_PATHS` with the deployed tree, or fails where the

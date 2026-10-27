@@ -370,9 +370,6 @@ importers:
         specifier: 'catalog:'
         version: 8.21.3
     devDependencies:
-      '@sentry/cli':
-        specifier: 2.58.6
-        version: 2.58.6
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -528,12 +525,6 @@ importers:
       '@orpc/server':
         specifier: 'catalog:'
         version: 2.0.0-beta.44(crossws@0.4.12)
-      '@sentry/esbuild-plugin':
-        specifier: 5.4.0
-        version: 5.4.0(rollup@4.62.4)
-      '@sentry/vite-plugin':
-        specifier: 5.4.0
-        version: 5.4.0(rollup@4.62.4)
       '@types/mdast':
         specifier: 4.0.4
         version: 4.0.4
@@ -4415,10 +4406,6 @@ packages:
   '@sentry/server-utils@11.8.0':
     resolution: {integrity: sha512-2MRFz1rXxnuDGafl6o/itwKHZeZn5hUZYeXNbQK012uO/a2pXhEc8Zh3FeO5L4tjGrIWHx419saAFnKwbVC2IQ==}
     engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
-
-  '@sentry/vite-plugin@5.4.0':
-    resolution: {integrity: sha512-fFJgCxs5hDyAm9BbZJ+LbA+LK2tjX5OoD0v0ARU4StR6KQmGUduoPs69yJ9AfqZ0om3Rlp5JDliiwFcNkasORA==}
-    engines: {node: '>= 18'}
 
   '@shikijs/core@4.5.0':
     resolution: {integrity: sha512-6CIgwq+bt2JZ3OSjb/nBkkwEf/CfpHcbam+Mg5Pllco7HAGRQ2/EFhZrrJtbyNTgKwknfVS+llsXGygiDGwJWw==}
@@ -11143,15 +11130,6 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@sentry/conventions': 0.27.0
       '@sentry/core': 11.8.0
-
-  '@sentry/vite-plugin@5.4.0(rollup@4.62.4)':
-    dependencies:
-      '@sentry/bundler-plugins': 10.73.0(rollup@4.62.4)
-    transitivePeerDependencies:
-      - encoding
-      - rollup
-      - supports-color
-      - webpack
 
   '@shikijs/core@4.5.0':
     dependencies:

@@ -808,16 +808,13 @@ root `AGENTS.md`'s "Never" describe. Sentry's Vercel integration, which maps
 this Vercel project to the `luke-web` Sentry project, owns `SENTRY_DSN`,
 `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`; a variable of those
 names set by hand stops it from syncing. Without `SENTRY_DSN` the SDK starts
-disabled. `VERCEL_ENV` names the environment. `scripts/bundle-functions.ts`
-uploads the function bundles' source maps when a production build
-(`VERCEL_ENV=production`) holds `SENTRY_AUTH_TOKEN`; a Preview uploads none, under the release the plugin writes into each bundle from
-the deployment's commit. The eve roots' builds do the same after `eve build`:
-each root's `nitro.config.ts` has Nitro write hidden maps when a production
-build holds the token, and `scripts/eve-source-maps.sh` gives the bundles debug IDs,
-uploads the maps to `luke-web` under `VERCEL_GIT_COMMIT_SHA`, and deletes them
-from the output. Alert rules are set in Sentry, not here: a Slack
-`#alerts` message on more than ten events in five minutes, and an email to
-the issue's owners on a high-priority issue.
+disabled. `VERCEL_ENV` names the environment, and the SDK reads
+`VERCEL_GIT_COMMIT_SHA` as the release. No build writes or uploads source
+maps, so a stack trace in Sentry reads as the minified bundle: uploading the
+client's, the functions', and the eve root's maps cost every production build
+60 to 75 seconds, and was dropped for it on 2026-10-27. Alert rules are set in
+Sentry, not here: a Slack `#alerts` message on more than ten events in five
+minutes, and an email to the issue's owners on a high-priority issue.
 
 ## Hosted voice service
 
