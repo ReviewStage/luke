@@ -21,6 +21,7 @@ import {
   BackButton,
   Badge,
   Breadcrumbs,
+  BUTTON_SIZE,
   CARD_LOOK,
   CARD_PADDING,
   Card,
@@ -94,7 +95,7 @@ import {
   WithdrawnWords,
 } from "./inbox-ask-controls.js";
 import { askHeadWords } from "./inbox-ask-words.js";
-import type { InboxCloser } from "./inbox-close.js";
+import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import type { InboxCodeDoors } from "./inbox-code-card.js";
 import { INBOX_VIEW_ITEMS } from "./inbox-columns.js";
 import { COMMENT, INBOX_THREAD, InboxComment } from "./inbox-comment.js";
@@ -934,6 +935,39 @@ function InboxItemMenu({
 }
 
 /**
+ * The open question's ×, at its card's top end: Resolve without answering,
+ * asked first, as the item's ⋯ offers it (`inbox-close.tsx`). It is keyed by
+ * its item where it is drawn, so a question asked on one item never closes
+ * the next.
+ */
+function QuestionClose({
+  item,
+  closer,
+  shown,
+}: {
+  item: InboxItem;
+  closer: InboxCloser | undefined;
+  shown: boolean;
+}): React.JSX.Element {
+  const close = useInboxClose(item, closer, shown);
+  return (
+    <>
+      {close.action === undefined ? null : (
+        <Tooltip label={close.action.label}>
+          <IconButton
+            icon={close.action.icon}
+            label={close.action.label}
+            size={BUTTON_SIZE.COMPACT}
+            onClick={close.action.onSelect}
+          />
+        </Tooltip>
+      )}
+      {close.dialog}
+    </>
+  );
+}
+
+/**
  * The thread's subject, as a plan or a pull request leads with one: the
  * item's title alone, the thread under it.
  */
@@ -1235,7 +1269,10 @@ export function InboxPane({
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
   const question =
     openAsk === undefined || wordsAlone ? undefined : (
-      <DraftQuestion pane={pane}>
+      <DraftQuestion
+        pane={pane}
+        close={<QuestionClose key={item.id} item={item} closer={doors.onClose} shown={!hidden} />}
+      >
         <AskControls
           ask={openAsk}
           title={cardTitle(item.title)}

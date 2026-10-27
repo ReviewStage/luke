@@ -1266,7 +1266,7 @@ async function confirmClose(): Promise<void> {
   await settle();
 }
 
-test("an open item's ⋯ menu in the pane's bar offers Mark as read or unread, Copy link, and Resolve without answering, which asks first and then settles it at the revision drawn, its ask saying who resolved it; a settled item's menu offers Copy link alone", async () => {
+test("an open item's ⋯ menu in the pane's bar, and the × on its question's card, offer Resolve without answering, the menu beside Mark as read or unread and Copy link, which asks first and then settles it at the revision drawn, its ask saying who resolved it; a settled item's menu offers Copy link alone", async () => {
   listedWorkspace = ACME;
   const { page } = mount();
   await settle();
@@ -1287,6 +1287,17 @@ test("an open item's ⋯ menu in the pane's bar offers Mark as read or unread, C
   act(() => menuItem("Mark as unread").click());
   await settle();
   assert.ok(readMarks.includes(`unread:${THRESHOLD.id}`), "the menu marks the item unread");
+  const questionClose =
+    itemPane(page).querySelector<HTMLButtonElement>(
+      '[data-inbox-draft-ask] button[aria-label="Resolve without answering"]',
+    ) ?? assert.fail("the open question's card offers its ×");
+  act(() => questionClose.click());
+  await settle();
+  assert.ok(document.querySelector('[role="alertdialog"]'), "the × asks first");
+  act(() =>
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
+  await settle();
   act(() => ellipsis().click());
   act(() => menuItem("Resolve without answering").click());
   await settle();
@@ -7578,7 +7589,9 @@ test("a form's fields attach to the reply as they are filled, with no Submit, an
   const pane = await mountThread(shown);
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000013"));
   assert.deepEqual(
-    [...pane.querySelectorAll("[data-inbox-draft-ask] button")].map((button) => button.textContent),
+    [...pane.querySelectorAll("[data-inbox-draft-ask] .inbox-ask-fields button")].map(
+      (button) => button.textContent,
+    ),
     ["Low", "High"],
     "the draft's box holds the ask's fields and no Submit",
   );

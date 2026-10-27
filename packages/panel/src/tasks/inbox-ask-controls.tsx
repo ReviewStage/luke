@@ -762,23 +762,33 @@ export function hasControls(ask: InboxAsk): boolean {
  * The open question's controls as the draft reply's card's body, over its
  * foot, with no card, border, or head of their own, since the agent's
  * message says what it asks: an Enter on an option or in a field sends the
- * card, a form of several fields too.
+ * card, a form of several fields too. Its × at the top end, where the item
+ * can be closed, resolves it without answering, asked first
+ * (`inbox-close.tsx`); its Enter presses the × rather than sending.
  */
 export function DraftQuestion({
   pane,
+  close,
   children,
 }: {
   pane: React.RefObject<HTMLElement | null>;
+  /** The × that resolves the item without answering; none where it cannot be closed. */
+  close?: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the card.
     <div
-      className="inbox-draft-ask flex min-w-0 flex-col gap-block-gap px-list-inset pt-list-inset pb-tight-gap"
+      className="inbox-draft-ask flex min-w-0 items-start gap-tight-gap px-list-inset pt-list-inset pb-tight-gap"
       data-inbox-draft-ask=""
-      onKeyDown={(event) => onResponseKey(pane, event)}
     >
-      {children}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the card. */}
+      <div
+        className="flex min-w-0 flex-1 flex-col gap-block-gap"
+        onKeyDown={(event) => onResponseKey(pane, event)}
+      >
+        {children}
+      </div>
+      {close}
     </div>
   );
 }
