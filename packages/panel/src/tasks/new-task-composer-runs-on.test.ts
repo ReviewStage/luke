@@ -26,9 +26,9 @@ import { NewTaskComposer } from "./new-task-composer.js";
  * new-task-composer-runs-on.test.ts -- New task's Runs on, with local agents
  * on and two of the member's devices offered, one offline: the task starts on
  * the device picked, by its id, and the offline one cannot be picked, nor
- * one online but getting ready or not set up, which says so; and a
- * card that fell back to Cloud stays there when the device comes back, but
- * takes a device picked in another card. Note
+ * one online but getting ready or not set up, which says so; a last pick
+ * that is offline or getting ready as the card opens stays picked and says
+ * so, never Cloud; and a card takes a device picked in another card. Note
  * that it stands in a file of its own, because a window reads its document
  * once, and the gate reads the experiment off that document. Synthetic
  * throughout.
@@ -90,7 +90,7 @@ function devicesWith(studioSeenAt = Date.now(), builderSeenAt = 0): readonly Mac
   ];
 }
 
-/** The card in Acme offering what `offered` holds now, each start's Runs on written down; `redraw` draws it again over the devices offered then. */
+/** The card in Acme offering what `offered` holds, each start's Runs on written down. */
 async function mount(offered: { devices: readonly MacOffer[] } = { devices: devicesWith() }) {
   const control = tasksControl();
   const starts: (TaskRunsOnRequest | undefined)[] = [];
@@ -121,11 +121,7 @@ async function mount(offered: { devices: readonly MacOffer[] } = { devices: devi
     );
   act(draw);
   await settle();
-  const redraw = async () => {
-    act(draw);
-    await settle();
-  };
-  return { container, starts, redraw };
+  return { container, starts };
 }
 
 /** The menu's row naming `name`. */
@@ -185,19 +181,33 @@ test("a device online but still getting ready, or that couldn't set up, is liste
   );
 });
 
-test("a card that fell back to Cloud for an offline last pick stays on Cloud once that device comes back", async () => {
-  window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
-  const offered = { devices: devicesWith(0) };
-  const { container, starts, redraw } = await mount(offered);
-  offered.devices = devicesWith();
-  await redraw();
-  pressInComposer(container, "Enter", { metaKey: true });
-  await settle();
+test.each([
+  { standing: "offline", studio: { seenAt: 0 }, chip: "Runs on: Studio · Offline" },
+  {
+    standing: "getting ready",
+    studio: { setup: DEVICE_SETUP.PREPARING },
+    chip: "Runs on: Studio · Getting ready…",
+  },
+])(
+  "a last pick $standing as the card opens stays picked and says so, and the task starts on it, never in the cloud",
+  async ({ studio, chip: label }) => {
+    window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
+    const [online, builder] = devicesWith();
+    assert.ok(online !== undefined && builder !== undefined);
+    const { container, starts } = await mount({ devices: [{ ...online, ...studio }, builder] });
+    const chip =
+      container.querySelector<HTMLButtonElement>('button[aria-label^="Runs on"]') ??
+      assert.fail("the card draws Runs on");
 
-  assert.deepEqual(starts, [{ machine: CODING_AGENT_MACHINE.VERCEL }]);
-});
+    assert.equal(chip.getAttribute("aria-label"), label);
+    pressInComposer(container, "Enter", { metaKey: true });
+    await settle();
 
-test("a device picked in another card reaches a card that fell back to Cloud", async () => {
+    assert.deepEqual(starts, [{ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
+  },
+);
+
+test("a device picked in another card reaches this one", async () => {
   window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
   const offered = { devices: devicesWith(0, Date.now()) };
   const welcome = await mount(offered);

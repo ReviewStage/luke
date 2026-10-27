@@ -170,6 +170,8 @@ export const HOSTED_API_ERROR = {
   HOST_STILL_ENROLLED: "host-still-enrolled",
   /** The agent ran on a host its starter removed, so no message reaches it again; Continue starts a new agent elsewhere. Nothing was sent. */
   DEVICE_REMOVED: "device-removed",
+  /** A change named where a task runs, which is set when the task is created and never changed after; nothing was written. */
+  RUNS_ON_LOCKED: "runs-on-locked",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

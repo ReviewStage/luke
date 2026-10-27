@@ -9,7 +9,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Atom } from "effect/reactivity";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { askAct } from "../act.js";
 import { useExperiment } from "../use-app-state.js";
 
@@ -177,17 +177,20 @@ export function useLukeOperator(asking: {
   useEffect(() => {
     if (workspaceId !== undefined) claimEnsure(write, { accountId, workspaceId }, false);
   }, [accountId, workspaceId, write]);
-  if (workspaceId === undefined) return undefined;
-  const place = { accountId, workspaceId };
-  const read = readAt(reads, place);
-  return {
-    workspaceId,
-    agentId: read?.kind === OPERATOR_READ.ENSURED ? read.agentId : undefined,
-    failed: read?.kind === OPERATOR_READ.FAILED,
-    retry: () => claimEnsure(write, place, true),
-    reset: () => replaced(write, place, { reset: true }, RESET_REFUSED),
-    restore: (agentId) => replaced(write, place, { restore: agentId }, RESTORE_REFUSED),
-  };
+  const read = workspaceId === undefined ? undefined : readAt(reads, { accountId, workspaceId });
+  // Note that Luke is the same object until his read changes, so a surface may build on him once rather than on every render.
+  return useMemo((): LukeOperator | undefined => {
+    if (workspaceId === undefined) return undefined;
+    const place = { accountId, workspaceId };
+    return {
+      workspaceId,
+      agentId: read?.kind === OPERATOR_READ.ENSURED ? read.agentId : undefined,
+      failed: read?.kind === OPERATOR_READ.FAILED,
+      retry: () => claimEnsure(write, place, true),
+      reset: () => replaced(write, place, { reset: true }, RESET_REFUSED),
+      restore: (agentId) => replaced(write, place, { restore: agentId }, RESTORE_REFUSED),
+    };
+  }, [accountId, workspaceId, read, write]);
 }
 
 /** Whether an agent is the account's operator: by its kind, or, from a service before the summary said it, by the id its ensure answered. */

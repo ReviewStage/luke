@@ -205,11 +205,10 @@ const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchem
  * Where a task's coding agents run, as a request names it: the cloud, or one
  * of the asking member's own devices (a Mac's desktop app or a host) by its
  * id, which the service checks is theirs, beat lately, and runs some model
- * before it keeps it. It decides where every agent started on the task
- * afterwards runs (`startCodingAgent`'s resolver); an agent already started
- * keeps where it runs.
+ * before it keeps it. It decides where every agent started on the task runs
+ * (`startCodingAgent`'s resolver), and is set when the task is created.
  */
-export const taskRunsOnRequestSchema = EffectSchema.Union([
+const taskRunsOnRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({ machine: EffectSchema.Literal(CODING_AGENT_MACHINE.VERCEL) }),
   EffectSchema.Struct({
     machine: EffectSchema.Literal(CODING_AGENT_MACHINE.DEVICE),
@@ -348,8 +347,10 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
  * member of the task's workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
  * the task's repository, and lets its assignee go where they are no member there.
- * Where its agents run (`runsOn`) is checked as a start's is, against the
- * asking member's own devices, and moves only the agents started after it.
+ * Where its agents run (`runsOn`) is set when the task is created and never
+ * changed: the field is still read so a build that sends it decodes, a value
+ * equal to the one the task holds changes nothing, and any other is refused
+ * (`HOSTED_API_ERROR.RUNS_ON_LOCKED`).
  */
 export const taskUpdateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
@@ -366,8 +367,8 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
-/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), where its agents run, or any of them. */
-export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority" | "assigneeId" | "runsOn">;
+/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), or any of them. */
+export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority" | "assigneeId">;
 
 /**
  * A repository the account pinned in the sidebar, and the instant it was

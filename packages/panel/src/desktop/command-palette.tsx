@@ -104,6 +104,7 @@ import { ACTOR_KIND, type Actor, actorName, assigneeFace } from "@luke/ui/actor-
 import {
   COMMAND_FILTER,
   CommandDialog,
+  type CommandDialogProps,
   type CommandGroup,
   type CommandItem,
 } from "@luke/ui/command";
@@ -132,6 +133,7 @@ import {
   Fragment,
   isValidElement,
   type ReactNode,
+  useCallback,
   useDeferredValue,
   useEffect,
   useLayoutEffect,
@@ -722,11 +724,14 @@ function PaletteTaskCard({
 
 /**
  * A task's muted words: its repository, by its name alone as the Tasks
- * list's row says it, unless another listed task's repository shares the
- * name (`repositoryLabel`).
+ * list's row says it, unless another listed repository shares the name
+ * (`repositoryLabel`).
  */
-function taskDetail(task: TaskSummary, listed: readonly TaskSummary[]): string | undefined {
-  return task.repository === null ? undefined : repositoryLabel(task.repository, listed);
+function taskDetail(
+  task: TaskSummary,
+  repositories: readonly { readonly repository: string | null }[],
+): string | undefined {
+  return task.repository === null ? undefined : repositoryLabel(task.repository, repositories);
 }
 
 /**
@@ -754,6 +759,10 @@ function taskRows(
 ): readonly PaletteRow[] {
   const listedId = tasks.workspace?.id;
   const carded = { ...tasks, onShowAgent: showAgent };
+  // Note that a repository's name is weighed against each repository listed once, not against each task, since many tasks share one.
+  const repositories = [...new Set(tasks.tasks.map((task) => task.repository))].map(
+    (repository) => ({ repository }),
+  );
   // Note that only the listed workspace's members are read, so another workspace's assignee stands by the wire's name, never as having left.
   const listedMembers = (task: TaskSummary) =>
     task.workspaceId === listedId ? members : undefined;
@@ -784,7 +793,7 @@ function taskRows(
     // Note that a task Luke or an agent made says them in its detail, so it is found by them.
     const origin = originOf(task);
     const madeBy = origin === undefined ? null : actorName(origin);
-    const detail = taskDetail(task, tasks.tasks);
+    const detail = taskDetail(task, repositories);
     return {
       ...tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }),
       detail:
@@ -1724,6 +1733,64 @@ function PaletteFooter({ typed, runs }: { typed: boolean; runs: boolean }): Reac
 }
 
 /**
+ * ⌘K's dialog over the rows ranked, holding the row chosen, by its place in
+ * the list: the first each time ⌘K opens the palette and as a filter is
+ * chosen, then wherever the arrows or the pointer move it. Note that the row
+ * chosen is held here rather than by the palette, so moving it draws the
+ * dialog again and never ranks a row, which the palette does over every
+ * task, Inbox item, and setting it lists.
+ */
+function PaletteDialog({
+  opening,
+  filter,
+  groups,
+  query,
+  ...dialog
+}: {
+  /** How many times ⌘K has opened the palette, each time choosing the first row again. */
+  opening: number;
+  filter: PaletteFilter;
+  groups: readonly CommandGroup[];
+  query: string;
+} & Pick<
+  CommandDialogProps,
+  | "open"
+  | "onOpenChange"
+  | "placeholder"
+  | "onQueryChange"
+  | "empty"
+  | "band"
+  | "onKeyDown"
+  | "inputRef"
+>): React.JSX.Element {
+  const [selected, setSelected] = useState(FIRST_ROW);
+  // Note that a palette closing keeps its row chosen, since it fades out as it stood.
+  const [chosenUnder, setChosenUnder] = useState({ opening, filter });
+  if (chosenUnder.opening !== opening || chosenUnder.filter !== filter) {
+    setChosenUnder({ opening, filter });
+    setSelected(FIRST_ROW);
+  }
+  // Whether the row chosen is a command's, Ask Luke's among them, which Return runs rather than opens.
+  const runs = groups.some(
+    (group) =>
+      (group.id === PALETTE_FILTER.COMMANDS || group.id === ASK_LUKE_GROUP) &&
+      group.items.some((item) => item.id === selected),
+  );
+  return (
+    <CommandDialog
+      {...dialog}
+      label="Command palette"
+      groups={groups}
+      filter={COMMAND_FILTER.NONE}
+      query={query}
+      selected={selected}
+      onSelectedChange={setSelected}
+      foot={<PaletteFooter typed={query !== ""} runs={runs} />}
+    />
+  );
+}
+
+/**
  * The palette, offering ⌘K while `available`: past the sign-in, where there
  * is something to run. A palette standing when that ends is taken down in
  * the render that finds it gone. It opens on All with nothing typed.
@@ -1795,15 +1862,11 @@ export function CommandPalette({
   const labels = filterLabels(experiments);
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
+  // How many times ⌘K has opened the palette, each of which chooses its first row.
+  const [openings, setOpenings] = useState(0);
   const [query, setQuery] = useState("");
   // Each key pressed in the search field is timed to the paint after it, which its ranking of every row is among.
   const keystrokes = useKeystrokeSpans(PANEL_SPAN.KEYSTROKE_COMMAND_PALETTE);
-  // The row chosen, by its place in the list, which a new filter puts back on the first.
-  const [selected, setSelected] = useState(FIRST_ROW);
-  const changeFilter = (next: PaletteFilter) => {
-    setFilter(next);
-    setSelected(FIRST_ROW);
-  };
   const [files, setFiles] = useState<FilesHeld | undefined>(undefined);
   // The read of the files asked last, by its count: only its answer is kept.
   const filesAsk = useRef(0);
@@ -1821,7 +1884,8 @@ export function CommandPalette({
     available
       ? () => {
           setFromPanel(inSidePanel(document.activeElement));
-          changeFilter(PALETTE_FILTER.ALL);
+          setFilter(PALETTE_FILTER.ALL);
+          setOpenings((count) => count + 1);
           setQuery("");
           // The files are read afresh by the first search of each opening,
           // since the branch they are listed on moves, and a read still out
@@ -1849,17 +1913,20 @@ export function CommandPalette({
     run?.();
   }, [open]);
 
-  const choose = (run: () => void) => {
+  const choose = useCallback((run: () => void) => {
     chosen.current = run;
     setOpen(false);
-  };
+  }, []);
   // A task, and an agent's tab, are always opened on the Tasks tab, as a
   // press in the sidebar is.
-  const onTasks = (run: () => void) =>
-    choose(() => {
-      if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-      run();
-    });
+  const onTasks = useCallback(
+    (run: () => void) =>
+      choose(() => {
+        if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+        run();
+      }),
+    [choose, tab, onTabChange],
+  );
   // The seek for a setting's row gives itself up once another is asked
   // for or Settings is left, so it never lands on a later visit's page.
   const landing = useRef<(() => void) | undefined>(undefined);
@@ -1915,7 +1982,7 @@ export function CommandPalette({
     const step = arrowStep(event, query);
     if (step !== 0) {
       event.preventDefault();
-      changeFilter(steppedFilter(filters, filter, step));
+      setFilter(steppedFilter(filters, filter, step));
       return;
     }
     const pressed = commandForKey(
@@ -1927,7 +1994,7 @@ export function CommandPalette({
     // claims their chords for its filters while it stands.
     event.preventDefault();
     if (pressed === APP_COMMAND.COMMAND_PALETTE) setOpen(false);
-    else changeFilter(steppedFilter(filters, filter, pressed === APP_COMMAND.BACK ? -1 : 1));
+    else setFilter(steppedFilter(filters, filter, pressed === APP_COMMAND.BACK ? -1 : 1));
   };
 
   const tokens = searchTokens(sought);
@@ -1936,7 +2003,7 @@ export function CommandPalette({
     accountId: tasks.me,
     workspaceId: tasks.signedIn ? tasks.workspace?.id : undefined,
   });
-  const listedTasks = withoutLukeIn(tasks, operator);
+  const listedTasks = useMemo(() => withoutLukeIn(tasks, operator), [tasks, operator]);
   const askLuke = operator === undefined ? undefined : askLukeRow(operator, onTasks, choose, tasks);
   const askLukeShown =
     open &&
@@ -1947,6 +2014,25 @@ export function CommandPalette({
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const originOf = useTaskOrigin();
   const { members } = membersRead;
+  // Note that the tasks' rows are built once for what they say rather than on every render, and
+  // only while a filter that lists them stands open, because a key, an arrow, or the pointer
+  // moving ranks or lights them again but changes none of them, and an account may hold thousands.
+  const tasksShown =
+    open && tasks.signedIn && (filter === PALETTE_FILTER.ALL || filter === PALETTE_FILTER.TASKS);
+  const taskList = useMemo(
+    () =>
+      tasksShown
+        ? taskRows(
+            listedTasks,
+            members,
+            (id) => onTasks(() => tasks.onSelect(id)),
+            (id) => onTasks(() => tasks.agentView.onOpen(id)),
+            (taskId, agentId) => onTasks(() => tasks.onShowAgent(taskId, agentId)),
+            originOf,
+          )
+        : [],
+    [tasksShown, listedTasks, members, onTasks, tasks, originOf],
+  );
   const reads = useReadMarks();
   const renameOffer = useTaskRenameOffer();
   const agentReads = useAgentReadMarks();
@@ -2039,18 +2125,7 @@ export function CommandPalette({
   const byRow = (row: PaletteRow) => rowScore(row, sought);
   const runCommand = (command: AppCommand) => choose(() => runAppCommand(command));
   const tiersOf = {
-    [PALETTE_FILTER.TASKS]: () => [
-      tasks.signedIn
-        ? taskRows(
-            listedTasks,
-            members,
-            (id) => onTasks(() => tasks.onSelect(id)),
-            (id) => onTasks(() => tasks.agentView.onOpen(id)),
-            (taskId, agentId) => onTasks(() => tasks.onShowAgent(taskId, agentId)),
-            originOf,
-          )
-        : [],
-    ],
+    [PALETTE_FILTER.TASKS]: () => [taskList],
     [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
     [PALETTE_FILTER.INBOX]: () => [
       inboxAsked
@@ -2181,37 +2256,23 @@ export function CommandPalette({
   // The render a key paints the field in draws the ranking already standing, and only the
   // render the words sought catch up in ranks them, so no key waits on the ranking.
   if (open) stood.current = sought === query ? rank() : stood.current;
-  // Whether the row chosen is a command's, Ask Luke's among them, which Return runs rather than opens.
-  const runs = stood.current.some(
-    (group) =>
-      (group.id === PALETTE_FILTER.COMMANDS || group.id === ASK_LUKE_GROUP) &&
-      group.items.some((item) => item.id === selected),
-  );
 
   return (
     <>
-      <CommandDialog
+      <PaletteDialog
         open={open}
+        opening={openings}
         onOpenChange={setOpen}
-        label="Command palette"
         placeholder={filterPlaceholder(filter, labels)}
         groups={stood.current}
-        filter={COMMAND_FILTER.NONE}
+        filter={filter}
         query={query}
         onQueryChange={setQuery}
-        selected={selected}
-        onSelectedChange={setSelected}
         // Note that a listing cut short is said where nothing matches too, since what was sought may lie past the cut.
         empty={cut ? `${NOTHING_MATCHES}. ${TRUNCATED_LINE}` : NOTHING_MATCHES}
         band={
-          <PaletteFilters
-            filters={filters}
-            labels={labels}
-            filter={filter}
-            onFilter={changeFilter}
-          />
+          <PaletteFilters filters={filters} labels={labels} filter={filter} onFilter={setFilter} />
         }
-        foot={<PaletteFooter typed={query !== ""} runs={runs} />}
         onKeyDown={keyDown}
         inputRef={keystrokes}
       />
