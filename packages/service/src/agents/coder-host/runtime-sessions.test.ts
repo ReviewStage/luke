@@ -759,7 +759,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.equal(
             yield* steerCodingAgent(sessions, writer, teammate, onEve, {
               ...line,
-              clientKey: randomUUID(),
+              clientKey: "key-teammate",
             }),
             STEER_OUTCOME.SENT,
           );
@@ -772,12 +772,22 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             STEER_OUTCOME.SENT,
           );
           // The model reads a teammate's words as theirs, by a closing line linking them, and the starter's as they are.
-          const [fromTeammate, fromOwner] = eve.messages.map((sent) => sent.message);
-          assert.ok(typeof fromTeammate === "string");
-          assert.ok(fromTeammate.startsWith("Also the emails.\n\nSent by [@Test User]("));
-          assert.ok(fromTeammate.includes(teammate));
-          assert.ok(fromTeammate.endsWith(", a teammate, not the developer."));
-          assert.equal(fromOwner, "Also the emails.");
+          const [fromTeammate, fromOwner] = eve.messages;
+          const handed = fromTeammate?.message;
+          assert.ok(typeof handed === "string");
+          assert.ok(handed.startsWith("Also the emails.\n\nSent by [@Test User]("));
+          assert.ok(handed.includes(teammate));
+          assert.ok(handed.endsWith(", a teammate, not the developer."));
+          assert.equal(fromOwner?.message, "Also the emails.");
+          // The row keeps the words eve was handed, which its receipt is matched by and a fresh session is seeded from.
+          const [kept] = yield* (yield* Database)
+            .select({ parts: messages.parts })
+            .from(messages)
+            .where(eq(messages.clientId, sentLineId("key-teammate")));
+          assert.deepEqual(
+            kept?.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+            [handed],
+          );
 
           const payer = Option.getOrThrow(
             yield* readCodingAgentRouting(owner, onClaudeCode.id),

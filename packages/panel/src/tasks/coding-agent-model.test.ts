@@ -229,6 +229,12 @@ test("the line an agent was started on stands until the transcript reads back th
   assert.equal(unreadOpeningLine(undefined, []), undefined);
 });
 
+test("a teammate's line reads without the closing line that names them to the agent", () => {
+  const named =
+    "Also the emails.\n\nSent by [@Dean](https://tryluke.dev/acme/person/user-1), a teammate, not the developer.";
+  assert.equal(messageWords(developer("m-1", named)), "Also the emails.");
+});
+
 test("a line refused for now is let go once its row lands, and one refused for good stands", () => {
   const unsent = { ...sentUnder("key-1", "Stop."), state: SENT_LINE_STATE.FAILED };
   const undelivered = { ...sentUnder("key-2", "Wait."), state: SENT_LINE_STATE.UNDELIVERED };

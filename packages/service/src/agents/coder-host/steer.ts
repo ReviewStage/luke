@@ -98,8 +98,10 @@ import { codingAgentStatusOf } from "./status.js";
  * alone, for an agent on its starter's own GitHub token), while the line
  * lands in the agent's conversation under the member who started it,
  * naming what sent it: the member, Luke from a call, or an automation's run.
- * A member other than the starter is named to eve too, by a closing line
- * the row leaves out, so the model reads a teammate's words as theirs.
+ * A member other than the starter is named in the words too, by a closing
+ * line the row keeps, as another agent's message keeps its head, so eve's
+ * receipt matches the row, a fresh session's seed names them, and the model
+ * reads a teammate's words as theirs; the panel draws the words without it.
  * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
@@ -219,7 +221,7 @@ const teammateMention = (agent: CodingAgent, sender: LineSender) => {
   );
 };
 
-/** The words as eve is handed them: a teammate's closed on the line naming who sent them, any other as they are. */
+/** The words as eve is handed them and the row keeps them: a teammate's closed on the line naming who sent them, any other as they are. */
 function wordsHanded(text: string, teammate: string | undefined): string {
   if (teammate === undefined) return text;
   return [text, teammateMessageLine(teammate)].filter((part) => part.trim() !== "").join("\n\n");
@@ -424,7 +426,8 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   const reads = yield* Effect.fromResult(reached.reads);
   const mentioned = reviewers ? undefined : mentionedContext(pointed, task, reads);
   const running = yield* Effect.fromResult(read.running);
-  const teammate = yield* Effect.fromResult(read.teammate);
+  // Note that the line naming a teammate is added after their words' mentions were read, so it mentions nothing of its own.
+  const text = wordsHanded(line.text, yield* Effect.fromResult(read.teammate));
   // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the
   // row names it; a repeat under the key was answered above, and the same bytes again keep nothing twice.
   const attachments = yield* hostedStoreOrUnavailable(
@@ -437,7 +440,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   const message = {
     conversationId: agent.conversationId,
     turn: BRAIN_HOST_TURN.TYPED,
-    message: eveContent(wordsHanded(line.text, teammate), attachments, mentioned),
+    message: eveContent(text, attachments, mentioned),
     // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
     lineId: sentLineId(line.clientKey),
   };
@@ -506,7 +509,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   );
   const written = yield* hostedStoreOrUnavailable(
     Effect.flatMap(writer, (write) =>
-      write.writeAwaitingLine(target, { ...line, attachments, mentioned }, dispatch),
+      write.writeAwaitingLine(target, { ...line, text, attachments, mentioned }, dispatch),
     ),
   );
   if (Result.isFailure(written))
