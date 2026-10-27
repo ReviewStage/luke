@@ -34,7 +34,8 @@ import {
  * caller builds from the rows leaves.
  *
  * Where Realtime fails the read (a subscription in error, a client that did
- * not load, or a renewal refused), the read is polled instead, and Realtime
+ * not load, a renewal refused, or a part whose first rows do not arrive
+ * within `FIRST_ROWS_WITHIN`), the read is polled instead, and Realtime
  * is subscribed to again every `RESUBSCRIBE_EVERY`; once it delivers again,
  * the polling stops. Each switch is said in the log, never the sealed query.
  * Where the service answers the seal itself polled, Realtime being off, the
@@ -55,6 +56,13 @@ const POLL_BACKOFF = Schedule.min([Schedule.exponential("1 second"), Schedule.sp
 /** How often Realtime is subscribed to again while a read is polled. */
 const RESUBSCRIBE_EVERY = Duration.seconds(15);
 /**
+ * How long a subscribe waits for every part's first rows before the read is
+ * polled instead. Note that Realtime may retry a part's first rows on its own
+ * side without ever putting it in `error`, which would otherwise hold the
+ * read, and every caller drawing it, waiting for good.
+ */
+const FIRST_ROWS_WITHIN = Duration.seconds(10);
+/**
  * Whether a failed seal ends the read for good: it names nothing the account
  * reaches any more, or the service refused the session as signed out, which
  * Neon's guide says is never asked again ("When the session changes").
@@ -70,7 +78,7 @@ const GONE = LIVE_GONE;
 const AGAIN = "again";
 const STAY = "stay";
 
-/** A subscription that stopped for good: Realtime's client did not load, Realtime said so, a renewal was refused, or a row did not decode. */
+/** A subscription that stopped for good: Realtime's client did not load, Realtime said so, a part's first rows did not arrive, a renewal was refused, or a row did not decode. */
 export class LiveBroken extends Data.TaggedError("LiveBroken")<{
   readonly reason: string;
   /** Realtime's own code for why a subscription stopped, where it said one. */
@@ -450,6 +458,15 @@ function realtimeRows<Part extends string>(
           }),
       );
       standing = subscriptions;
+      // A part whose first rows never come breaks the subscribe, so the read is polled rather than waited on.
+      yield* Effect.forkScoped(
+        Effect.andThen(
+          Effect.sleep(FIRST_ROWS_WITHIN),
+          Effect.sync(() => {
+            if (!handed) broken("the first rows did not arrive");
+          }),
+        ),
+      );
       let expiresAt = earliestExpiry(first);
       const renewal = Effect.gen(function* () {
         const wait = expiresAt - Duration.toMillis(RENEW_EARLY) - dependencies.now();

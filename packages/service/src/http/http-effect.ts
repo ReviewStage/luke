@@ -1,4 +1,4 @@
-import type { LocalAgentRefusal } from "@luke/features/coding-agent-wire";
+import type { LocalAgentRefusal, RefusedDevice } from "@luke/features/coding-agent-wire";
 import type { InstalledSkillFilesRefusal } from "@luke/features/installed-skill-route-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
@@ -68,6 +68,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
   [HOSTED_API_ERROR.HOST_STILL_ENROLLED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.DEVICE_REMOVED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.RUNS_ON_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -82,6 +83,7 @@ export type HostedRefusal = {
   readonly skillName?: string;
   readonly skillRefusal?: InstalledSkillFilesRefusal;
   readonly localAgentRefusal?: LocalAgentRefusal;
+  readonly refusedDevice?: RefusedDevice;
   readonly minimumVersion?: string;
 };
 
@@ -171,6 +173,8 @@ export const HOSTED_REFUSAL = {
   HOST_STILL_ENROLLED: { error: HOSTED_API_ERROR.HOST_STILL_ENROLLED },
   /** The agent ran on a host its starter removed; nothing was sent. */
   DEVICE_REMOVED: { error: HOSTED_API_ERROR.DEVICE_REMOVED },
+  /** Where a task runs is set when it is created (`taskRunsOnRequestSchema`); a change that names another is refused, nothing written. */
+  RUNS_ON_LOCKED: { error: HOSTED_API_ERROR.RUNS_ON_LOCKED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */
@@ -180,9 +184,16 @@ export function planLimitReached(resetsAt: number | undefined): HostedRefusal {
     : { ...HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED, resetsAt };
 }
 
-/** A Start on This Mac refused, named so the words can say why. */
-export function localAgentRefused(localAgentRefusal: LocalAgentRefusal): HostedRefusal {
-  return { ...HOSTED_REFUSAL.LOCAL_AGENT_REFUSED, localAgentRefusal };
+/** A Start on This Mac refused, named so the words can say why, and, where the device is another member's, which device and whose. */
+export function localAgentRefused(
+  localAgentRefusal: LocalAgentRefusal,
+  refusedDevice?: RefusedDevice,
+): HostedRefusal {
+  return {
+    ...HOSTED_REFUSAL.LOCAL_AGENT_REFUSED,
+    localAgentRefusal,
+    ...(refusedDevice === undefined ? undefined : { refusedDevice }),
+  };
 }
 
 /** A host's daemon below the floor given, named so the daemon can say which version to upgrade to. */

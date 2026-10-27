@@ -13,11 +13,14 @@ import {
   DEVICE_ISOLATION,
   DEVICE_KIND,
   DEVICE_PLATFORM,
+  DEVICE_SETUP,
   type DeviceArch,
   type DeviceCapability,
   type DeviceIsolation,
   type DevicePlatform,
+  type DeviceSetup,
   type DeviceSignedIn,
+  deviceSetupSchema,
   deviceSignedInSchema,
 } from "@luke/features/device-agent-wire";
 import { and, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
@@ -30,7 +33,7 @@ type DeviceEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 const DeviceKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
-/** One device as Start reads it: its id, the account it is, its name and kind, when it last beat, which harnesses it is signed in to, and the Codex it checked, where it has one. */
+/** One device as Start reads it: its id, the account it is, its name and kind, when it last beat, which harnesses it is signed in to, the Codex it checked, where it has one, and where its setup stands, none once it is ready. */
 const DeviceSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
@@ -39,6 +42,8 @@ const DeviceSchema = Schema.Struct({
   lastSeenAt: Schema.Date,
   signedIn: deviceSignedInSchema,
   codexExecutable: Schema.NullOr(Schema.String),
+  setup: Schema.NullOr(deviceSetupSchema),
+  setupFailure: Schema.NullOr(Schema.String),
 });
 
 export type Device = typeof DeviceSchema.Type;
@@ -61,7 +66,7 @@ export type DeviceStanding = typeof DeviceStandingSchema.Type;
 
 type DeviceLayout = typeof DeviceLayoutSchema.Type;
 
-/** What a Mac registers with beside its id and name: its platform and architecture, how it runs its agents, its layout, its Codex where it checked one, which harnesses it is signed in to where it says, and what its follower takes beyond the first lines, none where it names none. */
+/** What a Mac registers with beside its id and name: its platform and architecture, how it runs its agents, its layout, its Codex where it checked one, which harnesses it is signed in to where it says, what its follower takes beyond the first lines, none where it names none, and where its setup stands and why it failed, none once it is ready. */
 export type DeviceRegistration = Omit<DeviceLayout, "codexExecutable"> & {
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
@@ -69,6 +74,8 @@ export type DeviceRegistration = Omit<DeviceLayout, "codexExecutable"> & {
   readonly codexExecutable?: string | undefined;
   readonly signedIn?: DeviceSignedIn | undefined;
   readonly capabilities?: readonly DeviceCapability[] | undefined;
+  readonly setup?: DeviceSetup | undefined;
+  readonly setupFailure?: string | undefined;
 };
 
 const upsertDevice = SqlSchema.findAll({
@@ -79,6 +86,8 @@ const upsertDevice = SqlSchema.findAll({
     platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
     arch: Schema.Literals(Object.values(DEVICE_ARCH)),
     capabilities: Schema.Array(Schema.Literals(Object.values(DEVICE_CAPABILITY))),
+    setup: Schema.NullOr(deviceSetupSchema),
+    setupFailure: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -94,6 +103,8 @@ const upsertDevice = SqlSchema.findAll({
     codexExecutable,
     signedIn,
     capabilities,
+    setup,
+    setupFailure,
     now,
   }) =>
     Database.use((db) =>
@@ -113,6 +124,8 @@ const upsertDevice = SqlSchema.findAll({
           codexExecutable,
           signedIn,
           capabilities: [...capabilities],
+          setup,
+          setupFailure,
           lastSeenAt: now,
         })
         .onConflictDoUpdate({
@@ -127,6 +140,8 @@ const upsertDevice = SqlSchema.findAll({
             codexExecutable,
             signedIn,
             capabilities: [...capabilities],
+            setup,
+            setupFailure,
             lastSeenAt: now,
           },
           // Moved only where the account registering it is the one holding it.
@@ -167,6 +182,8 @@ const findSeen = SqlSchema.findAll({
           lastSeenAt: device.lastSeenAt,
           signedIn: device.signedIn,
           codexExecutable: device.codexExecutable,
+          setup: device.setup,
+          setupFailure: device.setupFailure,
         })
         .from(device)
         .where(
@@ -196,6 +213,8 @@ const findNamed = SqlSchema.findAll({
           lastSeenAt: device.lastSeenAt,
           signedIn: device.signedIn,
           codexExecutable: device.codexExecutable,
+          setup: device.setup,
+          setupFailure: device.setupFailure,
         })
         .from(device)
         .where(inArray(device.id, [...ids])),
@@ -249,6 +268,10 @@ export function registerDevice(
         signedIn: registered.signedIn ?? {},
         // Note that a register naming none clears the last ones, as a desktop moved back to a build without them takes none.
         capabilities: registered.capabilities ?? [],
+        // Likewise a register naming no setup is a device ready to take an agent, as every desktop from before the field is.
+        setup: registered.setup ?? null,
+        setupFailure:
+          registered.setup === DEVICE_SETUP.FAILED ? (registered.setupFailure ?? null) : null,
         now,
       }),
       (rows) => rows.length > 0,

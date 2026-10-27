@@ -94,22 +94,23 @@ export const TASK_MARK_GLYPH =
   "task-mark-glyph inline-block size-luke-12 flex-none text-muted-foreground";
 
 /**
- * The one icon at a task row's end, before its time: on a task whose
- * repository belongs to another of the account's workspaces, that
- * workspace's tile, which its card names (`strandedHome`); else how its
- * agents stand (`TaskAgentsMark`). Note that it is the workspace's own
- * square and never the attention mark, because the orange disc is the one
- * mark a row wears for a question waiting on the reader.
+ * The one icon at a task row's end, before its time: the attention mark on
+ * a task whose repository belongs to another of the account's workspaces,
+ * which its card names (`strandedHome`); else how its agents stand and
+ * whether a question waits on the reader (`TaskAgentsMark`).
  */
 export function TaskRowStatus({
   task,
+  waiting,
   stranded,
 }: {
   task: TaskSummary;
+  /** How many of the task's questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
+  waiting: number;
   /** The workspace the task's repository belongs to, where the reader may move it there. */
   stranded?: Workspace | undefined;
 }): React.JSX.Element | null {
-  if (stranded === undefined) return <TaskAgentsMark agents={task.agents} />;
+  if (stranded === undefined) return <TaskAgentsMark agents={task.agents} waiting={waiting} />;
   return (
     <span className="task-mark-stranded mr-tight-gap inline-flex">
       <WorkspaceTile workspace={stranded} size={TILE_SIZE.INLINE} />

@@ -70,7 +70,7 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
-import { clockText, dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
+import { clockText, dateOfText, dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
 import {
   SENTRY_LEVEL,
   SENTRY_TRIGGER_EVENT,
@@ -132,6 +132,7 @@ import {
   SettingsRow,
   type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
+  SettingsRowValue,
   SettingsSection,
   SidePanelIcon,
   SKELETON_SHAPE,
@@ -154,8 +155,9 @@ import {
   Tooltip,
   useConfirmDialog,
   useMenu,
+  useMinute,
 } from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { GLYPH } from "@luke/ui/icons";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
@@ -171,13 +173,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { ACTOR_SIZE, ActorMark, actorMarkWidth, automationActor } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, ActorRef, actorMarkWidth, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useScreenRef, useScreenSplit } from "../column-split.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton, useSendFeedbackItem } from "../experiment-marks.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
+import { useCreator } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
 import { Picker, PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
@@ -530,6 +533,7 @@ function OwnerRow({
   owner,
   owners,
   mine,
+  maker,
   workspace,
   onOwner,
 }: {
@@ -537,17 +541,25 @@ function OwnerRow({
   owners: readonly { value: AutomationScope; label: string }[];
   /** Whether the reading account made it, so Only you is drawn as its own; a new one is. */
   mine: boolean;
+  /** Who made it, whom its detail names among those who change it: You for the reader's own, its creator while the members do not name them. */
+  maker: Actor;
   workspace: Workspace | undefined;
   onOwner: (owner: AutomationScope) => void;
 }): React.JSX.Element {
   const parse = optionValue(owners);
+  // Note that a teammate's maker the members do not name yet is said as its creator, never as the reader.
+  const changers = mine
+    ? "You"
+    : maker.kind === ACTOR_KIND.SOMEONE
+      ? "Its creator"
+      : actorName(maker);
   return (
     <PickerRow
       width={CHIP_WIDTH.MIN_FIELD}
       label="Owner"
       detail={
         owner === AUTOMATION_SCOPE.WORKSPACE
-          ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
+          ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. ${changers}, owners, and admins change it.`
           : "Only you see and change it. Owners and admins can see it and turn it off."
       }
       value={owner}
@@ -573,6 +585,30 @@ function OwnerRow({
         if (picked !== undefined) onOwner(picked);
       }}
     />
+  );
+}
+
+/**
+ * Who made a saved automation, under its Owner: their face and name, which
+ * hang their card, read and never changed, and what being its maker means,
+ * since a run starts as them. Nothing where the members do not name them.
+ */
+function MakerRow({ maker, at }: { maker: Actor; at: number }): React.JSX.Element | null {
+  const now = useMinute();
+  if (maker.kind === ACTOR_KIND.SOMEONE) return null;
+  const name = actorName(maker, { sentence: true });
+  const theirs = actorName(maker, { sentence: true, possessive: true });
+  return (
+    <SettingsRow
+      label="Created by"
+      description={`Runs start as ${name}, on ${theirs} GitHub access, model keys, and integrations. Created ${dateOfText(at, now)}.`}
+    >
+      {() => (
+        <SettingsRowValue>
+          <ActorRef actor={maker} />
+        </SettingsRowValue>
+      )}
+    </SettingsRow>
   );
 }
 
@@ -903,12 +939,15 @@ const PROMPT_ROWS = 5;
 /**
  * The rows a saved automation's groups stand before it is read, as a
  * scheduled one, the kind most are, runs on a new agent each time: Sharing's
- * Owner; Trigger's Type, Repeats, Time, and Time zone; and Where it runs'
+ * Owner and Created by; Trigger's Type, Repeats, Time, and Time zone; and Where it runs'
  * Repository, Runs land in, Model on the account's default, MCP servers, and Archive
  * finished runs, each with the words under its name where it says them.
  */
 const SCHEDULED_ROWS = {
-  [EDITOR_SECTION.SHARING]: [{ described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] }],
+  [EDITOR_SECTION.SHARING]: [
+    { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
+    { described: true, controls: [SETTINGS_SKELETON_CONTROL.VALUE] },
+  ],
   [EDITOR_SECTION.TRIGGER]: [
     { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
     { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
@@ -2179,6 +2218,9 @@ function EditorForm({
   const form = useRef<HTMLDivElement>(null);
   const workspaceName = workspace?.name ?? "Workspace";
   const mine = automation === undefined || automation.mine === true;
+  const maker = useCreator(
+    automation?.creatorId === undefined ? {} : { ownerId: automation.creatorId },
+  );
   const owners = [
     {
       value: AUTOMATION_SCOPE.PERSONAL,
@@ -2195,9 +2237,11 @@ function EditorForm({
               owner={draft.owner}
               owners={owners}
               mine={mine}
+              maker={maker}
               workspace={workspace}
               onOwner={(owner) => onDraft({ owner })}
             />
+            {automation === undefined ? null : <MakerRow maker={maker} at={automation.createdAt} />}
           </SettingsSection>
         ) : null}
         <SettingsSection title={EDITOR_SECTION.TRIGGER}>

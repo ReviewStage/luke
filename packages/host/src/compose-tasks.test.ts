@@ -1131,9 +1131,8 @@ function fakeService(tasks: Task[]): FakeService {
           : { task: renamed, txid: service.renameTxid };
       }),
     // The service sets the status, the priority, and the assignee named, naming the assignee by
-    // their account, and leaves the rest standing; null assigns the task to no one. Where its
-    // agents run is the service's to resolve, so the fake leaves it out.
-    setStanding: (taskId, { assigneeId, runsOn: _runsOn, ...standing }) =>
+    // their account, and leaves the rest standing; null assigns the task to no one.
+    setStanding: (taskId, { assigneeId, ...standing }) =>
       Effect.sync(() => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         if (found === undefined) return undefined;
@@ -3909,10 +3908,10 @@ it.effect(
       ]);
       yield* moved;
 
-      // A follow Realtime stops is polled, and subscribed again on the next resubscribe.
+      // A follow Realtime stops is polled, and subscribed again as it breaks, which stands until its first rows' bound.
       service.boardSeals[INVITES] = sealedBoard(1);
       realtime.fail("board-0");
-      yield* TestClock.adjust(Duration.seconds(15));
+      yield* TestClock.adjust(Duration.seconds(5));
       yield* boardSettled;
       assert.deepEqual(realtime.subscribed(), ["board-1"]);
 
@@ -3972,7 +3971,7 @@ it.effect(
       const queued = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
       yield* boardSettled;
       realtime.fail("board");
-      yield* TestClock.adjust(Duration.seconds(15));
+      yield* TestClock.adjust(Duration.seconds(5));
       yield* boardSettled;
       realtime.deliver("board", [
         { taskId: INVITES, drawingNumber: 0, appliedDrawing: 0, imaged: false },

@@ -1,6 +1,6 @@
 import { noMatchWords, TERM } from "@luke/features/words";
 import { Command } from "cmdk";
-import { type ReactNode, type Ref, useLayoutEffect, useRef, useState } from "react";
+import { memo, type ReactNode, type Ref, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../../cn.js";
 import { SearchIcon } from "../../face/glyphs.js";
 import { searchHit } from "../../search-score.js";
@@ -139,8 +139,13 @@ function matching(groups: readonly CommandGroup[], typed: string): readonly Comm
   }));
 }
 
-/** One row, handed through cmdk's item, hanging its card beside it where it has one. */
-function CommandRow({ item }: { item: CommandItem }): React.JSX.Element {
+/**
+ * One row, handed through cmdk's item, hanging its card beside it where it
+ * has one. Note that it is drawn again only when it is handed another item,
+ * because the dialog draws again for each key typed and each row the arrows
+ * or the pointer light, and cmdk lights a row from its own store.
+ */
+const CommandRow = memo(function CommandRow({ item }: { item: CommandItem }): React.JSX.Element {
   const row = (
     <Command.Item
       asChild
@@ -158,7 +163,7 @@ function CommandRow({ item }: { item: CommandItem }): React.JSX.Element {
       {row}
     </Tooltip>
   );
-}
+});
 
 /** What a command dialog is told: whether it stands, what it lists, and what it says around the list. */
 export interface CommandDialogProps {
@@ -190,13 +195,20 @@ export interface CommandDialogProps {
   inputRef?: Ref<HTMLInputElement> | undefined;
   /** The owner's own keys, heard before cmdk's, which a key the owner prevents never reaches. */
   onKeyDown?: ((event: React.KeyboardEvent<HTMLDivElement>) => void) | undefined;
+  /**
+   * Whether the card stays drawn, hidden, while the dialog is shut, so opening it again only
+   * shows it: for an owner whose props stand still while it is shut, since the hidden card
+   * draws again whenever one changes.
+   */
+  keepMounted?: boolean | undefined;
 }
 
 /**
  * The palette: the dimmed window, the card high in it, the field taking
  * focus as it opens, an optional band, the `groups` of rows, and an
  * optional foot. Note that the dialog stays mounted while closed, so it
- * can fade out; Base UI draws its card only while it stands or leaves.
+ * can fade out; Base UI draws its card only while it stands or leaves,
+ * unless `keepMounted` holds it drawn and hidden in between.
  */
 export function CommandDialog({
   open,
@@ -215,6 +227,7 @@ export function CommandDialog({
   foot,
   inputRef,
   onKeyDown,
+  keepMounted = false,
 }: CommandDialogProps): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
   // Note that the card stands a render after the dialog opens, because Base UI's portal makes its node first, so the field takes focus once it does.
@@ -258,6 +271,7 @@ export function CommandDialog({
     >
       <DialogContent
         ref={(node: HTMLDivElement | null) => setDrawn(node !== null)}
+        keepMounted={keepMounted}
         className={CARD}
         aria-label={label}
         initialFocus={field}

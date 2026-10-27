@@ -136,9 +136,7 @@ it.effect(
       yield* settled;
       assert.deepEqual(moves, [{ board: [mark(1, 0, false)] }, { board: [mark(2, 1, true)] }]);
 
-      // Realtime is subscribed to again, and its first delivery stops the polling.
-      yield* TestClock.adjust(Duration.seconds(15));
-      yield* settled;
+      // Realtime is subscribed to again as the board breaks, and its first delivery, within the first rows' bound, stops the polling.
       realtime.deliver([mark(3, 2, true)]);
       yield* settled;
       board = [mark(9, 9, true)];

@@ -41,10 +41,9 @@ import {
 /**
  * task-list-live.ts -- the plan list followed over Neon Realtime: the sealed statements the service answers, the rows they deliver, and the list as the held read answers it, built from them at an instant.
  *
- * The plan list is four statements: the plans the account reaches, each with
+ * The plan list is three statements: the plans the account reaches, each with
  * its reader's own pin and its owner's name, the issues those plans link,
- * which each plan names as its tags, oldest linked first, how many questions
- * wait on the reader on each plan, and every agent of those plans
+ * which each plan names as its tags, oldest linked first, and every agent of those plans
  * and every agent with no plan in the account's workspaces, archived ones
  * among them, each with its newest turn, whether a line of the developer's
  * awaits its turn, what it last published, and the names of the members it
@@ -56,14 +55,13 @@ import {
  * orders it.
  */
 
-/** The plan list sealed for following: the address, and its statements, the questions' absent from a service before it. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
+/** The plan list sealed for following: the address, and its three statements. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
 export const taskListLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
     plans: sealedLiveQuerySchema,
     agents: sealedLiveQuerySchema,
     issues: sealedLiveQuerySchema,
-    questions: EffectSchema.optionalKey(sealedLiveQuerySchema),
   }),
 });
 
@@ -160,21 +158,11 @@ const issueLiveRowSchema = EffectSchema.Struct({
 
 type IssueLiveRow = typeof issueLiveRowSchema.Type;
 
-/** How many questions wait on the reader on one plan, as its row delivers it; a plan where none waits has no row. */
-const questionsLiveRowSchema = EffectSchema.Struct({
-  planId: EffectSchema.String,
-  waitingOnYou: countedNumber,
-});
-
-type QuestionsLiveRow = typeof questionsLiveRowSchema.Type;
-
 /** The plan list's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const taskListLiveRowsSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(taskLiveRowSchema),
   agents: EffectSchema.Array(agentLiveRowSchema),
   issues: EffectSchema.Array(issueLiveRowSchema),
-  /** Absent from a service before it counted the questions. */
-  questions: EffectSchema.optionalKey(EffectSchema.Array(questionsLiveRowSchema)),
 });
 
 export type TaskListLiveRows = typeof taskListLiveRowsSchema.Type;
@@ -306,13 +294,9 @@ function pullRequestLinesOf(rows: readonly AgentLiveRow[]): readonly TaskPullReq
  * named first, then the rest, newest started first within each; each pull
  * request once by its page, those still open first, newest agent's first
  * within a rank; the latest settled activity of every agent, archived
- * or not; how many failed; and the questions `waiting` on the reader.
+ * or not; and how many failed.
  */
-function agentsSummaryOf(
-  rows: readonly AgentLiveRow[],
-  waiting: number,
-  now: number,
-): TaskAgentsSummary {
+function agentsSummaryOf(rows: readonly AgentLiveRow[], now: number): TaskAgentsSummary {
   const pullRequests = pullRequestLinesOf(rows);
   const newest = rows
     .filter((row) => row.archivedAt === null)
@@ -324,7 +308,6 @@ function agentsSummaryOf(
     total: newest.length,
     working: working.length,
     failed: newest.filter(({ line }) => line.status === CODING_AGENT_STATUS.FAILED).length,
-    waitingOnYou: waiting,
     ...(rows.length === 0 ? undefined : { activityAt: Math.max(...rows.map(activityAt)) }),
     agents: [...working, ...resting]
       .slice(0, TASK_AGENTS_BOUNDS.MAX_AGENTS)
@@ -344,11 +327,10 @@ function originOf(row: TaskLiveRow): { readonly origin?: TaskOrigin } {
   };
 }
 
-/** One plan as the list's row says it, its agents in brief where it has any agent or a question waiting on the reader. */
+/** One plan as the list's row says it, its agents in brief where it has any. */
 function taskSummaryOf(
   row: TaskLiveRow,
   agents: readonly AgentLiveRow[] | undefined,
-  waiting: number,
   issues: readonly TaskIssueTag[] | undefined,
   now: number,
 ): TaskSummary {
@@ -378,9 +360,7 @@ function taskSummaryOf(
     ...(row.assigneeId === null || row.assigneeName === null
       ? undefined
       : { assignee: { userId: row.assigneeId, name: row.assigneeName } }),
-    ...(agents === undefined && waiting === 0
-      ? undefined
-      : { agents: agentsSummaryOf(agents ?? [], waiting, now) }),
+    ...(agents === undefined ? undefined : { agents: agentsSummaryOf(agents, now) }),
     ...(issues === undefined ? undefined : { issues }),
   };
 }
@@ -397,11 +377,6 @@ function tagsByPlan(rows: readonly IssueLiveRow[]): ReadonlyMap<string, readonly
     else held.push(tag);
   }
   return byPlan;
-}
-
-/** How many questions wait on the reader on each plan; a plan where none waits, or a service before the count, is absent. */
-function waitingByPlan(rows: readonly QuestionsLiveRow[] | undefined): ReadonlyMap<string, number> {
-  return new Map((rows ?? []).map((row) => [row.planId, row.waitingOnYou]));
 }
 
 /** Who archived an agent as its banner says it: the member where their account stands, the agent acting for them, and why. */
@@ -541,13 +516,10 @@ export function taskListOfLiveRows(rows: TaskListLiveRows, now: number): TaskLis
     byTask.set(agent.planId, [...(byTask.get(agent.planId) ?? []), agent]);
   }
   const tags = tagsByPlan(rows.issues);
-  const waiting = waitingByPlan(rows.questions);
   return {
     plans: rows.plans
       .toSorted(newestFirst)
-      .map((row) =>
-        taskSummaryOf(row, byTask.get(row.id), waiting.get(row.id) ?? 0, tags.get(row.id), now),
-      ),
+      .map((row) => taskSummaryOf(row, byTask.get(row.id), tags.get(row.id), now)),
     planlessAgents: rows.agents
       .filter((agent) => agent.planId === null)
       .toSorted(newestFirst)

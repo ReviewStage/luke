@@ -8,6 +8,7 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import type { AutomationRunSummary, AutomationSummary } from "@luke/features/automation-wire";
+import { dateOfText } from "@luke/features/time-format";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -17,9 +18,11 @@ import {
   cn,
   FiringGlyph,
   GAP,
+  HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
+  HoverCardRow,
   HoverCardRule,
   HoverCardScroll,
   INLINE_REF_LOOK,
@@ -56,6 +59,7 @@ import { type ReactNode, useEffect } from "react";
 import { useAutomation } from "./automation-directory.js";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words.js";
 import { PERSON_PAGE } from "./desktop/pages-on-demand.js";
+import { useCreator } from "./member-directory.js";
 import { useActorDoor } from "./person-door.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
 import { AgentHoverCard } from "./tasks/agent-ref.js";
@@ -771,7 +775,9 @@ export function automationRunActor(run: AutomationRunSummary, name: string): Act
 
 /**
  * An automation's card: the glyph of what fires it, its name over those words, whose it
- * is at the corner, when it runs next, and how its last run went. Note
+ * is at the corner, when it runs next, and how its last run went, and at
+ * its foot, under a rule, who made it and when, as a channel's card says
+ * it; one whose maker the members around it do not name has no foot. Note
  * that it offers no way to the automation's page under a rule, because
  * the name it hangs from opens that page on a press; hung from a control
  * whose press does something else, the Inbox's group header, which folds,
@@ -812,7 +818,28 @@ export function AutomationCard({
           {` · ${automationRunLine(lastRun, automation.mine === true ? undefined : "its creator")}`}
         </HoverCardNote>
       )}
+      <AutomationMaker automation={automation} now={now} />
     </HoverCard>
+  );
+}
+
+/** Who made the automation, under a rule at its card's foot; nothing where the members around it do not name them. */
+function AutomationMaker({
+  automation,
+  now,
+}: {
+  automation: AutomationSummary;
+  now: number;
+}): React.JSX.Element | null {
+  const maker = useCreator(
+    automation.creatorId === undefined ? {} : { ownerId: automation.creatorId },
+  );
+  if (maker.kind === ACTOR_KIND.SOMEONE) return null;
+  return (
+    <>
+      <HoverCardRule />
+      <CreatedByRow actor={maker} at={automation.createdAt} now={now} />
+    </>
   );
 }
 
@@ -1123,5 +1150,30 @@ export function ActorStack({
         />
       ) : null}
     </ul>
+  );
+}
+
+/** Who made a thing and when, as a card's foot says it: their face, then "Created by" and their name, which hangs their card, and the day. */
+export function CreatedByRow({
+  actor,
+  at,
+  now,
+}: {
+  actor: Actor;
+  at: number;
+  now: number;
+}): React.JSX.Element {
+  return (
+    <HoverCardRow
+      look={HOVER_CARD_ROW_LOOK.DETAIL}
+      glyph={<ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
+      label={
+        <>
+          {"Created by "}
+          <ActorRef actor={actor} sentence nameOnly />
+          {` · ${dateOfText(at, now)}`}
+        </>
+      }
+    />
   );
 }

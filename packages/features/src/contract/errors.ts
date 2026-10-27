@@ -15,7 +15,7 @@
 
 import type { ErrorMapItem } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
-import { localAgentRefusalSchema } from "../coding-agent-wire.js";
+import { localAgentRefusalSchema, refusedDeviceSchema } from "../coding-agent-wire.js";
 import { hostUpgradeNeededDataSchema } from "../host-wire.js";
 import { installedSkillRefusedDataSchema } from "../installed-skill-route-wire.js";
 import { modelProviderSchema } from "../models-wire.js";
@@ -70,9 +70,10 @@ export const credentialMissingDataSchema = EffectSchema.Struct({
   provider: EffectSchema.optionalKey(modelProviderSchema),
 });
 
-/** What a refused local agent carries beside its slug: why, which the refusal's words name. */
+/** What a refused local agent carries beside its slug: why, which the refusal's words name, and the device and its owner where it is another member's. */
 export const localAgentRefusedDataSchema = EffectSchema.Struct({
   localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
+  refusedDevice: EffectSchema.optionalKey(refusedDeviceSchema),
 });
 
 const localAgentRefusedData = EffectSchema.toStandardSchemaV1(
@@ -135,4 +136,5 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: { data: hostUpgradeNeededData },
   [HOSTED_API_ERROR.HOST_STILL_ENROLLED]: {},
   [HOSTED_API_ERROR.DEVICE_REMOVED]: {},
+  [HOSTED_API_ERROR.RUNS_ON_LOCKED]: {},
 } as const satisfies Record<HostedApiError, ErrorMapItem>;

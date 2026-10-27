@@ -845,6 +845,42 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
 });
 
+test("start_agent on a task that runs on another member's device is refused in words that name the device and its owner, starting nothing", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const deviceId = randomUUID();
+  const onTheirDevice = await database.run(
+    Effect.gen(function* () {
+      yield* writeAccountPreferences(agents.teammates.userId, {
+        experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
+      });
+      yield* registerDevice(agents.teammates.userId, {
+        id: deviceId,
+        name: "Studio",
+        ...DEVICE_LAYOUT,
+        signedIn: { claudeCode: true },
+      });
+      return yield* createTask(agents.teammates.userId, {
+        organizationId: workspaceId,
+        name: "Metered billing",
+        repository: RELAY_FULL_NAME,
+        runsOn: { machine: CODING_AGENT_MACHINE.DEVICE, deviceId },
+      });
+    }),
+  );
+
+  assert.deepEqual(
+    await call(CODER_TOOL.START_AGENT, { taskId: onTheirDevice.id, prompt: "Bill by seat." }),
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason:
+        "Not started: this task runs on Studio. Only Test User can start agents on it, so ask them to, or start the work on a task that runs elsewhere.",
+    },
+  );
+  assert.equal(eve.sent.length, 0, "nothing was started, in the cloud or anywhere");
+});
+
 test("start_agent hands over a prompt and a note each as long as a start allows, whole in the agent's first message, and refuses either past it, starting nothing", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);

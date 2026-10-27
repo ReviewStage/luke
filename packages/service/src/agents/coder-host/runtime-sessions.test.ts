@@ -10,7 +10,7 @@ import {
   readCodingAgentByKey,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
-import { registerDevice } from "@luke/database/models/device-store";
+import { type DeviceRegistration, registerDevice } from "@luke/database/models/device-store";
 import { removeHost } from "@luke/database/models/host-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
@@ -24,10 +24,11 @@ import {
   claimRuntimeSession,
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
-import { createTask, updateTask } from "@luke/database/models/task-store";
+import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { device } from "@luke/database/schemas/device";
 import { messages } from "@luke/database/schemas/storage";
+import { task as taskTable } from "@luke/database/schemas/task";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
@@ -37,7 +38,7 @@ import {
   type CodingAgentPayer,
   LOCAL_AGENT_REFUSAL,
 } from "@luke/features/coding-agent-wire";
-import { DEVICE_KIND } from "@luke/features/device-agent-wire";
+import { DEVICE_KIND, DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -759,9 +760,41 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.equal(
             yield* steerCodingAgent(sessions, writer, teammate, onEve, {
               ...line,
-              clientKey: randomUUID(),
+              clientKey: "key-teammate",
             }),
             STEER_OUTCOME.SENT,
+          );
+          assert.equal(
+            yield* steerCodingAgent(sessions, writer, owner, onEve, {
+              ...line,
+              clientKey: randomUUID(),
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+            }),
+            STEER_OUTCOME.SENT,
+          );
+          // The model reads a teammate's line behind the label naming them by their link, and the starter's as it is.
+          const texts = eve.messages.map((sent) =>
+            Array.isArray(sent.message)
+              ? sent.message.flatMap((part) => (part.type === "text" ? [part.text] : []))
+              : [sent.message],
+          );
+          assert.match(
+            texts[0]?.[0] ?? "",
+            new RegExp(
+              `^\\[sender: \\[@Test User\\]\\(https://tryluke\\.dev/[^/]+/person/${teammate}\\), a teammate\\]$`,
+              "u",
+            ),
+          );
+          assert.deepEqual(texts[0]?.slice(1), ["Also the emails."]);
+          assert.equal(eve.messages[1]?.message, "Also the emails.");
+          // The row keeps the teammate's words as they typed them, its sender in its own column.
+          const [kept] = yield* (yield* Database)
+            .select({ parts: messages.parts })
+            .from(messages)
+            .where(eq(messages.clientId, sentLineId("key-teammate")));
+          assert.deepEqual(
+            kept?.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+            ["Also the emails."],
           );
 
           const payer = Option.getOrThrow(
@@ -1352,6 +1385,15 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               model: "openai/gpt-5.5",
               refused: LOCAL_AGENT_REFUSAL.CODEX,
             },
+            {
+              name: "the task's device there, but still getting ready",
+              on: true,
+              mac: true,
+              setup: DEVICE_SETUP.PREPARING,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: LOCAL_AGENT_REFUSAL.PREPARING,
+            },
           ] as const;
           for (const each of cases) {
             const plan = !("plan" in each) || each.plan;
@@ -1369,6 +1411,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 name: "Studio",
                 ...DEVICE_LAYOUT,
                 ...("codex" in each ? { codexExecutable: CODEX_EXECUTABLE } : undefined),
+                ...("setup" in each ? { setup: each.setup } : undefined),
                 signedIn,
               });
             }
@@ -1430,7 +1473,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start runs where the agent it is started from runs, else where its task runs, else in the cloud; a teammate's agent on a task that runs on another member's device runs in the cloud and says why, in its answer and its first message; a device away is refused, never sent to the cloud",
+      "a Start runs where the agent it is started from runs, else where its task runs, else in the cloud; a teammate's Start on a task that runs on another member's device is refused by name with the device and its owner, and a continue from the owner's agent there is refused, never sent to the cloud; a device away is refused likewise",
       () =>
         Effect.gen(function* () {
           const { owner, workspaceId } = yield* openStarter(true);
@@ -1454,7 +1497,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             repository: `${RELAY.owner}/${RELAY.name}`,
             runsOn: onDevice,
           });
-          const { eve, claudeCode, codex, native } = runtimes();
+          const { eve, native } = runtimes();
           const layers = Layer.mergeAll(
             githubReaching(INSTALLATIONS).layer,
             CATALOG,
@@ -1483,27 +1526,24 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             yield* whereRuns(owned.success, owner),
             Option.some([CODING_AGENT_MACHINE.DEVICE, deviceId]),
           );
-          assert.equal(owned.success.notice, undefined);
-
-          // A teammate's agent on it runs in the cloud, and its answer and first message say why.
-          const theirs = yield* start(teammate, startOn(task.id, "anthropic/claude-opus-5.5"));
-          assert.ok(Result.isSuccess(theirs));
-          assert.deepEqual(
-            yield* whereRuns(theirs.success, teammate),
-            Option.some([CODING_AGENT_MACHINE.VERCEL, null]),
-          );
-          const notice = theirs.success.notice ?? "";
-          assert.match(
-            notice,
-            /^Runs in the cloud: this task runs on Studio, which only .+'s agents use\.$/,
-          );
-          const handed = [...eve.messages, ...claudeCode.messages, ...codex.messages];
-          assert.ok(handed.some((each) => JSON.stringify(each.message).includes(notice)));
+          // A teammate's Start on it is refused by name, the device and its owner beside, and no agent is made.
+          const NOT_THEIRS = localAgentRefused(LOCAL_AGENT_REFUSAL.NOT_OWNER, {
+            name: "Studio",
+            owner: "Test User",
+          });
+          const theirAsk = startOn(task.id, "anthropic/claude-opus-5.5");
+          const theirs = yield* start(teammate, theirAsk);
+          assert.ok(Result.isFailure(theirs));
+          assert.deepEqual(theirs.failure, NOT_THEIRS);
+          assert.ok(Option.isNone(yield* readCodingAgentByKey(teammate, theirAsk.idempotencyKey)));
 
           // A continue runs where its source runs, though the task now runs in the cloud.
-          yield* updateTask(owner, task.id, {
-            runsOn: { machine: CODING_AGENT_MACHINE.VERCEL, deviceId: null },
-          });
+          // Where a task runs is never changed through the service, so the row is written as an old build once did.
+          const db = yield* Database;
+          yield* db
+            .update(taskTable)
+            .set({ machine: CODING_AGENT_MACHINE.VERCEL, deviceId: null })
+            .where(eq(taskTable.id, task.id));
           const continued = yield* start(owner, {
             taskId: task.id,
             prompt: undefined,
@@ -1517,6 +1557,21 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             Option.some([CODING_AGENT_MACHINE.DEVICE, deviceId]),
           );
 
+          // A teammate's continue from the owner's agent on the device is refused by name too, as an agent on its starter's own Mac is theirs alone to start from, so it never reaches the cloud.
+          const theirContinue = {
+            taskId: task.id,
+            prompt: undefined,
+            idempotencyKey: randomUUID(),
+            choice: undefined,
+            from: { agentId: owned.success.agent.id },
+          };
+          const theirContinued = yield* start(teammate, theirContinue);
+          assert.ok(Result.isFailure(theirContinued));
+          assert.deepEqual(theirContinued.failure, HOSTED_REFUSAL.NOT_PERMITTED);
+          assert.ok(
+            Option.isNone(yield* readCodingAgentByKey(teammate, theirContinue.idempotencyKey)),
+          );
+
           // A Start with no task runs in the cloud.
           const planless = yield* start(owner, startIn(workspaceId, "anthropic/claude-opus-5.5"));
           assert.ok(Result.isSuccess(planless));
@@ -1526,7 +1581,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
 
           // A device away is refused by name, and no agent is made.
-          yield* updateTask(owner, task.id, { runsOn: onDevice });
+          yield* db.update(taskTable).set(onDevice).where(eq(taskTable.id, task.id));
           yield* TestClock.adjust(Duration.sum(THIS_MAC.FRESH, Duration.seconds(1)));
           const away = startOn(task.id, "anthropic/claude-opus-5.5");
           const refused = yield* start(owner, away);
@@ -1540,7 +1595,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.equal(retried.success.agent.id, owned.success.agent.id);
 
           // A continue from an agent on a host its starter removed is refused by name, not as away, and no agent is made.
-          const db = yield* Database;
           yield* db.update(device).set({ kind: DEVICE_KIND.HOST }).where(eq(device.id, deviceId));
           assert.equal(yield* removeHost(owner, deviceId), true);
           const fromRemoved = {
@@ -1624,6 +1678,33 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               each.name,
             );
           }
+        }),
+    );
+
+    it.effect(
+      "a device is offered with where its setup stands while it gets ready or after it failed, and with none once it registers ready, as a desktop from before setups always does",
+      () =>
+        Effect.gen(function* () {
+          const { owner } = yield* openStarter(true, "none");
+          yield* writeAccountPreferences(owner, {
+            experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
+          });
+          const id = randomUUID();
+          const offered = Effect.map(
+            macOffers(owner).pipe(Effect.provide(Layer.mergeAll(environment(), runtimes().native))),
+            (offers) => offers.map((offer) => [offer.name, offer.setup, offer.setupFailure]),
+          );
+          const register = (setup: Partial<Pick<DeviceRegistration, "setup" | "setupFailure">>) =>
+            registerDevice(owner, { id, name: "Studio", ...DEVICE_LAYOUT, ...setup });
+
+          yield* register({ setup: DEVICE_SETUP.PREPARING });
+          assert.deepEqual(yield* offered, [["Studio", DEVICE_SETUP.PREPARING, undefined]]);
+          yield* register({ setup: DEVICE_SETUP.FAILED, setupFailure: "smolvm could not be had" });
+          assert.deepEqual(yield* offered, [
+            ["Studio", DEVICE_SETUP.FAILED, "smolvm could not be had"],
+          ]);
+          yield* register({});
+          assert.deepEqual(yield* offered, [["Studio", undefined, undefined]]);
         }),
     );
 

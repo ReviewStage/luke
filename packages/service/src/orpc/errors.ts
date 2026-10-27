@@ -10,7 +10,7 @@
  * `hostedRefusalResponse` answered.
  */
 
-import { localAgentRefusalSchema } from "@luke/features/coding-agent-wire";
+import { localAgentRefusalSchema, refusedDeviceSchema } from "@luke/features/coding-agent-wire";
 import { installedSkillRefusedDataSchema } from "@luke/features/installed-skill-route-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { repositoryUnreachedSchema } from "@luke/features/repository-reach-wire";
@@ -54,6 +54,7 @@ const isHostedRefusal = Schema.is(
     provider: Schema.optionalKey(Schema.Literals(Object.values(MODEL_PROVIDER))),
     ...installedSkillRefusedDataSchema.fields,
     localAgentRefusal: Schema.optionalKey(localAgentRefusalSchema),
+    refusedDevice: Schema.optionalKey(refusedDeviceSchema),
     minimumVersion: Schema.optionalKey(Schema.String),
   }),
 );

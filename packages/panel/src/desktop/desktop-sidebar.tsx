@@ -156,13 +156,14 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
 import { welcomed } from "./desktop-welcome.js";
 import { useFailedRunsMark } from "./failed-runs.js";
+import { withoutFinishedRuns } from "./finished-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
-import { needsYouNoun, useInboxWaiting } from "./places-waiting.js";
+import { needsYouNoun, useInboxWaiting, useTasksWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
@@ -387,6 +388,8 @@ interface RowContext {
   readonly onDeletedAgent: (agentId: string) => () => void;
   /** Whether a task was saved since the developer last looked at it on this Mac. */
   readonly unread: (task: TaskSummary) => boolean;
+  /** How many questions wait on the reader on each task, by its id, as the Inbox counts them (`useTasksWaiting`). */
+  readonly waitingOn: ReadonlyMap<string, number>;
   /** Whether an agent's turn ended while the developer was not looking at it. */
   readonly unseenAgent: (agentId: string) => boolean;
   /** The time each row's last update is counted back from. */
@@ -481,6 +484,7 @@ function TaskRows({
             current={context.marked(row.task.id, undefined)}
             open={context.current(row.task.id)}
             unread={context.unread(row.task)}
+            waiting={context.waitingOn.get(row.task.id) ?? 0}
             now={context.now}
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
@@ -727,6 +731,7 @@ function PinnedRows({
                 current={context.marked(task.id, undefined)}
                 open={context.current(task.id)}
                 unread={context.unread(task)}
+                waiting={context.waitingOn.get(task.id) ?? 0}
                 now={context.now}
                 onOpen={() => context.onOpen(task.id)}
               />
@@ -1780,6 +1785,7 @@ function SidebarColumn({
   const shownChannelId =
     channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel.id : undefined;
   const waiting = useInboxWaiting(tasks);
+  const waitingOn = useTasksWaiting(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1870,8 +1876,6 @@ function SidebarColumn({
     standing: withoutLuke(tasks.listedAgents.standing, operator),
     archived: tasks.listedAgents.archived,
   };
-  // Note that an archived task or agent, which the list no longer shows, counts for nothing here.
-  const unlisted = listedRows.tasks.length === 0 && listedAgents.standing.length === 0;
   const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);
   const pinnedAgents = listedAgents.standing.filter((agent) => agent.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, pinnedAgents, tasks);
@@ -1955,6 +1959,7 @@ function SidebarColumn({
       if (tasks.agentView.agentId === agentId) tasks.agentView.onClose();
     },
     unread,
+    waitingOn,
     unseenAgent: (agentId) =>
       tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
     now,
@@ -1997,9 +2002,24 @@ function SidebarColumn({
   const unpinnedTasks = listedRows.tasks.filter(
     (task) => task.pinnedAt === undefined && !sectioned.taskIds.has(task.id),
   );
-  const unpinnedAgents = listedAgents.standing.filter(
-    (agent) => agent.pinnedAt === undefined && !sectioned.agentIds.has(agent.id),
+  // An automation's finished runs leave Tasks once they hold nothing of the reader's (`finished-runs.ts`).
+  const unpinnedAgents = withoutFinishedRuns(
+    listedAgents.standing.filter(
+      (agent) => agent.pinnedAt === undefined && !sectioned.agentIds.has(agent.id),
+    ),
+    {
+      unseen: context.unseenAgent,
+      inbox: tasks.inboxTaskless,
+      me: tasks.me,
+      shown: agentShown,
+    },
   );
+  // Note that an archived task or agent, and a finished run, which the list does not show, count for nothing here.
+  const unlisted =
+    listedRows.tasks.length === 0 &&
+    pinnedAgents.length === 0 &&
+    sectioned.agentIds.size === 0 &&
+    unpinnedAgents.length === 0;
   const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsAssignedTo(taskRowsCreatedBy(unpinned, createdBy), assignedTo);
   // The status filter thins the tasks listed.
@@ -2200,6 +2220,7 @@ function SidebarColumn({
                         current={context.marked(row.task.id, undefined)}
                         open={current(row.task.id)}
                         unread={unread(row.task)}
+                        waiting={context.waitingOn.get(row.task.id) ?? 0}
                         now={now}
                         faces={context.faces}
                         onOpen={() => context.onOpen(row.task.id)}

@@ -239,6 +239,12 @@ test("⌘K marks the task on screen unread and then read, and offers no mark for
   assert.deepEqual(markRows(), ["Mark as unread"]);
 });
 
+/** Whether the palette stands where a reader meets it: its card drawn, and hidden by nothing around it. */
+function paletteShown(): boolean {
+  const card = document.querySelector('[role="dialog"][aria-label="Command palette"]');
+  return card !== null && card.closest("[hidden]") === null;
+}
+
 function field(): HTMLInputElement {
   const input = document.querySelector<HTMLInputElement>('[role="dialog"] input[role="combobox"]');
   assert.ok(input, "the search field is drawn");
@@ -468,7 +474,7 @@ test("choosing a page opens Settings on that page", () => {
   press("Integrations");
 
   assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
-  assert.equal(document.querySelector('[role="option"]'), null, "the palette closed");
+  assert.equal(paletteShown(), false, "the palette closed");
 });
 
 /** The filter standing checked. */
@@ -564,6 +570,35 @@ test("a press on a filter chooses it and leaves the caret in the field, no filte
   assert.equal(chosenFilter(), "This task");
   assert.equal(document.activeElement, field(), "the caret stays in the field");
   assert.equal(field().value, "invite");
+});
+
+/** Where the row chosen stands in the list, the one Return opens. */
+function chosenRowAt(): number {
+  return [...document.querySelectorAll('[role="option"]')].findIndex(
+    (row) => row.getAttribute("aria-selected") === "true",
+  );
+}
+
+test("a filter chosen, and ⌘K run again, choose the first row wherever the arrows left the choice", () => {
+  openPalette();
+  chooseFilter("Settings");
+  key({ key: "ArrowDown" });
+  key({ key: "ArrowDown" });
+  assert.equal(chosenRowAt(), 2);
+
+  key(RIGHT);
+  assert.equal(chosenFilter(), "All");
+  assert.equal(chosenRowAt(), 0, "the filter's first row is chosen");
+
+  key({ key: "ArrowDown" });
+  assert.equal(chosenRowAt(), 1);
+  act(() => {
+    assert.ok(
+      runAppCommand(APP_COMMAND.COMMAND_PALETTE),
+      "the menu bar's ⌘K runs over the palette",
+    );
+  });
+  assert.equal(chosenRowAt(), 0, "the first row is chosen again");
 });
 
 test("in a row too narrow for every filter, the filter a key chooses is scrolled into view along the row alone", () => {
@@ -1351,7 +1386,7 @@ test("an agent pressed on a task's card in ⌘K over Settings leaves the palette
   act(() => agent.click());
   assert.deepEqual(shown, [["plan-1", "agent-7"]]);
   assert.deepEqual(sent.tabs, [PANEL_TAB.TASKS], "the window leaves Settings for the tasks");
-  assert.equal(document.querySelector('[role="dialog"]'), null, "the palette is put away");
+  assert.equal(paletteShown(), false, "the palette is put away");
 });
 
 test("Search lists the listed workspace's plans first, then every other workspace's, each naming its workspace by its tile and name and found by it", () => {
@@ -2250,7 +2285,9 @@ test("⌘K's Tasks lists the agents with no task among the tasks by their last a
   press("Triage overnight issues · acme/relay");
   assert.deepEqual(opened, ["a-1"]);
   // An archived one-off agent is listed nowhere in the sidebar, so ⌘K is its way to its page, whose Unarchive brings it back.
-  openPalette(control);
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
+  });
   chooseFilter("Tasks");
   press("Remove stale copy · acme/relay · Archived");
   assert.deepEqual(opened, ["a-1", "a-2"]);
@@ -3049,7 +3086,7 @@ test("choosing an Inbox item opens it in the Inbox, as a notification's would", 
   press("Use acme.dev for previews? · Billing usage alerts");
 
   assert.deepEqual(opened, [{ taskId: ROTATION.id, itemId: PREVIEWS.id, opened: true }]);
-  assert.equal(document.querySelector('[role="option"]'), null, "the palette closed");
+  assert.equal(paletteShown(), false, "the palette closed");
 });
 
 test("an Inbox that could not be read says so, rather than that nothing matches", async () => {

@@ -97,11 +97,6 @@ export function standsAt(task: TaskSummary, standing: TaskStanding): boolean {
   if (standing.assigneeId !== undefined) {
     return (task.assignee?.userId ?? null) === standing.assigneeId;
   }
-  if (standing.runsOn !== undefined) {
-    // Note that the cloud is a task with no runsOn, so a device since removed does not stand there.
-    if (!("deviceId" in standing.runsOn)) return task.runsOn === undefined;
-    return task.runsOn?.deviceId === standing.runsOn.deviceId;
-  }
   return priorityOf(task) === standing.priority;
 }
 

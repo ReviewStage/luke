@@ -66,6 +66,7 @@ import {
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
+import { ACTOR_KIND, actorName } from "@luke/ui/actor-model";
 import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { BotIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
@@ -74,6 +75,7 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
+import { MemberDirectory, useCreator } from "../member-directory.js";
 import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
@@ -221,9 +223,46 @@ function OwnerCell({
 }
 
 /**
+ * Who made an automation, as its row's column says it: their face and their
+ * name, or You, its owner and their whole name on hover where the column cuts
+ * it short. One whose maker the members do not name says its owner instead
+ * (`OwnerCell`), as the column did before it named makers.
+ */
+function MakerCell({
+  automation,
+  workspace,
+}: {
+  automation: AutomationSummary;
+  workspace: Workspace | undefined;
+}): React.JSX.Element {
+  const maker = useCreator(
+    automation.creatorId === undefined ? {} : { ownerId: automation.creatorId },
+  );
+  const owner = automationOwner(automation);
+  const mine = automation.mine === true;
+  if (maker.kind === ACTOR_KIND.SOMEONE) {
+    return <OwnerCell owner={owner} mine={mine} workspace={workspace} />;
+  }
+  const name = actorName(maker);
+  return (
+    <Tooltip label={`${name} · ${automationOwnerName(owner, workspace?.name, mine)}`}>
+      <AutomationOwnerFrame
+        owner={owner}
+        mark={<ActorMark actor={maker} size={ACTOR_SIZE.INLINE} />}
+        name={
+          <OneLine className="automation-owner-name" words={name}>
+            {name}
+          </OneLine>
+        }
+      />
+    </Tooltip>
+  );
+}
+
+/**
  * One automation's row: its tile, the glyph of what fires it wearing where its newest run
- * stands, its name over what fires it, its owner, when it runs next with a
- * failure's mark before it, and its switch, hanging the automation's card. The owner and the next run each keep a column of their
+ * stands, its name over what fires it, who made it, when it runs next with a
+ * failure's mark before it, and its switch, hanging the automation's card. The maker and the next run each keep a column of their
  * own, so they line up down the list whatever each row says. Everything but the switch is one press
  * that opens its page, as a sidebar task's row is, so the row opens wherever
  * it is pressed and the switch beside the press only switches. Its
@@ -231,7 +270,7 @@ function OwnerCell({
  * hands focus back to its press as the menu closes; a right-click on the switch is the switch's own and opens
  * nothing. A narrow room, a phone's, has no width for the two columns beside
  * the name, so the row keeps its name whole and says when it runs next in
- * the line under it, its owner said by its card's heading instead.
+ * the line under it, its maker said by its card's foot instead.
  */
 function AutomationRow({
   automation,
@@ -302,13 +341,7 @@ function AutomationRow({
           narrow ? undefined : (
             <AutomationRowMeta
               lead={hiddenWorking}
-              owner={
-                <OwnerCell
-                  owner={automationOwner(automation)}
-                  mine={automation.mine === true}
-                  workspace={workspace}
-                />
-              }
+              owner={<MakerCell automation={automation} workspace={workspace} />}
               next={
                 <>
                   {stateEndMark(state, true)}
@@ -896,10 +929,12 @@ export function AutomationsPage({
   /** The room the panel's stage gives, narrow where an automation's runs are a screen of their own. */
   room: ShellRoom;
 }): React.JSX.Element {
-  // Every Copy link on these pages is written under the listed workspace, whose automations they are.
+  // Every Copy link on these pages is written under the listed workspace, whose automations they are, and their makers named by its members.
   return (
     <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
-      <AutomationsPages tasks={tasks} room={room} />
+      <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+        <AutomationsPages tasks={tasks} room={room} />
+      </MemberDirectory>
     </LinkWorkspaceProvider>
   );
 }

@@ -118,6 +118,27 @@ export const DEVICE_ISOLATION = {
 
 export type DeviceIsolation = (typeof DEVICE_ISOLATION)[keyof typeof DEVICE_ISOLATION];
 
+/**
+ * Where a device stands in setting itself up to run agents, as it registers
+ * while it is not ready to take one: a Mac fetching its pinned smolvm and
+ * pulling the sandbox image the first time, or one whose fetch or pull
+ * failed. A device registers with none once it is ready, as every device
+ * from before the field does, and only a device with none takes an agent.
+ */
+export const DEVICE_SETUP = {
+  /** It is still fetching what its VMs run on. */
+  PREPARING: "preparing",
+  /** Its fetch failed, for the reason it registered beside it. */
+  FAILED: "failed",
+} as const;
+
+export type DeviceSetup = (typeof DEVICE_SETUP)[keyof typeof DEVICE_SETUP];
+
+export const deviceSetupSchema = EffectSchema.Literals(Object.values(DEVICE_SETUP));
+
+/** The most characters of the words a device says its setup failed for. */
+export const DEVICE_SETUP_FAILURE_MAX_CHARS = 200;
+
 /** A device's operating system, as Node's `process.platform` names it. */
 export const DEVICE_PLATFORM = {
   DARWIN: "darwin",
@@ -354,7 +375,11 @@ const deviceField = { deviceId: wireUuidSchema };
  * does not know, never sees it from a device that has none; a capability
  * this service does not know is passed over rather than refused, so a newer
  * device's list never fails its register. A sandboxed device names each
- * executable by its path where its agents run, inside the VM.
+ * executable by its path where its agents run, inside the VM. A device not
+ * ready to take an agent yet registers where its setup stands
+ * (`DEVICE_SETUP`), and for one that failed, in words of its own naming no
+ * secret, why; it names none once ready, so a service from before the
+ * field, which refuses it, only misses a device it would never have listed.
  */
 export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
   ...deviceField,
@@ -369,6 +394,13 @@ export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
   capabilities: EffectSchema.optionalKey(
     EffectSchema.Array(EffectSchema.String.check(EffectSchema.isMaxLength(64))).check(
       EffectSchema.isMaxLength(16),
+    ),
+  ),
+  setup: EffectSchema.optionalKey(deviceSetupSchema),
+  setupFailure: EffectSchema.optionalKey(
+    EffectSchema.String.check(
+      EffectSchema.isMinLength(1),
+      EffectSchema.isMaxLength(DEVICE_SETUP_FAILURE_MAX_CHARS),
     ),
   ),
 });

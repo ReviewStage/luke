@@ -104,6 +104,7 @@ import { ACTOR_KIND, type Actor, actorName, assigneeFace } from "@luke/ui/actor-
 import {
   COMMAND_FILTER,
   CommandDialog,
+  type CommandDialogProps,
   type CommandGroup,
   type CommandItem,
 } from "@luke/ui/command";
@@ -131,7 +132,9 @@ import { fileName, shownFiles } from "@luke/voice/code-pane-model";
 import {
   Fragment,
   isValidElement,
+  memo,
   type ReactNode,
+  useCallback,
   useDeferredValue,
   useEffect,
   useLayoutEffect,
@@ -197,6 +200,7 @@ import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, inboxEntries } from "./main-tabs.js";
 import { strandedHome } from "./move-task-dialog.js";
+import { useTasksWaiting } from "./places-waiting.js";
 import {
   ADD_SECTION,
   inboxOffered,
@@ -474,6 +478,20 @@ interface PaletteRow {
   onChoose: () => void;
 }
 
+/** What a row's search reads: its name, its short words, its task's key, its keywords, and whether its letters in order find it. */
+type RowWords = Pick<PaletteRow, "label" | "terms" | "taskKey" | "keywords" | "loose">;
+
+/**
+ * A row ranked before it is drawn: what its search reads, and the row, drawn
+ * only once the filter lists it. Note that the tasks and the Inbox's items
+ * rank this way, as the files do, because a source may hold thousands, a row's
+ * marks and card are most of its cost, and a filter lists fifty at most.
+ */
+interface UndrawnRow {
+  readonly subject: SearchSubject;
+  readonly draw: () => PaletteRow;
+}
+
 /** One kind's rows, ranked and cut to what the filter lists, and its source's notice where it stands. */
 interface PaletteSection {
   kind: PaletteKind;
@@ -485,7 +503,7 @@ interface PaletteSection {
  * What a row is searched by: its name, its other short words, its task's
  * key, its keywords, and, for a file or a command, its letters in order.
  */
-function rowSubject(row: PaletteRow): SearchSubject {
+function rowSubject(row: RowWords): SearchSubject {
   return {
     label: row.label,
     lines: row.terms.filter((term) => term !== row.label),
@@ -498,9 +516,19 @@ function rowSubject(row: PaletteRow): SearchSubject {
   };
 }
 
+/** How well what a row is searched by answers the query, by the tier it meets; 0 where it meets none. */
+function subjectScore(subject: SearchSubject, query: string): number {
+  return searchHit(subject, query)?.score ?? 0;
+}
+
 /** How well a row answers the query, by the tier it meets; 0 where it meets none. */
 function rowScore(row: PaletteRow, query: string): number {
-  return searchHit(rowSubject(row), query)?.score ?? 0;
+  return subjectScore(rowSubject(row), query);
+}
+
+/** A row ranked by its `words` and drawn with the rest of it, by `draw`, only once it is listed. */
+function undrawnRow(words: RowWords, draw: () => Omit<PaletteRow, keyof RowWords>): UndrawnRow {
+  return { subject: rowSubject(words), draw: () => ({ ...draw(), ...words }) };
 }
 
 /**
@@ -722,11 +750,14 @@ function PaletteTaskCard({
 
 /**
  * A task's muted words: its repository, by its name alone as the Tasks
- * list's row says it, unless another listed task's repository shares the
- * name (`repositoryLabel`).
+ * list's row says it, unless another listed repository shares the name
+ * (`repositoryLabel`).
  */
-function taskDetail(task: TaskSummary, listed: readonly TaskSummary[]): string | undefined {
-  return task.repository === null ? undefined : repositoryLabel(task.repository, listed);
+function taskDetail(
+  task: TaskSummary,
+  repositories: readonly { readonly repository: string | null }[],
+): string | undefined {
+  return task.repository === null ? undefined : repositoryLabel(task.repository, repositories);
 }
 
 /**
@@ -737,7 +768,8 @@ function taskDetail(task: TaskSummary, listed: readonly TaskSummary[]): string |
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it. A task wears at its end who is on it and its
- * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowStatus`),
+ * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowStatus`, its
+ * questions waiting on the reader by `waitingOn`),
  * leads with its key and says its repository by its name, as the Tasks
  * list's row does, and is found by its key, its assignee's name, and its
  * creator's, a key typed whole listing its task first. An agent opens on its own page, as its
@@ -751,9 +783,14 @@ function taskRows(
   openAgent: (agentId: string) => void,
   showAgent: TasksControl["onShowAgent"],
   originOf: (task: TaskSummary) => Actor | undefined,
-): readonly PaletteRow[] {
+  waitingOn: ReadonlyMap<string, number>,
+): readonly UndrawnRow[] {
   const listedId = tasks.workspace?.id;
   const carded = { ...tasks, onShowAgent: showAgent };
+  // Note that a repository's name is weighed against each repository listed once, not against each task, since many tasks share one.
+  const repositories = [...new Set(tasks.tasks.map((task) => task.repository))].map(
+    (repository) => ({ repository }),
+  );
   // Note that only the listed workspace's members are read, so another workspace's assignee stands by the wire's name, never as having left.
   const listedMembers = (task: TaskSummary) =>
     task.workspaceId === listedId ? members : undefined;
@@ -773,33 +810,18 @@ function taskRows(
       ? undefined
       : { workspaceName: home.name, number: task.number };
   };
-  const taskOf = (task: TaskSummary): PaletteRow => {
+  const taskOf = (task: TaskSummary): UndrawnRow => {
     const elsewhere = elsewhereOf(task);
     const numbered = keyOf(task);
     const key =
       numbered === undefined ? undefined : taskKey(numbered.workspaceName, numbered.number);
-    const worn = assigneeFace(task, readerOf(task));
     const createdBy = task.createdBy?.name ?? null;
     const assignedTo = task.assignee?.name ?? null;
     // Note that a task Luke or an agent made says them in its detail, so it is found by them.
     const origin = originOf(task);
     const madeBy = origin === undefined ? null : actorName(origin);
-    const detail = taskDetail(task, tasks.tasks);
-    return {
-      ...tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }),
-      detail:
-        madeBy === null
-          ? detail
-          : [detail, `by ${madeBy}`].filter((words) => words !== undefined).join(" · "),
-      workspace: elsewhere,
-      card: <PaletteTaskCard tasks={carded} task={task} />,
-      endMark: (
-        <>
-          {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
-          <TaskRowStatus task={task} stranded={strandedHome(tasks, task)} />
-        </>
-      ),
-      people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
+    const words: RowWords = {
+      label: task.name,
       terms: [
         task.name,
         key,
@@ -811,26 +833,58 @@ function taskRows(
         origin === undefined ? null : MADE_BY_WORDS[origin.kind],
       ].filter((term) => term !== null && term !== undefined),
       taskKey: numbered,
-      onChoose: () => open(task.id),
     };
+    return undrawnRow(words, () => {
+      const worn = assigneeFace(task, readerOf(task));
+      const detail = taskDetail(task, repositories);
+      return {
+        icon: tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }).icon,
+        detail:
+          madeBy === null
+            ? detail
+            : [detail, `by ${madeBy}`].filter((each) => each !== undefined).join(" · "),
+        workspace: elsewhere,
+        card: <PaletteTaskCard tasks={carded} task={task} />,
+        endMark: (
+          <>
+            {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
+            <TaskRowStatus
+              task={task}
+              waiting={waitingOn.get(task.id) ?? 0}
+              stranded={strandedHome(tasks, task)}
+            />
+          </>
+        ),
+        people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
+        onChoose: () => open(task.id),
+      };
+    });
   };
-  const agentOf = (agent: TasklessAgent, archived: boolean): PaletteRow => {
+  const agentOf = (agent: TasklessAgent, archived: boolean): UndrawnRow => {
     const name = agentName(agent, tasks.agents.models);
-    const words = [agent.repository, archived ? ARCHIVED_WORD : null].filter(
-      (word) => word !== null,
-    );
-    return {
-      ...tabLook({ kind: TAB_KIND.AGENT, name, agent }),
-      detail: words.length === 0 ? undefined : words.join(" · "),
-      endMark: agentEndMark(agent, archived),
-      card: (
-        <AgentCard subject={tasklessRowSubject(agent, tasks.agents)} models={tasks.agents.models} />
-      ),
+    const words: RowWords = {
+      label: name,
       terms: [name, agent.repository, agent.automationName ?? null].filter((term) => term !== null),
-      onChoose: () => openAgent(agent.id),
     };
+    return undrawnRow(words, () => {
+      const said = [agent.repository, archived ? ARCHIVED_WORD : null].filter(
+        (word) => word !== null,
+      );
+      return {
+        icon: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
+        detail: said.length === 0 ? undefined : said.join(" · "),
+        endMark: agentEndMark(agent, archived),
+        card: (
+          <AgentCard
+            subject={tasklessRowSubject(agent, tasks.agents)}
+            models={tasks.agents.models}
+          />
+        ),
+        onChoose: () => openAgent(agent.id),
+      };
+    });
   };
-  const rowOf = (row: TaskRow, archived: boolean): PaletteRow =>
+  const rowOf = (row: TaskRow, archived: boolean): UndrawnRow =>
     row.kind === TASK_ROW.TASK ? taskOf(row.task) : agentOf(row.agent, archived);
   const listed = (task: TaskSummary) => listedId === undefined || task.workspaceId === listedId;
   // The pinned stand first, as the sidebar's; the rest by their last
@@ -1071,16 +1125,21 @@ function snippetOf(
   return undefined;
 }
 
+/** What an Inbox item's search reads: its title and its holder's name, and else everything it says (`inboxItemWords`). */
+function inboxWords({ holder, item }: InboxListed): RowWords {
+  const title = cardTitle(item.title);
+  return { label: title, terms: [title, holderName(holder)], keywords: inboxItemWords(item) };
+}
+
 /**
- * The listed workspace's Inbox items, each by its agent's tile and title,
- * beside its task's or automation's name and, where its thread rather than
- * those found it, the words that did, the marks its Inbox row wears at its
- * end and its card hung beside it (`inbox-item-parts.tsx`). Each is found
- * by its title and its holder's name, and else by everything it says
- * (`inboxItemWords`).
+ * An Inbox item's row, by its agent's tile and title, beside its task's or
+ * automation's name and, where its thread rather than those found it, the
+ * words that did, the marks its Inbox row wears at its end and its card hung
+ * beside it (`inbox-item-parts.tsx`), drawn only once the filter lists it.
  */
-function inboxRows(
-  items: readonly InboxListed[],
+function inboxRow(
+  listed: InboxListed,
+  words: RowWords,
   seams: {
     readonly readerId: string | undefined;
     readonly models: CodingAgentsControl["models"];
@@ -1088,13 +1147,11 @@ function inboxRows(
     readonly now: number;
     readonly open: (listed: InboxListed) => void;
   },
-): readonly PaletteRow[] {
-  return items.map((listed) => {
-    const { holder, item } = listed;
-    const title = cardTitle(item.title);
+): UndrawnRow {
+  const { holder, item } = listed;
+  return undrawnRow(words, () => {
     const name = holderName(holder);
-    const words = inboxItemWords(item);
-    const snippet = snippetOf(words, [item.title, title, name], seams.tokens);
+    const snippet = snippetOf(words.keywords ?? [], [item.title, words.label, name], seams.tokens);
     return {
       icon: (
         <ItemMark
@@ -1105,7 +1162,6 @@ function inboxRows(
           plain
         />
       ),
-      label: title,
       detail: snippet === undefined ? name : `${name} · ${snippet}`,
       endMark: <InboxItemEnd listed={listed} now={seams.now} readerId={seams.readerId} />,
       card: (
@@ -1116,8 +1172,6 @@ function inboxRows(
           readerId={seams.readerId}
         />
       ),
-      terms: [title, name],
-      keywords: words,
       onChoose: () => seams.open(listed),
     };
   });
@@ -1724,6 +1778,68 @@ function PaletteFooter({ typed, runs }: { typed: boolean; runs: boolean }): Reac
 }
 
 /**
+ * ⌘K's dialog over the rows ranked, holding the row chosen, by its place in
+ * the list: the first each time ⌘K opens the palette and as a filter is
+ * chosen, then wherever the arrows or the pointer move it. Note that the row
+ * chosen is held here rather than by the palette, so moving it draws the
+ * dialog again and never ranks a row, which the palette does over every
+ * task, Inbox item, and setting it lists. Note too that it draws again only
+ * for props that changed, which the palette holds still while it is shut,
+ * so the window drawing again leaves the hidden dialog alone.
+ */
+const PaletteDialog = memo(function PaletteDialog({
+  opening,
+  filter,
+  groups,
+  query,
+  ...dialog
+}: {
+  /** How many times ⌘K has opened the palette, each time choosing the first row again. */
+  opening: number;
+  filter: PaletteFilter;
+  groups: readonly CommandGroup[];
+  query: string;
+} & Pick<
+  CommandDialogProps,
+  | "open"
+  | "onOpenChange"
+  | "placeholder"
+  | "onQueryChange"
+  | "empty"
+  | "band"
+  | "onKeyDown"
+  | "inputRef"
+>): React.JSX.Element {
+  const [selected, setSelected] = useState(FIRST_ROW);
+  // Note that a palette closing keeps its row chosen, since it fades out as it stood.
+  const [chosenUnder, setChosenUnder] = useState({ opening, filter });
+  if (chosenUnder.opening !== opening || chosenUnder.filter !== filter) {
+    setChosenUnder({ opening, filter });
+    setSelected(FIRST_ROW);
+  }
+  // Whether the row chosen is a command's, Ask Luke's among them, which Return runs rather than opens.
+  const runs = groups.some(
+    (group) =>
+      (group.id === PALETTE_FILTER.COMMANDS || group.id === ASK_LUKE_GROUP) &&
+      group.items.some((item) => item.id === selected),
+  );
+  return (
+    <CommandDialog
+      {...dialog}
+      label="Command palette"
+      // Note that the palette stays drawn, hidden, while shut, so ⌘K only shows it, since its props stand still until it opens.
+      keepMounted
+      groups={groups}
+      filter={COMMAND_FILTER.NONE}
+      query={query}
+      selected={selected}
+      onSelectedChange={setSelected}
+      foot={<PaletteFooter typed={query !== ""} runs={runs} />}
+    />
+  );
+});
+
+/**
  * The palette, offering ⌘K while `available`: past the sign-in, where there
  * is something to run. A palette standing when that ends is taken down in
  * the render that finds it gone. It opens on All with nothing typed.
@@ -1791,19 +1907,15 @@ export function CommandPalette({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const experiments = useExperimentChoices();
-  const filters = filtersOn(experiments);
-  const labels = filterLabels(experiments);
+  const filters = useMemo(() => filtersOn(experiments), [experiments]);
+  const labels = useMemo(() => filterLabels(experiments), [experiments]);
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
+  // How many times ⌘K has opened the palette, each of which chooses its first row.
+  const [openings, setOpenings] = useState(0);
   const [query, setQuery] = useState("");
   // Each key pressed in the search field is timed to the paint after it, which its ranking of every row is among.
   const keystrokes = useKeystrokeSpans(PANEL_SPAN.KEYSTROKE_COMMAND_PALETTE);
-  // The row chosen, by its place in the list, which a new filter puts back on the first.
-  const [selected, setSelected] = useState(FIRST_ROW);
-  const changeFilter = (next: PaletteFilter) => {
-    setFilter(next);
-    setSelected(FIRST_ROW);
-  };
   const [files, setFiles] = useState<FilesHeld | undefined>(undefined);
   // The read of the files asked last, by its count: only its answer is kept.
   const filesAsk = useRef(0);
@@ -1821,7 +1933,8 @@ export function CommandPalette({
     available
       ? () => {
           setFromPanel(inSidePanel(document.activeElement));
-          changeFilter(PALETTE_FILTER.ALL);
+          setFilter(PALETTE_FILTER.ALL);
+          setOpenings((count) => count + 1);
           setQuery("");
           // The files are read afresh by the first search of each opening,
           // since the branch they are listed on moves, and a read still out
@@ -1849,17 +1962,20 @@ export function CommandPalette({
     run?.();
   }, [open]);
 
-  const choose = (run: () => void) => {
+  const choose = useCallback((run: () => void) => {
     chosen.current = run;
     setOpen(false);
-  };
+  }, []);
   // A task, and an agent's tab, are always opened on the Tasks tab, as a
   // press in the sidebar is.
-  const onTasks = (run: () => void) =>
-    choose(() => {
-      if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-      run();
-    });
+  const onTasks = useCallback(
+    (run: () => void) =>
+      choose(() => {
+        if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+        run();
+      }),
+    [choose, tab, onTabChange],
+  );
   // The seek for a setting's row gives itself up once another is asked
   // for or Settings is left, so it never lands on a later visit's page.
   const landing = useRef<(() => void) | undefined>(undefined);
@@ -1905,30 +2021,33 @@ export function CommandPalette({
   // dialog sees to, because the window's Escape would stop Luke mid-reply and
   // a window chord would change what stands behind the palette. Escape itself
   // is the dialog's, which closes the palette alone.
-  const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    // Note that a Return the rows have not caught up with waits for them, so it never chooses a row the earlier words ranked.
-    if (event.key === "Enter" && sought !== query) {
+  const keyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      // Note that a Return the rows have not caught up with waits for them, so it never chooses a row the earlier words ranked.
+      if (event.key === "Enter" && sought !== query) {
+        event.preventDefault();
+        owedReturn.current = query;
+        return;
+      }
+      const step = arrowStep(event, query);
+      if (step !== 0) {
+        event.preventDefault();
+        setFilter(steppedFilter(filters, filter, step));
+        return;
+      }
+      const pressed = commandForKey(
+        [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.BACK, APP_COMMAND.FORWARD],
+        event.nativeEvent,
+      );
+      if (pressed === undefined) return;
+      // The menu bar's Back and Forward are held off too, since the palette
+      // claims their chords for its filters while it stands.
       event.preventDefault();
-      owedReturn.current = query;
-      return;
-    }
-    const step = arrowStep(event, query);
-    if (step !== 0) {
-      event.preventDefault();
-      changeFilter(steppedFilter(filters, filter, step));
-      return;
-    }
-    const pressed = commandForKey(
-      [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.BACK, APP_COMMAND.FORWARD],
-      event.nativeEvent,
-    );
-    if (pressed === undefined) return;
-    // The menu bar's Back and Forward are held off too, since the palette
-    // claims their chords for its filters while it stands.
-    event.preventDefault();
-    if (pressed === APP_COMMAND.COMMAND_PALETTE) setOpen(false);
-    else changeFilter(steppedFilter(filters, filter, pressed === APP_COMMAND.BACK ? -1 : 1));
-  };
+      if (pressed === APP_COMMAND.COMMAND_PALETTE) setOpen(false);
+      else setFilter(steppedFilter(filters, filter, pressed === APP_COMMAND.BACK ? -1 : 1));
+    },
+    [sought, query, filters, filter],
+  );
 
   const tokens = searchTokens(sought);
   // Luke leads the list as Ask Luke, so the rows that list agents leave him out.
@@ -1936,7 +2055,7 @@ export function CommandPalette({
     accountId: tasks.me,
     workspaceId: tasks.signedIn ? tasks.workspace?.id : undefined,
   });
-  const listedTasks = withoutLukeIn(tasks, operator);
+  const listedTasks = useMemo(() => withoutLukeIn(tasks, operator), [tasks, operator]);
   const askLuke = operator === undefined ? undefined : askLukeRow(operator, onTasks, choose, tasks);
   const askLukeShown =
     open &&
@@ -1946,7 +2065,28 @@ export function CommandPalette({
   // The listed workspace's members, read once for it, name a task's assignee by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const originOf = useTaskOrigin();
+  const waitingOn = useTasksWaiting(tasks);
   const { members } = membersRead;
+  // Note that the tasks' rows are built once for what they say rather than on every render, and
+  // only while a filter that lists them stands open, because a key, an arrow, or the pointer
+  // moving ranks or lights them again but changes none of them, and an account may hold thousands.
+  const tasksShown =
+    open && tasks.signedIn && (filter === PALETTE_FILTER.ALL || filter === PALETTE_FILTER.TASKS);
+  const taskList = useMemo(
+    () =>
+      tasksShown
+        ? taskRows(
+            listedTasks,
+            members,
+            (id) => onTasks(() => tasks.onSelect(id)),
+            (id) => onTasks(() => tasks.agentView.onOpen(id)),
+            (taskId, agentId) => onTasks(() => tasks.onShowAgent(taskId, agentId)),
+            originOf,
+            waitingOn,
+          )
+        : [],
+    [tasksShown, listedTasks, members, onTasks, tasks, originOf, waitingOn],
+  );
   const reads = useReadMarks();
   const renameOffer = useTaskRenameOffer();
   const agentReads = useAgentReadMarks();
@@ -1980,6 +2120,12 @@ export function CommandPalette({
   const inboxAsked =
     open && tasks.signedIn && (filter === PALETTE_FILTER.INBOX || tokens.length > 0);
   const inboxSearch = useInboxSearch(tasks, inboxAsked);
+  // Note that each Inbox item's words are read once for the items pushed rather than on every key.
+  const inboxList = useMemo(
+    () =>
+      inboxAsked ? inboxSearch.items.map((listed) => ({ listed, words: inboxWords(listed) })) : [],
+    [inboxAsked, inboxSearch.items],
+  );
   // Note that the channels are those the window holds, read again as the palette opens, as the sidebar reads them as it is shown.
   const channelsOn = filters.includes(PALETTE_FILTER.CHANNELS);
   const channels = useChannels(
@@ -2034,41 +2180,33 @@ export function CommandPalette({
           limit,
         );
 
-  // Each kind's rows in tiers, built only for the filter shown and only
-  // while open: every row a tier matches ranks above the next tier's.
   const byRow = (row: PaletteRow) => rowScore(row, sought);
   const runCommand = (command: AppCommand) => choose(() => runAppCommand(command));
-  const tiersOf = {
-    [PALETTE_FILTER.TASKS]: () => [
-      tasks.signedIn
-        ? taskRows(
-            listedTasks,
-            members,
-            (id) => onTasks(() => tasks.onSelect(id)),
-            (id) => onTasks(() => tasks.agentView.onOpen(id)),
-            (taskId, agentId) => onTasks(() => tasks.onShowAgent(taskId, agentId)),
-            originOf,
-          )
-        : [],
-    ],
-    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
-    [PALETTE_FILTER.INBOX]: () => [
-      inboxAsked
-        ? inboxRows(inboxSearch.items, {
-            readerId: tasks.me,
-            models: tasks.agents.models,
-            tokens,
-            now,
-            open: (listed) =>
-              onTasks(() =>
-                tasks.inboxView.onOpenItem(
-                  { ...choiceOf(listed), opened: true },
-                  listed.item.channelId,
-                ),
+  // The tasks and the Inbox's items, which may number thousands, ranked by what their search
+  // reads and drawn only once listed.
+  const undrawnOf = {
+    [PALETTE_FILTER.TASKS]: () => taskList,
+    [PALETTE_FILTER.INBOX]: () =>
+      inboxList.map(({ listed, words }) =>
+        inboxRow(listed, words, {
+          readerId: tasks.me,
+          models: tasks.agents.models,
+          tokens,
+          now,
+          open: (chosen) =>
+            onTasks(() =>
+              tasks.inboxView.onOpenItem(
+                { ...choiceOf(chosen), opened: true },
+                chosen.item.channelId,
               ),
-          })
-        : [],
-    ],
+            ),
+        }),
+      ),
+  } as const;
+  // Every other kind's rows in tiers, built only for the filter shown and only
+  // while open: every row a tier matches ranks above the next tier's.
+  const tiersOf = {
+    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
     [PALETTE_FILTER.CHANNELS]: () => [
       channelRows(channels.channels ?? [], tasks.workspace?.id, (channelId) =>
         onTasks(() => tasks.inboxView.onOpenChannel(channelId)),
@@ -2077,7 +2215,6 @@ export function CommandPalette({
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],
-    [PALETTE_FILTER.FILES]: () => [],
     // Note that a command is found by its letters in order too, as a path is, since a command's name is typed by its first letters.
     // Note that the commands are one tier, so a query ranks them all alike, and their order
     // is what an empty field lists and what breaks a tie: the open thing's, then Go to, then the window's.
@@ -2102,19 +2239,29 @@ export function CommandPalette({
       settingsPageRows(settings.capabilities, experiments, openPage),
       settingRows(settings.rows, land),
     ],
-  } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
+  } as const satisfies Record<
+    Exclude<PaletteKind, keyof typeof undrawnOf | typeof PALETTE_FILTER.FILES>,
+    () => readonly (readonly PaletteRow[])[]
+  >;
   // Note that a file found opens through the panel's one door for a file
   // named in place: the tab it has, as it stands, or a new one at the strip's end.
   const openFile = (path: string) =>
     onTasks(() => shownOverHistory(tasks, () => tasks.sidePanel.onOpenFile({ path })));
-  const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
-    kind === PALETTE_FILTER.FILES
-      ? (filesOpen ? matchedPaths : []).map((path) =>
-          fileRow(path, { shown: tasks.shownCode ?? [], repository }, openFile),
-        )
-      : tiersOf[kind]()
-          .flatMap((tier) => ranked(tier, sought, limit, byRow))
-          .slice(0, limit);
+  const rowsFor = (kind: PaletteKind): readonly PaletteRow[] => {
+    if (kind === PALETTE_FILTER.FILES) {
+      return (filesOpen ? matchedPaths : []).map((path) =>
+        fileRow(path, { shown: tasks.shownCode ?? [], repository }, openFile),
+      );
+    }
+    if (kind === PALETTE_FILTER.TASKS || kind === PALETTE_FILTER.INBOX) {
+      return ranked(undrawnOf[kind](), sought, limit, (row) =>
+        subjectScore(row.subject, sought),
+      ).map((row) => row.draw());
+    }
+    return tiersOf[kind]()
+      .flatMap((tier) => ranked(tier, sought, limit, byRow))
+      .slice(0, limit);
+  };
   const kinds = filters.filter((each): each is PaletteKind =>
     filter === PALETTE_FILTER.ALL ? each !== PALETTE_FILTER.ALL : each === filter,
   );
@@ -2181,37 +2328,25 @@ export function CommandPalette({
   // The render a key paints the field in draws the ranking already standing, and only the
   // render the words sought catch up in ranks them, so no key waits on the ranking.
   if (open) stood.current = sought === query ? rank() : stood.current;
-  // Whether the row chosen is a command's, Ask Luke's among them, which Return runs rather than opens.
-  const runs = stood.current.some(
-    (group) =>
-      (group.id === PALETTE_FILTER.COMMANDS || group.id === ASK_LUKE_GROUP) &&
-      group.items.some((item) => item.id === selected),
+  const band = useMemo(
+    () => <PaletteFilters filters={filters} labels={labels} filter={filter} onFilter={setFilter} />,
+    [filters, labels, filter],
   );
 
   return (
     <>
-      <CommandDialog
+      <PaletteDialog
         open={open}
+        opening={openings}
         onOpenChange={setOpen}
-        label="Command palette"
         placeholder={filterPlaceholder(filter, labels)}
         groups={stood.current}
-        filter={COMMAND_FILTER.NONE}
+        filter={filter}
         query={query}
         onQueryChange={setQuery}
-        selected={selected}
-        onSelectedChange={setSelected}
         // Note that a listing cut short is said where nothing matches too, since what was sought may lie past the cut.
         empty={cut ? `${NOTHING_MATCHES}. ${TRUNCATED_LINE}` : NOTHING_MATCHES}
-        band={
-          <PaletteFilters
-            filters={filters}
-            labels={labels}
-            filter={filter}
-            onFilter={changeFilter}
-          />
-        }
-        foot={<PaletteFooter typed={query !== ""} runs={runs} />}
+        band={band}
         onKeyDown={keyDown}
         inputRef={keystrokes}
       />

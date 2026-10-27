@@ -56,11 +56,12 @@ import { type EveForAccount, executeAutomationRun, recoverStrandedRun } from "./
  *
  * Last, the agents runs started for automations that archive their
  * successful runs are archived once each finished well, read as its tab
- * reads it, and holds nothing open in the inbox. Each is settled once: an
+ * reads it, holds nothing open in the inbox, and has no pull request open or
+ * in draft, since an archived agent hears nothing of a review on it. Each is settled once: an
  * agent archived here, one that failed or was stopped, and one the
  * developer already put away are marked so and never read again, so one
- * brought back stays; one still at work or waiting on the inbox is read
- * again by a later sweep, for a week.
+ * brought back stays; one still at work, waiting on the inbox, or with its
+ * pull request open is read again by a later sweep, for a week.
  */
 
 const AUTOMATION_SWEEP = {
