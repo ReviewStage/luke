@@ -8,7 +8,7 @@
  * time or a call's row in a transcript, draws the same mark through the
  * same seat, at the size its slot sets (`--state-glyph-size`). Failed, the
  * glyph stands as it does at rest, so a failed agent still shows the
- * harness it ran in, and an alert in the danger colour stands at the end
+ * harness it ran in, and `@luke/ui`'s failed triangle stands at the end
  * of its row or its tab (`stateEndMark`), before its time where it has
  * one, as an editor marks a file's tab with its problems; a call that
  * failed wears the same alert at its row's end. Only a failure has an end
@@ -21,8 +21,7 @@
  * `glyphStateWords` gives.
  */
 
-import { ROW_MARK, RowMark, Tooltip, WorkingMark } from "@luke/ui";
-import { CircleAlertIcon } from "lucide-react";
+import { FailedMark as FailedRowMark, Tooltip, WorkingMark } from "@luke/ui";
 import type { ReactNode } from "react";
 
 export const GLYPH_STATE = {
@@ -86,11 +85,13 @@ export function StateGlyph({
  * failed and a hint hung from a card would stand over the card's words.
  */
 function FailedMark({ hinted }: { hinted: boolean }): React.JSX.Element {
-  const words = GLYPH_STATE_WORDS[GLYPH_STATE.FAILED];
-  const mark = (
-    <RowMark kind={ROW_MARK.FAILED} label={words} glyph={<CircleAlertIcon aria-hidden="true" />} />
+  return hinted ? (
+    <Tooltip label={GLYPH_STATE_WORDS[GLYPH_STATE.FAILED]}>
+      <FailedRowMark />
+    </Tooltip>
+  ) : (
+    <FailedRowMark />
   );
-  return hinted ? <Tooltip label={words}>{mark}</Tooltip> : mark;
 }
 
 /** The mark at the end of a row or a tab whose work stands in `state`: the failed mark once it failed, nothing otherwise. */

@@ -8,7 +8,7 @@ import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { TOOL_STATE, ToolLine, type ToolState } from "./ai-elements/tool.js";
-import { TaskRowMark } from "./desktop/task-card.js";
+import { TaskRowStatus } from "./desktop/task-card.js";
 import { AgentGlyph } from "./tasks/tab-look.js";
 
 /**
@@ -66,7 +66,7 @@ function toolRow(state: ToolState): HTMLElement {
 
 test("a sidebar plan's row, an agent's tab, and a running call draw one working mark under one name", () => {
   const surfaces = {
-    sidebar: drawn(createElement(TaskRowMark, { task: WORKED_ON })),
+    sidebar: drawn(createElement(TaskRowStatus, { task: WORKED_ON })),
     tab: drawn(
       createElement(AgentGlyph, { agent: { model: MODEL, status: CODING_AGENT_STATUS.RUNNING } }),
     ),

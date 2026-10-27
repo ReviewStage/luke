@@ -57,6 +57,8 @@ import {
   SCROLL_SIZE,
   ScrollArea,
   Stack,
+  TASK_AGENTS_MARK_SIZE,
+  TaskAgentsMark,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -125,11 +127,9 @@ import {
   PriorityChip,
   StatusChip,
   standsAt,
-  TaskWorkMarks,
   taskSubject,
   useStandingDoor,
   WaitingBadge,
-  WORK_LOOK,
 } from "./task-row-parts.js";
 import {
   assigneeFor,
@@ -152,13 +152,13 @@ import { useRowDrag } from "./use-row-drag.js";
  * status's chip and its whole name, then a row that wraps rather than
  * running past the card's edge: the chips that change its priority and its
  * assignee where it stands, their marks alone as the List draws them, the
- * assignee's left off under an assignee's column, its repository, what its agents are doing and the
- * pull requests they opened (`task-row-parts.tsx`), and the issues it
+ * assignee's left off under an assignee's column, its repository, the one
+ * icon of how its agents stand (`TaskAgentsMark`), and the issues it
  * links, and a ⋯ at their end dropping the task's own menu, the sidebar
  * row's, which a right-click and the menu key drop too (`useRowMenu`) and
  * whose Rename makes the card's name its field. A press anywhere else opens the task. A card hangs no
  * card for the whole task, since it already says what that card would;
- * its parts hang their own instead (`task-part-cards.tsx`). A card dragged onto another column
+ * its parts hang their own instead. A card dragged onto another column
  * is sent that column's status or priority, or assigned to its person, No
  * assignee's assigning it to no one, as the task page's chips send them,
  * and moves there at once; the + at a column's head opens a bare title at
@@ -298,10 +298,9 @@ function TaskBoardRepository({
  * status's mark before its name, which wraps; and a row under it, wrapping
  * onto as many lines as they take, so nothing is cut off at the card's edge:
  * its priority's and its assignee's marks, drawn as the List draws them, then
- * pills for its repository, its agents at
- * work, the pull requests they opened, and the issues it links, each a press
- * of its own and each hanging its own card where it has more to say
- * (`task-part-cards.tsx`), rather than one card for the whole task, which
+ * pills for its repository and the issues it links, each a press of its own
+ * and each hanging its own card where it has more to say, and the icon of
+ * how its agents stand, rather than one card for the whole task, which
  * says nothing the card does not. Its ⋯ stands at the pills' end, dropping
  * the task's own menu, which a right-click opens too. One press, under its
  * pills, opens it. Renamed from that menu, its name is its field until the
@@ -449,7 +448,7 @@ function TaskBoardCard({
             <TaskBoardRepository tasks={tasks} repository={task.repository} />
           )}
           {drawn(TASK_PROPERTY.AGENTS) ? (
-            <TaskWorkMarks task={task} tasks={tasks} look={WORK_LOOK.PILLS} onOpen={onOpen} />
+            <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
           ) : null}
           <TaskBoardTags task={task} />
         </div>

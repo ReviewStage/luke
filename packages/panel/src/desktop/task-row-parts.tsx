@@ -1,11 +1,9 @@
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import {
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
   TASK_STATUS,
   TASK_STATUS_ORDER,
   type TaskPriority,
-  type TaskPullRequestLine,
   type TaskStanding,
   type TaskStatus,
   type TaskSummary,
@@ -30,10 +28,7 @@ import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { useActorDoor } from "../person-door.js";
-import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
-import { agentStillWriting, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { needsYouWords } from "../tasks/inbox-model.js";
-import { PullRequestMark, pullRequestMarkState } from "../tasks/pull-request-mark.js";
 import {
   assigneeRows,
   NO_ASSIGNEE,
@@ -41,19 +36,16 @@ import {
   TASK_PRIORITY_WORDS,
   TASK_STATUS_WORDS,
 } from "../tasks/task-standing.js";
-import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
-import { useTaskWork } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
-import { MorePullRequestsCard, PullRequestCard, TaskAgentsCard } from "./task-part-cards.js";
 
 /**
- * task-row-parts.tsx -- what the Tasks page's List row and Board card share: the chips that change a task's priority, status, and assignee where it stands, the marks of its agents at work and its pull requests, how many Inbox threads of it wait on the reader, and the door that sends a change.
+ * task-row-parts.tsx -- what the Tasks page's List row and Board card share: the chips that change a task's priority, status, and assignee where it stands, how many Inbox threads of it wait on the reader, and the door that sends a change.
  *
  * A row and a card draw the same task the same way, so a status picked on
- * either is picked from one menu, a pull request reads alike in both, and a
+ * either is picked from one menu, and a
  * change the service did not keep says so in one toast. A chip names its
  * value by its mark alone where its place has no room for words, its words
  * still its name, and drops a menu of every value, each with its mark, the
@@ -63,25 +55,11 @@ import { MorePullRequestsCard, PullRequestCard, TaskAgentsCard } from "./task-pa
  * card. A task from a service before statuses stands as Todo, and one
  * before priorities as No priority, as everywhere else. Neither hangs the
  * task's own card, which says nothing the row or the card does not: each
- * part hangs its own instead (`task-part-cards.tsx`).
+ * chip hangs its own instead.
  */
 
 /** What a change the service did not keep says. */
 const UNCHANGED_LINE = "The task could not be changed. Try again.";
-
-/** The most pull requests a task's marks draw before they count the rest. */
-const MARKED_PULL_REQUESTS = 3;
-
-/** How a task's agents and pull requests are drawn: bare marks in the List's column, or a Board card's pills, each a press of its own. */
-export const WORK_LOOK = {
-  MARKS: "marks",
-  PILLS: "pills",
-} as const;
-
-type WorkLook = (typeof WORK_LOOK)[keyof typeof WORK_LOOK];
-
-/** The pull requests that still stand, the open and the drafts, which a task's marks lead with. */
-const STANDING_PULL_REQUESTS = new Set<string>([PULL_REQUEST_STATE.OPEN, PULL_REQUEST_STATE.DRAFT]);
 
 /** A task's status, Todo for one from a service before statuses. */
 export function statusOf(task: Pick<TaskSummary, "status">): TaskStatus {
@@ -307,155 +285,6 @@ export function StatusChip({
 export function WaitingBadge({ count }: { count: number }): React.JSX.Element | null {
   if (count === 0) return null;
   return <Badge tone={STATUS_TONE.ATTENTION}>{needsYouWords(count)}</Badge>;
-}
-
-/** Pull requests in the order a task's marks draw them: those still standing first, then the merged and the closed, each kept in the order it came. */
-function markedPullRequests(all: readonly TaskPullRequestLine[]): readonly TaskPullRequestLine[] {
-  return [
-    ...all.filter((each) => STANDING_PULL_REQUESTS.has(each.state)),
-    ...all.filter((each) => !STANDING_PULL_REQUESTS.has(each.state)),
-  ];
-}
-
-/** What the count after a task's pull request marks says, to a reader who cannot see it. */
-function moreWords(more: number): string {
-  return `${more} more ${more === 1 ? "pull request" : "pull requests"}`;
-}
-
-/** What the working mark says of a task's agents at work, to a reader who cannot see it. */
-function workingWords(working: number): string {
-  return `${working} ${working === 1 ? "agent" : "agents"} working`;
-}
-
-/**
- * What a task's agents are doing and what they published, at a glance: the
- * working mark while one works, then its pull requests, each its mark in
- * GitHub's colour for where it stands and its number, those still standing
- * first, at most `most` of them and a count of the rest; nothing where it has
- * neither. Each is a press of its own and hangs its own card
- * (`task-part-cards.tsx`): the working mark opens the agent at work and hangs
- * the task's agents, a pull request opens it as a link to it does and hangs
- * it, and the count opens the task and hangs those it counts. A pull request
- * from a service before it sent its page opens the task instead, so no part
- * is a press that does nothing. As the List's marks (`WORK_LOOK.MARKS`) they
- * are quiet toolbar chips that light under the pointer; as a Board card's
- * (`WORK_LOOK.PILLS`), pills. Where `steady`, as in the List's column, a task
- * whose agents rest keeps the working mark's room before its pull requests,
- * so they line up with those of a task whose agent works.
- */
-export function TaskWorkMarks({
-  task,
-  tasks,
-  look = WORK_LOOK.MARKS,
-  most = MARKED_PULL_REQUESTS,
-  steady = false,
-  onOpen,
-}: {
-  task: TaskSummary;
-  tasks: Parameters<typeof TaskAgentsCard>[0]["tasks"];
-  look?: WorkLook;
-  most?: number;
-  steady?: boolean;
-  /** Opens the task, as the count of pull requests does. */
-  onOpen: () => void;
-}): React.JSX.Element | null {
-  const openLink = useOpenLink();
-  const work = useTaskWork(task);
-  const working = task.agents?.working ?? 0;
-  const pullRequests = markedPullRequests(work.pullRequests);
-  const shown = pullRequests.slice(0, most);
-  const total = Math.max(task.agents?.pullRequestTotal ?? 0, pullRequests.length);
-  const more = total - shown.length;
-  if (working === 0 && shown.length === 0) return null;
-  const chip = look === WORK_LOOK.PILLS ? CHIP_LOOK.PILL : CHIP_LOOK.TOOLBAR;
-  const { agents } = work;
-  // Note that the working mark opens the agent at work the row names, else the task, which shows its agents.
-  const atWork = agents.find((agent) => agentStillWriting(agent.status)) ?? agents[0];
-  const agentsCard =
-    agents.length === 0 ? undefined : (
-      <TaskAgentsCard taskId={task.id} agents={agents} tasks={tasks} />
-    );
-  const parts = (
-    <>
-      {working > 0 ? (
-        <Tooltip label={workingWords(working)} card={agentsCard}>
-          <Chip
-            look={chip}
-            size={CHIP_SIZE.COMPACT}
-            iconOnly={look === WORK_LOOK.MARKS}
-            aria-label={workingWords(working)}
-            data-task-work="agents"
-            onClick={atWork === undefined ? onOpen : () => tasks.onShowAgent(task.id, atWork.id)}
-          >
-            <StateGlyph state={GLYPH_STATE.WORKING} />
-            <ChipName>{`${working} working`}</ChipName>
-          </Chip>
-        </Tooltip>
-      ) : steady ? (
-        <span className="task-work-agents" data-task-work="agents">
-          <StateGlyph state={GLYPH_STATE.REST} />
-        </span>
-      ) : null}
-      {shown.map((pullRequest) => {
-        const { url } = pullRequest;
-        const face = (
-          <>
-            <PullRequestMark pullRequest={pullRequest} />
-            <ChipName>{pullRequestNumberLabel(pullRequest)}</ChipName>
-          </>
-        );
-        const marks = {
-          "data-task-work": "pull-request",
-          "data-pull-request-state": pullRequestMarkState(pullRequest),
-        };
-        // Note that a pull request is a link to its page, opened as a link to it is elsewhere; one from a service before it sent its page opens the task.
-        return (
-          <Tooltip
-            key={url ?? pullRequest.number}
-            label={pullRequest.title}
-            card={<PullRequestCard pullRequest={pullRequest} />}
-          >
-            {url === undefined ? (
-              <Chip look={chip} size={CHIP_SIZE.COMPACT} {...marks} onClick={onOpen}>
-                {face}
-              </Chip>
-            ) : (
-              <Chip
-                look={chip}
-                size={CHIP_SIZE.COMPACT}
-                {...marks}
-                href={url}
-                onClick={linkPressOf(openLink, url)}
-              >
-                {face}
-              </Chip>
-            )}
-          </Tooltip>
-        );
-      })}
-      {more > 0 ? (
-        <Tooltip
-          label={moreWords(more)}
-          card={
-            pullRequests.length > shown.length ? (
-              <MorePullRequestsCard pullRequests={pullRequests.slice(shown.length)} />
-            ) : undefined
-          }
-        >
-          <Chip
-            look={chip}
-            size={CHIP_SIZE.COMPACT}
-            aria-label={moreWords(more)}
-            data-task-work="more"
-            onClick={onOpen}
-          >
-            <ChipName>{`+${more}`}</ChipName>
-          </Chip>
-        </Tooltip>
-      ) : null}
-    </>
-  );
-  return look === WORK_LOOK.PILLS ? parts : <span className="task-work-marks">{parts}</span>;
 }
 
 /**

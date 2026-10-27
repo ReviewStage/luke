@@ -1777,40 +1777,13 @@ body,
   color: var(--luke-color-text-muted);
 }
 
-/* A row's creator's face and each of its agents' and pull requests' marks
-   (`task-row-parts.tsx`) are presses of their own, a pull request's a link
-   to its page, each hanging its card,
-   standing over the row's press in a cell that lets the pointer through, so
-   a press beside them still opens the task. */
-.tasks-list-cell :is([data-task-creator], :is(a, button)[data-task-work]) {
+/* A row's creator's face (`task-row-parts.tsx`) is a press of its own,
+   hanging its card, standing over the row's press in a cell that lets the
+   pointer through, so a press beside it still opens the task. */
+.tasks-list-cell [data-task-creator] {
   position: relative;
   z-index: 1;
   pointer-events: auto;
-}
-
-/* What a task's agents are doing and the pull requests they opened in the
-   List's column (`task-row-parts.tsx`): the working mark, then each pull
-   request's mark in GitHub's colour for where it stands and its number, then
-   how many more, each a quiet chip. */
-.task-work-marks {
-  display: inline-flex;
-  min-width: 0;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-space-2);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* A resting task keeps the working mark's chip's room, so its pull
-   requests line up with a working task's. */
-.task-work-agents {
-  display: inline-flex;
-  width: var(--luke-space-20);
-  height: var(--luke-space-20);
-  flex: none;
-  align-items: center;
-  justify-content: center;
 }
 
 /* New thread's bar, should it stand its title on a row of its own, stands

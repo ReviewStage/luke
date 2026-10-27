@@ -4,13 +4,12 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
-import { STATUS_TONE, type StatusTone } from "@luke/ui";
 import {
-  GitMergeIcon,
-  GitPullRequestClosedIcon,
-  GitPullRequestDraftIcon,
-  GitPullRequestIcon,
-} from "@luke/ui/icons";
+  PULL_REQUEST_GLYPH,
+  PULL_REQUEST_MARK_QUEUED,
+  STATUS_TONE,
+  type StatusTone,
+} from "@luke/ui";
 import { pullRequestNumberLabel, pullRequestPillLabel } from "./coding-agent-model.js";
 
 /**
@@ -26,22 +25,11 @@ import { pullRequestNumberLabel, pullRequestPillLabel } from "./coding-agent-mod
  * so its words, not its colour alone, tell it from a merged one.
  * Its checks never change its colour: failed checks are said in its words
  * for a reader who cannot see it, and drawn where the checks themselves
- * are. The colour is the stylesheet's, keyed on
+ * are. Its glyph is `@luke/ui`'s (`pull-request-glyph.ts`), which a task's
+ * status icon draws too. The colour is the stylesheet's, keyed on
  * `data-pull-request-state` (`tasks.css`); a chip naming the pull request
  * says the same in the shared palette's tone for it (`PULL_REQUEST_TONE`).
  */
-
-/** What a mark is drawn and coloured for: where the pull request stands, or queued for an open one in the merge queue. */
-export const PULL_REQUEST_MARK_QUEUED = "queued";
-
-/** The glyph a pull request is drawn with for where it stands, as GitHub draws it; a queued one wears the merge's. */
-const PULL_REQUEST_GLYPH = {
-  [PULL_REQUEST_STATE.OPEN]: GitPullRequestIcon,
-  [PULL_REQUEST_STATE.DRAFT]: GitPullRequestDraftIcon,
-  [PULL_REQUEST_STATE.MERGED]: GitMergeIcon,
-  [PULL_REQUEST_STATE.CLOSED]: GitPullRequestClosedIcon,
-  [PULL_REQUEST_MARK_QUEUED]: GitMergeIcon,
-} as const;
 
 /** The chip tone a pull request is named in for where it stands: GitHub's colour for it, in the shared palette. */
 export const PULL_REQUEST_TONE = {
@@ -52,7 +40,7 @@ export const PULL_REQUEST_TONE = {
 } as const satisfies Record<PullRequestState, StatusTone>;
 
 /** Where a pull request's mark says it stands: queued where it is open and the merge queue holds it, else where it stands. */
-export function pullRequestMarkState(
+function pullRequestMarkState(
   pullRequest: Pick<CodingAgentPullRequest, "state" | "queued">,
 ): PullRequestState | typeof PULL_REQUEST_MARK_QUEUED {
   return pullRequest.queued === true && pullRequest.state === PULL_REQUEST_STATE.OPEN

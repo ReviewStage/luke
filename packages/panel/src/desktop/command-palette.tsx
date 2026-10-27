@@ -206,7 +206,7 @@ import {
 } from "./side-panel.js";
 import type { AddEntry } from "./strip-tabs.js";
 import { taskOf } from "./task-actions.js";
-import { homeTaskCardOf, TaskRowMark } from "./task-card.js";
+import { homeTaskCardOf, TaskRowStatus } from "./task-card.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the filters stand. */
@@ -455,7 +455,7 @@ interface PaletteRow {
   detail?: string | undefined;
   /** The workspace a task is in where that is not the one listed, named by its tile and name before the detail. */
   workspace?: Workspace | undefined;
-  /** The mark at the row's end: a failed agent's, or a task's face of who is on it (`assigneeFace`) and its row's mark (`TaskRowMark`). */
+  /** The mark at the row's end: a failed agent's, or a task's face of who is on it (`assigneeFace`) and its row's mark (`TaskRowStatus`). */
   endMark?: React.JSX.Element | undefined;
   /** A task's assignee's and creator's names, the one the query found it by said after the detail. */
   people?: readonly string[] | undefined;
@@ -737,7 +737,7 @@ function taskDetail(task: TaskSummary, listed: readonly TaskSummary[]): string |
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it. A task wears at its end who is on it and its
- * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowMark`),
+ * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowStatus`),
  * leads with its key and says its repository by its name, as the Tasks
  * list's row does, and is found by its key, its assignee's name, and its
  * creator's, a key typed whole listing its task first. An agent opens on its own page, as its
@@ -796,7 +796,7 @@ function taskRows(
       endMark: (
         <>
           {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
-          <TaskRowMark task={task} stranded={strandedHome(tasks, task)} />
+          <TaskRowStatus task={task} stranded={strandedHome(tasks, task)} />
         </>
       ),
       people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
