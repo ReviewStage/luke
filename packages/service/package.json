@@ -89,6 +89,7 @@
     "./agents/coder-host/pull-request": "./src/agents/coder-host/pull-request.js",
     "./agents/coder-host/published": "./src/agents/coder-host/published.js",
     "./agents/coder-host/shell": "./src/agents/coder-host/shell.js",
+    "./agents/coder-host/workspace-environment": "./src/agents/coder-host/workspace-environment.js",
     "./agents/coder-host/skills": "./src/agents/coder-host/skills.js",
     "./agents/coder-host/sleep": "./src/agents/coder-host/sleep.js",
     "./agents/coder-host/start": "./src/agents/coder-host/start.js",

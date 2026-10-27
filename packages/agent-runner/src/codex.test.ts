@@ -403,11 +403,18 @@ it.effect("on the Mac's own sign-in, opens no thread where account/read finds no
 );
 
 it.effect(
-  "starts app-server with the plan's provider, steers the running turn, and ends at its completion",
+  "starts app-server with the plan's provider and the workspace's environment, steers the running turn, and ends at its completion",
   () =>
     Effect.gen(function* () {
       const luke = fakeLuke("ci-watch");
-      const { spawned, write, run } = yield* launch([WORKFLOW], luke);
+      const workspace = {
+        variables: { APP_MODE: "development" },
+        secrets: { NPM_TOKEN: "npm-secret" },
+      };
+      const { spawned, write, run } = yield* launch([WORKFLOW], luke, {
+        ...ENV,
+        [RUNNER_ENV.WORKSPACE]: JSON.stringify(workspace),
+      });
       yield* write(CONFIG);
       yield* write({
         type: INPUT_LINE.MESSAGE,
@@ -473,12 +480,17 @@ it.effect(
         'sandbox_mode="workspace-write"',
         "sandbox_workspace_write.network_access=true",
         `sandbox_workspace_write.writable_roots=["${CONFIG.cwd}/.git"]`,
-        'shell_environment_policy.inherit="core"',
-        "shell_environment_policy.ignore_default_excludes=false",
+        'shell_environment_policy.inherit="all"',
+        "shell_environment_policy.ignore_default_excludes=true",
         'shell_environment_policy.exclude=["LUKE_RUNNER_TOKEN"]',
+        'shell_environment_policy.include_only=["HOME", "LOGNAME", "PATH", "SHELL", "USER", "USERNAME", "TMPDIR", "TEMP", "TMP", "APP_MODE", "NPM_TOKEN"]',
       ]);
-      // The bearer reaches app-server in its environment alone, never argv.
+      // The bearer and the workspace's values reach app-server in its environment alone, never argv.
       assert.equal(process?.env[RUNNER_ENV.BEARER], BEARER);
+      assert.equal(process?.env.APP_MODE, "development");
+      assert.equal(process?.env.NPM_TOKEN, "npm-secret");
+      assert.equal(process?.env[RUNNER_ENV.WORKSPACE], undefined);
+      assert.ok(!process?.args.some((arg) => arg.includes("npm-secret")));
       assert.equal(process?.env.CODEX_HOME, ENV.CODEX_HOME);
       assert.ok(!process?.args.some((arg) => arg.includes(BEARER)));
 
@@ -897,7 +909,7 @@ it.effect(
       // The command inherits the bearer; no command the agent runs does.
       assert.equal(process?.env[RUNNER_ENV.BEARER], BEARER);
       assert.equal(override(process, "shell_environment_policy.exclude"), '["LUKE_RUNNER_TOKEN"]');
-      assert.equal(override(process, "shell_environment_policy.inherit"), '"core"');
+      assert.equal(override(process, "shell_environment_policy.inherit"), '"all"');
 
       // What the command printed went to app-server alone: never argv, an event, or a log.
       const posted = luke.bodies.join("\n");

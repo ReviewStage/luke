@@ -139,7 +139,16 @@ component, factored out of the surface where it builds the box by hand.
   line, a local variable, or an error's words carries may still reach Sentry
   from the desktop and the browser, and a log line, a local variable, or an
   error's words from any of them; a credential among it is replaced only where
-  Sentry's denylist catches it by name, and `PRIVACY.md` says so.
+  Sentry's denylist catches it by name, and `PRIVACY.md` says so. And a
+  workspace's environment secrets reach its coding agents' commands in Luke's
+  cloud sandboxes, and never an agent on a member's own Mac or host, as
+  environment variables (`packages/service/src/agents/coder-host/workspace-environment.ts`):
+  with each command of eve's shell, and in a native agent's runner's sealed
+  launch environment, which hands them on to its harness. Their values are
+  masked out of what an eve command answers and out of every event a runner
+  posts, where found, but a command may still print one transformed, so they
+  may reach the conversation, the model, the agent's transcript and traces,
+  and Sentry as a tool result may. Never a counted event or a fixture.
 - Session replay records the rendered panel with every word masked
   (`packages/panel/src/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what

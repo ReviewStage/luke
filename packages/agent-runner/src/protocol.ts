@@ -53,7 +53,23 @@ export const RUNNER_ENV = {
    * runner tells apart by its platform.
    */
   PLACE: "LUKE_RUNNER_PLACE",
+  /**
+   * The agent's workspace's variables and secrets, as one JSON
+   * `WorkspaceEnvironment`: the runner hands each to the harness, and so to
+   * every command the agent runs, under its own name, and masks every
+   * secret's value out of the events it posts. Unset where the workspace
+   * holds none.
+   */
+  WORKSPACE: "LUKE_WORKSPACE_ENVIRONMENT",
 } as const;
+
+/** A workspace's environment as a launch hands it over in `RUNNER_ENV.WORKSPACE`: each variable and each secret by its name. */
+export const WorkspaceEnvironmentSchema = Schema.Struct({
+  variables: Schema.Record(Schema.String, Schema.String),
+  secrets: Schema.Record(Schema.String, Schema.String),
+});
+
+export type WorkspaceEnvironment = typeof WorkspaceEnvironmentSchema.Type;
 
 /** The places a runner's starter names in `RUNNER_ENV.PLACE`. */
 export const RUNNER_PLACE = {

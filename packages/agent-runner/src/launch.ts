@@ -85,7 +85,10 @@ export interface LaunchContext<Config> {
   readonly config: Config;
   /** Luke's stdin lines after the config, ended when Luke closes stdin. */
   readonly lines: Queue.Dequeue<string, Cause.Done>;
+  /** The runner's environment with the workspace's values in it, which the harness and every command it runs inherit. */
   readonly env: Readonly<Record<string, string | undefined>>;
+  /** The names of the workspace's variables and secrets in `env`. */
+  readonly workspace: readonly string[];
   readonly bearer: Redacted.Redacted;
   readonly sink: EventSink;
   /** The runner's own bundle as a command; none where the runner was not started from one, as in a test that names none. */
