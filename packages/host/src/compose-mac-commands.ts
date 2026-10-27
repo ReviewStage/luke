@@ -395,7 +395,9 @@ export function composeMacCommands(
      * any, returns once the beat's pause has passed, so the follow that
      * missed it is sealed again. Note that the claims are awaited and the
      * pause kept, because a claim refused or unanswered leaves its row
-     * waiting, and the next follow's first beat would find it again at once.
+     * waiting, and the next follow's first beat would find it again at once;
+     * and that they are made together, because one claim's retries must not
+     * spend another command's claim window.
      */
     const presence = (running: FiberSet.FiberSet, userId: string) =>
       Effect.gen(function* () {
@@ -405,6 +407,7 @@ export function composeMacCommands(
           if (late.length > 0) {
             report("the Mac command follow missed a command; it is claimed and followed again");
             yield* Effect.forEach(late, (command) => claimed(running, userId, command), {
+              concurrency: "unbounded",
               discard: true,
             });
           }
