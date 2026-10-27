@@ -1162,6 +1162,7 @@ export const PlanBody = memo(function PlanBody({
   agents,
   standing: taskStanding,
   underTitle,
+  head,
   titleActions = true,
 }: {
   task: Task;
@@ -1189,6 +1190,8 @@ export const PlanBody = memo(function PlanBody({
   standing?: TaskStandingDoor;
   /** What the task's own page draws under its status and priority, over its byline, as its linked issues; nothing elsewhere. */
   underTitle?: React.ReactNode;
+  /** What the task's own page draws at the head of its text, under its byline, as its agents; nothing elsewhere. */
+  head?: React.ReactNode;
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
 }): React.JSX.Element {
@@ -1576,6 +1579,7 @@ export const PlanBody = memo(function PlanBody({
                   onShowHistory={onShowHistory}
                 />
                 <ChangedLine looks={looks} marks={marks} />
+                {head}
               </>
             ) : null}
             {editing.editor === undefined ? (
