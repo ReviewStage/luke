@@ -188,13 +188,15 @@ export function hostInstallCommand(installScriptUrl: string, installToken: strin
 /**
  * The same command run over SSH on many servers at once, each named in the
  * loop's list, for the member to fill in. One line that bash and zsh both
- * run: each ssh is backgrounded and `wait` holds the line until all end.
- * Note that `-n` keeps a backgrounded ssh off the terminal's input, and
- * that each server's lines are prefixed with its name, since twelve servers'
- * output would otherwise run together.
+ * run, in a subshell so its names stay out of the member's shell: each ssh
+ * is backgrounded, then each is waited for by its own pid, and the line
+ * exits non-zero if any server failed. Note that `pipefail` keeps ssh's
+ * status through the `sed` that prefixes each server's lines with its name,
+ * since twelve servers' output would otherwise run together, and that `-n`
+ * keeps a backgrounded ssh off the terminal's input.
  */
 export function hostInstallLoopCommand(installScriptUrl: string, installToken: string): string {
-  return `for h in server-1 server-2 server-3; do ssh -n root@$h 'curl -fsSL ${installScriptUrl} | sh -s -- --token ${installToken}' 2>&1 | sed "s/^/\${h}: /" & done; wait`;
+  return `( pids=(); for h in server-1 server-2 server-3; do ( set -o pipefail; ssh -n root@$h 'curl -fsSL ${installScriptUrl} | sh -s -- --token ${installToken}' 2>&1 | sed "s/^/\${h}: /" ) & pids+=($!); done; rc=0; for p in "\${pids[@]}"; do wait $p || rc=1; done; [ $rc = 0 ] )`;
 }
 
 /**
@@ -219,8 +221,8 @@ Follow these steps in order.
 
 ${hostInstallCommand(installScriptUrl, installToken)}
 
-   It prints a ✓ line for each step and ends with "✓ Connected to Luke". It can take several minutes, so wait for it. A failure prints a ✗ line and exits non-zero. If it ends with a ! line instead, the server is installed but not connected yet.
-4. When every server has finished, reply with a table: server, result (installed, skipped or failed) and, for a skip or a failure, the reason. For a failure, give the last error line the server printed.
+   It prints a ✓ line for each step, and keeps going after the connection check, so read its whole output, not just its end. "✓ Connected to Luke" means the server is installed and connected. A line beginning "! Not connected to Luke yet" means it is installed but not connected yet, and you report it that way. A ✗ line means it failed, and the command exits non-zero. It can take several minutes, because it also fetches a 1.3 GB image at the end, so wait for it.
+4. When every server has finished, reply with a table: server, result (connected, installed but not connected, skipped or failed) and, for a skip or a failure, the reason. For a failure, give the last ✗ line the server printed, or its last line of output if there is none.
 5. The install token in the command is a secret, and stops working at ${new Date(expiresAt).toISOString()}. Pass the command straight to ssh. Never write the token to a file, a memory or a note, and never repeat it in your reply or summary.
 `;
 }
