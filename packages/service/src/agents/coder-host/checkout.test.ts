@@ -16,6 +16,7 @@ import {
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
+import { CHECKOUT_IDENTITY_VARIABLE } from "@luke/features/checkout-identity";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Effect, Option, Redacted } from "effect";
@@ -305,7 +306,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
             (run) => run.env?.[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.DEEPEN] === step,
           );
         const identity = sandbox.runs.findIndex(
-          (run) => run.env?.[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.GIT_NAME] !== undefined,
+          (run) => run.env?.[CHECKOUT_IDENTITY_VARIABLE.NAME] !== undefined,
         );
         assert.ok(stepAt(DEEPEN_STEP.FETCH) >= 0 && identity > stepAt(DEEPEN_STEP.FETCH));
         assert.ok(stepAt(DEEPEN_STEP.MARK) > identity);

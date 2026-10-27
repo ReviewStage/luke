@@ -3,6 +3,11 @@ import type {
   DeviceAgentDevice,
   HostedDeviceAgentClient,
 } from "@luke/features";
+import {
+  CHECKOUT_IDENTITY_SCRIPT,
+  type CheckoutIdentity,
+  checkoutIdentityEnv,
+} from "@luke/features/checkout-identity";
 import { DEVICE_BEAT } from "@luke/features/coding-agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
@@ -85,7 +90,10 @@ import type { RunMode } from "./run-mode.js";
  * an agent's lines are delivered strictly in order while agents go on side
  * by side. A launch makes the agent's own repository under its folder
  * (`deviceAgentLayout`) where it has none, through the platform's script,
- * has the agent's VM made and started, and starts the runner in it, with
+ * has the agent's VM made and started, sets in the repository, inside the
+ * VM, who the agent's commits are by where the line says, as a cloud
+ * checkout sets it (`@luke/features/checkout-identity`), and starts the
+ * runner in it, with
  * the claim's secrets in its environment and nowhere else, never a file, an
  * argument, or a log, and its first lines on its stdin; its line is settled
  * with the runner's exit code once it exits. A message or retune line is
@@ -593,6 +601,47 @@ export function composeLocalAgents(
           }).pipe(Effect.orElseSucceed(() => false));
 
         /**
+         * Who the agent's commits are by, as the service settled it, set in
+         * its own repository's config by the step a cloud checkout sets it
+         * with (`CHECKOUT_IDENTITY_SCRIPT`); whether it was. Note that it runs
+         * in the agent's VM, never on the device, whose own git a repository
+         * the agent rigged could steer, and on every launch, since a
+         * repository made before the launch line carried an identity holds
+         * none.
+         */
+        const identitySet = (
+          agentId: string,
+          layout: DeviceAgentLayout,
+          identity: CheckoutIdentity,
+        ) => {
+          const run = platform.sandbox.exec({
+            agentId,
+            folder: layout.folder,
+            cwd: layout.checkoutPath,
+            command: "/bin/bash",
+            args: ["-c", CHECKOUT_IDENTITY_SCRIPT],
+            env: { ...shellVariables, ...checkoutIdentityEnv(identity) },
+          });
+          return Effect.scoped(
+            Effect.flatMap(
+              ChildProcess.make(run.command, [...run.args], {
+                cwd: folder,
+                env: run.env,
+                extendEnv: false,
+                stdin: "ignore",
+                stdout: "ignore",
+                stderr: "ignore",
+                forceKillAfter: KILL_GRACE,
+              }),
+              (handle) => handle.exitCode,
+            ),
+          ).pipe(
+            Effect.map((code) => Number(code) === 0),
+            Effect.orElseSucceed(() => false),
+          );
+        };
+
+        /**
          * A fresh token for the agent's repository from the service, handed
          * to the sandbox, which keeps it outside every folder the agent's VM
          * mounts, where the VM's bindings read it; whether it was. A token
@@ -684,6 +733,14 @@ export function composeLocalAgents(
               yield* Scope.close(runnerScope, Exit.void);
               report(`a local agent's VM could not be started: ${refused.value}`);
               return yield* settle(line.id, NOT_STARTED);
+            }
+            const identity = payload.value.identity;
+            if (withRepository && identity !== undefined) {
+              if (!(yield* identitySet(agentId, layout, identity))) {
+                yield* Scope.close(runnerScope, Exit.void);
+                report("a local agent's commit identity could not be set in its VM");
+                return yield* settle(line.id, NOT_STARTED);
+              }
             }
             const stdin = yield* Queue.unbounded<string>();
             const encoder = new TextEncoder();
