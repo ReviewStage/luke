@@ -35,6 +35,7 @@ import {
   undoStillDue,
   unsettledPinPositions,
   withStanding,
+  workspaceReaches,
 } from "./tasks-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -200,6 +201,20 @@ test("an account known to have no OpenAI API key is sent to add one before the m
 function _onRepository(name: string, repository: string | null, updatedAt: number) {
   return { id: name, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt, repository };
 }
+
+test("a workspace reaches the repositories of every active GitHub installation it holds, not its first alone", () => {
+  const workspace = {
+    github: { login: "dean", active: true },
+    githubInstallations: [
+      { installationId: 1, login: "dean", active: true },
+      { installationId: 2, login: "ReviewStage", active: true },
+      { installationId: 3, login: "acme", active: false },
+    ],
+  };
+
+  assert.equal(workspaceReaches(workspace, "reviewstage/luke"), true);
+  assert.equal(workspaceReaches(workspace, "acme/relay"), false);
+});
 
 test("a plan started from a Linear issue is named by its title, cut to a name's bound, or by its key where the title is blank", () => {
   const long = "x".repeat(TASK_BOUNDS.MAX_NAME_CHARS + 20);

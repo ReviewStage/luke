@@ -131,19 +131,22 @@ export function recentRepositories(tasks: TasksView["tasks"]): string[] {
 
 /**
  * Whether a workspace's GitHub reaches a repository, as far as the window can
- * tell before the service is asked: its installation is active and on the
- * repository's owner. Since #2524 a workspace reaches only its own installation's
- * repositories, so one with no GitHub connected reaches none, whatever its
- * tasks still name. The service's read is the last word, since an
- * installation on the owner may not have been given the repository.
+ * tell before the service is asked: one of its installations is active and
+ * on the repository's owner. Since #2524 a workspace reaches only its own
+ * installations' repositories, so one with no GitHub connected reaches none,
+ * whatever its tasks still name. The service's read is the last word, since
+ * an installation on the owner may not have been given the repository. Note
+ * that every installation is asked, not `github` alone, because that names
+ * only the first still active, and a workspace may hold several.
  */
 export function workspaceReaches(
-  workspace: Pick<Workspace, "github">,
+  workspace: Pick<Workspace, "github" | "githubInstallations">,
   repository: string,
 ): boolean {
-  const { github } = workspace;
-  const [owner] = repository.split("/");
-  return github != null && github.active && github.login.toLowerCase() === owner?.toLowerCase();
+  const { github, githubInstallations } = workspace;
+  const installations = githubInstallations ?? (github == null ? [] : [github]);
+  const owner = repository.split("/")[0]?.toLowerCase();
+  return installations.some((each) => each.active && each.login.toLowerCase() === owner);
 }
 
 /**
