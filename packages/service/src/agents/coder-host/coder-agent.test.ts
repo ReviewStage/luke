@@ -742,7 +742,7 @@ test("every agent is told that what happens on its pull request after its turn r
   }
 });
 
-test("every agent is told to reply to a message on an inbox thread on that thread, never in its own message alone, and never to post how the work is going", () => {
+test("every agent is told to reply on an inbox thread to a question or a request done there, never in its own message alone, and never to post how the work is going", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const onTask of [true, false]) {
       const instructions = coderInstructions(
@@ -758,6 +758,11 @@ test("every agent is told to reply to a message on an inbox thread on that threa
         brief,
       );
       assert.ok(instructions.includes("never answer them in your message alone"), brief);
+      // Note that a request acted on in silence leaves the member asking again, so its end is said on the thread.
+      assert.ok(
+        instructions.includes("once a request is done, say in a line or two what you did"),
+        brief,
+      );
       // Note that a progress note on a thread is noise the developer must acknowledge, so none is asked for.
       assert.ok(
         instructions.includes("Never post on a thread to say how the work is going"),
