@@ -19,6 +19,7 @@ import {
   createCodingAgent,
   lineSendersOf,
   readCodingAgent,
+  recordCodingAgentPublished,
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
@@ -42,7 +43,12 @@ import {
   GITHUB_TRIGGER_EVENT,
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_BOUNDS,
+  PULL_REQUEST_STATE,
+  type PullRequestState,
+} from "@luke/features/coding-agent-wire";
 import { INBOX_ASK } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -706,7 +712,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "an automation that archives its successful runs archives a run's agent once its turn settled well, once, and leaves standing one that failed, one brought back by hand, one waiting on the inbox until its question closes, and every agent of an automation that does not",
+    "an automation that archives its successful runs archives a run's agent once its turn settled well, once, and leaves standing one that failed, one brought back by hand, one waiting on the inbox until its question closes, one whose pull request is open until it merges, and every agent of an automation that does not",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -719,11 +725,13 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const succeeded = yield* startedNow(eve, archiving.automation);
         const failed = yield* startedNow(eve, archiving.automation);
         const asking = yield* startedNow(eve, archiving.automation);
+        const publishing = yield* startedNow(eve, archiving.automation);
         const kept = yield* startedNow(eve, keeping.automation);
         const orphaned = yield* startedNow(eve, departing.automation);
         yield* ranTurn(archiving.owner, succeeded, TURN_STATUS.SETTLED);
         yield* ranTurn(archiving.owner, failed, TURN_STATUS.FAILED);
         yield* ranTurn(archiving.owner, asking, TURN_STATUS.SETTLED);
+        yield* ranTurn(archiving.owner, publishing, TURN_STATUS.SETTLED);
         yield* ranTurn(keeping.owner, kept, TURN_STATUS.SETTLED);
         yield* ranTurn(departing.owner, orphaned, TURN_STATUS.SETTLED);
         // Its starter gone from the workspace, the agent is no one's to archive, so it is not counted archived.
@@ -738,6 +746,18 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           },
         );
         assert.ok(Result.isSuccess(question));
+        const published = (state: PullRequestState) =>
+          recordCodingAgentPublished(archiving.owner, publishing, {
+            number: 42,
+            title: "Retry the queue",
+            url: "https://github.com/acme/relay/pull/42",
+            state,
+            checks: CHECK_SUMMARY.PASSING,
+            additions: 12,
+            deletions: 3,
+            changedFiles: 2,
+          });
+        yield* published(PULL_REQUEST_STATE.OPEN);
 
         const swept = yield* sweepAutomations(eve.eveFor, archiving.now).pipe(
           Effect.provide(services),
@@ -754,13 +774,15 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             yield* archived(archiving.owner, succeeded),
             yield* archived(archiving.owner, failed),
             yield* archived(archiving.owner, asking),
+            yield* archived(archiving.owner, publishing),
             yield* archived(keeping.owner, kept),
           ],
-          [true, false, false, false],
+          [true, false, false, false, false],
         );
 
-        // Brought back by hand, the agent stays; its question closed later, the asking one goes.
+        // Brought back by hand, the agent stays; its question closed and its pull request merged later, the asking and publishing ones go.
         yield* archiveCodingAgent(archiving.owner, succeeded, false);
+        yield* published(PULL_REQUEST_STATE.MERGED);
         yield* closeInboxItem(
           { userId: archiving.owner, agentId: asking },
           "which-queue",
@@ -769,14 +791,15 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const later = yield* sweepAutomations(eve.eveFor, archiving.now + 3 * 86_400_000).pipe(
           Effect.provide(services),
         );
-        assert.equal(later.archived, 1);
+        assert.equal(later.archived, 2);
         assert.deepEqual(
           [
             yield* archived(archiving.owner, succeeded),
             yield* archived(archiving.owner, failed),
             yield* archived(archiving.owner, asking),
+            yield* archived(archiving.owner, publishing),
           ],
-          [false, false, true],
+          [false, false, true, true],
         );
       }),
   );

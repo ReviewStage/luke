@@ -22,6 +22,7 @@ import {
   automationTriggerSchema,
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import type { SentryTriggerEvent, TriggerProvider } from "@luke/features/trigger-catalog";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
@@ -36,6 +37,7 @@ import {
   isNull,
   lte,
   notExists,
+  notInArray,
   or,
   type SQL,
   sql,
@@ -849,6 +851,11 @@ const findArchivableAgents = SqlSchema.findAll({
                   ),
                 ),
             ),
+            // Note that an agent whose pull request is open or a draft still stands, because an archived agent is woken by no review, comment, or check on it.
+            notInArray(sql`coalesce(${codingAgent.published}->>'state', '')`, [
+              PULL_REQUEST_STATE.OPEN,
+              PULL_REQUEST_STATE.DRAFT,
+            ]),
           ),
         )
         .orderBy(asc(automationRun.firedAt))
