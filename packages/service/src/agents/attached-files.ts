@@ -24,6 +24,7 @@ import {
   PICTURE_OMISSION,
 } from "@luke/features/conversation-picture-wire";
 import { imageDimensions, sniffImageType } from "@luke/features/image-signature";
+import { MENTION_KIND, memberMentionOf } from "@luke/features/mention-link";
 import type { FileUIPart, UserContent } from "ai";
 import { Effect, Option } from "effect";
 import type { MessageReceivedPart } from "eve/client";
@@ -113,6 +114,9 @@ export function keptHandedImages(
 /** How the part naming a member who sent a message opens, which the service writes and no member can type as one. */
 export const SENDER_LABEL_LEAD = "[sender: ";
 
+/** How the part naming a teammate closes, after their mention link. */
+const SENDER_LABEL_TAIL = ", a teammate]";
+
 /**
  * The part naming a teammate who sent a message, a member other than the
  * agent's developer, ahead of their words, by their mention link. Note that
@@ -121,12 +125,16 @@ export const SENDER_LABEL_LEAD = "[sender: ";
  * the row keeps the words without it and names its sender in its own column.
  */
 export function senderLabel(teammate: string): string {
-  return `${SENDER_LABEL_LEAD}${teammate}, a teammate]`;
+  return `${SENDER_LABEL_LEAD}${teammate}${SENDER_LABEL_TAIL}`;
 }
 
 /** Whether a text part eve was handed is a message's sender label rather than its words. */
 function isSenderLabel(text: string): boolean {
-  return text.startsWith(SENDER_LABEL_LEAD) && text.endsWith("]") && !text.includes("\n");
+  if (!text.startsWith(SENDER_LABEL_LEAD) || !text.endsWith(SENDER_LABEL_TAIL)) return false;
+  // Note that only a person's mention link written whole between the two counts, as `senderLabel` writes it,
+  // because a developer's own words of a label's shape, sent with a file, are words.
+  const link = text.slice(SENDER_LABEL_LEAD.length, -SENDER_LABEL_TAIL.length);
+  return link.startsWith("[@") && memberMentionOf(link)?.kind === MENTION_KIND.PERSON;
 }
 
 /**

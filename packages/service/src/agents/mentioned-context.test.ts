@@ -187,6 +187,18 @@ test("a member's line handed behind the label naming them is matched by eve's re
   assert.equal(receipt.words, words);
 });
 
+test("a developer's words of a sender label's shape, sent with a file, read back as their words", () => {
+  const receipt = receivedMessage({
+    message: "",
+    parts: [
+      { type: "text", text: "[sender: reminder, a teammate]" },
+      { type: "file", mediaType: "image/png", filename: "flow.png" },
+    ],
+  });
+
+  assert.equal(receipt.words, "[sender: reminder, a teammate]");
+});
+
 test("words that mention nothing of the plan go to eve as the words alone, as every message did before", () => {
   assert.equal(eveContent("Use the helper.", [], undefined), "Use the helper.");
 });
