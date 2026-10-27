@@ -162,7 +162,14 @@ test("the stream runs by latest activity, a divider before each day a thread las
     updatedAt: NOON - HOUR / 2,
   });
   const fresh = thread("fresh", NOON, [said("f", undefined)]);
-  const rows = streamRows([fresh, revived, seen, mine, yesterday], {
+  // The reader replied before they looked, and the agent closed it since, which writes no message.
+  const closed = thread(
+    "closed",
+    NOON - 4 * HOUR,
+    [said("c", undefined), { ...said("cr", ME), createdAt: NOON - 3 * HOUR }],
+    { status: INBOX_STATUS.CLOSED, updatedAt: NOON - 90 * 60 * 1000 },
+  );
+  const rows = streamRows([fresh, revived, closed, seen, mine, yesterday], {
     lookedAt: NOON - 2 * HOUR,
     readerId: ME.userId,
     now: NOON + HOUR,
@@ -176,7 +183,7 @@ test("the stream runs by latest activity, a divider before each day a thread las
           ? row.words
           : "New",
     ),
-    ["Yesterday", "yesterday", "Today", "seen", "mine-after", "New", "revived", "fresh"],
+    ["Yesterday", "yesterday", "Today", "seen", "New", "closed", "mine-after", "revived", "fresh"],
   );
   assert.equal(
     streamRows([fresh], { lookedAt: undefined, readerId: ME.userId, now: NOON }).some(

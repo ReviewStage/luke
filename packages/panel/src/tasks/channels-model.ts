@@ -166,10 +166,15 @@ export function emptyStreamWords(name: string, view: ChannelView): string {
 
 /**
  * Whether the reader made the thread's latest activity themselves: the
- * latest message on it is theirs, or they settled it at that instant.
+ * latest message on it is theirs and nothing moved it since, or they
+ * settled it at that instant. Note that a message is written at the
+ * instant it moves its thread, while an agent's close moves the thread
+ * and writes none, so a message older than the thread's last change was
+ * not that change.
  */
 function movedByReader(thread: ChannelThread, readerId: string): boolean {
-  if (thread.thread?.at(-1)?.member?.userId === readerId) return true;
+  const latest = thread.thread?.at(-1);
+  if (latest?.member?.userId === readerId && latest.createdAt >= thread.updatedAt) return true;
   const settler = thread.closedBy ?? thread.answeredBy;
   return thread.settledAt === thread.updatedAt && settler?.userId === readerId;
 }
