@@ -25,6 +25,7 @@ import {
   FiberSet,
   Option,
   Schedule,
+  Schema,
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -82,7 +83,13 @@ import type { RunMode } from "./run-mode.js";
  * A live read writes nothing, so the Mac says it listens for its kinds
  * itself, every `LISTENING_EVERY`, well inside the service's freshness
  * window: the one timer that remains, because presence is a fact about this
- * process that no row change can carry. Each beat reads the gate first, so
+ * process that no row change can carry. Since the service counts the Mac
+ * listening on the beat alone, each beat also reads the unclaimed commands
+ * once, unheld, and a command left waiting past `MISSED_AFTER` is one the
+ * follow missed, as a Realtime socket that went quiet without an error
+ * misses every command: the beat claims it and ends the follow, which is
+ * sealed again, so a stalled follow costs a command seconds rather than
+ * every call until the app restarts. Each beat reads the gate first, so
  * the setting switched off, a sign-out, or a run that sends nothing ends the
  * follow and the beats, the agents' calls are told no Mac listens, and every
  * command still running is stopped, its process group killed. Every read
@@ -101,6 +108,15 @@ const LISTENING_EVERY = Duration.seconds(15);
  * the rows that named it may not change again to say so.
  */
 const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
+/** How long the service lets a command wait to be claimed: one waiting longer is refused, so a beat leaves it be. */
+const CLAIM_WINDOW = Duration.seconds(30);
+/**
+ * How long a command may wait unclaimed while the follow stands before a
+ * beat counts it missed: well past a live delivery and a claim's retries,
+ * and with `LISTENING_EVERY` still inside `CLAIM_WINDOW`, so a missed
+ * command is claimed in time.
+ */
+const MISSED_AFTER = Duration.seconds(10);
 
 /** The login shell when the environment names none: macOS's own default. */
 const DEFAULT_SHELL = "/bin/zsh";
@@ -109,6 +125,8 @@ const VARIABLE = { HOME: "HOME", SHELL: "SHELL" } as const;
 
 /** The kinds of command this Mac runs, which every read names: shell alone, for now. */
 const RUNS: readonly MacCommandKind[] = [MAC_COMMAND_KIND.SHELL];
+
+const decodeLiveRows = Schema.decodeUnknownOption(macCommandsLiveRowsSchema);
 
 /** The service's side of the commands, as this concern asks it. */
 export type MacCommandClient = Pick<
@@ -342,22 +360,53 @@ export function composeMacCommands(
         yield* FiberSet.run(running, decided(answer, userId));
       }).pipe(Effect.uninterruptible);
 
+    /** The unclaimed commands of this Mac's kinds, sealed or with `poll` inline, for the account `userId` names. */
+    const seal = (userId: string, poll: boolean, after?: string) =>
+      asked(client.live(RUNS, userId, poll, after));
+
+    /**
+     * The unclaimed commands the follow should long since have claimed, read
+     * once and unheld: each waiting past `MISSED_AFTER` by this Mac's clock,
+     * as the follow's renewals are timed, and still inside the claim window.
+     * None where the service answered no rows, or rows that did not decode.
+     */
+    const missed = (userId: string) =>
+      Effect.map(seal(userId, true), (read): readonly MacCommandRead[] => {
+        if ("failure" in read) return [];
+        const rows = decodeLiveRows({ commands: read.queries.commands.rows ?? [] });
+        if (Option.isNone(rows)) return [];
+        const now = kernel.now();
+        const late = rows.value.commands.filter((row) => {
+          const waited = now - row.queuedAt;
+          return (
+            waited >= Duration.toMillis(MISSED_AFTER) && waited < Duration.toMillis(CLAIM_WINDOW)
+          );
+        });
+        return macCommandsOfLiveRows({ commands: late });
+      });
+
     /**
      * That this Mac listens for its kinds, said every `LISTENING_EVERY` for
      * as long as the gate stands and the account signed in is the one the
      * follow is for; it returns once either changes, which ends the follow.
+     * Each beat also claims what the follow missed (`missed`) and, finding
+     * any, returns too, so the follow that missed it is sealed again.
      */
-    const presence = (userId: string) =>
+    const presence = (running: FiberSet.FiberSet, userId: string) =>
       Effect.gen(function* () {
         while ((yield* gateOpen) && dependencies.accountId() === userId) {
           yield* asked(client.listening(RUNS));
+          const late = yield* missed(userId);
+          if (late.length > 0) {
+            report("the Mac command follow missed a command; it is claimed and followed again");
+            for (const command of late) {
+              yield* FiberSet.run(running, claimed(running, userId, command));
+            }
+            return;
+          }
           yield* Effect.sleep(LISTENING_EVERY);
         }
       });
-
-    /** The unclaimed commands of this Mac's kinds, sealed or with `poll` inline, for the account `userId` names. */
-    const seal = (userId: string, poll: boolean, after?: string) =>
-      asked(client.live(RUNS, userId, poll, after));
 
     /**
      * The unclaimed commands followed (`live-follow.ts`, which polls the
@@ -390,7 +439,7 @@ export function composeMacCommands(
           macCommandsLiveRowsSchema,
         );
         const following = Stream.runForEach(rows, (read) => claimNew(macCommandsOfLiveRows(read)));
-        return Effect.raceFirst(following, presence(userId)).pipe(
+        return Effect.raceFirst(following, presence(running, userId)).pipe(
           Effect.catch(() => Effect.sleep(LIVE_RESTART)),
         );
       });

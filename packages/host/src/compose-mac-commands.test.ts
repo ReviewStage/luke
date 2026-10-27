@@ -36,7 +36,8 @@ import { scriptedSpawner } from "./testing/scripted-spawner.js";
  * service is never read; otherwise every read names the account and the
  * kinds this Mac runs, each command waiting is claimed by its id, the
  * earliest first, and run or refused by its kind, one queued later is heard
- * within the poll's hold, and the Mac says it listens every fifteen
+ * within the poll's hold, one a stalled follow never hears of is claimed by
+ * the next beat, and the Mac says it listens every fifteen
  * seconds until the setting is switched to Never. Under Always allow a
  * command runs as claimed; under Ask every time it is told as an ask and
  * runs only once the developer allows it, Always allow writing the setting
@@ -88,6 +89,8 @@ function scriptedService(
   options: {
     readonly signedOut?: boolean;
     readonly unansweredClaims?: number;
+    /** Whether a held poll never answers, as a follow whose Realtime socket went quiet without an error hears nothing. */
+    readonly followStalls?: boolean;
     /** What happens as a claim is made, before the service grants it, such as the setting being switched off. */
     readonly duringClaim?: Effect.Effect<void>;
   } = {},
@@ -116,6 +119,7 @@ function scriptedService(
       Effect.gen(function* () {
         reads.push({ userId, kinds });
         if (options.signedOut === true) return LIVE_SIGNED_OUT;
+        if (options.followStalls === true && after !== undefined) return yield* Effect.never;
         for (let held = 0; after === String(version) && held < 25; held += 1) {
           yield* Effect.sleep(HOLD_LOOK);
         }
@@ -336,6 +340,33 @@ it.effect(
           assert.equal(service.reads.length, reads, "nor reads");
         }),
       );
+    }),
+);
+
+it.effect(
+  "a command a stalled follow never hears of is claimed by the next beat and run, so the service's word that the Mac listens holds",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = scriptedService({ followStalls: true });
+      const { composer } = yield* subject(service, spawner, {
+        mode: MAC_COMMAND_MODE.ALWAYS,
+        signedIn: true,
+      });
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* composer.lifetime;
+          yield* settled;
+          // Queued once the follow stands, and waiting twelve seconds unheard by the next beat.
+          service.queue(LATER, NOW - 12_000);
+          yield* TestClock.adjust("15 seconds");
+          yield* settled;
+        }),
+      );
+
+      assert.deepEqual(service.claims, [LATER.id]);
+      assert.ok(service.settledResults.has(LATER.id), "it ran");
     }),
 );
 
