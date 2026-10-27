@@ -43,7 +43,7 @@ import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import { readTask, savePlanText, updateTask } from "@luke/database/models/task-store";
+import { createTask, readTask, savePlanText, updateTask } from "@luke/database/models/task-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { voiceWriter } from "@luke/database/models/voice-writer";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
@@ -1399,12 +1399,15 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           ...DEVICE_LAYOUT,
           signedIn: { claudeCode: true },
         });
-        yield* updateTask(owner, task.id, {
+        const onStudio = yield* createTask(owner, {
+          organizationId: task.workspaceId,
+          name: "On the Studio",
+          repository: RELAY_FULL_NAME,
           runsOn: { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: studio },
         });
 
         const theirKey = randomUUID();
-        const byTeammate = yield* ask(startAs(other, task.id, { idempotencyKey: theirKey }));
+        const byTeammate = yield* ask(startAs(other, onStudio.id, { idempotencyKey: theirKey }));
         assert.deepEqual(byTeammate, {
           status: HOSTED_HTTP_STATUS.CONFLICT,
           body: {

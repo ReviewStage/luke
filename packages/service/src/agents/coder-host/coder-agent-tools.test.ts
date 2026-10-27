@@ -846,11 +846,11 @@ test("start_agent starts an agent on the caller's own task as the deployment act
 });
 
 test("start_agent on a task that runs on another member's device is refused in words that name the device and its owner, starting nothing", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
   const deviceId = randomUUID();
-  await database.run(
+  const onTheirDevice = await database.run(
     Effect.gen(function* () {
       yield* writeAccountPreferences(agents.teammates.userId, {
         experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
@@ -861,14 +861,17 @@ test("start_agent on a task that runs on another member's device is refused in w
         ...DEVICE_LAYOUT,
         signedIn: { claudeCode: true },
       });
-      yield* updateTask(agents.teammates.userId, tasks.billing, {
+      return yield* createTask(agents.teammates.userId, {
+        organizationId: workspaceId,
+        name: "Metered billing",
+        repository: RELAY_FULL_NAME,
         runsOn: { machine: CODING_AGENT_MACHINE.DEVICE, deviceId },
       });
     }),
   );
 
   assert.deepEqual(
-    await call(CODER_TOOL.START_AGENT, { taskId: tasks.billing, prompt: "Bill by seat." }),
+    await call(CODER_TOOL.START_AGENT, { taskId: onTheirDevice.id, prompt: "Bill by seat." }),
     {
       status: ACTION_RESULT_STATUS.REJECTED,
       reason:
