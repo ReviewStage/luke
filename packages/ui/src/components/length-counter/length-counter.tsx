@@ -1,3 +1,4 @@
+import { formatCount } from "@luke/features/number-format";
 import { useState } from "react";
 import { useDisclosure } from "../../use-disclosure.js";
 
@@ -6,7 +7,7 @@ import { useDisclosure } from "../../use-disclosure.js";
  *
  * A field with a length limit says nothing of it while its words are well
  * short of it; from four fifths of the way (`COUNTER_FROM`) the counter
- * fades in, "52/64", and its count ticks as it changes, rising from below as
+ * fades in, "52/64", its figures grouped as every count is ("3,420/4,000", `formatCount`), and its count ticks as it changes, rising from below as
  * it grows and dropping from above as it shrinks, so a glance tells which
  * way it went. At the limit it is drawn in the danger ink, since the field
  * takes no more. Below four fifths again it fades out, held through its
@@ -63,9 +64,9 @@ export function LengthCounter({
     >
       {/* Note that each count is a figure of its own, so a change plays its tick from the start. */}
       <span key={length} className={COUNT} data-move={move}>
-        {length}
+        {formatCount(length)}
       </span>
-      /{limit}
+      /{formatCount(limit)}
     </span>
   );
 }

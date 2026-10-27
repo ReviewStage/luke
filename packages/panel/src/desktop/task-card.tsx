@@ -95,18 +95,21 @@ export const TASK_MARK_GLYPH =
 /**
  * The one icon at a task row's end, before its time: the attention mark on
  * a task whose repository belongs to another of the account's workspaces,
- * which its card names (`strandedHome`); else how its agents stand
- * (`TaskAgentsMark`).
+ * which its card names (`strandedHome`); else how its agents stand and
+ * whether a question waits on the reader (`TaskAgentsMark`).
  */
 export function TaskRowStatus({
   task,
+  waiting,
   stranded,
 }: {
   task: TaskSummary;
+  /** How many of the task's questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
+  waiting: number;
   /** The workspace the task's repository belongs to, where the reader may move it there. */
   stranded?: Workspace | undefined;
 }): React.JSX.Element | null {
-  if (stranded === undefined) return <TaskAgentsMark agents={task.agents} />;
+  if (stranded === undefined) return <TaskAgentsMark agents={task.agents} waiting={waiting} />;
   return (
     <span className="task-mark-attention mr-tight-gap [&_.attention-mark]:size-luke-12 [&_.attention-mark_svg]:size-attention-glyph-small">
       <AttentionMark />

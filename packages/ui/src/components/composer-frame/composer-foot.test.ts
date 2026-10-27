@@ -158,10 +158,10 @@ test("Stop stands in the send's place and stops, and while its stop is out it is
 test("the counter shows once the words reach four fifths of the limit", () => {
   const send = { label: "Send", empty: false };
   const { container, redraw } = draw({ send, counter: { length: 3199, limit: 4000 } });
-  expect(container.textContent).not.toContain("/4000");
+  expect(container.textContent).not.toContain("/4,000");
 
   redraw({ send, counter: { length: 3200, limit: 4000 } });
-  expect(container.textContent).toContain("3200/4000");
+  expect(container.textContent).toContain("3,200/4,000");
 });
 
 test("a call's status stands beside the send, and beside a strip in the bar's place", () => {

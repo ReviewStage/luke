@@ -53,7 +53,7 @@ function fold(defaultOpen = false): ReactElement {
   return createElement(Disclosure, {
     defaultOpen,
     children: [
-      createElement(DisclosureSummary, { key: "summary", children: "3 tools called" }),
+      createElement(DisclosureSummary, { key: "summary", children: "3 tool calls" }),
       createElement(DisclosureBody, { key: "body", children: "Read package.json" }),
     ],
   });
@@ -66,7 +66,7 @@ function summaryOf(container: HTMLElement): HTMLElement {
 test("a closed fold draws its summary alone, and a press opens it and closes it again", () => {
   const container = render(fold());
   const summary = summaryOf(container);
-  assert.equal(summary.textContent, "3 tools called");
+  assert.equal(summary.textContent, "3 tool calls");
   assert.equal(summary.getAttribute("aria-expanded"), "false");
   assert.ok(!container.textContent?.includes("Read package.json"));
 

@@ -202,7 +202,7 @@ it.layer(getTestDB())("the account's live reads", (it) => {
   );
 
   it.effect(
-    "the task list is answered polled as its tasks, its agents, its tasks' issues, and the questions waiting on the bearer, the bearer's tasks among them",
+    "the task list is answered polled as its tasks, its agents, and its tasks' issues, the bearer's tasks among them",
     () =>
       Effect.gen(function* () {
         const dana = yield* openUser;
@@ -212,12 +212,7 @@ it.layer(getTestDB())("the account's live reads", (it) => {
         assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
         const answer = Schema.decodeUnknownSync(taskListLiveAnswerSchema)(answered.body);
         assert.equal(answer.url, LIVE_POLL_URL);
-        assert.deepEqual(Object.keys(answer.queries).toSorted(), [
-          "agents",
-          "issues",
-          "plans",
-          "questions",
-        ]);
+        assert.deepEqual(Object.keys(answer.queries).toSorted(), ["agents", "issues", "plans"]);
         const rows = Schema.decodeUnknownSync(taskListLiveRowsSchema)({
           plans: answer.queries.plans.rows,
           agents: answer.queries.agents.rows,

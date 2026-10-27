@@ -41,6 +41,7 @@ export function RecentRow({
   now,
   face = true,
   unread,
+  waiting,
   onOpen,
 }: {
   tasks: TasksControl;
@@ -50,6 +51,8 @@ export function RecentRow({
   face?: boolean;
   /** Whether it is unread as the sidebar's row counts it: marked so by hand, or saved since the developer last looked (`useUnreadTasks`). */
   unread: boolean;
+  /** How many of the task's questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
+  waiting: number;
   onOpen: () => void;
 }): React.JSX.Element {
   const directory = useMemberDirectory();
@@ -98,7 +101,7 @@ export function RecentRow({
                   {task.repository ?? "No repository"}
                 </OneLine>
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
-                <TaskRowStatus task={task} stranded={strandedHome(tasks, task)} />
+                <TaskRowStatus task={task} waiting={waiting} stranded={strandedHome(tasks, task)} />
                 <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
               </span>
             )

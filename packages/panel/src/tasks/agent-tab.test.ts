@@ -310,7 +310,7 @@ test("a run of calls folds under a line that says it is open", () => {
     true,
   );
   const group = container.querySelector("[data-turn-fold] > summary");
-  assert.equal(group?.textContent, "2 tools called");
+  assert.equal(group?.textContent, "2 tool calls");
   assert.equal(group?.getAttribute("aria-expanded"), "true", "the group says it is open");
 });
 
@@ -367,7 +367,7 @@ const FAILURE_LINES: readonly {
       failedPart("run_on_mac", { command: "pnpm test" }),
       toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
     ],
-    label: "2 tools called, a call failed",
+    label: "2 tool calls, a call failed",
   },
   {
     name: "a stopped turn's run of calls that all answered",
@@ -414,7 +414,7 @@ const FAILURE_LINES: readonly {
         },
       ],
     ]),
-    label: "1 tool called, 1 subagent, a call failed",
+    label: "1 tool call, 1 subagent, a call failed",
   },
 ];
 
@@ -946,7 +946,7 @@ test("a call of an integration's tool is one row wearing the integration's mark,
     container.querySelector('[data-call-id="call-connection_execute"]') === null,
     "the connection_execute that ran it draws no row of its own",
   );
-  assert.equal(container.querySelector("[data-turn-fold] > summary")?.textContent, "1 tool called");
+  assert.equal(container.querySelector("[data-turn-fold] > summary")?.textContent, "1 tool call");
   const row = container.querySelector<HTMLElement>('[data-call-id="call-linear_remote"] summary');
   assert.ok(row, "the call's row is a fold's line");
   assert.match(row.textContent ?? "", /^Ran\s*list_issues\s*Linear$/u);

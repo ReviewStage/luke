@@ -185,14 +185,20 @@ export interface LocalAgentSandbox {
   /** Where the VM's own image keeps what a runner runs on, which the device registers in place of any copy of its own. */
   readonly tools: { readonly node: string; readonly claude: string; readonly codex: string };
   /**
-   * Whether the device has what its VMs run on, had now where it can be: a
+   * The device's VMs given what they run on, had now where it can be: a
    * host's `smolvm` is its service's own, so it always has; a Mac fetches and
-   * checks its pinned `smolvm` the first time, and pulls the image once. The
-   * device registers as sandboxed only once it has.
+   * checks its pinned `smolvm` the first time, and pulls the image once. It
+   * runs `preparing` once, just before a fetch or pull begins, and never
+   * where it has everything already, so the device says it is getting ready
+   * only while it is. It fails, in words naming no secret, with what could
+   * not be had. The device registers as ready to take an agent only once it
+   * succeeds.
    */
-  readonly ready: Effect.Effect<
-    boolean,
-    never,
+  readonly ready: (
+    preparing: Effect.Effect<void>,
+  ) => Effect.Effect<
+    void,
+    LocalAgentSandboxUnavailable,
     ChildProcessSpawner.ChildProcessSpawner | FileSystem | Path.Path | HttpClient
   >;
   /** The agent's VM made where it has none, its folder mounted at the same path, and started; it fails where it could not be. */

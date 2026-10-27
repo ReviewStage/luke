@@ -8,6 +8,7 @@ import {
   type FeedbackKind,
   type FeedbackResult,
 } from "@luke/features/feedback";
+import { formatCount } from "@luke/features/number-format";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
@@ -277,7 +278,7 @@ test("the field counts its words from four fifths of its cap, and says nothing b
   assert.equal(counter(), null);
 
   write("x".repeat(limit * 0.8));
-  assert.equal(counter(), `${String(limit * 0.8)}/${String(limit)}`);
+  assert.equal(counter(), `${formatCount(limit * 0.8)}/${formatCount(limit)}`);
 });
 
 test("a paste past the cap says it was cut until the words change", () => {

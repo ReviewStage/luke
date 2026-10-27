@@ -1,5 +1,5 @@
 import { CODING_AGENT_MACHINE, macOnline } from "@luke/features/coding-agent-wire";
-import { DEVICE_KIND, type DeviceKind } from "@luke/features/device-agent-wire";
+import { DEVICE_KIND, DEVICE_SETUP, type DeviceKind } from "@luke/features/device-agent-wire";
 import type { MacOffer } from "@luke/features/models-wire";
 import type { TaskRunsOn, TaskRunsOnRequest } from "@luke/features/task-wire";
 import {
@@ -26,13 +26,15 @@ import { keptKey, useKept } from "../use-kept.js";
  * created and never changed. New task's chip drops a menu: Cloud first, then
  * each device the member registered, as the models answer lists them, by its
  * name under the glyph of its kind, a Mac running Luke or a host, each saying
- * whether it is online, held against the window's own clock. An offline device is listed but not picked, since
- * the service refuses a task set to one that has not beat lately. New task's chip
- * starts on the member's last pick, kept in this window, and on Cloud only
- * where nothing is kept or that device is no longer listed. A kept device
- * that is offline, as a Mac is while Luke restarts on it and readies its
- * sandbox, stays picked and says so, so its start is refused by name rather
- * than sent quietly to the cloud; it wears the Experimental
+ * whether it is online, held against the window's own clock, or, online,
+ * that it is still getting ready for local agents or couldn't set them up. A
+ * device offline or not ready is listed but not picked, since the service
+ * refuses a task set to one that has not beat lately or is not set up yet.
+ * New task's chip starts on the member's last pick, kept in this window, and
+ * on Cloud only where nothing is kept or that device is no longer listed. A
+ * kept device that is offline, as a Mac is while Luke restarts on it, or
+ * still getting ready or not set up, stays picked and says so, so its start
+ * is refused by name rather than sent quietly to the cloud; it wears the Experimental
  * tag; it stands only while the member has a device to pick. The task's
  * chip stands with its status and priority, saying the device it runs on
  * and whether it is online, or that the device was removed, with no menu, and
@@ -47,6 +49,8 @@ const RUNS_ON_WORDS = {
   CLOUD: "Cloud",
   ONLINE: "Online",
   OFFLINE: "Offline",
+  GETTING_READY: "Getting ready…",
+  SETUP_FAILED: "Couldn't set up",
   REMOVED: "Removed device",
   NO_MATCH: "No devices match",
   LOCKED_HINT: "Set when the task was created.",
@@ -71,28 +75,40 @@ function offerOnline(device: MacOffer, now: number): boolean {
   return device.seenAt === undefined || macOnline(device.seenAt, now);
 }
 
-/** Cloud, then each device by name under its kind's glyph, an online one saying so and an offline one muted, unpicked. */
+/** Why a device offered takes no agent at `now`: offline, or online but still getting ready or not set up; none for one that takes an agent. */
+function offerUnready(device: MacOffer, now: number): string | undefined {
+  if (!offerOnline(device, now)) return RUNS_ON_WORDS.OFFLINE;
+  switch (device.setup) {
+    case DEVICE_SETUP.PREPARING:
+      return RUNS_ON_WORDS.GETTING_READY;
+    case DEVICE_SETUP.FAILED:
+      return RUNS_ON_WORDS.SETUP_FAILED;
+    case undefined:
+      return undefined;
+  }
+}
+
+/** Cloud, then each device by name under its kind's glyph, one that takes an agent saying it is online and any other muted, unpicked, saying why. */
 function runsOnRows(devices: readonly MacOffer[], now: number): readonly MenuRow[] {
   return [
     { id: CLOUD_ROW, label: RUNS_ON_WORDS.CLOUD, icon: <GLYPH.CLOUD /> },
-    ...devices.map(
-      (device): MenuRow => ({
+    ...devices.map((device): MenuRow => {
+      const unready = offerUnready(device, now);
+      return {
         id: device.deviceId,
         label: device.name,
         icon: <DeviceGlyph kind={device.kind} />,
-        ...(offerOnline(device, now)
-          ? { detail: RUNS_ON_WORDS.ONLINE }
-          : { disabled: RUNS_ON_WORDS.OFFLINE }),
-      }),
-    ),
+        ...(unready === undefined ? { detail: RUNS_ON_WORDS.ONLINE } : { disabled: unready }),
+      };
+    }),
   ];
 }
 
 /**
  * New task's pick, starting on the member's last where that device is
- * listed, online or not, else Cloud, and kept as it changes. Answers the
+ * listed, ready or not, else Cloud, and kept as it changes. Answers the
  * device picked, none for the cloud, and the setter. Note that an offline
- * device stays picked rather than falling back to Cloud, because a task's
+ * device, or one still getting ready, stays picked rather than falling back to Cloud, because a task's
  * Runs on is fixed as it starts, and one sent to the cloud while its Mac was
  * away for a moment could never be moved back.
  */
@@ -104,9 +120,10 @@ export function useNewTaskRunsOn(
   return [picked, (deviceId: string | undefined) => keep(deviceId ?? CLOUD_ROW)];
 }
 
-/** What New task's chip says of the device picked: its name while online, and that it is offline otherwise. */
+/** What New task's chip says of the device picked: its name while it takes an agent, and why it does not otherwise. */
 function offerStateWords(device: MacOffer, now: number): string {
-  return offerOnline(device, now) ? device.name : `${device.name} · ${RUNS_ON_WORDS.OFFLINE}`;
+  const unready = offerUnready(device, now);
+  return unready === undefined ? device.name : `${device.name} · ${unready}`;
 }
 
 /** What a start sends of New task's pick: the device it names, or the cloud. */

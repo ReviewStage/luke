@@ -658,6 +658,10 @@ export function localAgentRefusalWords(
       return `${name} can't run Codex agents yet. Wait for its Codex download to finish, choose a Claude model, ${RUN_IN_CLOUD}.`;
     case LOCAL_AGENT_REFUSAL.NO_HARNESS:
       return `${name} can't run this model's agents. Choose a Claude or Codex model, ${RUN_IN_CLOUD}.`;
+    case LOCAL_AGENT_REFUSAL.PREPARING:
+      return `${name} is still getting ready for local agents (downloading its sandbox). Try again in a few minutes.`;
+    case LOCAL_AGENT_REFUSAL.SETUP_FAILED:
+      return `${name} couldn't set up local agents. Turn Run agents on this Mac off and on in Settings › Agents to try again, ${RUN_IN_CLOUD}.`;
     // Note that no way out is offered, because the cloud is the owner's to set and a teammate can change nothing here.
     case LOCAL_AGENT_REFUSAL.NOT_OWNER:
       return `This task runs on ${device?.name ?? "another member's device"}. Only ${device?.owner ?? "its owner"} can start agents on it.`;
