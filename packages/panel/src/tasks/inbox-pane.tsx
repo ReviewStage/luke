@@ -1204,7 +1204,7 @@ export function InboxPane({
    * actions; none elsewhere, where the bar draws its crumbs and buttons.
    */
   phone?: InboxPanePhone | undefined;
-  /** The channel the Inbox is narrowed to, by name, which a phone's way back to the list names; none where it lists every channel. */
+  /** The channel the Inbox is narrowed to, by name, which the way back to the list names; none where it lists every channel. */
   channelName?: string | undefined;
 }): React.JSX.Element {
   const now = useMinute();
@@ -1313,8 +1313,10 @@ export function InboxPane({
           start={TOOLBAR_INSET.COLUMN}
           wrapHeading
           lead={
-            onBack === undefined ? undefined : (
+            onBack === undefined ? undefined : channelName === undefined ? (
               <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
+            ) : (
+              <BackButton label={`#${channelName}`} place={`#${channelName}`} onBack={onBack} />
             )
           }
           title={
