@@ -11,12 +11,20 @@
  * withdraws the ask the item held open with the same why. Nothing is
  * deleted, nothing is sent to the agent, and nothing moves the item's last
  * change, so a settled item keeps its place and stays read for whoever had
- * read it. A task reopened or an agent brought back later opens nothing
- * again; only the agent's own post under the item's key does.
+ * read it. The act's opposite reverses it: an agent brought back from an
+ * archive, and a task a member moves off Done or Canceled to work again,
+ * open again exactly the items that archive or that move settled, keyed on
+ * the act's own stamp (the agent's `archived_at`, the task's
+ * `completed_at`), the instant it wrote both the act and the settle, each
+ * holding open again the ask it withdrew, and nothing a settle before or
+ * since closed. A task Luke reopens on its own, as a turn starting on it
+ * does (`beginTaskWork`), opens nothing; only the agent's own post under
+ * the item's key does.
  */
 
 import { INBOX_ASK_STATUS, INBOX_STATUS } from "@luke/features/inbox-wire";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -33,6 +41,13 @@ export const INBOX_SETTLED_REASON = {
 } as const;
 
 export type InboxSettledReason = (typeof INBOX_SETTLED_REASON)[keyof typeof INBOX_SETTLED_REASON];
+
+/** Why a task standing in `status` settles its items: Done's or Canceled's reason, none for a status its work is open in. */
+function taskSettledReason(status: TaskStatus): InboxSettledReason | undefined {
+  if (status === TASK_STATUS.DONE) return INBOX_SETTLED_REASON.TASK_DONE;
+  if (status === TASK_STATUS.CANCELED) return INBOX_SETTLED_REASON.TASK_CANCELED;
+  return undefined;
+}
 
 /** What an item settles by: every item of one task, or of some agents. */
 const SETTLE_BY = { TASK: "task", AGENTS: "agents" } as const;
@@ -111,13 +126,14 @@ function settle(
   });
 }
 
-/** The task's open items settled, as its move to Done or Canceled settles them; run inside the transaction that moved it. */
+/** The task's open items settled, where it moved to Done or Canceled at `now`, its finish's stamp; nothing for a move to any other status. Run inside the transaction that moved it. */
 export function settleTaskInboxItems(
   taskId: string,
-  reason: InboxSettledReason,
+  status: TaskStatus,
   now: Date,
 ): SettleEffect<number> {
-  return settle(SETTLE_BY.TASK, [taskId], reason, now);
+  const reason = taskSettledReason(status);
+  return reason === undefined ? Effect.succeed(0) : settle(SETTLE_BY.TASK, [taskId], reason, now);
 }
 
 /** The agents' open items settled, as their archive settles them; run inside the transaction that archived them. */
@@ -126,4 +142,122 @@ export function settleAgentInboxItems(
   now: Date,
 ): SettleEffect<number> {
   return settle(SETTLE_BY.AGENTS, agentIds, INBOX_SETTLED_REASON.AGENT_ARCHIVED, now);
+}
+
+/** The items of the task or the agents one settle closed, by its reason and its stamp, opened again with nothing settled on them; their ids. */
+const reopenSettledItems = SqlSchema.findAll({
+  Request: SettleRequestSchema,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ by, ids, reason, now }) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({ status: INBOX_STATUS.OPEN, closedReason: null, settledAt: null })
+        .where(
+          and(
+            by === SETTLE_BY.TASK
+              ? inArray(inboxItem.taskId, ids)
+              : inArray(inboxItem.agentId, ids),
+            eq(inboxItem.status, INBOX_STATUS.CLOSED),
+            isNull(inboxItem.closedBy),
+            eq(inboxItem.closedReason, reason),
+            eq(inboxItem.settledAt, now),
+          ),
+        )
+        .returning({ id: inboxItem.id }),
+    ),
+});
+
+/** The latest message of each item named that carries an ask, the one an item's open ask always is. */
+const findLatestAsks = SqlSchema.findAll({
+  Request: Schema.Struct({ itemIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    itemId: Schema.String,
+    status: Schema.NullOr(Schema.String),
+    withdrawnReason: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ itemIds }) =>
+    Database.use((db) =>
+      db
+        .selectDistinctOn([inboxMessage.itemId], {
+          id: inboxMessage.id,
+          itemId: inboxMessage.itemId,
+          status: sql<string | null>`${inboxMessage.ask} ->> 'status'`,
+          withdrawnReason: sql<string | null>`${inboxMessage.ask} ->> 'withdrawnReason'`,
+        })
+        .from(inboxMessage)
+        .where(and(inArray(inboxMessage.itemId, itemIds), isNotNull(inboxMessage.ask)))
+        .orderBy(inboxMessage.itemId, desc(inboxMessage.createdAt), desc(inboxMessage.id)),
+    ),
+});
+
+/** The ask of the message named open again, the why of its withdrawal taken off, and its item holding it open. */
+const reopenAsk = SqlSchema.void({
+  Request: Schema.Struct({ messageId: Schema.String, itemId: Schema.String }),
+  execute: ({ messageId, itemId }) =>
+    Effect.andThen(
+      Database.use((db) =>
+        db
+          .update(inboxMessage)
+          .set({
+            ask: sql`(${inboxMessage.ask} - 'withdrawnReason') || jsonb_build_object('status', ${INBOX_ASK_STATUS.OPEN}::text)`,
+          })
+          .where(eq(inboxMessage.id, messageId)),
+      ),
+      Database.use((db) =>
+        db.update(inboxItem).set({ openAskMessageId: messageId }).where(eq(inboxItem.id, itemId)),
+      ),
+    ),
+});
+
+/**
+ * The items one settle closed opened again, as an undo of the act that
+ * settled them does: only those it closed for `reason` at `settledAt`, the
+ * act's own stamp, each holding open again the ask that settle withdrew.
+ * Note that an item's open ask is always its latest asking message, since a
+ * post replaces every ask before it, so the settle withdrew that one where
+ * it withdrew any; one already replaced or answered, as a notice's latest
+ * ask is, is left as it stands. Answers how many opened.
+ */
+function reopen(
+  by: (typeof SETTLE_BY)[keyof typeof SETTLE_BY],
+  ids: readonly string[],
+  reason: InboxSettledReason,
+  settledAt: Date,
+): SettleEffect<number> {
+  if (ids.length === 0) return Effect.succeed(0);
+  return Effect.gen(function* () {
+    const reopened = yield* reopenSettledItems({ by, ids, reason, now: settledAt });
+    if (reopened.length === 0) return 0;
+    const latest = yield* findLatestAsks({ itemIds: reopened.map(({ id }) => id) });
+    const withdrawn = latest.filter(
+      (ask) => ask.status === INBOX_ASK_STATUS.WITHDRAWN && ask.withdrawnReason === reason,
+    );
+    yield* Effect.forEach(
+      withdrawn,
+      (ask) => reopenAsk({ messageId: ask.id, itemId: ask.itemId }),
+      {
+        discard: true,
+      },
+    );
+    return reopened.length;
+  });
+}
+
+/** The items a task's move to `standing` (Done or Canceled) stamped at `completedAt` settled opened again, as a member moving it off that status does; run inside the transaction that moves it. */
+export function reopenTaskInboxItems(
+  taskId: string,
+  standing: TaskStatus,
+  completedAt: Date,
+): SettleEffect<number> {
+  const reason = taskSettledReason(standing);
+  return reason === undefined
+    ? Effect.succeed(0)
+    : reopen(SETTLE_BY.TASK, [taskId], reason, completedAt);
+}
+
+/** The agent's items its archive stamped at `archivedAt` settled opened again, as bringing the agent back from that archive does; run inside the transaction that brings it back. */
+export function reopenAgentInboxItems(agentId: string, archivedAt: Date): SettleEffect<number> {
+  return reopen(SETTLE_BY.AGENTS, [agentId], INBOX_SETTLED_REASON.AGENT_ARCHIVED, archivedAt);
 }

@@ -16,6 +16,8 @@ import { inboxMessage } from "../schemas/inbox-message.js";
 import { conversations } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 
+type AgentKind = (typeof codingAgent.$inferInsert)["kind"];
+
 /**
  * task-agents.ts -- a coding agent on a test's task, and an inbox item it holds open, written beneath the store.
  *
@@ -23,11 +25,17 @@ import { CONVERSATION_KIND } from "../storage-vocabulary.js";
  * or an item of that agent's waiting on the developer, writes the rows here
  * rather than starting a session: an agent of the member's, with its own
  * conversation, and an item open under a fresh key, holding its message's
- * ask open, or open as a notice whose message asks nothing.
+ * ask open, or open as a notice whose message asks nothing. An agent with
+ * no task, a member's operator among them, is written the same way.
  */
 
-/** An agent of the member's on the task, with its own conversation; its id. */
-export const openTaskAgent = (userId: string, organizationId: string, taskId: string) =>
+/** An agent of the member's on the task, or on none, of the kind given where one is, with its own conversation; its id. */
+export const openTaskAgent = (
+  userId: string,
+  organizationId: string,
+  taskId: string | null,
+  kind?: AgentKind,
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = randomUUID();
@@ -46,6 +54,7 @@ export const openTaskAgent = (userId: string, organizationId: string, taskId: st
       repository: "acme/api",
       repositories: ["acme/api"],
       idempotencyKey: randomUUID(),
+      ...(kind === undefined ? undefined : { kind }),
     });
     return id;
   });
@@ -54,7 +63,7 @@ export const openTaskAgent = (userId: string, organizationId: string, taskId: st
 export const openInboxItem = (
   userId: string,
   organizationId: string,
-  taskId: string,
+  taskId: string | null,
   agentId: string,
   asking: boolean,
 ) =>
