@@ -69,7 +69,7 @@ const OPERATOR: TasklessAgent = {
   activityAt: 2,
 };
 
-/** An agent with no task beside him, an automation's run. */
+/** An agent with no task beside him, started by hand. */
 const SWEEP: TasklessAgent = {
   id: "6a1f0c2e-0000-4000-8000-0000000000b1",
   planId: null,
@@ -79,8 +79,7 @@ const SWEEP: TasklessAgent = {
   createdAt: 1,
   status: CODING_AGENT_STATUS.COMPLETED,
   turnId: null,
-  automationName: "Copy sweep",
-  automationId: "6a1f0c2e-0000-4000-8000-0000000000c1",
+  automationId: null,
   workspaceId: ACME.id,
   repository: "acme/relay",
   activityAt: 2,
