@@ -1036,6 +1036,33 @@ const updateUnmovedArchived = SqlSchema.findAll({
     ),
 });
 
+/**
+ * The task the agent works on, locked against its status changing until
+ * the caller commits, as bringing the agent back takes it before the
+ * agent's own row: the order a task's write takes the two in, so an
+ * unarchive and a task moved off Done never wait on each other in a cycle,
+ * while each still sees the other's settle (`inbox-settle.ts`).
+ */
+const lockAgentTask = SqlSchema.void({
+  Request: Schema.String,
+  execute: (agentId) =>
+    Database.use((db) =>
+      db
+        .select({ id: task.id })
+        .from(task)
+        .where(
+          inArray(
+            task.id,
+            db
+              .select({ id: codingAgent.taskId })
+              .from(codingAgent)
+              .where(eq(codingAgent.id, agentId)),
+          ),
+        )
+        .for("share"),
+    ),
+});
+
 const updateAgentArchived = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -2817,6 +2844,7 @@ export function archiveCodingAgentCommitted(
     client.withTransaction(
       Effect.gen(function* () {
         const now = yield* DateTime.nowAsDate;
+        if (!archived) yield* lockAgentTask(agentId);
         // The archive standing before the write, whose stamp names the items it settled.
         const standing = archived ? Option.none() : yield* findAgent({ userId, agentId });
         const written = yield* updateAgentArchived({
@@ -2950,6 +2978,7 @@ export function unarchiveCodingAgentFrom(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
+        yield* lockAgentTask(agentId);
         const rows = yield* unarchiveIfStamped({ userId, agentId, archivedAt });
         if (rows.length === 0) return false;
         // The items that very archive settled open again with it.

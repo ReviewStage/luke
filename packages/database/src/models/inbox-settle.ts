@@ -191,6 +191,35 @@ function settledBy({ by, ids, reason, now }: typeof SettleRequestSchema.Type) {
 }
 
 /**
+ * The rows of the other act an undo reads, locked until it commits: the
+ * agents of the items a task's settle closed, or the tasks of those an
+ * archive closed. Note that the undo reads them only once it holds them, so
+ * that act, landing meanwhile, either committed before the read, which then
+ * hands the item to it, or waits on the lock and finds the item open after,
+ * which it then settles itself; otherwise its settle could skip the item
+ * still closed and the undo open it under that act.
+ */
+const lockOtherActRows = SqlSchema.void({
+  Request: SettleRequestSchema,
+  execute: (request) =>
+    Database.use((db) => {
+      const settled = (column: typeof inboxItem.agentId | typeof inboxItem.taskId) =>
+        db.select({ id: column }).from(inboxItem).where(settledBy(request));
+      return request.by === SETTLE_BY.TASK
+        ? db
+            .select({ id: codingAgent.id })
+            .from(codingAgent)
+            .where(inArray(codingAgent.id, settled(inboxItem.agentId)))
+            .for("share")
+        : db
+            .select({ id: task.id })
+            .from(task)
+            .where(inArray(task.id, settled(inboxItem.taskId)))
+            .for("share");
+    }),
+});
+
+/**
  * The items one settle closed that the other act still settles handed to
  * it, closed for its reason at its stamp: a task's to the archive of their
  * agent, an archive's to their task's Done or Canceled. Their ids and the
@@ -315,6 +344,7 @@ function reopen(
   if (ids.length === 0) return Effect.succeed(0);
   return Effect.gen(function* () {
     const request = { by, ids, reason, now: settledAt };
+    yield* lockOtherActRows(request);
     const handed = yield* handOverSettledItems(request);
     if (handed.length > 0) {
       const latest = yield* findLatestAsks({ itemIds: handed.map(({ id }) => id) });
