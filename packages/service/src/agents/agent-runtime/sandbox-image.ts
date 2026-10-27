@@ -16,7 +16,9 @@ import {
   CLAUDE_CODE_PIN,
   CLAUDE_EXECUTABLE,
   CODEX_PIN,
+  PLAYWRIGHT_PIN,
   RUNNER_DIRECTORY,
+  SANDBOX_TOOL_ENV,
 } from "@luke/agent-runner/pins";
 import { installCodeTooling } from "eve/extensions/code/sandbox";
 import type { SandboxSession } from "eve/sandbox";
@@ -24,7 +26,6 @@ import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { PREPARE_TMUX, SUDO_LINE } from "../terminal/tmux.js";
 
 /** The Playwright the image carries, pinned so a rebuilt snapshot holds the same browser. */
-const PLAYWRIGHT_VERSION = "1.64.1";
 
 /**
  * GitHub's own `gh stack` extension (github/gh-stack), pinned to a release
@@ -234,8 +235,13 @@ const SYSTEM_STAGE = stage([
   // though it costs about 400 MB in every snapshot, because the agent's own browser
   // (`../browser/sandbox-browser.ts`) runs it headful under Xvfb, where a site sees an ordinary
   // Chrome rather than a headless one that a sign-in would refuse.
-  `npm install -g playwright@${PLAYWRIGHT_VERSION}`,
-  "playwright install --with-deps chromium",
+  // Note that both are root's, the browsers inside the package, where every user reaches them
+  // (`PLAYWRIGHT_PIN`), since the default user's home, where they once went, is closed to the
+  // cloud's `agent` and to a device's VM's user; the last line fails the image where npm put them elsewhere.
+  `$SUDO env HOME=/root npm install --global --prefix ${PLAYWRIGHT_PIN.PREFIX} --no-audit --no-fund playwright@${PLAYWRIGHT_PIN.VERSION}`,
+  `$SUDO env HOME=/root PLAYWRIGHT_BROWSERS_PATH=${SANDBOX_TOOL_ENV.PLAYWRIGHT_BROWSERS_PATH} ${PLAYWRIGHT_PIN.PREFIX}/bin/playwright install --with-deps chromium`,
+  `$SUDO chmod -R a+rX ${PLAYWRIGHT_PIN.BROWSERS}`,
+  `ls -d ${PLAYWRIGHT_PIN.BROWSERS}/chromium-* >/dev/null || { echo 'Playwright put no Chromium in ${PLAYWRIGHT_PIN.BROWSERS}' >&2; exit 1; }`,
   // After Playwright, whose `--with-deps` has just refreshed the package lists and installed Xvfb.
   INSTALL_GTK,
   ...INSTALL_BUBBLEWRAP,

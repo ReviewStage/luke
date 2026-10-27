@@ -747,6 +747,8 @@ it.effect(
       assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
+      // A command's Playwright looks for its browsers in its own package: the image's where it installed them, a repository's where the agent may install them.
+      assert.equal(options.env?.PLAYWRIGHT_BROWSERS_PATH, "0");
     }),
 );
 

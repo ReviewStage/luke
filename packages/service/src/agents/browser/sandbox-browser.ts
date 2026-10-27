@@ -22,6 +22,7 @@
  * is a constant of this module, handed to it as a positional argument.
  */
 
+import { PLAYWRIGHT_PIN } from "@luke/agent-runner/pins";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
@@ -86,7 +87,9 @@ const START_SCRIPT = [
   "flock -w 60 9",
   `answers() { curl -fsS --max-time 1 "http://127.0.0.1:$port/json/version" >/dev/null 2>&1; }`,
   `if answers; then echo ${BROWSER_START_OUTPUT.ATTACHED}; exit 0; fi`,
-  'chrome=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -n 1)',
+  // Note that an image from before Playwright's shared folder kept the browser in the default user's cache, which a sandbox resumed from its snapshot still holds.
+  `chrome=$(ls -d ${PLAYWRIGHT_PIN.BROWSERS}/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -n 1)`,
+  `[ -n "$chrome" ] || chrome=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -n 1)`,
   `[ -x "$chrome" ] || { echo 'no Chromium in the image' >&2; exit ${BROWSER_START_EXIT.NO_CHROMIUM}; }`,
   // Xvfb by the pid its own lock file names, checked by name, since a resumed sandbox may have handed that pid to another process.
   'xvfb_pid=$(cat "/tmp/.X$display-lock" 2>/dev/null | tr -d " ")',
