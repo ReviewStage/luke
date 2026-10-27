@@ -132,6 +132,7 @@ import { fileName, shownFiles } from "@luke/voice/code-pane-model";
 import {
   Fragment,
   isValidElement,
+  memo,
   type ReactNode,
   useCallback,
   useDeferredValue,
@@ -1775,9 +1776,11 @@ function PaletteFooter({ typed, runs }: { typed: boolean; runs: boolean }): Reac
  * chosen, then wherever the arrows or the pointer move it. Note that the row
  * chosen is held here rather than by the palette, so moving it draws the
  * dialog again and never ranks a row, which the palette does over every
- * task, Inbox item, and setting it lists.
+ * task, Inbox item, and setting it lists. Note too that it draws again only
+ * for props that changed, which the palette holds still while it is shut,
+ * so the window drawing again leaves the hidden dialog alone.
  */
-function PaletteDialog({
+const PaletteDialog = memo(function PaletteDialog({
   opening,
   filter,
   groups,
@@ -1817,6 +1820,8 @@ function PaletteDialog({
     <CommandDialog
       {...dialog}
       label="Command palette"
+      // Note that the palette stays drawn, hidden, while shut, so ⌘K only shows it, since its props stand still until it opens.
+      keepMounted
       groups={groups}
       filter={COMMAND_FILTER.NONE}
       query={query}
@@ -1825,7 +1830,7 @@ function PaletteDialog({
       foot={<PaletteFooter typed={query !== ""} runs={runs} />}
     />
   );
-}
+});
 
 /**
  * The palette, offering ⌘K while `available`: past the sign-in, where there
@@ -1895,8 +1900,8 @@ export function CommandPalette({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const experiments = useExperimentChoices();
-  const filters = filtersOn(experiments);
-  const labels = filterLabels(experiments);
+  const filters = useMemo(() => filtersOn(experiments), [experiments]);
+  const labels = useMemo(() => filterLabels(experiments), [experiments]);
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   // How many times ⌘K has opened the palette, each of which chooses its first row.
@@ -2009,30 +2014,33 @@ export function CommandPalette({
   // dialog sees to, because the window's Escape would stop Luke mid-reply and
   // a window chord would change what stands behind the palette. Escape itself
   // is the dialog's, which closes the palette alone.
-  const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    // Note that a Return the rows have not caught up with waits for them, so it never chooses a row the earlier words ranked.
-    if (event.key === "Enter" && sought !== query) {
+  const keyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      // Note that a Return the rows have not caught up with waits for them, so it never chooses a row the earlier words ranked.
+      if (event.key === "Enter" && sought !== query) {
+        event.preventDefault();
+        owedReturn.current = query;
+        return;
+      }
+      const step = arrowStep(event, query);
+      if (step !== 0) {
+        event.preventDefault();
+        setFilter(steppedFilter(filters, filter, step));
+        return;
+      }
+      const pressed = commandForKey(
+        [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.BACK, APP_COMMAND.FORWARD],
+        event.nativeEvent,
+      );
+      if (pressed === undefined) return;
+      // The menu bar's Back and Forward are held off too, since the palette
+      // claims their chords for its filters while it stands.
       event.preventDefault();
-      owedReturn.current = query;
-      return;
-    }
-    const step = arrowStep(event, query);
-    if (step !== 0) {
-      event.preventDefault();
-      setFilter(steppedFilter(filters, filter, step));
-      return;
-    }
-    const pressed = commandForKey(
-      [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.BACK, APP_COMMAND.FORWARD],
-      event.nativeEvent,
-    );
-    if (pressed === undefined) return;
-    // The menu bar's Back and Forward are held off too, since the palette
-    // claims their chords for its filters while it stands.
-    event.preventDefault();
-    if (pressed === APP_COMMAND.COMMAND_PALETTE) setOpen(false);
-    else setFilter(steppedFilter(filters, filter, pressed === APP_COMMAND.BACK ? -1 : 1));
-  };
+      if (pressed === APP_COMMAND.COMMAND_PALETTE) setOpen(false);
+      else setFilter(steppedFilter(filters, filter, pressed === APP_COMMAND.BACK ? -1 : 1));
+    },
+    [sought, query, filters, filter],
+  );
 
   const tokens = searchTokens(sought);
   // Luke leads the list as Ask Luke, so the rows that list agents leave him out.
@@ -2311,6 +2319,10 @@ export function CommandPalette({
   // The render a key paints the field in draws the ranking already standing, and only the
   // render the words sought catch up in ranks them, so no key waits on the ranking.
   if (open) stood.current = sought === query ? rank() : stood.current;
+  const band = useMemo(
+    () => <PaletteFilters filters={filters} labels={labels} filter={filter} onFilter={setFilter} />,
+    [filters, labels, filter],
+  );
 
   return (
     <>
@@ -2325,9 +2337,7 @@ export function CommandPalette({
         onQueryChange={setQuery}
         // Note that a listing cut short is said where nothing matches too, since what was sought may lie past the cut.
         empty={cut ? `${NOTHING_MATCHES}. ${TRUNCATED_LINE}` : NOTHING_MATCHES}
-        band={
-          <PaletteFilters filters={filters} labels={labels} filter={filter} onFilter={setFilter} />
-        }
+        band={band}
         onKeyDown={keyDown}
         inputRef={keystrokes}
       />
