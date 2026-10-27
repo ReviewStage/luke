@@ -593,6 +593,10 @@ export const taskPullRequestLineSchema = EffectSchema.Struct({
   agentId: EffectSchema.optionalKey(wireUuidSchema),
   /** True where it is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service before it was sent. */
   queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /** The login of who opened it, their avatar, and whether they are an App's bot, which the hover card names; absent where GitHub named no one, and from a service before it was sent. */
+  author: EffectSchema.optionalKey(EffectSchema.String),
+  authorAvatarUrl: EffectSchema.optionalKey(EffectSchema.String),
+  authorBot: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;

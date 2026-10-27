@@ -15,6 +15,7 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   PULL_REQUEST_STATE,
+  pullRequestAuthorOf,
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import {
@@ -138,6 +139,7 @@ function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
       url,
       agentId: line.id,
       ...(published.queued === true ? { queued: true } : undefined),
+      ...pullRequestAuthorOf(published),
     });
   }
   return {

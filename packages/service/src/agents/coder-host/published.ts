@@ -15,6 +15,7 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
   PULL_REQUEST_STATE,
+  pullRequestAuthorOf,
 } from "@luke/features/coding-agent-wire";
 import { Cache, Clock, Data, Duration, Effect, Exit, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -124,6 +125,7 @@ function wirePullRequestOf(
     deletions: found.deletions,
     changedFiles: found.changedFiles,
     ...(queued && found.state === PULL_REQUEST_STATE.OPEN ? { queued: true } : undefined),
+    ...pullRequestAuthorOf(found),
   };
 }
 

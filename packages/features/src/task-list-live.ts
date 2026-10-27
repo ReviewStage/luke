@@ -17,6 +17,7 @@ import {
   codingAgentPullRequestSchema,
   codingAgentSummarySchema,
   PULL_REQUEST_STATE,
+  pullRequestAuthorOf,
   type TasklessAgent,
 } from "./coding-agent-wire.js";
 import { integrationConnectionOf } from "./integration-wire.js";
@@ -282,6 +283,7 @@ function pullRequestLinesOf(rows: readonly AgentLiveRow[]): readonly TaskPullReq
       url,
       agentId: row.id,
       ...(published.queued === true ? { queued: true } : undefined),
+      ...pullRequestAuthorOf(published),
     });
   }
   return [...pullRequests.values()].toSorted(

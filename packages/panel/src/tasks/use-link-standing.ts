@@ -71,7 +71,7 @@ export interface LinkStanding {
 const BOT_LOGIN_SUFFIX = "[bot]";
 
 /** Who opened a pull request or a GitHub issue, as GitHub named them on it: their login, their avatar where the service answered one, and whether they are an App's bot. */
-function openerOf(summary: {
+export function openerOf(summary: {
   readonly author?: string;
   readonly authorAvatarUrl?: string;
   readonly authorBot?: boolean;
