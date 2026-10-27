@@ -2579,6 +2579,13 @@ export function queuedLabel(position: number | undefined): string {
   return position === undefined ? QUEUED_LABEL : `${QUEUED_LABEL} #${position}`;
 }
 
+/** Where a pull request stands in one word, as its card heads it: Queued for an open one the merge queue holds, else its state's label. */
+export function pullRequestStateLabel(
+  pullRequest: Pick<CodingAgentPullRequest, "state" | "queued">,
+): string {
+  return pullRequestStateWord(pullRequest) ?? PULL_REQUEST_STATE_LABEL[pullRequest.state];
+}
+
 /** The chip's own words for a reader who cannot see it: the number and where it stands. */
 export function pullRequestPillLabel(
   pullRequest: Pick<CodingAgentPullRequest, "number" | "state">,

@@ -40,7 +40,7 @@ export const PULL_REQUEST_TONE = {
 } as const satisfies Record<PullRequestState, StatusTone>;
 
 /** Where a pull request's mark says it stands: queued where it is open and the merge queue holds it, else where it stands. */
-function pullRequestMarkState(
+export function pullRequestMarkState(
   pullRequest: Pick<CodingAgentPullRequest, "state" | "queued">,
 ): PullRequestState | typeof PULL_REQUEST_MARK_QUEUED {
   return pullRequest.queued === true && pullRequest.state === PULL_REQUEST_STATE.OPEN

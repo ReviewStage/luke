@@ -17,8 +17,8 @@ import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import type { MainTabsControl } from "../tasks/use-main-tabs.js";
 import { SUMMARY_GLYPH } from "./agent-archive.js";
 import { agentEntries } from "./main-tabs.js";
+import { PullRequestCard } from "./pull-request-card.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
-import { PullRequestCard } from "./task-part-cards.js";
 
 /**
  * plan-agents.tsx -- the open task's agents at the head of its plan: one row each, its tab's glyph and name, its failure where it failed, and its pull request.
