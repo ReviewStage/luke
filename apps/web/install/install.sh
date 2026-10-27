@@ -116,6 +116,33 @@ download() {
   fi
 }
 
+# Writes the service's unit, and has systemd read it.
+write_unit() {
+cat >"$UNIT_FILE" <<UNIT_EOF
+[Unit]
+Description=Luke host
+Documentation=https://tryluke.dev
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=$HOST_USER
+Group=$HOST_USER
+WorkingDirectory=$HOST_HOME
+# Note that the daemon is told which smolvm to run by its whole path, never the one PATH finds.
+Environment=LUKE_HOST_SMOLVM=$SMOLVM
+ExecStart=$INSTALL_DIR/bin/luke-host run
+Restart=on-failure
+RestartPreventExitStatus=$EXIT_REFUSED
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+UNIT_EOF
+  systemctl daemon-reload
+}
+
 # A test sources the script up to here, to call its functions and read what it carries.
 [ -z "${LUKE_HOST_INSTALL_LIBRARY:-}" ] || return 0
 
@@ -204,6 +231,24 @@ fi
 mkdir "$work/unpacked"
 tar -xzf "$work/$tarball" -C "$work/unpacked" || fail "Could not unpack $tarball"
 [ -x "$work/unpacked/luke-host/bin/luke-host" ] || fail "$tarball holds no luke-host."
+if id "$HOST_USER" >/dev/null 2>&1; then
+  made="Kept user $HOST_USER"
+else
+  useradd --system --create-home --home-dir "$HOST_HOME" --shell /bin/bash \
+    --comment "Luke host" "$HOST_USER" || fail "Could not make the $HOST_USER user."
+  made="Made user $HOST_USER"
+fi
+chmod 700 "$HOST_HOME"
+if getent group kvm >/dev/null 2>&1; then
+  usermod -aG kvm "$HOST_USER"
+  made="$made (in group kvm)"
+fi
+# Note that the user is made, and its access to the device checked, before the service is stopped or any file swapped, so a box it cannot use is left running as it was.
+# Note that the device may be open to every user rather than to the kvm group, so what decides is whether luke-host can open it.
+runuser -u "$HOST_USER" -- sh -c 'exec 3<>"$1"' sh "$KVM_DEVICE" 2>/dev/null ||
+  fail "$HOST_USER cannot open $KVM_DEVICE (see ls -l $KVM_DEVICE). Give its group to $HOST_USER, and run this again."
+ok "$made"
+
 # Note that a running daemon is stopped before its files are swapped, which
 # stops every agent it runs; their turns in flight end, and each agent picks up
 # on its next message.
@@ -245,23 +290,6 @@ else
   ok "Installed smolvm $SMOLVM_VERSION to $SMOLVM_DIR"
 fi
 
-if id "$HOST_USER" >/dev/null 2>&1; then
-  made="Kept user $HOST_USER"
-else
-  useradd --system --create-home --home-dir "$HOST_HOME" --shell /bin/bash \
-    --comment "Luke host" "$HOST_USER" || fail "Could not make the $HOST_USER user."
-  made="Made user $HOST_USER"
-fi
-chmod 700 "$HOST_HOME"
-if getent group kvm >/dev/null 2>&1; then
-  usermod -aG kvm "$HOST_USER"
-  made="$made (in group kvm)"
-fi
-# Note that the device may be open to every user rather than to the kvm group, so what decides is whether luke-host can open it.
-runuser -u "$HOST_USER" -- sh -c 'exec 3<>"$1"' sh "$KVM_DEVICE" 2>/dev/null ||
-  fail "$HOST_USER cannot open $KVM_DEVICE (see ls -l $KVM_DEVICE). Give its group to $HOST_USER, and run this again."
-ok "$made"
-
 name="$(hostname -s 2>/dev/null || hostname)"
 if [ -n "$token" ]; then
   # Note that the token goes in on stdin, never an argument another user could read.
@@ -269,6 +297,8 @@ if [ -n "$token" ]; then
   if ! enrolled="$(printf '%s\n' "$token" | runuser -u "$HOST_USER" -- env HOME="$HOST_HOME" \
     "$INSTALL_DIR/bin/luke-host" enroll --name "$name" --origin "$ORIGIN")"; then
     if [ -f "$HOST_HOME/state/device.json" ] && [ -f "$UNIT_FILE" ]; then
+      # Note that the unit is rewritten first, since the daemon just installed refuses to run under the previous release's, which names no smolvm.
+      write_unit
       systemctl restart "$UNIT" || true
       fail "Not enrolled again: $INSTALL_DIR was upgraded and $UNIT restarted on this box's existing enrollment."
     fi
@@ -279,30 +309,8 @@ else
   ok "Kept this box's enrollment"
 fi
 
-cat >"$UNIT_FILE" <<UNIT_EOF
-[Unit]
-Description=Luke host
-Documentation=https://tryluke.dev
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-Type=simple
-User=$HOST_USER
-Group=$HOST_USER
-WorkingDirectory=$HOST_HOME
-# Note that the daemon is told which smolvm to run by its whole path, never the one PATH finds.
-Environment=LUKE_HOST_SMOLVM=$SMOLVM
-ExecStart=$INSTALL_DIR/bin/luke-host run
-Restart=on-failure
-RestartPreventExitStatus=$EXIT_REFUSED
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-UNIT_EOF
+write_unit
 since="$(date '+%Y-%m-%d %H:%M:%S')"
-systemctl daemon-reload
 systemctl enable "$UNIT" >/dev/null 2>&1
 systemctl restart "$UNIT"
 ok "Started $UNIT (starts on boot)"
