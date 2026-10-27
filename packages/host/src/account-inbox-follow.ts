@@ -8,41 +8,33 @@ import {
 } from "@luke/features/live-wire";
 import { Clock, Duration, Effect, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import {
-  decodedLiveRows,
-  LIVE_STATE,
-  type LiveClient,
-  liveShown,
-  restarting,
-} from "./live-follow.js";
+import { decodedLiveRows, LIVE_STATE, restarting } from "./live-follow.js";
 
 /**
- * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime and told to main each time it moves.
+ * account-inbox-follow.ts -- what waits on the developer across the account, followed over the service's held poll and told to main each time it moves.
  *
- * The host subscribes to the account's sealed statements (`live-follow.ts`,
- * which polls them while Realtime fails or is off) once main follows the
- * account inbox, builds the answer the held read answered from each delivery
- * (`accountInboxOfLiveRows`), and tells main each one, which its notices, the
- * Dock badge, and the Inbox tab observe. A failed run ages out of the last
- * week with no row moving, so the answer is built again as it does. A seal
- * refused as signed out ends the subscription, which is sealed again after
- * `LIVE_RESTART`. The sealed statements stay here, where the account's
- * own bearer is; only the answer built from the rows leaves.
+ * The host follows the account's live read (`live-follow.ts`) once main
+ * follows the account inbox, builds the answer the held read answered from
+ * each delivery (`accountInboxOfLiveRows`), and tells main each one, which
+ * its notices, the Dock badge, and the Inbox tab observe. A failed run ages
+ * out of the last week with no row moving, so the answer is built again as
+ * it does. A read refused as signed out ends the follow, which is read again
+ * after `LIVE_RESTART`. Only the answer built from the rows leaves.
  */
 
-/** How long a subscription no follow holds is kept, so a follow started again soon finds it standing. */
+/** How long a follow no reader holds is kept, so a reader started again soon finds it standing. */
 const IDLE = Duration.seconds(30);
 
-/** A seal the service did not answer, `gone` where it never will again. */
+/** A read the service did not answer, `gone` where it never will again. */
 type SealFailure = { readonly failure: string; readonly gone?: boolean };
 
-/** A subscription before its first rows, with the answer they make, or stopped for good. */
+/** A follow before its first rows, with the answer they make, or stopped for good. */
 type LiveState =
   | { readonly kind: typeof LIVE_STATE.WAITING }
   | { readonly kind: typeof LIVE_STATE.STANDING; readonly answer: AccountInboxAnswer }
   | { readonly kind: typeof LIVE_STATE.BROKEN };
 
-/** What an account's read is answered from: its subscription, or that the service sealed none. */
+/** What an account's read is answered from: its follow, or that the service answered none. */
 type Standing =
   | {
       readonly kind: typeof LIVE_STATE.LIVE;
@@ -51,21 +43,17 @@ type Standing =
   | { readonly kind: typeof LIVE_STATE.BROKEN };
 
 export interface AccountInboxDependencies {
-  /** The account's read sealed for following for the account named, or with `poll` its rows inline; signed out, or a failure where the service sealed none. */
+  /** The account's read for the account named, its rows inline, held past `after` where it names one; signed out, or a failure where the service answered none. */
   readonly seal: (
     userId: string,
     poll: boolean,
     after?: string,
   ) => Effect.Effect<AccountInboxLiveAnswer | SealFailure>;
-  /** Realtime's client at the address the service named, loaded where it must be. */
-  readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
-  /** Now, by the host's own clock, which renewals are timed by. */
-  readonly now: () => number;
-  /** Where the account inbox's wait for a write's transaction stands while it is subscribed, which the inbox's writes wait on. */
+  /** Where the account inbox's wait for a write's transaction stands while it is followed, which the inbox's writes wait on. */
   readonly txWaits: InboxTxWaits;
 }
 
-/** Each account's subscription, by its id, held while main reads it and a while after. */
+/** Each account's follow, by its id, held while main reads it and a while after. */
 export type AccountInboxes = RcMap.RcMap<string, Standing>;
 
 /** The answer the rows make now, and again each time a failed run they carry ages out, until the rows move. */
@@ -97,17 +85,14 @@ export function accountInboxes(
         const inbox = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
         const rows = decodedLiveRows(
           {
-            openLive: dependencies.openLive,
-            reseal: () => dependencies.seal(userId, false),
             poll: (after) => dependencies.seal(userId, true, after),
-            now: dependencies.now,
             onTxWait: dependencies.txWaits.hook(),
           },
           first,
           accountInboxLiveRowsSchema,
         );
         yield* Effect.forkScoped(
-          Stream.runForEach(liveShown(Stream.switchMap(rows, answersOf)), (answer) =>
+          Stream.runForEach(Stream.switchMap(rows, answersOf), (answer) =>
             SubscriptionRef.set(inbox, { kind: LIVE_STATE.STANDING, answer }),
           ).pipe(
             Effect.catch(() => Effect.void),
@@ -121,9 +106,9 @@ export function accountInboxes(
 
 /**
  * What waits across the account for `userId`, told whole each time it moves,
- * until the fiber is let go. A seal the service refused, or a subscription
- * that stopped, is let go and sealed again after `LIVE_RESTART`, for whoever
- * the caller follows then.
+ * until the fiber is let go. A read the service refused, or a follow that
+ * stopped, is let go and read again after `LIVE_RESTART`, for whoever the
+ * caller follows then.
  */
 export function followAccountInbox(
   inboxes: AccountInboxes,

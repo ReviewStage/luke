@@ -20,45 +20,35 @@ import {
 } from "@luke/features/workspace-live";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { type Effect, type Schema, Stream } from "effect";
-import {
-  decodedLiveRows,
-  type LiveBroken,
-  type LiveClient,
-  type SealedRead,
-  type TxWait,
-} from "./live-follow.js";
+import { decodedLiveRows, type LiveBroken, type SealedRead, type TxWait } from "./live-follow.js";
 
 /**
- * workspaces-follow.ts -- the account's workspaces and sidebar, and one workspace's people and pending invitations, followed by the host over Neon Realtime subscriptions.
+ * workspaces-follow.ts -- the account's workspaces and sidebar, and one workspace's people and pending invitations, followed by the host over the service's held poll.
  *
- * The service seals each read's statements (`workspacesLiveStatements` in
+ * The service answers each read's statements (`workspacesLiveStatements` in
  * the database's workspace store, `workspaceMembersLiveStatements` in the
- * service's accounts). The host subscribes to them (`live-follow.ts`),
- * polled while Realtime fails them, and answers each delivery as the held
- * read would, in its order. The sealed statements stay here, beside the
- * account's own bearer; only what is built from their rows leaves.
+ * service's accounts) with their rows inline. The host follows them
+ * (`live-follow.ts`) and answers each delivery as the held read would, in
+ * its order. Only what is built from their rows leaves.
  */
 
-/** A sealed read, or why the service sealed none, `gone` where it names nothing the account reaches any more. */
+/** A read answered, or why the service answered none, `gone` where it names nothing the account reaches any more. */
 type Sealed<Answer> = Answer | { readonly failure: string; readonly gone?: boolean };
 
 export interface LiveReadDependencies<Answer> {
-  /** The read sealed again, for renewing; a failure where the service sealed none. */
-  readonly seal: () => Effect.Effect<Sealed<Answer>>;
-  /** The read's rows inline, polled while Realtime fails or is off, held until they move past `after`; failures as `seal`'s. */
+  /** The read's rows inline, held until they move past `after`; a failure where the service answered none. */
   readonly poll: (after: string | undefined) => Effect.Effect<Sealed<Answer>>;
-  /** Realtime's client at the address the service named, loaded where it must be. */
-  readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
+  /** Now, by the host's own clock, which an invitation's expiry is read against. */
   readonly now: () => number;
-  /** Hears the read's wait for a write's transaction once it is subscribed over Realtime, and none once let go or polled (`live-follow.ts`). */
+  /** Hears the read's wait for a write's transaction where it has one, and none once let go (`live-follow.ts`). */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
 /**
  * What one live read answers each time its rows change, decoded under
  * `schema` at this boundary and built by `build`, for as long as the
- * caller's scope stands. It fails where the subscription stops for good or
- * a row does not decode, which the caller answers by sealing it again.
+ * caller's scope stands. It fails where the read is gone or a row does not
+ * decode, which the caller answers by reading it again.
  */
 function liveMoves<Part extends string, Rows, Built>(
   dependencies: LiveReadDependencies<SealedRead<Part>>,
@@ -67,13 +57,7 @@ function liveMoves<Part extends string, Rows, Built>(
   build: (rows: Rows) => Built,
 ): Stream.Stream<Built, LiveBroken> {
   return decodedLiveRows(
-    {
-      openLive: dependencies.openLive,
-      reseal: dependencies.seal,
-      poll: dependencies.poll,
-      now: dependencies.now,
-      onTxWait: dependencies.onTxWait,
-    },
+    { poll: dependencies.poll, onTxWait: dependencies.onTxWait },
     first,
     schema,
   ).pipe(Stream.map(build));
@@ -98,7 +82,7 @@ export function peopleMoves(
 /**
  * One workspace's pending invitations each time their rows change, as the
  * held read would answer them at the host's own `now`, each accept link on
- * the origin the service sealed them with. Note that an invitation past its
+ * the origin the service answered them with. Note that an invitation past its
  * expiry is left out as each change lands, since the statement keeps no
  * clock.
  */

@@ -107,7 +107,6 @@ import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type InboxTxWaits, inboxTxWaits } from "./inbox-tx-waits.js";
-import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import {
   followInbox,
@@ -133,10 +132,10 @@ import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
  * from, asks when a task opens, when it starts or stops an agent, and while
  * an agent's tab shows its running transcript, and every ask is one call of
  * the service answered whole. The transcript read is held open here while
- * the agent runs and nothing new stands, on a Neon Realtime subscription to
- * what its pages are read from (`transcript-follow.ts`), which a sign-out
- * lets go. What waits across the account is followed the same way, on the
- * account's own subscription (`account-inbox-follow.ts`), heard as
+ * the agent runs and nothing new stands, on the service's held poll of what
+ * its pages are read from (`transcript-follow.ts`), which a sign-out lets
+ * go. What waits across the account is followed the same way, on the
+ * account's own live read (`account-inbox-follow.ts`), heard as
  * `ACCOUNT_INBOX_CHANGED` events by main's notices rather than a window
  * (`agent-notices.ts`). Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
@@ -223,8 +222,6 @@ export interface CodingAgentsDependencies {
   client: CodingAgentClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
-  /** Realtime's client at an address, which a transcript and every plan's and agent's inbox are followed over; Realtime's own outside a test. */
-  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /**
    * Hands a line typed to an agent to the call standing on that agent, where
    * one does (`LiveSessionHolder.typeLine`); answers whether the call took
@@ -282,8 +279,6 @@ export function composeCodingAgents(
           dependencies.client.agentTranscriptLive(key.agentId, userId, key.callId, poll, after),
         ),
       accountId: dependencies.accountId,
-      openLive: dependencies.openLive ?? openRealtimeClient,
-      now: dependencies.kernel.now,
     });
     const followed = yield* FiberMap.make<TranscriptKey>();
     const txWaits = inboxTxWaits();
@@ -296,14 +291,10 @@ export function composeCodingAgents(
             : client.agentInboxLive(scope.id, userId, poll, after),
         ),
       accountId: dependencies.accountId,
-      openLive: dependencies.openLive ?? openRealtimeClient,
-      now: dependencies.kernel.now,
       txWaits,
     });
     const accounts = yield* accountInboxes({
       seal: (userId, poll, after) => asked(client.accountInboxLive(userId, poll, after)),
-      openLive: dependencies.openLive ?? openRealtimeClient,
-      now: dependencies.kernel.now,
       txWaits,
     });
     const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
@@ -372,9 +363,9 @@ function composed(
 
   /**
    * A member's write on the inbox answered once a followed inbox has its
-   * transaction, so the window's next draw already shows it, as Neon's
-   * guide confirms a write (`inbox-tx-waits.ts`); at once where it changed
-   * nothing, failed, or no inbox is followed over Realtime.
+   * transaction, so the window's next draw already shows it
+   * (`inbox-tx-waits.ts`); at once where it changed nothing, failed, or no
+   * followed inbox hands a wait.
    */
   const confirmed = <A extends object>(answer: Effect.Effect<A>): Effect.Effect<A> =>
     Effect.tap(answer, (written) =>

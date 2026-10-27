@@ -90,7 +90,7 @@ test("each kind of request the page's policy refuses is sent once as a warning, 
     sent.push({ message: event.message, level: event.level });
   });
 
-  const socket = "wss://br-x-neonrealtimesocket.compute.c-10.us-east-1.aws.neon.tech/v1?token=t";
+  const socket = "wss://socket.example/v1?token=t";
   document.dispatchEvent(refusal("connect-src", socket));
   document.dispatchEvent(refusal("connect-src", socket));
   document.dispatchEvent(refusal("script-src-elem", "inline"));
@@ -102,8 +102,7 @@ test("each kind of request the page's policy refuses is sent once as a warning, 
 
   assert.deepEqual(sent, [
     {
-      message:
-        "Content-Security-Policy refused connect-src to wss://br-x-neonrealtimesocket.compute.c-10.us-east-1.aws.neon.tech",
+      message: "Content-Security-Policy refused connect-src to wss://socket.example",
       level: "warning",
     },
     { message: "Content-Security-Policy refused script-src-elem to inline", level: "warning" },
@@ -112,8 +111,7 @@ test("each kind of request the page's policy refuses is sent once as a warning, 
       level: "warning",
     },
     {
-      message:
-        "Content-Security-Policy refused img-src to wss://br-x-neonrealtimesocket.compute.c-10.us-east-1.aws.neon.tech",
+      message: "Content-Security-Policy refused img-src to wss://socket.example",
       level: "warning",
     },
     {

@@ -23,8 +23,6 @@ import { Clock, Duration, Effect, type Schema, Stream } from "effect";
 import {
   decodedLiveRows,
   LIVE_GONE,
-  type LiveClient,
-  liveShown,
   restarting,
   type SealedRead,
   type TxWait,
@@ -33,9 +31,8 @@ import {
 /**
  * automation-follow.ts -- a workspace's automations, an automation's runs, or a workspace's runs, followed on the service's live read for the windows that draw them, built again whenever the rows move and whenever the clock alone moves a run's agent.
  *
- * The live read is fetched from the service and followed (`live-follow.ts`):
- * held polls while Realtime is off, a subscription where it is on. The rows
- * are decoded where they arrive, and the list or the history is built from
+ * The live read is fetched from the service and followed over its held poll
+ * (`live-follow.ts`). The rows are decoded where they arrive, and the list or the history is built from
  * them (`@luke/features/automation-live`) at the host's own instant, and
  * again at the one instant the clock alone moves a run's agent, the end of
  * a grace. Only what is built from the rows leaves here.
@@ -48,7 +45,7 @@ import {
  * and the next sign-in's window follows it again.
  */
 
-/** A live read as the follow asks for it: sealed, or with `poll` its rows inline; a failure where the service answered none. */
+/** A live read as the follow asks for it, its rows inline; a failure where the service answered none. */
 type Sealed<Answer> = Answer | { readonly failure: string };
 
 export interface AutomationFollowDependencies {
@@ -70,14 +67,11 @@ export interface AutomationFollowDependencies {
     poll: boolean,
     after?: string,
   ) => Effect.Effect<Sealed<AutomationWorkspaceRunsLiveAnswer>>;
-  readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
-  /** Now, by the host's own clock, which renewals are timed by. */
-  readonly now: () => number;
   /** The service's origin, which a webhook automation's address is written on. */
   readonly serviceBaseUrl: string;
   /** What was followed, each time it moves. */
   readonly publish: (followed: AutomationFollowed) => void;
-  /** Hears the follow's wait for a write's transaction once it is subscribed, and none once it is let go or polled. */
+  /** Hears the follow's wait for a write's transaction where it has one, and none once it is let go. */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
@@ -139,9 +133,9 @@ function followed<Part extends string, Rows, View>(
       return true;
     }
     /**
-     * Why the follow ended for good, the first renewal's or poll's terminal
-     * failure, kept whatever answers after it, since a poll and a renewal may
-     * run side by side; so a follow that ends is told as not found or ended unsaid.
+     * Why the follow ended for good, the first poll's terminal failure, kept
+     * whatever answers after it, so a follow that ends is told as not found
+     * or ended unsaid.
      */
     let endedBy: string | undefined;
     const noted = (read: Sealed<SealedRead<Part>>) => {
@@ -157,10 +151,7 @@ function followed<Part extends string, Rows, View>(
     };
     const rows = decodedLiveRows(
       {
-        openLive: dependencies.openLive,
-        reseal: () => Effect.map(kind.live(false), noted),
         poll: (after) => Effect.map(kind.live(true, after), noted),
-        now: dependencies.now,
         onTxWait: dependencies.onTxWait,
       },
       sealed,
@@ -168,7 +159,7 @@ function followed<Part extends string, Rows, View>(
     );
     // A follow the service ended for good, as one whose automation is gone, ends here at once, rather than starting again.
     const gone = yield* Stream.runForEach(
-      liveShown(Stream.switchMap(rows, (decoded) => viewsOf(kind, decoded))),
+      Stream.switchMap(rows, (decoded) => viewsOf(kind, decoded)),
       (view) => Effect.sync(() => kind.publish(view)),
     ).pipe(
       Effect.as(false),

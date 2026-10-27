@@ -14,35 +14,32 @@ import {
   decodedLiveRows,
   LIVE_GONE,
   type LiveBroken,
-  type LiveClient,
-  liveShown,
   restarting,
   type TxWait,
 } from "./live-follow.js";
 
 /**
- * task-list-follow.ts -- the task list followed over Neon Realtime as Neon's guide says to, built again whenever its rows move and whenever the clock alone moves an agent's status.
+ * task-list-follow.ts -- the task list followed over the service's held poll, built again whenever its rows move and whenever the clock alone moves an agent's status.
  *
- * The sealed statements are fetched from the service and followed
- * (`live-follow.ts`); the rows are decoded where they arrive and the list
+ * The read is fetched from the service and followed (`live-follow.ts`); the
+ * rows are decoded where they arrive and the list
  * is built from them (`@luke/features/task-list-live`) at the host's own
  * instant. An agent with no turn yet reads starting through its grace and
  * failed past it, and one whose line no turn takes reads running through
  * the line's grace and failed past it, each with no row moving, so the list
  * is built again at the nearest such edge too (`statusClockEdge`): the one
- * clock left here, armed only while such an agent stands. The sealed statements stay here, where the account's own bearer
- * is; only the list built from the rows leaves.
+ * clock left here, armed only while such an agent stands. Only the list
+ * built from the rows leaves.
  *
- * A seal the service did not answer is asked for again, and a subscription
- * that stops for good started again, after `LIVE_RESTART`; while Realtime
- * fails it, the rows are polled inline (`live-follow.ts`). Each says so as
- * it happens: an unanswered seal as `failed`, a broken follow or a failed
- * poll as `behind`, until the next list is published. A seal refused
- * because the session is no longer the account the follow started for ends
- * the follow, which the next sign-in starts again.
+ * A read the service did not answer is asked for again, and a follow that
+ * stops for good started again, after `LIVE_RESTART`. Each says so as it
+ * happens: an unanswered read as `failed`, a broken follow or a failed poll
+ * as `behind`, until the next list is published. A read refused because the
+ * session is no longer the account the follow started for ends the follow,
+ * which the next sign-in starts again.
  */
 
-/** A seal as the follow asks for it: sealed, or with `poll` its rows inline; a failure where the service answered none, `gone` where it never will again. */
+/** A read as the follow asks for it, its rows inline; a failure where the service answered none, `gone` where it never will again. */
 type Sealed = TaskListLiveAnswer | { readonly failure: string; readonly gone?: boolean };
 /** The list as the live rows make it at one instant, and every agent on a plan beside it. */
 interface LiveTaskList {
@@ -52,22 +49,19 @@ interface LiveTaskList {
 }
 
 export interface TaskListFollowDependencies {
-  /** The sealed statements, or with `poll` their rows inline, fetched from the service. */
+  /** The read with its rows inline, fetched from the service, held past `after` where it names one. */
   readonly live: (poll: boolean, after?: string) => Effect.Effect<Sealed>;
-  readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
-  /** Now, by the host's own clock, which renewals are timed by. */
-  readonly now: () => number;
   /** The list, and every agent on a task as its task's own list names it, each time the rows or the clock move them. */
   readonly publish: (read: LiveTaskList) => void;
-  /** That the list could not be read, each time a seal goes unanswered; the list already drawn stands. */
+  /** That the list could not be read, each time a read goes unanswered; the list already drawn stands. */
   readonly failed: () => void;
   /**
    * That the list drawn may be behind what the service holds: a poll failed
-   * and is asked again, or the follow broke and is sealed again after
+   * and is asked again, or the follow broke and is read again after
    * `LIVE_RESTART`. The next list published is caught up.
    */
   readonly behind: () => void;
-  /** Hears the list's wait for a write's transaction once every part is live, and none once it is let go or polled. */
+  /** Hears the list's wait for a write's transaction where it has one, and none once it is let go. */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
@@ -91,17 +85,14 @@ function listsOf(rows: TaskListLiveRows): Stream.Stream<LiveTaskList> {
   );
 }
 
-/** The lists the live rows make, for as long as the subscriptions stand; it fails where one stops for good or a row does not decode. */
+/** The lists the live rows make, for as long as the follow stands; it fails where the read is gone or a row does not decode. */
 function liveLists(
   dependencies: TaskListFollowDependencies,
   first: TaskListLiveAnswer,
 ): Stream.Stream<LiveTaskList, LiveBroken> {
   const rows = decodedLiveRows(
     {
-      openLive: dependencies.openLive,
-      reseal: () => dependencies.live(false),
       poll: (after) => dependencies.live(true, after),
-      now: dependencies.now,
       onTxWait: dependencies.onTxWait,
       behind: dependencies.behind,
     },
@@ -121,13 +112,13 @@ export function followTaskList(dependencies: TaskListFollowDependencies): Effect
       return true;
     }
     // A read the service refused for good, as one under another session, ends the follow rather than starting it again.
-    const gone = yield* Stream.runForEach(liveShown(liveLists(dependencies, sealed)), (read) =>
+    const gone = yield* Stream.runForEach(liveLists(dependencies, sealed), (read) =>
       Effect.sync(() => dependencies.publish(read)),
     ).pipe(
       Effect.as(false),
       Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
     );
-    // A follow that broke draws the list it had until it is sealed again, so it says the list may be behind.
+    // A follow that broke draws the list it had until it is read again, so it says the list may be behind.
     if (!gone) dependencies.behind();
     return !gone;
   });
