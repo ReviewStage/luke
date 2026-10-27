@@ -40,8 +40,6 @@ export interface LinuxPlatformOptions {
   readonly installFolder: string;
   /** The Node the daemon runs on, the release's own, which every runner runs on too. */
   readonly node: string;
-  /** The `gh` the daemon fetched for its agents (`GH_LINUX_PINS`); none where it could not be had. */
-  readonly gh: string | undefined;
   readonly arch: DeviceArch;
   /** The box's own name, which the device registers under. */
   readonly hostname: string;
@@ -70,7 +68,7 @@ export function linuxPlatform(options: LinuxPlatformOptions): LocalAgentPlatform
     sandbox: vm.sandbox,
     runnerBundle: `${runnerFolder}/${RUNNER.BUNDLE}`,
     runnerEnv: { [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST },
-    bundled: { node: options.node, gh: options.gh },
+    bundled: { node: options.node },
     pins: {
       node: NODE_LINUX_PINS[options.arch],
       claude: CLAUDE_CODE_LINUX_PINS[options.arch],

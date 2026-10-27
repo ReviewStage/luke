@@ -236,31 +236,3 @@ export const CODEX_LINUX_PINS: LinuxToolPins = {
     BINARY: "bin/codex",
   },
 };
-
-/**
- * GitHub's CLI on a host, which each agent's `gh` and git's credential
- * helper are, as cli/cli's release keeps its static Linux builds; the host's
- * release carries it (`apps/host/scripts/package.ts`).
- */
-export const GH_LINUX_PINS: LinuxToolPins = {
-  x64: {
-    NAME: "gh",
-    VERSION: "2.103.3",
-    ARCHIVE: "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_amd64.tar.gz",
-    SHA256: "4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d",
-    BYTES: 15_031_972,
-    ROOT: "gh_2.103.3_linux_amd64",
-    MEMBERS: ["bin/gh"],
-    BINARY: "bin/gh",
-  },
-  arm64: {
-    NAME: "gh",
-    VERSION: "2.103.3",
-    ARCHIVE: "https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_arm64.tar.gz",
-    SHA256: "ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63",
-    BYTES: 13_661_485,
-    ROOT: "gh_2.103.3_linux_arm64",
-    MEMBERS: ["bin/gh"],
-    BINARY: "bin/gh",
-  },
-};
