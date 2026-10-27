@@ -309,13 +309,11 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     readonly agent: CodingAgentSummary;
     readonly created: boolean;
     readonly txid?: string;
-    readonly notice?: string;
   }) => ({
     status: started.created ? AGENT_START_STATUS.CREATED : AGENT_START_STATUS.STARTED_BEFORE,
     body: {
       agent: started.agent,
       ...(started.txid === undefined ? undefined : { txid: started.txid }),
-      ...(started.notice === undefined ? undefined : { notice: started.notice }),
     },
   });
   return {

@@ -5,7 +5,10 @@ import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
-import { readAccountPreferences } from "@luke/database/models/account-store";
+import {
+  readAccountPreferences,
+  writeAccountPreferences,
+} from "@luke/database/models/account-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import {
   createAutomation,
@@ -33,13 +36,14 @@ import {
   readConversationPicture,
 } from "@luke/database/models/conversation-pictures";
 import { rewindConversation } from "@luke/database/models/conversation-rewind";
+import { registerDevice } from "@luke/database/models/device-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import { readTask, savePlanText, updateTask } from "@luke/database/models/task-store";
+import { createTask, readTask, savePlanText, updateTask } from "@luke/database/models/task-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { voiceWriter } from "@luke/database/models/voice-writer";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
@@ -60,6 +64,7 @@ import {
   OPERATOR_NOTICE_KIND,
 } from "@luke/database/storage-vocabulary";
 import {
+  DEVICE_LAYOUT,
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
@@ -100,6 +105,7 @@ import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_KIND,
+  CODING_AGENT_MACHINE,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -115,6 +121,7 @@ import {
   codingAgentPageAnswerSchema,
   codingAgentPartAnswerSchema,
   codingAgentPullRequestAnswerSchema,
+  LOCAL_AGENT_REFUSAL,
   PART_CUT_FIELD,
   PULL_REQUEST_STATE,
   TRANSCRIPT_PARTS_QUERY,
@@ -159,6 +166,7 @@ import {
 } from "@luke/features/task-wire";
 import { taskTranscriptAnswerSchema } from "@luke/features/transcript-wire";
 import { LIVE_CLOSE_REASON, TRANSCRIPT_SPEAKER } from "@luke/live";
+import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { sentLineId } from "@luke/wire/host-ids";
@@ -1371,6 +1379,44 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             },
           },
         });
+        assert.deepEqual(eve.opened, []);
+      }),
+  );
+
+  it.effect(
+    "a Start on a task that runs on another member's device is refused on the route, naming the device and its owner, and no agent is made for the teammate",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, eve, ask } = yield* openTask();
+        yield* joinWorkspace(task.workspaceId, other);
+        yield* writeAccountPreferences(owner, {
+          experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
+        });
+        const studio = randomUUID();
+        yield* registerDevice(owner, {
+          id: studio,
+          name: "Studio",
+          ...DEVICE_LAYOUT,
+          signedIn: { claudeCode: true },
+        });
+        const onStudio = yield* createTask(owner, {
+          organizationId: task.workspaceId,
+          name: "On the Studio",
+          repository: RELAY_FULL_NAME,
+          runsOn: { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: studio },
+        });
+
+        const theirKey = randomUUID();
+        const byTeammate = yield* ask(startAs(other, onStudio.id, { idempotencyKey: theirKey }));
+        assert.deepEqual(byTeammate, {
+          status: HOSTED_HTTP_STATUS.CONFLICT,
+          body: {
+            error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
+            localAgentRefusal: LOCAL_AGENT_REFUSAL.NOT_OWNER,
+            refusedDevice: { name: "Studio", owner: "Test User" },
+          },
+        });
+        assert.ok(Option.isNone(yield* readCodingAgentByKey(other, theirKey)));
         assert.deepEqual(eve.opened, []);
       }),
   );

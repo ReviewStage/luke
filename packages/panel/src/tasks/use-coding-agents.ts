@@ -224,8 +224,6 @@ export interface CodingAgentsControl {
   modelsFailed: boolean;
   /** The member's devices a task's Runs on may name, as the last read of the models offered them; nothing where it offered none, or before the first read. */
   macs: readonly MacOffer[] | undefined;
-  /** Says the words a start answered beside its agent, such as why it runs in the cloud on a task that runs on a teammate's device. */
-  onNotice: (notice: string) => void;
   /** Reads the models now, for a menu opening or the menu's Retry. */
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
@@ -853,14 +851,6 @@ export function useCodingAgents(input: {
     (words: string) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
     [toast],
   );
-  // Note that a start's notice is said once, as it lands, since the agent's transcript says it too.
-  const onNotice = useCallback(
-    (words: string) => toast({ words, tone: STATUS_TONE.ATTENTION, hold: TOAST_HOLD.FAILED }),
-    [toast],
-  );
-  const tellNotice = (notice: string | undefined) => {
-    if (notice !== undefined) onNotice(notice);
-  };
   // Note that the acts and the opening are read through a ref, because the
   // tab hands new closures on every render and a read is owed to the task
   // opening, not to a render.
@@ -1100,7 +1090,6 @@ export function useCodingAgents(input: {
     }
     pending.current = undefined;
     landed(taskId, answer.agent);
-    tellNotice(answer.notice);
     return undefined;
   };
 
@@ -1132,7 +1121,6 @@ export function useCodingAgents(input: {
     withDraft(taskId, undefined);
     writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === held.id);
     landed(taskId, answer.agent);
-    tellNotice(answer.notice);
     return { agentId: answer.agent.id };
   };
 
@@ -1167,7 +1155,6 @@ export function useCodingAgents(input: {
     }
     continues.current.delete(sourceId);
     landed(startsOn, answer.agent);
-    tellNotice(answer.notice);
     return undefined;
   };
 
@@ -1421,7 +1408,6 @@ export function useCodingAgents(input: {
     withDraft(taskId, undefined);
     writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draftId);
     landed(taskId, answer.agent);
-    tellNotice(answer.notice);
     return undefined;
   };
 
@@ -1449,7 +1435,6 @@ export function useCodingAgents(input: {
     withDraft(startsOn, undefined);
     writer.drop((kept) => kept.kind === DRAFT_PLACE.NEW_AGENT && kept.draftId === draftId);
     landed(startsOn, answer.agent);
-    tellNotice(answer.notice);
     return undefined;
   };
 
@@ -1914,7 +1899,6 @@ export function useCodingAgents(input: {
     models,
     modelsFailed,
     macs,
-    onNotice,
     readModels,
     readDefault,
     onUnarchive: undefined,
