@@ -381,7 +381,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         yield* post(taskless);
         // Read by the agent's starter and not by the teammate, so the two read it apart.
         assert.ok(yield* markInboxItemRead(onTask.agent.userId, first.id));
-        // A second task of the starter's holding an item, settled, which the Inbox lists like any other.
+        // A second task of the starter's, settled, whose agent asks on it after, which the Inbox lists like any other.
         const shelved = yield* startTask(onTask.agent.userId, { name: "Billing export" });
         const shelvedAgent = yield* createCodingAgent(onTask.agent.userId, {
           taskId: shelved.id,
@@ -393,12 +393,12 @@ it.layer(getTestDB())("the inbox store", (it) => {
           prompt: null,
         });
         assert.ok(Option.isSome(shelvedAgent));
+        yield* updateTask(onTask.agent.userId, shelved.id, { status: TASK_STATUS.DONE });
         yield* post({
           userId: onTask.agent.userId,
           taskId: shelved.id,
           agentId: shelvedAgent.value.agent.id,
         });
-        yield* updateTask(onTask.agent.userId, shelved.id, { status: TASK_STATUS.DONE });
 
         const owner = onTask.agent.userId;
         for (const reader of [owner, taskless.userId, teammate, outsider]) {
@@ -1458,10 +1458,10 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         }
         yield* TestClock.adjust(Duration.seconds(1));
         assert.ok(Option.isSome(yield* replyInboxItem(agent, "followed", "One more thing.")));
-        // A teammate's agent asks on the same task, and a settled task holds the owner's open item.
+        // A teammate's agent asks on the same task, and the owner's agent asks on a task settled before.
         yield* postedId(teammates, "theirs");
-        yield* postedId(shelvedAgent, "shelved");
         yield* updateTask(owner, shelved.id, { status: TASK_STATUS.DONE });
+        yield* postedId(shelvedAgent, "shelved");
 
         const toDoOf = (answer: { readonly plans: readonly AccountInboxTask[] }) =>
           new Map(answer.plans.map((plan) => [plan.planId, plan.toDo]));

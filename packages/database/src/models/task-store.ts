@@ -65,6 +65,7 @@ import { agentAutomationNameSql } from "./agent-name.js";
 import { ensureGeneralChannel } from "./channel-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { type Device, devicesNamed } from "./device-store.js";
+import { reopenTaskInboxItems, settleTaskInboxItems } from "./inbox-settle.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
@@ -1429,7 +1430,9 @@ const lockStandingAgents = SqlSchema.findAll({
  * not a save: the document's `updatedAt` and the list's order stand. The pin
  * is the account's own and no other member's. A task no one is assigned to
  * that the change moves into progress is assigned to the account, unless the
- * change names an assignee of its own.
+ * change names an assignee of its own. A change that moves the task to Done
+ * or Canceled settles its open inbox items, and one that moves it off them
+ * to work again opens again the items that move settled (`inbox-settle.ts`).
  */
 export function updateTask<E = never, R = never>(
   userId: string,
@@ -1527,6 +1530,16 @@ export function updateTaskCommitted<E = never, R = never>(
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(taskId, row.organizationId, moved, now);
           if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
+        }
+        // A task moved to Done or Canceled settles its open inbox items, and one moved off them to work
+        // again opens again the items that move settled, by its stamp. Note that this runs after its
+        // agents moved, so the write locks agent rows before item rows, in the order an archive does.
+        if (columns.status !== undefined) {
+          yield* settleTaskInboxItems(taskId, columns.status, now);
+          const finishedAt = locked.value.completedAt;
+          if (!SETTLED.includes(columns.status) && finishedAt !== null) {
+            yield* reopenTaskInboxItems(taskId, locked.value.status, finishedAt);
+          }
         }
         const changed = yield* taskOf(userId, row);
         return Option.some(txid === undefined ? { task: changed } : { task: changed, txid });
@@ -1697,7 +1710,9 @@ const finishTask = SqlSchema.findOneOption({
  * row lock, each agent under its conversation's,
  * so a start or a turn racing the finish either landed before the read,
  * which then refuses, or waits on the lock and reopens the task after.
- * Like any change it is not a save, so the list's order stands.
+ * Like any change it is not a save, so the list's order stands. A finish
+ * settles the task's open inbox items, notices among them
+ * (`inbox-settle.ts`).
  */
 export function finishTaskWork<R = never>(
   userId: string,
@@ -1719,7 +1734,9 @@ export function finishTaskWork<R = never>(
         if (!(yield* idle(agents))) return false;
         const now = yield* DateTime.nowAsDate;
         const finished = yield* finishTask({ taskId, now });
-        return Option.isSome(finished);
+        if (Option.isNone(finished)) return false;
+        yield* settleTaskInboxItems(taskId, TASK_STATUS.DONE, now);
+        return true;
       }),
     ),
   );
