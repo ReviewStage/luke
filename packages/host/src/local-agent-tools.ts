@@ -1,4 +1,4 @@
-import type { MacToolPin } from "@luke/agent-runner/pins";
+import type { AgentToolPin } from "@luke/agent-runner/pins";
 import { Duration, Effect, Option, Path, Stream } from "effect";
 import { Hex } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
@@ -6,7 +6,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 
 /**
- * local-agent-tools.ts -- a binary this Mac's local agents run, as its pin names it (`@luke/agent-runner/pins`' `MacToolPin`): the copy the app or the checkout already has, or the pinned release fetched once, checked, and kept in the app's own folder.
+ * local-agent-tools.ts -- a binary this Mac's local agents run, as its pin names it (`@luke/agent-runner/pins`' `AgentToolPin`): the copy the app or the checkout already has, or the pinned release fetched once, checked, and kept in the app's own folder.
  *
  * One resolver answers every such binary, Node and Claude Code for the
  * runner and the harness, Codex beside them, however it came: the copy given
@@ -72,7 +72,7 @@ const signedAsPinned = (binary: string, team: string) =>
  * members kept under `folder`, moved into place whole, checked against its
  * signature where the pin names one, and marked; fails where any step does.
  */
-const fetchTool = Effect.fnUntraced(function* (pin: MacToolPin, folder: string) {
+const fetchTool = Effect.fnUntraced(function* (pin: AgentToolPin, folder: string) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const client = yield* HttpClient.HttpClient;
@@ -136,7 +136,7 @@ const fetchTool = Effect.fnUntraced(function* (pin: MacToolPin, folder: string) 
  */
 export const localAgentTool = Effect.fnUntraced(function* (
   stateRoot: string,
-  pin: MacToolPin,
+  pin: AgentToolPin,
   bundled: string | undefined,
 ): Effect.fn.Return<
   Option.Option<string>,

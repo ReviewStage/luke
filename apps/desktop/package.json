@@ -39,6 +39,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@keyframelabs/sdk": "0.3.0",
+    "@luke/agent-runner": "workspace:*",
     "@luke/brand": "workspace:*",
     "@luke/credentials": "workspace:*",
     "@luke/features": "workspace:*",

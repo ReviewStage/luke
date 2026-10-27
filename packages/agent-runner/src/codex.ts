@@ -58,7 +58,10 @@
  * directory, the folders the machine grants (a local agent's own folder),
  * and on a Mac the toolchains' caches, with the network on. On a Mac that
  * sandbox is Codex's Seatbelt, never `danger-full-access` or
- * `externalSandbox`.
+ * `externalSandbox`. On a host (`runsOnHost`) Codex runs no sandbox of its
+ * own, `danger-full-access`, since the box its member owns is the boundary
+ * and Landlock would keep a command from `/dev/kvm`; its commands still
+ * inherit no bearer or key (`shell_environment_policy`).
  */
 
 import { randomUUID } from "node:crypto";
@@ -88,6 +91,7 @@ import {
   MAC_TOOLCHAIN_CACHES,
   ON_MAC,
   type RunnerSelf,
+  runsOnHost,
 } from "./launch.js";
 import {
   CODEX_EFFORT,
@@ -351,17 +355,24 @@ function writableRoots(config: CodexConfig, env: LaunchContext<CodexConfig>["env
 
 /**
  * The sandbox every turn runs under, as `turn/start`'s documented
- * `sandboxPolicy`: workspace-write over the roots given, the network on, and
- * the temp folders writable as Codex keeps them.
+ * `sandboxPolicy`: on a host, none; elsewhere workspace-write over the
+ * writable roots (`writableRoots`), the network on, and the temp folders
+ * writable as Codex keeps them.
  */
-function sandboxPolicy(roots: readonly string[]): SandboxPolicy {
+function sandboxPolicy(config: CodexConfig, env: LaunchContext<CodexConfig>["env"]): SandboxPolicy {
+  if (runsOnHost(env)) return { type: "dangerFullAccess" };
   return {
     type: "workspaceWrite",
-    writableRoots: [...roots],
+    writableRoots: writableRoots(config, env),
     networkAccess: true,
     excludeTmpdirEnvVar: false,
     excludeSlashTmp: false,
   };
+}
+
+/** The sandbox mode a thread is started and resumed under, as the policy given names it. */
+function sandboxModeOf(sandbox: SandboxPolicy): "danger-full-access" | "workspace-write" {
+  return sandbox.type === "dangerFullAccess" ? "danger-full-access" : "workspace-write";
 }
 
 /**
@@ -370,7 +381,7 @@ function sandboxPolicy(roots: readonly string[]): SandboxPolicy {
  * server and each integration's beside it with the bearer read from the environment and their tools approved up
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
  * every MCP call, as P16 found) and given as long as Luke runs a call, the sandbox with network on and its
- * writable roots (`writableRoots`), and commands inheriting the core variables
+ * writable roots (`sandboxPolicy`), and commands inheriting the core variables
  * without the bearer or the key. Nothing in argv is secret.
  *
  * Note that workspace-write keeps `.git` read-only under every writable root
@@ -380,7 +391,7 @@ function sandboxPolicy(roots: readonly string[]): SandboxPolicy {
  * the sandbox on: commands still never see the token, and app-server's own
  * git calls run with hooks and fsmonitor disabled.
  */
-function appServerArgs(config: CodexConfig, auth: CodexAuth, roots: readonly string[]): string[] {
+function appServerArgs(config: CodexConfig, auth: CodexAuth, sandbox: SandboxPolicy): string[] {
   const mcp = `mcp_servers.${MCP_SERVER}`;
   // Each integration the agent is handed is a server of its own on the same bearer, its tools approved and bounded as Luke's are.
   const integrations = (config.integrations ?? [])
@@ -407,9 +418,16 @@ function appServerArgs(config: CodexConfig, auth: CodexAuth, roots: readonly str
     [`${mcp}.tool_timeout_sec`, MCP_TOOL_TIMEOUT_SECONDS.toFixed(1)],
     ...integrations,
     ["approval_policy", toml("never")],
-    ["sandbox_mode", toml("workspace-write")],
-    ["sandbox_workspace_write.network_access", "true"],
-    ["sandbox_workspace_write.writable_roots", `[${roots.map(toml).join(", ")}]`],
+    ["sandbox_mode", toml(sandboxModeOf(sandbox))],
+    ...(sandbox.type === "workspaceWrite"
+      ? ([
+          ["sandbox_workspace_write.network_access", "true"],
+          [
+            "sandbox_workspace_write.writable_roots",
+            `[${sandbox.writableRoots.map(toml).join(", ")}]`,
+          ],
+        ] as const)
+      : []),
     ["shell_environment_policy.inherit", toml("core")],
     ["shell_environment_policy.ignore_default_excludes", "false"],
     ["shell_environment_policy.exclude", `[${excluded.map(toml).join(", ")}]`],
@@ -465,8 +483,8 @@ interface CodexLaunch {
   readonly accepted: Set<string>;
   /** The credential app-server runs on. */
   readonly auth: CodexAuth;
-  /** The folders the agent's commands may write beside its checkout (`writableRoots`), which every turn's sandbox names. */
-  readonly roots: readonly string[];
+  /** The sandbox every turn runs under (`sandboxPolicy`). */
+  readonly sandbox: SandboxPolicy;
   model: string;
   effort: CodexEffort | undefined;
   /** Whether the next turn runs on the `fast` service tier: a fast version on an API key alone. */
@@ -523,7 +541,7 @@ function listenerFor(seen: ThreadSeen): AppServerListener {
  * otherwise. Answers the server, its scope, and the thread's id.
  */
 const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
-  launch: Pick<CodexLaunch, "context" | "signals" | "model" | "auth" | "roots">,
+  launch: Pick<CodexLaunch, "context" | "signals" | "model" | "auth" | "sandbox">,
   threadId: string | undefined,
 ) {
   const { config, env } = launch.context;
@@ -534,7 +552,7 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   const server = yield* spawnAppServer(
     {
       executable: config.executable,
-      args: appServerArgs(config, launch.auth, launch.roots),
+      args: appServerArgs(config, launch.auth, launch.sandbox),
       cwd: config.cwd,
       // Note that Claude Code's credentials, were they set, are no business of Codex's.
       env: {
@@ -574,7 +592,7 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
       cwd: config.cwd,
       model: launch.model,
       approvalPolicy: "never",
-      sandbox: "workspace-write",
+      sandbox: sandboxModeOf(launch.sandbox),
       developerInstructions: config.developerInstructions,
     } satisfies ThreadStartParams;
     const answer =
@@ -675,7 +693,7 @@ const startTurn = Effect.fn("agent-runner/startTurn")(function* (
       model: launch.model,
       effort: launch.effort ?? null,
       approvalPolicy: "never",
-      sandboxPolicy: sandboxPolicy(launch.roots),
+      sandboxPolicy: launch.sandbox,
       // Note that a null tier is the standard one, which a fast version turned off goes back to.
       ...(launch.auth.kind === CODEX_AUTH.API_KEY
         ? { serviceTier: launch.fast ? FAST_TIER : null }
@@ -887,14 +905,14 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   if (auth === undefined) {
     return ended(RUNNER_END.FAILED, "the runner was not started from its bundle");
   }
-  const roots = writableRoots(config, context.env);
+  const sandbox = sandboxPolicy(config, context.env);
   const signals = yield* Queue.unbounded<Signal>();
   yield* sink.undelivered.pipe(
     Effect.andThen(Queue.offer(signals, { kind: SIGNAL.UNDELIVERED })),
     Effect.forkScoped,
   );
   const opened = yield* openAppServer(
-    { context, signals, model: config.model, auth, roots },
+    { context, signals, model: config.model, auth, sandbox },
     config.threadId,
   ).pipe(Effect.result);
   if (opened._tag === "Failure") {
@@ -916,7 +934,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     waiting: [],
     accepted: new Set(),
     auth,
-    roots,
+    sandbox,
     model: config.model,
     effort: config.effort,
     fast: config.fast === true,

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import type { MacToolPin } from "@luke/agent-runner/pins";
+import type { AgentToolPin } from "@luke/agent-runner/pins";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Option } from "effect";
@@ -25,7 +25,7 @@ const release = Effect.gen(function* () {
   yield* fileSystem.writeFileString(`${scratch}/tool-1.0/unpinned.txt`, "left in the archive");
   execFileSync("tar", ["-czf", `${scratch}/tool.tgz`, "-C", scratch, "tool-1.0"]);
   const archive = readFileSync(`${scratch}/tool.tgz`);
-  const pin: MacToolPin = {
+  const pin: AgentToolPin = {
     NAME: "tool",
     VERSION: "1.0",
     ARCHIVE: "https://releases.test/tool-1.0.tgz",

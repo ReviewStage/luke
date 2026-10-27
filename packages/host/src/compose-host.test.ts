@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
+import { CLAUDE_CODE_MAC_PIN, CODEX_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
 import { loopbackConsent } from "@luke/credentials/node";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { DEVICE_ARCH, DEVICE_ISOLATION, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
@@ -146,6 +147,8 @@ describe("the host's platform concerns", () => {
               runnerBundle: "/usr/bin/false",
               runnerEnv: {},
               bundled: {},
+              pins: { node: NODE_MAC_PIN, claude: CLAUDE_CODE_MAC_PIN, codex: CODEX_MAC_PIN },
+              ownSignIns: true,
               deviceName: "Fixture Mac",
               devicePlatform: DEVICE_PLATFORM.DARWIN,
               deviceArch: DEVICE_ARCH.ARM64,

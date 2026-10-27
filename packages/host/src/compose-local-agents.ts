@@ -1,4 +1,3 @@
-import { CLAUDE_CODE_MAC_PIN, CODEX_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
 import type { DeviceAgentClaimedLine, HostedDeviceAgentClient } from "@luke/features";
 import {
   DEVICE_AGENT_LINE_KIND,
@@ -97,6 +96,13 @@ import type { RunMode } from "./run-mode.js";
  * any command stands in. The token goes to `gh`'s stdin and its config
  * folder alone, never an argument, a log, or a report. This Mac keeps the
  * developer's own login and does none of it.
+ *
+ * A host (`apps/host`) runs this same follow with a platform of its own: it
+ * enrolled under a device id of its own, which it is handed
+ * (`LocalAgentsDependencies.deviceId`), fetches the Linux pins, starts each
+ * runner in a systemd unit of its own (`LocalAgentPlatformSeam.launch`), and
+ * says it is signed in to no harness (`ownSignIns`), since no login left on
+ * the box reaches an agent there.
  *
  * Every launch this Mac claimed is kept in the host's state by its line's
  * id, no secret beside it, until its runner's exit settles it. A launch
@@ -198,6 +204,9 @@ type LocalAgentState = typeof LocalAgentStateSchema.Type;
 
 const NO_STATE: LocalAgentState = { devices: {}, launches: [] };
 
+/** What a device whose own sign-ins never run its agents says of them (`ownSignIns`). */
+const NOT_SIGNED_IN: DeviceSignedIn = { claudeCode: false, codex: false };
+
 const decodeState = Schema.decodeUnknownOption(Schema.fromJsonString(LocalAgentStateSchema));
 const encodeState = Schema.encodeSync(Schema.fromJsonString(LocalAgentStateSchema));
 const decodeLaunch = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
@@ -226,6 +235,8 @@ export interface LocalAgentsDependencies {
   account: Pick<AccountComposer, "capabilitiesActive">;
   /** The account signed in now, by its id; none where nobody is. */
   accountId: () => string | undefined;
+  /** The device id this device enrolled under, where it enrolled one, as a host does; minted once per account and kept otherwise. */
+  deviceId?: string | undefined;
   /** Whether the account's Local agents experiment and Settings › This Mac's switch are both on, read every `IDLE` while the gate is open. */
   switchedOn: Effect.Effect<boolean>;
   client: LocalAgentClient;
@@ -315,9 +326,10 @@ export function composeLocalAgents(
         ),
       );
 
-    /** The device id this account registers under on this Mac, minted the first time. */
+    /** The device id this account registers under on this device: the one it enrolled under, or one minted the first time. */
     const deviceOf = (userId: string) =>
       Effect.gen(function* () {
+        if (dependencies.deviceId !== undefined) return dependencies.deviceId;
         const kept = (yield* Ref.get(state)).devices[userId];
         if (kept !== undefined) return kept;
         const minted = kernel.createId();
@@ -363,8 +375,8 @@ export function composeLocalAgents(
         }
         const [node, claude] = yield* Effect.all(
           [
-            localAgentTool(kernel.stateRoot, NODE_MAC_PIN, platform.bundled.node),
-            localAgentTool(kernel.stateRoot, CLAUDE_CODE_MAC_PIN, platform.bundled.claude),
+            localAgentTool(kernel.stateRoot, platform.pins.node, platform.bundled.node),
+            localAgentTool(kernel.stateRoot, platform.pins.claude, platform.bundled.claude),
           ],
           { concurrency: 2 },
         );
@@ -392,7 +404,7 @@ export function composeLocalAgents(
       return fetched;
     });
 
-    /** The Codex this Mac checked against its pin (`CODEX_MAC_PIN`), once had; none until then. */
+    /** The Codex this device checked against its pin (`pins.codex`), once had; none until then. */
     const codex = yield* Ref.make(Option.none<string>());
     const fetchingCodex = yield* Semaphore.make(1);
 
@@ -408,7 +420,11 @@ export function composeLocalAgents(
       Effect.gen(function* () {
         const kept = yield* Ref.get(codex);
         if (Option.isSome(kept) && (yield* fileSystem.exists(kept.value))) return kept;
-        const had = yield* localAgentTool(kernel.stateRoot, CODEX_MAC_PIN, platform.bundled.codex);
+        const had = yield* localAgentTool(
+          kernel.stateRoot,
+          platform.pins.codex,
+          platform.bundled.codex,
+        );
         if (Option.isNone(had)) report("Codex for local agents could not be had");
         yield* Ref.set(codex, had);
         return had;
@@ -508,9 +524,15 @@ export function composeLocalAgents(
         return yield* localCodexSignedIn(executable.value, env);
       });
 
-    /** Which harnesses this Mac is signed in to by itself, each checked as its own CLI answers. */
+    /**
+     * Which harnesses this device is signed in to by itself, each checked as
+     * its own CLI answers; neither on a device whose own sign-ins never run
+     * its agents (`ownSignIns`), so every launch there carries the sign-in
+     * saved in Luke.
+     */
     const signedInNow = (had: LocalAgentTools, env: Readonly<Record<string, string>>) =>
       Effect.gen(function* () {
+        if (!platform.ownSignIns) return NOT_SIGNED_IN;
         const claudeCode = yield* claudeCodeSignedIn(had.claude, env);
         const said = yield* codexSignedIn(env);
         const signedIn: DeviceSignedIn = Option.match(said, {

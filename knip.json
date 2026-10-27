@@ -24,6 +24,10 @@
       ],
       "project": ["src/**", "scripts/**"]
     },
+    "apps/host": {
+      "entry": ["src/main.ts"],
+      "project": ["src/**"]
+    },
     "apps/catalog": {
       "project": ["src/**"]
     },

@@ -5,6 +5,7 @@
  * so a composer states the seams it reaches in its own requirements instead of
  * taking a kernel that holds all of them.
  */
+import type { AgentToolPin } from "@luke/agent-runner/pins";
 import type { OpenConsent } from "@luke/credentials";
 import type {
   DeviceArch,
@@ -147,29 +148,29 @@ export interface LocalAgentCommand {
 }
 
 /**
- * What a local agent's runner is started with on this Mac
+ * What a local agent's runner is started with on this device
  * (`compose-local-agents.ts`): how every runner is started (`launch`), the
- * one door another way of running it, a unit or a sandbox, would replace,
- * the runner's bundle, and what the start adds to its environment, which
- * the desktop chooses by how it runs; the copies of Node and the Claude
- * Code CLI the app or the checkout already has, where it has them, which
- * stand in for the pinned releases the host otherwise fetches
- * (`local-agent-tools.ts`); the name the Mac is offered under at Start; and
- * the script that makes an agent's worktree of Luke's shared clone
- * (`@luke/host/node`'s `agentWorktreeScript`). It arrives rather than being
- * built here, because each is the desktop's own, a path into its bundle or
- * a script `node:path` builds, and a host that built them could not load in
- * a browser. Only the local agents concern asks for it.
+ * one door an isolation layer would replace, the runner's bundle, and what
+ * the start adds to its environment, which the shell chooses by how it
+ * runs; the copies of Node and the Claude Code CLI the app or the checkout
+ * already has, where it has them, which stand in for the pinned releases the
+ * host otherwise fetches (`local-agent-tools.ts`), and those pins; whether a
+ * harness's own sign-in on the device counts; the name the device is offered
+ * under at Start; and the script that makes an agent's worktree of Luke's
+ * shared clone (`@luke/host/node`'s `agentWorktreeScript`). It arrives
+ * rather than being built here, because each is the shell's own, a path into
+ * its bundle or a script `node:path` builds, and a host that built them could
+ * not load in a browser. Only the local agents concern asks for it.
  */
 export interface LocalAgentPlatformSeam {
-  /** The process a runner is started as, given the runner the follower made: on the desktop, the Node and the bundle through its launcher. */
+  /** The process a runner is started as, given what it runs and the environment made for it: the desktop's launcher, or a host's own systemd unit. */
   readonly launch: (runner: LocalAgentRunner) => LocalAgentCommand;
   readonly runnerBundle: string;
   readonly runnerEnv: Readonly<Record<string, string>>;
   readonly bundled: {
     readonly node?: string | undefined;
     readonly claude?: string | undefined;
-    /** The Codex the app ships, where it ships one; none where the host fetches the pinned build (`CODEX_MAC_PIN`). */
+    /** The Codex the app ships, where it ships one; none where the device fetches the pinned build (`pins.codex`). */
     readonly codex?: string | undefined;
     /** The `gh` a host ships, which signs each agent in where `githubFromLuke` and which git's credential helper names; none takes `gh` from the runner's PATH. */
     readonly gh?: string | undefined;
@@ -182,6 +183,20 @@ export interface LocalAgentPlatformSeam {
    * serves, as on This Mac.
    */
   readonly githubFromLuke: boolean;
+  /** The pinned builds the device fetches and checks where it bundles none, for its platform and architecture. */
+  readonly pins: {
+    readonly node: AgentToolPin;
+    readonly claude: AgentToolPin;
+    readonly codex: AgentToolPin;
+  };
+  /**
+   * Whether a harness signed in on the device by itself runs its agents: a
+   * Mac's own login does, which a launch prefers to the account's saved
+   * credential; a host's never does, since each agent's home is its own
+   * folder and no login left on the box is ever seen there, so its agents
+   * run on the sign-in saved in Luke.
+   */
+  readonly ownSignIns: boolean;
   readonly deviceName: string;
   /** The platform and architecture the device registers as. */
   readonly devicePlatform: DevicePlatform;
