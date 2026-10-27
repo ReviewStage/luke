@@ -16,6 +16,7 @@ import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
+import { viewerPlace } from "../testing/viewer-place.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { PlanBody } from "./plan-body.js";
 import { HISTORY_READ } from "./use-plan-history.js";
@@ -149,7 +150,7 @@ test("a press on a picture opens the plan's pictures over the window, named by t
   const viewer = document.querySelector(".attachment-viewer");
   assert.ok(viewer, "the viewer stands over the window");
   assert.equal(viewer.querySelector(".attachment-viewer-title")?.textContent, "Members page");
-  assert.equal(viewer.querySelector(".attachment-viewer-place")?.textContent, "2 of 2");
+  assert.equal(viewerPlace(viewer), "2 of 2");
 });
 
 test("who last changed a picture's section is said in the viewer over the window, not over the picture in the words before the first heading", async () => {

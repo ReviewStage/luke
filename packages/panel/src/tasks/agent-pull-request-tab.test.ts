@@ -88,6 +88,7 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { viewerPlace } from "../testing/viewer-place.js";
 import { ToastHost } from "../toast.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
@@ -875,7 +876,7 @@ test("a picture GitHub linked to itself opens over the window rather than in the
     document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the viewer stands");
   const shown = () => [
     viewer().querySelector(".attachment-viewer-title")?.textContent,
-    viewer().querySelector(".attachment-viewer-place")?.textContent,
+    viewerPlace(viewer()),
   ];
   assert.deepEqual(shown(), ["before and after.png", "1 of 2"]);
   assert.equal(
@@ -922,7 +923,7 @@ test("in the viewer, Open on GitHub opens the upload GitHub linked a picture to,
   );
   const viewer =
     document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the viewer stands");
-  assert.equal(viewer.querySelector(".attachment-viewer-place"), null, "it walks the upload alone");
+  assert.equal(viewerPlace(viewer), undefined, "it walks the upload alone");
   act(() =>
     (
       [...viewer.querySelectorAll<HTMLAnchorElement>("a")].find(

@@ -121,6 +121,7 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { viewerPlace } from "../testing/viewer-place.js";
 import { ToastHost } from "../toast.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -2242,10 +2243,7 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   const viewer = () => {
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
-    return [
-      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
-      card.querySelector(".attachment-viewer-place")?.textContent,
-    ];
+    return [card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt, viewerPlace(card)];
   };
   const key = (name: string) =>
     act(() =>
@@ -2362,7 +2360,7 @@ test("a recording an agent's words draw plays where it stands, left out of the r
     assert.equal(player.getAttribute("src"), "blob:video-2");
     assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
     assert.deepEqual(created, [INBOX_FILE_TYPE.WEBM, INBOX_FILE_TYPE.WEBM]);
-    assert.equal(card?.querySelector(".attachment-viewer-place")?.textContent, "2 of 2");
+    assert.equal(viewerPlace(card ?? document), "2 of 2");
     act(() =>
       card?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }),
@@ -2454,10 +2452,7 @@ test("a thread draws a comment's files over its words: an agent's pictures stand
   const viewer = () => {
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
-    return [
-      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
-      card.querySelector(".attachment-viewer-place")?.textContent,
-    ];
+    return [card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt, viewerPlace(card)];
   };
   const key = (name: string) =>
     act(() =>
