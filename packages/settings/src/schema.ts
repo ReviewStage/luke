@@ -242,8 +242,8 @@ export const APP_SETTING_SCHEMA = {
     id: APP_SETTING_ID.LOCAL_AGENTS_SANDBOX,
     label: "Run agents in a sandbox",
     detail:
-      "Each coding agent on this Mac runs in a Linux VM of its own, with only its folder shared, " +
-      "on the sign-ins saved in Luke and a GitHub token Luke gives it. Turn it off to run agents " +
+      "Each coding agent on this Mac runs in a Linux VM of its own that sees only its folder, " +
+      "signed in through Luke rather than this Mac's own logins. Turn it off to run agents " +
       "directly on this Mac, for Xcode or iOS work.",
     default: false,
     page: SETTINGS_PAGE.CODING_AGENTS,
