@@ -1626,13 +1626,13 @@ const END_LINE_CLASS = "agent-end-line m-0 text-caption text-muted-foreground";
  * Says the turn's end, a stop or a failure, once, as it lands. Note that it
  * is said by the transcript rather than its end line, because the line
  * mounts with its words and its failure is history, no alert; and that only
- * an end this transcript saw the turn running before is said, so the end a
- * tab opens on, read with its first page or after a skeleton, is history
- * too, while a turn that fails before writing a word is still heard.
+ * an end that follows a page saying the turn runs is said, never a row's
+ * word alone, which may be stale, so the end a tab opens on is history too,
+ * while a turn that fails before writing a word is still heard.
  */
-function useTurnEndSaid(ended: EndLineParts | undefined, working: boolean): void {
+function useTurnEndSaid(ended: EndLineParts | undefined, pageRuns: boolean): void {
   const [sawRunning, setSawRunning] = useState(false);
-  if (!sawRunning && working && ended === undefined) setSawRunning(true);
+  if (!sawRunning && pageRuns && ended === undefined) setSawRunning(true);
   useAnnounce(ANNOUNCE.POLITE, sawRunning ? (ended?.words ?? "") : "");
 }
 
@@ -2115,6 +2115,7 @@ function AgentTranscriptView({
   reading,
   failed,
   working,
+  pageRuns = false,
   sessionStarting = false,
   rewindOut = false,
   startedAt,
@@ -2158,6 +2159,8 @@ function AgentTranscriptView({
   failed: boolean;
   /** Whether the agent may still write, which is when the transcript ends on a working line. */
   working: boolean;
+  /** Whether the last page read said the turn runs, after which an end that lands is said; none where no page tells it. */
+  pageRuns?: boolean;
   /** Whether the agent's session has not run its first turn yet, which its working line says. */
   sessionStarting?: boolean;
   /** Whether a rewind is out, which its working line says until the service answers. */
@@ -2200,7 +2203,7 @@ function AgentTranscriptView({
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   const undelivered = useUndeliveredLines();
-  useTurnEndSaid(ended, working);
+  useTurnEndSaid(ended, pageRuns);
   // Whether a replay opens the transcript is all its placing reads; the place itself is handed anew on every draw.
   const replayed = replay !== undefined;
   // Read through once for the messages held, so a draw that brings no page reads none of them again.
@@ -2731,6 +2734,10 @@ function AgentTabView({
                     failed={transcript.failed}
                     // Note that a rewind draws the working line from its press until its line reads back, however slow its stop and relaunch.
                     working={working || composer.rewinding}
+                    pageRuns={
+                      transcript.pageStatus !== undefined &&
+                      agentStillWriting(transcript.pageStatus)
+                    }
                     rewindOut={composer.rewindOut}
                     sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
                     // Note that while a rewind goes the line counts from its press, never from the run before it, which is the agent's start until a new turn begins.
@@ -3269,6 +3276,9 @@ export function AgentSubagentTab({
               reading={transcript.reading}
               failed={transcript.failed}
               working={agentStillWriting(status)}
+              pageRuns={
+                transcript.pageStatus !== undefined && agentStillWriting(transcript.pageStatus)
+              }
               sessionStarting={status === CODING_AGENT_STATUS.STARTING}
               startedAt={shown ? transcript.runStartedAt : undefined}
               ended={transcript.pages === 0 ? undefined : endLineParts(status, transcript.failure)}

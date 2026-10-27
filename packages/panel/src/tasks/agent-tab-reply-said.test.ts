@@ -234,6 +234,16 @@ test("a tab opened on a turn already finished, or already failed, says nothing",
     status: CODING_AGENT_STATUS.FAILED,
   });
   assert.equal(announcedPolitely(), "", "a failure the transcript opens on is history");
+  act(() => root?.unmount());
+
+  // A row still saying the turn runs, as a list read before it failed does, is no sign the turn was seen running.
+  const stale = await runningTab(page("The retry", CODING_AGENT_STATUS.FAILED, "1:1"));
+  await stale.row({ ...AGENT, status: CODING_AGENT_STATUS.FAILED });
+  assert.equal(
+    announcedPolitely(),
+    "",
+    "a failure read on opening is history, whatever the row said",
+  );
 });
 
 test("a reader whose focus stands in the transcript hears only who the reply is from", async () => {
