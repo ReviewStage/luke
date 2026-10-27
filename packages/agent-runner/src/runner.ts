@@ -63,6 +63,7 @@ import {
   runsOnHost,
 } from "./launch.js";
 import { openMcpRelay } from "./mcp-relay.js";
+import { SHARED_FILES_DIRECTORY } from "./pins.js";
 import { ProcessTable } from "./processes.js";
 import {
   CLAUDE_CODE_TOOLS,
@@ -192,6 +193,9 @@ function commandSandbox(config: ClaudeCodeConfig): NonNullable<Options["sandbox"
     // Note that the list is no strict allowlist, so under `bypassPermissions` a host past it is still reached.
     network: { allowedDomains: [...config.allowedDomains] },
     credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
+    // Note that a command writes only the checkout and the CLI's own temp folder otherwise, which
+    // Luke cannot read, so a screenshot saved anywhere but the checkout never reaches the developer.
+    filesystem: { allowWrite: [SHARED_FILES_DIRECTORY] },
   };
 }
 
