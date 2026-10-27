@@ -1180,15 +1180,24 @@
   .desktop-shell
   .pull-request-header[data-folded]
   .pull-request-title-row
-  > :not(.pull-request-title) {
+  > :not(.pull-request-title),
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  .pull-request-header[data-folded]
+  .pull-request-title-edit {
   display: none;
 }
 
+/* The folded title holds to one line. Note that its pencil goes with its
+   siblings (above), because it stands past the cut, where the keyboard would
+   land on a control it cannot see; the full header holds it. Note too that
+   the cut is a clip, never `hidden`, because a scroll container is scrolled
+   sideways by a focus inside it, words and fade and all. */
 :where(:root)[data-luke-room="narrow"]
   .desktop-shell
   .pull-request-header[data-folded]
   .pull-request-title {
-  overflow: hidden;
+  overflow: clip;
   white-space: nowrap;
 }
 
