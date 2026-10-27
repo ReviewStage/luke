@@ -16,8 +16,15 @@ import { MIGRATED_PGLITE_ENVIRONMENT, writeMigratedPgliteDump } from "./sql-clie
 
 export default async function setup(): Promise<() => Promise<void>> {
   const directory = await mkdtemp(join(tmpdir(), "luke-migrated-pglite-"));
+  const removeDirectory = () => rm(directory, { recursive: true, force: true });
   const file = join(directory, "migrated.tar");
-  await writeMigratedPgliteDump(file);
+  try {
+    await writeMigratedPgliteDump(file);
+  } catch (error) {
+    // Note that vitest runs no teardown for a setup that throws, so the directory goes here.
+    await removeDirectory();
+    throw error;
+  }
   process.env[MIGRATED_PGLITE_ENVIRONMENT.DUMP] = file;
-  return () => rm(directory, { recursive: true, force: true });
+  return removeDirectory;
 }
