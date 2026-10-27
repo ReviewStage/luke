@@ -187,9 +187,22 @@ it.effect("fails, rather than asking again, where a renewal finds the read gone"
   }),
 );
 
-it.effect(
-  "a subscription in error switches the read to polling, its rows fed on, until Realtime delivers again",
-  () =>
+it.effect.each([
+  [
+    "a subscription in error",
+    (realtime: ReturnType<typeof fakeRealtime>) => Effect.sync(() => realtime.fail("left-0")),
+  ],
+  [
+    "a part whose first rows do not arrive within ten seconds",
+    (realtime: ReturnType<typeof fakeRealtime>) =>
+      Effect.andThen(
+        Effect.sync(() => realtime.deliver("left-0", [{ id: "live-0" }])),
+        TestClock.adjust(Duration.seconds(10)),
+      ),
+  ],
+] as const)(
+  "%s switches the read to polling, its rows fed on, until Realtime delivers again",
+  ([, breaks]) =>
     Effect.gen(function* () {
       const realtime = fakeRealtime();
       let polled: unknown[] = [{ id: "polled-1" }];
@@ -216,7 +229,7 @@ it.effect(
         ),
       );
       yield* settled;
-      realtime.fail("left-0");
+      yield* breaks(realtime);
       yield* settled;
       assert.deepEqual(rows, [{ left: [{ id: "polled-1" }], right: [] }]);
       polled = [{ id: "polled-2" }];
@@ -224,8 +237,7 @@ it.effect(
       yield* settled;
       assert.deepEqual(rows.at(-1), { left: [{ id: "polled-2" }], right: [] }, "polled again");
 
-      yield* TestClock.adjust(Duration.seconds(15));
-      yield* settled;
+      // Realtime is subscribed to again as the read breaks, and delivers within the first rows' bound.
       realtime.deliver("left-1", [{ id: "live" }]);
       realtime.deliver("right-1", []);
       yield* settled;

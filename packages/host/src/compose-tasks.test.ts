@@ -3909,10 +3909,10 @@ it.effect(
       ]);
       yield* moved;
 
-      // A follow Realtime stops is polled, and subscribed again on the next resubscribe.
+      // A follow Realtime stops is polled, and subscribed again as it breaks, which stands until its first rows' bound.
       service.boardSeals[INVITES] = sealedBoard(1);
       realtime.fail("board-0");
-      yield* TestClock.adjust(Duration.seconds(15));
+      yield* TestClock.adjust(Duration.seconds(5));
       yield* boardSettled;
       assert.deepEqual(realtime.subscribed(), ["board-1"]);
 
@@ -3972,7 +3972,7 @@ it.effect(
       const queued = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
       yield* boardSettled;
       realtime.fail("board");
-      yield* TestClock.adjust(Duration.seconds(15));
+      yield* TestClock.adjust(Duration.seconds(5));
       yield* boardSettled;
       realtime.deliver("board", [
         { taskId: INVITES, drawingNumber: 0, appliedDrawing: 0, imaged: false },
