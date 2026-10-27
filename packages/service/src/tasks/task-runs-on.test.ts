@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { registerDevice } from "@luke/database/models/device-store";
+import { readRunsOnPick } from "@luke/database/models/runs-on-pick";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import {
   DEVICE_LAYOUT,
@@ -63,13 +64,13 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
     });
     // SAFETY: setting where a task runs yields the store and the clock alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
-    return (taskId: string, bearer: string, runsOn: TaskRunsOnRequest) =>
+    return (method: string, path: string, bearer: string, body: object) =>
       Effect.promise(async () => {
         const response = await handle(
-          new Request(new URL(`/api/plans/${taskId}`, ORIGIN), {
-            method: "PATCH",
+          new Request(new URL(path, ORIGIN), {
+            method,
             headers: { authorization: bearer, "content-type": "application/json" },
-            body: JSON.stringify({ runsOn }),
+            body: JSON.stringify(body),
           }),
           webServices,
         );
@@ -104,12 +105,14 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
           runsOn: onStudio,
         });
         const inCloud = yield* createTask(owner, { organizationId: workspace, name: "Kept" });
-        const patch = yield* standing(
+        const send = yield* standing(
           new Map([
             ["Bearer owner", owner],
             ["Bearer stranger", stranger],
           ]),
         );
+        const patch = (taskId: string, bearer: string, runsOn: TaskRunsOnRequest) =>
+          send("PATCH", `/api/plans/${taskId}`, bearer, { runsOn });
         const runsOnNow = (taskId: string) =>
           Effect.map(
             readTask(owner, taskId),
@@ -148,5 +151,26 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
         });
         assert.deepEqual(byStranger, { status: 404, body: { error: HOSTED_API_ERROR.NOT_FOUND } });
       }),
+  );
+
+  it.effect("a task made to run somewhere keeps that place as its member's last pick", () =>
+    Effect.gen(function* () {
+      const owner = yield* openTokenMember();
+      const workspace = yield* openWorkspace(owner);
+      yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
+      const studio = yield* deviceOf(owner, "Studio");
+      const onStudio = { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: studio } as const;
+      const send = yield* standing(new Map([["Bearer owner", owner]]));
+
+      const made = yield* send("POST", "/api/plans", "Bearer owner", {
+        name: "Relay",
+        workspaceId: workspace,
+        planning: false,
+        runsOn: onStudio,
+      });
+
+      assert.equal(made.status, 201, JSON.stringify(made.body));
+      assert.deepEqual(yield* readRunsOnPick(owner), Option.some(onStudio));
+    }),
   );
 });
