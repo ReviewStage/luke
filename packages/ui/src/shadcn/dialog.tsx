@@ -30,9 +30,13 @@ import { cn } from "../cn.js";
  * app draws is `@luke/ui`'s `Dialog`; this is its inside.
  */
 
-/** The dimmed window's room: over everything, inside what is seen of the window, never part of the desktop's drag region. */
+/**
+ * The dimmed window's room: over everything, inside what is seen of the window, never part of the desktop's drag region.
+ * Note that it is undrawn while Base UI marks it `hidden`, a kept card's dialog shut, because no app takes Tailwind's
+ * preflight, so the room's own `grid` would otherwise leave it drawn over the window.
+ */
 const DIALOG_ROOM =
-  "fixed inset-x-0 top-viewport-top bottom-keyboard-inset z-dialog [-webkit-app-region:no-drag]";
+  "fixed inset-x-0 top-viewport-top bottom-keyboard-inset z-dialog [-webkit-app-region:no-drag] [&[hidden]]:hidden";
 
 /** The card: a column at a question's measure, never taller than the window less its margins, on the motion tokens, fading out as it closes. */
 const DIALOG_CARD =

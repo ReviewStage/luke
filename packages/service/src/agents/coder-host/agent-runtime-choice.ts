@@ -63,6 +63,7 @@ import {
   type LocalAgentRefusal,
   MAC_PRESENCE,
 } from "@luke/features/coding-agent-wire";
+import { DEVICE_SETUP, type DeviceSetup } from "@luke/features/device-agent-wire";
 import { type MacOffer, MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -381,8 +382,16 @@ export const macOffers = /* @__PURE__ */ Effect.fnUntraced(function* (
     providers: MAC_PROVIDERS.filter((provider) => macRunsProvider(device, provider, paid)),
     kind: device.kind,
     seenAt: device.lastSeenAt.getTime(),
+    ...(device.setup === null ? undefined : { setup: device.setup }),
+    ...(device.setupFailure === null ? undefined : { setupFailure: device.setupFailure }),
   }));
 });
+
+/** Why a device still setting itself up takes no agent, by where its setup stands. */
+const SETUP_REFUSAL = {
+  [DEVICE_SETUP.PREPARING]: LOCAL_AGENT_REFUSAL.PREPARING,
+  [DEVICE_SETUP.FAILED]: LOCAL_AGENT_REFUSAL.SETUP_FAILED,
+} as const satisfies Record<DeviceSetup, LocalAgentRefusal>;
 
 /** The offer of the account's device `deviceId` names where it beat within `THIS_MAC.FRESH`; none for another account's, one never registered, or one away. */
 export const freshOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -424,6 +433,9 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (offer === undefined) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.MAC_AWAY });
   }
+  if (offer.setup !== undefined) {
+    return yield* new LocalAgentRefused({ reason: SETUP_REFUSAL[offer.setup] });
+  }
   // Note that a Mac runs only the providers it lists, so Codex on one that lists none of OpenAI's is refused by name.
   if (!offer.providers.includes(RUNTIME_PROVIDER[runtime])) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.CODEX });
@@ -451,6 +463,9 @@ export const taskRunsOnChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   const offer = yield* freshOffer(userId, asked.deviceId);
   if (offer === undefined) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.MAC_AWAY });
+  }
+  if (offer.setup !== undefined) {
+    return yield* new LocalAgentRefused({ reason: SETUP_REFUSAL[offer.setup] });
   }
   if (offer.providers.length === 0) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });

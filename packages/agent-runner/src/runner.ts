@@ -88,9 +88,6 @@ import {
 } from "./protocol.js";
 import { oneShotDueAt } from "./wakeups.js";
 
-/** The CLI's own switch that strips credentials from every command it starts (https://code.claude.com/docs/en/env-vars). */
-const CLAUDE_SUBPROCESS_SCRUB = "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB";
-
 /** The name the Luke MCP server is registered under, so its tools reach the model as `mcp__luke__<tool>`. */
 const MCP_SERVER = "luke";
 
@@ -198,7 +195,15 @@ function commandSandbox(config: ClaudeCodeConfig): NonNullable<Options["sandbox"
   };
 }
 
-/** The documented options a launch runs `query()` with (the plan's P05). */
+/**
+ * The documented options a launch runs `query()` with (the plan's P05), the
+ * same wherever the runner runs but for the command sandbox: a local agent's
+ * VM runs none (`RUNNER_PLACE.HOST`). Note that nothing else may follow the
+ * place, because the CLI decides its permission mode from more than
+ * `permissionMode`: 2.1.304 forces `default` under
+ * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`, which a host launch once set and which
+ * left every write, `gh`, and MCP tool waiting on an approval nobody gives.
+ */
 function queryOptions(
   config: ClaudeCodeConfig,
   env: RunnerInput["env"],
@@ -219,15 +224,8 @@ function queryOptions(
     disallowedTools: [...CLAUDE_CODE_TOOLS.DENIED],
     agents: { [CLAUDE_CODE_WORKER]: WORKER },
     // The CLI's environment is the runner's own, less the bearer, which only
-    // the runner uses; Node leaves an undefined one unset. Note that on a host,
-    // which runs no command sandbox to deny the credentials, the CLI strips
-    // them from every command it starts itself (`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`,
-    // https://code.claude.com/docs/en/env-vars).
-    env: {
-      ...env,
-      [RUNNER_ENV.BEARER]: undefined,
-      ...(runsOnHost(env) ? { [CLAUDE_SUBPROCESS_SCRUB]: "1" } : undefined),
-    },
+    // the runner uses; Node leaves an undefined one unset.
+    env: { ...env, [RUNNER_ENV.BEARER]: undefined },
     // Note that the SDK puts an HTTP server's config, headers and all, in the
     // CLI's argv, which any process in the sandbox can read, so Luke's is an
     // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`), as is each integration's.

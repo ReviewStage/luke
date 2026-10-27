@@ -10,6 +10,11 @@ import type { TaskAgentsSummary, TaskPullRequestLine } from "./task-wire.js";
  * failed; then one at work; then the pull request that matters most, an
  * open or draft one before a merged one, and a merged one before a closed
  * one. A task whose agents finished with nothing published wears none.
+ *
+ * Note that the questions waiting on the reader are handed in apart from
+ * the agents' summary, as the Inbox counts them live with the window's own
+ * answers laid over them, so the row's icon, the Tasks page's badge, and the
+ * sidebar's Inbox count read one number and never disagree.
  */
 
 /** Where a task's agents stand, most pressing first. */
@@ -51,10 +56,13 @@ function markedPullRequest(
   return undefined;
 }
 
-/** The one status a task's row wears for what its agents are doing, what they ask, and what they published. */
-export function taskAgentsStatus(agents: TaskAgentsSummary | undefined): TaskAgentsStatus {
+/** The one status a task's row wears for what its agents are doing, the questions `waiting` on the reader, and what they published. */
+export function taskAgentsStatus(
+  agents: TaskAgentsSummary | undefined,
+  waiting: number,
+): TaskAgentsStatus {
+  if (waiting > 0) return { kind: TASK_AGENTS_STATUS.WAITING_ON_YOU };
   if (agents === undefined) return NO_STATUS;
-  if ((agents.waitingOnYou ?? 0) > 0) return { kind: TASK_AGENTS_STATUS.WAITING_ON_YOU };
   if ((agents.failed ?? 0) > 0) return { kind: TASK_AGENTS_STATUS.FAILED };
   if (agents.working > 0) return { kind: TASK_AGENTS_STATUS.WORKING };
   const pullRequest = markedPullRequest(agents.pullRequests);

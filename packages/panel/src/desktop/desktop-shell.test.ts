@@ -845,6 +845,7 @@ test("on a phone the bar's Inbox wears the count the drawer's row shows, named i
     {
       boardView: { ...tasksControl().boardView, open: true },
       listed,
+      inboxTasks: listed.inboxTasks,
     },
     { overlay: SIDEBAR_OVERLAY.OPEN },
   );

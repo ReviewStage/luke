@@ -163,7 +163,7 @@ import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
-import { needsYouNoun, useInboxWaiting } from "./places-waiting.js";
+import { needsYouNoun, useInboxWaiting, useTasksWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
@@ -388,6 +388,8 @@ interface RowContext {
   readonly onDeletedAgent: (agentId: string) => () => void;
   /** Whether a task was saved since the developer last looked at it on this Mac. */
   readonly unread: (task: TaskSummary) => boolean;
+  /** How many questions wait on the reader on each task, by its id, as the Inbox counts them (`useTasksWaiting`). */
+  readonly waitingOn: ReadonlyMap<string, number>;
   /** Whether an agent's turn ended while the developer was not looking at it. */
   readonly unseenAgent: (agentId: string) => boolean;
   /** The time each row's last update is counted back from. */
@@ -482,6 +484,7 @@ function TaskRows({
             current={context.marked(row.task.id, undefined)}
             open={context.current(row.task.id)}
             unread={context.unread(row.task)}
+            waiting={context.waitingOn.get(row.task.id) ?? 0}
             now={context.now}
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
@@ -728,6 +731,7 @@ function PinnedRows({
                 current={context.marked(task.id, undefined)}
                 open={context.current(task.id)}
                 unread={context.unread(task)}
+                waiting={context.waitingOn.get(task.id) ?? 0}
                 now={context.now}
                 onOpen={() => context.onOpen(task.id)}
               />
@@ -1238,7 +1242,7 @@ function groupOf(row: TaskRow, grouping: TaskSections["grouping"]): string | nul
 
 /**
  * Where each row stands, as the sections order and group it: the row as it
- * was first drawn while the sidebar is in sight (`use-held-order.ts`), or as
+ * was first drawn while the pointer is over the sidebar (`use-held-order.ts`), or as
  * it is now where it is new to the list, it belongs in another group now, or
  * a press here gave it a name or a status the view has yet to carry. Note
  * that a row held under a group it left would stand under a header that no
@@ -1733,6 +1737,8 @@ function SidebarColumn({
   const onTasks = tab === PANEL_TAB.TASKS;
   // Whether a row of the column is lifted into a drag, while which an empty Pinned stands to take it.
   const [carrying, setCarrying] = useState(false);
+  // Whether the pointer is over the column, while which its tasks hold their places.
+  const [pointing, setPointing] = useState(false);
   const overlay = useFloatingSidebar(sidebar);
   useFirstUsableSpan(tasks);
   const body = useRef<HTMLDivElement>(null);
@@ -1781,6 +1787,7 @@ function SidebarColumn({
   const shownChannelId =
     channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel.id : undefined;
   const waiting = useInboxWaiting(tasks);
+  const waitingOn = useTasksWaiting(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1954,6 +1961,7 @@ function SidebarColumn({
       if (tasks.agentView.agentId === agentId) tasks.agentView.onClose();
     },
     unread,
+    waitingOn,
     unseenAgent: (agentId) =>
       tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
     now,
@@ -2030,8 +2038,12 @@ function SidebarColumn({
     assignedTo,
   };
   const placing = { grouping: orderView.grouping, pending: tasks.pendingTasks };
-  // While the sidebar is in sight each task keeps the place it was first drawn in, so one an update would sort elsewhere stays under the reader's eye.
-  const sections = useHeldOrder(orderView, tasks.shown && overlay.inSight, {
+  // While the pointer is over the sidebar each task keeps the place it was
+  // first drawn in, so one an update would sort elsewhere stays under the
+  // reader's hand. Note that the hold is the pointer's and not the sidebar's
+  // being in sight, because a pinned sidebar is in sight for as long as the
+  // window is open, and its tasks would sort anew only at the next launch.
+  const sections = useHeldOrder(orderView, tasks.shown && overlay.inSight && pointing, {
     sameOrder: sameTaskOrder,
     draw: (places: ReadonlyMap<string, TaskRow>) => {
       const placed = taskPlaces(statusRows, places, placing);
@@ -2131,7 +2143,11 @@ function SidebarColumn({
       data-row-drop-scope=""
       inert={!overlay.inSight}
       onPin={onPressWithin}
-      onPointerLeave={overlay.onPointerLeave}
+      onPointerEnter={() => setPointing(true)}
+      onPointerLeave={(event) => {
+        setPointing(false);
+        overlay.onPointerLeave(event);
+      }}
       onKeyDown={overlay.onKeyDown}
     >
       <div className="desktop-drag-strip" />
@@ -2214,6 +2230,7 @@ function SidebarColumn({
                         current={context.marked(row.task.id, undefined)}
                         open={current(row.task.id)}
                         unread={unread(row.task)}
+                        waiting={context.waitingOn.get(row.task.id) ?? 0}
                         now={now}
                         faces={context.faces}
                         onOpen={() => context.onOpen(row.task.id)}

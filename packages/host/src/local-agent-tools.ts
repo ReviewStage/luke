@@ -135,6 +135,8 @@ export function keptToolBinary(stateRoot: string, pin: AgentToolPin): string {
 export const localAgentTool = Effect.fnUntraced(function* (
   stateRoot: string,
   pin: AgentToolPin,
+  /** Run once just before a fetch begins, never for a kept build. */
+  fetching: Effect.Effect<void> = Effect.void,
 ): Effect.fn.Return<
   Option.Option<string>,
   never,
@@ -155,6 +157,7 @@ export const localAgentTool = Effect.fnUntraced(function* (
   const kept =
     marked && (yield* filesAsPinned(pin, folder).pipe(Effect.orElseSucceed(() => false)));
   if (kept) return Option.some(binary);
+  yield* fetching;
   return yield* fetchTool(pin, folder).pipe(
     Effect.as(Option.some(binary)),
     Effect.orElseSucceed(() => Option.none<string>()),

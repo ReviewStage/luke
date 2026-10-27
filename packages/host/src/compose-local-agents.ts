@@ -1,9 +1,14 @@
-import type { DeviceAgentClaimedLine, HostedDeviceAgentClient } from "@luke/features";
+import type {
+  DeviceAgentClaimedLine,
+  DeviceAgentDevice,
+  HostedDeviceAgentClient,
+} from "@luke/features";
 import { DEVICE_BEAT } from "@luke/features/coding-agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ISOLATION,
   DEVICE_LAUNCH_REFUSAL,
+  DEVICE_SETUP,
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLayout,
   type DeviceAgentLine,
@@ -29,6 +34,7 @@ import {
   Path,
   Queue,
   Ref,
+  Result,
   Schedule,
   Schema,
   Scope,
@@ -63,7 +69,11 @@ import type { RunMode } from "./run-mode.js";
  * app start among them, the device first has what its VMs run on
  * (`LocalAgentSandbox.ready`: a Mac's pinned smolvm, fetched and checked,
  * and the image pulled once), once per opening, so a device offline is not
- * asked again every turn; it then registers with its home folder, the VM's
+ * asked again every turn. A first fetch or pull takes minutes, so while it
+ * runs the device registers as preparing (`DEVICE_SETUP`) and beats, and the
+ * menus list it as getting ready, which takes no agent; one that failed
+ * registers why and beats until the gate shuts, so it is listed as not set
+ * up rather than not at all. Once it has them it registers with its home folder, the VM's
  * own Claude Code and Codex, and no harness signed in by itself, since no
  * login of the device's reaches a VM, so every launch carries the sign-in
  * saved in Luke; then it beats every `BEAT_EVERY` while it follows. It
@@ -196,6 +206,9 @@ const LocalAgentStateSchema = Schema.Struct({
 type LocalAgentState = typeof LocalAgentStateSchema.Type;
 
 const NO_STATE: LocalAgentState = { devices: {}, launches: [] };
+
+/** Where a device's setup stands as it registers: nothing once it is ready, else preparing, or failed and why. */
+type DeviceSetupRegister = Pick<DeviceAgentDevice, "setup" | "setupFailure">;
 
 /** What a device says of the harnesses signed in on it by itself: none, since no login of the device's reaches its agents' VMs. */
 const NOT_SIGNED_IN: DeviceSignedIn = { claudeCode: false, codex: false };
@@ -360,27 +373,6 @@ export function composeLocalAgents(
         launches: current.launches.filter((launch) => launch.id !== id),
       }));
 
-    // -- what the VMs run on ------------------------------------------------------
-
-    /** Whether the device had what its VMs run on as it last asked, and whether it asked since the gate last opened. */
-    const readied = yield* Ref.make(false);
-    const readyTried = yield* Ref.make(false);
-
-    /**
-     * Whether the device has what its VMs run on (`LocalAgentSandbox.ready`),
-     * asked again each time the gate opens once it had it, and otherwise once
-     * per opening, and once per app start, since the app's first opening is
-     * one; one that failed waits for the next, so a device offline is not
-     * asked again every turn.
-     */
-    const readyForOpening = Effect.gen(function* () {
-      if (!(yield* Ref.get(readied)) && (yield* Ref.getAndSet(readyTried, true))) return false;
-      const ready = yield* platform.sandbox.ready;
-      yield* Ref.set(readied, ready);
-      if (!ready) report("the local agents' smolvm or sandbox image could not be had");
-      return ready;
-    });
-
     // -- the gate --------------------------------------------------------------
 
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
@@ -392,6 +384,79 @@ export function composeLocalAgents(
       (on) =>
         on && Option.isSome(home) && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
     );
+
+    /** The beats, for as long as the gate stands and the account signed in is the one `userId` names; it returns once either changes. */
+    const presence = (userId: string, deviceId: string) =>
+      Effect.gen(function* () {
+        let sinceBeat = Duration.toMillis(BEAT_EVERY);
+        while ((yield* gateOpen) && dependencies.accountId() === userId) {
+          if (sinceBeat >= Duration.toMillis(BEAT_EVERY)) {
+            yield* asked(client.beat(deviceId, NOT_SIGNED_IN));
+            sinceBeat = 0;
+          }
+          yield* Effect.sleep(IDLE);
+          sinceBeat += Duration.toMillis(IDLE);
+        }
+      });
+
+    // -- what the VMs run on ------------------------------------------------------
+
+    /** Whether the device had what its VMs run on as it last asked, and whether it asked since the gate last opened. */
+    const readied = yield* Ref.make(false);
+    const readyTried = yield* Ref.make(false);
+    /** Whether the service took the register saying the device's setup failed, so it may go on beating. */
+    const failureListed = yield* Ref.make(false);
+
+    /**
+     * Whether the device has what its VMs run on (`LocalAgentSandbox.ready`),
+     * asked again each time the gate opens once it had it, and otherwise once
+     * per opening, and once per app start, since the app's first opening is
+     * one; one that failed waits for the next, so a device offline is not
+     * asked again every turn. As a fetch or pull begins (the sandbox's
+     * `preparing`) the device registers as preparing and beats, so the
+     * menus list it as getting ready rather than not at all; one that failed
+     * registers why and beats for as long as the opening stands, so it is
+     * listed as not set up rather than away. `registered` registers the
+     * device with where its setup stands, a register the service may refuse
+     * from a build before the field; then the device beats nothing until it
+     * registers ready, since a beat would keep fresh the ready row it
+     * registered before, and that service would take an agent on it.
+     */
+    const readyForOpening = (
+      userId: string,
+      deviceId: string,
+      registered: (
+        setup: DeviceSetupRegister,
+      ) => Effect.Effect<boolean, never, HttpClient.HttpClient>,
+    ) =>
+      Effect.gen(function* () {
+        if (!(yield* Ref.get(readied)) && (yield* Ref.getAndSet(readyTried, true))) {
+          if (yield* Ref.get(failureListed)) yield* presence(userId, deviceId);
+          return false;
+        }
+        const ready = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const scope = yield* Effect.scope;
+            // Note that it beats only once the service took the setup, since a beat after a refused register keeps an earlier ready row fresh.
+            const preparing = Effect.gen(function* () {
+              if (yield* asked(registered({ setup: DEVICE_SETUP.PREPARING }))) {
+                yield* Effect.forkIn(presence(userId, deviceId), scope);
+              }
+            });
+            return yield* Effect.result(platform.sandbox.ready(preparing));
+          }),
+        );
+        yield* Ref.set(readied, Result.isSuccess(ready));
+        if (Result.isSuccess(ready)) return true;
+        report("the local agents' smolvm or sandbox image could not be had");
+        // Note that the device stays listed with why, beating until the gate shuts, which lets the next opening try again.
+        const listed = yield* asked(
+          registered({ setup: DEVICE_SETUP.FAILED, setupFailure: ready.failure.detail }),
+        );
+        yield* Ref.set(failureListed, listed);
+        if (listed) yield* presence(userId, deviceId);
+        return false;
+      });
 
     // -- the developer's own environment ---------------------------------------------
 
@@ -960,22 +1025,9 @@ export function composeLocalAgents(
           }),
         );
 
-        /** The beats, for as long as the gate stands and the account signed in is the one the follow is for; it returns once either changes. */
-        const presence = Effect.gen(function* () {
-          let sinceBeat = Duration.toMillis(BEAT_EVERY);
-          while ((yield* gateOpen) && dependencies.accountId() === userId) {
-            if (sinceBeat >= Duration.toMillis(BEAT_EVERY)) {
-              yield* asked(client.beat(deviceId, NOT_SIGNED_IN));
-              sinceBeat = 0;
-            }
-            yield* Effect.sleep(IDLE);
-            sinceBeat += Duration.toMillis(IDLE);
-          }
-        });
-
         yield* Effect.forkScoped(linesFollowed);
         yield* Effect.forkScoped(requestsFollowed);
-        yield* presence;
+        yield* presence(userId, deviceId);
       });
 
     /**
@@ -992,12 +1044,9 @@ export function composeLocalAgents(
         yield* Ref.set(readyTried, false);
         return yield* Effect.sleep(IDLE);
       }
-      // Note that the device registers only once it has what its VMs run on, so Start never offers one that cannot run an agent.
-      if (!(yield* readyForOpening)) return yield* Effect.sleep(IDLE);
       const deviceId = yield* deviceOf(userId);
-      const shellVariables = yield* shellEnvironment;
       const { tools } = platform.sandbox;
-      const registered = yield* asked(
+      const registered = (setup: DeviceSetupRegister) =>
         client.register(deviceId, {
           name: platform.deviceName,
           platform: platform.devicePlatform,
@@ -1008,9 +1057,12 @@ export function composeLocalAgents(
           codexExecutable: tools.codex,
           signedIn: NOT_SIGNED_IN,
           capabilities: platform.deviceCapabilities,
-        }),
-      );
-      if (!registered) return yield* Effect.sleep(IDLE);
+          ...setup,
+        });
+      // Note that the device registers as ready only once it has what its VMs run on, so Start never takes one that cannot run an agent.
+      if (!(yield* readyForOpening(userId, deviceId, registered))) return yield* Effect.sleep(IDLE);
+      const shellVariables = yield* shellEnvironment;
+      if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
       const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
       for (const launch of left) {
         if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
