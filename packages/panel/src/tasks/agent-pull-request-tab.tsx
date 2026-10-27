@@ -220,6 +220,7 @@ import {
   PullRequestWriteNote,
   type PullRequestWrites,
   usePullRequestWrites,
+  WritePlaceProvider,
 } from "./pull-request-writes.js";
 import {
   THREAD_REVEAL_WORDS,
@@ -2453,10 +2454,22 @@ function useConversationAnchors(input: {
  * changed draws the conversation's review threads on their lines.
  */
 export function AgentPullRequestTab(props: AgentPullRequestTabProps): React.JSX.Element {
+  const { control, agentId } = props;
+  const planId = (
+    control.agents?.find((each) => each.id === agentId) ??
+    control.archived?.find((each) => each.id === agentId)
+  )?.planId;
+  // Note that a repository out of reach is mended in the agent's own workspace, by its task or, on none, its page's.
+  const place = useMemo(
+    () => ({ taskId: planId ?? null, workspaceId: control.workspaceId }),
+    [planId, control.workspaceId],
+  );
   // Note that the number is handed down before any of the tab's own hooks run, its writes among them.
   return (
     <PullRequestNumberProvider value={props.number}>
-      <PullRequestTabBody {...props} />
+      <WritePlaceProvider value={place}>
+        <PullRequestTabBody {...props} />
+      </WritePlaceProvider>
     </PullRequestNumberProvider>
   );
 }

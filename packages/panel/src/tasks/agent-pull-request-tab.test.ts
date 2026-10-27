@@ -51,7 +51,6 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { timeRuntime } from "@luke/ui";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
@@ -75,7 +74,6 @@ import {
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
-import { OpenSettingsProvider } from "../open-settings.js";
 import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -92,6 +90,7 @@ import { codingAgentsControl } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
+import { RepositoryRemedyProvider } from "./repository-remedy.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { type ThreadReveal, ThreadRevealProvider } from "./thread-reveal.js";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request.js";
@@ -2400,12 +2399,17 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
   assert.equal(standing(merged), "Merged");
 });
 
-test("a change refused for a repository out of the workspace's reach says where access is given, and Open Settings opens the workspace's GitHub there", async () => {
+test("a change refused for a repository out of the workspace's reach says where access is given, and Open Settings opens the GitHub of the agent's task's workspace", async () => {
   changeAnswer = { failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
-  const settings: SettingsLink[] = [];
+  const opened: string[] = [];
   const tab = await drawn(
-    createElement(OpenSettingsProvider, {
-      value: (link: SettingsLink) => settings.push(link),
+    createElement(RepositoryRemedyProvider, {
+      value: {
+        openWorkspaceGitHub: (taskId) => opened.push(taskId),
+        openGitHub: () => undefined,
+        chooseRepository: () => undefined,
+        moveTask: () => Promise.resolve(false),
+      },
       children: createElement(Switching, {
         control: controlAnswering(),
         first: PULL_REQUEST_VIEW.CONVERSATION,
@@ -2426,9 +2430,7 @@ test("a change refused for a repository out of the workspace's reach says where 
     [...note.querySelectorAll("button")].find((button) => button.textContent === "Open Settings") ??
     assert.fail("the line offers Settings, where access is given");
   act(() => open.click());
-  assert.deepEqual(settings, [
-    { page: SETTINGS_VIEW.WORKSPACE, section: SETTINGS_SECTION.GITHUB_REPOSITORIES },
-  ]);
+  assert.deepEqual(opened, [AGENT.planId]);
 });
 
 test("a change GitHub refused says so in GitHub's own words until dismissed, and the pull request is read again in case it moved", async () => {

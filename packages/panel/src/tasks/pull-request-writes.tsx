@@ -54,7 +54,15 @@ import {
 } from "@luke/ui/icons";
 import { useClipped } from "@luke/ui/use-clipped";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { type ReactNode, useCallback, useId, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useGitHubConnection } from "../github-connect.js";
@@ -67,6 +75,7 @@ import {
 } from "./coding-agent-model.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
+import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
 
 /**
  * pull-request-writes.tsx -- the changes a member makes to an agent's pull request from its Pull request tab, and what the tab says of each: the pill's menu of where the pull request stands, and the line over the header where GitHub would not take one.
@@ -175,6 +184,17 @@ export type WriteNote =
       /** What mends it beyond trying again, where something does. */
       readonly remedy?: WriteRemedy | undefined;
     };
+
+/** Where the agent whose pull request a tab shows stands: its task, or, for an agent on none, the workspace its page belongs to. */
+export interface WritePlace {
+  readonly taskId: string | null;
+  readonly workspaceId?: string | undefined;
+}
+
+const WritePlaceContext = createContext<WritePlace | undefined>(undefined);
+
+/** Hands the notes under it where the agent stands, so a repository out of reach is mended in that workspace's GitHub; none opens Settings on the workspace it lists. */
+export const WritePlaceProvider = WritePlaceContext.Provider;
 
 /** What mends a change that never reached GitHub, beyond trying again. */
 export const WRITE_REMEDY = {
@@ -510,6 +530,17 @@ export function PullRequestWriteNote({
 }): React.JSX.Element | null {
   const { connect } = useGitHubConnection();
   const openSettings = useOpenSettings();
+  const openWorkspaceGitHub = useOpenWorkspaceGitHub();
+  const place = useContext(WritePlaceContext);
+  // Note that a task's workspace is the task's to name, and an agent on none names its page's.
+  const openAccess = () =>
+    place?.taskId === null || place?.taskId === undefined
+      ? openSettings({
+          page: SETTINGS_VIEW.WORKSPACE,
+          section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+          ...(place?.workspaceId === undefined ? undefined : { workspaceId: place.workspaceId }),
+        })
+      : openWorkspaceGitHub(place.taskId);
   const { note, dismiss } = writes;
   if (note === undefined) return null;
   return (
@@ -523,14 +554,7 @@ export function PullRequestWriteNote({
         </ErrorState>
       ) : note.remedy === WRITE_REMEDY.GITHUB_ACCESS ? (
         <ErrorState
-          remedy={{
-            label: OPEN_SETTINGS_LABEL,
-            onClick: () =>
-              openSettings({
-                page: SETTINGS_VIEW.WORKSPACE,
-                section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
-              }),
-          }}
+          remedy={{ label: OPEN_SETTINGS_LABEL, onClick: openAccess }}
           onDismiss={dismiss}
         >
           {note.words}
