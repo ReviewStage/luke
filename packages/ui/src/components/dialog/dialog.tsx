@@ -75,8 +75,8 @@ import { useHeldFocus } from "./held-focus.js";
  * by the next one; a reader is told so through the window's `Announcer`, since a card that stays is otherwise a press gone nowhere. The card is the
  * profile's dialog card, its inset and its corners, at a question's
  * measure, wider for a note being written, fitted edge to edge to a file
- * shown, or as large as the window allows, a small margin from the window's
- * edges and its top clear of the traffic lights where the window draws them
+ * shown, or nearly the window's size, the dimmed window a margin round it
+ * (wider at a wide window's sides) and its top clear of the traffic lights where the window draws them
  * (`--luke-dialog-window-top`, which the window sets); what it holds lays
  * itself out inside. A dialog that takes files dropped on the dimmed window rings its
  * card while a drag it would take is over it.
@@ -106,8 +106,8 @@ export type DialogRole = (typeof DIALOG_ROLE)[keyof typeof DIALOG_ROLE];
 /**
  * How wide the card stands: a question's measure, wider for a note being
  * written, wider still for a composer card with chips at its foot, fitted
- * to a file shown edge to edge, or as large as the window allows, a file
- * shown edge to edge in a card a small margin from the window's edges, its
+ * to a file shown edge to edge, or nearly the window's size, a file
+ * shown edge to edge in a card the dimmed window stands a margin round, its
  * top clear of what the window draws over it; or a sheet standing on the
  * window's foot, which draws its own ground, edge, and entrance.
  */
@@ -173,7 +173,7 @@ const CARD_LOOK = [
   "data-[size=composer]:w-dialog-composer data-[size=composer]:gap-3",
   "room-narrow:data-[size=composer]:-ml-dialog-reach room-narrow:data-[size=composer]:-mr-dialog-reach room-narrow:data-[size=composer]:w-dialog-composer-reach room-narrow:data-[size=composer]:pt-card-inset-snug room-narrow:data-[size=composer]:pr-card-inset-snug room-narrow:data-[size=composer]:pb-card-inset-snug room-narrow:data-[size=composer]:pl-card-inset-snug",
   "data-[size=media]:w-auto data-[size=media]:min-w-dialog-media-min data-[size=media]:max-w-dialog-media-max data-[size=media]:gap-0 data-[size=media]:overflow-hidden data-[size=media]:p-0",
-  "data-[size=window]:w-auto data-[size=window]:max-h-none data-[size=window]:max-w-none data-[size=window]:place-self-stretch data-[size=window]:gap-0 data-[size=window]:overflow-hidden data-[size=window]:p-0 data-[size=window]:mx-luke-12 data-[size=window]:mb-luke-12 data-[size=window]:mt-dialog-window-top @min-[1024px]/luke-dialog-room:data-[size=window]:mx-luke-16 @min-[1024px]/luke-dialog-room:data-[size=window]:mb-luke-16",
+  "data-[size=window]:w-auto data-[size=window]:max-h-none data-[size=window]:max-w-none data-[size=window]:place-self-stretch data-[size=window]:gap-0 data-[size=window]:overflow-hidden data-[size=window]:p-0 data-[size=window]:mx-luke-32 data-[size=window]:mb-luke-24 data-[size=window]:mt-dialog-window-top @min-[1024px]/luke-dialog-room:data-[size=window]:mx-luke-64 @min-[1024px]/luke-dialog-room:data-[size=window]:mb-luke-32",
   "data-[size=sheet]:w-dialog-wide data-[size=sheet]:gap-0 data-[size=sheet]:rounded-none data-[size=sheet]:border-0 data-[size=sheet]:bg-transparent data-[size=sheet]:p-0 data-[size=sheet]:shadow-none data-[size=sheet]:animate-none data-[size=sheet]:data-ending-style:animate-leave",
   "data-[expanding=true]:animate-none",
   "data-[dropping=true]:shadow-dialog-drop",

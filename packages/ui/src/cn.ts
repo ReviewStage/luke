@@ -387,6 +387,7 @@ const TASK_SURFACES = {
     "todos-dock",
     "dictation-clock",
     "viewer-text",
+    "viewer-gutter",
     "shells-pane",
     "servers-list",
     "issue-chip",

@@ -8,6 +8,8 @@ import {
 } from "@luke/features/attachment-model";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import {
+  BUTTON_SHAPE,
+  BUTTON_VARIANT,
   Button,
   ButtonLink,
   CloseIcon,
@@ -23,6 +25,7 @@ import {
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  ThumbStrip,
   Tooltip,
   useImageZoom,
   usePictureExpand,
@@ -64,13 +67,13 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * plays at once as large as the card lets it, with the player's own
  * controls, Full screen among them (`@luke/ui`'s VideoPlayer).
  *
- * The files of one message are walked in place with the header's arrows or
- * the arrow keys, and the header names the file shown, its size, and how
- * far along the message's files it is, a note the place opening it gives
- * the file shown (who last edited it, for a plan's picture), beside Copy for a text file or a picture,
+ * The files of one message are walked in place with the arrows either side
+ * of the file shown, a press on its preview in the strip along the card's
+ * foot, or the arrow keys, and the header names the file shown, its size, a
+ * note the place opening it gives the file shown (who last edited it, for a plan's picture), beside Copy for a text file or a picture,
  * whatever the place opening it offers for a picture (Add to plan, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
- * `@luke/ui`'s dialog as large as the window allows, its top clear of the
+ * `@luke/ui`'s dialog nearly the window's size, its top clear of the
  * traffic lights, the file fitted inside it edge to edge: a picture or a
  * video up to twice its own pixels, a text file at its reading width. The window dims, Tab stays inside the card, and
  * Escape, a press on the dimmed window or the room around the file, and the way out all close it and
@@ -100,7 +103,10 @@ const SIZE_CLASS = "attachment-viewer-size flex-none text-caption text-muted-for
 const NOTE_CLASS =
   "attachment-viewer-note flex min-w-0 overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)] text-caption text-muted-foreground";
 
-/** What the header's buttons are named. */
+/** What the strip of the message's files is named. */
+const STRIP_LABEL = "Files";
+
+/** What the viewer's buttons are named. */
 const VIEWER_LABEL = {
   PREVIOUS: "Previous file",
   NEXT: "Next file",
@@ -210,6 +216,31 @@ function HeaderButton({
   );
 }
 
+/** Previous or Next, standing either side of the file shown, round in an outline so it reads over any picture's edge. */
+function WalkButton({
+  label,
+  chord,
+  onClick,
+  icon,
+}: {
+  label: string;
+  chord: ShortcutChord;
+  onClick: () => void;
+  icon: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <Tooltip label={label} chord={chord}>
+      <IconButton
+        icon={icon}
+        label={label}
+        variant={BUTTON_VARIANT.OUTLINE}
+        shape={BUTTON_SHAPE.ROUND}
+        onClick={onClick}
+      />
+    </Tooltip>
+  );
+}
+
 /** What a phone's ⋯ copies the file shown as, and what its toast says once it is copied. */
 const COPIED = { TEXT: "Text copied", IMAGE: "Image copied" } as const;
 
@@ -307,24 +338,31 @@ function actionItems(action: ViewerAction, file: FileChip): MenuAction[] {
     : [{ label: action.label, icon, onSelect: () => action.onOpen(address) }];
 }
 
-/** The file shown: the picture, the video playing, its text drawn as every code is, or the icon, name, and size over Download. */
+/**
+ * The file shown: the picture, the video playing, its text drawn as every
+ * code is, or the icon, name, and size over Download; where the files are
+ * walked, all but the text stand clear of the arrows either side.
+ */
 function AttachmentBody({
   file,
   base64,
   text,
   zoom,
+  walking,
 }: {
   file: FileChip;
   base64: string;
   text: string | undefined;
   zoom: ImageZoom;
+  walking: boolean;
 }): React.JSX.Element {
+  const gutter = walking ? " px-viewer-gutter" : "";
   if (attachmentView(file) === ATTACHMENT_VIEW.IMAGE) {
     return (
       // Two fingers anywhere on the frame pinch the picture (`@luke/ui`'s ZoomImage), never the page.
       <div
         ref={zoom.frameRef}
-        className="attachment-viewer-body min-h-0 flex-auto grid touch-none place-items-center overflow-hidden bg-surface"
+        className={`attachment-viewer-body min-h-0 flex-auto grid touch-none place-items-center overflow-hidden bg-surface${gutter}`}
         {...DIALOG_VEIL}
       >
         <ZoomImage zoom={zoom} src={file.url} alt={file.name} />
@@ -335,7 +373,7 @@ function AttachmentBody({
     return (
       // A video plays on the veil, centred, as large as the card leaves it under its header at its own shape.
       <div
-        className="attachment-viewer-body min-h-0 flex-auto grid place-items-center overflow-hidden bg-veil"
+        className={`attachment-viewer-body min-h-0 flex-auto grid place-items-center overflow-hidden bg-veil${gutter}`}
         {...DIALOG_VEIL}
       >
         <VideoPlayer dataUrl={file.url} label={file.name} place={VIDEO_PLAYER_PLACE.VIEWER} />
@@ -359,7 +397,7 @@ function AttachmentBody({
   }
   return (
     <div
-      className="attachment-viewer-body min-h-0 flex-auto flex flex-col items-center justify-center gap-item-gap p-card text-center"
+      className={`attachment-viewer-body min-h-0 flex-auto flex flex-col items-center justify-center gap-item-gap p-card text-center${gutter}`}
       {...DIALOG_VEIL}
     >
       <FileTypeIcon name={file.name} className="size-12" />
@@ -425,6 +463,8 @@ export function AttachmentViewer({
   const walk = (step: number) => onAt((at + step + files.length) % files.length);
   const image = attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
   const video = attachmentView(file) === ATTACHMENT_VIEW.VIDEO;
+  // A phone walks the files from its ⋯ and the arrow keys, with no room beside the file for the arrows or under it for the strip.
+  const walking = !phone && files.length > 1;
   // The arrows walk the message's files, and a picture's zoom keys zoom it;
   // a key's own default, a copy of the lines selected among them, is left alone.
   const walkKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -527,25 +567,6 @@ export function AttachmentViewer({
             {note === undefined || note === null ? null : (
               <span className={`my-0 mr-auto ml-block-gap ${NOTE_CLASS}`}>{note}</span>
             )}
-            {files.length > 1 ? (
-              <div className="flex items-center">
-                <HeaderButton
-                  label={VIEWER_LABEL.PREVIOUS}
-                  chord={VIEWER_CHORD.PREVIOUS}
-                  onClick={() => walk(-1)}
-                  icon={<ChevronLeftIcon aria-hidden="true" />}
-                />
-                <span className="attachment-viewer-place min-w-12 text-center text-caption text-muted-foreground tabular-nums">
-                  {`${String(at + 1)} of ${String(files.length)}`}
-                </span>
-                <HeaderButton
-                  label={VIEWER_LABEL.NEXT}
-                  chord={VIEWER_CHORD.NEXT}
-                  onClick={() => walk(1)}
-                  icon={<ChevronRightIcon aria-hidden="true" />}
-                />
-              </div>
-            ) : null}
             {text === undefined ? null : <CopyTextButton text={text} />}
             {image ? (
               <>
@@ -584,7 +605,57 @@ export function AttachmentViewer({
             />
           </header>
         )}
-        <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
+        {/* The arrows stand either side of the file shown, centred down it, in the room its body keeps clear for them. */}
+        <div className="attachment-viewer-stage relative flex min-h-0 flex-auto flex-col">
+          <AttachmentBody
+            key={at}
+            file={file}
+            base64={base64}
+            text={text}
+            zoom={zoom}
+            walking={walking}
+          />
+          {walking ? (
+            <>
+              <span className="absolute top-1/2 left-luke-12 -translate-y-1/2">
+                <WalkButton
+                  label={VIEWER_LABEL.PREVIOUS}
+                  chord={VIEWER_CHORD.PREVIOUS}
+                  onClick={() => walk(-1)}
+                  icon={<ChevronLeftIcon aria-hidden="true" />}
+                />
+              </span>
+              <span className="absolute top-1/2 right-luke-12 -translate-y-1/2">
+                <WalkButton
+                  label={VIEWER_LABEL.NEXT}
+                  chord={VIEWER_CHORD.NEXT}
+                  onClick={() => walk(1)}
+                  icon={<ChevronRightIcon aria-hidden="true" />}
+                />
+              </span>
+            </>
+          ) : null}
+        </div>
+        {walking ? (
+          <div
+            className="attachment-viewer-strip flex flex-none justify-center border-t border-border bg-surface px-list-inset py-luke-4"
+            {...DIALOG_VEIL}
+          >
+            <ThumbStrip
+              label={STRIP_LABEL}
+              items={files.map((each) => ({
+                name: each.name,
+                image: attachmentView(each) === ATTACHMENT_VIEW.IMAGE ? each.url : undefined,
+                glyph:
+                  attachmentView(each) === ATTACHMENT_VIEW.IMAGE ? undefined : (
+                    <FileTypeIcon name={each.name} />
+                  ),
+              }))}
+              at={at}
+              onPick={onAt}
+            />
+          </div>
+        ) : null}
       </div>
     </Dialog>
   );
