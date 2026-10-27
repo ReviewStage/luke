@@ -367,7 +367,7 @@ export function endLineParts(
       return { words: "Stopped", failed: false };
     case CODING_AGENT_STATUS.FAILED: {
       if (ranDirectly !== undefined)
-        return { words: ranDirectlyWords(ranDirectly.folder), failed: true };
+        return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true };
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);
       return { words: words === undefined ? "Failed" : `Failed: ${words}`, failed: true };
