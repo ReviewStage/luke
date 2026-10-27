@@ -57,6 +57,7 @@ const STOOD_IN = [
   "sed",
   "tee",
   "visudo",
+  "ls",
 ] as const;
 
 /**
@@ -137,10 +138,10 @@ test("the image gets Playwright where every user reaches it, Claude Code, Codex,
   assert.equal(exitCode, 0, stderr);
 
   const installs = [
-    // Playwright and its browsers as root's, where every user reaches them, never the default user's home.
+    // Playwright and its browsers as root's, the browsers in its own package, where every user reaches them, never the default user's home.
     "sudo -n env HOME=/root npm install --global --prefix /usr/local --no-audit --no-fund playwright@1.64.1",
-    "sudo -n env HOME=/root PLAYWRIGHT_BROWSERS_PATH=/ms-playwright /usr/local/bin/playwright install --with-deps chromium",
-    "sudo -n chmod -R a+rX /ms-playwright",
+    "sudo -n env HOME=/root PLAYWRIGHT_BROWSERS_PATH=0 /usr/local/bin/playwright install --with-deps chromium",
+    "sudo -n chmod -R a+rX /usr/local/lib/node_modules/playwright/node_modules/playwright-core/.local-browsers",
     "sudo -n dnf install -y bubblewrap socat",
     "sudo -n env HOME=/root npm install --prefix /opt/luke/claude-agent-sdk --no-audit --no-fund --save-exact @anthropic-ai/claude-agent-sdk@0.3.304",
     "sudo -n ln -sfn /opt/luke/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude /usr/local/bin/claude",

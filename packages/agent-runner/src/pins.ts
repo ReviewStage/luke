@@ -29,22 +29,25 @@ export const SHARED_FILES_DIRECTORY = "/tmp/luke";
 /**
  * Playwright as the image installs it, where every user of every machine
  * reaches it: the package and its `playwright` command under `/usr/local`,
- * on every PATH and in `NODE_PATH`'s usual root, and its browsers in one
- * world-readable folder, the one Playwright's own image uses, rather than
- * the cache of the user who built the image, whose home neither the cloud's
- * `agent` nor a device's own uid in its VM reads. Playwright looks for its
- * browsers in its own user's cache unless `PLAYWRIGHT_BROWSERS_PATH` says
- * otherwise, so the runner hands both harnesses' commands that variable
- * (`SANDBOX_TOOL_ENV`).
+ * on every PATH and in `NODE_PATH`'s usual root, and its browsers inside its
+ * own playwright-core, Playwright's hermetic install, rather than in the
+ * cache of the user who built the image, whose home neither the cloud's
+ * `agent` nor a device's own uid in its VM reads. Each Playwright looks in
+ * its own package for its browsers only where `PLAYWRIGHT_BROWSERS_PATH` is
+ * `0`, so the runner hands both harnesses' commands that (`SANDBOX_TOOL_ENV`),
+ * which also has a repository's own Playwright install its browsers in its
+ * own `node_modules`, which the agent writes, rather than in a shared folder
+ * it may not. `BROWSERS` is where npm's global install puts them, which the
+ * image checks and Luke's own browser reads.
  */
 export const PLAYWRIGHT_PIN = {
   VERSION: "1.64.1",
   PREFIX: "/usr/local",
-  BROWSERS: "/ms-playwright",
+  BROWSERS: "/usr/local/lib/node_modules/playwright/node_modules/playwright-core/.local-browsers",
 } as const;
 
-/** What every command a harness runs is handed of the image's tools, in the cloud and in a device's VM alike. */
-export const SANDBOX_TOOL_ENV = { PLAYWRIGHT_BROWSERS_PATH: PLAYWRIGHT_PIN.BROWSERS } as const;
+/** What every command a harness runs is handed of the image's tools, in the cloud and in a device's VM alike: each Playwright's browsers in its own package (`PLAYWRIGHT_PIN`). */
+export const SANDBOX_TOOL_ENV = { PLAYWRIGHT_BROWSERS_PATH: "0" } as const;
 
 /** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. */
 export const RUNNER_DIRECTORY = "/opt/luke/agent-runner";
