@@ -75,10 +75,7 @@ plan); an item has not
  * has the plan's tab alone,
  * and what arrives on it adds its tab at the strip's end as it arrives,
  * never taking the chosen one's place. Beside the window's Inbox the panel
- * draws none of them but the Inbox, and that only while a channel's thread
- * stands open beside its stream, the tab showing the thread and closing
- * with it, a choice of the thread's rather than the task's (`OpenTask`'s
- * `thread`). The developer's own choices lie
+ * draws none of them. The developer's own choices lie
  * over that, per task: a tab they open from the "+" stands on that task
  * though it holds nothing, and one they close stays closed on that task however
  * much more arrives, until they or Luke's next drawing or snippet open it again. The tab chosen is the
@@ -719,13 +716,6 @@ export interface OpenTask {
   holds: TaskHolds;
   /** Whether the panel draws none of the task's fixed tabs, standing beside the window's Inbox rather than the task's page, which draws what they show. */
   bare?: true | undefined;
-  /**
-   * Whether a channel's thread stands open beside its stream, which the bare
-   * panel draws as its one fixed tab, the Inbox, as a task's page draws its
-   * threads there. Note that the tab is the open thread's rather than any
-   * choice of the task's, so opening or closing it keeps nothing on the task.
-   */
-  thread?: true | undefined;
 }
 
 /** What the task holds for the tabs: its id and its kinds, its agents whose tabs are open, or nothing while unread, the brain's workers its work holds, by the call that started each, and the files shown on it. */
@@ -756,8 +746,8 @@ const NO_PAGES: readonly string[] = [];
 /** A task with no Changes tab open, the same array every render. */
 const NO_CHANGES: readonly ChangesStripTab[] = [];
 
-/** The bare panel's fixed tabs while a channel's thread stands open beside it: the Inbox alone, the same array every render. */
-const THREAD_TABS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX];
+/** The bare panel's fixed tabs: none, the same array every render. */
+const NO_FIXED: readonly FixedSidePanelTab[] = [];
 
 /** A task no tab was opened or moved on. */
 const NO_ORDER: readonly SidePanelTab[] = [];
@@ -776,7 +766,7 @@ function orderOn(held: HeldState, taskId: string | undefined): readonly SidePane
  * only on a task that may draw one.
  */
 function drawnFixed(held: HeldState, task: OpenTask): readonly FixedSidePanelTab[] {
-  if (task.bare === true) return task.thread === true ? THREAD_TABS : [];
+  if (task.bare === true) return NO_FIXED;
   const chosen = taskTabs(held, task.id);
   const open = held.tabs.filter((tab) =>
     tab === SIDE_PANEL_TAB.INBOX
@@ -965,7 +955,7 @@ function withTab(
   taskId: string | undefined,
   bare = false,
 ): HeldState {
-  // Note that a bare panel's fixed tab is a channel's thread's, so the task keeps no choice of it.
+  // Note that a bare panel draws no fixed tab, so the task keeps no choice of one.
   const opened = isFixedTab(tab)
     ? bare
       ? held
@@ -1386,12 +1376,8 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
                     }
                   : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
-  // Note that a bare panel's thread tab closes with its thread, which its holder closes as it asks this, so it is left out of what stands,
-  // and the task's own Inbox tab keeps its place among those viewed, since it was never closed.
-  const threadTab = drawn.task.bare === true && isFixedTab(tab);
-  const forgotten = threadTab ? closed : withoutViewed(closed, drawn.task.id, tab);
-  const after = threadTab ? { ...drawn, task: { ...drawn.task, thread: undefined } } : drawn;
-  const left = stripOf(forgotten, after);
+  const forgotten = withoutViewed(closed, drawn.task.id, tab);
+  const left = stripOf(forgotten, drawn);
   // Note that only a close that empties the strip shuts the panel, because a
   // tab the strip never drew may close without the developer seeing it go.
   const shut = left.length === 0 && stripOf(held, drawn).length > 0;
@@ -1921,12 +1907,7 @@ export function useSidePanel(
   // chosen on this very task and stands in for nothing: a file's waits for
   // the task's code to be read, however much arrives before it. A kind that
   // arrived stands at the strip's end, as a tab opened does (`firstHeld`).
-  if (
-    seen.id !== taskId ||
-    seen.bare !== task.bare ||
-    seen.thread !== task.thread ||
-    !sameHolds(seen.holds, task.holds)
-  ) {
+  if (seen.id !== taskId || seen.bare !== task.bare || !sameHolds(seen.holds, task.holds)) {
     setSeen(task);
     const before =
       seen.id === taskId && arrived(seen.holds, task.holds) ? shownFor(seen.holds) : undefined;

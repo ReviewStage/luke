@@ -4,15 +4,23 @@ import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { searchTokens } from "@luke/ui/search-tokens";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAct } from "../act.js";
-import { useInboxTaskFolds, useInboxViewChoices } from "../desktop/folded-groups.js";
+import {
+  type InboxViewChoices,
+  useInboxTaskFolds,
+  useInboxViewChoices,
+} from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
+  channelGroups,
+  EVERYONES,
   firstChoice,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
   type InboxGroup,
   type InboxListed,
+  type InboxShow,
+  type InboxWhose,
   inboxCounts,
   listedItems,
   type TasklessInboxAgent,
@@ -40,6 +48,13 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * Its search, the words typed in the list's head, is held here too, the item
  * the pane shows keeping its place among the steps, as it does under any
  * scope (`inboxList`); and whether a New thread stands in the pane.
+ *
+ * Narrowed to a channel, it lists and counts that channel's items alone
+ * (`channelGroups`), under a scope of the channel's own: All of everyone's
+ * each time a channel opens, since a channel is everyone's threads on one
+ * topic, and whatever the reader turns it to while that channel stays
+ * shown, never kept. Its grouping, its order, and the rest of its view are
+ * the Inbox's own.
  */
 
 /** A New thread just opened, before the Inbox it opened on has named the item it stands over. */
@@ -74,6 +89,33 @@ function holdingGroups(
   });
 }
 
+/** A channel's own scope, as the reader last turned it while that channel stood. */
+interface ChannelScope {
+  readonly channelId: string;
+  readonly show: InboxShow;
+  readonly whose: InboxWhose;
+}
+
+/**
+ * The Inbox's view choices, narrowed to a channel where one is given: its
+ * scope the channel's own, All of everyone's as it opens, held only while
+ * it stands; the Inbox's kept choices where none is.
+ */
+function useScopedChoices(channelId: string | undefined): InboxViewChoices {
+  const kept = useInboxViewChoices();
+  const [scope, setScope] = useState<ChannelScope | undefined>(undefined);
+  if (channelId === undefined) return kept;
+  const standing =
+    scope?.channelId === channelId ? scope : { channelId, show: INBOX_SHOW.ALL, whose: EVERYONES };
+  return {
+    ...kept,
+    show: standing.show,
+    onShow: (show) => setScope({ ...standing, show }),
+    whose: standing.whose,
+    onWhose: (whose) => setScope({ ...standing, whose }),
+  };
+}
+
 /** The choice that opens a listed item: by its task, or by its agent where it has none. */
 export function choiceOf({ holder, item }: InboxListed): InboxChoice {
   return holder.kind === INBOX_HOLDER.TASK
@@ -82,13 +124,14 @@ export function choiceOf({ holder, item }: InboxListed): InboxChoice {
 }
 
 /**
- * The window's Inbox as it is read and listed, and its chosen item; see the
- * module's head, its list held still while it is shown (`use-held-inbox-list.ts`).
+ * The window's Inbox as it is read and listed, narrowed to `channelId`
+ * where one is given, and its chosen item; see the module's head, its list
+ * held still while it is shown (`use-held-inbox-list.ts`).
  */
-export function useInboxListing(tasks: TasksControl) {
+export function useInboxListing(tasks: TasksControl, channelId?: string) {
   const view = tasks.inboxView;
   const { act } = useAct();
-  const choices = useInboxViewChoices();
+  const choices = useScopedChoices(channelId);
   const folds = useInboxTaskFolds();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
@@ -172,10 +215,14 @@ export function useInboxListing(tasks: TasksControl) {
         ]
       : [];
   // Note that every read here draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
-  const standing: readonly InboxGroup[] = [
+  const everyChannel: readonly InboxGroup[] = [
     ...taskEntries,
     ...tasklessGroups([...waitingTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
   ];
+  const standing =
+    channelId === undefined
+      ? everyChannel
+      : channelGroups(everyChannel, channelId, asked?.opened === true ? asked.itemId : undefined);
   // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
   const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
   // A New thread stands in the pane over the item chosen as it opened, and gives way as soon as another is chosen.

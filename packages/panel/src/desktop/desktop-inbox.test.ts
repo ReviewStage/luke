@@ -20,11 +20,7 @@ import {
   type CodingAgentListAnswer,
   INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
@@ -80,13 +76,8 @@ import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import {
-  type ChannelPlaceControl,
-  chooseChannel,
-  leaveChannel,
-  useChannelPlace,
-} from "../tasks/use-channels.js";
-import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
+import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
+import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
@@ -568,57 +559,6 @@ interface Asked {
   newTasks: number;
 }
 
-test("a channel's post names an untitled agent by the automation that started it, as its thread was read with it, where its task's row names the agent by its model alone", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  const untitled: TaskSummary = {
-    ...BILLING,
-    agents: {
-      ...(BILLING.agents ?? assert.fail("the task's row names its agent")),
-      agents: [
-        {
-          id: AGENT.id,
-          title: null,
-          model: AGENT.model,
-          effort: AGENT.effort,
-          status: AGENT.status,
-        },
-      ],
-    },
-  };
-  const previous = fakeActsAnswer();
-  const done = (value: unknown): Promise<FakeActAnswer> =>
-    Promise.resolve({ status: FAKE_ANSWER.DONE, value } as FakeActAnswer);
-  fakeActs({
-    ...appBridge(),
-    act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CHANNELS_LIST) return done({ channels: [GENERAL] });
-      // Note that no read of the open thread's agents holds it, as for a post on a task other than the open thread's.
-      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: [] });
-      if (request.kind === ACT_KIND.CHANNELS_THREADS) {
-        return done({
-          threads: [
-            {
-              ...THRESHOLD,
-              channelId: GENERAL.id,
-              agent: { title: null, model: AGENT.model, automationName: "Nightly triage" },
-            },
-          ],
-        });
-      }
-      return previous(request);
-    },
-  });
-  const { page } = mount([], { channels: true, standing: [untitled, INVITES] });
-  await settle();
-
-  const post =
-    page.querySelector<HTMLElement>(".channel-stream [data-channel-post]") ??
-    assert.fail("the post is drawn");
-  assert.match(post.textContent ?? "", /^Nightly triage/u);
-});
-
 /** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
 function mount(
   firstTaskless: readonly AppInboxTasklessItem[] = [],
@@ -646,7 +586,7 @@ function mount(
     readerKnown?: boolean;
     /** Whether the window's toasts stand beside the Inbox, where the test presses one's action. */
     toasts?: boolean;
-    /** Whether the page shows #general's stream, chosen as the sidebar's row chooses it, the side panel the chosen thread's, as the tasks tab holds it beside a channel's stream. */
+    /** Whether the Inbox is narrowed to #general, chosen as the sidebar's row chooses it. */
     channels?: boolean;
   } = {},
 ) {
@@ -665,7 +605,6 @@ function mount(
     // The drafts are handed to the account signed in, none here, as the panel's root hands them.
     useDraftsOwner(undefined);
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
-    const threadPanel = useThreadPanel(chosen);
     // Whether the list was asked for, which the window keeps as the Tasks tab does.
     const [listAsked, setListAsked] = useState(false);
     const [inboxOpen, setOpen] = useState(true);
@@ -691,14 +630,12 @@ function mount(
       workspace: listedWorkspace,
       tasks: listed,
       listRead,
-      sidePanel: channels
-        ? threadPanel
-        : (sidePanel ?? {
-            ...tasksControl().sidePanel,
-            onPreview: (tab) => {
-              if (isTranscriptTab(tab)) asked.previewedAgents.push(tab.transcript);
-            },
-          }),
+      sidePanel: sidePanel ?? {
+        ...tasksControl().sidePanel,
+        onPreview: (tab) => {
+          if (isTranscriptTab(tab)) asked.previewedAgents.push(tab.transcript);
+        },
+      },
       inbox: [
         { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
         { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
@@ -765,35 +702,6 @@ function mount(
   if (channels) chooseChannel(GENERAL.id);
   act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
-}
-
-/** The side panel beside a channel's stream as the window last drew it. */
-let threadPanelNow: SidePanelControl | undefined;
-
-/** The channel the window shows and the thread open in it, as the window last drew them, which a test moves as a link would. */
-let channelPlaceNow: ChannelPlaceControl | undefined;
-
-/** The side panel as the tasks tab holds it beside a channel's stream: the chosen item's task's, its Inbox tab the thread open there (`use-tasks-tab.ts`). */
-function useThreadPanel(chosen: InboxChoice | undefined): SidePanelControl {
-  const place = useChannelPlace();
-  channelPlaceNow = place;
-  const { threadId } = place;
-  const panel = useSidePanel(
-    undefined,
-    {
-      id: chosen === undefined ? undefined : "taskId" in chosen ? chosen.taskId : chosen.agentId,
-      holds: {},
-      bare: true,
-      thread: threadId !== undefined && chosen?.itemId === threadId ? true : undefined,
-    },
-    [],
-    [],
-    [],
-    [],
-    [AGENT.id],
-  );
-  threadPanelNow = panel;
-  return panel;
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -9356,7 +9264,7 @@ test("on a phone New thread is headed by its way back's glyph, its title centred
   assert.equal(head.querySelector("h1")?.textContent, "New thread");
 });
 
-/** The workspace's #general, where the two tasks' threads are posted. */
+/** The workspace's #general, which every thread naming no channel lives in. */
 const GENERAL: Channel = {
   id: "c0ffee00-0000-4000-8000-000000000001",
   name: "general",
@@ -9365,167 +9273,6 @@ const GENERAL: Channel = {
   createdAt: 1,
   waiting: 0,
 };
-
-test("an unread post wears the dot, and its ⋯ offers the thread's acts, its Move to channel moving it to the channel picked", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  const moves: { threadId: string; channelId: string }[] = [];
-  const previous = fakeActsAnswer();
-  const done = (value: unknown): Promise<FakeActAnswer> =>
-    Promise.resolve({ status: FAKE_ANSWER.DONE, value } as FakeActAnswer);
-  const threads = [
-    { ...THRESHOLD, unread: true, channelId: GENERAL.id },
-    { ...EXPIRY, channelId: GENERAL.id },
-  ];
-  fakeActs({
-    ...appBridge(),
-    act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CHANNELS_LIST) {
-        return done({ channels: [GENERAL, APP_CHANNEL] });
-      }
-      if (request.kind === ACT_KIND.CHANNELS_THREADS) return done({ threads });
-      if (request.kind === ACT_KIND.CHANNELS_MOVE) {
-        moves.push(request.payload);
-        return done({ thread: { ...threads[0], channelId: request.payload.channelId } });
-      }
-      return previous(request);
-    },
-  });
-  const { page } = mount([], { channels: true });
-  await settle();
-  const post = (title: string) =>
-    [...page.querySelectorAll<HTMLElement>(".channel-stream [data-channel-post]")].find((each) =>
-      each.textContent?.includes(title),
-    ) ?? assert.fail(`the post ${title} is drawn`);
-  assert.ok(
-    post(THRESHOLD.title).querySelector(".luke-unread-dot"),
-    "the unread post wears the dot",
-  );
-  assert.equal(post(EXPIRY.title).querySelector(".luke-unread-dot"), null, "a read one does not");
-
-  act(() =>
-    (
-      post(THRESHOLD.title).querySelector<HTMLElement>('button[aria-label="Thread actions"]') ??
-      assert.fail("the post has its ⋯")
-    ).click(),
-  );
-  assert.deepEqual(menuWords(), [
-    "Mark as read",
-    "—",
-    "Copy link",
-    "—",
-    `Open task${BILLING.name}`,
-    "Open agent",
-    "—",
-    "Move to channel…",
-    "—",
-    "Resolve without answering",
-  ]);
-  act(() => menuItem("Move to channel…").click());
-  await settle();
-  const move =
-    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-      (each) => each.textContent === "Move to #app",
-    ) ?? assert.fail("the dialog offers the other channel");
-  act(() => move.click());
-  await settle();
-  assert.deepEqual(moves, [{ threadId: THRESHOLD.id, channelId: APP_CHANNEL.id }]);
-});
-
-test("a post pressed in a channel's stream opens its thread in the side panel as its Thread tab, another post's press swaps the panel to its thread, and hiding the panel closes the thread while the stream stands as it stood, its look not yet stamped", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  // Note that the stream shows everyone's threads, so the two tasks' posts stand whoever owns them.
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  const looks: string[] = [];
-  const previous = fakeActsAnswer();
-  const done = (value: unknown): Promise<FakeActAnswer> =>
-    Promise.resolve({ status: FAKE_ANSWER.DONE, value } as FakeActAnswer);
-  fakeActs({
-    ...appBridge(),
-    act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CHANNELS_LIST) return done({ channels: [GENERAL] });
-      if (request.kind === ACT_KIND.CHANNELS_THREADS) {
-        return done({
-          threads: [THRESHOLD, EXPIRY].map((item) => ({ ...item, channelId: GENERAL.id })),
-        });
-      }
-      if (request.kind === ACT_KIND.CHANNELS_LOOK) {
-        looks.push(request.payload.channelId);
-        return done({ channels: [GENERAL] });
-      }
-      return previous(request);
-    },
-  });
-  const { page } = mount([], { channels: true });
-  await settle();
-  const stream = page.querySelector(".channel-stream") ?? assert.fail("the stream is drawn");
-  const panel = () => threadPanelNow ?? assert.fail("the panel is held");
-  const press = (title: string) =>
-    act(() =>
-      (
-        stream.querySelector<HTMLElement>(`button[aria-label="Open ${title}"]`) ??
-        assert.fail(`the post ${title} is drawn`)
-      ).click(),
-    );
-  const threadBeside = () => page.querySelector("aside.side-panel")?.textContent ?? "";
-  const chosenPost = () =>
-    stream.querySelector("[data-channel-post][data-chosen]")?.textContent ?? undefined;
-  assert.equal(panel().open, false, "nothing stands beside a stream no thread is open in");
-
-  press(THRESHOLD.title);
-  await settle();
-  assert.equal(panel().open, true);
-  assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX, "the thread is the panel's Inbox tab");
-  assert.deepEqual(
-    [...page.querySelectorAll('aside.side-panel [role="tab"]')].map((tab) => tab.textContent),
-    ["Thread"],
-    "the tab is named for the thread, never the Inbox",
-  );
-  assert.match(threadBeside(), /Alert at 80%\?/u);
-  assert.match(chosenPost() ?? "", /Alert at 80%\?/u);
-
-  press(EXPIRY.title);
-  await settle();
-  assert.equal(panel().tab, SIDE_PANEL_TAB.INBOX);
-  assert.match(threadBeside(), /Expire after 7 days\?/u);
-  assert.doesNotMatch(threadBeside(), /Alert at 80%\?/u, "the panel swapped to the other thread");
-
-  act(() => panel().onToggle());
-  await settle();
-  assert.equal(chosenPost(), undefined, "hiding the panel closed the thread");
-  assert.equal(page.querySelector(".channel-stream"), stream, "the stream stood throughout");
-  assert.deepEqual(looks, [], "the stream was never left, so its look is not stamped");
-  act(() => panel().onToggle());
-  assert.deepEqual(panel().strip, [], "the thread's tab went with it");
-});
-
-test("a thread open beside a channel's stream leads its path with the channel's glyph and bare name, then its task and agent, and an agent no automation names under the channel alone", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  agentInboxes = new Map([[STRAY_AGENT, [BUMP]]]);
-  answerChannels({ threads: () => Promise.resolve(threadsPage([THRESHOLD, BUMP])) });
-  const { page } = mount([{ ...waitingTaskless(BUMP), automationId: null, automationName: null }], {
-    channels: true,
-  });
-  await settle();
-  const open = async (title: string) => {
-    act(() => page.querySelector<HTMLElement>(`button[aria-label="Open ${title}"]`)?.click());
-    await settle();
-  };
-
-  await open(THRESHOLD.title);
-  assert.deepEqual(pathWords(page), ["general", "Billing usage alerts", "Alerts"]);
-  assert.ok(
-    page.querySelector('.inbox-view-items nav[aria-label="Path"] li .lucide-hash'),
-    "the channel's crumb wears its glyph",
-  );
-
-  await open(BUMP.title);
-  assert.deepEqual(pathWords(page), ["general", "Coding agent"]);
-});
 
 /** #app, a second standing channel of the workspace. */
 const APP_CHANNEL: Channel = {
@@ -9536,15 +9283,6 @@ const APP_CHANNEL: Channel = {
   createdAt: 2,
   waiting: 0,
 };
-
-/** A page of #general's threads as the service answers it, the two tasks' threads by default. */
-function threadsPage(
-  threads: readonly InboxItem[] = [THRESHOLD, EXPIRY],
-  older?: string,
-): { readonly threads: readonly unknown[]; readonly older?: string } {
-  const page = { threads: threads.map((thread) => ({ ...thread, channelId: GENERAL.id })) };
-  return older === undefined ? page : { ...page, older };
-}
 
 /** A follow of the channels a test pushes on: each word pushed is handed to the window as the host hands it. */
 function channelFollow() {
@@ -9578,19 +9316,15 @@ function channelFollow() {
 
 /**
  * Answers the channels' acts as a test says, every other act as before:
- * the channels listed, each page of #general's threads by the thread it
- * reads before, the latest page by none, and the follow where one is given.
+ * the channels listed, a thread moved, and the follow where one is given.
  */
 function answerChannels(answers: {
   channels?: () => readonly Channel[];
-  threads?: (before: string | undefined) => Promise<unknown>;
   follow?: AsyncIterableIterator<unknown>;
-  /** A channel made or archived, before the channels as they then stand are answered. */
+  /** A channel made, archived, or unarchived, or a thread moved, before the service answers it. */
   onWrite?: (write: AnyAct) => void;
   /** The workspace's archived channels, or why their read fails; the read is refused where none are given. */
   archived?: () => readonly ArchivedChannel[] | { readonly failure: string };
-  /** Why the service refuses an unarchive, where it does. */
-  unarchiveRefused?: string;
 }): void {
   const previous = fakeActsAnswer();
   const done = (value: unknown): Promise<FakeActAnswer> =>
@@ -9608,17 +9342,11 @@ function answerChannels(answers: {
         request.kind === ACT_KIND.CHANNELS_UNARCHIVE
       ) {
         answers.onWrite?.(request);
-        if (
-          request.kind === ACT_KIND.CHANNELS_UNARCHIVE &&
-          answers.unarchiveRefused !== undefined
-        ) {
-          return done({ failure: answers.unarchiveRefused });
-        }
         return done({ channels: answers.channels?.() ?? [GENERAL] });
       }
-      if (request.kind === ACT_KIND.CHANNELS_THREADS) {
-        const read = answers.threads?.(request.payload.before) ?? Promise.resolve(threadsPage());
-        return read.then((value) => ({ status: FAKE_ANSWER.DONE, value }) as FakeActAnswer);
+      if (request.kind === ACT_KIND.CHANNELS_MOVE) {
+        answers.onWrite?.(request);
+        return done({ thread: { ...THRESHOLD, channelId: request.payload.channelId } });
       }
       if (request.kind === ACT_KIND.CHANNELS_ARCHIVED && answers.archived !== undefined) {
         const archived = answers.archived();
@@ -9632,128 +9360,185 @@ function answerChannels(answers: {
   });
 }
 
-/** The posts a channel's stream draws, by their titles, oldest first. */
-function postTitles(page: Element): readonly string[] {
+/** The rows the list draws, by their titles, in its order. */
+function rowTitles(page: HTMLElement): (string | null | undefined)[] {
   return [
-    ...page.querySelectorAll<HTMLElement>(
-      '.channel-stream [data-channel-post] button[aria-label^="Open "]',
-    ),
-  ].map((open) => open.ariaLabel?.slice(5) ?? "");
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
+  ].map((row) => row.querySelector(ROW_TITLE)?.textContent);
 }
 
-/** The post of the thread open beside the stream, by its title. */
-function chosenPostTitle(page: Element): string | undefined {
-  return page
-    .querySelector('.channel-stream [data-channel-post][data-chosen] button[aria-label^="Open "]')
-    ?.ariaLabel?.slice(5);
+/** The words after the list's head's title: a channel's purpose, or when it was archived. */
+function headDetail(page: HTMLElement): string | null | undefined {
+  return page.querySelector(".inbox-tasks .luke-toolbar-detail")?.textContent;
 }
 
-test("a channel's Needs me with nothing waiting on the reader offers Show everyone, whose press shows every thread", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("needs-me"));
-  answerChannels({ threads: () => Promise.resolve(threadsPage([noticeOf(THRESHOLD)])) });
-  const { page } = mount([], { channels: true });
-  await settle();
-  assert.deepEqual(postTitles(page), []);
+/** The sidebar's channel rows under its Inbox row, as a reader meets them: each one's words, its count among them. */
+function sidebarChannels(page: HTMLElement): (string | null)[] {
+  const group =
+    page.querySelector('.sidebar-places [role="group"][aria-label="Channels"]') ??
+    assert.fail("the channels stand among the sidebar's places");
+  return [...group.querySelectorAll(".luke-nav-item")].map((row) => row.textContent);
+}
 
-  act(() => buttonSaying("Show everyone").click());
-  await settle();
-  assert.deepEqual(postTitles(page), [THRESHOLD.title]);
-});
-
-test("K and J open the thread above and below the one open, through the threads the stream's view shows, the thread's bar counting where it stands; either opens the latest where none is open; and Escape closes the thread", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  answerChannels({});
-  const { page } = mount([], { channels: true });
-  await settle();
-  assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title]);
-
-  act(() => runAppCommand(APP_COMMAND.NEXT_INBOX_ITEM));
-  await settle();
-  assert.equal(chosenPostTitle(page), EXPIRY.title, "J with none open opens the latest");
-  assert.match(page.querySelector("aside.side-panel")?.textContent ?? "", /2 of 2/u);
-
-  act(() => runAppCommand(APP_COMMAND.PREVIOUS_INBOX_ITEM));
-  await settle();
-  assert.equal(chosenPostTitle(page), THRESHOLD.title);
-  assert.match(page.querySelector("aside.side-panel")?.textContent ?? "", /1 of 2/u);
+/** Types `words` into a field as a reader would. */
+function typeInto(field: HTMLInputElement | null, words: string): void {
+  if (field === null) assert.fail("the field stands");
   act(() => {
-    assert.equal(
-      runAppCommand(APP_COMMAND.PREVIOUS_INBOX_ITEM),
-      false,
-      "K at the oldest goes nowhere",
-    );
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
 
-  act(() => runAppCommand(APP_COMMAND.INBOX_LIST));
-  await settle();
-  assert.equal(chosenPostTitle(page), undefined, "Escape closed the thread");
-  assert.ok(page.querySelector(".channel-stream"), "the stream stands");
-});
+/** The button standing anywhere in the window whose words are `words`. */
+function buttonSaying(words: string): HTMLButtonElement {
+  return (
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === words,
+    ) ?? assert.fail(`a button says ${words}`)
+  );
+}
 
-test("on a phone, Back from a thread opened in a channel's stream goes back to the stream", async () => {
+test("a channel narrows the Inbox to its own threads, everyone's, under its name and purpose", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  answerChannels({});
-  const { page } = mount([], { channels: true, room: SHELL_ROOM.NARROW });
+  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
+  inboxes = new Map([
+    [
+      BILLING.id,
+      [
+        { ...THRESHOLD, channelId: GENERAL.id, startedBy: TEAMMATE },
+        { ...RETRY, channelId: APP_CHANNEL.id },
+      ],
+    ],
+    [INVITES.id, [{ ...EXPIRY, channelId: GENERAL.id }]],
+  ]);
+  const { page } = mount([], { channels: true });
   await settle();
-  act(() =>
-    page.querySelector<HTMLElement>(`button[aria-label="Open ${THRESHOLD.title}"]`)?.click(),
-  );
-  await settle();
-  const stream = () => page.querySelector<HTMLElement>(".channel-stream");
-  assert.equal(stream()?.hidden, true, "the thread stands in the stream's place");
 
-  act(() => runAppCommand(APP_COMMAND.BACK));
-  await settle();
-  assert.equal(stream()?.hidden, false, "Back gave the stream its place again");
+  assert.equal(headTitle(page), "#general");
+  assert.equal(headDetail(page), GENERAL.purpose);
+  assert.deepEqual(
+    rowTitles(page),
+    [EXPIRY.title, THRESHOLD.title],
+    "#general's threads alone, a teammate's among them, the latest first",
+  );
 });
 
-test("on a phone, a thread whose agent's inbox could not be read says so in the stream's place, under the way back to the stream", async () => {
+test("a New thread started while a channel is shown is moved into it", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  pageAgents = new Map([[AGENT.id, AGENT]]);
-  agentReadFails = true;
-  answerChannels({ threads: () => Promise.resolve(threadsPage([THRESHOLD])) });
-  const { page } = mount([], { channels: true, holding: [], room: SHELL_ROOM.NARROW });
+  const moves: unknown[] = [];
+  answerChannels({
+    channels: () => [GENERAL, APP_CHANNEL],
+    onWrite: (write) => {
+      if (write.kind === ACT_KIND.CHANNELS_MOVE) moves.push(write.payload);
+    },
+  });
+  inboxes = new Map([[BILLING.id, [{ ...THRESHOLD, channelId: APP_CHANNEL.id }]]]);
+  heldStarts([AGENT]);
+  const { page } = mount();
+  chooseChannel(APP_CHANNEL.id);
   await settle();
-  act(() =>
-    page.querySelector<HTMLElement>(`button[aria-label="Open ${THRESHOLD.title}"]`)?.click(),
-  );
-  await settle();
-  const stream = () => page.querySelector<HTMLElement>(".channel-stream");
-  assert.equal(stream()?.hidden, true, "the thread stands in the stream's place");
-  assert.match(page.textContent ?? "", /This thread could not be read\./u);
 
+  const pane = await openNewThread(page);
+  typeInComposer(pane, "Draft the annual plan's line too.");
   act(() =>
     (
-      [...page.querySelectorAll<HTMLElement>("button")].find(
-        (button) =>
-          button.getAttribute("aria-label") === "#general" || button.textContent === "#general",
-      ) ?? assert.fail("the thread's head offers the way back")
+      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+      assert.fail("the box has a Send")
     ).click(),
   );
   await settle();
-  assert.equal(stream()?.hidden, false, "the way back gave the stream its place again");
+
+  assert.deepEqual(moves, [{ threadId: STARTED.id, channelId: APP_CHANNEL.id }]);
 });
 
-test("a channel archived or unknown says so in the stream's place, with the way to #general", async () => {
+test("with Channels on, a row's ⋯ moves its thread to the channel picked", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  const moves: unknown[] = [];
+  answerChannels({
+    channels: () => [GENERAL, APP_CHANNEL],
+    onWrite: (write) => {
+      if (write.kind === ACT_KIND.CHANNELS_MOVE) moves.push(write.payload);
+    },
+  });
+  inboxes = new Map([[BILLING.id, [{ ...THRESHOLD, channelId: GENERAL.id }]]]);
+  const { page } = mount();
+  await settle();
+
+  act(() => {
+    rowNamed(page, THRESHOLD.title).dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+  });
+  act(() => menuItem("Move to channel…").click());
+  await settle();
+  act(() => buttonSaying("Move to #app").click());
+  await settle();
+
+  assert.deepEqual(moves, [{ threadId: THRESHOLD.id, channelId: APP_CHANNEL.id }]);
+});
+
+test("the sidebar lists the channels under the Inbox's row, each with what waits on the reader, and a press narrows the Inbox to one", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  const project: Channel = {
+    ...APP_CHANNEL,
+    id: "c0ffee00-0000-4000-8000-000000000003",
+    name: "launch",
+    project: true,
+  };
+  answerChannels({ channels: () => [project, { ...GENERAL, waiting: 2 }, APP_CHANNEL] });
+  const { page } = mount([], { withSidebar: true });
+  await settle();
+
+  assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch", "Add channel"]);
+  act(() =>
+    (
+      [...page.querySelectorAll<HTMLButtonElement>('[aria-label="Channels"] .luke-nav-item')].find(
+        (row) => row.textContent === "app",
+      ) ?? assert.fail("#app's row stands")
+    ).click(),
+  );
+  await settle();
+  assert.equal(headTitle(page), "#app");
+});
+
+test("a channel made from the sidebar's Add channel narrows the Inbox to it once the service has made it", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  let standing: readonly Channel[] = [GENERAL];
+  answerChannels({
+    channels: () => standing,
+    onWrite: (write) => {
+      if (write.kind === ACT_KIND.CHANNELS_CREATE) standing = [GENERAL, APP_CHANNEL];
+    },
+  });
+  const { page } = mount([], { withSidebar: true });
+  await settle();
+  act(() => buttonSaying("Add channel").click());
+  act(() => menuItem("New channel").click());
+  const dialog = document.querySelector('[role="dialog"]') ?? assert.fail("the dialog stands");
+  const [name, purpose] = dialog.querySelectorAll<HTMLInputElement>("input");
+  typeInto(name ?? null, "app");
+  typeInto(purpose ?? null, "The desktop and web apps");
+  act(() => buttonSaying("Create channel").click());
+  await settle();
+  assert.equal(headTitle(page), "#app");
+});
+
+test("a channel archived or unknown says so in the list's place, with the way to #general", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
   answerChannels({});
   const { page } = mount([], { channels: true });
   await settle();
-  act(() => channelPlaceNow?.onChoose("c0ffee00-0000-4000-8000-0000000000ff"));
+  act(() => chooseChannel("c0ffee00-0000-4000-8000-0000000000ff"));
   await settle();
   const missing =
     page.querySelector<HTMLElement>('section[aria-label="Channel not found"]') ??
     assert.fail("the channel's absence is said");
-  assert.equal(page.querySelector(".channel-stream [data-channel-post]"), null);
 
   act(() =>
     [...missing.querySelectorAll("button")]
@@ -9761,13 +9546,12 @@ test("a channel archived or unknown says so in the stream's place, with the way 
       ?.click(),
   );
   await settle();
-  assert.ok(page.querySelector('section[aria-label="#general"]'), "#general's stream stands");
+  assert.equal(headTitle(page), "#general");
 });
 
-test("an archived channel chosen shows its threads to read, offering no ask and no move, and Unarchive opens it again", async () => {
+test("an archived channel narrows the Inbox under its name and when it was archived, and Unarchive opens it again", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
   const old: ArchivedChannel = {
     id: "c0ffee00-0000-4000-8000-0000000000aa",
     name: "old-app",
@@ -9783,74 +9567,18 @@ test("an archived channel chosen shows its threads to read, offering no ask and 
       if (write.kind === ACT_KIND.CHANNELS_UNARCHIVE) unarchived.push(write.payload.channelId);
     },
   });
+  inboxes = new Map([[BILLING.id, [{ ...THRESHOLD, channelId: old.id }]]]);
   const { page } = mount([], { channels: true });
   await settle();
-  act(() => channelPlaceNow?.onChoose(old.id));
+  act(() => chooseChannel(old.id));
   await settle();
-  const stream =
-    page.querySelector<HTMLElement>('section[aria-label="#old-app"]') ??
-    assert.fail("the archived channel's stream stands");
-  assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title]);
-  assert.equal(stream.querySelector(".channel-post-ask"), null, "no ask is answered from a post");
-  assert.match(stream.textContent ?? "", /#old-app was archived/u);
 
-  act(() =>
-    (
-      stream.querySelector<HTMLElement>('button[aria-label="Thread actions"]') ??
-      assert.fail("a post has its ⋯")
-    ).click(),
-  );
-  assert.ok(!menuWords().includes("Move to channel…"), "no thread is moved out of it");
-  act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-
-  act(() =>
-    (
-      [...stream.querySelectorAll<HTMLButtonElement>("button")].find(
-        (each) => each.textContent === "Unarchive",
-      ) ?? assert.fail("the stream offers Unarchive")
-    ).click(),
-  );
+  assert.equal(headTitle(page), "#old-app");
+  assert.match(headDetail(page) ?? "", /^Archived /u);
+  assert.deepEqual(rowTitles(page), [THRESHOLD.title]);
+  act(() => buttonSaying("Unarchive").click());
   await settle();
   assert.deepEqual(unarchived, [old.id]);
-  // Note that the window's channel place outlives the test, so it goes back to #general for the next.
-  act(() => channelPlaceNow?.onChoose(GENERAL.id));
-});
-
-test("an archived channel whose threads could not be read still says why its Unarchive was refused", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  const old: ArchivedChannel = {
-    id: "c0ffee00-0000-4000-8000-0000000000ab",
-    name: "old-app",
-    purpose: "The apps, before the split",
-    project: false,
-    createdAt: 1,
-    archivedAt: 2,
-  };
-  answerChannels({
-    archived: () => [old],
-    threads: () => Promise.resolve({ failure: "unanswered" }),
-    unarchiveRefused: "name-taken",
-  });
-  const { page } = mount([], { channels: true });
-  await settle();
-  act(() => channelPlaceNow?.onChoose(old.id));
-  await settle();
-  const stream =
-    page.querySelector<HTMLElement>('section[aria-label="#old-app"]') ??
-    assert.fail("the archived channel's stream stands");
-  assert.match(stream.textContent ?? "", /Could not read #old-app/u);
-
-  act(() =>
-    (
-      [...stream.querySelectorAll<HTMLButtonElement>("button")].find(
-        (each) => each.textContent === "Unarchive",
-      ) ?? assert.fail("the stream offers Unarchive")
-    ).click(),
-  );
-  await settle();
-  assert.match(stream.textContent ?? "", /Another channel already goes by that name\./u);
-  act(() => channelPlaceNow?.onChoose(GENERAL.id));
 });
 
 test("an archived channel shown stays shown when a later read of the archived channels fails", async () => {
@@ -9875,204 +9603,14 @@ test("an archived channel shown stays shown when a later read of the archived ch
   });
   const { page } = mount([], { channels: true });
   await settle();
-  act(() => channelPlaceNow?.onChoose(old.id));
+  act(() => chooseChannel(old.id));
   await settle();
-  assert.ok(page.querySelector('section[aria-label="#old-app"]'), "the archived stream stands");
+  assert.equal(headTitle(page), "#old-app");
 
   act(() => follow.push({ moved: [GENERAL.id] }));
   await settle();
   assert.ok(archivedReads > 1, "the archived channels were read again");
-  assert.ok(page.querySelector('section[aria-label="#old-app"]'), "a failed read kept it shown");
-  assert.equal(page.querySelector('section[aria-label="Channel not found"]'), null);
-  act(() => channelPlaceNow?.onChoose(GENERAL.id));
-});
-
-test("a thread opened in a channel's stream that is gone says so beside the stream, as a thread, with the way back to it", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  answerChannels({});
-  const { page } = mount([], { channels: true });
-  await settle();
-  const gone = "a1b2c3d4-0000-4000-8000-0000000000ff";
-  act(() => {
-    chooseFromOutside({ taskId: BILLING.id, itemId: gone, opened: true });
-    channelPlaceNow?.onOpenThread(gone);
-  });
-  await settle();
-  const beside = page.querySelector("aside.side-panel") ?? assert.fail("the panel stands");
-  assert.match(
-    beside.textContent ?? "",
-    /This thread doesn't exist, or you don't have access to it/u,
-  );
-
-  act(() =>
-    [...beside.querySelectorAll("button")]
-      .find((button) => button.textContent === "Back to #general")
-      ?.click(),
-  );
-  await settle();
-  assert.equal(channelPlaceNow?.threadId, undefined, "the way back closed the thread");
-});
-
-test("a thread pressed in a channel's stream whose agent's inbox could not be read says so beside the stream, and Retry reads it there", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  // Note that no holding names the billing task, so its thread is opened by its agent, whose own read fails.
-  pageAgents = new Map([[AGENT.id, AGENT]]);
-  agentInboxes = new Map([[AGENT.id, [THRESHOLD]]]);
-  agentReadFails = true;
-  answerChannels({ threads: () => Promise.resolve(threadsPage([THRESHOLD])) });
-  const { page } = mount([], { channels: true, holding: [] });
-  await settle();
-  act(() =>
-    page.querySelector<HTMLElement>(`button[aria-label="Open ${THRESHOLD.title}"]`)?.click(),
-  );
-  await settle();
-  const beside = () => page.querySelector("aside.side-panel")?.textContent ?? "";
-  assert.equal(threadPanelNow?.tab, SIDE_PANEL_TAB.INBOX, "the thread's tab is chosen");
-  assert.match(beside(), /This thread could not be read\./u);
-
-  agentReadFails = false;
-  act(() =>
-    [...page.querySelectorAll<HTMLElement>("aside.side-panel button")]
-      .find((button) => button.textContent === "Retry")
-      ?.click(),
-  );
-  await settle();
-  assert.match(beside(), /Alert at 80%\?/u, "the thread is read again and drawn");
-});
-
-test("a stream stands placeholders while its first read is on its way, and reads its older threads as the reader nears its top", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  const latest = Promise.withResolvers<unknown>();
-  const asked: (string | undefined)[] = [];
-  answerChannels({
-    threads: (before) => {
-      asked.push(before);
-      return before === undefined ? latest.promise : Promise.resolve(threadsPage([THRESHOLD]));
-    },
-  });
-  const { page } = mount([], { channels: true });
-  await settle();
-  assert.match(
-    page.querySelector('.channel-stream [role="status"]')?.textContent ?? "",
-    /^Reading threads/u,
-  );
-  assert.deepEqual(postTitles(page), []);
-
-  latest.resolve(threadsPage([EXPIRY], THRESHOLD.id));
-  await settle();
-  // Note that the stream's box measures nothing here, so it stands at its top, where older threads are asked for.
-  assert.deepEqual(asked, [undefined, THRESHOLD.id], "the older page is read before the oldest");
-  assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title]);
-  assert.equal(page.querySelector('.channel-stream [role="status"]'), null);
-});
-
-test("a stream whose read again fails keeps its threads and says so under them, and Retry reads them again", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  const follow = channelFollow();
-  let fails = false;
-  answerChannels({
-    follow: follow.stream,
-    threads: () => Promise.resolve(fails ? { failure: "unanswered" } : threadsPage()),
-  });
-  const { page } = mount([], { channels: true });
-  await settle();
-  const notice = () => page.querySelector(".channel-stream [role=alert]")?.textContent ?? "";
-
-  fails = true;
-  act(() => follow.push({ moved: [GENERAL.id] }));
-  await settle();
-  assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title], "the threads stand");
-  assert.match(notice(), /Could not read #general again\./u);
-
-  fails = false;
-  act(() =>
-    [...page.querySelectorAll<HTMLElement>(".channel-stream button")]
-      .find((button) => button.textContent === "Retry")
-      ?.click(),
-  );
-  await settle();
-  assert.equal(notice(), "", "the read landed again");
-});
-
-test("a thread posted from elsewhere lands in the stream and the sidebar's count as the follow hears its channel move, with no reopen", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  const follow = channelFollow();
-  let posted = false;
-  answerChannels({
-    follow: follow.stream,
-    channels: () => [posted ? { ...GENERAL, waiting: 1 } : GENERAL],
-    threads: () => Promise.resolve(threadsPage(posted ? [THRESHOLD, EXPIRY] : [THRESHOLD])),
-  });
-  const { page } = mount([], { channels: true, withSidebar: true });
-  await settle();
-  const generalRow = () =>
-    [...page.querySelectorAll('nav[aria-label="Channels"] button')].find((row) =>
-      row.textContent?.startsWith("general"),
-    )?.textContent;
-  assert.deepEqual(postTitles(page), [THRESHOLD.title]);
-  assert.equal(generalRow(), "general");
-
-  posted = true;
-  act(() => follow.push({ moved: [GENERAL.id] }));
-  await settle();
-  assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title]);
-  assert.equal(generalRow(), "general1 needs you");
-});
-
-/** Types `words` into a field as a reader would. */
-function typeInto(field: HTMLInputElement | null, words: string): void {
-  if (field === null) assert.fail("the field stands");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, words);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-/** The button standing anywhere in the window whose words are `words`. */
-function buttonSaying(words: string): HTMLButtonElement {
-  return (
-    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent === words,
-    ) ?? assert.fail(`a button says ${words}`)
-  );
-}
-
-test("a channel made from the sidebar's + opens once the service has made it", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  let standing: readonly Channel[] = [GENERAL];
-  answerChannels({
-    channels: () => standing,
-    onWrite: (write) => {
-      if (write.kind === ACT_KIND.CHANNELS_CREATE) standing = [GENERAL, APP_CHANNEL];
-    },
-  });
-  const { page } = mount([], { channels: true, withSidebar: true });
-  await settle();
-  act(() =>
-    page
-      .querySelector<HTMLButtonElement>(
-        'nav[aria-label="Channels"] button[aria-label="New channel"]',
-      )
-      ?.click(),
-  );
-  const dialog = document.querySelector('[role="dialog"]') ?? assert.fail("the dialog stands");
-  const [name, purpose] = dialog.querySelectorAll<HTMLInputElement>("input");
-  typeInto(name ?? null, "app");
-  typeInto(purpose ?? null, "The desktop and web apps");
-  act(() => buttonSaying("Create channel").click());
-  await settle();
-  assert.equal(page.querySelector(".channel-stream")?.getAttribute("aria-label"), "#app");
-  act(() => channelPlaceNow?.onChoose(GENERAL.id));
+  assert.equal(headTitle(page), "#old-app", "a failed read kept it shown");
 });
 
 test("archiving the channel shown moves the window to #general and says so", async () => {
@@ -10087,79 +9625,40 @@ test("archiving the channel shown moves the window to #general and says so", asy
   });
   const { page } = mount([], { channels: true, withSidebar: true, toasts: true });
   await settle();
-  act(() => channelPlaceNow?.onChoose(APP_CHANNEL.id));
+  act(() => chooseChannel(APP_CHANNEL.id));
   await settle();
   const row =
-    [...page.querySelectorAll<HTMLElement>('nav[aria-label="Channels"] button')].find(
+    [...page.querySelectorAll<HTMLElement>('[aria-label="Channels"] .luke-nav-item')].find(
       (each) => each.textContent === "app",
     ) ?? assert.fail("#app's row stands");
   act(() => {
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   });
-  act(() =>
-    (
-      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
-        item.textContent?.startsWith("Archive"),
-      ) ?? assert.fail("the row offers Archive")
-    ).click(),
-  );
+  act(() => menuItem("Archive").click());
   act(() => buttonSaying("Archive channel").click());
   await settle();
-  assert.equal(page.querySelector(".channel-stream")?.getAttribute("aria-label"), "#general");
-  assert.equal(page.querySelector('section[aria-label="Channel not found"]'), null);
+  assert.equal(headTitle(page), "#general");
   assert.match(newestToastSays() ?? "", /#app is archived\. You're in #general now\./u);
 });
 
-test("a channel's post draws its first message as its thread does: a pull request alone on its line as its card, read through the channel's workspace, and the thread's own picture", async () => {
-  const connected: Workspace = { ...ACME, github: { login: "acme", active: true } };
-  handState(experimentsOn(EXPERIMENT.CHANNELS), {
-    tasks: { ...IDLE_TASKS_VIEW, workspaces: [connected] },
-  });
-  listedWorkspace = connected;
-  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
-  const shot = inboxAttachmentAddress(
-    { kind: LINK_PLACE.INBOX_ITEM, planId: BILLING.id, itemId: THRESHOLD.id },
-    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c77",
-    "acme",
-  );
-  const words = [
-    "Opened the pull request.",
-    "https://github.com/acme/relay/pull/42",
-    `![The alert as it fires](${shot})`,
-  ].join("\n\n");
-  answerChannels({ threads: () => Promise.resolve(threadsPage([saying(THRESHOLD, words)])) });
-  const previous = fakeActsAnswer();
-  const read: string[] = [];
-  fakeActs({
-    ...appBridge(),
-    act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.TASKS_PULL_REQUEST) return previous(request);
-      read.push(request.payload.workspaceId);
-      return Promise.resolve({
-        status: FAKE_ANSWER.DONE,
-        value: {
-          number: 42,
-          title: "Alert at 80% of the plan's usage",
-          url: "https://github.com/acme/relay/pull/42",
-          state: PULL_REQUEST_STATE.OPEN,
-        },
-      });
-    },
-  });
-  const { page } = mount([], { channels: true });
+test("an item opened whose agent's inbox could not be read says so in the pane, and Retry reads it there", async () => {
+  listedWorkspace = ACME;
+  // Note that no holding names the billing task, so its item is opened by its agent, whose own read fails.
+  pageAgents = new Map([[AGENT.id, AGENT]]);
+  agentInboxes = new Map([[AGENT.id, [THRESHOLD]]]);
+  agentReadFails = true;
+  const { page } = mount([], { holding: [] });
   await settle();
-  for (const land of imageReads.splice(0)) land();
+  act(() => chooseFromOutside({ agentId: AGENT.id, itemId: THRESHOLD.id, opened: true }));
   await settle();
-  const post =
-    page.querySelector(".channel-stream [data-channel-post]") ?? assert.fail("the post is drawn");
+  assert.match(page.textContent ?? "", /This item could not be read\./u);
+
+  agentReadFails = false;
+  act(() => buttonSaying("Retry").click());
+  await settle();
   assert.equal(
-    post.querySelector('[data-lone-link="pull-request"] .luke-list-row-title')?.textContent,
-    "#42 Alert at 80% of the plan's usage",
+    itemPane(page).getAttribute("aria-label"),
+    THRESHOLD.title,
+    "the item is read again",
   );
-  assert.deepEqual(
-    read,
-    [connected.id],
-    "the pull request is read through the channel's workspace",
-  );
-  assert.equal(post.querySelector<HTMLImageElement>("img")?.alt, "The alert as it fires");
 });

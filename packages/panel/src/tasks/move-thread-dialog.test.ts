@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Channel, ChannelThread } from "@luke/features/channel-wire";
-import { INBOX_STATUS, INBOX_WIRE_VERSION } from "@luke/features/inbox-wire";
+import type { Channel } from "@luke/features/channel-wire";
+import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@luke/features/inbox-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -18,7 +18,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 /**
  * move-thread-dialog.test.ts -- Move to channel's question goes with its
- * thread: a thread that leaves the stream while it is asked, as when a
+ * thread: a thread that leaves the Inbox while it is asked, as when a
  * teammate moves it first, takes the dialog with it, so nothing stale moves
  * it a second time.
  */
@@ -33,7 +33,7 @@ const GENERAL: Channel = {
 };
 const APP: Channel = { ...GENERAL, id: "c0ffee00-0000-4000-8000-000000000002", name: "app" };
 
-const THREAD: ChannelThread = {
+const THREAD: InboxItem = {
   id: "a1b2c3d4-0000-4000-8000-000000000001",
   agentId: "a1b2c3d4-0000-4000-8000-0000000000a1",
   key: "0001",
@@ -56,11 +56,10 @@ afterEach(() => {
 });
 
 test("a thread moved away by someone else while Move to channel is asked takes the dialog with it", () => {
-  let ask: ((thread: ChannelThread) => void) | undefined;
-  function Stream({ threads }: { threads: readonly ChannelThread[] }) {
+  let ask: ((thread: InboxItem) => void) | undefined;
+  function Inbox({ threads }: { threads: readonly InboxItem[] }) {
     const move = useMoveThreadDialog({
       channels: [GENERAL, APP],
-      from: GENERAL.id,
       threads,
       shown: true,
       onMove: () => Promise.resolve(undefined),
@@ -70,8 +69,8 @@ test("a thread moved away by someone else while Move to channel is asked takes t
     return move.dialog;
   }
   const registry = AtomRegistry.make();
-  const draw = (threads: readonly ChannelThread[]) =>
-    act(() => root?.render(onRegistry(registry, createElement(Stream, { threads }))));
+  const draw = (threads: readonly InboxItem[]) =>
+    act(() => root?.render(onRegistry(registry, createElement(Inbox, { threads }))));
   root = createRoot(document.body.appendChild(document.createElement("div")));
   draw([THREAD]);
   act(() => ask?.(THREAD));

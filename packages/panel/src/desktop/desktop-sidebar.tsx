@@ -146,7 +146,7 @@ import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
-import { useChannelPlace, useChannelStreaming, useChannels } from "../tasks/use-channels.js";
+import { useChannelPlace, useChannels, useInboxNarrowed } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
@@ -1769,14 +1769,14 @@ function SidebarColumn({
     inBoard ||
     inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
-  // With Channels on, the channels stand under the account's own tasks, and one chosen shows its stream in the Inbox's place, which then marks its row rather than the Inbox's.
+  // With Channels on, the channels stand under the Inbox's row as its filters, and one chosen narrows the Inbox to it, which then marks its row rather than the Inbox's.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const channels = useChannels(
     channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined,
     tasks.shown,
   );
   const channelPlace = useChannelPlace();
-  const streaming = useChannelStreaming();
+  const narrowed = useInboxNarrowed();
   // Note that a channel archived or unknown marks no row, its place saying it is gone.
   const channelState = channelShown(
     channelsOn && inInbox ? channels.channels : undefined,
@@ -1807,7 +1807,6 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.inboxView.onOpen();
   };
-  // Note that a phone's channel opens on its stream, never a thread left open in it (`onOpenChannel`).
   const openChannel = (channelId: string) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.inboxView.onOpenChannel(channelId);
@@ -2113,10 +2112,20 @@ function SidebarColumn({
         </NavItem>
         <SidebarInboxRow
           waiting={waiting}
-          current={inInbox && !streaming}
+          current={inInbox && !narrowed}
           disabled={!tasks.signedIn}
           onOpen={chosen(openInbox)}
         />
+        {/* With Channels on, the workspace's channels stand under the Inbox's row as its filters. */}
+        {channelsOn && tasks.signedIn ? (
+          <SidebarChannels
+            workspaceId={tasks.workspace?.id}
+            channels={channels}
+            currentId={shownChannelId}
+            shown={tasks.shown && overlay.inSight}
+            onOpen={chosen(openChannel)}
+          />
+        ) : null}
         <SidebarTasksRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
         <SidebarAutomationsRow
           current={inAutomations}
@@ -2325,16 +2334,6 @@ function SidebarColumn({
                 />
                 <HiddenStatusesLine menu={statusMenu} hidden={hidden} />
               </nav>
-              {/* With Channels on, the workspace's channels stand under the account's own tasks. */}
-              {channelsOn && tasks.signedIn ? (
-                <SidebarChannels
-                  workspaceId={tasks.workspace?.id}
-                  channels={channels}
-                  currentId={shownChannelId}
-                  shown={tasks.shown && overlay.inSight}
-                  onOpen={chosen(openChannel)}
-                />
-              ) : null}
             </div>
           </ListMotion>
         </ScrollArea>

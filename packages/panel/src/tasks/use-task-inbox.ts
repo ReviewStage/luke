@@ -303,7 +303,7 @@ export type InboxImageReads = Pick<TaskInboxControl, "images" | "onImage" | "onR
  * kept, because the Inbox's pane draws the item from its list's read then,
  * and nothing would ask for the picture again.
  */
-export function useInboxImageReads(input: {
+function useInboxImageReads(input: {
   read: InboxImageReader;
   scope: string | undefined;
   items: readonly InboxItem[];

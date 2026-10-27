@@ -1312,7 +1312,7 @@ function channelPlaceNow(): () => ChannelPlaceControl {
   return () => seen ?? assert.fail("the channel place is read");
 }
 
-test("with Channels on, a channel's link opens its stream in the Inbox's place, and a thread's link of an agent with no task, or an item opened from another surface, opens as the thread in its channel", async () => {
+test("with Channels on, a channel's link opens the Inbox narrowed to it, which a thread's link of an agent with no task keeps until its item is read, and an item opened from another surface narrows it to the item's channel", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
   await settle();
@@ -1332,7 +1332,6 @@ test("with Channels on, a channel's link opens its stream in the Inbox's place, 
     open: tab.control().inboxView.open,
     listed: tab.control().inboxView.listed,
     channelId: place().channelId,
-    threadId: place().threadId,
   };
   act(() =>
     tab.control().onOpenLink({
@@ -1340,19 +1339,13 @@ test("with Channels on, a channel's link opens its stream in the Inbox's place, 
       place: { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT_ID, itemId: linked },
     }),
   );
-  const thread = { channelId: place().channelId, threadId: place().threadId };
+  const thread = place().channelId;
   act(() => tab.control().inboxView.onOpenItem({ taskId: "alerts", itemId: opened }, design));
 
-  assert.deepEqual(channel, { open: true, listed: false, channelId: app, threadId: undefined });
-  assert.deepEqual(thread, { channelId: app, threadId: linked });
+  assert.deepEqual(channel, { open: true, listed: false, channelId: app });
+  assert.equal(thread, app);
   assert.deepEqual(tab.control().inboxView.chosen, { taskId: "alerts", itemId: opened });
-  assert.deepEqual(
-    { channelId: place().channelId, threadId: place().threadId },
-    {
-      channelId: design,
-      threadId: opened,
-    },
-  );
+  assert.equal(place().channelId, design);
   handState({});
 });
 

@@ -1083,7 +1083,7 @@ function peopleRows(
   }));
 }
 
-/** The listed workspace's open channels, each by its glyph and name, as the sidebar lists it, and its purpose, hanging the channel's card as its sidebar row does, which choosing opens on its stream; `#app` typed finds it too. */
+/** The listed workspace's open channels, each by its glyph and name, as the sidebar lists it, and its purpose, hanging the channel's card as its sidebar row does, which choosing narrows the Inbox to; `#app` typed finds it too. */
 function channelRows(
   channels: readonly Channel[],
   workspaceId: string | undefined,

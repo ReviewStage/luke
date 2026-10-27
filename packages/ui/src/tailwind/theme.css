@@ -357,6 +357,9 @@
   --spacing-row-inset: var(--luke-row-inset);
   --spacing-list-inset: var(--luke-list-inset);
   --spacing-control-gap: var(--luke-control-gap);
+  /* A row nested under a place stands in by the place's glyph and its gap,
+     so its own glyph stands under the place's name (`SidebarFilters`). */
+  --spacing-nav-nest: calc(var(--luke-control-icon) + var(--luke-icon-gap));
 
   /* The panel's places beside the sidebar (`@luke/panel`: Automations,
      Settings, a version history, the Admin place, the sign-in): the

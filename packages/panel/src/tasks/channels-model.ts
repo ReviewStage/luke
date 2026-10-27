@@ -1,60 +1,18 @@
-import type { ArchivedChannel, Channel, ChannelThread } from "@luke/features/channel-wire";
-import {
-  type InboxItem,
-  type InboxMessage,
-  inboxAsksOpen,
-  inboxWaitsOn,
-  threadNeedsReader,
-} from "@luke/features/inbox-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 
 /**
- * channels-model.ts -- a workspace's channels as the sidebar lists them and one channel's threads as its stream draws them (STAG-547).
+ * channels-model.ts -- a workspace's channels as the sidebar lists them under the Inbox, and the channel the Inbox is narrowed to (STAG-547).
  *
  * A channel is a topic its workspace's threads live in, each thread an Inbox
- * item (`channel-wire.ts`). The sidebar lists the standing channels and then
- * the projects', each counting the open asks that wait on the reader. A
- * channel's stream is its threads by their latest activity, the latest at
- * its foot, a divider before each day they last moved on, and the New line
- * before the first thread someone else moved since the reader last looked. The reader views it three ways, Mine by default: Mine,
- * the threads of tasks assigned to them, those asking them, and those they
- * wrote in; Everyone, every thread; and Needs me, the open asks addressed to
- * them alone. A thread needs the reader while its ask stands open and it waits
- * on them, which the stream marks on the attention tint and nothing else. A
+ * item (`channel-wire.ts`), so a channel is the Inbox narrowed to one topic.
+ * The sidebar lists the standing channels and then the projects' under the
+ * Inbox's row, each counting the open asks that wait on the reader. A
  * channel reads as unread while something was posted in it since the
  * reader last looked, which its row says in the unread weight.
  */
 
 /** The channel every thread that names none goes to, which is never renamed or archived; the service mints it under this name (`GENERAL_CHANNEL`). */
 const GENERAL_CHANNEL_NAME = "general";
-
-/** Which of a channel's threads the stream shows. */
-export const CHANNEL_VIEW = {
-  MINE: "mine",
-  EVERYONE: "everyone",
-  NEEDS_ME: "needs-me",
-} as const;
-
-export type ChannelView = (typeof CHANNEL_VIEW)[keyof typeof CHANNEL_VIEW];
-
-/** Each view as its menu and the channel's title name it, in the menu's order. */
-const CHANNEL_VIEW_WORDS = {
-  [CHANNEL_VIEW.MINE]: "Mine",
-  [CHANNEL_VIEW.EVERYONE]: "Everyone",
-  [CHANNEL_VIEW.NEEDS_ME]: "Needs me",
-} as const satisfies Record<ChannelView, string>;
-
-/** What a row of the stream is: a day's divider, the New line, or a thread. */
-export const STREAM_ROW = {
-  DAY: "day",
-  NEW: "new",
-  THREAD: "thread",
-} as const;
-
-export type StreamRow =
-  | { readonly kind: typeof STREAM_ROW.DAY; readonly key: string; readonly words: string }
-  | { readonly kind: typeof STREAM_ROW.NEW }
-  | { readonly kind: typeof STREAM_ROW.THREAD; readonly thread: ChannelThread };
 
 /** A workspace's channels as the sidebar sections them: the standing ones, then the projects'. */
 export interface ChannelSections {
@@ -63,206 +21,14 @@ export interface ChannelSections {
 }
 
 /**
- * The sidebar's sections of channels, and a phone's list's, in their order:
- * what each is called, whether it holds the projects', what its "+" makes,
- * and how wide each of its rows' names stands while the channels are read,
- * a few rows' worth, since nobody knows how many there are yet.
+ * What the sidebar's Add channel offers of each kind of channel, the
+ * standing ones and the projects', in its order: what makes one, and what
+ * lists the archived ones.
  */
 export const CHANNEL_SECTIONS = [
-  { label: "Channels", project: false, add: "New channel", reading: ["56%", "72%", "44%"] },
-  { label: "Projects", project: true, add: "New project channel", reading: ["64%"] },
+  { project: false, add: "New channel", browse: "Browse archived channels" },
+  { project: true, add: "New project channel", browse: "Browse archived project channels" },
 ] as const;
-
-export type ChannelSectionLook = (typeof CHANNEL_SECTIONS)[number];
-
-/** The replies line under a post: who replied, how many replies, and who the open ask waits on. */
-export interface RepliesLine {
-  /** One message for each person who replied, the agent counted once, in the order they first replied. */
-  readonly repliers: readonly InboxMessage[];
-  /** "N replies", or "Reply in thread" where nobody has. */
-  readonly words: string;
-  /** "Waiting on you" or "Waiting on <name>" while an ask stands open; none otherwise. */
-  readonly waiting: string | undefined;
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** The day a time falls on, in the reader's own time zone. */
-function dayStart(at: number): number {
-  return new Date(at).setHours(0, 0, 0, 0);
-}
-
-/** A day's divider's words: Today, Yesterday, or the weekday and date. */
-function dayWords(at: number, now: number): string {
-  const today = dayStart(now);
-  const day = dayStart(at);
-  if (day >= today) return "Today";
-  if (day >= today - DAY_MS) return "Yesterday";
-  return new Date(at).toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-/**
- * Whether a thread is the reader's own, as Mine lists it: theirs (`owned`,
- * `ownsThread`), asking them, or one they wrote in.
- */
-function threadIsMine(item: InboxItem, readerId: string | undefined, owned: boolean): boolean {
-  if (readerId === undefined) return false;
-  if (owned) return true;
-  if (threadNeedsReader(item, readerId)) return true;
-  return (item.thread ?? []).some((message) => message.member?.userId === readerId);
-}
-
-/**
- * Whether the reader owns a thread: its task's assignee, else its agent's
- * starter, as the service derives whom it waits on (`inbox-store.ts`'s
- * `WAITS_ON`), and never its task's creator. Note that a thread whose task
- * the reader's Inbox did not read, or that has none, is owned by whom it
- * waits on where its agent addressed nobody, which the service derived the
- * same way, and else by its starter.
- */
-export function ownsThread(
-  readerId: string | undefined,
-  thread: ChannelThread,
-  task: Pick<TaskSummary, "assignee"> | undefined,
-): boolean {
-  if (readerId === undefined) return false;
-  const owner =
-    task !== undefined
-      ? (task.assignee ?? thread.startedBy)
-      : thread.addressed === true
-        ? thread.startedBy
-        : inboxWaitsOn(thread);
-  return owner?.userId === readerId;
-}
-
-/** The threads a view shows, in the order given; `ownThread` says which threads are the reader's own. */
-export function viewedThreads(
-  threads: readonly ChannelThread[],
-  view: ChannelView,
-  readerId: string | undefined,
-  ownThread: (thread: ChannelThread) => boolean,
-): readonly ChannelThread[] {
-  switch (view) {
-    case CHANNEL_VIEW.EVERYONE:
-      return threads;
-    case CHANNEL_VIEW.MINE:
-      return threads.filter((thread) => threadIsMine(thread, readerId, ownThread(thread)));
-    case CHANNEL_VIEW.NEEDS_ME:
-      return threads.filter((thread) => threadNeedsReader(thread, readerId));
-  }
-}
-
-/** How many threads need the reader, which Needs me counts in its menu. */
-export function needsReaderCount(
-  threads: readonly ChannelThread[],
-  readerId: string | undefined,
-): number {
-  return threads.filter((thread) => threadNeedsReader(thread, readerId)).length;
-}
-
-/** A view's entry in the View options menu: its name, Needs me counting what waits on the reader. */
-export function channelViewLabel(view: ChannelView, needsCount: number): string {
-  const words = CHANNEL_VIEW_WORDS[view];
-  return view === CHANNEL_VIEW.NEEDS_ME && needsCount > 0 ? `${words} · ${needsCount}` : words;
-}
-
-/** The channel's title: its name, and the view after it where it is not Mine. */
-export function channelTitle(name: string, view: ChannelView): string {
-  return view === CHANNEL_VIEW.MINE ? `#${name}` : `#${name} · ${CHANNEL_VIEW_WORDS[view]}`;
-}
-
-/** What an empty stream says, by its view. */
-export function emptyStreamWords(name: string, view: ChannelView): string {
-  switch (view) {
-    case CHANNEL_VIEW.EVERYONE:
-      return `Nothing has been posted in #${name} yet`;
-    case CHANNEL_VIEW.MINE:
-      return `Nothing of yours in #${name} right now`;
-    case CHANNEL_VIEW.NEEDS_ME:
-      return `Nothing in #${name} needs you`;
-  }
-}
-
-/**
- * Whether the reader made the thread's latest activity themselves: the
- * latest message on it is theirs and nothing moved it since, or they
- * settled it at that instant. Note that a message is written at the
- * instant it moves its thread, while an agent's close moves the thread
- * and writes none, so a message older than the thread's last change was
- * not that change.
- */
-function movedByReader(thread: ChannelThread, readerId: string): boolean {
-  const latest = thread.thread?.at(-1);
-  if (latest?.member?.userId === readerId && latest.createdAt >= thread.updatedAt) return true;
-  const settler = thread.closedBy ?? thread.answeredBy;
-  return thread.settledAt === thread.updatedAt && settler?.userId === readerId;
-}
-
-/**
- * The stream's rows: the threads the least recently active first, a thread's
- * activity being its last change (`updatedAt`), so one an old thread's new
- * reply moves stands at the foot; a divider before each day they last moved
- * on; and the New line before the first thread someone else moved since the
- * reader last looked (`lookedAt`). A channel never looked at draws no New
- * line, since everything in it would stand under one.
- */
-export function streamRows(
-  threads: readonly ChannelThread[],
-  seams: {
-    readonly lookedAt: number | undefined;
-    readonly readerId: string | undefined;
-    readonly now: number;
-  },
-): readonly StreamRow[] {
-  const { lookedAt, readerId, now } = seams;
-  const sorted = threads.toSorted((a, b) => a.updatedAt - b.updatedAt);
-  const firstNew =
-    lookedAt === undefined
-      ? undefined
-      : sorted.find(
-          (thread) =>
-            thread.updatedAt > lookedAt &&
-            (readerId === undefined || !movedByReader(thread, readerId)),
-        );
-  const rows: StreamRow[] = [];
-  let lastDay: number | undefined;
-  for (const thread of sorted) {
-    const day = dayStart(thread.updatedAt);
-    if (day !== lastDay) {
-      rows.push({ kind: STREAM_ROW.DAY, key: String(day), words: dayWords(thread.updatedAt, now) });
-      lastDay = day;
-    }
-    if (thread === firstNew) rows.push({ kind: STREAM_ROW.NEW });
-    rows.push({ kind: STREAM_ROW.THREAD, thread });
-  }
-  return rows;
-}
-
-/** The replies line under a post, read from its thread: everything after its first message is a reply. */
-export function repliesLine(item: InboxItem, readerId: string | undefined): RepliesLine {
-  const replies = (item.thread ?? []).slice(1);
-  const byWho = new Map<string, InboxMessage>();
-  for (const reply of replies) {
-    const who = reply.member?.userId ?? reply.author;
-    if (!byWho.has(who)) byWho.set(who, reply);
-  }
-  const words =
-    replies.length === 0
-      ? "Reply in thread"
-      : `${replies.length} ${replies.length === 1 ? "reply" : "replies"}`;
-  const waitsOn = inboxAsksOpen(item) ? inboxWaitsOn(item) : undefined;
-  const waiting =
-    waitsOn === undefined
-      ? undefined
-      : waitsOn.userId === readerId
-        ? "Waiting on you"
-        : `Waiting on ${waitsOn.name}`;
-  return { repliers: [...byWho.values()], words, waiting };
-}
 
 /** The workspace's channels as the sidebar sections them, each section in the service's order. */
 export function channelSections(channels: readonly Channel[]): ChannelSections {
@@ -270,14 +36,6 @@ export function channelSections(channels: readonly Channel[]): ChannelSections {
     standing: channels.filter((channel) => !channel.project),
     projects: channels.filter((channel) => channel.project),
   };
-}
-
-/** The channels one of `CHANNEL_SECTIONS` lists, in the service's order. */
-export function sectionChannels(
-  channels: readonly Channel[],
-  section: ChannelSectionLook,
-): readonly Channel[] {
-  return channels.filter((channel) => channel.project === section.project);
 }
 
 /**
@@ -301,14 +59,14 @@ export function generalChannel(channels: readonly Channel[]): Channel | undefine
   return channels.find((channel) => channel.name === GENERAL_CHANNEL_NAME);
 }
 
-/** What the Inbox's place shows of the workspace's channels: one of them, an archived one to read, that the channel chosen stands nowhere, or none. */
+/** The channel the Inbox is narrowed to: one of the workspace's, an archived one, that the channel chosen stands nowhere, or none. */
 export const CHANNEL_SHOWN = {
   CHANNEL: "channel",
-  /** The channel chosen is one of the workspace's archived channels, its threads drawn to read. */
+  /** The channel chosen is one of the workspace's archived channels, which Unarchive opens again. */
   ARCHIVED: "archived",
   /** The channel chosen is neither open nor among the archived channels given. */
   MISSING: "missing",
-  /** No channel is chosen, the Inbox standing in the place, or the channels are not read yet. */
+  /** No channel is chosen, the Inbox listing every channel, or the channels are not read yet. */
   NONE: "none",
 } as const;
 
@@ -319,11 +77,11 @@ export type ChannelShown =
   | { readonly kind: typeof CHANNEL_SHOWN.NONE };
 
 /**
- * What the place shows once the channels are read: the channel chosen
- * where it is still open, or where it is among the `archived` channels
- * given, that one to read; a missing channel's state where it is neither,
+ * The channel the Inbox is narrowed to once the channels are read: the
+ * channel chosen where it is still open, or where it is among the
+ * `archived` channels given; a missing channel's state where it is neither,
  * so a link to an unknown channel says so rather than showing another; and
- * none while nothing is chosen, where the place shows the Inbox.
+ * none while nothing is chosen, where the Inbox lists every channel.
  */
 export function channelShown(
   channels: readonly Channel[] | undefined,
@@ -337,11 +95,6 @@ export function channelShown(
   return gone === undefined
     ? { kind: CHANNEL_SHOWN.MISSING }
     : { kind: CHANNEL_SHOWN.ARCHIVED, channel: gone };
-}
-
-/** "↑ N older asks need you", as the jump over the stream says it. */
-export function olderAsksWords(count: number): string {
-  return count === 1 ? "1 older ask needs you" : `${count} older asks need you`;
 }
 
 /** A channel's name as it is typed, written as a channel's is: lowercase, a dash for each run of anything but letters and digits, none at its ends. */

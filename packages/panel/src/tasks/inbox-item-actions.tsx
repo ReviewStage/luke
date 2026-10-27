@@ -8,7 +8,7 @@ import { INBOX_HOLDER, type InboxHolder, isUnread } from "./inbox-model.js";
 import { markReadItem } from "./task-menu-items.js";
 
 /**
- * inbox-item-actions.tsx -- the acts every menu of one Inbox item offers, wherever the item is drawn: its row in the Inbox's list, the ⋯ on its thread's bar, and its post in a channel's stream.
+ * inbox-item-actions.tsx -- the acts every menu of one Inbox item offers, wherever the item is drawn: its row in the Inbox's list and the ⋯ on its thread's bar.
  *
  * Each menu offers the same groups in the same order: Mark as read or
  * unread, naming U where U reaches the item; Copy link, the item's link
