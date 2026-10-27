@@ -39,7 +39,12 @@ import {
   type StreamWords,
   useChannelStream,
 } from "../tasks/channel-stream.js";
-import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
+import {
+  CHANNEL_SHOWN,
+  channelShown,
+  generalChannel,
+  ownsThread,
+} from "../tasks/channels-model.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import {
   INBOX_COLUMNS,
@@ -427,12 +432,13 @@ export function DesktopInbox({
     ),
   );
   const listedOf = (itemId: string) => listedById.get(itemId);
-  const ownTask = (thread: ChannelThread) => {
+  // A thread is the reader's where they are its task's assignee, else its agent's starter, never its task's creator.
+  const ownThread = (thread: ChannelThread) => {
     const holder = listedOf(thread.id)?.holder;
-    return (
-      holder?.kind === INBOX_HOLDER.TASK &&
-      tasks.me !== undefined &&
-      (holder.task.ownerId === tasks.me || holder.task.assignee?.userId === tasks.me)
+    return ownsThread(
+      tasks.me,
+      thread,
+      holder?.kind === INBOX_HOLDER.TASK ? holder.task : undefined,
     );
   };
   // A post's press opens its thread in the side panel beside the stream, chosen as the Inbox chooses an item, by its holder where it is read.
@@ -475,7 +481,7 @@ export function DesktopInbox({
     onListed(false);
   };
   // The stream is read here, so K and J page the threads it posts, and the thread's bar counts them.
-  const stream = useChannelStream(channel?.id, tasks.me, ownTask);
+  const stream = useChannelStream(channel?.id, tasks.me, ownThread);
   const streamPager = useChannelPager(
     stream.viewed,
     threadOpen ? channelPlace.threadId : undefined,

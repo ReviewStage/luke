@@ -15,6 +15,7 @@ import {
   channelSlug,
   channelStep,
   channelUnread,
+  ownsThread,
   repliesLine,
   STREAM_ROW,
   streamRows,
@@ -24,7 +25,8 @@ import {
 /**
  * channels-model.test.ts -- a channel's stream as its views list it: Mine
  * holds the reader's own threads and Needs me only open asks waiting on
- * them; the stream divides its days and draws the New line before the first
+ * them, a thread being owned by its task's assignee, else its agent's
+ * starter, never its task's creator; the stream divides its days and draws the New line before the first
  * thread someone else posted since the reader looked; a post's replies line
  * says who replied and who the ask waits on; a typed name is written as a
  * channel's; the stream opens on #general where none is chosen and says a
@@ -151,6 +153,21 @@ test("Mine lists the reader's own threads and Needs me only the open asks waitin
     ids(CHANNEL_VIEW.EVERYONE),
     all.map(({ id }) => id),
   );
+});
+
+test("a thread is its task's assignee's, else its agent's starter's, never that of whoever made the task or started its agent", () => {
+  const startedByMe = thread("started-by-me", NOON, [said("o1", undefined)], {
+    startedBy: ME,
+    waitsOn: MATE,
+  });
+
+  // Assigned to a teammate since the reader started its agent: the teammate's, not the reader's.
+  assert.equal(ownsThread(ME.userId, startedByMe, { assignee: MATE }), false);
+  assert.equal(ownsThread(MATE.userId, startedByMe, { assignee: MATE }), true);
+  // Nobody assigned: its starter's.
+  assert.equal(ownsThread(ME.userId, startedByMe, {}), true);
+  // Its task unread by the Inbox: whom the service says it waits on.
+  assert.equal(ownsThread(ME.userId, startedByMe, undefined), false);
 });
 
 test("the stream runs by latest activity, a divider before each day a thread last moved on, the New line before the first thread someone else moved since the reader looked", () => {

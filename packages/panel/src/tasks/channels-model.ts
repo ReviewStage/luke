@@ -6,6 +6,7 @@ import {
   inboxWaitsOn,
   threadNeedsReader,
 } from "@luke/features/inbox-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 
 /**
  * channels-model.ts -- a workspace's channels as the sidebar lists them and one channel's threads as its stream draws them (STAG-547).
@@ -16,9 +17,9 @@ import {
  * channel's stream is its threads by their latest activity, the latest at
  * its foot, a divider before each day they last moved on, and the New line
  * before the first thread someone else moved since the reader last looked. The reader views it three ways, Mine by default: Mine,
- * the threads of their own tasks, those asking them, and those they wrote
- * in; Everyone, every thread; and Needs me, the open asks addressed to them
- * alone. A thread needs the reader while its ask stands open and it waits
+ * the threads of tasks assigned to them, those asking them, and those they
+ * wrote in; Everyone, every thread; and Needs me, the open asks addressed to
+ * them alone. A thread needs the reader while its ask stands open and it waits
  * on them, which the stream marks on the attention tint and nothing else. A
  * channel reads as unread while something was posted in it since the
  * reader last looked, which its row says in the unread weight.
@@ -105,29 +106,51 @@ function dayWords(at: number, now: number): string {
 }
 
 /**
- * Whether a thread is the reader's own, as Mine lists it: of a task of
- * theirs (`ownTask`) or an agent they started, asking them, or one they
- * wrote in.
+ * Whether a thread is the reader's own, as Mine lists it: theirs (`owned`,
+ * `ownsThread`), asking them, or one they wrote in.
  */
-function threadIsMine(item: InboxItem, readerId: string | undefined, ownTask: boolean): boolean {
+function threadIsMine(item: InboxItem, readerId: string | undefined, owned: boolean): boolean {
   if (readerId === undefined) return false;
-  if (ownTask || item.startedBy?.userId === readerId) return true;
+  if (owned) return true;
   if (threadNeedsReader(item, readerId)) return true;
   return (item.thread ?? []).some((message) => message.member?.userId === readerId);
 }
 
-/** The threads a view shows, in the order given; `ownTask` says which threads stand on a task of the reader's. */
+/**
+ * Whether the reader owns a thread: its task's assignee, else its agent's
+ * starter, as the service derives whom it waits on (`inbox-store.ts`'s
+ * `WAITS_ON`), and never its task's creator. Note that a thread whose task
+ * the reader's Inbox did not read, or that has none, is owned by whom it
+ * waits on where its agent addressed nobody, which the service derived the
+ * same way, and else by its starter.
+ */
+export function ownsThread(
+  readerId: string | undefined,
+  thread: ChannelThread,
+  task: Pick<TaskSummary, "assignee"> | undefined,
+): boolean {
+  if (readerId === undefined) return false;
+  const owner =
+    task !== undefined
+      ? (task.assignee ?? thread.startedBy)
+      : thread.addressed === true
+        ? thread.startedBy
+        : inboxWaitsOn(thread);
+  return owner?.userId === readerId;
+}
+
+/** The threads a view shows, in the order given; `ownThread` says which threads are the reader's own. */
 export function viewedThreads(
   threads: readonly ChannelThread[],
   view: ChannelView,
   readerId: string | undefined,
-  ownTask: (thread: ChannelThread) => boolean,
+  ownThread: (thread: ChannelThread) => boolean,
 ): readonly ChannelThread[] {
   switch (view) {
     case CHANNEL_VIEW.EVERYONE:
       return threads;
     case CHANNEL_VIEW.MINE:
-      return threads.filter((thread) => threadIsMine(thread, readerId, ownTask(thread)));
+      return threads.filter((thread) => threadIsMine(thread, readerId, ownThread(thread)));
     case CHANNEL_VIEW.NEEDS_ME:
       return threads.filter((thread) => threadNeedsReader(thread, readerId));
   }
