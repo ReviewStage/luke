@@ -54,6 +54,7 @@ import { attachment } from "../schemas/attachment.js";
 import { automation } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
+import { inboxItemRead } from "../schemas/inbox-item-read.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { conversations } from "../schemas/storage.js";
@@ -1394,6 +1395,7 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
  * held open withdrawn with none, so it reads on its thread as theirs. Note
  * that no agent is woken for it, because a canceled task's work is not to
  * go on, and that no close key is written, so no client can take it back.
+ * Each item is left read for the member, as their own close leaves it.
  */
 const closeOpenItemsOnCancel = Effect.fnUntraced(function* (
   userId: string,
@@ -1431,6 +1433,21 @@ const closeOpenItemsOnCancel = Effect.fnUntraced(function* (
           sql`${inboxMessage.ask} ->> 'status' = ${INBOX_ASK_STATUS.OPEN}`,
         ),
       ),
+  );
+  // The close is the member's own, so it leaves each item read for them, as their close from the thread does.
+  yield* Database.use((db) =>
+    db
+      .insert(inboxItemRead)
+      .values(
+        closed.map(({ id }) => ({ itemId: id, userId, readThrough: now, markedUnread: false })),
+      )
+      .onConflictDoUpdate({
+        target: [inboxItemRead.itemId, inboxItemRead.userId],
+        set: {
+          readThrough: sql`greatest(${inboxItemRead.readThrough}, excluded.${sql.identifier(inboxItemRead.readThrough.name)})`,
+          markedUnread: false,
+        },
+      }),
   );
 });
 

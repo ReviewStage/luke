@@ -20,6 +20,7 @@ import { user } from "../../schemas/auth.js";
 import { channel } from "../../schemas/channel.js";
 import { codingAgent, type StoredPullRequest } from "../../schemas/coding-agent.js";
 import { inboxItem } from "../../schemas/inbox.js";
+import { inboxItemRead } from "../../schemas/inbox-item-read.js";
 import { inboxMessage } from "../../schemas/inbox-message.js";
 import { conversations } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
@@ -1028,6 +1029,12 @@ it.layer(getTestDB())("a task canceled", (it) => {
           .from(inboxMessage)
           .where(eq(inboxMessage.itemId, question));
         assert.equal(asked?.ask?.status, INBOX_ASK_STATUS.WITHDRAWN);
+        // The close is the canceler's own, so it is read for them and for no one else.
+        const markers = yield* db
+          .select({ userId: inboxItemRead.userId, markedUnread: inboxItemRead.markedUnread })
+          .from(inboxItemRead)
+          .where(eq(inboxItemRead.itemId, question));
+        assert.deepEqual(markers, [{ userId: charles, markedUnread: false }]);
       }),
   );
 });
