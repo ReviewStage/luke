@@ -341,7 +341,8 @@ function actionItems(action: ViewerAction, file: FileChip): MenuAction[] {
 /**
  * The file shown: the picture, the video playing, its text drawn as every
  * code is, or the icon, name, and size over Download; where the files are
- * walked, all but the text stand clear of the arrows either side.
+ * walked, all but the text stand clear of the arrows either side, the
+ * text kept clear of them by the stage around it.
  */
 function AttachmentBody({
   file,
@@ -605,8 +606,11 @@ export function AttachmentViewer({
             />
           </header>
         )}
-        {/* The arrows stand either side of the file shown, centred down it, in the room its body keeps clear for them. */}
-        <div className="attachment-viewer-stage relative flex min-h-0 flex-auto flex-col">
+        {/* The arrows stand either side of the file shown, centred down it, in the room its body keeps clear for them, or, round a text file, the room the stage keeps beside its lines; a press on that room closes the viewer as one on the dimmed window does. */}
+        <div
+          className={`attachment-viewer-stage relative flex min-h-0 flex-auto flex-col${walking && text !== undefined ? " px-viewer-gutter" : ""}`}
+          {...DIALOG_VEIL}
+        >
           <AttachmentBody
             key={at}
             file={file}

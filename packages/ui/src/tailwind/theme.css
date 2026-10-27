@@ -1157,13 +1157,9 @@
   --color-file-icon-pink: var(--file-icon-pink);
   --color-file-icon-mauve: var(--file-icon-mauve);
   /* A file opened over the window (`attachment-viewer.tsx`): a text file's
-     reading width, centred in the window. */
-  --spacing-viewer-text: min(
-    880px,
-    var(--luke-stage-width) -
-    2 *
-    var(--luke-space-24)
-  ); /* off-scale: a text file's reading width */
+     reading width, centred in the card, never wider than the room the card
+     leaves it. */
+  --spacing-viewer-text: min(880px, 100%); /* off-scale: a text file's reading width */
   /* The room each side of a picture or a video the viewer walks through, where
      its Previous and Next stand clear of it: a control and its gap either side. */
   --spacing-viewer-gutter: calc(var(--luke-control-height) + 2 * var(--luke-space-12));
