@@ -1450,8 +1450,9 @@ function PlanDocument({
  * The page of a task New task is still starting with its agent, before the
  * service has made either: the task's page in the shape it lands in, its
  * column standing as the agent's tab with the developer's words as its first
- * line, and the side panel at its width, so Start opens the page at once
- * and the start's answer only fills it in.
+ * line and no side panel beside it, since the task lands on its agent alone
+ * (`useTasksTab`'s `openAgent`), so Start opens the page at once and the
+ * start's answer only fills it in.
  */
 function StartingTaskPage({
   tasks,
@@ -1465,10 +1466,10 @@ function StartingTaskPage({
   /** A phone's way back, which heads the page as the task's will be (`TaskWaitHead`); none elsewhere. */
   phoneAway: TaskHeadBack | undefined;
 }): React.JSX.Element {
-  const drawing = useSidePanelDrawing(tasks.sidePanel);
+  const drawing = { ...useSidePanelDrawing(tasks.sidePanel), panel: undefined };
   const [column, setColumn] = useState<HTMLElement | null>(null);
   // Note that the summary's room is kept, as the task's page keeps it for the agent it lists, so nothing moves as the page lands.
-  const summaryLayout = useSummaryLayout(summary, column, tasks.sidePanel.fullScreen, true);
+  const summaryLayout = useSummaryLayout(summary, column, false, true);
   return (
     <TaskPageSkeleton
       drawing={drawing}
