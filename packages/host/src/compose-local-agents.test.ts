@@ -15,6 +15,7 @@ import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
   DEVICE_ARCH,
+  DEVICE_ISOLATION,
   DEVICE_PLATFORM,
   deviceAgentLayout,
 } from "@luke/features/device-agent-wire";
@@ -117,6 +118,8 @@ const following = (githubFromLuke: boolean) =>
         deviceName: "rack-1",
         devicePlatform: DEVICE_PLATFORM.LINUX,
         deviceArch: DEVICE_ARCH.X64,
+        deviceIsolation: DEVICE_ISOLATION.SANDBOX,
+        deviceCapabilities: [],
         worktreeScript: () => "exit 0",
       }),
     );

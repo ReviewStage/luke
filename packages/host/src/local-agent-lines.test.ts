@@ -127,6 +127,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
         unsavedWorkScript: unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,
+        githubFromLuke: false,
       }),
     );
     const composer = yield* composeLocalAgents({
