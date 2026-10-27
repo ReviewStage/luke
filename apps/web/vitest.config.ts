@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vitest/config";
+import { DurationSharding } from "../../scripts/lib/test-shards.mjs";
 import { panelResolve } from "./scripts/panel-build";
 import { siteMarkdown } from "./scripts/site-markdown";
 
@@ -27,6 +28,8 @@ export default defineConfig({
     globalSetup: ["../../packages/database/src/testing/migrated-pglite-setup.ts"],
     css: { include: [INLINE_STYLESHEETS] },
     server: { deps: { inline: ["streamdown"] } },
+    // CI's shards split the files by their recorded time (`scripts/lib/test-shards.mjs`).
+    sequence: { sequencer: DurationSharding },
     // The whole suite stands up a database, and a PGlite test exceeds vitest's
     // 5 s default on a loaded machine; node:test, which ran it before, had no
     // default at all. Suite-wide so the next database test meets the same bar.
