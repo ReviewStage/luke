@@ -17,6 +17,7 @@ import {
   type ContextWindow,
   codingAgentPullRequestSchema,
   contextWindowSchema,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import {
@@ -39,6 +40,7 @@ import {
   lte,
   ne,
   not,
+  notInArray,
   or,
   type SQL,
   sql,
@@ -1001,6 +1003,16 @@ const updateAgentTitle = SqlSchema.findOneOption({
  * lines have run no further than `seenSeq`, so an agent a message woke
  * after the caller read it is left standing.
  */
+/**
+ * An agent with no pull request open or in draft, as GitHub last answered:
+ * what an archive the developer did not ask for waits on, since an archived
+ * agent is woken by no review, comment, or check on its pull request.
+ */
+export const noOpenPullRequest: SQL = notInArray(
+  sql`coalesce(${codingAgent.published}->>'state', '')`,
+  [PULL_REQUEST_STATE.OPEN, PULL_REQUEST_STATE.DRAFT],
+);
+
 const updateUnmovedArchived = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -1019,6 +1031,8 @@ const updateUnmovedArchived = SqlSchema.findAll({
           and(
             reachableAgent(userId, agentId),
             isNull(codingAgent.archivedAt),
+            // Note that a pull request reopened since the read moves no line, so it is read again here.
+            noOpenPullRequest,
             exists(
               queryBuilder
                 .select({ one: conversations.id })
@@ -3057,9 +3071,10 @@ export function codingAgentConversation(
 
 /**
  * Archives the agent as `archiveCodingAgent` does, but only where it stands
- * unarchived and its conversation's lines have run no further than the
- * `seenSeq` its reader saw, so an agent a message woke since stands;
- * answers whether it was archived.
+ * unarchived, its conversation's lines have run no further than the
+ * `seenSeq` its reader saw, so an agent a message woke since stands, and it
+ * has no pull request open (`noOpenPullRequest`); answers whether it was
+ * archived.
  */
 export function archiveUnmovedCodingAgent(
   userId: string,

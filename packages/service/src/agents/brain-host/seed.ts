@@ -16,13 +16,15 @@ import { storedMessageLine } from "./context.js";
 /** The marker the seed rides behind, so the model knows it is data. */
 const SEED_MARKER = "[conversation so far]";
 
+/** The seed, each message under its speaker, or under the one `speakers` names for it, such as a teammate of a coding agent's developer. */
 export function rotationSeedText(
   messages: readonly StoredUIMessage[],
   now: number,
+  speakers?: ReadonlyMap<StoredUIMessage, string>,
 ): string | undefined {
   if (messages.length === 0) return undefined;
   const lines = messages.map((message) =>
-    storedMessageLine(message, BRAIN_HOST.RECENT_MESSAGE_CHARS),
+    storedMessageLine(message, BRAIN_HOST.RECENT_MESSAGE_CHARS, speakers?.get(message)),
   );
   let body = lines.join("\n");
   if (body.length > BRAIN_HOST.SEED_CHARS) {

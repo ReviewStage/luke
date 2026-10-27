@@ -59,6 +59,7 @@ import {
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
   type NativeCodingAgentRuntime,
+  type RefusedDevice,
 } from "@luke/features/coding-agent-wire";
 import {
   GITHUB_ACCESS,
@@ -462,7 +463,7 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.DEVICE_REMOVED, START_CODING_AGENT_REFUSAL.DEVICE_REMOVED],
 ]);
 
-/** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for. */
+/** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for, bar another member's device, which names whose it is (`notOwnerWords`). */
 const LOCAL_AGENT_REFUSAL_WORDS = {
   [LOCAL_AGENT_REFUSAL.OFF]:
     "Not started: this task runs its agents on a device, and Local agents is off for the member you start for. Ask them to turn it on, or to change where the task runs.",
@@ -476,7 +477,17 @@ const LOCAL_AGENT_REFUSAL_WORDS = {
     "Not started: the device this task runs its agents on is still getting ready for local agents, downloading its sandbox. Try again in a few minutes.",
   [LOCAL_AGENT_REFUSAL.SETUP_FAILED]:
     "Not started: the device this task runs its agents on couldn't set up local agents, since its sandbox download failed. Ask the member to turn Run agents on this Mac off and on in Settings › Agents to try again, or to change where the task runs.",
-} as const satisfies Record<LocalAgentRefusal, string>;
+} as const satisfies Record<
+  Exclude<LocalAgentRefusal, typeof LOCAL_AGENT_REFUSAL.NOT_OWNER>,
+  string
+>;
+
+/** Why a start on another member's device refused it, naming the device and its owner where the refusal did. */
+function notOwnerWords(device: RefusedDevice | undefined): string {
+  const where = device === undefined ? "another member's device" : device.name;
+  const who = device?.owner ?? "its owner";
+  return `Not started: this task runs on ${where}. Only ${who} can start agents on it, so ask them to, or start the work on a task that runs elsewhere.`;
+}
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
 export const AGENT_CALLER = {
@@ -1313,6 +1324,9 @@ function withReset(words: string, refusal: HostedRefusal): string {
 
 /** A start's refusal in the model's words. */
 function startRefusalWords(refusal: HostedRefusal): string {
+  if (refusal.localAgentRefusal === LOCAL_AGENT_REFUSAL.NOT_OWNER) {
+    return notOwnerWords(refusal.refusedDevice);
+  }
   if (refusal.localAgentRefusal !== undefined) {
     return LOCAL_AGENT_REFUSAL_WORDS[refusal.localAgentRefusal];
   }
@@ -1789,8 +1803,6 @@ export function runStartAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: yield* startedReading(started.success.agent, yield* offeredModels, ownTask),
         ...earlierContinuations(landing?.success.continuedBy, started.success.agent.id),
-        // An agent sent to the cloud on a device's task says why, so the caller can tell its member.
-        ...(started.success.notice === undefined ? undefined : { notice: started.success.notice }),
       };
     }),
   );

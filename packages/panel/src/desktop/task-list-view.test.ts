@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+  type TasklessAgent,
+} from "@luke/features/coding-agent-wire";
 import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -145,6 +150,14 @@ function oneOff(
     workspaceId: ACME.id,
     repository,
     activityAt,
+    // Its pull request still open, the finished run holds the reader, so it stands under Tasks (`finished-runs.ts`).
+    pullRequest: {
+      number: 7,
+      title,
+      url: `https://github.com/${repository}/pull/7`,
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+    },
     ...(archivedAt === undefined ? undefined : { archivedAt }),
   };
 }
@@ -613,6 +626,17 @@ test("an archived one-off agent stands nowhere in the list", async () => {
   const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
   const sidebar = await mountRead(ACME, TASKS, [TRIAGE, shelved]);
   assert.ok(!taskRows(sidebar).some((row) => row.name === "Digest of open pull requests"));
+});
+
+test("an automation's run that finished and holds nothing of the reader's stands nowhere, and a list of only such runs holds no tasks", async () => {
+  const { pullRequest: _, ...finished } = oneOff("a-4", "Nightly digest", "acme/relay", DEAN, 45);
+  const among = await mountRead(ACME, TASKS, [TRIAGE, finished]);
+  assert.ok(!taskRows(among).some((row) => row.name === "Nightly digest"));
+  assert.ok(taskRows(among).some((row) => row.name === "Triage overnight issues"));
+
+  const alone = await mountRead(ACME, [], [finished]);
+  assert.deepEqual(taskRows(alone), []);
+  assert.match(alone.textContent ?? "", /No tasks yet\./u);
 });
 
 test("the agent whose page stands is the row the sidebar marks", () => {

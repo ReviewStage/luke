@@ -41,6 +41,7 @@ import {
   PART_CUT_FIELD,
   PULL_REQUEST_STATE,
   type PullRequestState,
+  type RefusedDevice,
 } from "@luke/features/coding-agent-wire";
 import { DEVICE_KIND, type DeviceKind } from "@luke/features/device-agent-wire";
 import {
@@ -615,12 +616,14 @@ export interface RefusedCall {
   readonly resetsAt?: number | undefined;
   readonly provider?: ModelProvider | undefined;
   readonly localAgentRefusal?: LocalAgentRefusal | undefined;
+  readonly refusedDevice?: RefusedDevice | undefined;
 }
 
-/** The device a task runs its agents on, as a refusal names it: its name, and its kind where the service said. */
+/** The device a task runs its agents on, as a refusal names it: its name, its kind where the service said, and its owner where it is another member's and the service said. */
 export interface RefusingDevice {
   readonly name: string;
   readonly kind?: DeviceKind | undefined;
+  readonly owner?: string | undefined;
 }
 
 /** What a device refusing a Start is called where its name is not known. */
@@ -659,6 +662,9 @@ export function localAgentRefusalWords(
       return `${name} is still getting ready for local agents (downloading its sandbox). Try again in a few minutes.`;
     case LOCAL_AGENT_REFUSAL.SETUP_FAILED:
       return `${name} couldn't set up local agents. Turn Run agents on this Mac off and on in Settings › Agents to try again, ${RUN_IN_CLOUD}.`;
+    // Note that no way out is offered, because the cloud is the owner's to set and a teammate can change nothing here.
+    case LOCAL_AGENT_REFUSAL.NOT_OWNER:
+      return `This task runs on ${device?.name ?? "another member's device"}. Only ${device?.owner ?? "its owner"} can start agents on it.`;
     case undefined:
       return `${name} couldn't take this agent. Try again, ${RUN_IN_CLOUD}.`;
   }
@@ -846,7 +852,9 @@ export function startFailureNote(
     return unreachedFailure(refused.unreached, taskId);
   }
   if (refused.failure === CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
-    return callFailure(localAgentRefusalWords(refused.localAgentRefusal, device));
+    return callFailure(
+      localAgentRefusalWords(refused.localAgentRefusal, refused.refusedDevice ?? device),
+    );
   }
   return (
     settingsFailure(refused, ACTION.START) ??

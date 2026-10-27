@@ -20,9 +20,12 @@ import { cn } from "../cn.js";
  * and lift, at a question's measure; it fades and rises in on the motion
  * tokens, and as it closes it and its dimmed window fade out over
  * `--luke-duration-exit`, taking no press while they do, Base UI holding
- * them drawn (`data-ending-style`) until the card's fade has run. shadcn's close button, header, footer, title, description,
- * trigger, and close are left out, because a Luke dialog draws its own
- * head and foot (`components/dialog/dialog.tsx`), as is its ring utility,
+ * them drawn (`data-ending-style`) until the card's fade has run. A card
+ * may also stay drawn, hidden, while its dialog is shut (`keepMounted`, Base
+ * UI's portal's own), so opening it again only shows it. shadcn's close
+ * button, header, footer, title, description, trigger, and close are left
+ * out, because a Luke dialog draws its own head and foot
+ * (`components/dialog/dialog.tsx`), as is its ring utility,
  * because the card holds focus for its controls and draws no ring. What an
  * app draws is `@luke/ui`'s `Dialog`; this is its inside.
  */
@@ -57,14 +60,17 @@ function DialogContent({
   className,
   children,
   viewport,
+  keepMounted = false,
   ...props
 }: DialogPrimitive.Popup.Props & {
   /** What the dimmed window's room is handed: its presses, keys, and drags. */
   viewport?: Omit<DialogPrimitive.Viewport.Props, "children"> | undefined;
+  /** Whether the room and the card stay drawn, hidden, while the dialog is shut, so opening it again only shows them. */
+  keepMounted?: boolean | undefined;
 }) {
   const { className: viewportClassName, ...room } = viewport ?? {};
   return (
-    <DialogPortal>
+    <DialogPortal keepMounted={keepMounted}>
       <DialogOverlay />
       <DialogPrimitive.Viewport
         data-slot="dialog-viewport"

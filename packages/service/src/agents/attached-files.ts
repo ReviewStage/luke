@@ -24,6 +24,7 @@ import {
   PICTURE_OMISSION,
 } from "@luke/features/conversation-picture-wire";
 import { imageDimensions, sniffImageType } from "@luke/features/image-signature";
+import { MENTION_KIND, memberMentionOf } from "@luke/features/mention-link";
 import type { FileUIPart, UserContent } from "ai";
 import { Effect, Option } from "effect";
 import type { MessageReceivedPart } from "eve/client";
@@ -110,21 +111,49 @@ export function keptHandedImages(
   );
 }
 
+/** How the part naming a member who sent a message opens, which the service writes and no member can type as one. */
+export const SENDER_LABEL_LEAD = "[sender: ";
+
+/** How the part naming a teammate closes, after their mention link. */
+const SENDER_LABEL_TAIL = ", a teammate]";
+
+/**
+ * The part naming a teammate who sent a message, a member other than the
+ * agent's developer, ahead of their words, by their mention link. Note that
+ * the developer's own words go unlabelled, as they always went, because every
+ * other sender's line already opens on who sent it. It is the model's alone:
+ * the row keeps the words without it and names its sender in its own column.
+ */
+export function senderLabel(teammate: string): string {
+  return `${SENDER_LABEL_LEAD}${teammate}${SENDER_LABEL_TAIL}`;
+}
+
+/** Whether a text part eve was handed is a message's sender label rather than its words. */
+function isSenderLabel(text: string): boolean {
+  if (!text.startsWith(SENDER_LABEL_LEAD) || !text.endsWith(SENDER_LABEL_TAIL)) return false;
+  // Note that only a person's mention link written whole between the two counts, as `senderLabel` writes it,
+  // because a developer's own words of a label's shape, sent with a file, are words.
+  const link = text.slice(SENDER_LABEL_LEAD.length, -SENDER_LABEL_TAIL.length);
+  return link.startsWith("[@") && memberMentionOf(link)?.kind === MENTION_KIND.PERSON;
+}
+
 /**
  * What eve is handed for a message: the words alone where nothing is
- * attached and nothing mentioned, as every message went before files, and
- * otherwise the words where there are any, what they mention that the agent
- * cannot read for itself (`mentioned-context.ts`), the text files inlined,
- * and the images and PDFs as file parts, each image followed by the line
- * naming what was kept of it where it was kept or refused, so a model is
- * never handed an empty text part.
+ * attached, nothing mentioned, and no teammate named, as every message went
+ * before files, and otherwise the sender label where a teammate sent it, the
+ * words where there are any, what they mention that the agent cannot read
+ * for itself (`mentioned-context.ts`), the text files inlined, and the images
+ * and PDFs as file parts, each image followed by the line naming what was
+ * kept of it where it was kept or refused, so a model is never handed an
+ * empty text part.
  */
 export function eveContent(
   text: string,
   attachments: readonly HandedFile[],
   mentioned?: string,
+  sender?: string,
 ): string | UserContent {
-  if (attachments.length === 0 && mentioned === undefined) return text;
+  if (attachments.length === 0 && mentioned === undefined && sender === undefined) return text;
   const texts = attachments.flatMap((file) =>
     file.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT
       ? [{ type: "text" as const, text: inlinedFile(file.name, textOf(file.data)) }]
@@ -146,6 +175,7 @@ export function eveContent(
         ],
   );
   return [
+    ...(sender === undefined ? [] : [{ type: "text" as const, text: sender }]),
     ...(text === "" ? [] : [{ type: "text" as const, text }]),
     ...(mentioned === undefined ? [] : [{ type: "text" as const, text: mentioned }]),
     ...texts,
@@ -195,7 +225,8 @@ function keptOnto(image: FileUIPart, text: string): FileUIPart | undefined {
  * carry files with no words. A file staged in the sandbox carries no URL,
  * so its part keeps its name and no bytes; eve stages every file a message
  * carries, a task's included, so a receipt's own row names each file and
- * draws none.
+ * draws none. A sender label leading the parts is the model's alone, so it
+ * is neither matched nor kept as words.
  */
 export function receivedMessage(received: {
   readonly message: string;
@@ -209,6 +240,9 @@ export function receivedMessage(received: {
   const files: FileUIPart[] = [];
   for (const [index, part] of received.parts.entries()) {
     if (part.type === "text") {
+      // The sender label leads what a member sent, and is neither the words nor a part the row keeps.
+      // Note that it is read as one only ahead of another part, so a message of those words alone is words.
+      if (index === 0 && received.parts.length > 1 && isSenderLabel(part.text)) continue;
       texts.push(part.text);
       // The line naming what was kept of the image just before it is that image's, and no words.
       const image = received.parts[index - 1]?.type === "file" ? files.at(-1) : undefined;

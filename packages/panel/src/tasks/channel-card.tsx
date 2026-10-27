@@ -2,23 +2,14 @@ import { useAtomValue } from "@effect/atom-react";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import { dateOfText } from "@luke/features/time-format";
 import { ACT_KIND } from "@luke/host/acts";
-import {
-  HOVER_CARD_ROW_LOOK,
-  HoverCard,
-  HoverCardHead,
-  HoverCardNote,
-  HoverCardRow,
-  HoverCardRule,
-  Time,
-  useMinute,
-} from "@luke/ui";
+import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule, Time, useMinute } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { askAct } from "../act.js";
-import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
+import { CreatedByRow } from "../actor-ref.js";
 import type { CountNoun } from "../desktop/sidebar-fold.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
@@ -54,7 +45,7 @@ const CHANNEL_KIND_WORDS = { CHANNEL: "Channel", PROJECT: "Project" } as const;
 /** What a count of a channel's threads is said with. */
 const THREAD_NOUN: CountNoun = { one: "thread", many: "threads" };
 
-/** What parts the kind from the size in a card's sub, and the maker from the day at its foot. */
+/** What parts the kind from the size in a card's sub. */
 const PART = " · ";
 
 /** The channels a read answered; none where it refused, or did not land. */
@@ -100,7 +91,7 @@ function channelCorner(channel: Channel | ArchivedChannel, now: number): ReactNo
   return latest === undefined ? undefined : <Time at={latest} now={now} hint={false} />;
 }
 
-/** Who made a channel and when, as a task's card says it: their face, then "Created by" and their name, which hangs their card, and the day. */
+/** Who made a channel and when, as the members around it name them (`CreatedByRow`). */
 function CreatedBy({
   userId,
   name,
@@ -112,20 +103,7 @@ function CreatedBy({
   at: number;
   now: number;
 }): React.JSX.Element {
-  const actor = usePerson({ userId, name });
-  return (
-    <HoverCardRow
-      look={HOVER_CARD_ROW_LOOK.DETAIL}
-      glyph={<ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
-      label={
-        <>
-          {"Created by "}
-          <ActorRef actor={actor} sentence nameOnly />
-          {`${PART}${dateOfText(at, now)}`}
-        </>
-      }
-    />
-  );
+  return <CreatedByRow actor={usePerson({ userId, name })} at={at} now={now} />;
 }
 
 /** A channel's card as the members around it name its maker; waiting while they are read. */
