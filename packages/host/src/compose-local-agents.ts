@@ -38,6 +38,7 @@ import type { Composer } from "./composer.js";
 import {
   Environment,
   LocalAgentPlatform,
+  type LocalAgentPlatformSeam,
   type LocalAgentSandbox,
   type LocalAgentSandboxCommand,
   Reporter,
@@ -119,6 +120,17 @@ import type { RunMode } from "./run-mode.js";
  * agent's folder, where the agent could read it; and a tool's command runs
  * in the VM rather than on the device, since the worktree is the agent's to
  * rig.
+ *
+ * This Mac runs its agents either way, as its sandbox setting says
+ * (`LocalAgentsDependencies.sandboxed`): directly on the Mac, or on its
+ * platform's sandboxed alternative, a VM per agent as on a host, on the
+ * sign-ins saved in Luke and a GitHub token from Luke. The platform is read
+ * as the gate opens and on every beat; a change ends the follow, and the
+ * next one has what the other way runs on and registers the device so. An
+ * agent whose worktree a direct launch made never starts in a VM, whose
+ * mounts leave out the shared clone its Git folder is in, and a discard
+ * deletes the VM of an agent that ran in one whichever way the Mac runs
+ * agents now.
  *
  * Every launch this Mac claimed is kept in the host's state by its line's
  * id, no secret beside it, until its runner's exit settles it. A launch
@@ -273,6 +285,14 @@ export interface LocalAgentsDependencies {
   deviceId?: string | undefined;
   /** Whether the account's Local agents experiment and Settings › This Mac's switch are both on, read every `IDLE` while the gate is open. */
   switchedOn: Effect.Effect<boolean>;
+  /**
+   * Whether the device's sandbox setting is on, where it has one (This
+   * Mac's `localAgentsSandbox`): its agents then run on the platform's
+   * `sandboxed` alternative. Read as the gate opens and every `IDLE` while
+   * it stands, so a change ends the follow and the next one registers the
+   * device the other way. None runs them on the platform as given.
+   */
+  sandboxed?: Effect.Effect<boolean> | undefined;
   client: LocalAgentClient;
 }
 
@@ -307,7 +327,7 @@ export function composeLocalAgents(
 ): Effect.Effect<LocalAgentsComposer, never, LocalAgentServices> {
   return Effect.gen(function* () {
     const { report } = yield* Reporter;
-    const platform = yield* LocalAgentPlatform;
+    const given = yield* LocalAgentPlatform;
     const services = yield* Effect.context<
       | ChildProcessSpawner.ChildProcessSpawner
       | FileSystem.FileSystem
@@ -330,6 +350,11 @@ export function composeLocalAgents(
     }
     const { kernel, account, switchedOn, client } = dependencies;
     const statePath = path.join(kernel.stateRoot, STATE_FILE);
+
+    /** The platform the device's agents run on now: its sandboxed alternative while the sandbox setting is on, the one given otherwise. */
+    const platformNow = Effect.map(dependencies.sandboxed ?? Effect.succeed(false), (sandboxed) =>
+      sandboxed ? (given.sandboxed ?? given) : given,
+    );
 
     // -- the host's state ----------------------------------------------------
 
@@ -385,8 +410,9 @@ export function composeLocalAgents(
 
     // -- the tools a runner runs on ------------------------------------------------
 
-    /** The Node and Claude Code CLI this Mac's runners run on, once had, and whether a fetch was tried since the gate last opened. */
+    /** The Node and Claude Code CLI this Mac's runners run on, once had, the platform they were had for, and whether a fetch was tried since the gate last opened. */
     const tools = yield* Ref.make(Option.none<LocalAgentTools>());
+    const toolsFor = yield* Ref.make<LocalAgentPlatformSeam>(given);
     const fetchTried = yield* Ref.make(false);
     const fetching = yield* Semaphore.make(1);
 
@@ -395,42 +421,46 @@ export function composeLocalAgents(
      * had already, where both still stand, or each had now through its pin
      * (`localAgentTool`), the app's or the checkout's own copy first; none
      * where either cannot be had. One at a time, so two asks never fetch the
-     * same release twice.
+     * same release twice. On a sandboxed platform they are the VM's own,
+     * once the device has what its VMs run on (`LocalAgentSandbox.ready`).
      */
-    const toolsHad = fetching.withPermit(
-      Effect.gen(function* () {
-        // Note that a sandboxed device's runners run on the VM's own tools, so it fetches none of its own.
-        if (platform.sandbox !== undefined) {
-          const inVm = Option.some({
-            node: platform.sandbox.tools.node,
-            claude: platform.sandbox.tools.claude,
-          });
-          yield* Ref.set(tools, inVm);
-          return inVm;
-        }
-        const had = yield* Ref.get(tools);
-        if (Option.isSome(had)) {
-          const standing = yield* Effect.all(
-            [fileSystem.exists(had.value.node), fileSystem.exists(had.value.claude)],
+    const toolsHad = (platform: LocalAgentPlatformSeam) =>
+      fetching.withPermit(
+        Effect.gen(function* () {
+          // Note that a sandboxed device's runners run on the VM's own tools, so it fetches none of its own.
+          if (platform.sandbox !== undefined) {
+            const inVm = (yield* platform.sandbox.ready)
+              ? Option.some({
+                  node: platform.sandbox.tools.node,
+                  claude: platform.sandbox.tools.claude,
+                })
+              : Option.none<LocalAgentTools>();
+            yield* Ref.set(tools, inVm);
+            return inVm;
+          }
+          const had = yield* Ref.get(tools);
+          if (Option.isSome(had)) {
+            const standing = yield* Effect.all(
+              [fileSystem.exists(had.value.node), fileSystem.exists(had.value.claude)],
+              { concurrency: 2 },
+            ).pipe(Effect.orElseSucceed(() => [false, false]));
+            if (standing.every((each) => each)) return had;
+          }
+          const [node, claude] = yield* Effect.all(
+            [
+              localAgentTool(kernel.stateRoot, platform.pins.node, platform.bundled.node),
+              localAgentTool(kernel.stateRoot, platform.pins.claude, platform.bundled.claude),
+            ],
             { concurrency: 2 },
-          ).pipe(Effect.orElseSucceed(() => [false, false]));
-          if (standing.every((each) => each)) return had;
-        }
-        const [node, claude] = yield* Effect.all(
-          [
-            localAgentTool(kernel.stateRoot, platform.pins.node, platform.bundled.node),
-            localAgentTool(kernel.stateRoot, platform.pins.claude, platform.bundled.claude),
-          ],
-          { concurrency: 2 },
-        );
-        const both =
-          Option.isSome(node) && Option.isSome(claude)
-            ? Option.some({ node: node.value, claude: claude.value })
-            : Option.none<LocalAgentTools>();
-        yield* Ref.set(tools, both);
-        return both;
-      }),
-    );
+          );
+          const both =
+            Option.isSome(node) && Option.isSome(claude)
+              ? Option.some({ node: node.value, claude: claude.value })
+              : Option.none<LocalAgentTools>();
+          yield* Ref.set(tools, both);
+          return both;
+        }),
+      );
 
     /**
      * The tools as the gate opens: had already, or fetched once per opening,
@@ -438,14 +468,27 @@ export function composeLocalAgents(
      * that failed waits for the next, so a Mac offline is not asked again
      * every turn.
      */
-    const toolsForOpening = Effect.gen(function* () {
-      const had = yield* Ref.get(tools);
-      if (Option.isSome(had)) return yield* toolsHad;
-      if (yield* Ref.getAndSet(fetchTried, true)) return Option.none<LocalAgentTools>();
-      const fetched = yield* toolsHad;
-      if (Option.isNone(fetched)) report("the local agents' Node or Claude Code could not be had");
-      return fetched;
-    });
+    const toolsForOpening = (platform: LocalAgentPlatformSeam) =>
+      Effect.gen(function* () {
+        // Note that a platform other than the last one's starts over, since nothing had for the one runs the other.
+        if ((yield* Ref.getAndSet(toolsFor, platform)) !== platform) {
+          yield* Ref.set(tools, Option.none());
+          yield* Ref.set(codex, Option.none());
+          yield* Ref.set(fetchTried, false);
+        }
+        const had = yield* Ref.get(tools);
+        if (Option.isSome(had)) return yield* toolsHad(platform);
+        if (yield* Ref.getAndSet(fetchTried, true)) return Option.none<LocalAgentTools>();
+        const fetched = yield* toolsHad(platform);
+        if (Option.isNone(fetched)) {
+          report(
+            platform.sandbox === undefined
+              ? "the local agents' Node or Claude Code could not be had"
+              : "the local agents' smolvm or sandbox image could not be had",
+          );
+        }
+        return fetched;
+      });
 
     /** The Codex this device checked against its pin (`pins.codex`), once had; none until then. */
     const codex = yield* Ref.make(Option.none<string>());
@@ -459,25 +502,26 @@ export function composeLocalAgents(
      * reported, and tried again as the gate next opens or a launch finds the
      * Codex the Mac registered gone.
      */
-    const codexHad = fetchingCodex.withPermit(
-      Effect.gen(function* () {
-        if (platform.sandbox !== undefined) {
-          const inVm = Option.some(platform.sandbox.tools.codex);
-          yield* Ref.set(codex, inVm);
-          return inVm;
-        }
-        const kept = yield* Ref.get(codex);
-        if (Option.isSome(kept) && (yield* fileSystem.exists(kept.value))) return kept;
-        const had = yield* localAgentTool(
-          kernel.stateRoot,
-          platform.pins.codex,
-          platform.bundled.codex,
-        );
-        if (Option.isNone(had)) report("Codex for local agents could not be had");
-        yield* Ref.set(codex, had);
-        return had;
-      }).pipe(Effect.orElseSucceed(() => Option.none<string>())),
-    );
+    const codexHad = (platform: LocalAgentPlatformSeam) =>
+      fetchingCodex.withPermit(
+        Effect.gen(function* () {
+          if (platform.sandbox !== undefined) {
+            const inVm = Option.some(platform.sandbox.tools.codex);
+            yield* Ref.set(codex, inVm);
+            return inVm;
+          }
+          const kept = yield* Ref.get(codex);
+          if (Option.isSome(kept) && (yield* fileSystem.exists(kept.value))) return kept;
+          const had = yield* localAgentTool(
+            kernel.stateRoot,
+            platform.pins.codex,
+            platform.bundled.codex,
+          );
+          if (Option.isNone(had)) report("Codex for local agents could not be had");
+          yield* Ref.set(codex, had);
+          return had;
+        }).pipe(Effect.orElseSucceed(() => Option.none<string>())),
+      );
 
     // -- the gate --------------------------------------------------------------
 
@@ -578,7 +622,11 @@ export function composeLocalAgents(
      * its agents (`ownSignIns`), so every launch there carries the sign-in
      * saved in Luke.
      */
-    const signedInNow = (had: LocalAgentTools, env: Readonly<Record<string, string>>) =>
+    const signedInNow = (
+      platform: LocalAgentPlatformSeam,
+      had: LocalAgentTools,
+      env: Readonly<Record<string, string>>,
+    ) =>
       Effect.gen(function* () {
         if (!platform.ownSignIns) return NOT_SIGNED_IN;
         const claudeCode = yield* claudeCodeSignedIn(had.claude, env);
@@ -594,6 +642,7 @@ export function composeLocalAgents(
 
     /** Everything one open gate runs for the account `userId` names, on the device it registered, from its home folder. */
     const follow = (
+      platform: LocalAgentPlatformSeam,
       userId: string,
       deviceId: string,
       folder: string,
@@ -627,10 +676,12 @@ export function composeLocalAgents(
          * VM, so a command between turns never leaves it running, and never
          * stops it under a runner. A VM a discard deleted is held by nothing.
          */
-        const vmHeld = <E, R>(agentId: string, start: Effect.Effect<boolean, E, R>) =>
+        const vmHeld = <E, R>(
+          sandbox: LocalAgentSandbox,
+          agentId: string,
+          start: Effect.Effect<boolean, E, R>,
+        ) =>
           Effect.gen(function* () {
-            const sandbox = platform.sandbox;
-            if (sandbox === undefined) return false;
             const lock = vmLockOf(agentId);
             const up = yield* lock.withPermit(
               Effect.tap(start, (stands) =>
@@ -660,6 +711,13 @@ export function composeLocalAgents(
 
         const settle = (id: string, exitCode?: number) =>
           asked(client.settleLine(deviceId, id, exitCode));
+
+        /** Whether the agent's checkout is a worktree of Luke's shared clone, its `.git` a file naming the clone's Git folder, as a launch directly on the device makes it. */
+        const sharedCloneWorktree = (layout: DeviceAgentLayout) =>
+          Effect.map(
+            Effect.option(fileSystem.stat(path.join(layout.checkoutPath, ".git"))),
+            Option.exists((info) => info.type === "File"),
+          );
 
         /** The agent's worktree made where it has none, on the agent's GitHub sign-in where the host gave it one: a folder for an agent with no repository, and Luke's shared clone's worktree otherwise. */
         const madeWorktree = (
@@ -794,6 +852,13 @@ export function composeLocalAgents(
                 ? githubEnvironment(configFolder, gh)
                 : sandbox.deviceGit(agentId);
             const github = sandbox === undefined ? deviceGithub : undefined;
+            // Note that a worktree made while the agent ran directly on this Mac keeps its Git folder in Luke's shared clone, which no VM mounts, so it never starts in one.
+            if (sandbox !== undefined && (yield* sharedCloneWorktree(layout))) {
+              report(
+                "a local agent made to run directly on this device was not started in a VM, since its worktree's Git folder is in Luke's shared clone",
+              );
+              return yield* settle(line.id, NOT_STARTED);
+            }
             const signedIn = signsIn && (yield* signedInToGithub(agentId, configFolder, gh));
             const made = yield* madeWorktree(
               layout,
@@ -809,7 +874,7 @@ export function composeLocalAgents(
               Option.isSome(kept) &&
               !(yield* Effect.orElseSucceed(fileSystem.exists(kept.value), () => false))
             ) {
-              yield* codexHad;
+              yield* codexHad(platform);
             }
             const temp = path.join(layout.folder, TEMP_FOLDER);
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
@@ -818,6 +883,7 @@ export function composeLocalAgents(
             if (sandbox !== undefined) {
               // Note that smolvm's reason names no secret, since its credentials are only ever references to their files.
               const refused = yield* vmHeld(
+                sandbox,
                 agentId,
                 Effect.as(
                   sandbox.started({ agentId, folder: layout.folder, github: signsIn }),
@@ -910,18 +976,42 @@ export function composeLocalAgents(
         /**
          * Why the agent's folder holds work a discard would lose, as the
          * platform's check says it; none where the platform names no check or
-         * the check finds nothing. A check that fails, outlasts `UNSAVED_CHECK`,
-         * or cannot start is taken as work, since the folder may hold the only
-         * copy.
+         * the check finds nothing. Where the agent ran in a VM (`vm`), the
+         * check runs there, woken for it, and never on the device, whose own
+         * git a repository the agent rigged could make run anything; a VM
+         * that cannot be woken leaves the folder unchecked. A check that
+         * fails, outlasts `UNSAVED_CHECK`, or cannot start is taken as work,
+         * since the folder may hold the only copy.
          */
-        const unsavedWork = (layout: DeviceAgentLayout) =>
+        const unsavedWork = (
+          agentId: string,
+          layout: DeviceAgentLayout,
+          vm: LocalAgentSandbox | undefined,
+        ) =>
           Effect.gen(function* () {
             if (platform.unsavedWorkScript === undefined) return Option.none<string>();
             const script = platform.unsavedWorkScript({ worktree: layout.checkoutPath });
             return yield* Effect.scoped(
               Effect.gen(function* () {
-                const handle = yield* ChildProcess.make("/bin/bash", ["-c", script], {
+                if (vm !== undefined && !(yield* vmHeld(vm, agentId, vm.woken(agentId)))) {
+                  return (yield* fileSystem.exists(layout.checkoutPath))
+                    ? Option.some(UNSAVED_UNKNOWN)
+                    : Option.none<string>();
+                }
+                const run =
+                  vm === undefined
+                    ? { command: "/bin/bash", args: ["-c", script], env: undefined }
+                    : vm.exec({
+                        agentId,
+                        folder: layout.folder,
+                        cwd: layout.folder,
+                        command: "/bin/bash",
+                        args: ["-c", script],
+                        env: shellVariables,
+                      });
+                const handle = yield* ChildProcess.make(run.command, [...run.args], {
                   cwd: folder,
+                  ...(run.env === undefined ? undefined : { env: run.env, extendEnv: false }),
                   stdin: "ignore",
                   stderr: "ignore",
                   forceKillAfter: KILL_GRACE,
@@ -955,29 +1045,50 @@ export function composeLocalAgents(
           });
 
         /**
-         * The agent let go of: its runner stopped and its exit settled, and
-         * its folder removed with everything in it, its worktree and what its
-         * runner and commands wrote there; the shared clone the worktree was
-         * made from stays, and the next worktree made of it prunes this one's
-         * record. A device whose platform names a check of the worktree keeps
-         * the folder, and says why, where the check finds work in it that is
-         * nowhere else, or cannot say. A removal that fails is reported.
+         * The VM a discard lets go of: the platform's, or, on a device that
+         * runs its agents directly now, its sandboxed alternative's for an
+         * agent whose checkout is a repository of its own, which only a
+         * sandboxed launch makes; none for an agent that never ran in one.
+         */
+        const vmOf = (layout: DeviceAgentLayout) =>
+          Effect.gen(function* () {
+            if (platform.sandbox !== undefined) return platform.sandbox;
+            const alternative = given.sandboxed?.sandbox;
+            if (alternative === undefined) return undefined;
+            const git = yield* Effect.option(
+              fileSystem.stat(path.join(layout.checkoutPath, ".git")),
+            );
+            return Option.exists(git, (info) => info.type === "Directory")
+              ? alternative
+              : undefined;
+          });
+
+        /**
+         * The agent let go of: its runner stopped and its exit settled, its
+         * VM, where it ran in one, deleted, and its folder removed with
+         * everything in it, its worktree and what its runner and commands
+         * wrote there; the shared clone the worktree was made from stays, and
+         * the next worktree made of it prunes this one's record. A device
+         * whose platform names a check of the worktree keeps the folder, and
+         * says why, where the check finds work in it that is nowhere else, or
+         * cannot say; its VM goes either way. A removal that fails is
+         * reported.
          */
         const discarded = (agentId: string) =>
           Effect.gen(function* () {
             yield* stopped(agentId);
+            const layout = deviceAgentLayout(folder, agentId);
+            const vm = yield* vmOf(layout);
+            const unsaved = yield* unsavedWork(agentId, layout, vm);
             // Note that the VM goes before the folder, so nothing in it is still writing there as it is removed, and a command's hold outlasting it stops nothing.
-            const sandbox = platform.sandbox;
-            if (sandbox !== undefined) {
+            if (vm !== undefined) {
               yield* vmLockOf(agentId).withPermit(
                 Effect.andThen(
                   Effect.sync(() => vmHolds.delete(agentId)),
-                  sandbox.deleted(agentId),
+                  vm.deleted(agentId),
                 ),
               );
             }
-            const layout = deviceAgentLayout(folder, agentId);
-            const unsaved = yield* unsavedWork(layout);
             if (Option.isSome(unsaved)) {
               return yield* Effect.sync(() =>
                 report(`a local agent's folder was kept, since ${unsaved.value}`),
@@ -1141,7 +1252,7 @@ export function composeLocalAgents(
               sandbox === undefined
                 ? undefined
                 : {
-                    woken: vmHeld(claimed.agentId, sandbox.woken(claimed.agentId)),
+                    woken: vmHeld(sandbox, claimed.agentId, sandbox.woken(claimed.agentId)),
                     exec: (command: Omit<LocalAgentSandboxCommand, "agentId" | "folder">) =>
                       sandbox.exec({ ...command, agentId: claimed.agentId, folder: layout.folder }),
                   };
@@ -1176,11 +1287,16 @@ export function composeLocalAgents(
           let sinceBeat = Duration.toMillis(BEAT_EVERY);
           let sinceCheck = 0;
           let registeredCodex = yield* Ref.get(codex);
-          while ((yield* gateOpen) && dependencies.accountId() === userId) {
+          // Note that the follow ends once the platform turns, so the next registers the device the other way.
+          while (
+            (yield* gateOpen) &&
+            dependencies.accountId() === userId &&
+            (yield* platformNow) === platform
+          ) {
             // A Codex had since the Mac registered is registered now, with its sign-in, so Start offers it.
             const hadCodex = yield* Ref.get(codex);
             if (Option.getOrUndefined(hadCodex) !== Option.getOrUndefined(registeredCodex)) {
-              signedIn = yield* signedInNow(had, shellVariables);
+              signedIn = yield* signedInNow(platform, had, shellVariables);
               if (yield* asked(registered(signedIn))) registeredCodex = hadCodex;
               sinceCheck = 0;
             }
@@ -1188,7 +1304,7 @@ export function composeLocalAgents(
               Object.values(signedIn).some((each) => each === true) &&
               sinceCheck >= Duration.toMillis(SIGN_IN_EVERY)
             ) {
-              signedIn = yield* signedInNow(had, shellVariables);
+              signedIn = yield* signedInNow(platform, had, shellVariables);
               sinceCheck = 0;
               sinceBeat = Duration.toMillis(BEAT_EVERY);
             }
@@ -1205,7 +1321,7 @@ export function composeLocalAgents(
         yield* Effect.forkScoped(linesFollowed);
         yield* Effect.forkScoped(requestsFollowed);
         // Note that Codex is had as the gate opens, off the follow, since a fetch takes far longer than a beat.
-        yield* Effect.forkScoped(codexHad);
+        yield* Effect.forkScoped(codexHad(platform));
         yield* presence;
       });
 
@@ -1223,14 +1339,15 @@ export function composeLocalAgents(
         yield* Ref.set(fetchTried, false);
         return yield* Effect.sleep(IDLE);
       }
+      const platform = yield* platformNow;
       // Note that the Mac registers only once it has what a runner runs on, so Start never offers a Mac that cannot run one.
-      const had = yield* toolsForOpening;
+      const had = yield* toolsForOpening(platform);
       if (Option.isNone(had)) return yield* Effect.sleep(IDLE);
       // Note that a sandboxed device's Codex is the VM's, had at once, so it registers with its first registration.
-      if (platform.sandbox !== undefined) yield* codexHad;
+      if (platform.sandbox !== undefined) yield* codexHad(platform);
       const deviceId = yield* deviceOf(userId);
       const shellVariables = yield* shellEnvironment;
-      const signedIn = yield* signedInNow(had.value, shellVariables);
+      const signedIn = yield* signedInNow(platform, had.value, shellVariables);
       /** The Mac registered, with the Codex it checked where it has one, its sign-ins given, and the lines beyond the first it takes. */
       const registration = (said: DeviceSignedIn) =>
         Effect.flatMap(Ref.get(codex), (checked) =>
@@ -1253,7 +1370,16 @@ export function composeLocalAgents(
         if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
       }
       yield* Effect.scoped(
-        follow(userId, deviceId, home.value, shellVariables, had.value, signedIn, registration),
+        follow(
+          platform,
+          userId,
+          deviceId,
+          home.value,
+          shellVariables,
+          had.value,
+          signedIn,
+          registration,
+        ),
       );
     });
 

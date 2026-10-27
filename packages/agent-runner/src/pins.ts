@@ -135,6 +135,34 @@ export const CODEX_MAC_PIN: AgentToolPin = {
 };
 
 /**
+ * smolvm on a Mac whose local agents run sandboxed, one VM each: the
+ * release step 0 and the launcher's hand test passed on, as its GitHub
+ * release keeps the macOS arm64 build. The whole folder is kept, since the
+ * `smolvm` wrapper runs `smolvm-bin` beside it with the `lib/` it links, the
+ * `agent-rootfs/` it boots, and the disk templates it copies. Its binary is
+ * signed ad hoc with the hypervisor entitlement and no Developer ID team,
+ * so its digest alone decides.
+ */
+export const SMOLVM_MAC_PIN: AgentToolPin = {
+  NAME: "smolvm",
+  VERSION: "1.32.3",
+  ARCHIVE:
+    "https://github.com/smol-machines/smolvm/releases/download/v1.32.3/smolvm-1.32.3-darwin-arm64.tar.gz",
+  SHA256: "5d307f7df82886ccb48f3a3b3c77ff35dbeb00fc7dcdde8aa0d1d8b6fdb2d7f6",
+  BYTES: 41_229_365,
+  ROOT: "smolvm-1.32.3-darwin-arm64",
+  MEMBERS: [
+    "smolvm",
+    "smolvm-bin",
+    "lib",
+    "agent-rootfs",
+    "storage-template.ext4.zst",
+    "overlay-template.ext4.zst",
+  ],
+  BINARY: "smolvm",
+};
+
+/**
  * A tool's builds for a host (`apps/host`), one per architecture it runs on,
  * by Node's `process.arch` names (`@luke/features/device-agent-wire`'s
  * `DEVICE_ARCH`). None is signed, so each digest alone decides.

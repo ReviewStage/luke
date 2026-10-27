@@ -129,6 +129,15 @@ const fetchTool = Effect.fnUntraced(function* (pin: AgentToolPin, folder: string
 });
 
 /**
+ * Where the pin's binary is kept under the state root once fetched, for a
+ * caller that names it before it is had, as a Mac's `smolvm` is named in
+ * every command of its sandbox's.
+ */
+export function keptToolBinary(stateRoot: string, pin: AgentToolPin): string {
+  return [stateRoot, TOOL_FETCH.FOLDER, pin.NAME, pin.VERSION, pin.BINARY].join("/");
+}
+
+/**
  * The pinned binary for this Mac's local agents: `bundled` where it is given
  * and stands there, the kept build where it was checked and marked, and
  * otherwise the build fetched now; none where it cannot be had, which the

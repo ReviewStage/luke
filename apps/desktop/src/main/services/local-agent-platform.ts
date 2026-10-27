@@ -1,7 +1,13 @@
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { CLAUDE_CODE_MAC_PIN, CODEX_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
+import {
+  CLAUDE_CODE_MAC_PIN,
+  CODEX_MAC_PIN,
+  NODE_MAC_PIN,
+  SMOLVM_MAC_PIN,
+} from "@luke/agent-runner/pins";
+import { RUNNER_ENV, RUNNER_PLACE } from "@luke/agent-runner/protocol";
 import {
   DEVICE_ARCH,
   DEVICE_CAPABILITY,
@@ -17,6 +23,7 @@ import {
   agentUnsavedWorkScript,
   agentWorktreeScript,
   cloneFolder,
+  smolvmSandbox,
   worktreesRoot,
 } from "@luke/host/node";
 import { app } from "electron";
@@ -36,6 +43,19 @@ import { nativeHelperPath } from "../native/native-helper";
  * which keeps Electron's fuses, runs the bundle the start built under
  * Electron's own Node, and the CLI the runner's Agent SDK installed for
  * this Mac, pinned to the cloud's, where it installed one.
+ *
+ * Beside it stands the platform the Mac runs its agents on while its
+ * sandbox setting is on (`sandboxed`): each in a smolvm VM of its own
+ * (`@luke/host/node`'s `smolvmSandbox`), the pinned smolvm fetched and
+ * checked under the app's state, started through the same launcher, with
+ * the agent's folder and the runner's bundle mounted at their paths, no
+ * nested VMs, which a Mac's Hypervisor.framework never gives its guests, and
+ * the runner on the image's own Node, Claude Code, and Codex. Nothing of the
+ * Mac's reaches it: it runs on the sign-ins saved in Luke (`ownSignIns`),
+ * GitHub through a token from Luke that stays outside the VM
+ * (`githubFromLuke`), and a repository of its own rather than a worktree of
+ * Luke's shared clone, whose Git folder no VM mounts. The check of its
+ * folder for unsaved work still runs before a discard, in its VM.
  */
 
 const LAUNCHER = "luke-agent-launcher";
@@ -76,7 +96,55 @@ function deviceName(): string {
   return name.length > 0 ? name : "This Mac";
 }
 
-export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
+export interface LocalAgentPlatformOptions {
+  readonly packaged: boolean;
+  /** Luke's state root, the host's own, under which the pinned smolvm and each sandboxed agent's GitHub token are kept. */
+  readonly stateRoot: string;
+}
+
+/**
+ * The platform `base` runs its agents on in a VM each: the same runner's
+ * bundle and the Mac's name, platform, and capabilities, and everything a
+ * VM changes.
+ */
+function sandboxedPlatform(
+  base: LocalAgentPlatformSeam,
+  stateRoot: string,
+  launcher: string,
+): LocalAgentPlatformSeam {
+  const { uid, gid } = os.userInfo();
+  const vm = smolvmSandbox({
+    smolvm: SMOLVM_MAC_PIN,
+    through: launcher,
+    stateRoot,
+    runnerFolder: path.dirname(base.runnerBundle),
+    // Note that every command in a VM runs as the developer, who owns the agent's folder it mounts.
+    user: { uid, gid },
+    nested: false,
+  });
+  return {
+    ...base,
+    launch: vm.launch,
+    sandbox: vm.sandbox,
+    // Note that the harnesses run no sandbox of their own, since the VM is the boundary.
+    runnerEnv: { [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST },
+    bundled: {},
+    ownSignIns: false,
+    githubFromLuke: true,
+    deviceIsolation: DEVICE_ISOLATION.SANDBOX,
+    worktreeScript: ({ home, repository, worktree, branch }) =>
+      agentWorktreeScript({
+        repository,
+        clone: cloneFolder(worktreesRoot(home), repository),
+        worktree,
+        branch,
+        own: true,
+      }),
+    sandboxed: undefined,
+  };
+}
+
+export function localAgentPlatform(options: LocalAgentPlatformOptions): LocalAgentPlatformSeam {
   const worktreeScript: LocalAgentPlatformSeam["worktreeScript"] = ({
     home,
     repository,
@@ -102,7 +170,7 @@ export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
     // Note that the app is built for Apple silicon alone (`package.json`'s `--mac --arm64`).
     devicePlatform: DEVICE_PLATFORM.DARWIN,
     deviceArch: DEVICE_ARCH.ARM64,
-    // Note that every agent runs directly on the Mac, since its launcher starts the runner there; no Mac sandbox exists yet.
+    // Note that every agent runs directly on the Mac here, since its launcher starts the runner there; `sandboxed` runs each in a VM.
     deviceIsolation: DEVICE_ISOLATION.BARE,
     deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
     worktreeScript,
@@ -111,7 +179,7 @@ export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
     // Note that an agent on This Mac pushes on the developer's own git login, as they would.
     githubFromLuke: false,
   };
-  return packaged
+  const bare: LocalAgentPlatformSeam = options.packaged
     ? {
         ...shared,
         runnerBundle: path.join(process.resourcesPath, RESOURCES.DIRECTORY, RESOURCES.BUNDLE),
@@ -124,4 +192,5 @@ export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
         runnerEnv: { ELECTRON_RUN_AS_NODE: "1" },
         bundled: { node: process.execPath, claude: installedClaude() },
       };
+  return { ...bare, sandboxed: sandboxedPlatform(bare, options.stateRoot, launcher) };
 }

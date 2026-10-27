@@ -276,6 +276,14 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             ),
             Effect.orElseSucceed(() => false),
           ),
+          // Likewise a file that cannot be read runs agents as they always have, directly on this Mac.
+          sandboxed: settings.store.snapshot().pipe(
+            Effect.map(
+              ({ stored }) =>
+                stored.localAgentsSandbox ?? APP_SETTING_SCHEMA.localAgentsSandbox.default,
+            ),
+            Effect.orElseSucceed(() => false),
+          ),
           client: new HostedDeviceAgentClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             credential: account.credential,

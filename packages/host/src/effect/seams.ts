@@ -21,9 +21,11 @@ import {
   type Effect,
   Layer,
   Logger,
+  type Path,
   type Stream,
 } from "effect";
 import type { FileSystem } from "effect/FileSystem";
+import type { HttpClient } from "effect/http/HttpClient";
 import type { PlatformError } from "effect/PlatformError";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountSourceSeam } from "../account-source.js";
@@ -184,6 +186,17 @@ export interface LocalAgentSandboxCommand {
 export interface LocalAgentSandbox {
   /** Where the VM's own image keeps what a runner runs on, which the device registers in place of any copy of its own. */
   readonly tools: { readonly node: string; readonly claude: string; readonly codex: string };
+  /**
+   * Whether the device has what its VMs run on, had now where it can be: a
+   * host's `smolvm` is its service's own, so it always has; a Mac fetches and
+   * checks its pinned `smolvm` the first time, and pulls the image once. The
+   * device registers as sandboxed only once it has.
+   */
+  readonly ready: Effect.Effect<
+    boolean,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner | FileSystem | Path.Path | HttpClient
+  >;
   /** The agent's VM made where it has none, its folder mounted at the same path, and started; it fails where it could not be. */
   readonly started: (agent: {
     readonly agentId: string;
@@ -314,6 +327,14 @@ export interface LocalAgentPlatformSeam {
    * itself, as on This Mac.
    */
   readonly sandbox?: LocalAgentSandbox | undefined;
+  /**
+   * The platform this device's agents run on instead while its sandbox
+   * setting is on (`LocalAgentsDependencies.sandboxed`), each in a VM of its
+   * own (`sandbox`): This Mac's, beside the one that runs them directly on
+   * the Mac. None where the device has one way of running them, as a host,
+   * which is always sandboxed.
+   */
+  readonly sandboxed?: LocalAgentPlatformSeam | undefined;
 }
 
 export class LocalAgentPlatform extends Context.Service<
