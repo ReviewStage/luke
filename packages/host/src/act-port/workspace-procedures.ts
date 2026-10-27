@@ -7,7 +7,6 @@ import type {
   TasksWorkspaceAnswer,
   TasksWorkspaceCreateParams,
   TasksWorkspaceEnvironmentAnswer,
-  TasksWorkspaceEnvironmentParams,
   TasksWorkspaceEnvironmentRemoveParams,
   TasksWorkspaceEnvironmentSaveParams,
   TasksWorkspaceGitHubConnectAnswer,
@@ -77,7 +76,7 @@ export interface WorkspaceProceduresDependencies {
     workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
     workspaceEnvironmentRead(
-      params: TasksWorkspaceEnvironmentParams,
+      params: TasksWorkspaceParams,
     ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
     workspaceEnvironmentSave(
       params: TasksWorkspaceEnvironmentSaveParams,

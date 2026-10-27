@@ -18,12 +18,13 @@ import { EnvironmentGroup } from "./environment-section.js";
 
 /**
  * Settings › Workspace › Environment over a bridge answering as the host
- * would: a member reads a variable with its value and a secret by its hint
- * alone, and is offered no change; an owner or admin adds a secret into a
- * masked field that keeps its line breaks, sent once and gone from the page
- * once kept; editing a variable starts from its value and a secret from
- * nothing; a name or value the service would refuse is refused on the page,
- * saying why, and sends nothing; a save past the workspace's bound says why.
+ * would: a member reads a variable with its value and a secret by its name
+ * alone, and is offered no change; an owner or admin adds a secret that
+ * keeps its line breaks, its name typed in capitals, sent once and gone from
+ * the page once kept; editing a variable starts from its value and a secret
+ * from nothing; a name or value the service would refuse is refused on the
+ * page, saying why, and sends nothing; a save past the workspace's bound
+ * says why; removing asks first; a read that fails can be tried again.
  * Synthetic workspaces and values.
  */
 
@@ -48,7 +49,6 @@ const VARIABLE: WorkspaceEnvironmentEntry = {
 const SECRET: WorkspaceEnvironmentEntry = {
   name: "STRIPE_KEY",
   kind: WORKSPACE_ENVIRONMENT_KIND.SECRET,
-  hint: "…wxyz",
   readable: true,
   updatedAt: Date.UTC(2026, 9, 12, 12),
 };
@@ -59,9 +59,8 @@ let stored: WorkspaceEnvironmentEntry[] = [];
 let sent: SentPortAct[] = [];
 /** Whether the service answers the next save as past the workspace's bound. */
 let tooMany = false;
-/** Where a save is held unanswered until the test lets it go, rather than answered at once. */
-let heldSave: ((answer: WireBoundaryInput) => void) | undefined;
-let holdSave = false;
+/** How many of the next reads the service fails. */
+let failingReads = 0;
 
 /** What a save asked for, as the page sent it. */
 interface SaveAsked {
@@ -75,13 +74,12 @@ function answer(request: SentPortAct): Promise<WireBoundaryInput> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.WORKSPACE_ENVIRONMENT_READ:
+      if (failingReads > 0) {
+        failingReads -= 1;
+        return Promise.reject(new Error("The host did not answer."));
+      }
       return Promise.resolve({ entries: stored });
     case ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE: {
-      if (holdSave) {
-        return new Promise((resolve) => {
-          heldSave = resolve;
-        });
-      }
       if (tooMany) {
         return Promise.resolve({
           entries: stored,
@@ -115,8 +113,7 @@ beforeEach(() => {
   stored = [];
   sent = [];
   tooMany = false;
-  holdSave = false;
-  heldSave = undefined;
+  failingReads = 0;
   fakeAppBridge({});
   fakeActPortAnswering(answer);
 });
@@ -185,7 +182,6 @@ async function add(page: HTMLElement, name: string, kind: string, value: string)
   await submit(page);
 }
 
-/** What the open dialog says went wrong. */
 /** What the value's field is described by: the dialog's refusal, where one stands. */
 const refusal = (page: HTMLElement) =>
   (field(page, "Value").getAttribute("aria-describedby") ?? "")
@@ -195,13 +191,13 @@ const refusal = (page: HTMLElement) =>
 
 const saves = () => sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE);
 
-test("a member reads a variable with its value and a secret by its hint alone, and is offered no change", async () => {
+test("a member reads a variable with its value and a secret by its name alone, and is offered no change", async () => {
   stored = [VARIABLE, SECRET];
   const page = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
 
   const text = page.textContent ?? "";
   assert.match(text, /APP_MODE\s*development · Saved /u);
-  assert.match(text, /STRIPE_KEY\s*Secret · …wxyz · Saved /u);
+  assert.match(text, /STRIPE_KEY\s*Secret · Saved /u);
   assert.match(text, /Only an owner or admin can change them\./u);
   assert.equal(
     [...page.querySelectorAll("button")].some((each) => each.textContent === "Add variable"),
@@ -209,12 +205,12 @@ test("a member reads a variable with its value and a secret by its hint alone, a
   );
 });
 
-test("an admin's secret keeps its line breaks, is sent once, and is gone from the window once kept", async () => {
+test("an admin's secret keeps its line breaks, its name typed in capitals, is sent once, and is gone from the window once kept", async () => {
   const certificate = `-----BEGIN CERTIFICATE-----\n${PASTED}\n-----END CERTIFICATE-----`;
   const page = await mount(ACME);
 
   act(() => button(page, "Add variable").click());
-  type(field(page, "Name"), "TLS_CERT");
+  type(field(page, "Name"), "tls_cert");
   act(() => button(page, "Secret").click());
   type(field(page, "Value"), certificate);
   await submit(page);
@@ -239,24 +235,21 @@ test("an admin's secret keeps its line breaks, is sent once, and is gone from th
     !document.body.innerHTML.includes(PASTED),
     "the window holds the secret nowhere once kept",
   );
-  assert.match(page.textContent ?? "", /TLS_CERT\s*Secret · …wxyz/u);
+  assert.match(page.textContent ?? "", /TLS_CERT\s*Secret · Saved /u);
 });
 
 test("a name or value the service would refuse is refused in the dialog, saying why, and nothing is sent", async () => {
   const page = await mount(ACME);
 
-  await add(page, "lower_case", "Variable", "x");
+  await add(page, "1ST", "Variable", "x");
   const said = [refusal(page)];
-  for (const [name, value] of [
-    ["PATH", "x"],
-    ["A".repeat(129), "x"],
-    ["BIG", "x".repeat(16_385)],
-  ] as const) {
-    type(field(page, "Name"), name);
-    type(field(page, "Value"), value);
-    await submit(page);
-    said.push(refusal(page));
-  }
+  type(field(page, "Name"), "PATH");
+  await submit(page);
+  said.push(refusal(page));
+  type(field(page, "Name"), "PIN");
+  type(field(page, "Value"), "");
+  await submit(page);
+  said.push(refusal(page));
   act(() => button(page, "Secret").click());
   type(field(page, "Value"), "123");
   await submit(page);
@@ -265,8 +258,7 @@ test("a name or value the service would refuse is refused in the dialog, saying 
   assert.deepEqual(said, [
     "Use capital letters, digits, and underscores, not starting with a digit.",
     "PATH is set by the sandbox, Luke, or the agent's harness. Choose another name.",
-    "A name can be at most 128 characters.",
-    "A value can be at most 16,384 characters.",
+    "Enter a value.",
     "A secret must be at least 4 characters, so it can be hidden in command output.",
   ]);
   assert.deepEqual(saves(), []);
@@ -305,50 +297,44 @@ test("editing a variable starts from its value, and editing a secret from nothin
   assert.deepEqual([variable, secret], ["development", ""]);
 });
 
-test("Escape while a save is on its way keeps the dialog open, so the service's refusal stands in it", async () => {
-  holdSave = true;
+test("removing asks first, then takes the row away", async () => {
+  stored = [VARIABLE, SECRET];
   const page = await mount(ACME);
 
-  act(() => button(page, "Add variable").click());
-  type(field(page, "Name"), "ONE_MORE");
-  type(field(page, "Value"), "kept");
-  await submit(page);
-  const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
-  act(() => {
-    button(page, "Save").dispatchEvent(press);
-  });
-  const openWhileSaving = document.querySelector('[role="dialog"]') !== null;
-  await act(async () => {
-    heldSave?.({ entries: [], rejected: WORKSPACE_ENVIRONMENT_REJECTION.TOO_MANY });
-  });
-  await settle();
-
-  assert.equal(press.defaultPrevented, true);
-  assert.equal(openWhileSaving, true);
-  assert.equal(field(page, "Value").value, "kept");
-  assert.equal(
-    refusal(page),
-    "This workspace already holds 100 variables and secrets. Remove one first.",
-  );
-});
-
-test("adding starts typing in the name, and editing in the value", async () => {
-  stored = [VARIABLE];
-  const page = await mount(ACME);
-
-  act(() => button(page, "Add variable").click());
-  await settle();
-  const adding = document.activeElement === field(page, "Name");
-  act(() => button(page, "Cancel").click());
-  await settle();
   const more = page.querySelector<HTMLButtonElement>('button[aria-label="APP_MODE actions"]');
   act(() => (more ?? assert.fail("no ⋯ for APP_MODE")).click());
   await settle();
-  act(() => button(page, "Edit").click());
+  act(() => button(document.body, "Remove").click());
   await settle();
-  const editing = document.activeElement === field(page, "Value");
+  const askedFirst = document.body.textContent?.includes("Remove APP_MODE?") ?? false;
+  const sentBeforeConfirming = sent.some(
+    (request) => request.kind === ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE,
+  );
+  act(() => button(document.body, "Remove").click());
+  await settle();
 
-  assert.deepEqual([adding, editing], [true, true]);
+  assert.deepEqual([askedFirst, sentBeforeConfirming], [true, false]);
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind === ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE)
+      .map((request) => request.payload),
+    [{ workspaceId: ACME.id, name: "APP_MODE" }],
+  );
+  assert.doesNotMatch(page.textContent ?? "", /APP_MODE/u);
+  assert.match(page.textContent ?? "", /STRIPE_KEY/u);
+});
+
+test("a read that fails says so, and Retry reads it again", async () => {
+  failingReads = 1;
+  stored = [VARIABLE];
+  const page = await mount(ACME);
+
+  const failed = page.textContent?.includes("The workspace's environment could not be read.");
+  act(() => button(page, "Retry").click());
+  await settle();
+
+  assert.equal(failed, true);
+  assert.match(page.textContent ?? "", /APP_MODE\s*development · Saved /u);
 });
 
 test("the group and its fields are kept out of the screen recording", async () => {

@@ -88,6 +88,9 @@ const RESERVED_ENVIRONMENT_PREFIXES: readonly string[] = [
   "LD_",
 ];
 
+/** A name a shell takes: capital letters, digits, and underscores, not starting with a digit. */
+export const ENVIRONMENT_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/u;
+
 /** Whether a name is one the workspace may set. */
 export function environmentNameAllowed(name: string): boolean {
   return (
@@ -98,7 +101,7 @@ export function environmentNameAllowed(name: string): boolean {
 
 const workspaceEnvironmentNameSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(WORKSPACE_ENVIRONMENT_BOUNDS.MAX_NAME_CHARS),
-  EffectSchema.isPattern(/^[A-Z_][A-Z0-9_]*$/u),
+  EffectSchema.isPattern(ENVIRONMENT_NAME_PATTERN),
   EffectSchema.makeFilter(environmentNameAllowed),
 );
 

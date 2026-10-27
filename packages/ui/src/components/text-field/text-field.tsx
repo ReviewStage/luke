@@ -33,9 +33,7 @@ import type { FieldControl } from "../form-field/form-field.js";
  * A number field holds a number, or nothing while it is empty or holds what
  * is not yet one (a lone minus sign), as the browser reads it; a busy text
  * area, its words on their way somewhere, takes no typing and answers
- * neither Escape nor its submit key until it is not. A masked text area draws
- * its characters as discs, as a password field does, keeping a secret's line
- * breaks, which a one-line password field would drop.
+ * neither Escape nor its submit key until it is not.
  *
  * A TextField is drawn by shadcn/ui's input (`../../shadcn/input.tsx`, on
  * Base UI) and a TextArea by its textarea (`../../shadcn/textarea.tsx`); a
@@ -166,9 +164,6 @@ const TEXT_AREA_GROW =
 /** A text area bare in a card that is its well: no edge, no ground, and no ring, at the insets its card sets. */
 const TEXT_AREA_BARE =
   "p-0 pt-text-area-inset-start px-text-area-inset-inline pb-text-area-inset-end rounded-none border-0 bg-transparent focus:bg-transparent resize-none outline-none";
-
-/** A secret of many lines, its characters drawn as discs as a password field's are; the engine still holds and pastes what was typed. */
-const TEXT_AREA_MASKED = "[-webkit-text-security:disc]";
 
 /** Each face's class: the body's, which a field wears already, or a fixed width. */
 const TEXT_FIELD_FONT_CLASS = {
@@ -352,7 +347,6 @@ export function TextField({
 export function TextArea({
   rows = 4,
   grow = false,
-  masked = false,
   look = TEXT_AREA_LOOK.WELL,
   growLimit = TEXT_AREA_GROW_LIMIT.NOTE,
   enterKeyHint,
@@ -368,8 +362,6 @@ export function TextArea({
   rows?: number;
   /** Whether it grows with its words from `rows` tall, rather than standing at that height. */
   grow?: boolean;
-  /** Whether its characters are drawn as discs, as a password field draws them, for a secret of many lines such as a certificate. */
-  masked?: boolean;
   /** How it stands; in a field's well where none is named. */
   look?: TextAreaLook | undefined;
   /** How far it grows, where it may; to the profile's tallest note where none is named. */
@@ -394,7 +386,6 @@ export function TextArea({
         look === TEXT_AREA_LOOK.BARE && TEXT_AREA_BARE,
         grow && look === TEXT_AREA_LOOK.BARE && "min-h-text-area-bare-least",
         grow && growLimit === TEXT_AREA_GROW_LIMIT.NONE && "max-h-none",
-        masked && TEXT_AREA_MASKED,
         TEXT_FIELD_FONT_CLASS[props.font ?? TEXT_FIELD_FONT.BODY],
       )}
       rows={rows}

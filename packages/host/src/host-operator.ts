@@ -310,7 +310,6 @@ import {
   type TasksWorkspaceAnswer,
   type TasksWorkspaceCreateParams,
   type TasksWorkspaceEnvironmentAnswer,
-  type TasksWorkspaceEnvironmentParams,
   type TasksWorkspaceEnvironmentRemoveParams,
   type TasksWorkspaceEnvironmentSaveParams,
   type TasksWorkspaceGitHubConnectAnswer,
@@ -668,7 +667,7 @@ export interface HostOperator {
   workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
   /** A workspace's environment variables and secrets; or why there are none. */
   workspaceEnvironmentRead(
-    params: TasksWorkspaceEnvironmentParams,
+    params: TasksWorkspaceParams,
   ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
   /** One environment variable or secret saved, the value carried once; the list as it then stands, or why it is unchanged. */
   workspaceEnvironmentSave(

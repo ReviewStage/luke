@@ -1,6 +1,7 @@
 import { dayText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import {
+  ENVIRONMENT_NAME_PATTERN,
   environmentNameAllowed,
   WORKSPACE_ENVIRONMENT_BOUNDS,
   WORKSPACE_ENVIRONMENT_KIND,
@@ -55,23 +56,15 @@ import { MenuRow } from "./menu-row.js";
 /**
  * environment-section.tsx -- Settings › Workspace › Environment: the variables and secrets every coding agent of the workspace runs its commands with.
  *
- * One row per name, its name in the code face: a variable with its value,
- * a secret by the hint the service answers (its last characters) alone,
- * each with when it was last saved. An owner or admin adds one with Add
- * variable, and edits or removes one behind its row's ⋯; a member reads
- * the list alone. Adding and editing open one dialog, as Add skill does: the
- * name (a new entry's alone, since an edited one's is its title), Variable
- * or Secret, and the value in a text area that keeps a certificate's line
- * breaks, a secret's drawn as discs. A secret's value stands in the dialog
- * alone, is sent once on Save, and is gone with the dialog once the service
- * keeps it; editing a secret starts from an empty value, since the page
- * never holds one. A name or value the service would refuse is refused in
- * the dialog, saying why under the value, and sends nothing. One change
- * runs at a time, since every answer is the list whole. Remove asks first.
- * The section and the dialog are kept out of the screen recording. The page
- * and the dialog, once Secret is chosen, say that secrets reach cloud
- * sandboxes alone, as the service holds them to
- * (`@luke/service/agents/coder-host/workspace-environment`).
+ * One row per name: a variable with its value, a secret by its name alone,
+ * as GitHub shows one. An owner or admin adds one with Add variable, and
+ * edits or removes one behind its row's ⋯; a member reads the list. Adding
+ * and editing open one dialog, as Add skill does; editing a secret starts
+ * from an empty value, since the page never holds one. A name is typed in
+ * capitals as it is entered, and the refusals a member could not guess (a
+ * reserved name, a secret too short to mask) are said under the value before
+ * anything is sent. The section and the dialog are kept out of the screen
+ * recording.
  */
 
 const PAGE_LINE = {
@@ -84,12 +77,9 @@ const PAGE_LINE = {
   FAILED: "The workspace's environment could not be read.",
   SAVE_FAILED: "It could not be saved. Try again.",
   REMOVE_FAILED: "It could not be removed. Try again.",
-  TOO_MANY: "This workspace already holds 100 variables and secrets. Remove one first.",
+  TOO_MANY: `This workspace already holds ${WORKSPACE_ENVIRONMENT_BOUNDS.MAX_ENTRIES} variables and secrets. Remove one first.`,
   BAD_NAME: "Use capital letters, digits, and underscores, not starting with a digit.",
-  LONG_NAME: `A name can be at most ${WORKSPACE_ENVIRONMENT_BOUNDS.MAX_NAME_CHARS} characters.`,
   NO_VALUE: "Enter a value.",
-  LONG_VALUE: `A value can be at most ${WORKSPACE_ENVIRONMENT_BOUNDS.MAX_VALUE_CHARS.toLocaleString("en-US")} characters.`,
-  NUL_VALUE: "A value can't hold a NUL character.",
   SHORT_SECRET: `A secret must be at least ${WORKSPACE_ENVIRONMENT_BOUNDS.MIN_SECRET_CHARS} characters, so it can be hidden in command output.`,
   UNREADABLE: "Can no longer be read. Save it again.",
 } as const;
@@ -102,9 +92,6 @@ const ENTRIES_SKELETON: readonly SettingsRowSkeletonShape[] = Array.from({ lengt
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
-
-/** A name a shell takes; the service holds every name to the same. */
-const NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/u;
 
 const KIND_ITEMS = [
   { value: WORKSPACE_ENVIRONMENT_KIND.VARIABLE, label: "Variable" },
@@ -123,19 +110,20 @@ type EnvironmentDialogFor =
   | { readonly adding: true }
   | { readonly adding: false; readonly entry: WorkspaceEnvironmentEntry };
 
-/** Why a typed name or value would be refused, or nothing where the service would take them. */
+/**
+ * Why a typed name or value would be refused, or nothing where the service
+ * would take them. Note that the lengths are held by the fields themselves,
+ * and a NUL, which no one types, is left to the service to refuse.
+ */
 function refusalOf(
   name: string,
   kind: WorkspaceEnvironmentKind,
   value: string,
 ): string | undefined {
-  if (!NAME_PATTERN.test(name)) return PAGE_LINE.BAD_NAME;
-  if (name.length > WORKSPACE_ENVIRONMENT_BOUNDS.MAX_NAME_CHARS) return PAGE_LINE.LONG_NAME;
+  if (!ENVIRONMENT_NAME_PATTERN.test(name)) return PAGE_LINE.BAD_NAME;
   if (!environmentNameAllowed(name))
     return `${name} is set by the sandbox, Luke, or the agent's harness. Choose another name.`;
   if (value === "") return PAGE_LINE.NO_VALUE;
-  if (value.length > WORKSPACE_ENVIRONMENT_BOUNDS.MAX_VALUE_CHARS) return PAGE_LINE.LONG_VALUE;
-  if (value.includes("\0")) return PAGE_LINE.NUL_VALUE;
   const secret = kind === WORKSPACE_ENVIRONMENT_KIND.SECRET;
   if (secret && value.length < WORKSPACE_ENVIRONMENT_BOUNDS.MIN_SECRET_CHARS) {
     return PAGE_LINE.SHORT_SECRET;
@@ -152,20 +140,14 @@ function Code({ children }: { children: string }): React.JSX.Element {
   );
 }
 
-/** What one entry's row says under its name: its value or hint, when it was saved, and whether it can still be read. */
+/** What one entry's row says under its name: a variable's value or that it is a secret, when it was saved, and whether it can still be read. */
 function EntryFacts({ entry }: { entry: WorkspaceEnvironmentEntry }): React.JSX.Element {
-  const secret = entry.kind === WORKSPACE_ENVIRONMENT_KIND.SECRET;
-  const shown = secret
-    ? entry.hint === undefined || entry.hint === ""
-      ? undefined
-      : entry.hint
-    : entry.value;
   return (
     <SettingsFacts gap={GAP.TIGHT}>
-      {secret ? "Secret · " : null}
-      {shown === undefined ? null : (
+      {entry.kind === WORKSPACE_ENVIRONMENT_KIND.SECRET ? "Secret · " : null}
+      {entry.value === undefined ? null : (
         <>
-          <Code>{shown}</Code>
+          <Code>{entry.value}</Code>
           {" · "}
         </>
       )}
@@ -256,23 +238,19 @@ function EnvironmentDialog({
                   font={TEXT_FIELD_FONT.MONO}
                   autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
                   spellCheck={false}
+                  maxLength={WORKSPACE_ENVIRONMENT_BOUNDS.MAX_NAME_CHARS}
                   disabled={saving}
                   value={name}
                   onEnter={save}
                   onChange={(typed) => {
-                    setName(typed);
+                    setName(typed.toUpperCase());
                     setRefusal(undefined);
                   }}
                 />
               )}
             </FormField>
           ) : null}
-          <FormField
-            label="Kind"
-            description={
-              kind === WORKSPACE_ENVIRONMENT_KIND.SECRET ? PAGE_LINE.SECRET_REACH : undefined
-            }
-          >
+          <FormField label="Kind">
             {() => (
               <ChoiceBar
                 label="Kind"
@@ -282,8 +260,6 @@ function EnvironmentDialog({
                 disabled={saving}
                 onChange={(chosen: WorkspaceEnvironmentKind) => {
                   setKind(chosen);
-                  // Note that a value typed as one kind is not carried to the other, so a variable's is never masked as a secret's or the reverse.
-                  setValue("");
                   setRefusal(undefined);
                 }}
               />
@@ -294,12 +270,10 @@ function EnvironmentDialog({
               <TextArea
                 ref={valueField}
                 field={field}
-                placeholder={
-                  kind === WORKSPACE_ENVIRONMENT_KIND.SECRET ? "Paste the secret" : "Value"
-                }
+                placeholder="Value"
                 rows={1}
                 grow
-                masked={kind === WORKSPACE_ENVIRONMENT_KIND.SECRET}
+                maxLength={WORKSPACE_ENVIRONMENT_BOUNDS.MAX_VALUE_CHARS}
                 font={TEXT_FIELD_FONT.MONO}
                 spellCheck={false}
                 busy={saving}

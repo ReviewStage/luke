@@ -81,7 +81,6 @@ import {
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
 import {
   workspaceEnvironmentAnswerSchema,
-  workspaceEnvironmentListRequestSchema,
   workspaceEnvironmentRemoveRequestSchema,
   workspaceEnvironmentSaveRequestSchema,
 } from "./workspace-environment-wire.js";
@@ -1075,11 +1074,6 @@ export const tasksLinearIssuesAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksLinearIssuesAnswer = typeof tasksLinearIssuesAnswerSchema.Type;
-
-/** A workspace's environment variables and secrets, as the window asks for them: the workspace. */
-export const tasksWorkspaceEnvironmentParamsSchema = workspaceEnvironmentListRequestSchema;
-
-export type TasksWorkspaceEnvironmentParams = typeof tasksWorkspaceEnvironmentParamsSchema.Type;
 
 /** One environment variable or secret saved, as the window asks it: the workspace, the name, the kind, and the value, once. */
 export const tasksWorkspaceEnvironmentSaveParamsSchema = workspaceEnvironmentSaveRequestSchema;

@@ -113,7 +113,6 @@ import {
   tasksStartRequestSchema,
   tasksTreeParamsSchema,
   tasksWorkspaceCreateParamsSchema,
-  tasksWorkspaceEnvironmentParamsSchema,
   tasksWorkspaceEnvironmentRemoveParamsSchema,
   tasksWorkspaceEnvironmentSaveParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
@@ -2727,7 +2726,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     [GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_READ]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
-          tasksWorkspaceEnvironmentParamsSchema,
+          tasksWorkspaceParamsSchema,
           params,
           "reading a workspace's environment names a workspace",
         );

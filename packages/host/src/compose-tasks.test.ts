@@ -809,14 +809,14 @@ function fakeService(tasks: Task[]): FakeService {
           service.reads.push(`environment:${workspaceId}`);
           return { ok: true, answer: { entries: service.environment[workspaceId] ?? [] } } as const;
         }),
-      // A save is recorded by its name alone, as the service logs it; a secret is answered by its hint.
+      // A save is recorded by its name alone, as the service logs it; a secret is answered by its name alone.
       saveEnvironment: ({ workspaceId, name, kind, secretValue }) =>
         Effect.sync(() => {
           service.reads.push(`environment-save:${workspaceId}:${name}`);
           if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
           const entry: WorkspaceEnvironmentEntry =
             kind === WORKSPACE_ENVIRONMENT_KIND.SECRET
-              ? { name, kind, hint: `…${secretValue.slice(-4)}`, readable: true, updatedAt: 1 }
+              ? { name, kind, readable: true, updatedAt: 1 }
               : { name, kind, value: secretValue, readable: true, updatedAt: 1 };
           const kept = (service.environment[workspaceId] ?? []).filter(
             (each) => each.name !== name,
@@ -2893,7 +2893,6 @@ it.effect(
       const secret = {
         name: "STRIPE_KEY",
         kind: WORKSPACE_ENVIRONMENT_KIND.SECRET,
-        hint: "…wxyz",
         readable: true,
         updatedAt: 1,
       };

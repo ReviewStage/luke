@@ -10,7 +10,6 @@ import {
   tasksGitHubIssuesParamsSchema,
   tasksLinearIssuesParamsSchema,
   tasksWorkspaceCreateParamsSchema,
-  tasksWorkspaceEnvironmentParamsSchema,
   tasksWorkspaceEnvironmentRemoveParamsSchema,
   tasksWorkspaceEnvironmentSaveParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
@@ -111,7 +110,7 @@ export const workspaceActsContract = {
   [WORKSPACE_ACT_KIND.WORKSPACE_ENVIRONMENT_READ]: actProcedure(
     "Could not read that workspace's environment on this system.",
   )
-    .input(exactInput(tasksWorkspaceEnvironmentParamsSchema))
+    .input(exactInput(tasksWorkspaceParamsSchema))
     .output(EffectSchema.flip(workspaceEnvironmentAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE]: actProcedure(
     "Could not save that environment value on this system.",
