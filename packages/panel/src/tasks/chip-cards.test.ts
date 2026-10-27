@@ -153,8 +153,9 @@ const SWEEP: AutomationSummary = {
   guards: AUTOMATION_DEFAULT_GUARDS,
   nextRunAt: null,
   lastRun: null,
-  createdAt: AT,
+  createdAt: new Date(2026, 9, 25, 12).getTime(),
   scope: AUTOMATION_SCOPE.WORKSPACE,
+  creatorId: SAM,
 };
 
 const AUDIT: AutomationSummary = {
@@ -769,7 +770,8 @@ test("a member's chip hangs their card", async () => {
   assert.equal(member.sub, "sam@example.com");
 });
 
-test("an automation's chip hangs its card, the workspace's automations read only once the card is hung", async () => {
+test("an automation's chip hangs its card, who made it and when at its foot, the workspace's automations read only once the card is hung", async () => {
+  vi.useFakeTimers({ now: CHANNELS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(`Run by [the sweep](${HOME}/automation/${SWEEP.id}).`);
   const reads = () => automationReads.length;
   const before = reads();
@@ -779,6 +781,7 @@ test("an automation's chip hangs its card, the workspace's automations read only
   assert.equal(before, 0, "nothing is read as the chip is drawn");
   assert.equal(card.card, "data-actor-card");
   assert.equal(card.name, "Nightly sweep");
+  assert.deepEqual(card.detailWords, ["Created by Sam Okafor · Oct 25"]);
   assert.equal(reads(), 1);
 });
 
