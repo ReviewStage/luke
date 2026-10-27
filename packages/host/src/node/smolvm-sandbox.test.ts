@@ -496,21 +496,24 @@ it.effect(
       const tampered = Uint8Array.from(archive);
       tampered[tampered.length - 1] = (tampered[tampered.length - 1] ?? 0) ^ 0xff;
 
-      const refused = yield* vm.sandbox.ready.pipe(
-        Effect.provide(fakeHttpClientLayer(() => new Response(tampered))),
-        Effect.result,
-      );
-      const ready = yield* vm.sandbox.ready.pipe(
-        Effect.provide(fakeHttpClientLayer(() => new Response(archive))),
-        Effect.result,
-      );
-      const again = yield* vm.sandbox.ready.pipe(
-        Effect.provide(fakeHttpClientLayer(() => new Response("never asked", { status: 500 }))),
-        Effect.result,
-      );
+      const preparing: string[] = [];
+      const refused = yield* vm.sandbox
+        .ready(Effect.sync(() => preparing.push("refused")))
+        .pipe(Effect.provide(fakeHttpClientLayer(() => new Response(tampered))), Effect.result);
+      const ready = yield* vm.sandbox
+        .ready(Effect.sync(() => preparing.push("ready")))
+        .pipe(Effect.provide(fakeHttpClientLayer(() => new Response(archive))), Effect.result);
+      const again = yield* vm.sandbox
+        .ready(Effect.sync(() => preparing.push("again")))
+        .pipe(
+          Effect.provide(fakeHttpClientLayer(() => new Response("never asked", { status: 500 }))),
+          Effect.result,
+        );
 
       const smolvm = `${stateRoot}/agent-tools/smolvm/9.9.9/smolvm`;
       assert.deepEqual([refused, ready, again].map(Result.isSuccess), [false, true, true]);
+      // Note that a Mac that has everything already says nothing of getting ready.
+      assert.deepEqual(preparing, ["refused", "ready"]);
       assert.deepEqual(readFileSync(calls, "utf8").trim().split("\n"), [
         `${smolvm} machine run --net --image ${IMAGE} -- true`,
       ]);

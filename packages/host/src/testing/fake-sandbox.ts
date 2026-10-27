@@ -3,7 +3,7 @@
  */
 
 import { Effect } from "effect";
-import type { LocalAgentSandbox, LocalAgentSandboxUnavailable } from "../effect/seams.js";
+import type { LocalAgentSandbox } from "../effect/seams.js";
 
 /** The program a command in a fake VM is spawned as, the command's own program and arguments after it. */
 export const VM_EXEC = "/opt/luke/smolvm-exec";
@@ -22,10 +22,8 @@ export interface FakeSandbox {
   readonly deleted: string[];
 }
 
-/** A sandbox whose VMs always start, once `ready` has, at once where the suite names none. */
-export function fakeSandbox(
-  ready: Effect.Effect<void, LocalAgentSandboxUnavailable> = Effect.void,
-): FakeSandbox {
+/** A sandbox whose VMs always start, once `ready` has, at once and with nothing to fetch where the suite names none. */
+export function fakeSandbox(ready: LocalAgentSandbox["ready"] = () => Effect.void): FakeSandbox {
   const tokens: string[] = [];
   const deleted: string[] = [];
   const sandbox: LocalAgentSandbox = {

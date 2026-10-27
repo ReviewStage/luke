@@ -29,6 +29,7 @@ import { composeLocalAgents } from "./compose-local-agents.js";
 import {
   Environment,
   LocalAgentPlatform,
+  type LocalAgentSandbox,
   LocalAgentSandboxUnavailable,
   Reporter,
 } from "./effect/seams.js";
@@ -75,7 +76,7 @@ const until = (holds: () => boolean) =>
  * registered, spawned, asked, handed the sandbox, settled, and reported.
  */
 const followingDevice = (
-  ready: Effect.Effect<void, LocalAgentSandboxUnavailable>,
+  ready: LocalAgentSandbox["ready"],
   options: {
     readonly madeBare?: boolean;
     readonly formerlyDirect?: boolean;
@@ -189,7 +190,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { registered, spawned, asked, tokens } = yield* followingDevice(Effect.void);
+        const { registered, spawned, asked, tokens } = yield* followingDevice(() => Effect.void);
         yield* until(() => spawned.some((each) => each.program === VM_EXEC));
 
         // Note that no login of the device's reaches a VM, so the service pays with the sign-in saved in Luke, or refuses.
@@ -231,8 +232,8 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { registered, beats, spawned } = yield* followingDevice(
-          Effect.sleep(Duration.minutes(3)),
+        const { registered, beats, spawned } = yield* followingDevice((preparing) =>
+          Effect.andThen(preparing, Effect.sleep(Duration.minutes(3))),
         );
         yield* TestClock.adjust(Duration.seconds(5));
         yield* until(() => registered.length > 0);
@@ -265,7 +266,7 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         const { registered, beats, spawned } = yield* followingDevice(
-          Effect.sleep(Duration.minutes(3)),
+          (preparing) => Effect.andThen(preparing, Effect.sleep(Duration.minutes(3))),
           { refusesSetup: true },
         );
         yield* TestClock.adjust(Duration.seconds(5));
@@ -291,7 +292,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { registered, beats, spawned, reported } = yield* followingDevice(
+        const { registered, beats, spawned, reported } = yield* followingDevice(() =>
           Effect.fail(
             new LocalAgentSandboxUnavailable({ detail: "smolvm couldn't be downloaded" }),
           ),
@@ -318,7 +319,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { spawned, settled, reported } = yield* followingDevice(Effect.void, {
+        const { spawned, settled, reported } = yield* followingDevice(() => Effect.void, {
           madeBare: true,
         });
         yield* until(() => settled.some((each) => each.id === LINE_ID));
@@ -342,7 +343,7 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { spawned, settled } = yield* followingDevice(Effect.void, {
+        const { spawned, settled } = yield* followingDevice(() => Effect.void, {
           madeBare: true,
           formerlyDirect: false,
         });

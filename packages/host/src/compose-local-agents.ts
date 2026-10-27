@@ -134,8 +134,6 @@ import type { RunMode } from "./run-mode.js";
 
 /** How long the follow rests while the gate is shut, and how often an open gate is read again. */
 const IDLE = Duration.seconds(5);
-/** How long a device waits on what its VMs run on before it registers as preparing: one that has it already answers well within it, so only a first fetch or pull lists it as getting ready. */
-const PREPARING_AFTER = Duration.seconds(2);
 /** How often a device following its agents beats: a third of the service's forty-five-second presence window. */
 const BEAT_EVERY = Duration.seconds(15);
 /** How long a discard waits on the platform's check of the worktree before it keeps the folder. */
@@ -413,8 +411,8 @@ export function composeLocalAgents(
      * asked again each time the gate opens once it had it, and otherwise once
      * per opening, and once per app start, since the app's first opening is
      * one; one that failed waits for the next, so a device offline is not
-     * asked again every turn. While a first fetch or pull runs past
-     * `PREPARING_AFTER` the device registers as preparing and beats, so the
+     * asked again every turn. As a fetch or pull begins (the sandbox's
+     * `preparing`) the device registers as preparing and beats, so the
      * menus list it as getting ready rather than not at all; one that failed
      * registers why and beats for as long as the opening stands, so it is
      * listed as not set up rather than away. `registered` registers the
@@ -435,19 +433,18 @@ export function composeLocalAgents(
           if (yield* Ref.get(failureListed)) yield* presence(userId, deviceId);
           return false;
         }
-        const readying = yield* Effect.forkChild(Effect.result(platform.sandbox.ready));
-        const answered = yield* Effect.timeoutOption(Fiber.join(readying), PREPARING_AFTER);
-        const ready = Option.isSome(answered)
-          ? answered.value
-          : yield* Effect.scoped(
-              Effect.gen(function* () {
-                // Note that it beats only once the service took the setup, since a beat after a refused register keeps an earlier ready row fresh.
-                if (yield* asked(registered({ setup: DEVICE_SETUP.PREPARING }))) {
-                  yield* Effect.forkScoped(presence(userId, deviceId));
-                }
-                return yield* Fiber.join(readying);
-              }),
-            );
+        const ready = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const scope = yield* Effect.scope;
+            // Note that it beats only once the service took the setup, since a beat after a refused register keeps an earlier ready row fresh.
+            const preparing = Effect.gen(function* () {
+              if (yield* asked(registered({ setup: DEVICE_SETUP.PREPARING }))) {
+                yield* Effect.forkIn(presence(userId, deviceId), scope);
+              }
+            });
+            return yield* Effect.result(platform.sandbox.ready(preparing));
+          }),
+        );
         yield* Ref.set(readied, Result.isSuccess(ready));
         if (Result.isSuccess(ready)) return true;
         report("the local agents' smolvm or sandbox image could not be had");

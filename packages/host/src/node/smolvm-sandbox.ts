@@ -4,7 +4,7 @@ import {
   CODEX_PIN,
   SANDBOX_IMAGE,
 } from "@luke/agent-runner/pins";
-import { Duration, Effect, Option, Schema, Stream } from "effect";
+import { Duration, Effect, Option, Ref, Schema, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { ChildProcess } from "effect/process";
 import {
@@ -357,31 +357,41 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
    * image once; a seed smolvm let go of since is pulled again by the next
    * agent's first start, as without one.
    */
-  const imageSeeded = Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const folder = [options.stateRoot, CREDENTIALS_FOLDER].join("/");
-    const record = [folder, IMAGE_SEEDED].join("/");
-    const recorded = yield* fileSystem.readFileString(record).pipe(Effect.orElseSucceed(() => ""));
-    if (recorded.trim() === SANDBOX_IMAGE) return true;
-    const pulled = yield* succeeded(
-      ["machine", "run", "--net", "--image", SANDBOX_IMAGE, "--", ...SEED_COMMAND],
-      START_TIMEOUT,
-    );
-    if (!pulled) return false;
-    yield* fileSystem.makeDirectory(folder, { recursive: true, mode: 0o700 });
-    yield* fileSystem.writeFileString(record, `${SANDBOX_IMAGE}\n`);
-    return true;
-  }).pipe(Effect.orElseSucceed(() => false));
+  const imageSeeded = (pulling: Effect.Effect<void>) =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const folder = [options.stateRoot, CREDENTIALS_FOLDER].join("/");
+      const record = [folder, IMAGE_SEEDED].join("/");
+      const recorded = yield* fileSystem
+        .readFileString(record)
+        .pipe(Effect.orElseSucceed(() => ""));
+      if (recorded.trim() === SANDBOX_IMAGE) return true;
+      yield* pulling;
+      const pulled = yield* succeeded(
+        ["machine", "run", "--net", "--image", SANDBOX_IMAGE, "--", ...SEED_COMMAND],
+        START_TIMEOUT,
+      );
+      if (!pulled) return false;
+      yield* fileSystem.makeDirectory(folder, { recursive: true, mode: 0o700 });
+      yield* fileSystem.writeFileString(record, `${SANDBOX_IMAGE}\n`);
+      return true;
+    }).pipe(Effect.orElseSucceed(() => false));
 
   const sandbox: LocalAgentSandbox = {
     tools: { node: "node", claude: CLAUDE_CODE_PIN.LINK, codex: CODEX_PIN.LINK },
 
-    ready: Effect.gen(function* () {
-      if (pinned === undefined) return;
-      const had = yield* localAgentTool(options.stateRoot, pinned);
-      if (Option.isNone(had)) return yield* unavailable(SETUP_FAILURE.SMOLVM);
-      if (!(yield* imageSeeded)) return yield* unavailable(SETUP_FAILURE.IMAGE);
-    }),
+    ready: (preparing) =>
+      Effect.gen(function* () {
+        if (pinned === undefined) return;
+        // Note that the device says it is getting ready once, whichever of the two fetches begins first.
+        const said = yield* Ref.make(false);
+        const once = Effect.flatMap(Ref.getAndSet(said, true), (already) =>
+          already ? Effect.void : preparing,
+        );
+        const had = yield* localAgentTool(options.stateRoot, pinned, once);
+        if (Option.isNone(had)) return yield* unavailable(SETUP_FAILURE.SMOLVM);
+        if (!(yield* imageSeeded(once))) return yield* unavailable(SETUP_FAILURE.IMAGE);
+      }),
 
     started: ({ agentId, folder, github }) =>
       Effect.gen(function* () {
