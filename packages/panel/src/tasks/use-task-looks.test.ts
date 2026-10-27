@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import {
   PLAN_ACTOR,
   type PlanSectionEdit,
   type Task,
+  type TaskAgentsSummary,
   type TaskSummary,
 } from "@luke/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -121,30 +123,57 @@ interface Drawn {
   unread: boolean;
 }
 
-/** A window as a test drives it: what it drew last, a render with a plan open or none, and `summary` marked unread or read from a menu. */
+/** A window as a test drives it: what it drew last, a render with a plan open or none and its row as the list names it, and the row marked unread or read from a menu. */
 interface TestWindow {
   readonly drawn: Drawn;
-  readonly draw: (open: Task | undefined) => void;
+  readonly draw: (open: Task | undefined, row?: TaskSummary) => void;
   readonly mark: (unread: boolean) => void;
 }
 
-/** A window drawing `summary`'s row and, while `open` is given, that plan open, re-rendered by `draw`. */
+/** A window drawing `summary`'s row, or the row `draw` last named, and, while `open` is given, that plan open with the agents its row names. */
 function windowOn(summary: TaskSummary): TestWindow {
   const drawn: Drawn = { changed: [], unread: false };
+  let shown = summary;
   let marks: ReturnType<typeof useReadMarks> | undefined;
-  function Window({ open }: { open: Task | undefined }) {
-    drawn.changed = [...useTaskLooks(open, DEAN.userId).changed].sort();
-    drawn.unread = useUnreadTasks([summary], { listRead: true, staged: false })(summary);
+  function Window({ open, row }: { open: Task | undefined; row: TaskSummary }) {
+    drawn.changed = [...useTaskLooks(open, DEAN.userId, row.agents).changed].sort();
+    drawn.unread = useUnreadTasks([row], { listRead: true, staged: false })(row);
     marks = useReadMarks();
     return null;
   }
   const root = createRoot(document.createElement("div"));
   roots.push(root);
   const registry = AtomRegistry.make();
-  const draw = (open: Task | undefined) =>
-    act(() => root.render(onRegistry(registry, createElement(Window, { open }))));
-  const mark = (unread: boolean) => act(() => marks?.mark(summary, unread));
+  const draw = (open: Task | undefined, row = shown) => {
+    shown = row;
+    act(() => root.render(onRegistry(registry, createElement(Window, { open, row }))));
+  };
+  const mark = (unread: boolean) => act(() => marks?.mark(shown, unread));
   return { drawn, draw, mark };
+}
+
+/** A task's agents as its row names them, one agent's pull request standing `state`, its agents' newest settled activity at `activityAt`. */
+function agentsAt(
+  activityAt: number,
+  state: TaskAgentsSummary["pullRequests"][number]["state"] = PULL_REQUEST_STATE.OPEN,
+): TaskAgentsSummary {
+  return {
+    total: 1,
+    working: 0,
+    activityAt,
+    agents: [],
+    pullRequestTotal: 1,
+    pullRequests: [
+      {
+        number: 7,
+        title: "Fix it",
+        state,
+        checks: CHECK_SUMMARY.PASSING,
+        additions: 1,
+        deletions: 1,
+      },
+    ],
+  };
 }
 
 test("a plan opened is read at once, and still lights what changed since the last look for that visit alone", () => {
@@ -154,7 +183,7 @@ test("a plan opened is read at once, and still lights what changed since the las
     sectionEdits: EDITS.map((edit) => ({ ...edit, at: LOOKED_AT + 1, duringCall: false })),
   };
   window.localStorage.setItem("luke.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
-  window.localStorage.setItem("luke.planLooksSeeded", "1");
+  window.localStorage.setItem("luke.taskLooksSeededWithAgents", "1");
   const { drawn, draw } = windowOn(task);
 
   draw(undefined);
@@ -180,7 +209,7 @@ test("a plan marked unread lights, as it next opens, what changed since its last
     ].map((edit) => ({ ...edit, duringCall: false })),
   };
   window.localStorage.setItem("luke.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
-  window.localStorage.setItem("luke.planLooksSeeded", "1");
+  window.localStorage.setItem("luke.taskLooksSeededWithAgents", "1");
   const { drawn, draw, mark } = windowOn(task);
 
   draw(undefined);
@@ -194,7 +223,7 @@ test("a plan marked unread lights, as it next opens, what changed since its last
 test("a save landing while the plan stays open is read as it lands, and stays read once the plan is left", () => {
   const task: Task = { ...DOCUMENT_TASK, updatedAt: LOOKED_AT };
   window.localStorage.setItem("luke.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
-  window.localStorage.setItem("luke.planLooksSeeded", "1");
+  window.localStorage.setItem("luke.taskLooksSeededWithAgents", "1");
   const saved: Task = {
     ...task,
     updatedAt: LOOKED_AT + 1,
@@ -210,6 +239,75 @@ test("a save landing while the plan stays open is read as it lands, and stays re
 
   draw(undefined);
   assert.deepEqual(drawn, { changed: [], unread: false });
+});
+
+test("an agent finishing after the look makes its task unread, opening it reads it, and what its agents do while it stays open is read as it lands", () => {
+  const task: Task = { ...DOCUMENT_TASK, updatedAt: LOOKED_AT };
+  window.localStorage.setItem("luke.taskLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
+  window.localStorage.setItem("luke.taskLooksSeededWithAgents", "1");
+  const { drawn, draw } = windowOn({ ...task, agents: agentsAt(LOOKED_AT) });
+
+  draw(undefined);
+  assert.equal(drawn.unread, false);
+
+  draw(undefined, { ...task, agents: agentsAt(LOOKED_AT + 1) });
+  assert.equal(drawn.unread, true, "the agent's turn ending after the look is unread");
+
+  draw(task);
+  draw(task, { ...task, agents: agentsAt(LOOKED_AT + 2) });
+  draw(undefined);
+  assert.equal(drawn.unread, false, "opening reads it, and the turn ending while open is seen");
+});
+
+test("a pull request merging alone leaves a read task read", () => {
+  const task: Task = { ...DOCUMENT_TASK, updatedAt: LOOKED_AT };
+  window.localStorage.setItem("luke.taskLooks", JSON.stringify({ [task.id]: LOOKED_AT + 1 }));
+  window.localStorage.setItem("luke.taskLooksSeededWithAgents", "1");
+  const { drawn, draw } = windowOn({ ...task, agents: agentsAt(LOOKED_AT + 1) });
+
+  draw(undefined);
+  draw(undefined, { ...task, agents: agentsAt(LOOKED_AT + 1, PULL_REQUEST_STATE.MERGED) });
+  assert.equal(drawn.unread, false);
+});
+
+test("the first list read since agents counted marks their old activity read, and leaves a task saved since its look unread", () => {
+  const read: TaskSummary = {
+    ...DOCUMENT_TASK,
+    id: "task-read",
+    updatedAt: LOOKED_AT,
+    agents: agentsAt(LOOKED_AT + 5),
+  };
+  const saved: TaskSummary = {
+    ...DOCUMENT_TASK,
+    id: "task-saved",
+    updatedAt: LOOKED_AT + 1,
+    agents: agentsAt(LOOKED_AT + 5),
+  };
+  const unmarked: TaskSummary = {
+    ...DOCUMENT_TASK,
+    id: "task-unmarked",
+    updatedAt: LOOKED_AT,
+    agents: agentsAt(LOOKED_AT + 5),
+  };
+  const listed = [read, saved, unmarked];
+  window.localStorage.setItem(
+    "luke.taskLooks",
+    JSON.stringify({ [read.id]: LOOKED_AT, [saved.id]: LOOKED_AT }),
+  );
+  window.localStorage.setItem("luke.taskLooksSeeded", "1");
+  let unread: (task: TaskSummary) => boolean = () => false;
+  function Sidebar() {
+    unread = useUnreadTasks(listed, { listRead: true, staged: false });
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Sidebar))));
+
+  assert.deepEqual(
+    listed.filter((task) => unread(task)).map((task) => task.id),
+    [saved.id],
+  );
 });
 
 test("a reader's id arriving mid-stay lights neither a save that landed during the stay nor a section dismissed", () => {
