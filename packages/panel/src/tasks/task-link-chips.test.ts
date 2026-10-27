@@ -97,6 +97,9 @@ const THREE_CHIPS = [
   ["link", "LUKE-142/fix-the-thing"],
 ];
 
+/** The same chips where the page's plan is at hand, whose heading names the section now whatever its link was labelled. */
+const THREE_CHIPS_ON_PAGE = [["section", "Rollout"], ...THREE_CHIPS.slice(1)];
+
 /** Words drawn as Markdown with the page's mentions, as a version and a note draw them. */
 function PageWords({ words, marks }: { words: string; marks: MarkdownMark[] }): ReactNode {
   const link = useMentionLink();
@@ -139,7 +142,7 @@ test("a version's diff draws a mention written in as its chip, still marked as w
     }),
   );
 
-  assert.deepEqual(chips(container), THREE_CHIPS);
+  assert.deepEqual(chips(container), THREE_CHIPS_ON_PAGE);
   assert.deepEqual(
     [...container.querySelectorAll("[data-mention-ref]")].map(
       (chip) => chip.closest("ins.markdown-inserted") !== null,
@@ -157,7 +160,7 @@ test("Luke's note on a File tab's lines draws its links as a transcript does", (
   });
   const container = drawn(createElement(TaskMentions, { value: PAGE, children: annotation }));
 
-  assert.deepEqual(chips(container), THREE_CHIPS);
+  assert.deepEqual(chips(container), THREE_CHIPS_ON_PAGE);
   assert.deepEqual(
     [...container.querySelectorAll(".luke-text-link")].map((link) => link.textContent),
     ["the docs"],
@@ -188,6 +191,7 @@ test("the plan's version history, off the plan's page, reads a version's mention
   const document = { body: `## Rollout\n\n${LINKS}\n`, assumptions: [] };
   const container = drawn(
     createElement(VersionView, {
+      onRetry: () => undefined,
       viewing: {
         line: {
           seq: 2,

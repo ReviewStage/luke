@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { test } from "vitest";

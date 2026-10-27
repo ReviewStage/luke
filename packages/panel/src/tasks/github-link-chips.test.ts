@@ -25,9 +25,9 @@ import { TranscriptWords } from "./transcript-blocks.js";
 /**
  * github-link-chips.test.ts -- a pull request's or an issue's link in a
  * plan's words says what the workspace's GitHub App answers for it: once it
- * answers, every link to it is called by its number alone, whatever its
- * label, with its repository's name before it where that is not the
- * plan's, so a pasted address and an agent's `[@#42](…)` draw one chip; each wears GitHub's mark for where it
+ * answers, every link to it is called by its number and live title, whatever
+ * its label and never its repository, so a pasted address and an agent's
+ * `[@#42](…)` draw one chip, on a page with a repository and one with none; each wears GitHub's mark for where it
  * stands and says it in words, its card saying its key, its state, and a
  * pull request's lines added and removed in place of its address. Each is read by repository and number through
  * the plan's workspace, nothing is asked where that workspace has no active
@@ -200,12 +200,12 @@ afterEach(() => {
 });
 
 /** The words drawn on the plan's page in a window holding `workspace`, as a document where asked, and every act the window asked. */
-function drawn(text: string, workspace: Workspace, asDocument = false) {
-  return drawnOnPage(createElement(TranscriptWords, { text, asDocument }), workspace);
+function drawn(text: string, workspace: Workspace, asDocument = false, page = PAGE) {
+  return drawnOnPage(createElement(TranscriptWords, { text, asDocument }), workspace, page);
 }
 
 /** `children` drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
-async function drawnOnPage(children: ReactNode, workspace: Workspace) {
+async function drawnOnPage(children: ReactNode, workspace: Workspace, page = PAGE) {
   const asked: AnyAct[] = [];
   const state = stateWith(workspace);
   fakeActs({
@@ -238,7 +238,7 @@ async function drawnOnPage(children: ReactNode, workspace: Workspace) {
       onRegistry(
         AtomRegistry.make(),
         createElement(TaskMentions, {
-          value: PAGE,
+          value: page,
           children,
         }),
       ),
@@ -272,17 +272,17 @@ function issueChips(container: HTMLElement): (string | null | undefined)[][] {
   });
 }
 
-test("a pull request's link says its number and state, wearing its mark, as the plan's workspace's GitHub App answers them, whatever its label, and its repository's name too where that is not the plan's", async () => {
+test("a pull request's link says its number, live title, and state, wearing its mark, as the plan's workspace's GitHub App answers them, whatever its label, and never its repository", async () => {
   const { container, asked } = await drawn(
     `Lands after ${MERGED}, [@#42](${MERGED}), [the expiry change](${MERGED}), ${ELSEWHERE}, and ${UNREACHED}.`,
     ACME_WITH_GITHUB,
   );
 
   assert.deepEqual(chips(container), [
-    ["#42", "Merged", PULL_REQUEST_STATE.MERGED],
-    ["#42", "Merged", PULL_REQUEST_STATE.MERGED],
-    ["#42", "Merged", PULL_REQUEST_STATE.MERGED],
-    ["ledger#5", "Open", PULL_REQUEST_STATE.OPEN],
+    ["#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
+    ["#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
+    ["#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
+    ["#5 Settle nightly", "Open", PULL_REQUEST_STATE.OPEN],
     ["secret/pull/7", null, undefined],
   ]);
   assert.deepEqual(
@@ -300,7 +300,7 @@ test("a pull request's link says its number and state, wearing its mark, as the 
 test("an open pull request GitHub's merge queue holds says Queued and wears the queued mark, as a chip and as a row standing alone", async () => {
   const { container } = await drawn(`Queued behind ${QUEUED}.`, ACME_WITH_GITHUB);
 
-  assert.deepEqual(chips(container), [["#46", "Queued", "queued"]]);
+  assert.deepEqual(chips(container), [["#46 Rotate the signing keys", "Queued", "queued"]]);
 
   act(() => root?.unmount());
   root = undefined;
@@ -314,6 +314,41 @@ test("an open pull request GitHub's merge queue holds says Queued and wears the 
   assert.ok(row?.textContent?.includes("Queued"));
 });
 
+/** The plan's page as Luke's chat draws it: in no repository. */
+const NO_REPOSITORY: TaskMentionsValue = {
+  ...PAGE,
+  repository: null,
+  doors: { ...PAGE.doors, place: { workspace: "acme", repository: null } },
+};
+
+test("on a page with no repository a pull request's and an issue's chip still say its number and title, never a repository's name", async () => {
+  const { container } = await drawn(
+    `${MERGED}, ${ELSEWHERE}, and ${OPEN_ISSUE}.`,
+    ACME_WITH_GITHUB,
+    false,
+    NO_REPOSITORY,
+  );
+
+  assert.deepEqual(
+    [...container.querySelectorAll("[data-mention-ref] .luke-inline-ref-label")].map(
+      (label) => label.textContent,
+    ),
+    ["#42 Expire old invitations", "#5 Settle nightly", "#7 Invitations expire too soon"],
+  );
+});
+
+test("a pull request's link standing alone is a row named as its chip is, on a page with a repository and on one with none", async () => {
+  for (const page of [PAGE, NO_REPOSITORY]) {
+    const { container } = await drawn(ELSEWHERE, ACME_WITH_GITHUB, true, page);
+    const row = container.querySelector('[data-lone-link="pull-request"]');
+
+    assert.ok(row?.textContent?.startsWith("#5 Settle nightly"), row?.textContent ?? "no row");
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+  }
+});
+
 test("where the workspace has no GitHub App installed, nothing is asked and the chip says what the address says", async () => {
   const { container, asked } = await drawn(`See ${MERGED}.`, ACME);
 
@@ -324,15 +359,15 @@ test("where the workspace has no GitHub App installed, nothing is asked and the 
   );
 });
 
-test("an issue's link says its number and state, whatever its label, wearing GitHub's issue mark, as the plan's workspace's GitHub App answers them, and one it does not reach stays as its address says", async () => {
+test("an issue's link says its number, live title, and state, whatever its label, wearing GitHub's issue mark, as the plan's workspace's GitHub App answers them, and one it does not reach stays as its address says", async () => {
   const { container, asked } = await drawn(
     `Fixes ${OPEN_ISSUE}, [the phone ask](${SHELVED_ISSUE}), and ${UNREACHED_ISSUE}.`,
     ACME_WITH_GITHUB,
   );
 
   assert.deepEqual(issueChips(container), [
-    ["#7", "Open", ISSUE_STATE.OPEN, "Issue #7, open"],
-    ["#9", "Not planned", ISSUE_STATE.NOT_PLANNED, "Issue #9, not planned"],
+    ["#7 Invitations expire too soon", "Open", ISSUE_STATE.OPEN, "Issue #7, open"],
+    ["#9 Invite by phone number", "Not planned", ISSUE_STATE.NOT_PLANNED, "Issue #9, not planned"],
     ["secret/issues/3", null, undefined, undefined],
   ]);
   assert.deepEqual(

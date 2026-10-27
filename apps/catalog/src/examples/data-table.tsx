@@ -1,3 +1,4 @@
+import { formatCount } from "@luke/features/number-format";
 import {
   BUTTON_VARIANT,
   Button,
@@ -64,7 +65,7 @@ const COLUMNS: readonly DataTableColumn<Run, RunKey>[] = [
     label: "Minutes",
     kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
     sortable: true,
-    cell: (run) => run.minutes.toLocaleString("en-US"),
+    cell: (run) => formatCount(run.minutes),
   },
   {
     key: "lastRun",

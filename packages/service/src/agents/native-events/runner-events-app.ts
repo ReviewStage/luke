@@ -32,7 +32,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { HTTP_METHOD, type WireValue, WireValueSchema } from "@luke/wire";
-import { Clock, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
+import { Clock, DateTime, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 import {
   FetchHttpClient,
   HttpRouter,
@@ -40,6 +40,7 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { BRAIN_RUN_EVENT, type BrainRunEvent, TURN_ORIGIN } from "../../core.js";
+import { afterResponse } from "../../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -104,7 +105,9 @@ import {
  * the newest model call read on the agent's row for its context ring, the
  * batch's last such reading alone, and once a batch has started or ended a
  * turn, asks for the agent's title where none stands yet
- * (`../coder-host/title.ts`), which names its untitled task with it.
+ * (`../coder-host/title.ts`), which names its untitled task with it, once
+ * the answer has left (`../../http/after-response.ts`), so the runner never
+ * waits on the title model.
  */
 
 /** The path a runner posts its events to. */
@@ -520,7 +523,7 @@ const stopTurnOfAsk = (
       }
     }
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-    const at = new Date(yield* Clock.currentTimeMillis);
+    const at = yield* DateTime.nowAsDate;
     yield* writer.requestTurnCancel(target, { turnId, at });
   }).pipe(
     Effect.catchCause((cause) =>
@@ -599,9 +602,9 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
       turnId,
     );
   }
-  // Note that the title is awaited rather than forked, because the function instance ends with the answer.
+  // Note that the title runs after the answer, kept awake past it, because the runner need not wait on a model.
   if (title !== undefined && (applied.value.turns.started || applied.value.turns.ended)) {
-    yield* title(target, agent.value);
+    yield* afterResponse("a coding agent's title", title(target, agent.value));
   }
   if (alive !== undefined && applied.value.keepsAlive) {
     yield* alive({ target, sessionId: admitted.value.runtimeSessionId });

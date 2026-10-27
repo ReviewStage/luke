@@ -1,4 +1,6 @@
 import type { AdminMetrics, AdminRetentionCell } from "@luke/features/admin-answer-wire";
+import { formatCount, formatPercent } from "@luke/features/number-format";
+import { formatDayTick } from "@luke/features/time-format";
 import {
   SCROLL_AXIS,
   SCROLL_OVERSCROLL,
@@ -12,7 +14,6 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { formatCount, formatDayTick } from "@luke/ui/time-format";
 import { Fragment } from "react";
 import { ChartEmpty, ChartFrame, PlotBox } from "./chart-frame.js";
 
@@ -73,7 +74,7 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
       </div>
     );
   }
-  const percent = `${Math.round(cell.share * 100)}%`;
+  const percent = formatPercent(cell.share);
   const title = `${formatCount(cell.activeAccounts)} ${
     cell.activeAccounts === 1 ? "account" : "accounts"
   } active${cell.inProgress ? " so far this week" : ""}`;

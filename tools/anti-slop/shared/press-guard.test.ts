@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { configWeakensGuard, guardSuppressionLines, PRESS_GUARD_RULE } from "./press-guard.ts";
+import {
+  configWeakensGuard,
+  guardSuppressionLines,
+  ignoredFiles,
+  PRESS_GUARD_RULE,
+} from "./press-guard.ts";
 import { SKELETON_GUARD_RULE } from "./skeleton-guard.ts";
 
 describe("guardSuppressionLines", () => {
@@ -64,6 +69,51 @@ describe("configWeakensGuard", () => {
       overrides: [{ files: ["packages/panel/**"], rules: { [PRESS_GUARD_RULE]: "off" } }],
     };
     expect(configWeakensGuard(overridden)).toBeDefined();
+  });
+});
+
+describe("ignoredFiles", () => {
+  const panel = "packages/panel/src/tasks/inbox-pane.tsx";
+  const ui = "packages/ui/src/components/button/button.tsx";
+  const hook = ".claude/hooks/notify.mjs";
+
+  it("finds a folder, a glob, and a bare name that hide a watched file", () => {
+    expect(ignoredFiles({ ignorePatterns: ["packages/panel/**"] }, [panel, ui])).toEqual(
+      new Map([["packages/panel/**", [panel]]]),
+    );
+    expect(ignoredFiles({ ignorePatterns: ["/packages/panel/"] }, [panel])).toEqual(
+      new Map([["/packages/panel/", [panel]]]),
+    );
+    expect(ignoredFiles({ ignorePatterns: ["*.tsx"] }, [panel, hook])).toEqual(
+      new Map([["*.tsx", [panel]]]),
+    );
+    expect(ignoredFiles({ ignorePatterns: ["tasks"] }, [panel, ui])).toEqual(
+      new Map([["tasks", [panel]]]),
+    );
+  });
+
+  it("finds a wildcard that hides a dotfile or a file in a dot folder", () => {
+    const dotfile = "packages/panel/src/.private.tsx";
+    const inDotFolder = "packages/panel/.hidden/row.tsx";
+    expect(ignoredFiles({ ignorePatterns: ["packages/panel/**"] }, [dotfile, inDotFolder])).toEqual(
+      new Map([["packages/panel/**", [dotfile, inDotFolder]]]),
+    );
+    expect(ignoredFiles({ ignorePatterns: ["*.tsx"] }, [dotfile])).toEqual(
+      new Map([["*.tsx", [dotfile]]]),
+    );
+    expect(ignoredFiles({ ignorePatterns: [".private.tsx"] }, [dotfile, panel])).toEqual(
+      new Map([[".private.tsx", [dotfile]]]),
+    );
+  });
+
+  it("passes patterns that hide no watched file, and a file a later ! brings back", () => {
+    expect(
+      ignoredFiles({ ignorePatterns: [".claude/**", "tools/anti-slop/**"] }, [panel, ui]),
+    ).toEqual(new Map());
+    expect(ignoredFiles({ ignorePatterns: ["packages/**", `!${panel}`] }, [panel, ui])).toEqual(
+      new Map([["packages/**", [ui]]]),
+    );
+    expect(ignoredFiles({ rules: {} }, [panel])).toEqual(new Map());
   });
 });
 

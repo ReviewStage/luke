@@ -1,5 +1,5 @@
+import { appLinkOf, type LinkPlaceKind, readLink } from "./link-grammar.js";
 import { LINK_ORIGIN } from "./link-home.js";
-import { appLinkOf, type LinkPlaceKind, readLink } from "./luke-link.js";
 
 /**
  * open-address.ts -- what a web page at a Luke link reads off its address: the place it is a link to, spelled in the desktop's own scheme.
@@ -11,7 +11,7 @@ import { appLinkOf, type LinkPlaceKind, readLink } from "./luke-link.js";
  * a task), and its fragment are read as those of a link on the home,
  * whatever host served it, a slash after it let go as the route lets it,
  * and written again in the desktop's scheme by the one module that knows a
- * link's form (`@luke/features/luke-link`). A picture's address,
+ * link's form (`@luke/features/link-grammar`). A picture's address,
  * `/<workspace>/plan/<id>/files/<picture>`, opens the plan it is of. A path
  * that names no place opens nothing.
  */

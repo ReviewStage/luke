@@ -3,7 +3,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestStackEntry,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import { ACT_KIND } from "@luke/host/acts";
 import { BUTTON_VARIANT, Button, dropBelowStart, Tooltip, useMenu } from "@luke/ui";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
@@ -57,13 +57,13 @@ function placeOf(agent: NonNullable<PullRequestStackEntry["agent"]>): LinkPlace 
 
 /** How a pull request of the stack opens: its agent's Pull request tab where an agent owns it and the window can open one, else its page on GitHub. */
 function useOpenEntry(): (entry: PullRequestStackEntry) => void {
-  const { tell } = useAct();
+  const { press } = useAct();
   const openPlace = useOpenPlace();
   return (entry) => {
     if (entry.agent !== undefined && openPlace !== undefined) {
       openPlace(placeOf(entry.agent));
     } else {
-      tell(ACT_KIND.GITHUB_OPEN, { url: entry.url });
+      press(ACT_KIND.GITHUB_OPEN, { url: entry.url });
     }
   };
 }

@@ -58,6 +58,7 @@ import {
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
 } from "@luke/features/automation-wire";
+import { readerZone } from "@luke/features/date-mention";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
@@ -65,15 +66,17 @@ import {
   type IntegrationProvider,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
+import { dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
 import {
   SENTRY_LEVEL,
   SENTRY_TRIGGER_EVENT,
   type SentryLevel,
   type SentryTriggerEvent,
 } from "@luke/features/trigger-catalog";
+import { andList, noMatchWords, readFailedWords, TERM } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -99,6 +102,7 @@ import {
   IconButton,
   OneLine,
   PAGE_FRAME,
+  PageToolbar,
   POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -134,7 +138,6 @@ import {
   wholeWordsHint,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
-import { dayAndTimeText, localTimeZone, timeZoneNames } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
@@ -326,7 +329,7 @@ const TIME_ZONES = timeZoneNames();
 const NO_MATCH = {
   DAYS: "No days match",
   TIMES: "No times match",
-  AGENTS: "No agents match",
+  AGENTS: noMatchWords(TERM.AGENT),
 } as const;
 
 /** Why a save the service refused did not land, as the line under the name says it. */
@@ -374,11 +377,6 @@ function hourlyLabel(minute: number): string {
 /** A zone as the zone picker names it, its underscores read as spaces. */
 function zoneLabel(zone: string): string {
   return zone.replaceAll("_", " ");
-}
-
-/** The zone this Mac is in, which a new automation runs in until another is chosen. */
-function windowZone(): string {
-  return localTimeZone();
 }
 
 /** An owner as the crumbs and the Owner row name it. */
@@ -476,7 +474,7 @@ function ServersRow({
         description={
           disabled.length === 0
             ? "All of its creator's connected servers."
-            : `Its creator's connected servers, but ${disabled.map(switchedOffName).join(", ")} switched off.`
+            : `Its creator's connected servers, but ${andList(disabled.map(switchedOffName))} switched off.`
         }
       >
         {() => null}
@@ -486,11 +484,9 @@ function ServersRow({
   return <OwnServersRow disabled={disabled} onSwitch={onSwitch} />;
 }
 
-/** Names as a sentence says them: "Linear", "Linear and Notion", "Linear, Notion and Sentry". */
+/** Names as a sentence says them: "Linear", "Linear and Notion", "Linear, Notion, and Sentry". */
 function namesSaid(providers: readonly IntegrationProvider[]): string {
-  const names = providers.map((provider) => INTEGRATION_NAME[provider]);
-  if (names.length < 2) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return andList(providers.map((provider) => INTEGRATION_NAME[provider]));
 }
 
 /** The most marks the servers chip holds before it counts the rest, so it stays a picker's width. */
@@ -879,19 +875,21 @@ function EditorToolbarFrame({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <header className="desktop-toolbar">
-      <div className="automation-toolbar">
-        <div className="desktop-toolbar-heading">
-          <nav className="automation-crumbs" aria-label="Path">
-            <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
-            <ChevronRightIcon aria-hidden="true" />
-            {crumb}
-          </nav>
-          {tag}
+    <PageToolbar
+      lead={
+        <div className="automation-toolbar">
+          <div className="desktop-toolbar-heading">
+            <nav className="automation-crumbs" aria-label="Path">
+              <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
+              <ChevronRightIcon aria-hidden="true" />
+              {crumb}
+            </nav>
+            {tag}
+          </div>
+          <div className="desktop-toolbar-actions">{children}</div>
         </div>
-        <div className="desktop-toolbar-actions">{children}</div>
-      </div>
-    </header>
+      }
+    />
   );
 }
 
@@ -977,11 +975,7 @@ function EditorToolbar({
     >
       {codeReview ? <SendFeedbackButton experiment={EXPERIMENT.CODE_REVIEW} /> : null}
       <EditorStatus>
-        <Text
-          variant={TEXT_VARIANT.CAPTION}
-          tone={dirty ? TEXT_TONE.MUTED : TEXT_TONE.SUBTLE}
-          as={TEXT_ELEMENT.SPAN}
-        >
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
           {status}
         </Text>
       </EditorStatus>
@@ -1542,10 +1536,13 @@ const TARGETS: readonly { value: AutomationTargetKind; label: string }[] = [
  */
 function ModelPicker({
   models,
+  modelsFailed,
   readModels,
   onChoose,
 }: {
   models: RunChoices["models"];
+  /** Whether the catalog could not be read, which the menu says with Retry. */
+  modelsFailed: boolean;
   /** Reads the catalog now, as the menu opens, so a catalog that failed to read is asked for again. */
   readModels: () => void;
   onChoose: (choice: ModelChoice) => void;
@@ -1584,6 +1581,8 @@ function ModelPicker({
             id={menuId}
             className="agent-model-menu"
             models={models}
+            failed={modelsFailed}
+            onRetry={readModels}
             chosen={undefined}
             onChoose={(choice) => {
               onChoose(choice);
@@ -1628,6 +1627,7 @@ function ModelRow({
           <AgentModelChip
             model={{ choice: shown, note: undefined, choose: (choice) => onDraft({ choice }) }}
             models={choices.models}
+            modelsFailed={choices.modelsFailed}
             readModels={choices.readModels}
             usage={undefined}
             look={CHIP_LOOK.FIELD}
@@ -1636,6 +1636,7 @@ function ModelRow({
         ) : choices.defaultFailed ? (
           <ModelPicker
             models={choices.models}
+            modelsFailed={choices.modelsFailed}
             readModels={choices.readModels}
             onChoose={(choice) => onDraft({ choice })}
           />
@@ -1648,8 +1649,9 @@ function ModelRow({
 /** What the agent picker names the saved agent the workspace's list no longer holds. */
 const KEPT_AGENT_LABEL = "The agent it goes to now";
 
-/** What the agent row says where the workspace's agents could not be read. */
-const AGENTS_UNREAD = "The workspace's agents could not be read.";
+/** What the agent row says where the workspace's agents could not be read, and where the search among them did not answer. */
+const AGENTS_UNREAD = readFailedWords("the workspace's agents");
+const AGENT_SEARCH_FAILED = readFailedWords("the search for agents");
 
 /** What the agent row says under its name. */
 const AGENT_DETAIL =
@@ -1679,7 +1681,15 @@ function AgentRow({
   problem: string | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
-  const { agents, found, models, searched: words, searchAgents } = choices;
+  const {
+    agents,
+    found,
+    models,
+    searched: words,
+    searchAgents,
+    searchFailed,
+    retryAgents,
+  } = choices;
   const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
   const known = useKnownNames();
   const place = useAgentRowPlace();
@@ -1690,10 +1700,9 @@ function AgentRow({
       <SettingsRow
         label="Agent"
         description={AGENT_DETAIL}
-        error={problem === undefined ? AGENTS_UNREAD : `${AGENTS_UNREAD} ${problem}`}
-      >
-        {() => null}
-      </SettingsRow>
+        error={problem}
+        below={() => <ErrorState onRetry={retryAgents}>{AGENTS_UNREAD}</ErrorState>}
+      />
     );
   }
   const offered = (agents?.agents ?? []).map((agent) =>
@@ -1746,7 +1755,11 @@ function AgentRow({
       rows={rows}
       placeholder="Search agents"
       note={
-        words !== "" ? undefined : agents === undefined ? (
+        words !== "" ? (
+          searchFailed ? (
+            <ErrorState onRetry={retryAgents}>{AGENT_SEARCH_FAILED}</ErrorState>
+          ) : undefined
+        ) : agents === undefined ? (
           <Spinner delay label="Loading agents" />
         ) : rows.length === 0 ? (
           "No agents of this workspace work in it yet."
@@ -1806,7 +1819,7 @@ function RunsGroup({
             ? "Its task's repository."
             : also.length === 0
               ? undefined
-              : `Runs start here, and also work in ${also.join(", ")}.`
+              : `Runs start here, and also work in ${andList(also)}.`
         }
         error={problems[DRAFT_FIELD.REPOSITORY]}
       >
@@ -1972,7 +1985,6 @@ function EditorForm({
                   <SelectRow
                     width={CHIP_WIDTH.MIN_FIELD}
                     label="Event"
-                    detail="Heard through the workspace's GitHub App."
                     value={draft.githubEvent}
                     options={GITHUB_EVENTS}
                     parse={githubEventOf}
@@ -2292,7 +2304,7 @@ export function AutomationEditor({
   const linkedRun = linked?.runId;
   const [running, setRunning] = useState(false);
   const [defaults] = useState<DraftDefaults>(() => ({
-    timezone: windowZone(),
+    timezone: readerZone(),
     owner: AUTOMATION_SCOPE.PERSONAL,
   }));
   // A new automation starts in the repository the workspace's plans were about lately, as a new plan does,

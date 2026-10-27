@@ -2,16 +2,22 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { type AppSettingField, SETTING_SECTION, SETTINGS_PAGE } from "@luke/settings";
-import { settingsView } from "@luke/settings/testing";
+import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { rendererRegistry } from "../renderer-runtime.js";
+import { fakeActPort, refusedOnPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { SchemaSettingRows } from "./schema-rows.js";
-import type { SettingsWrites } from "./writes.js";
+import { type SettingsWrites, useSettingsWrites } from "./writes.js";
 
 /**
  * schema-rows.test.ts -- a schema row as the reader meets it: a toggle is a
@@ -30,10 +36,12 @@ const REFUSED = "The setting could not be saved. Try again.";
 let written: [AppSettingField, unknown][] = [];
 /** What the store answers the next write. */
 let answer: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+/** A write the store has not answered yet, for a test that reads the row while it waits. */
+let held: PromiseWithResolvers<ActionResult> | undefined;
 const writes: SettingsWrites = {
   setting: (field, value) => {
     written.push([field, value]);
-    return Promise.resolve(answer);
+    return held?.promise ?? Promise.resolve(answer);
   },
   reset: () => Promise.reject(new Error("a row resets nothing")),
 };
@@ -42,6 +50,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   written = [];
   answer = { status: ACTION_RESULT_STATUS.ACCEPTED };
+  held = undefined;
 });
 
 afterEach(() => {
@@ -49,6 +58,27 @@ afterEach(() => {
   document.body.innerHTML = "";
   vi.restoreAllMocks();
 });
+
+/** The rows the page draws over `settings`, beside the window's toasts, drawn with `writes`. */
+function rows(
+  page: typeof SETTINGS_PAGE.APPEARANCE | typeof SETTINGS_PAGE.VOICE,
+  settings: ReturnType<typeof settingsView>,
+  rowWrites: SettingsWrites,
+) {
+  const view = {
+    settings,
+    voiceControlsDrawn: page === SETTINGS_PAGE.VOICE,
+    accountDrawn: true,
+    capabilities: DESKTOP_CAPABILITIES,
+  };
+  const section = page === SETTINGS_PAGE.VOICE ? SETTING_SECTION.CONTROLS : SETTING_SECTION.MAIN;
+  return createElement(
+    Fragment,
+    null,
+    createElement(SchemaSettingRows, { page, section, view, writes: rowWrites }),
+    onRegistry(rendererRegistry, createElement(ToastHost)),
+  );
+}
 
 /** The Appearance page's own rows over the shipped defaults, or the Voice page's controls with voice ready. */
 function mount(
@@ -58,15 +88,26 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const view = {
-    settings: settingsView({ voiceAvailable: true }),
-    voiceControlsDrawn: page === SETTINGS_PAGE.VOICE,
-    accountDrawn: true,
-    capabilities: DESKTOP_CAPABILITIES,
-  };
-  const section = page === SETTINGS_PAGE.VOICE ? SETTING_SECTION.CONTROLS : SETTING_SECTION.MAIN;
-  act(() => root.render(createElement(SchemaSettingRows, { page, section, view, writes })));
+  act(() => root.render(rows(page, settingsView({ voiceAvailable: true }), writes)));
   return container;
+}
+
+/** The Appearance page drawn through the window's own writes, which reach the fake act port, and a way to draw it again over the settings the store then holds. */
+function mountThroughActs(): {
+  page: HTMLElement;
+  redraw: (settings: ReturnType<typeof settingsView>) => void;
+} {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  function Page({ settings }: { settings: ReturnType<typeof settingsView> }) {
+    return rows(SETTINGS_PAGE.APPEARANCE, settings, useSettingsWrites());
+  }
+  const redraw = (settings: ReturnType<typeof settingsView>) =>
+    act(() => root.render(createElement(Page, { settings })));
+  redraw(settingsView());
+  return { page: container, redraw };
 }
 
 /** The control a reader hears as `name`. */
@@ -127,24 +168,76 @@ test("choosing the size a pop-up already names writes nothing", async () => {
   assert.deepEqual(written, []);
 });
 
-test("a switch the store refuses says why under its own row, stays as it stood, and can be pressed again", async () => {
+test("a switch flips at once, before the store answers, and is never rested for the write", async () => {
   const page = mount();
-  answer = { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED };
+  held = Promise.withResolvers<ActionResult>();
+
+  act(() => control(page, "Open Luke at login").click());
+
+  const login = control(page, "Open Luke at login");
+  assert.equal(login.getAttribute("aria-checked"), "false");
+  assert.equal(login.disabled, false);
+  assert.deepEqual(written, [["openAtLogin", false]]);
+
+  held.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+  await settle();
+  assert.equal(control(page, "Open Luke at login").getAttribute("aria-checked"), "false");
+  assert.equal(newestToastSays(), undefined);
+});
+
+test("a switch follows the settings again once they agree with what it flipped to", async () => {
+  const { page, redraw } = mountThroughActs();
+  fakeActPort({
+    [SETTINGS_ACT_KIND.SETTING_UPDATE]: () =>
+      Promise.resolve({
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        settings: appSettingsWire(settingsView({ openAtLogin: false })),
+      }),
+  });
+
+  act(() => control(page, "Open Luke at login").click());
+  await settle();
+  redraw(settingsView({ openAtLogin: false }));
+  assert.equal(control(page, "Open Luke at login").getAttribute("aria-checked"), "false");
+
+  // Another window turns it back on; the switch is the store's again, not a value held here.
+  redraw(settingsView({ openAtLogin: true }));
+  assert.equal(control(page, "Open Luke at login").getAttribute("aria-checked"), "true");
+});
+
+test("a switch the store refuses flips back and says why in a toast, and can be pressed again", async () => {
+  const page = mount();
+  held = Promise.withResolvers<ActionResult>();
+
+  act(() => control(page, "Open Luke at login").click());
+  assert.equal(control(page, "Open Luke at login").getAttribute("aria-checked"), "false");
+  held.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED });
+  await settle();
+
+  const login = control(page, "Open Luke at login");
+  assert.equal(login.getAttribute("aria-checked"), "true");
+  assert.equal(login.disabled, false);
+  assert.equal(newestToastSays(), REFUSED);
+
+  held = undefined;
+  act(() => login.click());
+  await settle();
+  assert.equal(control(page, "Open Luke at login").getAttribute("aria-checked"), "false");
+});
+
+test("a switch whose write the host refuses outright flips back with the host's sentence and is never left disabled", async () => {
+  const { page } = mountThroughActs();
+  fakeActPort({
+    [SETTINGS_ACT_KIND.SETTING_UPDATE]: () => Promise.reject(refusedOnPort(REFUSED)),
+  });
 
   act(() => control(page, "Open Luke at login").click());
   await settle();
 
   const login = control(page, "Open Luke at login");
-  assert.equal(page.textContent?.includes(REFUSED), true);
-  assert.equal(describedAs(login), REFUSED);
   assert.equal(login.getAttribute("aria-checked"), "true");
   assert.equal(login.disabled, false);
-  assert.deepEqual(written, [["openAtLogin", false]]);
-
-  answer = { status: ACTION_RESULT_STATUS.ACCEPTED };
-  act(() => login.click());
-  await settle();
-  assert.equal(page.textContent?.includes(REFUSED), false);
+  assert.equal(newestToastSays(), REFUSED);
 });
 
 test("a choice the store refuses says why under its own row and marks its pop-up invalid until a choice is kept", async () => {

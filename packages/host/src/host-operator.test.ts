@@ -188,21 +188,16 @@ it.effect(
     }),
 );
 
-it.effect("an inbox answer's files travel to the host with its words, under the answer's key", () =>
+it.effect("a nod on an inbox notice travels to the host as its revision and its key alone", () =>
   Effect.gen(function* () {
     const { client, requests } = recordingClient();
     const operator = operatorOver(client);
-    const attachments = [
-      { name: "alerts.yml", mediaType: "text/plain", data: "dGhyZXNob2xk" },
-    ] as const;
 
     yield* operator.codingAgentInboxAnswer({
       itemId: "item-1",
       revision: 2,
-      reply: INBOX_REPLY.ANSWERED,
-      note: "See the file.",
-      attachments,
-      clientKey: "answer-1",
+      reply: INBOX_REPLY.ACKNOWLEDGED,
+      clientKey: "nod-1",
     });
 
     assert.deepEqual(
@@ -210,14 +205,7 @@ it.effect("an inbox answer's files travel to the host with its words, under the 
       [
         [
           GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER,
-          {
-            itemId: "item-1",
-            revision: 2,
-            reply: INBOX_REPLY.ANSWERED,
-            note: "See the file.",
-            attachments,
-            clientKey: "answer-1",
-          },
+          { itemId: "item-1", revision: 2, reply: INBOX_REPLY.ACKNOWLEDGED, clientKey: "nod-1" },
         ],
       ],
     );

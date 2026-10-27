@@ -19,7 +19,7 @@ import {
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
-import { agentTabLabel } from "./coding-agent-model.js";
+import { agentName } from "./coding-agent-model.js";
 import { AgentGlyph, agentEndMark } from "./tab-look.js";
 import { TerminalStanding } from "./terminal-shells.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
@@ -202,7 +202,7 @@ export function TerminalPicker({
           ) : (
             <Command.Group
               heading={
-                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                   Coding agents
                 </Text>
               }
@@ -212,7 +212,7 @@ export function TerminalPicker({
                   key={agent.id}
                   agent={agent}
                   agents={agents}
-                  name={agentTabLabel(agent, agents.models)}
+                  name={agentName(agent, agents.models)}
                   last={agent.id === lastUsed}
                   onPick={() => choose(() => onPick(agent.id))}
                 />

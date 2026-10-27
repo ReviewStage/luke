@@ -5,7 +5,7 @@
  * auth service that still called itself the production URL there refuses the
  * first thing the browser asks of it: Better Auth trusts the origin of its own
  * base URL, and a page on a preview sends the preview's, which is how a
- * sign-in press on a preview becomes "Sign-in could not start". Naming the
+ * sign-in press on a preview becomes "Sign-in didn't finish". Naming the
  * preview as its own base URL is what makes the deployment honest about where
  * it is.
  *

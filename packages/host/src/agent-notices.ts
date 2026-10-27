@@ -21,7 +21,7 @@ import {
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import { linkLabels } from "@luke/features/mention-link";
-import { agentTabLabel, modelLabel } from "@luke/features/model-label";
+import { agentName, modelLabel } from "@luke/features/model-label";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import { Context, Duration, Effect, Queue, type Scope, Stream } from "effect";
@@ -374,9 +374,9 @@ interface HeldAgent {
   model: string;
   /** The agent's title, said in the model's place where it has one. */
   title: string | null;
-  /** What kind of agent it is: an operator is said as Luke (`agentTabLabel`); none for a coder. */
+  /** What kind of agent it is: an operator is said as Luke (`agentName`); none for a coder. */
   kind?: CodingAgentKind | undefined;
-  /** The automation whose run started it, which an untitled agent goes by (`agentTabLabel`). */
+  /** The automation whose run started it, which an untitled agent goes by (`agentName`). */
   automationName?: string | undefined;
   status: CodingAgentStatus;
   /** The turn the status is read from; none before the first. */
@@ -420,7 +420,7 @@ function stillWriting(status: CodingAgentStatus): boolean {
 /**
  * What the notification says, built in one place: the plan's name, or the
  * automation's for an agent with no plan, over the agent as its tab names it
- * (`agentTabLabel`), and the word for how the turn ended, or the
+ * (`agentName`), and the word for how the turn ended, or the
  * pull request it opened once a reader of the agent's pull request hands one
  * in. Nothing for a status that is not a turn's end, or for a Stop.
  */
@@ -438,7 +438,7 @@ function noticeText(input: {
   if (status !== CODING_AGENT_STATUS.COMPLETED && status !== CODING_AGENT_STATUS.FAILED) {
     return undefined;
   }
-  const name = agentTabLabel(input, input.models);
+  const name = agentName(input, input.models);
   const ended =
     input.pullRequest !== undefined && status === CODING_AGENT_STATUS.COMPLETED
       ? `opened #${input.pullRequest}`

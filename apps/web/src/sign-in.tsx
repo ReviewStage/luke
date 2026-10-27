@@ -1,7 +1,7 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { LANDING_TONE } from "@luke/features/landing-outcome";
 import { type SocialProvider, socialProviderFromState } from "@luke/features/sign-in-provider";
-import { AuthMark, AuthPage, SIGN_IN_FAILURE, SocialProviderButton } from "@luke/ui";
+import { AuthMark, AuthPage, SIGN_IN_UNFINISHED, SocialProviderButton } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useRef, useState } from "react";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
@@ -45,7 +45,7 @@ function SignIn(): React.JSX.Element {
       mark={<AuthMark provider={provider} tone={provider ? undefined : LANDING_TONE.FAILED} />}
       title={provider ? "Sign in to Luke" : "Luke could not continue"}
       description={provider ? undefined : "Start sign-in again."}
-      error={failed ? SIGN_IN_FAILURE : undefined}
+      error={failed ? SIGN_IN_UNFINISHED : undefined}
       action={provider ? undefined : openLukeFromMac()}
       footnote={provider ? "You can close this window after Luke confirms the sign-in." : undefined}
     >

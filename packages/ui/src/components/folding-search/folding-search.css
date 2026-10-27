@@ -1,0 +1,133 @@
+/* folding-search.css -- a name and its magnifier in one box, and the search
+   laid over that box while open: it unfolds out of the magnifier's own shape,
+   its glyph riding the leading edge on the same beat, and folds back into it.
+   Only clip-path, transform, and opacity move, so nothing beside the box is
+   displaced and no text changes size mid-motion. Reduced motion and a capture
+   run zero the durations (`motion.css`), so the field then simply stands. */
+
+@layer components {
+  .luke-folding-search {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: var(--luke-control-gap);
+  }
+
+  .luke-folding-search-name {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+  }
+
+  .luke-folding-search-name > * {
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* What the field covers fades back once the field has left. */
+  .luke-folding-search-name,
+  .luke-folding-search-magnifier {
+    display: flex;
+    transition: opacity var(--luke-duration-quick) var(--luke-motion-pane) var(--luke-duration-exit);
+  }
+
+  .luke-folding-search[data-open="true"]
+    :is(.luke-folding-search-name, .luke-folding-search-magnifier) {
+    opacity: 0;
+    transition: opacity var(--luke-duration-exit) var(--luke-motion-exit);
+  }
+
+  .luke-folding-search-field {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    animation: luke-folding-search-unfold var(--luke-duration-pane) var(--luke-motion-pane)
+      backwards;
+  }
+
+  .luke-folding-search-field > .luke-search-field {
+    width: 100%;
+  }
+
+  .luke-folding-search-field .luke-search-field > svg {
+    animation: luke-folding-search-glyph var(--luke-duration-pane) var(--luke-motion-pane) backwards;
+  }
+
+  /* The field's words wait for the well to open, so the riding glyph never
+     crosses them. */
+  .luke-folding-search-field .luke-search-field-input {
+    animation: luke-folding-search-words var(--luke-duration-quick) var(--luke-motion-pane)
+      calc(var(--luke-duration-pane) - var(--luke-duration-quick)) backwards;
+  }
+
+  .luke-folding-search-field[data-leaving="true"] {
+    animation: luke-folding-search-fold var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  }
+
+  .luke-folding-search-field[data-leaving="true"] .luke-search-field > svg {
+    animation: luke-folding-search-glyph-back var(--luke-duration-exit) var(--luke-motion-exit)
+      forwards;
+  }
+
+  .luke-folding-search-field[data-leaving="true"]
+    :is(.luke-search-field-input, .luke-search-field-clear) {
+    animation: luke-folding-search-words-out calc(var(--luke-duration-exit) / 2)
+      var(--luke-motion-exit) forwards;
+  }
+
+  /* Folded, the well is the magnifier's square at the box's end, its corner
+     the control's; open, it is uncovered a little past its edge, so the
+     ring the caret brings is never clipped. */
+  @keyframes luke-folding-search-unfold {
+    from {
+      clip-path: inset(
+        0 0 0 calc(100% - var(--luke-control-height)) round var(--luke-control-radius)
+      );
+    }
+    to {
+      clip-path: inset(calc(-1 * var(--luke-space-4)) round var(--luke-control-radius));
+    }
+  }
+
+  @keyframes luke-folding-search-fold {
+    from {
+      clip-path: inset(calc(-1 * var(--luke-space-4)) round var(--luke-control-radius));
+    }
+    to {
+      clip-path: inset(
+        0 0 0 calc(100% - var(--luke-control-height)) round var(--luke-control-radius)
+      );
+      opacity: 0;
+    }
+  }
+
+  /* The travel is measured from the magnifier's glyph to the field's
+     (`folding-search.tsx`). */
+  @keyframes luke-folding-search-glyph {
+    from {
+      transform: translateX(var(--luke-folding-search-travel, 0px));
+    }
+  }
+
+  @keyframes luke-folding-search-glyph-back {
+    to {
+      transform: translateX(var(--luke-folding-search-travel, 0px));
+    }
+  }
+
+  @keyframes luke-folding-search-words {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-folding-search-words-out {
+    to {
+      opacity: 0;
+    }
+  }
+}

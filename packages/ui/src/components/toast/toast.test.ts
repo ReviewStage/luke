@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { TOAST_TONE, Toast } from "./toast.js";
+import { STATUS_TONE } from "../../status-tone.js";
+import { Toast } from "./toast.js";
 import { ToastActions } from "./toast-actions.js";
 import { ToastStack } from "./toast-stack.js";
 
@@ -46,7 +47,7 @@ function acting(
   countdown?: number,
 ) {
   return createElement(Toast, {
-    tone: TOAST_TONE.DONE,
+    tone: STATUS_TONE.COMPLETE,
     words: "Task archived",
     countdown,
     onHold,
@@ -119,7 +120,7 @@ test("a toast with no action takes no press and no hold", () => {
     createElement(
       "ol",
       null,
-      createElement(Toast, { tone: TOAST_TONE.FAILED, words: "Couldn't save", detail: "Offline" }),
+      createElement(Toast, { tone: STATUS_TONE.DANGER, words: "Couldn't save", detail: "Offline" }),
     ),
   );
   const toast = view.querySelector("li");
@@ -201,26 +202,26 @@ test("a toast whose tone turns keeps the glyph it led with beside the new one, a
   const container = document.body.appendChild(document.createElement("ol"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Toast, { tone: TOAST_TONE.WORKING, words: "Saving…" })));
+  act(() => root.render(createElement(Toast, { tone: STATUS_TONE.WORKING, words: "Saving…" })));
   const toast = container.querySelector("li");
   const before = [...container.querySelectorAll<HTMLElement>(".luke-toast-glyph > span")];
 
-  act(() => root.render(createElement(Toast, { tone: TOAST_TONE.DONE, words: "Saved" })));
+  act(() => root.render(createElement(Toast, { tone: STATUS_TONE.COMPLETE, words: "Saved" })));
   const after = [...container.querySelectorAll<HTMLElement>(".luke-toast-glyph > span")];
 
   assert.deepEqual(
     before.map((glyph) => glyph.dataset.tone),
-    [TOAST_TONE.WORKING],
+    [STATUS_TONE.WORKING],
   );
   assert.deepEqual(
     after.map((glyph) => [glyph.dataset.tone, glyph.dataset.turn]),
     [
-      [TOAST_TONE.WORKING, "was"],
-      [TOAST_TONE.DONE, "now"],
+      [STATUS_TONE.WORKING, "was"],
+      [STATUS_TONE.COMPLETE, "now"],
     ],
   );
   assert.equal(container.querySelector("li"), toast, "the same card");
-  assert.equal(toast?.dataset.tone, TOAST_TONE.DONE);
+  assert.equal(toast?.dataset.tone, STATUS_TONE.COMPLETE);
   assert.equal(container.querySelector(".luke-toast-words")?.textContent, "Saved");
 });
 

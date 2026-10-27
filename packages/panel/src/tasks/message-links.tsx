@@ -1,4 +1,4 @@
-import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import { createContext, useContext, useEffect, useRef } from "react";
 import { centreWithin, scrollerOf } from "./code-pane.js";
 
@@ -6,7 +6,7 @@ import { centreWithin, scrollerOf } from "./code-pane.js";
  * message-links.tsx -- a message's own link: whose transcript a message is of, so its Copy link can name it, and the ask to bring a linked message into view.
  *
  * A message is named by its agent, under its task where it has one, and its
- * own id (`@luke/features/luke-link`'s message place). The tab drawing an
+ * own id (`@luke/features/link-grammar`'s message place). The tab drawing an
  * agent's transcript hands down how its messages are named; a message
  * drawn anywhere else names nothing and offers no link.
  *

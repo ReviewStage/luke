@@ -40,7 +40,7 @@ import { ExternalLinkIcon } from "lucide-react";
 import { AdminPlace, adminSectionOf, adminSectionView } from "../admin/admin-place.js";
 import { AdminToolbarLead } from "../admin/chrome/page-header.js";
 import { ADMIN_PLACES } from "../admin/chrome/places.js";
-import type { AdminView } from "../admin/routing.js";
+import { ADMIN_PAGE, ADMIN_TAB, type AdminView } from "../admin/routing.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
@@ -58,7 +58,7 @@ const ADMIN_TITLE = "Admin";
 const OPEN_IN_BROWSER = "Open in browser";
 
 /** The sections the app lists: every section but the face's reference, which only the web page draws. */
-const APP_SECTIONS = ADMIN_PLACES.filter((place) => place.tab !== "animations");
+const APP_SECTIONS = ADMIN_PLACES.filter((place) => place.tab !== ADMIN_TAB.ANIMATIONS);
 
 /** The row that opens the web page: a link to it in a browser tab, a press the shell answers in the Mac app. */
 function OpenInBrowserRow(): React.JSX.Element {
@@ -76,8 +76,8 @@ function OpenInBrowserRow(): React.JSX.Element {
 
 /** A view by the words a find's scope is keyed by, so moving to another view closes the bar. */
 function adminViewKey(view: AdminView): string {
-  if (view.kind === "account") return `account:${view.id}`;
-  if (view.kind === "day") return `day:${view.day}`;
+  if (view.kind === ADMIN_PAGE.ACCOUNT) return `account:${view.id}`;
+  if (view.kind === ADMIN_PAGE.DAY) return `day:${view.day}`;
   return view.kind;
 }
 

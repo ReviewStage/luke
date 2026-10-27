@@ -1,4 +1,5 @@
 import { base64Bytes } from "./coding-agent-wire.js";
+import { formatBytes } from "./number-format.js";
 
 /**
  * attachment-model.ts -- one file on a message as its chip and its viewer read it: its bytes from its `data:` URL, its size in words, and how it is shown.
@@ -15,33 +16,34 @@ export interface FileChip {
   readonly url: string;
 }
 
-/** How the viewer shows a file: as a picture, as its lines, or by its icon and name with a way to save it. */
+/** How the viewer shows a file: as a picture, played as a video, as its lines, or by its icon and name with a way to save it. */
 export const ATTACHMENT_VIEW = {
   IMAGE: "image",
+  VIDEO: "video",
   TEXT: "text",
   OTHER: "other",
 } as const;
 
 export type AttachmentView = (typeof ATTACHMENT_VIEW)[keyof typeof ATTACHMENT_VIEW];
 
-const KILOBYTE = 1_000;
-const MEGABYTE = 1_000_000;
+/** The videos the viewer plays, the ones Chromium plays everywhere; any other video is shown by its icon. */
+const PLAYED_VIDEO_TYPE = { WEBM: "video/webm", MP4: "video/mp4" } as const;
+const PLAYED_VIDEO_TYPES: ReadonlySet<string> = new Set(Object.values(PLAYED_VIDEO_TYPE));
 
 /** A file's bytes in base64, read off its `data:` URL; empty where it carries none. */
 export function chipBase64(file: FileChip): string {
   return file.url.startsWith("data:") ? file.url.slice(file.url.indexOf(",") + 1) : "";
 }
 
-/** A file's size as a chip says it: kilobytes up to a megabyte, then megabytes to one place. */
+/** A file's size as a chip says it. */
 export function sizeLabel(base64: string): string {
-  const bytes = base64Bytes(base64);
-  if (bytes < MEGABYTE) return `${String(Math.max(1, Math.round(bytes / KILOBYTE)))} KB`;
-  return `${(bytes / MEGABYTE).toFixed(1)} MB`;
+  return formatBytes(base64Bytes(base64));
 }
 
 /** How the viewer shows a file that carries bytes. */
 export function attachmentView(file: FileChip): AttachmentView {
   if (file.mediaType.startsWith("image/")) return ATTACHMENT_VIEW.IMAGE;
+  if (PLAYED_VIDEO_TYPES.has(file.mediaType)) return ATTACHMENT_VIEW.VIDEO;
   if (file.mediaType.startsWith("text/")) return ATTACHMENT_VIEW.TEXT;
   return ATTACHMENT_VIEW.OTHER;
 }

@@ -1,4 +1,4 @@
-import { bigint, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { bigint, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { codingAgent } from "./coding-agent.js";
 
@@ -25,20 +25,27 @@ export interface StoredPollEtags {
   readonly statuses?: string | undefined;
 }
 
-export const tokenPullRequestPoll = pgTable("token_pull_request_poll", {
-  agentId: uuid("agent_id")
-    .primaryKey()
-    .references(() => codingAgent.id, { onDelete: "cascade" }),
-  /** The pull request's number the state below was read on; another number starts the state afresh. */
-  pullRequest: integer("pull_request").notNull(),
-  etags: jsonb("etags").$type<StoredPollEtags>().notNull().default({}),
-  /** GitHub's id of the newest review seen; null before a read of the reviews. */
-  lastReviewId: bigint("last_review_id", { mode: "number" }),
-  /** GitHub's id of the newest conversation comment seen; null before a read of the comments. */
-  lastCommentId: bigint("last_comment_id", { mode: "number" }),
-  /** The head commit the checks were last read on. */
-  headSha: text("head_sha"),
-  /** What the checks on that head last came to, failed or not, as the sweep words it (`CHECK_SUMMARY`). */
-  checkConclusion: text("check_conclusion"),
-  nextPollAt: timestamptz("next_poll_at").notNull(),
-});
+export const tokenPullRequestPoll = pgTable(
+  "token_pull_request_poll",
+  {
+    agentId: uuid("agent_id")
+      .primaryKey()
+      .references(() => codingAgent.id, { onDelete: "cascade" }),
+    /** The pull request's number the state below was read on; another number starts the state afresh. */
+    pullRequest: integer("pull_request").notNull(),
+    etags: jsonb("etags").$type<StoredPollEtags>().notNull().default({}),
+    /** GitHub's id of the newest review seen; null before a read of the reviews. */
+    lastReviewId: bigint("last_review_id", { mode: "number" }),
+    /** GitHub's id of the newest conversation comment seen; null before a read of the comments. */
+    lastCommentId: bigint("last_comment_id", { mode: "number" }),
+    /** The head commit the checks were last read on. */
+    headSha: text("head_sha"),
+    /** What the checks on that head last came to, failed or not, as the sweep words it (`CHECK_SUMMARY`). */
+    checkConclusion: text("check_conclusion"),
+    nextPollAt: timestamptz("next_poll_at").notNull(),
+  },
+  (table) => [
+    // The sweep locks the polls due, soonest first.
+    index("token_pull_request_poll_due").on(table.nextPollAt, table.agentId),
+  ],
+);

@@ -395,7 +395,7 @@ for (const metaAt of [LIST_ROW_META.MIDDLE, LIST_ROW_META.TITLE]) {
 }
 
 for (const metaAt of [LIST_ROW_META.MIDDLE, LIST_ROW_META.TITLE]) {
-  test(`a list row with its metadata at its ${metaAt} lays out alike with its acts shown or not: they stand over its end, the metadata keeps its box, and the title its room`, () => {
+  test(`a list row with its metadata at its ${metaAt} lays out alike with its acts shown or not: they stand in its end's track, the metadata keeps its box, and the title its room`, () => {
     layFor(true);
     drawRows(metaAt);
     const [open, other] = [...document.querySelectorAll<HTMLElement>(".luke-list-row")];
@@ -405,14 +405,15 @@ for (const metaAt of [LIST_ROW_META.MIDDLE, LIST_ROW_META.TITLE]) {
         getComputedStyle(row.querySelector(selector) ?? assert.fail(selector));
       const head = row.querySelector(".luke-list-row-head");
       return {
-        acts: style(".luke-list-row-actions").position,
+        acts: style(".luke-list-row-actions").gridColumn,
+        end: style(".luke-list-row-end").gridColumn,
         meta: style(".luke-list-row-meta").display,
         press: style(".luke-list-row-main").paddingInlineEnd,
         head: head === null ? undefined : getComputedStyle(head).paddingInlineEnd,
       };
     };
     assert.ok(standing(open.querySelector(".luke-list-row-actions") ?? assert.fail("acts")));
-    assert.equal(laidOut(open).acts, "absolute");
+    assert.equal(laidOut(open).acts, laidOut(open).end);
     assert.deepEqual(
       laidOut(open),
       laidOut(other),
@@ -420,3 +421,112 @@ for (const metaAt of [LIST_ROW_META.MIDDLE, LIST_ROW_META.TITLE]) {
     );
   });
 }
+
+/** The track of a row's grid that `selector`'s part of it is drawn in. */
+function trackOf(row: Element, selector: string): string {
+  return getComputedStyle(row.querySelector(selector) ?? assert.fail(selector)).gridColumn;
+}
+
+/** Draws one row offering Pin and Done to the row in hand, its metadata where `metaAt` puts it, under its title a preview and an attachment, its menu open where `menuOpen` says; answers its item. */
+function drawHoverRow(
+  metaAt: (typeof LIST_ROW_META)[keyof typeof LIST_ROW_META],
+  menuOpen = false,
+): HTMLElement {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(
+        List,
+        null,
+        createElement(ListRow, {
+          title: "Apply Scandinavian design across app",
+          description: "Can you take a look before the release?",
+          attachments: createElement("span", null, "▤"),
+          meta: "2m",
+          metaAt,
+          menuOpen,
+          onPress: () => undefined,
+          actionsAt: LIST_ROW_ACTIONS.HOVER,
+          actions: [
+            createElement(IconButton, { key: "pin", icon: "⌖", label: "Pin" }),
+            createElement(IconButton, { key: "done", icon: "✓", label: "Done" }),
+          ],
+        }),
+      ),
+    ),
+  );
+  return container.querySelector<HTMLElement>(".luke-list-row") ?? assert.fail("row");
+}
+
+for (const metaAt of [LIST_ROW_META.MIDDLE, LIST_ROW_META.TITLE]) {
+  test(`a list row with its metadata at its ${metaAt} stands its hover acts in its metadata's track beside its words, never in the words' own`, () => {
+    layFor(false);
+    const row = drawHoverRow(metaAt);
+    const words = metaAt === LIST_ROW_META.TITLE ? ".luke-list-row-title" : ".luke-list-row-text";
+
+    assert.equal(trackOf(row, ".luke-list-row-actions"), trackOf(row, ".luke-list-row-end"));
+    assert.notEqual(trackOf(row, ".luke-list-row-actions"), trackOf(row, words));
+    assert.equal(
+      getComputedStyle(row.querySelector(".luke-list-row-actions") ?? assert.fail("acts")).gridRow,
+      "1",
+    );
+  });
+}
+
+test("a list row with its metadata on its title's line keeps that line's end for its hover acts, its preview and attachments running the words' track and the end's whole under both", () => {
+  layFor(false);
+  const row = drawHoverRow(LIST_ROW_META.TITLE);
+  const across = `${trackOf(row, ".luke-list-row-title")}-start / ${trackOf(row, ".luke-list-row-end")}-end`;
+
+  assert.equal(trackOf(row, ".luke-list-row-description"), across);
+  assert.equal(trackOf(row, ".luke-list-row-attachments"), across);
+});
+
+/** Draws `drawRows`'s list, answering its open row. */
+function drawOpenRow(): Element {
+  drawRows(LIST_ROW_META.MIDDLE);
+  return document.querySelector(".luke-list-row") ?? assert.fail("the open row");
+}
+
+for (const touch of [false, true]) {
+  test(`a list row's acts shown ${touch ? "on a touch screen, the open row's" : "with a mouse, its menu open"} draw nothing behind them and fade none of the row's words, so whatever the row stands on shows through`, () => {
+    layFor(touch);
+    const row = touch ? drawOpenRow() : drawHoverRow(LIST_ROW_META.TITLE, true);
+    const acts = row.querySelector(".luke-list-row-actions") ?? assert.fail("acts");
+    assert.ok(standing(acts));
+
+    assert.equal(getComputedStyle(acts).backgroundColor, "rgba(0, 0, 0, 0)");
+    assert.equal(getComputedStyle(acts).backgroundImage, "none");
+    for (const part of row.querySelectorAll(".luke-list-row-main, .luke-list-row-main *")) {
+      assert.equal(getComputedStyle(part).maskImage, "none", part.className);
+    }
+  });
+}
+
+/** The properties a `transition` moves, each named first in its comma-separated part. */
+function transitioned(style: CSSStyleDeclaration): string[] {
+  return style.transition
+    .split(/,(?![^(]*\))/)
+    .map((part) => part.trim().split(/\s+/)[0] ?? "")
+    .toSorted();
+}
+
+test("with a mouse a list row's metadata and its acts trade places on opacity and transform alone, the acts sliding in from a step past the end", () => {
+  layFor(false);
+  const atRest = drawHoverRow(LIST_ROW_META.MIDDLE);
+  const inHand = drawHoverRow(LIST_ROW_META.MIDDLE, true);
+  const style = (row: Element, selector: string) =>
+    getComputedStyle(row.querySelector(selector) ?? assert.fail(selector));
+
+  assert.equal(style(atRest, ".luke-list-row-end").opacity, "1");
+  assert.ok(faded(atRest.querySelector(".luke-list-row-actions") ?? assert.fail("acts")));
+  assert.notEqual(style(atRest, ".luke-list-row-actions").transform, "none");
+  assert.equal(style(inHand, ".luke-list-row-end").opacity, "0");
+  assert.equal(style(inHand, ".luke-list-row-actions").opacity, "1");
+  assert.equal(style(inHand, ".luke-list-row-actions").transform, "none");
+  for (const selector of [".luke-list-row-end", ".luke-list-row-actions"]) {
+    assert.deepEqual(transitioned(style(atRest, selector)), ["opacity", "transform"], selector);
+  }
+});

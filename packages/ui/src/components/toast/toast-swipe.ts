@@ -5,6 +5,7 @@ import {
   type RefObject,
   useRef,
 } from "react";
+import { MOTION_TOKEN, tokenTiming } from "../../motion-timing.js";
 
 /**
  * toast-swipe.ts -- a toast sent away sideways: dragged by the pointer or swept by a trackpad's two fingers, it follows, flies off past a threshold, and springs back under it.
@@ -38,6 +39,9 @@ const SWIPE_LEAST = 64;
 
 /** How long a sweep stands with no wheel delta before the toast springs home: `--luke-duration-quick`'s. */
 const SWIPE_QUIET = MOTION_DURATION_MS.QUICK;
+
+/** What a spring home plays on where motion is held still: a frame, which only stands out a sweep's delay. */
+const HELD = { duration: 1 } as const;
 
 /** Which way a toast was sent: the side it leaves by. */
 const SWIPE_SIDE = {
@@ -81,14 +85,12 @@ function farEnough(toast: HTMLLIElement, offset: number): boolean {
  */
 function springHome(toast: HTMLLIElement, offset: number, delay: number): Animation | undefined {
   place(toast, 0);
-  const style = getComputedStyle(toast);
-  const duration = Number.parseFloat(style.getPropertyValue("--luke-duration-fast")) || 0;
+  const timing = tokenTiming(toast, MOTION_TOKEN.DURATION_FAST, MOTION_TOKEN.SPRING_FAST);
   if (offset === 0 || typeof toast.animate !== "function") return undefined;
-  if (duration <= 1 && delay === 0) return undefined;
+  if (timing === undefined && delay === 0) return undefined;
   return toast.animate([{ translate: `${offset}px 0` }, { translate: "0 0" }], {
-    duration: Math.max(1, duration),
+    ...(timing ?? HELD),
     delay,
-    easing: style.getPropertyValue("--luke-spring-fast").trim(),
     fill: "backwards",
   });
 }

@@ -1,5 +1,5 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
-import { agentTabLabel } from "@luke/features/model-label";
+import { agentName } from "@luke/features/model-label";
 import {
   TASK_STATUS,
   TASK_STATUS_ORDER,
@@ -125,9 +125,9 @@ export function agentRow(agent: TasklessAgent): TaskRow {
   return { kind: TASK_ROW.AGENT, agent };
 }
 
-/** The row's name: its task's, or its agent's as its tab names it (`agentTabLabel`). */
+/** The row's name: its task's, or its agent's as its tab names it (`agentName`). */
 export function taskRowName(row: TaskRow): string {
-  return row.kind === TASK_ROW.TASK ? row.task.name : agentTabLabel(row.agent);
+  return row.kind === TASK_ROW.TASK ? row.task.name : agentName(row.agent);
 }
 
 /** The repository the row works in; null for a task with none chosen yet. */
@@ -178,13 +178,6 @@ function byOrder(order: TaskOrder): (a: TaskRow, b: TaskRow) => number {
 /** The rows in the order chosen. */
 export function orderTaskRows(rows: readonly TaskRow[], order: TaskOrder): TaskRow[] {
   return rows.toSorted(byOrder(order));
-}
-
-/** The plans in the order chosen, as their rows are ordered. */
-export function orderTasks(tasks: readonly TaskSummary[], order: TaskOrder): TaskSummary[] {
-  return orderTaskRows(tasks.map(taskRow), order).flatMap((row) =>
-    row.kind === TASK_ROW.TASK ? [row.task] : [],
-  );
 }
 
 /** The rows split by a key, each run kept in the order it was handed. */

@@ -14,7 +14,8 @@ import {
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_CALL_FAILURE, type AutomationView } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
+import { momentText } from "@luke/features/time-format";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -35,8 +36,10 @@ import {
   NO_CONTEXT_MENU,
   OneLine,
   PAGE_FRAME,
+  PageToolbar,
   RowHint,
   RowHintOptions,
+  STATUS_TONE,
   Switch,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -47,7 +50,6 @@ import {
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
-import { momentText } from "@luke/ui/time-format";
 import { BotIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -59,7 +61,7 @@ import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { AutomationEditor, AutomationPageSkeleton, type SentryOffer } from "./automation-editor.js";
@@ -414,7 +416,7 @@ function ListPage({
     toggle(automation.id, enabled).then((answer) => {
       const refusal = toggleRefusal(answer, enabled);
       if (refusal !== undefined) {
-        toast({ words: refusal, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: refusal, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       }
     });
   };
@@ -487,6 +489,34 @@ function ListPage({
   );
 }
 
+/** One automation's page that has no automation to show: its way back over `children`, which say why. */
+function AutomationAbsentPage({
+  onBack,
+  children,
+}: {
+  onBack: () => void;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  return (
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Automation"
+      toolbar={
+        <PageToolbar
+          heading={
+            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
+              Automations
+            </Button>
+          }
+        />
+      }
+    >
+      {children}
+    </DetailPage>
+  );
+}
+
 /** One automation's page whose list, or the workspaces it is read in, could not be read: said so, with Retry, rather than called gone. */
 function UnreadPage({
   line,
@@ -497,47 +527,21 @@ function UnreadPage({
   onBack: () => void;
   onRetry: () => void;
 }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Automation"
-      toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-              Automations
-            </Button>
-          </div>
-        </header>
-      }
-    >
+    <AutomationAbsentPage onBack={onBack}>
       <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
         {line}
       </ErrorState>
-    </DetailPage>
+    </AutomationAbsentPage>
   );
 }
 
 /** One automation's page that names an automation the list does not hold: it was deleted, or is of a workspace the reader is not in, as a link may name. */
 function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Automation"
-      toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-              Automations
-            </Button>
-          </div>
-        </header>
-      }
-    >
+    <AutomationAbsentPage onBack={onBack}>
       <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
-    </DetailPage>
+    </AutomationAbsentPage>
   );
 }
 

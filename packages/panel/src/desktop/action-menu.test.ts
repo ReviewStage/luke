@@ -63,6 +63,17 @@ function rightClick(target: HTMLElement, at: { x: number; y: number }): void {
 }
 
 /** Lays an element out where the window would, which jsdom never does. */
+/** Where the open menu hangs, once Base UI has placed it over the few promises it places it in: its positioner's offset. */
+async function hungAt(): Promise<{ left: string; top: string } | undefined> {
+  await act(async () => {
+    for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
+  });
+  const at = /translate\((-?[\d.]+px), (-?[\d.]+px)\)/u.exec(
+    openMenu()?.parentElement?.style.transform ?? "",
+  );
+  return at === null ? undefined : { left: at[1] ?? "", top: at[2] ?? "" };
+}
+
 function placeAt(element: Element, box: { left: number; top: number; bottom: number }): void {
   vi.spyOn(element, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ x: box.left, y: box.top, width: 120, height: box.bottom - box.top }),
@@ -94,7 +105,7 @@ test("a Settings row's ⋯ and a file bar's ⋯ each open their menu on a press 
   }
 });
 
-test("a right-click opens the row's menu at the pointer, and the menu key's under the row", () => {
+test("a right-click opens the row's menu at the pointer, and the menu key's under the row", async () => {
   const container = mount(
     createElement(MenuRow, { label: "Linear actions", actions: ACTIONS, children: "Linear" }),
   );
@@ -103,8 +114,9 @@ test("a right-click opens the row's menu at the pointer, and the menu key's unde
 
   rightClick(row, { x: 300, y: 200 });
   const atPointer = openMenu();
-  assert.equal(atPointer?.style.left, "300px", "the menu hangs where the pointer is");
-  assert.equal(atPointer?.style.top, "200px");
+  const hung = await hungAt();
+  assert.equal(hung?.left, "300px", "the menu hangs where the pointer is");
+  assert.equal(hung?.top, "200px");
   act(() =>
     atPointer?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
   );
@@ -119,8 +131,9 @@ test("a right-click opens the row's menu at the pointer, and the menu key's unde
   // under the row from its start rather than into the window's corner.
   placeAt(row, { left: 40, top: 60, bottom: 100 });
   rightClick(row, { x: 0, y: 0 });
-  assert.equal(openMenu()?.style.left, "40px", "the menu key's menu starts at the row's start");
-  assert.equal(openMenu()?.style.top, "104px", "and hangs under the row");
+  const under = await hungAt();
+  assert.equal(under?.left, "40px", "the menu key's menu starts at the row's start");
+  assert.equal(under?.top, "104px", "and hangs under the row");
 });
 
 test("a Settings row's ⋯ opens its acts in groups ruled apart, and Escape, Tab, or a press elsewhere closes them, focus back on the ⋯", () => {

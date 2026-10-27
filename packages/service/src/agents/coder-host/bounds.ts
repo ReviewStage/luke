@@ -169,6 +169,24 @@ export const CODER = {
     POLL: Duration.millis(250),
   },
   /**
+   * How long a native agent's runner stays warm once its turn is over, for
+   * the next message to reach it as a line on its stdin rather than through
+   * a resumed sandbox and a relaunched CLI; past it, the sweep retires the
+   * runner (`retireWarmRunner`) and its END stops the sandbox. An idle
+   * sandbox bills its memory alone, 8 GB at Vercel's rate, so ten warm
+   * minutes cost about three cents a turn.
+   */
+  RUNNER_WARM: Duration.minutes(10),
+  /**
+   * How long renewing a running runner's credential may take once its
+   * message is written. The send answers only after it, inside the store's
+   * thirty-second dispatch deadline (`AWAITING_LINE_DISPATCH_DEADLINE`), and
+   * a send that timed out there records no line for a message the runner
+   * already took, so a renewal past this is given up and logged; the next
+   * message renews it.
+   */
+  CREDENTIAL_RENEWAL: Duration.seconds(5),
+  /**
    * How long a rewind waits for a native agent's runner to end on its Stop
    * before ending its command: a turn interrupted mid-step settles in a
    * second or two, and a runner that never does is ended rather than left

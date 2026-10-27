@@ -13,7 +13,7 @@
  */
 
 import type { ConversationEntry, ReviewThread } from "@luke/features/coding-agent-wire";
-import { pullRequestAddressOf } from "@luke/features/github-repositories-wire";
+import { pullRequestAddressOf } from "@luke/features/link-grammar";
 
 /** What a link to a pull request's own comment names: a review thread, or an entry of its conversation. */
 export const ANCHOR_KIND = {

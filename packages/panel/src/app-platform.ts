@@ -108,6 +108,14 @@ export interface AppPlatform {
    * leaves this out.
    */
   unsavedWork?(ask: ((leave: () => void) => void) | undefined): void;
+  /**
+   * Hears whether the window holds unsaved work, a page's or a plan's words
+   * not saved, each time that changes, so a shell whose own ways out of the
+   * app save nothing asks first while there is work to lose: the Mac app's
+   * quit, restart to update, and sign-out. A browser tab, whose ways out
+   * `unsavedWork` guards, leaves this out.
+   */
+  holdsUnsavedWork?(holding: boolean): void;
 }
 
 let installed: AppPlatform | undefined;

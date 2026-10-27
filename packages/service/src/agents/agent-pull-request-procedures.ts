@@ -72,6 +72,7 @@ import {
   setAutoMerge,
   setFileViewed,
   setLabelled,
+  setPullRequestDescription,
   setPullRequestDraft,
   setPullRequestOpen,
   setPullRequestTitle,
@@ -87,6 +88,7 @@ import {
   pullRequestConversation,
   pullRequestDeployments,
   pullRequestOverview,
+  viewerCanUpdateOf,
   viewerPendingReviewOf,
   viewerReactionsOf,
 } from "../github/pull-requests.js";
@@ -184,29 +186,38 @@ const mergingOrNone = (token: Redacted.Redacted, repository: string, number: num
     ),
   );
 
+/** Whether the member may edit the pull request's description, read on their own token; not where they hold no sign-in GitHub takes. */
+const memberCanEdit = (userId: string, repository: string, number: number) =>
+  Effect.flatMap(memberReadToken(userId), (token) =>
+    token === undefined ? Effect.succeed(false) : viewerCanUpdateOf(token, repository, number),
+  );
+
 /**
  * The pull request itself: its description, branches, mergeability, who
  * opened it, who it asks for a review, its labels, and, while it was open as
  * last read, the stack it stands in, its people named against the
  * workspace's members and its stack by their agents (`github-people.ts`),
- * with who its row says it writes as; none where the repository no longer
- * holds it.
+ * with who its row says it writes as; and, read beside it on the member's
+ * own token, whether they may edit its description. None where the
+ * repository no longer holds it.
  */
 const overviewPullRequestRead = (
   token: Redacted.Redacted,
   agent: WithRepository<CodingAgent>,
   pullRequest: CodingAgentPullRequest,
+  userId: string,
 ) =>
   Effect.gen(function* () {
-    const [read, merging] = yield* Effect.all(
+    const [read, merging, canEditDescription] = yield* Effect.all(
       [
         pullRequestOverview(token, agent.repository, pullRequest.number, stackable(pullRequest)),
         mergingOrNone(token, agent.repository, pullRequest.number),
+        memberCanEdit(userId, agent.repository, pullRequest.number),
       ],
       { concurrency: "unbounded" },
     );
     if (Option.isNone(read)) return null;
-    const named = yield* namedOverviewPullRequest(agent, read.value);
+    const named = { ...(yield* namedOverviewPullRequest(agent, read.value)), canEditDescription };
     return Option.isNone(merging) ? named : { ...named, merging: merging.value };
   });
 
@@ -316,6 +327,8 @@ function writeOf(
       return setPullRequestOpen(token, id, true);
     case PULL_REQUEST_ACTION.EDIT_TITLE:
       return setPullRequestTitle(token, id, request.title);
+    case PULL_REQUEST_ACTION.EDIT_DESCRIPTION:
+      return setPullRequestDescription(token, id, request);
     case PULL_REQUEST_ACTION.SUBMIT_REVIEW:
       return submitPullRequestReview(token, id, request);
     case PULL_REQUEST_ACTION.REPLY_TO_THREAD:

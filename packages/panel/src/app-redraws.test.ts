@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
+import { type AppStateDelivery, type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
 import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
 import { PUSH_METHOD } from "@luke/host/contract";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@luke/live";
@@ -33,7 +33,7 @@ import { runAppCommand } from "./app-commands.js";
 import { installWindowHistory } from "./navigation-history.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { stateWith } from "./testing/app-state.js";
+import { deliveryOf, stateWith } from "./testing/app-state.js";
 
 /** How many times each recorded surface was drawn, by its name. */
 const draws = vi.hoisted(() => new Map<string, number>());
@@ -125,19 +125,16 @@ function onCall(version: number, lines: number, lukeSpeaking: boolean): AppState
     ...FIRST,
     version,
     run: { ...FIRST.run, fixtureMode: true, profile: RUN_PROFILE.TASKS_WORK },
-    voice: {
-      avatar: AVATAR_OFF,
-      view,
-      callTranscript: {
-        voiceSessionId: "session-on-call",
-        lines: Array.from({ length: lines }, (_, at) => ({
-          rowId: `row-${at}`,
-          speaker: TRANSCRIPT_SPEAKER.USER,
-          words: "Invite a teammate by email".slice(0, at + 1),
-          startMs: at * 100,
-          endMs: at * 100 + 100,
-        })),
-      },
+    voice: { avatar: AVATAR_OFF, view },
+    callTranscript: {
+      voiceSessionId: "session-on-call",
+      lines: Array.from({ length: lines }, (_, at) => ({
+        rowId: `row-${at}`,
+        speaker: TRANSCRIPT_SPEAKER.USER,
+        words: "Invite a teammate by email".slice(0, at + 1),
+        startMs: at * 100,
+        endMs: at * 100 + 100,
+      })),
     },
   };
 }
@@ -171,7 +168,8 @@ beforeEach(() => {
   fakeAppBridge({
     ...quiet,
     requestAppState: () => Promise.resolve(structuredClone(opening)),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       listeners.add(listener);
       return () => listeners.delete(listener);
     },

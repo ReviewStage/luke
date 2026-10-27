@@ -14,7 +14,7 @@
     width: 6px;
     cursor: col-resize;
     outline: none; /* no ring: the edge fills in the focus colour */
-    transition: background-color var(--luke-duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   [data-luke-profile="desktop"] .luke-resize-edge {

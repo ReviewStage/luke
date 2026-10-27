@@ -8,6 +8,7 @@ import {
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
+import { PLAN_COMMENT_CALL_FAILURE } from "@luke/features/tasks-view";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
@@ -95,5 +96,42 @@ test("a write's answer that lands after a later revision of its thread leaves th
   }
 
   assert.equal(control?.threads.find((thread) => thread.id === THREAD.id)?.revision, 3);
+  act(() => root.unmount());
+});
+
+test("a shown plan's comments land, a read that did not answer says so, and Retry reads again at once", async () => {
+  let control: PlanCommentsControl | undefined;
+  const answers = [
+    { threads: [THREAD], cursor: "c1" },
+    { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED },
+    { threads: [], cursor: "c2" },
+  ] as const;
+  let reads = 0;
+  function Probe() {
+    control = usePlanComments({
+      planId: PLAN,
+      shown: true,
+      readComments: () => {
+        const answer = answers[reads];
+        reads += 1;
+        return answer === undefined
+          ? Promise.withResolvers<never>().promise
+          : Promise.resolve(answer);
+      },
+      startComment: async () => ({ thread: THREAD }),
+      actOnComment: async () => ({ thread: THREAD }),
+    });
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  await act(async () => root.render(createElement(Probe)));
+
+  assert.deepEqual(control?.threads, [THREAD]);
+  assert.equal(control?.failed, true);
+  assert.equal(reads, 2);
+
+  await act(async () => control?.onRetry());
+  assert.equal(control?.failed, false);
+  assert.deepEqual(control?.threads, []);
   act(() => root.unmount());
 });

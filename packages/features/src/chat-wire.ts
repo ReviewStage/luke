@@ -769,7 +769,7 @@ export function replyWords(reply: ChatReply): string {
  */
 export function replyRefusal(response: ChatReadResponse, reply: ChatReply): string | undefined {
   if (!knownResponse(response)) return "The item asks something this Luke does not know.";
-  return inboxReplyRefusal({ response }, reply);
+  return inboxReplyRefusal(response, reply);
 }
 
 /** What a window's post carries: its words as text or as blocks, and the pictures under them. */

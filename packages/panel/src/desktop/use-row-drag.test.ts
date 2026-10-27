@@ -109,6 +109,7 @@ test("a row let go off to the side lands its copy on the row's place on both axe
   const moves: [number, number][] = [];
   const list = drawn(4, (from, to) => moves.push([from, to]));
   list.style.setProperty("--luke-duration-fast", "180ms");
+  list.style.setProperty("--luke-spring-fast", "ease-out");
   let faded: string | null = null;
   act(() => {
     grip(list, 0).dispatchEvent(at("pointerdown", 10));

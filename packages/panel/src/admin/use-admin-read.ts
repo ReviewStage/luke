@@ -3,18 +3,36 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AdminReadRefused, useAdminDoors } from "./admin-doors.js";
 
 /**
+ * Where one admin read stands: being read, refused by the gate (its
+ * refusals' own words, `ADMIN_REFUSED`), failed, or answered.
+ */
+export const ADMIN_READ_STATUS = {
+  LOADING: "loading",
+  SIGNED_OUT: ADMIN_REFUSED.SIGNED_OUT,
+  FORBIDDEN: ADMIN_REFUSED.FORBIDDEN,
+  MISSING: ADMIN_REFUSED.MISSING,
+  ERROR: "error",
+  READY: "ready",
+} as const;
+
+/**
  * What one admin read resolved to: the gate's refusals stay distinct here, and
  * a ready answer carries the one failure a later refresh may have landed on
  * it. `missing` reaches only the endpoints that answer 404, and the screens
  * whose endpoint never does word it as their own failure.
  */
 export type AdminRead<T> =
-  | { status: "loading" }
-  | { status: "signed-out" }
-  | { status: "forbidden" }
-  | { status: "missing" }
-  | { status: "error"; detail: string }
-  | { status: "ready"; value: T; question: AdminQuestion; refreshFailure: string | undefined };
+  | { status: typeof ADMIN_READ_STATUS.LOADING }
+  | { status: typeof ADMIN_READ_STATUS.SIGNED_OUT }
+  | { status: typeof ADMIN_READ_STATUS.FORBIDDEN }
+  | { status: typeof ADMIN_READ_STATUS.MISSING }
+  | { status: typeof ADMIN_READ_STATUS.ERROR; detail: string }
+  | {
+      status: typeof ADMIN_READ_STATUS.READY;
+      value: T;
+      question: AdminQuestion;
+      refreshFailure: string | undefined;
+    };
 
 /**
  * Asks the read's procedure through the mount's doors (`admin-doors.tsx`),
@@ -94,18 +112,19 @@ const ADMIN_READ_ERROR = {
  * that did not read, as the endpoint's own failure.
  */
 function adminReadRefused(cause: unknown, errorDetail: string): AdminRead<never> {
-  if (!(cause instanceof AdminReadRefused)) return { status: "error", detail: errorDetail };
+  if (!(cause instanceof AdminReadRefused))
+    return { status: ADMIN_READ_STATUS.ERROR, detail: errorDetail };
   switch (cause.refused) {
     case ADMIN_REFUSED.SIGNED_OUT:
-      return { status: "signed-out" };
+      return { status: ADMIN_READ_STATUS.SIGNED_OUT };
     case ADMIN_REFUSED.FORBIDDEN:
-      return { status: "forbidden" };
+      return { status: ADMIN_READ_STATUS.FORBIDDEN };
     case ADMIN_REFUSED.MISSING:
-      return { status: "missing" };
+      return { status: ADMIN_READ_STATUS.MISSING };
     case ADMIN_REFUSED.UNAVAILABLE:
-      return { status: "error", detail: ADMIN_READ_ERROR.UNAVAILABLE };
+      return { status: ADMIN_READ_STATUS.ERROR, detail: ADMIN_READ_ERROR.UNAVAILABLE };
     case ADMIN_REFUSED.INTERCEPTED:
-      return { status: "error", detail: ADMIN_READ_ERROR.PROTECTED };
+      return { status: ADMIN_READ_STATUS.ERROR, detail: ADMIN_READ_ERROR.PROTECTED };
   }
 }
 
@@ -117,7 +136,12 @@ async function adminReadSettled<T>(
   errorDetail: string,
 ): Promise<AdminRead<T>> {
   try {
-    return { status: "ready", value: await reader(signal), question, refreshFailure: undefined };
+    return {
+      status: ADMIN_READ_STATUS.READY,
+      value: await reader(signal),
+      question,
+      refreshFailure: undefined,
+    };
   } catch (cause) {
     return adminReadRefused(cause, errorDetail);
   }
@@ -129,7 +153,7 @@ async function adminReadSettled<T>(
  * own failure, which is what an unexpected refusal has always read as.
  */
 export function adminReadFailure(state: AdminRead<unknown>, endpointDetail: string): string {
-  return state.status === "error" ? state.detail : endpointDetail;
+  return state.status === ADMIN_READ_STATUS.ERROR ? state.detail : endpointDetail;
 }
 
 /**
@@ -158,25 +182,25 @@ function settleRead<State extends { status: string }>(
 }
 
 interface ShownAnswer {
-  status: "ready";
+  status: typeof ADMIN_READ_STATUS.READY;
   /** The request the answer came from, so a failure can say whether it asked the same one. */
   question: AdminQuestion;
   refreshFailure: string | undefined;
 }
 
 interface FailedRead {
-  status: "error";
+  status: typeof ADMIN_READ_STATUS.ERROR;
   detail: string;
 }
 
 function isShownAnswer<State extends { status: string }>(
   state: State,
 ): state is State & ShownAnswer {
-  return state.status === "ready";
+  return state.status === ADMIN_READ_STATUS.READY;
 }
 
 function isFailedRead<State extends { status: string }>(state: State): state is State & FailedRead {
-  return state.status === "error";
+  return state.status === ADMIN_READ_STATUS.ERROR;
 }
 
 /**
@@ -199,7 +223,9 @@ export function useAdminRead<T>(
     // A read the mount already knows the gate holds is signed-out from the
     // very first frame: it never fetches, so a loading state would pose as a
     // request that is not in flight.
-    gate.heldAtGate() ? { status: "signed-out" } : { status: "loading" },
+    gate.heldAtGate()
+      ? { status: ADMIN_READ_STATUS.SIGNED_OUT }
+      : { status: ADMIN_READ_STATUS.LOADING },
   );
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef<AbortController>(null);
@@ -224,7 +250,7 @@ export function useAdminRead<T>(
     // sign-in has been pressed on it once, whatever cookie the browser holds:
     // the sign-in is then the answer, and nothing is asked.
     if (latest.current.held()) {
-      setState({ status: "signed-out" });
+      setState({ status: ADMIN_READ_STATUS.SIGNED_OUT });
       return;
     }
     // One read at a time: a scope flipped twice, or a refresh pressed on a slow
@@ -239,9 +265,10 @@ export function useAdminRead<T>(
     // for a press that changes one filter throws away the reader's place and
     // reads as a fault.
     setState((current) =>
-      current.status === "ready" && (shownStands === undefined || shownStands(current.value))
+      current.status === ADMIN_READ_STATUS.READY &&
+      (shownStands === undefined || shownStands(current.value))
         ? current
-        : { status: "loading" },
+        : { status: ADMIN_READ_STATUS.LOADING },
     );
     setRefreshing(true);
     void (async () => {
@@ -276,12 +303,14 @@ export function useAdminRead<T>(
     inFlight.current?.abort();
     setRefreshing(false);
     await signOut();
-    setState({ status: "signed-out" });
+    setState({ status: ADMIN_READ_STATUS.SIGNED_OUT });
   }, []);
 
   const revise = useCallback((change: (value: T) => T) => {
     setState((current) =>
-      current.status === "ready" ? { ...current, value: change(current.value) } : current,
+      current.status === ADMIN_READ_STATUS.READY
+        ? { ...current, value: change(current.value) }
+        : current,
     );
   }, []);
 

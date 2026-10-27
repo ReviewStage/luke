@@ -1,4 +1,5 @@
 import releases from "virtual:luke/changelog-releases";
+import { formatDayHeading } from "@luke/features/time-format";
 import {
   BUTTON_VARIANT,
   ButtonLink,
@@ -18,7 +19,6 @@ import {
   Text,
   TextLink,
 } from "@luke/ui";
-import { formatDayHeading } from "@luke/ui/time-format";
 import {
   CHANGELOG_PATH,
   CHANGELOG_VIEW,

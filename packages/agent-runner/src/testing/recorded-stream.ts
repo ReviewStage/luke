@@ -227,6 +227,15 @@ export const SHORT_TURN: readonly Step[] = [
   { emit: result("success") },
 ];
 
+/** Two turns that each end at their `result` with nothing pending, the second on Luke's next message, as a warm launch takes it. */
+export const WARM_TURNS: readonly Step[] = [
+  ...SHORT_TURN,
+  { awaitPrompt: true },
+  { emit: said("Done with the second.") },
+  { stopHook: NOTHING_IN_FLIGHT },
+  { emit: result("success") },
+];
+
 /** A turn that schedules a wakeup and ends its model turn waiting on it alone, the CLI then held up until the launch ends. */
 export const WAKEUP_WAIT: readonly Step[] = [
   { emit: INIT },

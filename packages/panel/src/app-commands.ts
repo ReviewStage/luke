@@ -14,6 +14,7 @@
  * swipe hands the window the same way) leaves the page behind it alone.
  */
 
+import type { HostCapability } from "@luke/settings";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -27,6 +28,7 @@ import {
 } from "@luke/settings/shortcuts";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
+import { capabilityNow } from "./use-app-state.js";
 
 type CommandRun = { current: () => void };
 
@@ -54,6 +56,12 @@ const KEYED: readonly KeyedCommand[] = KEYED_COMMANDS.filter((command) => {
   const { chord } = APP_SHORTCUTS[command];
   return !shortcutLayered(chord) && !shortcutSwitching(chord);
 });
+
+/** Whether the platform offers what the command's feature stands on: a chord of one it lacks is the browser's or the system's, never the window's. */
+function platformCarries(command: KeyedCommand): boolean {
+  const { capability } = APP_SHORTCUTS[command] as { capability?: HostCapability };
+  return capability === undefined || capabilityNow(capability);
+}
 
 /** Whether the press landed in something taking typing, which keeps the keys it edits with. */
 function typingInto(target: EventTarget | null): boolean {
@@ -134,7 +142,9 @@ export function useAppKeymap(enabled: boolean): void {
       // offer is gone, because a repeat falling through to the menu bar runs
       // what the press never asked for: a held ⌘W closing the tab, and then
       // the window behind it.
+      // Note that a command the platform lacks has its repeats left alone, because the browser's own zoom keeps stepping while ⌘+ is held.
       if (!event.repeat && !offers.get(command)?.length) return;
+      if (event.repeat && !offers.get(command)?.length && !platformCarries(command)) return;
       event.preventDefault();
       if (!event.repeat) runAppCommand(command);
     };

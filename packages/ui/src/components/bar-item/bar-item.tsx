@@ -15,7 +15,7 @@ import { pulseOnPress } from "../../press-pulse.js";
  * A `count` of what waits on the reader there stands as a badge on the
  * glyph's top corner, the figure alone, and is said after the item's name
  * with its noun ("Inbox, 3 need you"); it is left out at none. It is a
- * NavItem's accent count (`NAV_COUNT_TONE.ACCENT`) turned inside out, so a
+ * NavItem's needs-you count (`STATUS_TONE.ATTENTION`) turned inside out, so a
  * place reads the same in the bar as in a column of places.
  */
 

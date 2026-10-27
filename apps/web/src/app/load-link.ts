@@ -13,8 +13,8 @@
  * `/app`.
  */
 
+import { type ReadLink, readLink } from "@luke/features/link-grammar";
 import { LINK_ORIGIN } from "@luke/features/link-home";
-import { type ReadLink, readLink } from "@luke/features/luke-link";
 import type { AppBridge } from "@luke/host/bridge";
 import { savedEntry } from "./browser-history";
 import { addressHere, PANEL_PATH } from "./web-address";

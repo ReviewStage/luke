@@ -11,7 +11,11 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { gunzipSync } from "node:zlib";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { sandboxListRefusal, sandboxStopRefusal } from "./vercel-sandbox-fake.js";
+import {
+  sandboxListRefusal,
+  sandboxStopRefusal,
+  sandboxTagsRefusal,
+} from "./vercel-sandbox-fake.js";
 
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
@@ -139,12 +143,15 @@ export function runnerSandboxApi() {
   const failCommandReads = { remaining: 0 };
   /** How many network policy updates the API refuses next, as a passing outage. */
   const failPolicy = { remaining: 0 };
+  /** How many network policy updates the API holds next, answering none until the caller gives up. */
+  const holdPolicy = { remaining: 0 };
   /** Whether a read that waits for a running command's exit is held until the reader gives up. */
   const waits = { hold: false };
-  /** What a test does the moment a detached command has started, before the API answers, and the exit a waited run ends on, 0 unless it says. */
+  /** What a test does the moment a detached command has started, before the API answers; the exit a waited run ends on, 0 unless it says; and what it does as a waited run arrives, before it ends. */
   const hooks: {
     onStart?: ((command: FakeCommand) => Promise<void>) | undefined;
     runExit?: ((args: readonly string[]) => number) | undefined;
+    onRun?: ((env: Readonly<Record<string, string>>) => Promise<void>) | undefined;
   } = {};
   /** The snapshots taken, in order. */
   const snapshots: string[] = [];
@@ -182,6 +189,8 @@ export function runnerSandboxApi() {
       if (sandboxes.some((each) => !each.deleted && each.name === asked.name)) {
         return Response.json({ error: { code: "conflict" } }, { status: 409 });
       }
+      const tagsRefused = sandboxTagsRefusal(asked.tags);
+      if (tagsRefused !== undefined) return tagsRefused;
       const sandbox: FakeSandbox = {
         name: asked.name,
         status: "running",
@@ -223,6 +232,8 @@ export function runnerSandboxApi() {
       if (method === "PATCH") {
         // Only the fields given change, as Vercel's update takes them.
         const asked = await body();
+        const tagsRefused = sandboxTagsRefusal(asked.tags);
+        if (tagsRefused !== undefined) return tagsRefused;
         if (asked.tags !== undefined) sandbox.tags = asked.tags;
         if (asked.timeout !== undefined) sandbox.timeout = asked.timeout;
         return Response.json({ sandbox: listed(sandbox) });
@@ -272,6 +283,12 @@ export function runnerSandboxApi() {
       taking.currentSnapshotId = snapshot;
       return Response.json({ snapshot: { id: snapshot }, session: { id: sessionId } });
     }
+    if (rest === "network-policy" && holdPolicy.remaining > 0) {
+      holdPolicy.remaining -= 1;
+      assert.ok(init.signal, "a held update needs a caller that can give up");
+      await once(init.signal, "abort");
+      throw new Error("the caller gave up");
+    }
     if (rest === "network-policy" && failPolicy.remaining > 0) {
       failPolicy.remaining -= 1;
       return new Response(null, { status: 503 });
@@ -291,6 +308,7 @@ export function runnerSandboxApi() {
     if (rest === "cmd") {
       const asked = await body();
       if (asked.wait === true) {
+        await hooks.onRun?.(asked.env ?? {});
         runs.push({ session: sessionId, args: asked.args, env: asked.env ?? {} });
         const exitCode = hooks.runExit?.(asked.args) ?? 0;
         return new Response(`${JSON.stringify({ command: { exitCode } })}\n`);
@@ -372,6 +390,7 @@ export function runnerSandboxApi() {
     failDelete,
     failCommandReads,
     failPolicy,
+    holdPolicy,
     waits,
     hooks,
   };

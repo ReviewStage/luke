@@ -33,7 +33,7 @@ import {
   type automationCreateRequestSchema,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_KIND, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { Clock, Effect, Option, Result } from "effect";
+import { Clock, DateTime, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";
 import {
@@ -574,7 +574,7 @@ export const runAutomationNowAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal,
   DatabaseServices | ModelCatalog | GitHubApp | HttpClient.HttpClient
 > {
-  const firedAt = new Date(yield* Clock.currentTimeMillis);
+  const firedAt = yield* DateTime.nowAsDate;
   const recorded = yield* hostedStoreOrUnavailable(
     recordAutomationRun(automation, {
       dedupeKey: key,

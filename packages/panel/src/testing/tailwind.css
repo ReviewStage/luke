@@ -1,0 +1,10 @@
+/* tailwind.css -- the utilities an app's Tailwind entry compiles, for the tests that lay the panel's sheets (`container-width.ts`).
+
+   The same imports the desktop's `tailwind.css` and the web's `app.css` take,
+   in the same layers, gathered from the panel's and `@luke/ui`'s sources, so
+   a test reads what a control's utilities draw beside its own sheet's rules. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "../sources.css";
+@import "@luke/ui/tailwind/sources.css";
+@import "@luke/ui/tailwind/theme.css";

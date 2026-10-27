@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
-import { agentTabLabel } from "@luke/features/model-label";
+import { agentName } from "@luke/features/model-label";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { type Actor, type OriginAgent, originActor } from "@luke/ui/actor-model";
@@ -44,7 +44,7 @@ function originAgentOf(
 ): OriginAgent {
   const taskName = taskId === null || taskId === undefined ? undefined : taskNames.get(taskId);
   return {
-    name: agentTabLabel(agent),
+    name: agentName(agent),
     provider: providerOf(agent.model),
     state: agentActorState(agent.status),
     ...(taskId === null || taskId === undefined ? undefined : { taskId }),

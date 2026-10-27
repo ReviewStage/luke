@@ -3,8 +3,8 @@
  *
  * A list hung from an editor, the `@` list and the `/` menu, takes its keys
  * from the caret rather than the focus, so nothing on it says which keys it
- * hears; its foot does, behind a hairline, each key in the muted ink before
- * what it does in the subtle one. It is the list's own surface's foot, run
+ * hears; its foot does, behind a hairline, each key and what it does in the
+ * muted ink. It is the list's own surface's foot, run
  * edge to edge on a surface with no inset, its words in line with the rows'.
  * The keys are what the owner hears now, so a list whose keys change with
  * what it shows hands new ones. A finger picks a row by pressing it, so

@@ -8,7 +8,7 @@
  * nothing they wrote closes the fence and reads as the brief.
  */
 
-import { fenceFor } from "../tasks/markdown-edits.js";
+import { fencedBlock } from "../tasks/markdown-fence.js";
 
 /** The brief every Create with an agent opens with, ahead of the request. */
 const BRIEF = `# Create an automation
@@ -26,7 +26,5 @@ const REQUEST_LEAD = "Their request, in their own words:";
 
 /** The agent's first message for a request: the brief, then the request fenced, trimmed of the space around it. */
 export function automationAgentBrief(request: string): string {
-  const words = request.trim();
-  const fence = fenceFor(words);
-  return `${BRIEF}\n\n${REQUEST_LEAD}\n\n${fence}text\n${words}\n${fence}`;
+  return `${BRIEF}\n\n${REQUEST_LEAD}\n\n${fencedBlock(request.trim(), "text")}`;
 }

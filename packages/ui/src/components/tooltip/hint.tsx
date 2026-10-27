@@ -103,7 +103,7 @@ import type { ListRowHint } from "../list-row/list-row.js";
 import { useTouchHold } from "../menu/touch-hold.js";
 import type { OneLineHint } from "../one-line/clipped-line.js";
 import { Shortcut } from "../shortcut/shortcut.js";
-import { TooltipCard, TooltipPill } from "./tooltip.js";
+import { TOOLTIP_CHORD, TooltipCard, TooltipPill } from "./tooltip.js";
 
 /**
  * How long after one pill goes the next shows at once. Note that it is the
@@ -121,7 +121,7 @@ const HINT_REST = Duration.millis(MOTION_DELAY_MS.HINT);
  * that a pointer moving on has it gone before it looks for it, as Radix's
  * and GitHub's hover cards wait.
  */
-const CARD_LINGER = Duration.millis(180);
+const CARD_LINGER = Duration.millis(MOTION_DELAY_MS.SETTLE);
 
 /**
  * What a press may land on that is a control of its own: a tap works it
@@ -354,7 +354,7 @@ function Hint({
       {...placed}
       label={drawn.label}
       shortcut={
-        chord === undefined ? undefined : <Shortcut chord={chord} className="luke-tooltip-chord" />
+        chord === undefined ? undefined : <Shortcut chord={chord} className={TOOLTIP_CHORD} />
       }
     />
   );

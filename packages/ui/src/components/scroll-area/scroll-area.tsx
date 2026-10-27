@@ -1,4 +1,5 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
+import { ScrollArea as ShadcnScrollArea } from "../../shadcn/scroll-area.js";
 
 /**
  * scroll-area.tsx -- the one box that scrolls: a pane's body, a list's column, a page under its bar, each scrolling the axis it names and no other.
@@ -36,6 +37,11 @@ import type { ComponentPropsWithRef, ReactNode } from "react";
  * div's attributes pass through (a ref, an id, a role and its names, a tab
  * index, key and scroll handlers, `data-*`), so a caller's scroll logic and
  * its accessibility reach the scroller itself.
+ *
+ * It is drawn by shadcn/ui's scroll area (`../../shadcn/scroll-area.tsx`),
+ * kept to the one native scroller, so the system's scroll bar and momentum
+ * are what it scrolls with; its size, overscroll, and gutter are utilities,
+ * and its axis and edge fade stay in `scroll-area.css`.
  */
 
 /** The axes an area scrolls: up and down, with nothing sideways; sideways alone; or both. */
@@ -121,6 +127,35 @@ export type ScrollAreaProps = {
   "className" | "style" | "children" | "dangerouslySetInnerHTML"
 >;
 
+/**
+ * Filling, it takes the rest of a flex column or row, and the whole of a box
+ * or a grid cell that is no flex container; note that its basis is a
+ * percentage, so in a column of no fixed height, where that resolves to what
+ * it holds, it stands as tall as that rather than collapsing. As tall as
+ * what it holds, it gives way where its parent runs short of room, a flex
+ * column's or a box's, and scrolls the rest.
+ */
+const SIZE_CLASS = {
+  [SCROLL_SIZE.FILL]: "flex-1 block-full",
+  [SCROLL_SIZE.CONTENT]: "flex-initial max-block-full",
+} as const satisfies Record<ScrollSize, string>;
+
+/**
+ * Held, a swipe that reaches an end stops there. Handed on, the browser's
+ * own chaining is left alone; note that a contained axis an area does not
+ * scroll still swallows a swipe along it, which is why a short box inside a
+ * scroller hands on.
+ */
+const OVERSCROLL_CLASS = {
+  [SCROLL_OVERSCROLL.CONTAIN]: "overscroll-contain",
+  [SCROLL_OVERSCROLL.CHAIN]: "",
+} as const satisfies Record<ScrollOverscroll, string>;
+
+const GUTTER_CLASS = {
+  [SCROLL_GUTTER.AUTO]: "",
+  [SCROLL_GUTTER.STABLE]: "scrollbar-gutter-stable",
+} as const satisfies Record<ScrollGutter, string>;
+
 /** A box scrolling `axis`, filling its parent's room as `size` says, its edges fading as `fade` and `fadeInset` say, a swipe past its end stopping or handed on as `overscroll` says. */
 export function ScrollArea({
   axis = SCROLL_AXIS.VERTICAL,
@@ -133,9 +168,9 @@ export function ScrollArea({
   ...div
 }: ScrollAreaProps): React.JSX.Element {
   return (
-    <div
+    <ShadcnScrollArea
       {...div}
-      className="luke-scroll-area"
+      className={`luke-scroll-area ${SIZE_CLASS[size]} ${OVERSCROLL_CLASS[overscroll]} ${GUTTER_CLASS[gutter]}`}
       data-axis={axis}
       data-size={size}
       data-fade={fade}
@@ -144,6 +179,6 @@ export function ScrollArea({
       data-overscroll={overscroll}
     >
       {children}
-    </div>
+    </ShadcnScrollArea>
   );
 }

@@ -17,7 +17,7 @@
 import type { AdminReadParams, AdminRefused } from "@luke/features/admin-wire";
 import { ADMIN_UNANSWERED } from "@luke/features/admin-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, PageToolbar } from "@luke/ui";
 import { askAct } from "../act.js";
 import {
   type AdminDoors,
@@ -69,7 +69,7 @@ function GateRefusal({ words }: { words: string }): React.JSX.Element {
   const lead = useAdminToolbarLead();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {lead === undefined ? null : <header className="desktop-toolbar">{lead}</header>}
+      {lead === undefined ? null : <PageToolbar lead={lead} />}
       <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{words}</ErrorState>
     </div>
   );

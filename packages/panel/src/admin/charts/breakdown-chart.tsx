@@ -4,13 +4,13 @@
  * than one way.
  */
 
+import { formatCount } from "@luke/features/number-format";
 import {
   type ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@luke/ui/chart";
-import { formatCount } from "@luke/ui/time-format";
 import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, SeriesLegend } from "./chart-frame.js";
 

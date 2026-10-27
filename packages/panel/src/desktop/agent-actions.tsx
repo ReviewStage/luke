@@ -60,7 +60,7 @@ type AgentDoors = Pick<
  * `sidebar-agent.test.ts` holds: a door added to `AgentDoors` either is
  * placed on the row or is named here, or that test fails.
  */
-export const NOT_ON_A_ROW = {
+const NOT_ON_A_ROW = {
   onOpenTerminal: "The terminal opens in a side panel, and a sidebar row has none.",
   onCopy: "A task's sidebar row offers no transcript copy either, so an agent's row offers none.",
 } as const satisfies Partial<Record<keyof AgentDoors, string>>;

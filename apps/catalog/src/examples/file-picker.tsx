@@ -1,4 +1,4 @@
-import { Button, GAP, IconButton, ImageIcon, Stack, useFilePicker } from "@luke/ui";
+import { ALIGN, Button, GAP, IconButton, ImageIcon, Stack, useFilePicker } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -15,7 +15,7 @@ function Picks(): React.JSX.Element {
   const images = useFilePicker({ accept: "image/*", multiple: true, onFiles: note });
   const single = useFilePicker({ onFiles: note });
   return (
-    <Stack gap={GAP.CONTROL} align="start">
+    <Stack gap={GAP.CONTROL} align={ALIGN.START}>
       <Button onClick={images.open}>Choose images</Button>
       <IconButton icon={<ImageIcon />} label="Attach screenshot" onClick={single.open} />
       {images.input}

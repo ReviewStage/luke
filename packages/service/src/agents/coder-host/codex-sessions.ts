@@ -54,6 +54,7 @@ import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provide
 import { Duration, Effect, Option, Redacted, Result } from "effect";
 import { CHATGPT_ACCESS, refreshChatGptAccess } from "../../accounts/chatgpt-credentials.js";
 import { HostedEnvironment } from "../../environment.js";
+import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import { PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
@@ -208,6 +209,8 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         integrations: yield* options.integrations(agent),
         tokenUrl,
         installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
+        // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
+        warm: true,
       };
       return written;
     });
@@ -230,6 +233,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
 
   return {
     name: "Codex",
+    runtime: SERVER_AGENT_HARNESS.CODEX,
     sessionPrefix: NATIVE_SESSION_PREFIX[CONVERSATION_RUNTIME.CODEX],
     launch,
     config,

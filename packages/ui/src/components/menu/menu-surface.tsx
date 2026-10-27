@@ -1,4 +1,6 @@
 import { createElement } from "react";
+import { cn } from "../../cn.js";
+import { DROPDOWN_MENU_SURFACE } from "../../shadcn/dropdown-menu.js";
 
 /**
  * menu-surface.tsx -- the menu's surface for a list an app hangs itself: its ground, edge, corner, shadow, inset, entrance, and exit, with the owner's place and keys.
@@ -12,7 +14,8 @@ import { createElement } from "react";
  * and keys it; the surface draws it the way every menu is drawn. It stays
  * hidden for the one layout pass that measures where it fits, where its
  * owner says it is not placed yet, and while its owner holds it drawn
- * through its exit it fades, inert, taking no press.
+ * through its exit it fades, inert, taking no press. It wears the menu's
+ * own surface classes (`../../shadcn/dropdown-menu.tsx`).
  */
 
 /** How far the surface's edge stands from what it holds: a menu's inset, or none for content that carries its own, as a searchable menu's field and lists do. */
@@ -72,7 +75,17 @@ export function MenuSurface({
     Element,
     {
       ...rest,
-      className: className === undefined ? "luke-menu-surface" : `luke-menu-surface ${className}`,
+      className: cn(
+        "luke-menu-surface",
+        DROPDOWN_MENU_SURFACE,
+        inset === MENU_SURFACE_INSET.NONE && "p-[0]",
+        flow !== MENU_SURFACE_FLOW.COLUMN && "flex-row items-center gap-luke-2",
+        // A toolbar's buttons stand a hair from its edge, its corner a row's round that hair out, and it has no entrance of its own, since its owner shows it as the pointer or a selection comes.
+        flow === MENU_SURFACE_FLOW.TOOLBAR &&
+          "w-max rounded-menu-toolbar p-luke-2 whitespace-nowrap",
+        flow === MENU_SURFACE_FLOW.TOOLBAR && !leaving && "animate-none",
+        className,
+      ),
       "data-inset": inset,
       "data-flow": flow === MENU_SURFACE_FLOW.COLUMN ? undefined : flow,
       "data-placed": placed === undefined ? undefined : String(placed),
@@ -85,5 +98,9 @@ export function MenuSurface({
 
 /** A glyph in a menu row's column, muted beside the words it leads, as a crumb heading a menu's narrowed list leads with its kind's mark. */
 export function MenuGlyph({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <span className="luke-menu-item-glyph">{children}</span>;
+  return (
+    <span className="luke-menu-item-glyph inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-data-[variant=destructive]/menu-item:text-inherit [&_svg]:size-menu-glyph [&_svg]:flex-none [&>img]:size-menu-glyph [&>img]:flex-none">
+      {children}
+    </span>
+  );
 }

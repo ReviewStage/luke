@@ -1,9 +1,11 @@
+import { readFailedWords, TERM, VERB } from "@luke/features/words";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { MENU_DETAIL } from "@luke/ui";
 import { memberActor, type PersonActor } from "@luke/ui/actor-model";
 import { UserIcon, UsersIcon } from "lucide-react";
 import { ACTOR_SIZE, ActorMark, PersonCard } from "./actor-ref.js";
 import type { MenuAction } from "./desktop/action-menu.js";
+import type { Directory } from "./member-directory.js";
 
 /**
  * member-rows.tsx -- the one people list every menu of people draws: the reader first, then everyone else by name.
@@ -26,6 +28,30 @@ export const PEOPLE_FILTER_WORDS = {
   ANYONE: "Anyone",
   ME: "Me",
 } as const;
+
+/**
+ * The row standing last in a people menu while the members are read or could
+ * not be: a disabled row for the wait, and for the failure a row that says
+ * they could not be read, whose press, Retry, reads them again and leaves the
+ * menu standing; none while the members stand read.
+ */
+export function memberReadNotice(
+  reader: Pick<Directory, "membersReading" | "membersRefused" | "retry">,
+): MenuAction[] {
+  if (reader.membersRefused) {
+    return [
+      {
+        label: readFailedWords(TERM.MEMBER.many),
+        detail: VERB.RETRY,
+        detailPlace: MENU_DETAIL.BESIDE,
+        stays: true,
+        onSelect: reader.retry,
+      },
+    ];
+  }
+  if (!reader.membersReading) return [];
+  return [{ label: `Reading ${TERM.MEMBER.many}…`, disabled: true, onSelect: () => undefined }];
+}
 
 /** One person as every people menu lists them. */
 export interface MemberRow {

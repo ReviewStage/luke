@@ -34,6 +34,8 @@ import {
   deploymentOidcToken,
   type InteractiveShell,
   type ListedSandbox,
+  OPEN_INTERNET_POLICY,
+  SANDBOX_STATUS,
   SandboxUnavailable,
   type VercelSandboxApi,
   vercelSandboxApi,
@@ -50,11 +52,11 @@ import {
 
 /** Vercel's sandbox states, read as the tab reads them. */
 const STATE_OF_STATUS = new Map<string, SandboxState>([
-  ["running", SANDBOX_STATE.RUNNING],
-  ["pending", SANDBOX_STATE.STARTING],
-  ["stopping", SANDBOX_STATE.STOPPED],
-  ["snapshotting", SANDBOX_STATE.STOPPED],
-  ["stopped", SANDBOX_STATE.STOPPED],
+  [SANDBOX_STATUS.RUNNING, SANDBOX_STATE.RUNNING],
+  [SANDBOX_STATUS.PENDING, SANDBOX_STATE.STARTING],
+  [SANDBOX_STATUS.STOPPING, SANDBOX_STATE.STOPPED],
+  [SANDBOX_STATUS.SNAPSHOTTING, SANDBOX_STATE.STOPPED],
+  [SANDBOX_STATUS.STOPPED, SANDBOX_STATE.STOPPED],
   ["failed", SANDBOX_STATE.STOPPED],
   ["aborted", SANDBOX_STATE.STOPPED],
 ]);
@@ -83,9 +85,6 @@ type SandboxAttach =
 
 /** GitHub's two hosts a credential is set on at the firewall: git's, and the REST API's. */
 const GITHUB_HOST = { GIT: "github.com", API: "api.github.com" } as const;
-
-/** The policy with no credential on it, as Vercel's API takes it: eve's default, the open internet. */
-export const OPEN_INTERNET_POLICY = { mode: "allow-all" } as const;
 
 /** A repository's credential as the firewall carries it: the token, the repository as GitHub spells it, and whose the token is. */
 export interface RepositoryCredential {

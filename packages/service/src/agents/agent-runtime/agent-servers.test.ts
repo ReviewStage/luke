@@ -14,7 +14,7 @@ import {
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Effect, Layer, Option, Redacted, Result } from "effect";
+import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { GitHubApp } from "../../github/github-app.js";
 import {
@@ -270,7 +270,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
                 agent.userId,
                 { provider: NOTION, connectionName, connectSubject },
                 state,
-                Redacted.make("verifier"),
               ),
               completeIntegrationSignIn(agent.userId, connectionName, state, undefined),
             );
@@ -309,7 +308,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
                 agent.userId,
                 { provider: NOTION, connectionName, connectSubject },
                 state,
-                Redacted.make("verifier"),
               ),
               completeIntegrationSignIn(agent.userId, connectionName, state, undefined),
             );
@@ -346,7 +344,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
                 agent.userId,
                 { provider: NOTION, connectionName, connectSubject },
                 state,
-                Redacted.make("verifier"),
               ),
               completeIntegrationSignIn(agent.userId, connectionName, state, undefined),
             );
@@ -363,7 +360,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
               connectSubject: `pending-${agent.agentId}`,
             },
             `state-pending-${agent.agentId}`,
-            Redacted.make("verifier"),
           );
           const deployment = integrationConnectOver({ NOTION_CONNECTOR_UID: "oauth/notion" });
           const handed = (policy: typeof ALWAYS_ON | typeof AGENT_SWITCHES) =>

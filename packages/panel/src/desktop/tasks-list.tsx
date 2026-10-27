@@ -12,6 +12,13 @@ import {
   type TaskStanding,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import {
+  noneYetWords,
+  REFRESH_FAILED_WORDS,
+  readFailedWords,
+  readingWords,
+  TERM,
+} from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -174,10 +181,10 @@ import { useRowDrag } from "./use-row-drag.js";
 const TASKS = "Tasks";
 
 /** What the page is read as while the tasks are. */
-const READING_LINE = "Reading tasks";
+const READING_LINE = readingWords(TERM.TASK.many);
 
 /** What the page says where the tasks could not be read. */
-const UNREAD_LINE = "Your tasks could not be read.";
+const UNREAD_LINE = readFailedWords(`your ${TERM.TASK.many}`);
 
 /** What the List says where the filter and the view leave no task standing. */
 const NONE_STANDING = "No tasks match this view";
@@ -930,13 +937,17 @@ export function TasksList({
       filters={frame.chips}
       state={listState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
-      empty={<EmptyState icon={<ListTodoIcon />}>No tasks yet</EmptyState>}
+      empty={<EmptyState icon={<ListTodoIcon />}>{noneYetWords(TERM.TASK)}</EmptyState>}
       error={
         <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}
         </ErrorState>
       }
     >
+      {/* A refresh that failed after the tasks were read leaves them drawn, with a line over them. */}
+      {tasks.listFailed && listed.length > 0 ? (
+        <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
+      ) : null}
       <ListMotion root={list}>
         <div
           ref={list}

@@ -6,7 +6,7 @@ import {
 import { AUTOMATION_FIRING, AUTOMATION_TRIGGER } from "@luke/features/automation-wire";
 import { TRIGGER_PROVIDER, type TriggerProvider } from "@luke/features/trigger-catalog";
 import { HTTP_METHOD } from "@luke/wire";
-import { Clock, Effect, Layer, Option } from "effect";
+import { DateTime, Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -128,7 +128,7 @@ function deliveryEndpoint(source: TriggerSource<TriggerSourceServices>) {
     if (Option.isNone(workspace)) {
       return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, { queued: 0 });
     }
-    const firedAt = new Date(yield* Clock.currentTimeMillis);
+    const firedAt = yield* DateTime.nowAsDate;
     let queued = 0;
     for (const event of source.normalize(delivery)) {
       queued += yield* hostedStoreOrUnavailable(

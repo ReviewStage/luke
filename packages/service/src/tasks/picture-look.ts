@@ -1,6 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readPlanAttachment } from "@luke/database/models/plan-attachments";
-import { type Picture, pictureTypeSchema } from "@luke/features/picture-wire";
+import { type Picture, type PictureType, pictureTypeSchema } from "@luke/features/picture-wire";
 import { planAttachmentOf } from "@luke/features/plan-attachment-link";
 import { type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
@@ -27,7 +27,15 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * membership gate (`readPlanAttachment`), and only under the plan the
  * conversation is on, never the plan an address names: an address of
  * another plan, or of a picture this plan does not hold, is refused alike.
- * The picture reaches the model as an image (`pictureLookModelOutput`),
+ *
+ * A plan may hold a video an agent recorded, which no model is handed in any
+ * form: a look at one is refused, pointing the model at its alt text and
+ * caption, and both of the model's views, eve's here and the MCP door's,
+ * hand on a look only of an image's type, turning any other into that
+ * refusal (`lookNamedOnly`), so a video could not reach a model even were
+ * it answered, as an image nor as its base64 spelled out.
+ *
+ * An image reaches the model as an image (`pictureLookModelOutput`),
  * never as its base64 spelled out as text, and stays out of the
  * conversation's stored messages (`storedPictureLookOutput`), which keep
  * only that the model looked: what the model saw once is no record of the
@@ -47,6 +55,8 @@ export const PICTURE_LOOK_REFUSAL = {
   UNREADABLE: "Not looked: name the picture by its address, copied from the plan's text.",
   ELSEWHERE: "Not looked: that address is not a picture in this task's plan.",
   NO_PICTURE: "Not looked: this task's plan holds no such picture.",
+  VIDEO:
+    "Not looked: that address is a video, which is never shown to a model. Its alt text and caption in the plan's text say what it shows.",
   TASKLESS: "Not looked: you work on no task, so there is no plan to look in.",
   UNAVAILABLE: "Not looked: the picture could not be read just now. The call may be made again.",
 } as const;
@@ -60,7 +70,7 @@ export const PICTURE_LOOK_STATUS = {
 export type PictureLookResult =
   | {
       readonly status: typeof PICTURE_LOOK_STATUS.LOOKED;
-      readonly mediaType: Picture["contentType"];
+      readonly mediaType: PictureType;
       readonly image: string;
     }
   | { readonly status: typeof PICTURE_LOOK_STATUS.NOT_LOOKED; readonly reason: string };
@@ -90,8 +100,13 @@ export function pictureNotLooked(reason: string): PictureLookResult {
   return { status: PICTURE_LOOK_STATUS.NOT_LOOKED, reason };
 }
 
-/** A picture as a look answers it: its type and its bytes in base64. */
+const isImageType = Schema.is(pictureTypeSchema);
+
+/** A picture as a look answers it: an image's type and its bytes in base64, or the refusal of a video, whose bytes go nowhere. */
 function looked(picture: Picture): PictureLookResult {
+  if (!isImageType(picture.contentType)) {
+    return pictureNotLooked(PICTURE_LOOK_REFUSAL.VIDEO);
+  }
   return {
     status: PICTURE_LOOK_STATUS.LOOKED,
     mediaType: picture.contentType,
@@ -101,8 +116,8 @@ function looked(picture: Picture): PictureLookResult {
 
 /**
  * One call of `look_at_picture`: the picture the address names, where it is
- * a picture of the plan the call is bound to that the account reads;
- * `not-looked` and why otherwise.
+ * an image of the plan the call is bound to that the account reads;
+ * `not-looked` and why otherwise, a video among them.
  */
 export function runLookAtPicture(
   plan: PlanDocumentBinding,
@@ -131,10 +146,22 @@ const LookedSchema = Schema.Struct({ status: Schema.Literal(PICTURE_LOOK_STATUS.
 
 const isLookedStatus = Schema.is(LookedSchema);
 
-/** A look's picture, as the model's view reads one. */
+/** A look's picture, as the model's view reads one: an image's type alone. */
 const isLooked = Schema.is(
   Schema.Struct({ ...LookedSchema.fields, mediaType: pictureTypeSchema, image: Schema.String }),
 );
+
+/**
+ * A result that is no image's look, as a model may be handed it: a look
+ * answering anything but an image becomes the video's refusal, so what
+ * else it carries never reaches a model as text, and any other result
+ * stands as it is.
+ */
+export function lookNamedOnly(output: UnparsedWireValue): UnparsedWireValue {
+  return isLookedStatus(output) && !isLooked(output)
+    ? unparsedWire(pictureNotLooked(PICTURE_LOOK_REFUSAL.VIDEO))
+    : output;
+}
 
 /**
  * What the model is shown of a call's result: a look's picture as an image,
@@ -143,7 +170,7 @@ const isLooked = Schema.is(
  * module is in every function's bundle and eve's runtime belongs in none.
  */
 export function pictureLookModelOutput(output: UnparsedWireValue): ToolModelOutput {
-  if (!isLooked(output)) return { type: "json", value: output };
+  if (!isLooked(output)) return { type: "json", value: lookNamedOnly(output) };
   return {
     type: "content",
     value: [

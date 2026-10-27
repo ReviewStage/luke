@@ -1,4 +1,4 @@
-import { BADGE_TONE, Badge, CHIP_LOOK, CHIP_SIZE, CHIP_TONE, Chip } from "@luke/ui";
+import { Badge, CHIP_LOOK, CHIP_SIZE, Chip, STATUS_TONE } from "@luke/ui";
 import { CheckIcon, Undo2Icon } from "lucide-react";
 import { ANSWER_TONE, type AnswerStamp } from "./inbox-model.js";
 
@@ -28,14 +28,14 @@ export function InboxStamp({
   return (
     <span className="inbox-stamp" data-inbox-stamp="" data-tone={stamp.tone}>
       {onRemove === undefined ? (
-        <Badge tone={ahead ? BADGE_TONE.COMPLETE : BADGE_TONE.DANGER} icon={glyph}>
+        <Badge tone={ahead ? STATUS_TONE.COMPLETE : STATUS_TONE.DANGER} icon={glyph}>
           {stamp.words}
         </Badge>
       ) : (
         <Chip
           look={CHIP_LOOK.PILL}
           size={CHIP_SIZE.COMPACT}
-          tone={ahead ? CHIP_TONE.COMPLETE : CHIP_TONE.DANGER}
+          tone={ahead ? STATUS_TONE.COMPLETE : STATUS_TONE.DANGER}
           onRemove={onRemove}
           removeLabel={TAKE_OFF}
         >

@@ -251,6 +251,28 @@ test("the bound refuses a keystroke past it, and a paste past it is cut to the r
   assert.equal(box.drafts.at(-1), "123456789x", "a full box takes no paste");
 });
 
+test("the owner is told of a paste that was cut, a paste with no room left included, and of none that went in whole", () => {
+  let cuts = 0;
+  const box = mounted("12345678", {
+    maxLength: 10,
+    onPasteCut: () => {
+      cuts += 1;
+    },
+  });
+
+  paste(box.host, "x");
+  assert.equal(box.drafts.at(-1), "12345678x");
+  assert.equal(cuts, 0, "a paste that fits is not a cut one");
+
+  paste(box.host, "yz");
+  assert.equal(box.drafts.at(-1), "12345678xy");
+  assert.equal(cuts, 1, "a paste past the bound is told");
+
+  paste(box.host, "more");
+  assert.equal(box.drafts.at(-1), "12345678xy");
+  assert.equal(cuts, 2, "a paste with no room left is told too");
+});
+
 test("a pasted image goes to the owner and not into the words, and pasted lines stand as they were, blank ones too", () => {
   const box = mounted("");
   const image = new File(["png"], "shot.png", { type: "image/png" });

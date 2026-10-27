@@ -47,6 +47,10 @@ export const operatorNotice = pgTable(
     index("operator_notice_operator_at").on(table.operatorId, table.at),
     // The cascade from a deleted agent finds its notices.
     index("operator_notice_agent").on(table.agentId),
+    // The wake sweep reads the unread notices of one kind, oldest first.
+    index("operator_notice_unread_kind_at")
+      .on(table.kind, table.at)
+      .where(sql`${table.readAt} is null`),
   ],
 );
 

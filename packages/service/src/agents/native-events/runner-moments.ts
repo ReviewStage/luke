@@ -26,7 +26,8 @@ import {
  *
  * The runner posts its own events (`@luke/agent-runner/protocol`) among its
  * harness's messages, the same for Claude Code and Codex: a line Luke handed
- * the harness, the launch waiting on work in flight, and the launch's end. A
+ * the harness, the launch waiting on work in flight, the agent's turn over
+ * with the launch kept warm, and the launch's end. A
  * tool's answer is settled the same way whichever harness ran it: a Luke
  * tool's as the JSON it answered, any other's as the text the model read.
  */
@@ -56,6 +57,8 @@ const ENDING_OF_RUNNER_END = {
   [RUNNER_END.STOPPED]: NATIVE_ENDING.STOPPED,
   [RUNNER_END.INPUT_CLOSED]: NATIVE_ENDING.FAILED,
   [RUNNER_END.FAILED]: NATIVE_ENDING.FAILED,
+  // A warm launch's turn already ended at its IDLE, so this end finds none to settle.
+  [RUNNER_END.IDLED]: NATIVE_ENDING.DONE,
 } as const satisfies Record<RunnerEnd, (typeof NATIVE_ENDING)[keyof typeof NATIVE_ENDING]>;
 
 /** The ends that are no failure, which carry no detail. */
@@ -63,6 +66,7 @@ const QUIET_ENDS: ReadonlySet<RunnerEnd> = new Set([
   RUNNER_END.TURN_ENDED,
   RUNNER_END.RELEASED,
   RUNNER_END.STOPPED,
+  RUNNER_END.IDLED,
 ]);
 
 /**
@@ -120,6 +124,9 @@ export function runnerMoments(message: WireValue): Option.Option<readonly Native
       );
     case RUNNER_EVENT.WAITING:
       return Option.some([{ kind: NATIVE_MOMENT.WAITING }]);
+    // The agent's turn is over, as a `turn_ended` END says, though the launch stays warm.
+    case RUNNER_EVENT.IDLE:
+      return Option.some([{ kind: NATIVE_MOMENT.ENDED, ending: NATIVE_ENDING.DONE }]);
     case RUNNER_EVENT.END:
       return Option.some(endMoments(message));
     default:

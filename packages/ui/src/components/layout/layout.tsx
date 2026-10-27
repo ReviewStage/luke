@@ -32,11 +32,12 @@ import { motionRows } from "../list-motion/list-motion.js";
  * names it by its own class, never restyling the fill itself.
  */
 
-/** The room between items, by what they are: from none, through a list's rows and a glyph and its words, to two sections. */
+/** The room between items, by what they are: from none, through a list's rows and a glyph and its words, to two sections of a pane and two of a page. */
 export const GAP = {
   NONE: "none",
   /** A list's rows, as a list of rows stands them (`--luke-list-gap`). */
   ROW: "row",
+  /** The parts of one item, close enough to read as one (`--luke-tight-gap`). */
   TIGHT: "tight",
   /** A list's items that each stand as a box of their own: cards, threads, people. */
   ITEM: "item",
@@ -45,7 +46,10 @@ export const GAP = {
   FIELD: "field",
   /** Blocks of words one under another, as comments in a thread stand. */
   BLOCK: "block",
+  /** Two groups inside a pane or a form (`--luke-section-gap`). */
   SECTION: "section",
+  /** Two sections of a page, Settings' and every other page's (`--luke-page-section-gap`). */
+  PAGE: "page",
 } as const;
 
 export type Gap = (typeof GAP)[keyof typeof GAP];

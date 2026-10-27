@@ -1,5 +1,5 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { Badge, ProviderMark } from "@luke/ui";
+import { AVATAR_SIZE, Badge, HoverCard, HoverCardHead, ProviderMark } from "@luke/ui";
 import { RepositoryPicture } from "./repository-picture.js";
 import type { MenuRow } from "./searchable-menu.js";
 
@@ -25,6 +25,35 @@ export function repositoryWords(fullName: string): { label: string; detail?: str
   return { label: fullName.slice(slash + 1), detail: fullName.slice(0, slash) };
 }
 
+/** A repository's card: its owner's picture and its name, and its owner under the name. */
+export function RepositoryCard({
+  repository,
+  pictures,
+}: {
+  /** The repository, `owner/name`. */
+  repository: string;
+  /** Whether owners' pictures are drawn at all: not in a fixture run. */
+  pictures: boolean;
+}): React.JSX.Element {
+  const { label, detail } = repositoryWords(repository);
+  return (
+    <HoverCard data-repository-card="">
+      <HoverCardHead
+        glyph={
+          <RepositoryPicture
+            repository={repository}
+            pictures={pictures}
+            fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+            size={AVATAR_SIZE.GLYPH}
+          />
+        }
+        name={label}
+        sub={detail}
+      />
+    </HoverCard>
+  );
+}
+
 /** A repository's row in a searched menu: its owner's picture, its name, its owner and, where the token reaches it, the Token mark; found by `owner/name`. */
 export function repositoryMenuRow(fullName: string, pictures: boolean, token = false): MenuRow {
   const { label, detail } = repositoryWords(fullName);
@@ -39,6 +68,7 @@ export function repositoryMenuRow(fullName: string, pictures: boolean, token = f
       detail
     ),
     terms: [fullName],
+    card: <RepositoryCard repository={fullName} pictures={pictures} />,
     icon: (
       <RepositoryPicture
         repository={fullName}

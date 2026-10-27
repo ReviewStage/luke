@@ -142,6 +142,7 @@ function Version({ previous, now }: { previous: string; now: string }): ReactNod
     Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
   );
   return createElement(VersionView, {
+    onRetry: () => undefined,
     viewing: {
       line: {
         seq: 2,

@@ -8,6 +8,7 @@ import {
   type InboxReplyKind,
   inboxFormValueSchema,
 } from "@luke/features/inbox-wire";
+import { PLAN_COMMENT_SCOPE } from "@luke/features/plan-comment-wire";
 import { Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
@@ -21,7 +22,13 @@ import { readKept, writeKept } from "./kept-storage.js";
  * sends somewhere: an agent's composer keeps its words per agent, a plan's
  * draft agent its first message per plan, New task its words per workspace
  * the task starts in, a chat's box its message per channel and per thread
- * (`chat-composer.tsx`), and an inbox
+ * (`chat-composer.tsx`), the Inbox's New thread its To, Subject, and words
+ * per workspace (`inbox-compose.tsx`), a plan's comment its words per
+ * thread being started, per thread answered, and per comment edited
+ * (`plan-comments.tsx`), an agent's line written again its words and
+ * files per agent and line (`edit-composer.tsx`), a chat ask's answer its
+ * picks and note per message, at the revision it was written against
+ * (`chat-ask.tsx`), and an inbox
  * card its answer per item, at the revision it was written against, the
  * options picked, the fields filled, and, on a thread, the steps ticked and
  * the answer pressed beside its note. A draft is known by where
@@ -53,7 +60,7 @@ const STORAGE_KEY = "luke.composerDrafts";
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, or a chat's channel or thread. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a chat's channel or thread, an Inbox thread not yet started, a plan's comment, an agent's line written again, or a chat message's ask. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
@@ -61,6 +68,10 @@ export const DRAFT_PLACE = {
   NEW_TASK: "newTask",
   NEW_AUTOMATION: "newAutomation",
   CHAT: "chat",
+  NEW_THREAD: "newThread",
+  PLAN_COMMENT: "planComment",
+  EDIT: "edit",
+  CHAT_ASK: "chatAsk",
 } as const;
 
 const draftPlaceSchema = Schema.Union([
@@ -114,6 +125,44 @@ const draftPlaceSchema = Schema.Union([
     /** The thread's root, by its place in the chat, where the draft is a reply in it rather than a post at the channel's foot. */
     replyTo: Schema.optionalKey(Schema.Number),
   }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.NEW_THREAD),
+    /** The workspace whose Inbox the thread is written in; null before the workspaces are read. */
+    workspaceId: Schema.NullOr(Schema.String),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.PLAN_COMMENT),
+    /** The plan the comment is on, which the sidebar marks. */
+    planId: Schema.String,
+    /**
+     * What the words go to: the comment of a thread they edit, the thread
+     * they answer, or, for a thread not yet started, the words it is started
+     * on and whether on them or their block. Note that an edit is read first,
+     * because a reply's place would read one with the comment it names left off.
+     */
+    on: Schema.Union([
+      Schema.Struct({ threadId: Schema.String, entryId: Schema.String }),
+      Schema.Struct({ threadId: Schema.String }),
+      Schema.Struct({
+        quote: Schema.String,
+        scope: Schema.Literals(Object.values(PLAN_COMMENT_SCOPE)),
+      }),
+    ]),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.EDIT),
+    /** The agent whose transcript holds the line. */
+    agentId: Schema.String,
+    /** The developer's line the words are written again in place of. */
+    messageId: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.CHAT_ASK),
+    /** The chat message that carries the ask. */
+    messageId: Schema.String,
+    /** The ask's revision the answer was written against, so picks never land on options its poster changed since. */
+    revision: Schema.Number,
+  }),
 ]);
 
 /** Where one draft goes. */
@@ -152,6 +201,9 @@ const storedDrafts = Schema.fromJsonString(
       values: Schema.optionalKey(Schema.Array(inboxFormValueSchema)),
       steps: Schema.optionalKey(Schema.Array(Schema.Number)),
       press: Schema.optionalKey(Schema.Literals(Object.values(INBOX_REPLY))),
+      title: Schema.optionalKey(Schema.String),
+      to: Schema.optionalKey(Schema.String),
+      dropped: Schema.optionalKey(Schema.Array(Schema.String)),
     }),
   ),
 );
@@ -161,7 +213,7 @@ type StoredDraft = (typeof storedDrafts.Type)[number];
 /** The account a window's drafts are written by: the one signed in, none before its state is read, as in a test. */
 type Owner = string | null;
 
-/** What a box holds unsent: its words, the files attached to them, and an inbox card's options picked and fields filled, and a thread's steps ticked and answer pressed. */
+/** What a box holds unsent: its words, the files attached to them, and an inbox card's options picked and fields filled, and a thread's steps ticked and answer pressed; a box that names its own title and whom it goes to, as New thread's Subject and To do, keeps those beside them. */
 export interface Draft {
   readonly text: string;
   readonly attachments: readonly CodingAgentAttachment[];
@@ -169,6 +221,11 @@ export interface Draft {
   readonly values: readonly InboxFormValue[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
+  readonly title?: string | undefined;
+  /** The agent the draft goes to, by its id; kept only beside something written, since a pick alone is no draft. */
+  readonly to?: string | undefined;
+  /** The files of a line written again that its box took off, by their key in the line, so they stay off where the line's files are offered again (`edit-composer.tsx`). */
+  readonly dropped?: readonly string[] | undefined;
 }
 
 /** One place's draft. */
@@ -185,6 +242,18 @@ export type InboxPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.INBOX }>
 /** A chat box's place: a channel's foot, or a thread in it. */
 export type ChatDraftPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.CHAT }>;
 
+/** New thread's place: the workspace whose Inbox it is written in. */
+export type NewThreadPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_THREAD }>;
+
+/** A plan comment's place: a thread being started, answered, or one of its comments edited. */
+export type PlanCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.PLAN_COMMENT }>;
+
+/** An agent's line written again: the agent and the line. */
+export type EditPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.EDIT }>;
+
+/** A chat ask's answer: the message carrying it, at the ask's revision. */
+export type ChatAskPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.CHAT_ASK }>;
+
 /** A box holding nothing. */
 export const EMPTY_DRAFT: Draft = { text: "", attachments: [], choices: [], values: [] };
 
@@ -195,7 +264,9 @@ function stored(draft: Draft): boolean {
     draft.choices.length > 0 ||
     draft.values.length > 0 ||
     (draft.steps ?? []).length > 0 ||
-    draft.press !== undefined
+    draft.press !== undefined ||
+    (draft.title ?? "") !== "" ||
+    (draft.dropped ?? []).length > 0
   );
 }
 
@@ -213,7 +284,7 @@ function readStored(): readonly StoredDraft[] {
 function readDrafts(owner: Owner): readonly KeptDraft[] {
   return readStored()
     .filter((kept) => kept.accountId === owner)
-    .flatMap(({ place, text, choices = [], values = [], steps, press }) =>
+    .flatMap(({ place, text, choices = [], values = [], steps, press, title, to, dropped }) =>
       isDraftPlace(place)
         ? [
             {
@@ -224,6 +295,9 @@ function readDrafts(owner: Owner): readonly KeptDraft[] {
               values,
               ...(steps === undefined ? undefined : { steps }),
               ...(press === undefined ? undefined : { press }),
+              ...(title === undefined ? undefined : { title }),
+              ...(to === undefined ? undefined : { to }),
+              ...(dropped === undefined ? undefined : { dropped }),
             },
           ]
         : [],
@@ -240,7 +314,10 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
     Equal.equals(entry.choices ?? [], kept.choices) &&
     Equal.equals(entry.values ?? [], kept.values) &&
     Equal.equals(entry.steps ?? [], kept.steps ?? []) &&
-    entry.press === kept.press
+    entry.press === kept.press &&
+    (entry.title ?? "") === (kept.title ?? "") &&
+    entry.to === kept.to &&
+    Equal.equals(entry.dropped ?? [], kept.dropped ?? [])
   );
 }
 
@@ -259,7 +336,7 @@ function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): readonly KeptD
   );
   const written = kept
     .filter((draft) => !standing.some((entry) => storedAs(owner, draft, entry)))
-    .map(({ place, text, choices, values, steps = [], press }) => ({
+    .map(({ place, text, choices, values, steps = [], press, title = "", to, dropped = [] }) => ({
       accountId: owner,
       place,
       text,
@@ -267,6 +344,9 @@ function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): readonly KeptD
       ...(values.length === 0 ? undefined : { values }),
       ...(steps.length === 0 ? undefined : { steps }),
       ...(press === undefined ? undefined : { press }),
+      ...(title === "" ? undefined : { title }),
+      ...(to === undefined ? undefined : { to }),
+      ...(dropped.length === 0 ? undefined : { dropped }),
     }));
   const entries = [...standing, ...written].slice(-MAX_KEPT);
   writeKept(STORAGE_KEY, storedDrafts, entries);
@@ -551,7 +631,7 @@ export function useDraftWriter(): DraftWriter {
   );
 }
 
-/** Whether a plan holds a draft: one of its agents', its draft agent's, or an inbox card's. */
+/** Whether a plan holds a draft: one of its agents', its draft agent's, an inbox card's, or a comment's. */
 export function usePlanDrafted(taskId: string): boolean {
   return useAtomValue(draftedAtom, (tasks) => tasks.includes(taskId));
 }

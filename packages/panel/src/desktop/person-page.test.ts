@@ -13,7 +13,9 @@ import {
 import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
-  INBOX_RESPONSE,
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -182,10 +184,21 @@ function item(n: number, title: string, agentId: string, ago: number): InboxItem
     revision: 1,
     version: INBOX_WIRE_VERSION,
     title,
-    blocks: [],
-    response: { type: INBOX_RESPONSE.CHOICE, options: [{ label: "Yes" }, { label: "No" }] },
     needsReply: true,
     status: INBOX_STATUS.OPEN,
+    thread: [
+      {
+        id: `e1b2c3d4-0000-4000-8000-${String(n).padStart(12, "0")}`,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: title,
+        ask: {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "Yes" }, { label: "No" }],
+          status: INBOX_ASK_STATUS.OPEN,
+        },
+        createdAt: NOW - ago,
+      },
+    ],
     postedAt: NOW - ago,
     updatedAt: NOW - ago,
   };
@@ -424,14 +437,20 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
-test("a waiting item is the Inbox's own row: its task named in a chip before its preview, the marks of its Inbox row and its time at the end, and its card hung beside it", async () => {
+test("a waiting item is the Inbox's own row: its task named on a line of its own over its preview, its time at the end, and its card hung beside it, which names the agent its row leaves out", async () => {
   const { page } = mount(CHARLES.userId);
   await settle();
 
   const row = button(page, "Retry 429s too?");
   assert.equal(row.querySelector(".home-row-context"), null, "no task name at the row's end");
-  assert.equal(row.querySelector(".luke-list-row-lead")?.textContent, RETRIES.name);
-  assert.ok(row.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
+  const lead = row.querySelector('.luke-list-row-lead[data-at="line"]');
+  assert.equal(lead?.textContent, RETRIES.name);
+  assert.equal(
+    lead?.closest(".luke-list-row-description"),
+    null,
+    "the task stands on its own line",
+  );
+  assert.equal(row.querySelector('.actor-mark[data-kind="agent"]'), null, "no agent's tile leads");
   assert.ok(row.querySelector(".home-row-meta time"), "its time stands at its end");
 
   restOn(row);

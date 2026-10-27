@@ -8,7 +8,7 @@ import {
   liveCreateRequest,
 } from "@luke/live";
 import { readEither } from "@luke/wire/effect";
-import { Data, Effect, type Layer, Result, type Scope } from "effect";
+import { Data, Effect, type Layer, Result, Schema, type Scope } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import { WebSocket } from "ws";
@@ -18,6 +18,7 @@ import {
   EXCESS_KEYS,
   fixedBearer,
   HTTP_METHOD,
+  HTTP_STATUS,
   withoutTrailingSlash,
 } from "../core.js";
 import { SOCKET_CLOSE_CODE } from "./socket.js";
@@ -42,8 +43,22 @@ const OPENAI_DEFAULTS = {
   ATTACH_TIMEOUT_MS: 15_000,
 } as const;
 
+/**
+ * The one thing read off a refused create's body: whether OpenAI named it
+ * `insufficient_quota`, its word for a key whose account has no credit left
+ * and which it answers with the same 429 as a rate limit. The read keeps the
+ * match and nothing else, so no word of OpenAI's body travels on.
+ */
+const unfundedRefusalSchema = Schema.Struct({
+  error: Schema.Struct({ code: Schema.Literal("insufficient_quota") }),
+});
+
+const readUnfunded = readEither(unfundedRefusalSchema, { excess: EXCESS_KEYS.DROP });
+
 type LiveCreateResult =
   | { outcome: typeof LIVE_SESSION_OUTCOME.SUCCEEDED; answer: LiveCreateAnswer }
+  | { outcome: typeof LIVE_SESSION_OUTCOME.OPENAI_KEY_REFUSED }
+  | { outcome: typeof LIVE_SESSION_OUTCOME.OPENAI_KEY_UNFUNDED }
   | { outcome: typeof LIVE_SESSION_OUTCOME.HTTP_ERROR; status: number }
   | { outcome: typeof LIVE_SESSION_OUTCOME.NETWORK_ERROR; errorName: string | undefined }
   | { outcome: typeof LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE };
@@ -135,13 +150,19 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
         if (!callAnswered(answer)) {
           return { outcome: LIVE_SESSION_OUTCOME.NETWORK_ERROR, errorName: answer.errorName };
         }
-        if (!answer.response.ok) {
-          return { outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR, status: answer.response.status };
+        const { status } = answer.response;
+        if (status === HTTP_STATUS.UNAUTHORIZED) {
+          return { outcome: LIVE_SESSION_OUTCOME.OPENAI_KEY_REFUSED };
         }
         const payload = yield* Effect.orElseSucceed(
           Effect.tryPromise(() => answer.response.json()),
           () => undefined,
         );
+        if (!answer.response.ok) {
+          return status === HTTP_STATUS.TOO_MANY_REQUESTS && Result.isSuccess(readUnfunded(payload))
+            ? { outcome: LIVE_SESSION_OUTCOME.OPENAI_KEY_UNFUNDED }
+            : { outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR, status };
+        }
         // The provider names more of a created session than the two fields
         // this build reads, so the read drops what it does not name.
         const created = Result.getOrUndefined(

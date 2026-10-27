@@ -279,13 +279,11 @@ it.effect(
         agentId: AGENT_ID,
         key: "invite-copy",
         revision: 1,
-        version: 4,
+        version: 5,
         title: "What should the invitation email say?",
-        blocks: [],
-        response: { type: "text" },
         needsReply: true,
         status: "answered",
-        messages: [
+        thread: [
           {
             id: "6e3c9a1f-2b4d-4f70-8c8e-3d5f7b9c1e2a",
             author: "member",

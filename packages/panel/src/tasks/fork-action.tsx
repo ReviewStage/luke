@@ -1,5 +1,5 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import {
   CARD_CORNER,
   CARD_LOOK,
@@ -18,7 +18,7 @@ import { createContext, Fragment, type ReactNode, useContext } from "react";
 import { ActorRef } from "../actor-ref.js";
 import { MessageAction } from "../ai-elements/message.js";
 import type { TranscriptCards } from "./agent-tab.js";
-import { agentActor, agentTabLabel } from "./coding-agent-model.js";
+import { agentActor, agentName } from "./coding-agent-model.js";
 import { type AgentFork, FORK_WORDS, type ForkCut, forksOf, messageOpening } from "./fork-model.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
@@ -87,7 +87,7 @@ function bareActor(
   known: CodingAgentSummary | undefined,
   title: string | null = null,
 ): Actor {
-  if (known !== undefined) return agentActor(known, agentTabLabel(known, undefined));
+  if (known !== undefined) return agentActor(known, agentName(known, undefined));
   return {
     kind: ACTOR_KIND.AGENT,
     agentId,

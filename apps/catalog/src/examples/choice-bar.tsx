@@ -8,24 +8,23 @@
  */
 
 import {
+  ALIGN,
   AlertIcon,
   CHOICE_BAR_FOLD,
-  CHOICE_BAR_INSET,
   CHOICE_BAR_LOOK,
   CHOICE_BAR_SIZE,
   CheckIcon,
   ChoiceBar,
   type ChoiceBarFold,
-  type ChoiceBarInset,
   type ChoiceBarLook,
   type ChoiceBarSize,
   type ChoiceItem,
   CloseIcon,
-  COUNT_TONE,
   CodeIcon,
   DocumentIcon,
   GAP,
   linesCount,
+  STATUS_TONE,
   Stack,
   TEXT_TONE,
   Text,
@@ -49,7 +48,7 @@ const VIEWS: readonly ChoiceItem<View>[] = [
     value: VIEW.CHECKS,
     icon: <CheckIcon />,
     label: "Checks",
-    count: [{ text: "2", tone: COUNT_TONE.DANGER, glyph: <CloseIcon />, glyphLabel: "failing" }],
+    count: [{ text: "2", tone: STATUS_TONE.DANGER, glyph: <CloseIcon />, glyphLabel: "failing" }],
   },
   { value: VIEW.FILES, icon: <CodeIcon />, label: "Files changed", count: linesCount(128, 42) },
 ];
@@ -60,7 +59,7 @@ const VIEWS_PASSING: readonly ChoiceItem<View>[] = VIEWS.map((item) =>
     ? {
         ...item,
         count: [
-          { text: "9", tone: COUNT_TONE.COMPLETE, glyph: <CheckIcon />, glyphLabel: "passing" },
+          { text: "9", tone: STATUS_TONE.COMPLETE, glyph: <CheckIcon />, glyphLabel: "passing" },
         ],
       }
     : item,
@@ -85,7 +84,9 @@ const SHOWS: readonly ChoiceItem<Show>[] = [
   {
     value: SHOW.NEEDS_YOU,
     label: "Needs you",
-    count: [{ text: "3", tone: COUNT_TONE.ATTENTION, glyph: <AlertIcon />, glyphLabel: "waiting" }],
+    count: [
+      { text: "3", tone: STATUS_TONE.ATTENTION, glyph: <AlertIcon />, glyphLabel: "waiting" },
+    ],
   },
   { value: SHOW.UNREAD, label: "Unread", count: "7" },
   { value: SHOW.ALL, label: "All open", count: "24" },
@@ -113,7 +114,6 @@ function HeldTabs<Value extends string>({
   start,
   look,
   size,
-  inset,
   fold,
   stretch,
 }: {
@@ -122,7 +122,6 @@ function HeldTabs<Value extends string>({
   start: Value;
   look: ChoiceBarLook;
   size?: ChoiceBarSize | undefined;
-  inset?: ChoiceBarInset | undefined;
   fold?: ChoiceBarFold | undefined;
   stretch?: boolean | undefined;
 }): React.JSX.Element {
@@ -130,7 +129,7 @@ function HeldTabs<Value extends string>({
   const id = useId();
   const panels = (each: Value) => ({ tab: `${id}-${each}-tab`, panel: `${id}-${each}-panel` });
   return (
-    <Stack gap={GAP.CONTROL} align="start">
+    <Stack gap={GAP.CONTROL} align={ALIGN.START}>
       <ChoiceBar<Value>
         label={label}
         items={items}
@@ -139,7 +138,6 @@ function HeldTabs<Value extends string>({
         look={look}
         size={size}
         panels={panels}
-        inset={inset}
         fold={fold}
         stretch={stretch}
       />
@@ -222,13 +220,12 @@ function ChoiceBarExample(): React.JSX.Element {
           />
         </Stack>
       </CatalogSection>
-      <CatalogSection id="choice-bar-reading" title="Fill, set in to a reading measure">
+      <CatalogSection id="choice-bar-passing" title="Fill, a count with its glyph">
         <HeldTabs
           label="Pull request"
           items={VIEWS_PASSING}
           start={VIEW.CONVERSATION}
           look={CHOICE_BAR_LOOK.FILL}
-          inset={CHOICE_BAR_INSET.READING}
         />
       </CatalogSection>
       <CatalogSection id="choice-bar-plain" title="Fill, names alone">
@@ -277,7 +274,7 @@ function ChoiceBarExample(): React.JSX.Element {
         </div>
       </CatalogSection>
       <CatalogSection id="choice-bar-radio" title="Setting a value, as a radio group">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           <HeldEffort start={EFFORT.MEDIUM} />
           <HeldEffort start={EFFORT.MEDIUM} size={CHOICE_BAR_SIZE.COMPACT} />
           <HeldEffort start={EFFORT.HIGH} look={CHOICE_BAR_LOOK.FILL} />
@@ -289,13 +286,13 @@ function ChoiceBarExample(): React.JSX.Element {
         </Stack>
       </CatalogSection>
       <CatalogSection id="choice-bar-clearable" title="Clearable, none chosen">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           <HeldEffort start={undefined} clearable />
           <HeldEffort start={undefined} look={CHOICE_BAR_LOOK.FILL} clearable />
         </Stack>
       </CatalogSection>
       <CatalogSection id="choice-bar-disabled" title="Unavailable">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           <HeldEffort start={EFFORT.LOW} disabled />
           <HeldEffort start={EFFORT.LOW} look={CHOICE_BAR_LOOK.FILL} disabled />
         </Stack>

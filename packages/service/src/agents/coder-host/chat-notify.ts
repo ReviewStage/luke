@@ -48,6 +48,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
 import { MESSAGE_AUTHOR, MESSAGE_CHANNEL } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
+import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -92,7 +93,10 @@ import { steerCodingAgent } from "./steer.js";
  * they fit what one message carries; the rest are named in its words as
  * not attached. What each member came to is the
  * receipt the poster reads, each member by its mention link: told, held,
- * left, and the labels of the links that named no one. A name marked
+ * left, and the labels of the links that named no one; a coding agent's
+ * post is answered before any agent it addresses is steered, since a steer
+ * may wake that agent's sandbox, and reads those agents as being told
+ * (`tellMessageAfterAnswer`). A name marked
  * `@public` is what the coder's tools, the window's route, and its
  * announcements read as they land.
  */
@@ -416,33 +420,46 @@ function toldBy(address: ChatAddress): readonly string[] {
   return told.slice(0, CHAT_BOUNDS.MAX_STEERS_PER_POST);
 }
 
+/** What the steer of one agent needs beyond the telling's own: the eve a notice is handed to. */
+type SteerServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
+
 /**
- * A coding agent told of a message, as the module's header says: left where it is archived, on an archived
- * plan, its starter gone from the workspace, or retired, the last stamped
- * for good, otherwise steered.
+ * Where telling one member stands before anything is handed over: settled
+ * already, or the steer that tells it, which answers what it came to.
  */
-function tellAgent(
+type MemberTelling =
+  | { readonly outcome: NoticeOutcome }
+  | { readonly steer: Effect.Effect<NoticeOutcome, HostedRefusal, SteerServices> };
+
+/**
+ * Where telling a coding agent stands, as the module's header says: left
+ * where it is archived, on an archived plan, or its starter gone from the
+ * workspace, held where it read past the message or no eve is reached, and
+ * otherwise the steer, which leaves it for good where eve retired its
+ * session. Note that everything before the steer is a read of the store,
+ * so a caller that answers before the steer (`tellMessageAfterAnswer`)
+ * knows who stays and who has left as it answers.
+ */
+function agentTelling(
   telling: ChatTelling,
   member: ChatMemberRow,
   notice: ChatNotice,
-): Effect.Effect<
-  NoticeOutcome,
-  HostedRefusal,
-  DatabaseServices | HttpClient.HttpClient | GitHubApp
-> {
+): Effect.Effect<MemberTelling, HostedRefusal, DatabaseServices> {
   return Effect.gen(function* () {
     const { userId, organizationId } = telling;
-    if (member.leftAt !== null) return NOTICE_OUTCOME.LEFT;
+    if (member.leftAt !== null) return { outcome: NOTICE_OUTCOME.LEFT };
     const agent =
       member.agentId === null
         ? Option.none()
         : yield* hostedStoreOrUnavailable(readCodingAgent(userId, member.agentId));
-    if (Option.isNone(agent) || agent.value.archivedAt !== null) return NOTICE_OUTCOME.LEFT;
+    if (Option.isNone(agent) || agent.value.archivedAt !== null) {
+      return { outcome: NOTICE_OUTCOME.LEFT };
+    }
     // An agent runs as its starter, so one whose starter left the workspace hears nothing of its chat.
     const starterStays = yield* hostedStoreOrUnavailable(
       isWorkspaceMember(agent.value.userId, organizationId),
     );
-    if (!starterStays) return NOTICE_OUTCOME.LEFT;
+    if (!starterStays) return { outcome: NOTICE_OUTCOME.LEFT };
     // A message the agent has read already, told again, is no news to it.
     const read = yield* hostedStoreOrUnavailable(
       readPast(
@@ -453,49 +470,69 @@ function tellAgent(
         notice.message.touchedSeq,
       ),
     );
-    if (read) return NOTICE_OUTCOME.HELD;
+    if (read) return { outcome: NOTICE_OUTCOME.HELD };
     // A deployment that reaches no eve steers nothing, so the agent reads the message when it next reads.
     const eve = telling.eveFor(agent.value.userId);
-    if (eve === undefined) return NOTICE_OUTCOME.HELD;
-    const sender = yield* senderOf(userId, notice.from, notice.fromName);
-    // Note that eve is the starter's, whose turn it steers, while the plan is read as the poster's, who may stay when the starter leaves.
-    const steered = yield* steerCodingAgent(eve, telling.writer, userId, agent.value, {
-      text: notice.text,
-      attachments: notice.attachments,
-      clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
-      sender,
-      metadata: {
-        author: AUTHOR_OF_KIND[notice.from.kind],
-        channel: MESSAGE_CHANNEL.CHAT,
-        chat_seq: notice.message.seq,
-        from: noticeFrom(notice.fromName, notice.from.kind),
-      },
-    }).pipe(Effect.result);
-    if (Result.isSuccess(steered)) return NOTICE_OUTCOME.TOLD;
-    if (steered.failure.error === HOSTED_REFUSAL.AGENT_RETIRED.error) {
-      return yield* Effect.as(
-        hostedStoreOrUnavailable(leave(userId, organizationId, member.id)),
-        NOTICE_OUTCOME.LEFT,
-      );
-    }
-    return GONE_REFUSALS.has(steered.failure.error) ? NOTICE_OUTCOME.LEFT : NOTICE_OUTCOME.HELD;
+    if (eve === undefined) return { outcome: NOTICE_OUTCOME.HELD };
+    const steer = Effect.gen(function* () {
+      const sender = yield* senderOf(userId, notice.from, notice.fromName);
+      // Note that eve is the starter's, whose turn it steers, while the plan is read as the poster's, who may stay when the starter leaves.
+      const steered = yield* steerCodingAgent(eve, telling.writer, userId, agent.value, {
+        text: notice.text,
+        attachments: notice.attachments,
+        clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
+        sender,
+        metadata: {
+          author: AUTHOR_OF_KIND[notice.from.kind],
+          channel: MESSAGE_CHANNEL.CHAT,
+          chat_seq: notice.message.seq,
+          from: noticeFrom(notice.fromName, notice.from.kind),
+        },
+      }).pipe(Effect.result);
+      if (Result.isSuccess(steered)) return NOTICE_OUTCOME.TOLD;
+      if (steered.failure.error === HOSTED_REFUSAL.AGENT_RETIRED.error) {
+        return yield* Effect.as(
+          hostedStoreOrUnavailable(leave(userId, organizationId, member.id)),
+          NOTICE_OUTCOME.LEFT,
+        );
+      }
+      return GONE_REFUSALS.has(steered.failure.error) ? NOTICE_OUTCOME.LEFT : NOTICE_OUTCOME.HELD;
+    });
+    return { steer };
   });
 }
 
+/** Where telling one member stands: an agent's as `agentTelling` reads it, and a person's settled through their door. */
+function memberTelling(
+  telling: ChatTelling,
+  member: ChatMemberRow,
+  notice: ChatNotice,
+): Effect.Effect<MemberTelling, HostedRefusal, DatabaseServices> {
+  switch (member.kind) {
+    case MEMBER_KIND.AGENT:
+      return agentTelling(telling, member, notice);
+    case MEMBER_KIND.HUMAN:
+      return Effect.map(telling.doors.human(member, notice), (outcome) => ({ outcome }));
+  }
+}
+
+/** What a message addresses: the members it tells, in order, the notice they are told, and how the poster's account names each. */
+interface MessageAddress {
+  readonly told: readonly ChatMemberRow[];
+  readonly notice: ChatNotice;
+  readonly names: ChatNames;
+}
+
 /**
- * Tells a message just posted to the members it addresses, each through
- * the way its kind is told, and answers the receipt: what `postChat` does
- * after a post, and what an ask's post or an answer's reply calls itself.
- * Every member is named by its mention link as the poster's account reads
- * the workspace; the labels of the links that named no one when it was
- * posted are the caller's to pass on.
- * @public
+ * The members a message just posted tells and the notice it tells them, as
+ * the poster's account reads the workspace: the channel, the thread's
+ * earlier authors, the roster, and, only where an agent is told, the
+ * message's pictures.
  */
-export function tellMessage(
+function addressOf(
   telling: ChatTelling,
   message: ChatMessageRow,
-  unresolved: readonly string[],
-): Effect.Effect<ChatReceipt, HostedRefusal, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
+): Effect.Effect<MessageAddress, HostedRefusal, DatabaseServices> {
   return Effect.gen(function* () {
     const { userId, organizationId } = telling;
     const channel = yield* hostedStoreOrUnavailable(
@@ -542,31 +579,114 @@ export function tellMessage(
       from,
       fromName: names.name(from),
     };
+    return { told, notice, names };
+  });
+}
+
+/** The members of a receipt with one outcome, each by its mention link. */
+function namedWith(
+  names: ChatNames,
+  outcomes: readonly { readonly member: ChatMemberRow; readonly outcome: NoticeOutcome }[],
+  outcome: NoticeOutcome,
+): readonly string[] {
+  return outcomes
+    .filter((each) => each.outcome === outcome)
+    .map((each) => names.mention(each.member));
+}
+
+/**
+ * Tells a message just posted to the members it addresses, each through
+ * the way its kind is told, and answers the receipt: what `postChat` does
+ * after a post, and what an ask's post or an answer's reply calls itself.
+ * Every member is named by its mention link as the poster's account reads
+ * the workspace; the labels of the links that named no one when it was
+ * posted are the caller's to pass on.
+ * @public
+ */
+export function tellMessage(
+  telling: ChatTelling,
+  message: ChatMessageRow,
+  unresolved: readonly string[],
+): Effect.Effect<ChatReceipt, HostedRefusal, SteerServices> {
+  return Effect.gen(function* () {
+    const { told, notice, names } = yield* addressOf(telling, message);
     // Note that each member is told at once beside the others, because each claim and steer is its own member's, and an answer waited on three steers in a row.
     const outcomes = yield* Effect.forEach(
       told,
-      (member) => {
-        switch (member.kind) {
-          case MEMBER_KIND.AGENT:
-            return Effect.map(tellAgent(telling, member, notice), (outcome) => ({
-              member,
-              outcome,
-            }));
-          case MEMBER_KIND.HUMAN:
-            return Effect.map(telling.doors.human(member, notice), (outcome) => ({
-              member,
-              outcome,
-            }));
-        }
-      },
+      (member) =>
+        Effect.gen(function* () {
+          const standing = yield* memberTelling(telling, member, notice);
+          const outcome = "steer" in standing ? yield* standing.steer : standing.outcome;
+          return { member, outcome };
+        }),
       { concurrency: CHAT_BOUNDS.MAX_STEERS_PER_POST },
     );
-    const named = (outcome: NoticeOutcome) =>
-      outcomes.filter((each) => each.outcome === outcome).map((each) => names.mention(each.member));
     return {
-      told: named(NOTICE_OUTCOME.TOLD),
-      held: named(NOTICE_OUTCOME.HELD),
-      left: named(NOTICE_OUTCOME.LEFT),
+      told: namedWith(names, outcomes, NOTICE_OUTCOME.TOLD),
+      held: namedWith(names, outcomes, NOTICE_OUTCOME.HELD),
+      left: namedWith(names, outcomes, NOTICE_OUTCOME.LEFT),
+      unresolved,
+    };
+  });
+}
+
+/**
+ * What a poster reads back where the agents it tells are steered after the
+ * answer: the receipt, and the agents whose steer runs once the poster has
+ * been answered, each by its mention link, none of them yet told.
+ * @public
+ */
+export type ChatReceiptTelling = ChatReceipt & { readonly telling: readonly string[] };
+
+/**
+ * Tells a message just posted as `tellMessage` does, but answers before
+ * any agent is steered: who the message addresses, who has left, who reads
+ * it at their next read, and each person told through their door are
+ * settled as it answers, every one a read or a stamp in the store, while
+ * the steers, which may wake an agent's sandbox and relaunch its runner,
+ * run after the answer has left (`after-response.ts`) and are answered as
+ * the agents being told. A runtime that keeps no work past its answer
+ * steers in place, and answers who was told, as `tellMessage` does. Note
+ * that a steer that fails past the answer is held for the agent's next
+ * read, as one failed in place is; only the poster no longer hears it.
+ * @public
+ */
+export function tellMessageAfterAnswer(
+  telling: ChatTelling,
+  message: ChatMessageRow,
+  unresolved: readonly string[],
+): Effect.Effect<ChatReceipt | ChatReceiptTelling, HostedRefusal, SteerServices> {
+  return Effect.gen(function* () {
+    if (Option.isNone(yield* Effect.serviceOption(AfterResponse))) {
+      return yield* tellMessage(telling, message, unresolved);
+    }
+    const { told, notice, names } = yield* addressOf(telling, message);
+    const standings = yield* Effect.forEach(
+      told,
+      (member) =>
+        Effect.map(memberTelling(telling, member, notice), (standing) => ({ member, standing })),
+      { concurrency: CHAT_BOUNDS.MAX_STEERS_PER_POST },
+    );
+    const settled = standings.flatMap(({ member, standing }) =>
+      "outcome" in standing ? [{ member, outcome: standing.outcome }] : [],
+    );
+    const steered = standings.flatMap(({ member, standing }) =>
+      "steer" in standing ? [{ member, steer: standing.steer }] : [],
+    );
+    if (steered.length > 0) {
+      yield* afterResponse(
+        "an agent's chat post's notices",
+        Effect.forEach(steered, ({ steer }) => steer, {
+          concurrency: CHAT_BOUNDS.MAX_STEERS_PER_POST,
+          discard: true,
+        }),
+      );
+    }
+    return {
+      told: namedWith(names, settled, NOTICE_OUTCOME.TOLD),
+      telling: steered.map(({ member }) => names.mention(member)),
+      held: namedWith(names, settled, NOTICE_OUTCOME.HELD),
+      left: namedWith(names, settled, NOTICE_OUTCOME.LEFT),
       unresolved,
     };
   });

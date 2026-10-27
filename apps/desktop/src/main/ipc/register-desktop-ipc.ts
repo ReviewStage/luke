@@ -15,7 +15,9 @@ import {
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { PUSH } from "@luke/host/contract";
 import { startMacTerminal, worktreesRoot } from "@luke/host/node";
+import { LEAVE } from "@luke/host/quit";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
+import type { WireBoundaryInput } from "@luke/wire";
 import {
   BrowserWindow,
   clipboard,
@@ -66,6 +68,24 @@ async function windowStill(
 }
 
 /**
+ * Opens a fresh channel to a panel's page under `channel`: main keeps one end
+ * and posts the other to the page with the ticket.
+ */
+function portTo(channel: string) {
+  return (sender: WebContents, ticket: unknown) => {
+    const { port1, port2 } = new MessageChannelMain();
+    sender.postMessage(channel, ticket, [port2]);
+    port1.start();
+    return {
+      post: (message: unknown) => port1.postMessage(message),
+      onMessage: (listener: (message: WireBoundaryInput) => void) =>
+        port1.on("message", (event) => listener(event.data)),
+      close: () => port1.close(),
+    };
+  };
+}
+
+/**
  * Every channel the sandboxed renderers reach this process through, composed
  * once and attached between the composition and its start: a window that
  * loaded before its channels were registered would meet an unhandled invoke,
@@ -108,9 +128,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     liveDiagnostics: () => operator.host.liveDiagnostics(),
     liveSession: operator.host,
     recordProductEvent,
-    recordAgentTrace: (trace: Parameters<typeof operator.host.recordAgentTrace>[0]) => {
-      void run(operator.host.recordAgentTrace(trace));
-    },
   };
 
   const browserExperimentOn = () =>
@@ -123,16 +140,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ...browserLiveProcedures<WebContents>({
       host: operator.host,
       ports: {
-        open: (sender, ticket) => {
-          const { port1, port2 } = new MessageChannelMain();
-          sender.postMessage(BROWSER_LIVE_PORT_CHANNEL, ticket, [port2]);
-          port1.start();
-          return {
-            post: (message) => port1.postMessage(message),
-            onMessage: (listener) => port1.on("message", (event) => listener(event.data)),
-            close: () => port1.close(),
-          };
-        },
+        open: portTo(BROWSER_LIVE_PORT_CHANNEL),
         whenGone: whenPageGone,
       },
       experimentOn: browserExperimentOn,
@@ -147,33 +155,16 @@ export function registerDesktopIpc(services: DesktopServices): void {
       exists: (folder) => fs.existsSync(folder),
       stateRoot: config.stateRoot,
       ports: {
-        open: (sender, ticket) => {
-          const { port1, port2 } = new MessageChannelMain();
-          sender.postMessage(MAC_TERMINAL_PORT_CHANNEL, ticket, [port2]);
-          port1.start();
-          return {
-            post: (message) => port1.postMessage(message),
-            onMessage: (listener) => port1.on("message", (event) => listener(event.data)),
-            close: () => port1.close(),
-          };
-        },
+        open: portTo(MAC_TERMINAL_PORT_CHANNEL),
         whenGone: whenPageGone,
       },
       start: startMacTerminal,
+      fork: (effect) => void run(effect),
     }),
     ...terminalProcedures<WebContents>({
       host: operator.host,
       ports: {
-        open: (sender, ticket) => {
-          const { port1, port2 } = new MessageChannelMain();
-          sender.postMessage(TERMINAL_PORT_CHANNEL, ticket, [port2]);
-          port1.start();
-          return {
-            post: (message) => port1.postMessage(message),
-            onMessage: (listener) => port1.on("message", (event) => listener(event.data)),
-            close: () => port1.close(),
-          };
-        },
+        open: portTo(TERMINAL_PORT_CHANNEL),
         whenGone: whenPageGone,
       },
       createId: randomUUID,
@@ -197,6 +188,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         return true;
       },
       captureStill: (sender, rect) => windowStill(sender, rect),
+      tellUnsavedWork: services.unsavedWork.tell,
       saveFile: async (sender, name, text) => {
         const window = BrowserWindow.fromWebContents(sender);
         const options = { defaultPath: name };
@@ -258,6 +250,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
           host: operator.host,
           haltSessionReplay: operator.haltSessionReplay,
           resumeSessionReplay: operator.resumeSessionReplay,
+          askBeforeSignOut: () => services.askBeforeLeaving(LEAVE.SIGN_OUT),
         },
         accountAsks: { host: operator.host },
         agentInbox: { host: operator.host },
@@ -309,7 +302,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     snapshotFor: async (sender): Promise<AppStateSnapshot> => {
       await run(operator.readBootstrap());
       native.refreshMicrophoneStatus();
-      return { ...state.snapshot(), window: windows.windowFactsFor(sender) };
+      return windows.appStateFor(sender);
     },
   });
 }

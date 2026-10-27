@@ -1,6 +1,6 @@
 import { HTTP_METHOD, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -12,7 +12,6 @@ import {
 import type { Board, BoardElement, BoardSaveAnswer } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
-import { CODING_AGENT_ATTACHMENT_TYPE } from "./coding-agent-wire.js";
 import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
 import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
 import type {
@@ -41,7 +40,7 @@ import {
   type TaskRecordLiveAnswer,
 } from "./live-wire.js";
 import { type PageLine, type PagePlace, type PageVersion, pagePlaceId } from "./page-wire.js";
-import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
+import { PLAN_ATTACHMENT_REFUSAL, planAttachmentTypeSchema } from "./plan-attachment-wire.js";
 import {
   type PlanCommentActionRequest,
   type PlanCommentStartRequest,
@@ -153,8 +152,14 @@ export interface HostedTaskClientOptions {
 
 const UNANSWERED = { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
-/** The types a plan's attachment is served as: a picture's, or any a comment's file may be. */
-const attachmentTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+/** Why a keep the service refused in band was not kept, as the editor hears it. */
+const KEEP_REFUSED = {
+  [PLAN_ATTACHMENT_REFUSAL.TOO_MANY]: PICTURE_KEEP_FAILURE.TOO_MANY,
+  [PLAN_ATTACHMENT_REFUSAL.TOO_MANY_VIDEOS]: PICTURE_KEEP_FAILURE.TOO_MANY_VIDEOS,
+} as const satisfies Record<
+  (typeof PLAN_ATTACHMENT_REFUSAL)[keyof typeof PLAN_ATTACHMENT_REFUSAL],
+  (typeof PICTURE_KEEP_FAILURE)[keyof typeof PICTURE_KEEP_FAILURE]
+>;
 
 /** A comment call that answered nothing to draw. */
 const COMMENT_UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as const;
@@ -812,8 +817,8 @@ export class HostedTaskClient {
   /**
    * One attachment of one plan, a picture its text names or a file one of
    * its comments carries, fetched under the account: its bytes in base64
-   * under its media type, where the service answered with a type a coding
-   * agent's file may be; not found where the plan is not one the account
+   * under its media type, where the service answered with a type a plan's
+   * attachment may be (`PLAN_ATTACHMENT_TYPE`), a video among them; not found where the plan is not one the account
    * reaches or holds no such attachment; unanswered for anything else,
    * another media type included, so nothing a window draws is a type it did
    * not expect.
@@ -833,15 +838,15 @@ export class HostedTaskClient {
         const refused = refusedAs(unparsedWire(yield* jsonOf(answer.response)), NOT_FOUND_REFUSAL);
         return { failure: refused.ok ? TASK_CALL_FAILURE.UNANSWERED : refused.failure };
       }
-      const picture = yield* imageBodyOf(answer.response, attachmentTypeSchema);
+      const picture = yield* imageBodyOf(answer.response, planAttachmentTypeSchema);
       return picture ?? { failure: TASK_CALL_FAILURE.UNANSWERED };
     });
   }
 
   /**
-   * One picture kept on one plan, sent as the `data:` URL the Mac made of
-   * it: the id the plan's text then names it by; too many where the plan
-   * holds its bound; not found where the plan is not one the account may
+   * One picture or video kept on one plan, sent as the `data:` URL the Mac
+   * made of it: the id the plan's text then names it by; too many where the
+   * plan holds its bound of pictures, or of videos for a video; not found where the plan is not one the account may
    * write, an archived one among them; unanswered for anything else.
    */
   keepPicture(
@@ -862,10 +867,7 @@ export class HostedTaskClient {
           "id" in kept
             ? { id: kept.id }
             : {
-                failure:
-                  kept.refused === PLAN_ATTACHMENT_REFUSAL.TOO_MANY
-                    ? PICTURE_KEEP_FAILURE.TOO_MANY
-                    : PICTURE_KEEP_FAILURE.UNANSWERED,
+                failure: KEEP_REFUSED[kept.refused],
               },
       },
     );

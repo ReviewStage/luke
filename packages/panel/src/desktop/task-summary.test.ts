@@ -146,7 +146,7 @@ function mount(shown: "agent" | "plan", linkWorkspace?: string) {
             tasks,
             layout: PINNED,
             cardId: "summary-card",
-            inbox: { open: [], settled: [] },
+            inbox: { open: [], waiting: [], settled: [] },
             held: HELD,
             repository: "acme/relay",
             onOpenAgent: (agentId) => opened.push(agentId),
@@ -198,7 +198,7 @@ test("a page's row hangs the page's tab's card, previewing its newest version", 
           tasks,
           layout: PINNED,
           cardId: "summary-card",
-          inbox: { open: [], settled: [] },
+          inbox: { open: [], waiting: [], settled: [] },
           held: HELD,
           repository: "acme/relay",
           onOpenAgent: () => undefined,
@@ -264,7 +264,7 @@ test("the plan's row hangs the task's card, as the Plan tab does", () => {
             tasks,
             layout: PINNED,
             cardId: "summary-card",
-            inbox: { open: [], settled: [] },
+            inbox: { open: [], waiting: [], settled: [] },
             held: HELD,
             repository: "acme/relay",
             onOpenAgent: () => undefined,
@@ -328,7 +328,7 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
 });
 
 /** What the plan's own inbox holds in these tests: nothing. */
-const NO_INBOX = { open: [], settled: [] };
+const NO_INBOX = { open: [], waiting: [], settled: [] };
 
 /** The plan's column as the shell lays it out: the toolbar's button over the summary, laid out by the column's own width. */
 function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {

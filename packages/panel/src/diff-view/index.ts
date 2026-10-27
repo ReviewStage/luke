@@ -466,7 +466,7 @@ const LIST_CSS = `
   }
   [data-separator="line-info-basic"] {
     height: ${LIST_GAP_HEIGHT}px;
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-caption-size);
   }

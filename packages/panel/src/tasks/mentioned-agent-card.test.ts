@@ -2,7 +2,13 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import {
   encodeMention,
   MENTION_KIND,
@@ -14,12 +20,13 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
-import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
+import { ACTOR_KIND, ACTOR_STATE, LUKE_ACTOR } from "@luke/ui/actor-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { ActorRef } from "../actor-ref.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -121,6 +128,24 @@ const told: AnyAct[] = [];
 /** Whether the service answers reads of agents; refused otherwise. */
 let answering = true;
 
+/** Whether the service is still to answer every read, so each stands out for as long as a test looks. */
+let pending = false;
+
+/** The pull request the prorater opened, as its Pull request tab reads it. */
+const SEAT_PULL_REQUEST: CodingAgentPullRequest = {
+  number: 42,
+  title: "Prorate seats on upgrade",
+  url: "https://github.com/acme/relay/pull/42",
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PASSING,
+  additions: 120,
+  deletions: 8,
+  changedFiles: 3,
+};
+
+/** A pull request no agent of the workspace opened. */
+const OUTSIDE_PULL_REQUEST = "https://github.com/acme/relay/pull/7";
+
 let root: Root | undefined;
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -131,6 +156,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   told.length = 0;
   answering = true;
+  pending = false;
 });
 
 /** What the main process answers: a task's agents, and the workspace's searched or newest. */
@@ -149,6 +175,17 @@ function answer(request: AnyAct): FakeActAnswer {
             agent.title?.toLowerCase().includes(words.toLowerCase()),
           );
     return { status: FAKE_ANSWER.DONE, value: { agents } };
+  }
+  if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST) {
+    const opened = request.payload.agentId === PRORATE.id;
+    return {
+      status: FAKE_ANSWER.DONE,
+      value: {
+        repository: "acme/relay",
+        branch: opened ? "feat/prorate-seats" : null,
+        pullRequest: opened ? SEAT_PULL_REQUEST : null,
+      },
+    };
   }
   if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
     return request.payload.agentId === ARCHIVIST.id
@@ -223,7 +260,9 @@ async function drawnElement(
     requestAppState: () => Promise.resolve(state),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       told.push(request);
-      return Promise.resolve(answer(request));
+      return pending
+        ? Promise.withResolvers<FakeActAnswer>().promise
+        : Promise.resolve(answer(request));
     },
   });
   const container = document.body.appendChild(document.createElement("div"));
@@ -283,6 +322,8 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(card, "the chip hangs a card");
   const look = {
     tab: card.matches("[data-tab-card]"),
+    reading: card.matches("[data-chip-card-reading]"),
+    actor: card.getAttribute("data-actor-card") ?? undefined,
     name: card.querySelector(".luke-hover-card-name")?.textContent,
     model: card.querySelector("[data-model-label]")?.textContent,
     corner: card.querySelector(".luke-hover-card-corner")?.textContent,
@@ -484,4 +525,106 @@ test("two chips of one task's agents hung one after the other share the task's r
 
   assert.equal(card.name, "Prorate seat changes");
   assert.equal(agentReads().length, 1);
+});
+
+/** Main's document as `STATE`, its billing row naming the pull request the prorater opened, as the plan list carries it. */
+const PULL_REQUEST_STATE_LISTED: AppStateSnapshot = {
+  ...STATE,
+  tasks: {
+    ...STATE.tasks,
+    tasks: [
+      {
+        ...BILLING,
+        agents: {
+          total: 1,
+          working: 1,
+          agents: [],
+          pullRequestTotal: 1,
+          pullRequests: [
+            {
+              number: SEAT_PULL_REQUEST.number,
+              title: SEAT_PULL_REQUEST.title,
+              state: SEAT_PULL_REQUEST.state,
+              checks: SEAT_PULL_REQUEST.checks,
+              additions: SEAT_PULL_REQUEST.additions,
+              deletions: SEAT_PULL_REQUEST.deletions,
+              url: SEAT_PULL_REQUEST.url,
+              agentId: PRORATE.id,
+            },
+          ],
+        },
+      },
+    ],
+  },
+};
+
+test("a pull request's chip off its task's page hangs the card its Pull request tab hangs, read as it is hung; one no listed agent opened keeps the chip's own", async () => {
+  const container = await drawn(
+    `Lands in [@#42](${SEAT_PULL_REQUEST.url}) after [@#7](${OUTSIDE_PULL_REQUEST}).`,
+    PULL_REQUEST_STATE_LISTED,
+  );
+  const [opened, outside] = container.querySelectorAll("[data-mention-ref]");
+
+  const card = await cardOf(opened);
+  assert.equal(card.tab, true, "the chip hangs the Pull request tab's card");
+  assert.equal(card.name, "Prorate seats on upgrade");
+  assert.match(card.corner ?? "", /#42/u);
+  assert.match(card.words ?? "", /3 files changed/u);
+  assert.match(card.words ?? "", /Prorate seat changes/u, "it names the agent whose it is");
+  const other = await cardOf(outside);
+  assert.deepEqual([other.tab, other.reading], [false, false]);
+});
+
+test("while what it shows is read, an agent's chip and a pull request's chip each hang the one reading state, wearing the chip's name", async () => {
+  pending = true;
+  const container = await drawn(
+    `${mentionOf(PRORATE, "Prorate")} opened [@#42](${SEAT_PULL_REQUEST.url}).`,
+    PULL_REQUEST_STATE_LISTED,
+  );
+  const [agent, pullRequest] = container.querySelectorAll("[data-mention-ref]");
+
+  const agentCard = await cardOf(agent);
+  const pullRequestCard = await cardOf(pullRequest);
+  assert.deepEqual(
+    [agentCard.reading, agentCard.name, pullRequestCard.reading, pullRequestCard.name],
+    [true, "Prorate", true, "#42"],
+  );
+});
+
+test("a chip of Luke hangs Luke's own card", async () => {
+  const container = await drawn(
+    `Ask ${mentionMarkdown({ kind: MENTION_KIND.LUKE, taskId: BILLING.id }, "Luke", PLACE)}.`,
+  );
+
+  const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
+  assert.deepEqual([card.actor, card.name], [ACTOR_KIND.LUKE, "Luke"]);
+});
+
+test("Luke and an agent named as actors hang Luke's card and the agent's tab's card, the agent's read as it is hung", async () => {
+  const container = await drawnElement(
+    createElement(
+      "p",
+      null,
+      createElement(ActorRef, { actor: LUKE_ACTOR }),
+      createElement(ActorRef, {
+        actor: {
+          kind: ACTOR_KIND.AGENT,
+          agentId: PRORATE.id,
+          taskId: BILLING.id,
+          name: "Prorate",
+          provider: undefined,
+          state: ACTOR_STATE.REST,
+        },
+      }),
+    ),
+  );
+  const [luke, agent] = container.querySelectorAll("[data-actor-ref]");
+
+  const lukeCard = await cardOf(luke);
+  const agentCard = await cardOf(agent);
+  assert.equal(lukeCard.actor, ACTOR_KIND.LUKE);
+  assert.deepEqual(
+    [agentCard.tab, agentCard.name, agentCard.foot],
+    [true, "Prorate seat changes", "On Billing by seat"],
+  );
 });

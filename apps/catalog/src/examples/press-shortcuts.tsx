@@ -9,12 +9,11 @@ import {
   IconButton,
   Inline,
   MARK_STRIP_LOOK,
-  MARK_STRIP_TONE,
   MarkStrip,
   Menu,
   PlayIcon,
-  SkillChip,
   SplitButton,
+  STATUS_TONE,
   type StripMark,
   TEXT_TONE,
   Text,
@@ -28,9 +27,8 @@ import { CatalogSection } from "../section";
  * press-shortcuts.tsx -- the second ways in a press offers beside a control's
  * own: Back held, or right-clicked, listing the steps behind it; a split
  * button that hears every press of its main part, a refused one too; a hidden
- * rail's strip of marks, pressed to show the rail; a title a ⌘-click opens;
- * and a chosen skill's pill in a box's words, pressed to open its file. Each
- * says what it last did, since the catalog has nowhere to go.
+ * rail's strip of marks, pressed to show the rail; and a title a ⌘-click
+ * opens. Each says what it last did, since the catalog has nowhere to go.
  */
 
 const STEPS = ["Auth refactor · Code", "Auth refactor · Plan", "Inbox"] as const;
@@ -91,21 +89,21 @@ function HeardSplit({ onDone }: { onDone: (what: string) => void }): React.JSX.E
 }
 
 const MARKS: readonly StripMark[] = [
-  { tone: MARK_STRIP_TONE.DANGER, viewed: true },
-  { tone: MARK_STRIP_TONE.ATTENTION, current: true },
-  { tone: MARK_STRIP_TONE.COMPLETE },
-  { tone: MARK_STRIP_TONE.ATTENTION },
+  { tone: STATUS_TONE.DANGER, viewed: true },
+  { tone: STATUS_TONE.ATTENTION, current: true },
+  { tone: STATUS_TONE.COMPLETE },
+  { tone: STATUS_TONE.ATTENTION },
   {},
 ];
 
 /** A changed file's bar for each of a pull request's files, a renamed one in the working tone, the file shown standing wider. */
 const BARS: readonly StripMark[] = [
-  { tone: MARK_STRIP_TONE.COMPLETE, viewed: true },
-  { tone: MARK_STRIP_TONE.ATTENTION },
-  { tone: MARK_STRIP_TONE.ATTENTION, current: true },
-  { tone: MARK_STRIP_TONE.WORKING },
-  { tone: MARK_STRIP_TONE.DANGER },
-  ...Array.from({ length: 40 }, () => ({ tone: MARK_STRIP_TONE.ATTENTION })),
+  { tone: STATUS_TONE.COMPLETE, viewed: true },
+  { tone: STATUS_TONE.ATTENTION },
+  { tone: STATUS_TONE.ATTENTION, current: true },
+  { tone: STATUS_TONE.WORKING },
+  { tone: STATUS_TONE.DANGER },
+  ...Array.from({ length: 40 }, () => ({ tone: STATUS_TONE.ATTENTION })),
 ];
 
 function PressShortcuts(): React.JSX.Element {
@@ -160,13 +158,6 @@ function PressShortcuts(): React.JSX.Element {
         >
           Fix token refresh on wake #4635
         </CommandLink>
-        {said}
-      </CatalogSection>
-      <CatalogSection id="press-skill" title="A chosen skill in a box's words">
-        <Text>
-          Run <SkillChip label="/testing" onOpen={() => setDone("Opened testing's SKILL.md")} /> on
-          the new store, then <SkillChip label="/orchestrate" /> the rest.
-        </Text>
         {said}
       </CatalogSection>
     </>

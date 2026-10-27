@@ -17,18 +17,20 @@ import { installAppPlatform } from "@luke/panel/app-platform";
 import { installPanelSpanRecorder } from "@luke/panel/panel-spans";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
+import { ReloadState } from "@luke/ui/error-boundary";
 import { Effect } from "effect";
 import type { ReactNode } from "react";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
 import { BLANK_WINDOW, type DesktopSentryOptions, startDesktopSentry } from "./desktop-sentry";
-import { createReportingRoot } from "./desktop-sentry-root";
+import { createReportingRoot, reloadWindow, WINDOW_FAILED } from "./desktop-sentry-root";
 
 /**
  * Installs the window's bridge and platform, draws `surface` into its root
  * once the window's document has been read, and then starts its tracing. A
- * window whose document cannot be read mounts nothing: a fallback would
- * protect nothing. What its SDK watches beyond every window's is `sentry`'s
- * to say: the panel's entry asks for its freezes to be reported.
+ * window whose document cannot be read draws that failure with Reload in
+ * place of the surface, rather than stand blank. What its SDK watches
+ * beyond every window's is `sentry`'s to say: the panel's entry asks for
+ * its freezes to be reported.
  */
 export function mountWindow(
   surface: ReactNode,
@@ -71,10 +73,10 @@ export function mountWindow(
       await pushes.opened;
       await Effect.runPromise(appStateFirstRead);
     } catch (error) {
-      console.error("The window's state could not be read; nothing is drawn.", error);
-      // A blank window is a failure, so it is sent as an event through this
-      // window's SDK and its filters, not only kept as the console's
-      // breadcrumb, once the SDK it waits for has loaded: with nothing to
+      console.error("The window's state could not be read; its surface is not drawn.", error);
+      // A window with no state is a failure, so it is sent as an event through
+      // this window's SDK and its filters, not only kept as the console's
+      // breadcrumb, once the SDK it waits for has loaded: with no surface to
       // draw, there is no paint to wait for. Note that it is captured here
       // rather than through main's Effect reporter, because providing a
       // reporter layer on this path put 90 to 130 KB gzipped on every
@@ -84,6 +86,7 @@ export function mountWindow(
         BLANK_WINDOW.FIRST_READ,
       );
       sentry.load();
+      draw(<ReloadState failure={WINDOW_FAILED} onReload={reloadWindow} />);
       return;
     }
     draw(<RegistryContext.Provider value={rendererRegistry}>{surface}</RegistryContext.Provider>);

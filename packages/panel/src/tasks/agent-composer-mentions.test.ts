@@ -19,7 +19,7 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import {
   encodeMention,
   MENTION_KIND,
@@ -207,6 +207,9 @@ const told: AnyAct[] = [];
 /** The repository the task's tree is read from now. */
 let standing = "acme/relay";
 
+/** The kinds of act main refuses now, as it does while GitHub or the service cannot be reached. */
+const refusing = new Set<string>();
+
 const noSkills: SkillSource = () => Promise.resolve({ skills: [] });
 
 const ignore = () => undefined;
@@ -222,6 +225,9 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 /** What main answers the box's acts with on the act port, every one told. */
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   told.push(request);
+  if (refusing.has(request.kind)) {
+    return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not reach it." });
+  }
   return Promise.resolve(
     request.kind === ACT_KIND.INTEGRATIONS_STATUS
       ? {
@@ -274,6 +280,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
 
 beforeEach(() => {
   standing = "acme/relay";
+  refusing.clear();
   newest = NEWEST_AGENTS;
   told.length = 0;
   installScrollIntoView();
@@ -614,7 +621,7 @@ test("an @ in the box offers the repository's skills, a pick written as the /nam
   );
   pressInComposer(container, "Enter");
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".luke-skill-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-skill-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -659,6 +666,46 @@ test("skills that could not be read for one @ list are asked for again by the ne
 
   assert.deepEqual(first, []);
   assert.deepEqual(groups(container), ["Skills"]);
+});
+
+test("an @ whose read of the skills came back unread says they could not be read, with Retry, and ends its reading; Retry reads them again", async () => {
+  let reachable = false;
+  const flaky: SkillSource = () =>
+    Promise.resolve(
+      reachable
+        ? {
+            skills: [
+              {
+                name: "release",
+                description: "Use to cut a release.",
+                source: TASK_SKILL_SOURCE.REPOSITORY,
+                path: ".agents/skills/release/SKILL.md",
+              },
+            ],
+          }
+        : { unread: "GitHub could not be reached." },
+    );
+  const { container } = await box(planPage([]), flaky);
+
+  typeInComposer(container, "Run @releas");
+  await settle();
+
+  const failed = listNote(container);
+  assert.match(failed.words, /Skills could not be read\./u);
+  assert.doesNotMatch(failed.words, /Reading/u);
+  assert.equal(container.querySelector(".mention-menu .luke-combobox-empty"), null);
+
+  reachable = true;
+  act(() => (failed.retry ?? assert.fail("no Retry")).click());
+  await settle();
+
+  assert.equal(listNote(container).words, "");
+  assert.deepEqual(
+    [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) =>
+      group.getAttribute("aria-label"),
+    ),
+    ["Skills"],
+  );
 });
 
 const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
@@ -869,6 +916,63 @@ test("an @ offers the workspace's agents after the task's own, each labelled by 
     ["Sweep flaky tests", "No task"],
   ]);
   assert.deepEqual(workspaceReads(), [{ workspaceId: "workspace-1" }]);
+});
+
+/** What the open list says after its rows, and the press that reads again. */
+function listNote(container: HTMLElement): { words: string; retry: HTMLButtonElement | null } {
+  const note = container.querySelector(".mention-menu .luke-combobox-note");
+  return {
+    words: note?.textContent ?? "",
+    retry:
+      [...(note?.querySelectorAll("button") ?? [])].find((button) =>
+        (button.textContent ?? "").includes("Retry"),
+      ) ?? null,
+  };
+}
+
+test("an @ whose read of the workspace's agents failed says they could not be read, with Retry, never that none match, and Retry reads them again", async () => {
+  refusing.add(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST);
+  const { container } = await workspaceBox();
+
+  typeInComposer(container, "See @");
+  await settle();
+
+  assert.match(listNote(container).words, /Agents could not be read\./u);
+  assert.equal(container.querySelector(".mention-menu .luke-combobox-empty"), null);
+  assert.deepEqual(agentsListed(container), [["Wire the desktop", "This task"]]);
+
+  refusing.clear();
+  const { retry } = listNote(container);
+  act(() => (retry ?? assert.fail("no Retry")).click());
+  await settle();
+
+  assert.equal(listNote(container).words, "");
+  assert.deepEqual(agentsListed(container), [
+    ["Wire the desktop", "This task"],
+    ["Bill by seat", "Billing"],
+    ["Sweep flaky tests", "No task"],
+  ]);
+});
+
+test("an @ whose read of the repository's files was refused ends its reading, says they could not be read, and Retry reads them again", async () => {
+  refusing.add(ACT_KIND.TASKS_TREE);
+  const { container } = await box(planPage([]));
+
+  typeInComposer(container, "Follow @roll");
+  await settle();
+
+  const failed = listNote(container);
+  assert.match(failed.words, /The repository's files could not be read\./u);
+  assert.doesNotMatch(failed.words, /Reading/u);
+  assert.equal(container.querySelector(".mention-menu .luke-combobox-empty"), null);
+  assert.deepEqual(listed(container), ["Rollout"]);
+
+  refusing.clear();
+  act(() => (failed.retry ?? assert.fail("no Retry")).click());
+  await settle();
+
+  assert.equal(listNote(container).words, "");
+  assert.deepEqual(listed(container), ["rollout-store.ts", "Rollout"]);
 });
 
 test("a word typed after @ finds an agent of another task by its task's name, and an archived one, read then and marked archived", async () => {
@@ -1098,7 +1202,7 @@ test("an @ row for a page still on its first version says how long ago it was wr
   assert.equal(option.querySelector(".luke-combobox-option-detail")?.textContent, "3h");
 });
 
-test("a sent mention of an agent of another task or none hangs a card naming where it works, never the task page's own card for an id it has no tab of", () => {
+test("a sent mention of an agent of another task or none hangs its card's one reading state while it is read, never the task page's own card for an id it has no tab of", () => {
   const mention = (agentId: string, taskId: string | undefined) =>
     mentionMarkdown(
       taskId === undefined
@@ -1126,8 +1230,10 @@ test("a sent mention of an agent of another task or none hangs a card naming whe
 
   const notes = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
     restOn(chip);
-    const card = document.querySelector(".luke-tooltip-card [data-mention-card]");
-    const words = card?.textContent ?? "";
+    const card = document.querySelector(".luke-tooltip-card > *");
+    const words = card?.hasAttribute("data-chip-card-reading")
+      ? "Reading"
+      : (/Not found/u.exec(card?.textContent ?? "")?.[0] ?? card?.textContent);
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
     });
@@ -1135,9 +1241,9 @@ test("a sent mention of an agent of another task or none hangs a card naming whe
   });
 
   assert.deepEqual(
-    notes.map((words) => /A coding agent on [a-z ]+task|Not found/u.exec(words)?.[0]),
-    ["Not found", "A coding agent on another task", "A coding agent on no task"],
-    "the task's own agent hangs its tab's card; another task's and one on none name where they work",
+    notes,
+    ["Not found", "Reading", "Reading"],
+    "the task's own agent hangs its tab's card; another task's and one on none wait on their read",
   );
 });
 
@@ -1168,7 +1274,13 @@ test("a page's address pasted in the app's own scheme is called by the name the 
       Promise.resolve(
         stateWith(
           {},
-          { tasks: { ...IDLE_TASKS_VIEW, pages: [{ ...PAGE, version: 1, at: 1_000 }] } },
+          {
+            tasks: {
+              ...IDLE_TASKS_VIEW,
+              activeTaskId: TASK_ID,
+              pages: [{ ...PAGE, version: 1, at: 1_000 }],
+            },
+          },
         ),
       ),
   });
@@ -1606,7 +1718,7 @@ test("a person picked from the @ list is drawn as their chip and sent as their p
   assert.deepEqual(sent, ["Ask [@Dana Reyes](https://tryluke.dev/acme/person/u_dana)"]);
 });
 
-test("a sent message's mention of a person is drawn as the chip wearing their mark that opens their page, its target on no attribute", async () => {
+test("a sent message's mention of a person is drawn as the chip wearing their mark and their name now that opens their page, its target on no attribute", async () => {
   const opened: ReadLink[] = [];
   const person = mentionMarkdown({ kind: MENTION_KIND.PERSON, userId: DANA_ID }, "Dana", PLACE);
   const container = drawn(
@@ -1625,7 +1737,7 @@ test("a sent message's mention of a person is drawn as the chip wearing their ma
   assert.ok(chip);
   act(() => chip.click());
 
-  assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "Dana");
+  assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "Dana Reyes");
   assert.equal(chip.dataset.kind, MENTION_KIND.PERSON);
   assert.equal(chip.querySelector(".actor-mark")?.getAttribute("data-kind"), ACTOR_KIND.PERSON);
   assert.deepEqual(opened, [

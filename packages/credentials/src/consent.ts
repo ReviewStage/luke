@@ -7,6 +7,7 @@
  * which reaches `node:http`; nothing here does, so the manager loads where
  * Node does not.
  */
+import type { SignInFailure } from "@luke/features/words";
 import type { Effect, Scope } from "effect";
 import type { LoopbackConnectionSource } from "./loopback-page.js";
 
@@ -16,8 +17,15 @@ import type { LoopbackConnectionSource } from "./loopback-page.js";
  */
 export const LOOPBACK_CONSENT_CANCELLED = "Sign-in was cancelled.";
 
-/** What one finished consent trip settled on. `reason` is a sentence for a row. */
-export type LoopbackConsentOutcome<Grant> = Grant | { reason: string };
+/**
+ * What one finished consent trip settled on. `reason` is a sentence for a row;
+ * `failure` names which of the trip's own ends it was, where it was one, for a
+ * screen that says it in words of its own. A reason a flow's exchange wrote
+ * names none.
+ */
+export type LoopbackConsentOutcome<Grant> =
+  | Grant
+  | { reason: string; failure?: SignInFailure | undefined };
 
 /** One landing card's words. The tone and the mark are the flow's own. */
 export interface LoopbackConsentCard {
@@ -101,6 +109,13 @@ export interface LoopbackConsentOptions<Grant> {
    * reaches for Electron itself.
    */
   openExternal(url: string): void | Promise<void>;
+  /**
+   * Whether this machine has a network now, as the shell's platform probes
+   * it: a trip asked while it answers no ends at once rather than opening a
+   * page nobody can load and waiting out the timeout. The shell's seam fills
+   * it in; omitted, the trip takes the machine as online.
+   */
+  isOnline?: (() => boolean) | undefined;
   timeoutMs?: number | undefined;
 }
 

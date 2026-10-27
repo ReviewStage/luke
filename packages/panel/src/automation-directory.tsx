@@ -24,6 +24,8 @@ interface Shelf {
   readonly workspaceName: string | undefined;
   /** Whether this directory, or one standing around it, reads the workspace's automations. */
   readonly reading: boolean;
+  /** Whether that read has answered, the automations or why it was refused. */
+  readonly settled: boolean;
   readonly onOpen: (automationId: string) => void;
 }
 
@@ -63,10 +65,11 @@ export function AutomationDirectory({
   const own = read !== undefined && "automations" in read ? read.automations : undefined;
   const automations = shared ? outer?.automations : own;
   const reading = reads || shared;
+  const settled = shared ? outer?.settled === true : read !== undefined;
   const workspaceName = workspace?.name;
   const shelf = useMemo(
-    () => ({ automations, workspaceId, workspaceName, reading, onOpen }),
-    [automations, workspaceId, workspaceName, reading, onOpen],
+    () => ({ automations, workspaceId, workspaceName, reading, settled, onOpen }),
+    [automations, workspaceId, workspaceName, reading, settled, onOpen],
   );
   return <ShelfContext.Provider value={shelf}>{children}</ShelfContext.Provider>;
 }
@@ -82,4 +85,10 @@ export function useAutomation(automationId: string | undefined): KnownAutomation
     workspaceName: shelf.workspaceName,
     onOpen: () => shelf.onOpen(automation.id),
   };
+}
+
+/** Whether the automations the directory around the caller reads have answered, or no read of them stands, so a card no longer waits on them. */
+export function useAutomationsLanded(): boolean {
+  const shelf = useContext(ShelfContext);
+  return shelf === undefined || !shelf.reading || shelf.settled;
 }

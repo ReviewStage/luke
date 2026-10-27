@@ -959,6 +959,38 @@ test("Assigned to and Created by each offer Anyone, then you as Me, then each te
   assert.deepEqual(offered, [people, people]);
 });
 
+test("Assigned to says the members could not be read, with Retry, after Anyone, and Retry reads them again and leaves the menu standing", async () => {
+  let reads = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
+      reads += 1;
+      return reads === 1 ? Promise.reject(new Error("offline")) : Promise.resolve(MEMBERS);
+    },
+  });
+  const sidebar = await mountRead(ACME, ASSIGNED);
+  const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(button, "the Tasks head offers View options");
+  act(() => button.click());
+  act(() => menuItem("Assigned to").click());
+  const offered = () => {
+    const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
+    return [
+      ...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]') ??
+        []),
+    ].map((item) => [
+      itemLabel(item),
+      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+    ]);
+  };
+
+  const failed = offered();
+  await act(async () => menuItem("Members could not be read.").click());
+
+  assert.deepEqual(failed.at(-1), ["Members could not be read.", "Retry"]);
+  assert.ok(offered().some(([label]) => label === "Charles Pan"));
+  assert.ok(offered().every(([label]) => label !== "Members could not be read."));
+});
+
 test("a person's group header, by assignee or by creator, hangs their card", async () => {
   const sidebar = await mountRead(ACME, ASSIGNED);
   const header = (name: string) =>

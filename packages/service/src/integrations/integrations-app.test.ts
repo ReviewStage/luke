@@ -9,7 +9,6 @@ import {
   INTEGRATION_ACCOUNTS_MAX,
   INTEGRATION_LANDING_STATUS,
   INTEGRATION_PROVIDER,
-  INTEGRATION_SIGN_IN_FAILURE,
   INTEGRATION_STATUS,
   type IntegrationAccount,
   type IntegrationProvider,
@@ -18,7 +17,7 @@ import {
 } from "@luke/features/integration-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { fakeHttpClientLayer, noNetwork } from "@luke/wire/testing";
-import { Clock, type Context, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Schema } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -36,10 +35,8 @@ import {
 import {
   firstIntegrationAccount,
   GRANTING_SIGN_IN_URL,
-  GRANTING_SIGN_IN_VERIFIER,
   integrationConnectOver,
 } from "../testing/integration-connect.js";
-import { CONNECT_SIGN_IN_RESULT, type ConnectSignInResult } from "./integration-connect.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
@@ -150,9 +147,8 @@ function githubServer(listed: () => readonly string[]) {
 /**
  * The group over the test's database and a deployment with these variables
  * and this GitHub App, none unless given, each bearer the account it names,
- * over a Connect that grants everything unless it `declines` and says the
- * sign-ins it began `ends` as given, and over the real store unless `seams`
- * stands in for part of it.
+ * over a Connect that grants everything unless it `declines`, and over the
+ * real store unless `seams` stands in for part of it.
  */
 const standing = (
   variables: Readonly<Record<string, string>>,
@@ -160,7 +156,6 @@ const standing = (
   network: Layer.Layer<HttpClient.HttpClient> = noNetwork,
   connect: {
     readonly declines?: boolean;
-    readonly ends?: ConnectSignInResult;
     readonly names?: (subject: string) => string | undefined;
     readonly grantsOnce?: boolean;
   } = {},
@@ -262,17 +257,6 @@ const standing = (
             text: yield* Effect.promise(() => response.text()),
           };
         }),
-      /** Where Slack stands for the account, and the sign-in failures the read found. */
-      slackRead: (userId: string) =>
-        Effect.map(ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }), ({ body }) => {
-          // SAFETY: a statuses answer is a record of every provider's word, and the failures it found.
-          const read = body as { integrations: Record<string, string>; signInFailures?: unknown };
-          return {
-            status: read.integrations[SLACK],
-            failures: read.signInFailures,
-            answer: JSON.stringify(body),
-          };
-        }),
       /** Where Slack stands for the account. */
       slackStatus: (userId: string) =>
         Effect.map(
@@ -309,12 +293,7 @@ const standing = (
       slackLanding: (userId: string) =>
         Effect.gen(function* () {
           const state = mintIntegrationState();
-          yield* beginIntegrationSignIn(
-            userId,
-            firstIntegrationAccount(userId, SLACK),
-            state,
-            Redacted.make(GRANTING_SIGN_IN_VERIFIER),
-          );
+          yield* beginIntegrationSignIn(userId, firstIntegrationAccount(userId, SLACK), state);
           const response = yield* fetch(
             `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_CONNECTED}?state=${state}`,
           );
@@ -389,7 +368,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           lapsed,
           firstIntegrationAccount(lapsed, SLACK),
           "state-before",
-          Redacted.make("connect-verifier"),
         );
         yield* completeIntegrationSignIn(lapsed, SLACK, "state-before");
         yield* expireIntegrationConnection(lapsed, SLACK);
@@ -427,33 +405,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           { provider: SLACK, connection: SLACK, status: INTEGRATION_STATUS.PENDING },
         ]);
         assert.equal(yield* group.slackStatus(account), INTEGRATION_STATUS.CONNECTED);
-      }),
-  );
-
-  it.effect(
-    "a read a session cookie names leaves a sign-in Connect says was cancelled for the bearer's read to end and say so",
-    () =>
-      Effect.gen(function* () {
-        const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
-          declines: true,
-          ends: { kind: CONNECT_SIGN_IN_RESULT.CANCELED },
-        });
-        const account = yield* openAccount("noa@cookie-read.example");
-        assert.equal((yield* group.connectSlack(account)).status, HOSTED_HTTP_STATUS.OK);
-
-        const browsed = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, {
-          cookieOf: account,
-        });
-        assert.equal(statusIn(browsed.body, SLACK), INTEGRATION_STATUS.PENDING);
-        assert.equal(
-          Schema.decodeUnknownSync(integrationStatusesAnswerSchema)(browsed.body).signInFailures,
-          undefined,
-        );
-        const read = yield* group.slackRead(account);
-        assert.equal(read.status, INTEGRATION_STATUS.DISCONNECTED);
-        assert.deepEqual(read.failures, [
-          { provider: SLACK, connection: SLACK, reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED },
-        ]);
       }),
   );
 
@@ -528,7 +479,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           lapsed,
           firstIntegrationAccount(lapsed, SLACK),
           "state-lapsed",
-          Redacted.make("connect-verifier"),
         );
         yield* completeIntegrationSignIn(lapsed, SLACK, "state-lapsed");
         yield* expireIntegrationConnection(lapsed, SLACK);
@@ -570,7 +520,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
                   userId,
                   firstIntegrationAccount(userId, SLACK),
                   "state-reopened",
-                  Redacted.make("connect-verifier"),
                 ),
                 endIntegrationSignIn(userId, connectionName, state),
               ),
@@ -585,85 +534,21 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
   );
 
   it.effect(
-    "a sign-in Connect says was cancelled on its own page is ended by the next read, which says so once, and Connect's handle never leaves the service",
+    "a sign-in that never comes back stands pending at every read until its window runs out, then disconnected",
     () =>
       Effect.gen(function* () {
-        const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
-          declines: true,
-          ends: { kind: CONNECT_SIGN_IN_RESULT.CANCELED },
-        });
-        const account = yield* openAccount("ana@cancelled-at-connect.example");
+        const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, { declines: true });
+        const account = yield* openAccount("ana@never-back.example");
         const begun = yield* group.connectSlack(account);
         assert.deepEqual(begun.body, { url: GRANTING_SIGN_IN_URL, connection: SLACK });
 
-        const ending = yield* group.slackRead(account);
-        assert.equal(ending.status, INTEGRATION_STATUS.DISCONNECTED);
-        assert.deepEqual(ending.failures, [
-          { provider: SLACK, connection: SLACK, reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED },
-        ]);
-        assert.ok(!ending.answer.includes(GRANTING_SIGN_IN_VERIFIER));
-
-        const after = yield* group.slackRead(account);
-        assert.equal(after.status, INTEGRATION_STATUS.DISCONNECTED);
-        assert.equal(after.failures, undefined);
+        assert.equal(yield* group.slackStatus(account), INTEGRATION_STATUS.PENDING);
+        yield* TestClock.adjust("14 minutes");
+        assert.equal(yield* group.slackStatus(account), INTEGRATION_STATUS.PENDING);
+        yield* TestClock.adjust("2 minutes");
+        assert.equal(yield* group.slackStatus(account), INTEGRATION_STATUS.DISCONNECTED);
       }),
   );
-
-  it.effect(
-    "a sign-in Connect says was refused answers Connect's own line as why, and an expired row stands expired again",
-    () =>
-      Effect.gen(function* () {
-        const message = "The provider rejected the authorization-code exchange";
-        const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
-          declines: true,
-          ends: { kind: CONNECT_SIGN_IN_RESULT.FAILED, message },
-        });
-        const lapsed = yield* openAccount("bo@refused.example");
-        yield* beginIntegrationSignIn(
-          lapsed,
-          firstIntegrationAccount(lapsed, SLACK),
-          "state-before",
-          Redacted.make("connect-verifier"),
-        );
-        yield* completeIntegrationSignIn(lapsed, SLACK, "state-before");
-        yield* expireIntegrationConnection(lapsed, SLACK);
-        assert.equal((yield* group.connectSlack(lapsed)).status, HOSTED_HTTP_STATUS.OK);
-
-        const read = yield* group.slackRead(lapsed);
-        assert.equal(read.status, INTEGRATION_STATUS.EXPIRED);
-        assert.deepEqual(read.failures, [
-          {
-            provider: SLACK,
-            connection: SLACK,
-            reason: INTEGRATION_SIGN_IN_FAILURE.ERROR,
-            message,
-          },
-        ]);
-        assert.equal(yield* group.slackStatus(lapsed), INTEGRATION_STATUS.EXPIRED);
-      }),
-  );
-
-  it.effect(
-    "a browser back without a grant from a sign-in Connect says was refused leaves it for the next read to say why",
-    () =>
-      Effect.gen(function* () {
-        const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
-          declines: true,
-          ends: { kind: CONNECT_SIGN_IN_RESULT.FAILED },
-        });
-        const account = yield* openAccount("dee@denied.example");
-        assert.equal(
-          yield* group.slackLanding(account),
-          integrationLandingPath(SLACK, INTEGRATION_LANDING_STATUS.NOT_COMPLETED),
-        );
-        const read = yield* group.slackRead(account);
-        assert.equal(read.status, INTEGRATION_STATUS.DISCONNECTED);
-        assert.deepEqual(read.failures, [
-          { provider: SLACK, connection: SLACK, reason: INTEGRATION_SIGN_IN_FAILURE.ERROR },
-        ]);
-      }),
-  );
-
   it.effect("an exact email entry offers the integration to that account alone", () =>
     Effect.gen(function* () {
       const group = yield* standing({
@@ -871,7 +756,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
                       owner,
                       firstIntegrationAccount(owner, NOTION),
                       "restarted-state",
-                      Redacted.make("connect-verifier"),
                     ),
                   )
                 : endIntegrationSignIn(owner, connectionName, state),
@@ -912,7 +796,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
                     owner,
                     { provider: NOTION, connectionName, connectSubject: `${connectionName}-raced` },
                     `${connectionName}-raced-state`,
-                    Redacted.make("connect-verifier"),
                   ),
                 ),
               ),
@@ -944,12 +827,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const userId = yield* openAccount("dee@replaced.example");
         const first = (state: string) =>
           Effect.andThen(
-            beginIntegrationSignIn(
-              userId,
-              firstIntegrationAccount(userId, NOTION),
-              state,
-              Redacted.make("connect-verifier"),
-            ),
+            beginIntegrationSignIn(userId, firstIntegrationAccount(userId, NOTION), state),
             completeIntegrationSignIn(userId, NOTION, state),
           );
         yield* first(`state-read-${userId}`);
@@ -979,13 +857,10 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
   );
 
   it.effect(
-    "a read that ends the sign-ins holding a provider's places offers the provider again in that same read",
+    "a read past the window of the sign-ins holding a provider's places offers the provider again in that same read",
     () =>
       Effect.gen(function* () {
-        const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, {
-          declines: true,
-          ends: { kind: CONNECT_SIGN_IN_RESULT.CANCELED },
-        });
+        const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, { declines: true });
         const userId = yield* openAccount("ended@five-notions.example");
         const add = (query: string) =>
           group.ask(`/api/account/integrations/${NOTION}/connect${query}`, {
@@ -994,6 +869,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           });
         yield* add("");
         for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) yield* add("?add=true");
+        yield* TestClock.adjust("16 minutes");
         const read = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
 
         assert.equal(accountsIn(read.body).length, 0);
@@ -1011,7 +887,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           userId,
           firstIntegrationAccount(userId, NOTION),
           `state-before-labels-${userId}`,
-          Redacted.make("connect-verifier"),
         );
         yield* completeIntegrationSignIn(userId, NOTION, `state-before-labels-${userId}`);
         const labelsOf = (group: { ask: typeof upgraded.ask }) =>
@@ -1038,7 +913,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           userId,
           firstIntegrationAccount(userId, NOTION),
           `state-reconnect-${userId}`,
-          Redacted.make("connect-verifier"),
         );
         yield* completeIntegrationSignIn(userId, NOTION, `state-reconnect-${userId}`);
         let named = "Acme";
@@ -1072,7 +946,6 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           userId,
           firstIntegrationAccount(userId, NOTION),
           `state-unnamed-${userId}`,
-          Redacted.make("connect-verifier"),
         );
         yield* completeIntegrationSignIn(userId, NOTION, `state-unnamed-${userId}`);
         const unnamed = yield* standing(NOTION_CONNECTOR);

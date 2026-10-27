@@ -10,12 +10,10 @@ import {
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
-  INBOX_STATUS,
-  INBOX_WIRE_VERSION,
+  type InboxResponse,
+  inboxAcknowledgeRequestSchema,
   inboxAnswerFileSchema,
   inboxAnswersRefusal,
-  inboxAskResponse,
-  inboxItemSchema,
   inboxMessageSchema,
   inboxReplyAnswers,
   inboxReplyRefusal,
@@ -32,18 +30,16 @@ import {
 } from "./service-wire.js";
 
 /**
- * inbox-asks.test.ts -- version 5 of the inbox wire: an ask on a thread's
- * message and the answer to it, how each reads off the wire, a desktop
- * before version 5 reading the same item, the mapping between an ask and
- * the version 4 response nearest it both ways, an older desktop's answer
- * read as the answer to the open ask, and every answer an ask refuses.
+ * inbox-asks.test.ts -- the inbox wire's asks: an ask on a thread's
+ * message and the answer to it, how each reads off the wire, the ask a
+ * response stands for, an answer given against a response read as the
+ * answer to that ask, and every answer an ask refuses.
  * Synthetic items throughout.
  */
 
 const ASKING_ID = "6f1c2a4e-1b9d-4c7e-9a52-3d8e0f4b7c11";
 const ANSWERING_ID = "0d3e5b7a-2c4f-4e8a-b1d6-9f7a3c5e2b40";
 const ITEM_ID = "a4b2c6d8-3e5f-4a7b-8c9d-1e2f3a4b5c6d";
-const AGENT_ID = "b1c3d5e7-4f6a-4b8c-9d0e-2f3a4b5c6d7e";
 const MEMBER = { userId: "user-dean", name: "Dean" };
 
 const DEPLOY = {
@@ -84,49 +80,18 @@ const ANSWERING = {
   createdAt: 2_000,
 };
 
-/** An item as a version 5 service writes it: its response a view of the ask, its thread carrying the ask and its answer. */
-const ITEM = {
-  id: ITEM_ID,
-  agentId: AGENT_ID,
-  key: "deploy-billing",
-  revision: 1,
-  version: INBOX_WIRE_VERSION,
-  title: "Deploy the billing export?",
-  blocks: [{ type: "markdown", text: "Ready to deploy the billing export." }],
-  response: inboxAskResponse(DEPLOY),
-  needsReply: true,
-  status: INBOX_STATUS.ANSWERED,
-  answer: { reply: INBOX_REPLY.CHOSE, choices: ["Ship it"], note: "Go ahead." },
-  messages: [ASKING, ANSWERING],
-  postedAt: 1_000,
-  updatedAt: 2_000,
-};
-
-/**
- * A message as a desktop before version 5 declares one, written out as it
- * stood, so the test reads what a released build reads rather than this
- * build's schema with its new keys taken off.
- */
-const v4MessageSchema = Schema.Struct({
-  id: wireUuidSchema,
-  author: Schema.Literals(Object.values(INBOX_MESSAGE_AUTHOR)),
-  member: Schema.optionalKey(memberRefSchema),
-  text: Schema.String,
-  files: Schema.optionalKey(Schema.Array(inboxAnswerFileSchema)),
-  createdAt: countedNumber,
-});
-const v4ItemSchema = Schema.Struct({
-  ...inboxItemSchema.fields,
-  messages: Schema.optionalKey(Schema.Array(v4MessageSchema)),
-});
-
 /**
  * A message as a desktop that reads a choice's one recommended label
  * declares it, written out as it stood, so the test reads what a released
  * build reads of a choice recommending several.
  */
 const oneRecommendedMessageSchema = Schema.Struct({
-  ...v4MessageSchema.fields,
+  id: wireUuidSchema,
+  author: Schema.Literals(Object.values(INBOX_MESSAGE_AUTHOR)),
+  member: Schema.optionalKey(memberRefSchema),
+  text: Schema.String,
+  files: Schema.optionalKey(Schema.Array(inboxAnswerFileSchema)),
+  createdAt: countedNumber,
   ask: Schema.Struct({
     type: Schema.Literal(INBOX_ASK.DECIDE),
     options: Schema.Array(
@@ -160,6 +125,12 @@ test("a message reads with its ask and where it stands, with the answer it carri
   assert.deepEqual(read(inboxMessageSchema, replaced), replaced);
 });
 
+test("a nod on a notice is a revision, the acknowledgement, and a key, and takes no other answer", () => {
+  const nod = { revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED, clientKey: "nod-1" };
+  assert.deepEqual(read(inboxAcknowledgeRequestSchema, nod), nod);
+  assert.equal(read(inboxAcknowledgeRequestSchema, { ...nod, reply: INBOX_REPLY.DONE }), undefined);
+});
+
 test("a known ask that fails its own shape is refused, and an ask without where it stands is too", () => {
   const oneOption = {
     ...ASKING,
@@ -185,24 +156,6 @@ test("an ask of a type this build does not know reads as its type and where it s
   });
 });
 
-test("a desktop before version 5 reads a version 5 item whole, its response the ask's view and its messages without the new keys", () => {
-  const v4 = read(v4ItemSchema, ITEM);
-  assert.notEqual(v4, undefined);
-  assert.deepEqual(v4?.response, {
-    type: INBOX_RESPONSE.CHOICE,
-    options: DEPLOY.options,
-    recommended: "Ship it",
-  });
-  assert.deepEqual(
-    v4?.messages?.map((message) => Object.keys(message).sort()),
-    [
-      ["author", "createdAt", "id", "text"],
-      ["author", "createdAt", "id", "member", "text"],
-    ],
-  );
-  assert.deepEqual(read(inboxItemSchema, ITEM)?.messages, [ASKING, ANSWERING]);
-});
-
 test("a decide posted recommending several is kept as its first label and every label, which a desktop reading one label reads as its first", () => {
   const options = [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }];
   const posted = read(inboxThreadPostInputSchema, {
@@ -225,22 +178,7 @@ test("a decide posted recommending several is kept as its first label and every 
   });
 });
 
-test("an ask maps to the version 4 response nearest it", () => {
-  assert.deepEqual(inboxAskResponse({ ...DEPLOY, multiple: true }), {
-    type: INBOX_RESPONSE.CHOICE,
-    options: DEPLOY.options,
-    multiple: true,
-    recommended: "Ship it",
-  });
-  assert.deepEqual(inboxAskResponse(SECRET), { type: INBOX_RESPONSE.TODO });
-  assert.deepEqual(inboxAskResponse(REGION), {
-    type: INBOX_RESPONSE.FORM,
-    fields: REGION.fields,
-  });
-  assert.deepEqual(inboxAskResponse(WORDS), { type: INBOX_RESPONSE.TEXT });
-});
-
-test("an agent's answer ask keeps the option its select recommends, as the version 4 response it posts does", () => {
+test("an agent's answer ask keeps the option its select recommends", () => {
   const ask = {
     type: INBOX_ASK.ANSWER,
     fields: [
@@ -259,13 +197,9 @@ test("an agent's answer ask keeps the option its select recommends, as the versi
     ask,
   });
   assert.deepEqual(posted?.ask, ask);
-  assert.deepEqual(posted?.ask && inboxAskResponse(posted.ask), {
-    type: INBOX_RESPONSE.FORM,
-    fields: ask.fields,
-  });
 });
 
-test("a stored version 4 response maps to the ask it stands for, and an acknowledgement to none", () => {
+test("a response maps to the ask it stands for, and an acknowledgement to none", () => {
   const options = [{ label: "Postgres" }, { label: "SQLite", detail: "Simpler." }];
   assert.deepEqual(
     inboxResponseAsk({
@@ -294,51 +228,48 @@ test("a stored version 4 response maps to the ask it stands for, and an acknowle
   assert.equal(inboxResponseAsk({ type: INBOX_RESPONSE.NONE }), undefined);
 });
 
-test("an older desktop's answer reads as the answer to the open ask, Done ticking every step", () => {
-  const asking = (ask: Parameters<typeof inboxAskResponse>[0]) => ({
-    id: ASKING_ID,
-    ask,
-    view: inboxAskResponse(ask),
-  });
-  // A stored approval keeps its own response as the view an older desktop answers.
-  const stored = { type: INBOX_RESPONSE.APPROVAL } as const;
-  const approval = inboxResponseAsk(stored);
-  assert.notEqual(approval, undefined);
-  if (approval === undefined) return;
-  const approvalAsking = { id: ASKING_ID, ask: approval, view: stored };
+test("an answer given against a response reads as the answer to the ask it stands for, Done ticking every step", () => {
+  const asking = (view: InboxResponse) => {
+    const ask = inboxResponseAsk(view);
+    assert.notEqual(ask, undefined);
+    return ask === undefined ? undefined : { id: ASKING_ID, ask, view };
+  };
+  const choice = { type: INBOX_RESPONSE.CHOICE, options: DEPLOY.options } as const;
+  const todo = { type: INBOX_RESPONSE.TODO } as const;
+  const form = { type: INBOX_RESPONSE.FORM, fields: REGION.fields } as const;
   const cases = [
     [
-      asking(DEPLOY),
+      asking(choice),
       { reply: INBOX_REPLY.CHOSE, choices: ["Wait"], note: "Not today." },
       { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: ["Wait"] },
     ],
     [
-      approvalAsking,
+      asking({ type: INBOX_RESPONSE.APPROVAL }),
       { reply: INBOX_REPLY.APPROVED },
       { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: [INBOX_APPROVAL_OPTION.APPROVE] },
     ],
     [
-      approvalAsking,
+      asking({ type: INBOX_RESPONSE.APPROVAL }),
       { reply: INBOX_REPLY.DECLINED },
       { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: [INBOX_APPROVAL_OPTION.DECLINE] },
     ],
     [
-      asking(DEPLOY),
+      asking(choice),
       { reply: INBOX_REPLY.ANSWERED, note: "Neither." },
       { ask: ASKING_ID, reply: INBOX_REPLY.ANSWERED },
     ],
     [
-      asking(SECRET),
+      asking(todo),
       { reply: INBOX_REPLY.DONE },
-      { ask: ASKING_ID, reply: INBOX_REPLY.DONE, steps: [0, 1] },
+      { ask: ASKING_ID, reply: INBOX_REPLY.DONE, steps: [] },
     ],
     [
-      asking(SECRET),
+      asking(todo),
       { reply: INBOX_REPLY.NOT_DONE },
       { ask: ASKING_ID, reply: INBOX_REPLY.NOT_DONE },
     ],
     [
-      asking(REGION),
+      asking(form),
       { reply: INBOX_REPLY.SUBMITTED, values: [{ label: "Region", value: "eu-west" }] },
       {
         ask: ASKING_ID,
@@ -348,9 +279,10 @@ test("an older desktop's answer reads as the answer to the open ask, Done tickin
     ],
   ] as const;
   for (const [open, reply, answers] of cases) {
-    // The older desktop's answer fits the view it was given, and its reading fits the ask.
+    if (open === undefined) continue;
+    // The answer fits the response it was given against, and its reading fits the ask.
     const note: string | undefined = "note" in reply ? reply.note : undefined;
-    assert.equal(inboxReplyRefusal({ response: open.view }, reply), undefined, reply.reply);
+    assert.equal(inboxReplyRefusal(open.view, reply), undefined, reply.reply);
     const read = inboxReplyAnswers(open, reply);
     assert.deepEqual(read, answers, reply.reply);
     assert.equal(
@@ -359,7 +291,9 @@ test("an older desktop's answer reads as the answer to the open ask, Done tickin
       reply.reply,
     );
   }
-  assert.equal(inboxReplyAnswers(asking(WORDS), { reply: INBOX_REPLY.ACKNOWLEDGED }), undefined);
+  const words = asking({ type: INBOX_RESPONSE.TEXT });
+  assert.ok(words !== undefined);
+  assert.equal(inboxReplyAnswers(words, { reply: INBOX_REPLY.ACKNOWLEDGED }), undefined);
 });
 
 test("a decide takes a pick of its offered options, or words or files where none fits", () => {
@@ -502,7 +436,7 @@ test("a form filled in part is taken with a required field left empty, as is one
     "a required field left empty is absent, never there blank",
   );
 
-  const form = { response: { type: INBOX_RESPONSE.FORM, fields: REGION.fields } };
+  const form = { type: INBOX_RESPONSE.FORM, fields: REGION.fields } as const;
   const reply = { reply: INBOX_REPLY.SUBMITTED, values: partial.values };
   assert.equal(inboxReplyRefusal(form, reply), undefined);
   assert.equal(inboxReplyRefusal(form, { ...reply, values: [], note: "Either." }), undefined);

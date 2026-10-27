@@ -6,9 +6,10 @@ import type {
 } from "@luke/features/admin-answer-wire";
 import { RETENTION_BASIS, type RetentionBasis } from "@luke/features/admin-overview-vocabulary";
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
+import { formatCount, formatPercent } from "@luke/features/number-format";
+import { formatDate } from "@luke/features/time-format";
 import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
-import { formatCount, formatDate } from "@luke/ui/time-format";
 import { useState } from "react";
 import {
   ACCOUNTS_TABLE_MIN_WIDTH,
@@ -16,6 +17,7 @@ import {
   AccountsTableSkeleton,
 } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminReadView } from "../admin-read-view.js";
 import { ActivityChart, ActivityChartSkeleton } from "../charts/activity-chart.js";
 import { CHART_PAIR_WIDE, TrendMove } from "../charts/chart-frame.js";
 import { RetentionGrid, RetentionGridSkeleton } from "../charts/retention-grid.js";
@@ -27,13 +29,12 @@ import {
 } from "../charts/share-bars.js";
 import { SignupsChart, SignupsChartSkeleton } from "../charts/signups-chart.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
-import { AdminErrorState } from "../chrome/cards.js";
-import { AdminViewOptions, Refreshing, windowWords } from "../chrome/controls.js";
+import { AdminViewOptions, windowWords } from "../chrome/controls.js";
 import { ActivityNote, RetentionNote, TopAccountsNote } from "../chrome/notes.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
-import { type AdminReadHandle, adminReadFailure, useAdminRead } from "../use-admin-read.js";
+import { type AdminReadHandle, useAdminRead } from "../use-admin-read.js";
 
 const METRICS_ERROR = "The metrics endpoint did not answer.";
 
@@ -92,7 +93,7 @@ const OVERVIEW_ACCOUNT_COLUMNS: readonly AccountsDetailColumn<AdminOverviewAccou
 ];
 
 function percentOf(part: number, whole: number): string {
-  return `${Math.round((part / whole) * 100)}%`;
+  return formatPercent(part / whole);
 }
 
 /** A tile's move against the run before, and what else it says. */
@@ -348,38 +349,32 @@ export function DashboardScreen({
     onOpenDay,
   };
 
-  switch (state.status) {
-    case "loading":
-      return frame(
+  return adminReadView({
+    read: { state, refreshing, reload },
+    gate,
+    email: account?.email,
+    onSignOut: signOut,
+    failure: METRICS_ERROR,
+    loading: () =>
+      frame(
         <PageSkeleton title={OVERVIEW_TITLE} note={windowWords(windowDays)} controls={controls}>
           <DashboardSections metrics={undefined} {...sections} />
         </PageSkeleton>,
-      );
-    case "signed-out":
-      return gate.signedOut();
-    case "forbidden":
-      return gate.forbidden({ email: account?.email, onSignOut: signOut });
-    case "missing":
-    case "error":
-      return frame(
+      ),
+    failed: (error) =>
+      frame(
         <AdminPage title={OVERVIEW_TITLE} note={windowWords(windowDays)} controls={controls}>
-          <AdminErrorState
-            detail={adminReadFailure(state, METRICS_ERROR)}
-            refreshing={refreshing}
-            onRetry={reload}
-          />
+          {error}
         </AdminPage>,
-      );
-    case "ready":
-      return frame(
+      ),
+    // A refetch dims the answer already on screen rather than replacing it:
+    // the numbers below stay the last ones actually read, and the dimming
+    // says so while the next read is in flight.
+    ready: (metrics, refreshed) =>
+      frame(
         <AdminPage title={OVERVIEW_TITLE} note={windowWords(windowDays)} controls={controls}>
-          {/* A refetch dims the answer already on screen rather than replacing it:
-          the numbers below stay the last ones actually read, and the dimming
-          says so while the next read is in flight. */}
-          <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <DashboardSections metrics={state.value} {...sections} />
-          </Refreshing>
+          {refreshed(<DashboardSections metrics={metrics} {...sections} />)}
         </AdminPage>,
-      );
-  }
+      ),
+  });
 }

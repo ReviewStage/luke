@@ -98,6 +98,13 @@ function vercel() {
   const clock = { now: 0 };
   /** What the test does once, the next time a sandbox is read by name, before the read is answered. */
   const hooks: { onceOnRead?: (() => Promise<void>) | undefined } = {};
+  /**
+   * Whether a read that waits on a running command's exit is held until the
+   * command exits, as Vercel holds it, rather than answered at once with no
+   * exit, as a read something between cut short is; and how many such reads
+   * were made, and the held ones' release.
+   */
+  const exitReads = { hold: false, made: 0, held: [] as (() => void)[] };
   let next = 0;
   const id = (prefix: string) => {
     next += 1;
@@ -215,6 +222,17 @@ function vercel() {
     assert.ok(commandCall !== null, `an unexpected call: ${method} ${path}`);
     const command = commands.find((each) => each.id === commandCall[1]);
     if (command === undefined) return new Response(null, { status: 404 });
+    if (parsed.searchParams.get("wait") === "true") {
+      exitReads.made += 1;
+      if (exitReads.hold && command.exitCode === null) {
+        await new Promise<void>((exited, gaveUp) => {
+          exitReads.held.push(exited);
+          init.signal?.addEventListener("abort", () => gaveUp(new Error("the reader gave up")), {
+            once: true,
+          });
+        });
+      }
+    }
     return commandRead(command, parsed, init, false);
   };
   return {
@@ -226,9 +244,11 @@ function vercel() {
     goneSnapshots,
     clock,
     hooks,
-    /** The build of the template named ends with the exit code given. */
+    exitReads,
+    /** The build of the template named ends with the exit code given, which lets go every read held on it. */
     finishBuild: (exitCode: number) => {
       for (const command of commands) command.exitCode = command.exitCode ?? exitCode;
+      for (const exited of exitReads.held.splice(0)) exited();
     },
   };
 }
@@ -322,6 +342,55 @@ it.effect(
       for (const each of answered) {
         assert.deepEqual(each, { state: TEMPLATE_STATE.READY, snapshotId: fake.snapshots[0] });
       }
+    }),
+);
+
+/** Real turns of the event loop enough for a forked fiber to reach whatever it waits on next. */
+const turnsPass = Effect.promise(async () => {
+  for (let turn = 0; turn < 50; turn += 1) {
+    await new Promise<void>((settle) => setImmediate(settle));
+  }
+});
+
+it.effect(
+  "a launch waiting on a build reads the template again the moment the build exits, with no clock between",
+  () =>
+    Effect.gen(function* () {
+      const fake = vercel();
+      fake.exitReads.hold = true;
+      const { api, build } = yield* setUp(fake);
+
+      const launch = yield* Effect.forkChild(awaitTemplate(api, build));
+      yield* turnsPass;
+      assert.equal(fake.exitReads.held.length, 1);
+      assert.equal(fake.snapshots.length, 0);
+      fake.finishBuild(0);
+      const ready = yield* Fiber.join(launch);
+
+      assert.deepEqual(ready, { state: TEMPLATE_STATE.READY, snapshotId: fake.snapshots[0] });
+      assert.equal(fake.commands.length, 1);
+    }),
+);
+
+it.effect(
+  "a read of the build's exit Vercel answers early with none is made again only once a poll has passed, never in a loop",
+  () =>
+    Effect.gen(function* () {
+      const fake = vercel();
+      const { api, build } = yield* setUp(fake);
+
+      const launch = yield* Effect.forkChild(awaitTemplate(api, build));
+      yield* turnsPass;
+      const first = fake.exitReads.made;
+      yield* turnsPass;
+      assert.equal(fake.exitReads.made, first);
+      yield* TestClock.adjust(NATIVE_TEMPLATE.POLL);
+      yield* turnsPass;
+      assert.ok(fake.exitReads.made > first);
+      fake.finishBuild(0);
+      yield* TestClock.adjust(NATIVE_TEMPLATE.POLL);
+
+      assert.equal((yield* Fiber.join(launch)).state, TEMPLATE_STATE.READY);
     }),
 );
 

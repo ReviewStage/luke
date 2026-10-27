@@ -1,5 +1,5 @@
 import { WRITING_BLOCK, WRITING_INSERT } from "@luke/settings/shortcuts";
-import type { Editor } from "@tiptap/core";
+import type { Editor, JSONContent } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import {
@@ -7,6 +7,7 @@ import {
   type PlanEditorBlocks,
   SLASH_INSERT,
   type SlashBlock,
+  type SlashChoice,
   sameTrigger,
 } from "./contract.js";
 import { turnInto } from "./writing-format.js";
@@ -23,8 +24,11 @@ import { inTableCell } from "./writing-keys.js";
  * (`insert`): a block is set rather than toggled, as Turn into sets it; a
  * diagram is a Mermaid code block; a table is three by three under a
  * header row; a mention lays in the `@` that opens the panel's `@` list;
- * and a picture lays in nothing, the panel opening its chooser. The keys the
- * menu takes are the panel's first (`./plan-editor.ts`'s `handleKeyDown`).
+ * a picture lays in nothing, the panel opening its chooser; and a
+ * document's own block lays in the Markdown it names, read as the editor
+ * reads its text, in place of the line where the word stood alone on it.
+ * The keys the menu takes are the panel's first (`./plan-editor.ts`'s
+ * `handleKeyDown`).
  */
 
 /** The `/` word the caret ends: `/`, at the start of the line or after a space, then anything but a space or another `/`. */
@@ -115,6 +119,33 @@ function slashAt(view: EditorView): SlashWord | undefined {
   };
 }
 
+/** A document's own blocks laid in after the top-level block the selection ends in, or in place of it where the caret stands alone on an empty line, so nothing written is split or replaced. */
+function ownBlockAtCaret(editor: Editor, content: readonly JSONContent[]): void {
+  const { $to, empty } = editor.state.selection;
+  if ($to.depth < 1) {
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(editor.state.doc.content.size, [...content])
+      .run();
+    return;
+  }
+  const line = $to.node(1);
+  if (empty && line.isTextblock && line.content.size === 0) {
+    editor
+      .chain()
+      .focus()
+      .insertContent([...content])
+      .run();
+    return;
+  }
+  editor
+    .chain()
+    .focus()
+    .insertContentAt($to.after(1), [...content])
+    .run();
+}
+
 /** The `/` word found again, and reported where it changed. */
 function reported(view: EditorView, state: SlashState, blocks: PlanEditorBlocks): void {
   state.found = slashAt(view);
@@ -124,8 +155,15 @@ function reported(view: EditorView, state: SlashState, blocks: PlanEditorBlocks)
   blocks.onTrigger(next);
 }
 
-/** The plan editor's `/`: the word reported as the editor's state moves and as it takes or loses the caret, and a block chosen laid in in its place. */
-export function planSlash(blocks: PlanEditorBlocks) {
+/**
+ * The plan editor's `/`: the word reported as the editor's state moves and
+ * as it takes or loses the caret, and a block chosen laid in in its place,
+ * a document's own Markdown read into blocks by `parse`.
+ */
+export function planSlash(
+  blocks: PlanEditorBlocks,
+  parse: (markdown: string) => readonly JSONContent[],
+) {
   const state: SlashState = { found: undefined, reported: undefined };
   const plugin = new Plugin({
     key: new PluginKey("plan-slash"),
@@ -143,12 +181,21 @@ export function planSlash(blocks: PlanEditorBlocks) {
       },
     },
   });
-  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in. */
-  const insert = (editor: Editor, block: SlashBlock): void => {
+  /**
+   * The `/` word the caret ends deleted, and `block` run on the block the
+   * caret stands in, or a document's own Markdown laid in there. With no `/`
+   * word, as a press beside the editor lays one in, a document's own block
+   * goes after the block the caret stands in, or in place of it where empty.
+   */
+  const insert = (editor: Editor, block: SlashChoice): void => {
     const word = state.found;
-    if (word === undefined) return;
+    if (word === undefined) {
+      if (typeof block !== "string") ownBlockAtCaret(editor, parse(block.markdown));
+      return;
+    }
     editor.chain().focus().deleteRange({ from: word.from, to: word.to }).run();
-    INSERTS[block](editor);
+    if (typeof block === "string") INSERTS[block](editor);
+    else editor.commands.insertContent([...parse(block.markdown)]);
   };
   return { plugin, insert };
 }

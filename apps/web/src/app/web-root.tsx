@@ -14,9 +14,11 @@
  *
  * Until the panel draws, the tab shows the shell's frame app.html stands in
  * the root element, which the root's first render replaces; a tab that can
- * draw nothing takes the frame down, so it is never left looking as though
- * the panel were still coming. What the next load's frame needs to know of
- * this one is kept as the panel draws (`first-frame-hint.tsx`).
+ * draw nothing takes the frame down and says so with Reload in its place, so
+ * it is never left looking as though the panel were still coming, nor
+ * blank. The panel stands in an error boundary that does the same for a
+ * render that throws. What the next load's frame needs to know of this one
+ * is kept as the panel draws (`first-frame-hint.tsx`).
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -29,6 +31,7 @@ import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { installShellBundles } from "@luke/panel/shell-bundles";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
+import { ErrorBoundary, ReloadState } from "@luke/ui/error-boundary";
 import type { HistoryAdapter } from "@luke/ui/history-adapter";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -56,6 +59,23 @@ export interface WebAppOptions {
   readonly sentry?: WebSentryBuild;
 }
 
+/** What a tab whose panel could not be drawn says over its Reload. */
+const TAB_FAILED = "This page could not be shown.";
+
+/** Reload's press for the tab: the page read again from the start, its host, its first read, and every chunk among it. */
+function reloadTab(): void {
+  location.reload();
+}
+
+/**
+ * Hands a failure an error boundary caught to the tab's own error event, as
+ * React does with one no boundary caught, so Sentry's SDK hears it there.
+ */
+function reportCaught(thrown: unknown): void {
+  console.error("The tab's panel failed to render.", thrown);
+  reportError(thrown);
+}
+
 /** The app as drawn: closing it takes the panel down and drains the host. */
 export interface WebApp {
   readonly close: () => Promise<void>;
@@ -77,8 +97,8 @@ function installTabHistory<State>(
  * Composes the host in the tab, installs its doors, and draws the panel into
  * the element given once its document has been read, in place of whatever
  * frame the element held. A tab whose host cannot stand, or whose document
- * cannot be read, empties the element and draws nothing, as a desktop window
- * does, and answers nothing to close.
+ * cannot be read, draws that failure with Reload in place of the frame, as a
+ * desktop window does, and answers nothing to close.
  */
 export async function mountWebApp(
   rootElement: HTMLElement,
@@ -117,21 +137,27 @@ export async function mountWebApp(
     installed.push(installTabHistory(installWindowHistory, browserHistory()));
     await runtime.runPromise(appStateFirstRead);
   } catch (error) {
-    console.error("The tab's host could not stand or its state be read; nothing is drawn.", error);
-    // A blank tab is a failure, so it is sent as an event, not only kept as the console's breadcrumb.
+    console.error(
+      "The tab's host could not stand or its state be read; its panel is not drawn.",
+      error,
+    );
+    // A tab with no panel is a failure, so it is sent as an event, not only kept as the console's breadcrumb.
     sentry.reportBlankTab(error instanceof Error ? error : new Error(String(error)));
     uninstall();
     rootElement.replaceChildren();
     await runtime.dispose();
+    createRoot(rootElement).render(<ReloadState failure={TAB_FAILED} onReload={reloadTab} />);
     return undefined;
   }
-  const root = createRoot(rootElement);
+  const root = createRoot(rootElement, { onCaughtError: reportCaught });
   root.render(
-    <RegistryContext.Provider value={rendererRegistry}>
-      <WebAppearance />
-      <FirstFrameHint />
-      <App />
-    </RegistryContext.Provider>,
+    <ErrorBoundary failure={TAB_FAILED} onReload={reloadTab}>
+      <RegistryContext.Provider value={rendererRegistry}>
+        <WebAppearance />
+        <FirstFrameHint />
+        <App />
+      </RegistryContext.Provider>
+    </ErrorBoundary>,
   );
   // The account's choice of the Mac app is read after the first paint, once per fresh load, and never awaited.
   runtime.runFork(

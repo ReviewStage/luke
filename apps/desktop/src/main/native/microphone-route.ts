@@ -6,7 +6,6 @@ import {
   type MicrophoneTransport,
 } from "@luke/voice/audio";
 import { lineWatcher } from "./line-watcher";
-import type { NativeHelperProcess } from "./native-helper";
 
 /** The one word the helper takes; its one line is read by the parser below. */
 const MICROPHONE_ROUTE_PROBE = "probe";
@@ -16,11 +15,6 @@ interface MicrophoneRouteEdges {
   onRoute(route: MicrophoneRoute): void;
   /** The route cannot be read — no helper, or the helper died. */
   onUnavailable(): void;
-}
-
-export interface MicrophoneRouteWatcherOptions extends MicrophoneRouteEdges {
-  /** Injectable so the reader can be exercised without a Mac or a binary. */
-  spawnHelper?: () => NativeHelperProcess | undefined;
 }
 
 export interface MicrophoneRouteWatch {
@@ -46,10 +40,7 @@ export interface MicrophoneRouteWatch {
  * answer decides is bounded to one action: which device the renderer asks the
  * browser to open when a press takes a turn.
  */
-export function microphoneRouteWatcher(
-  options: MicrophoneRouteWatcherOptions,
-): MicrophoneRouteWatch {
-  const { spawnHelper } = options;
+export function microphoneRouteWatcher(options: MicrophoneRouteEdges): MicrophoneRouteWatch {
   const watch = lineWatcher<MicrophoneRoute>({
     binary: "mac-microphone-route",
     input: "pipe",
@@ -58,7 +49,6 @@ export function microphoneRouteWatcher(
     onUnavailable: options.onUnavailable,
     // The helper writes no refusal of its own; only its death withdraws a route.
     unavailableLineEnds: true,
-    ...(spawnHelper ? { spawnProcess: spawnHelper } : undefined),
   });
 
   // The watcher's own `send` stays off the caller-facing shape: the one word
@@ -68,9 +58,7 @@ export function microphoneRouteWatcher(
     probe: () => {
       watch.send(MICROPHONE_ROUTE_PROBE);
     },
-    stop: () => {
-      void watch.stop();
-    },
+    stop: () => watch.stop(),
   };
 }
 

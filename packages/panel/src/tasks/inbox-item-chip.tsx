@@ -116,6 +116,13 @@ function WaitingItemCard({
   );
 }
 
+/** An item's title as its Inbox row names it, waiting or settled; main's brief's while its inbox is read; none where neither holds the item. */
+export function useInboxItemTitle(place: InboxItemPlace): string | undefined {
+  const listed = useLinkedItem(place);
+  const waiting = useWaitingBrief(place.itemId);
+  return listed?.item.title ?? waiting?.title;
+}
+
 /** An item's glyph on its chip: its agent's tile, as its row leads with it; the Inbox's own glyph until the item is read. */
 export function InboxItemChipGlyph({ place }: { place: InboxItemPlace }): ReactNode {
   const listed = useLinkedItem(place);

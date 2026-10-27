@@ -95,12 +95,13 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * app's is (`LIST_ROW_META.TITLE`), at the end of its title's line, the
  * description running the row's whole width under both and its leading
  * mark level with the title. A row's acts stand beside it, or, in a list
- * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), over
- * its metadata's end while the pointer rests on it or it holds the
+ * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), in
+ * its metadata's place while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
- * Pin and Archive. They are laid over the row's end on a backdrop of the
- * row's own fill, faded in over the words they cover, so coming and going
- * they move nothing: the title keeps its room, and the press its ring.
+ * Pin and Archive. The row keeps their place beside its words whether they
+ * show or not, as wide as the wider of them and its metadata, so coming and
+ * going they move nothing and cover nothing: the title keeps its room, and
+ * the press its ring.
  *
  * A title cut short, there or anywhere, fades out over its last few pixels
  * instead of ending in an ellipsis, as a browser's tab does; one drawn
@@ -113,7 +114,11 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * thread's task, say, in a list grouped by something else: a small chip
  * of a glyph and a name, cut short at a short name's width, the
  * description's words following it on the same line, as a mail app tags a
- * thread with its mailbox.
+ * thread with its mailbox. A fuller row may stand it on a line of its own
+ * instead (`LIST_ROW_LEAD.LINE`), between its title and its description,
+ * its glyph and its whole name in the description's quieter ink, as a
+ * mail app names a thread's sender over its preview, so neither the name
+ * nor the preview is cut short to make room for the other.
  *
  * A row may be swiped right to one act (`swipe`), as a mail app's thread
  * is swiped to mark it read: a short swipe leaves it open on the act's
@@ -139,13 +144,21 @@ export const LIST_ROW_META = {
 
 export type ListRowMeta = (typeof LIST_ROW_META)[keyof typeof LIST_ROW_META];
 
-/** When a row's acts stand: always, beside it, or over its metadata's end only while the row is in hand. */
+/** When a row's acts stand: always, beside it, or in its metadata's place only while the row is in hand. */
 export const LIST_ROW_ACTIONS = {
   ALWAYS: "always",
   HOVER: "hover",
 } as const;
 
 export type ListRowActions = (typeof LIST_ROW_ACTIONS)[keyof typeof LIST_ROW_ACTIONS];
+
+/** Where what a row belongs to stands: a chip leading its description's line, or a line of its own over the description. */
+export const LIST_ROW_LEAD = {
+  DESCRIPTION: "description",
+  LINE: "line",
+} as const;
+
+export type ListRowLeadAt = (typeof LIST_ROW_LEAD)[keyof typeof LIST_ROW_LEAD];
 
 /** A row's one swipe: what its act is called, its glyph, and the act. */
 export interface ListRowSwipe {
@@ -215,7 +228,6 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
 function plainWords(words: ReactNode): string | undefined {
   // A slot is handed over as a loose ReactNode, and a string is the one form
   // whose words can be compared from render to render; this check is the boundary.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof
   return typeof words === "string" ? words : undefined;
 }
 
@@ -225,6 +237,13 @@ function plainWords(words: ReactNode): string | undefined {
  * rather than by reading where it stands once drawn.
  */
 const ListDensityContext = createContext<ListDensity>(LIST_DENSITY.REGULAR);
+
+/**
+ * How the `List` a row stands in stands, so a row in a card, edge to edge
+ * on the card's ground, answers a press inside its fill rather than pulling
+ * that fill back from the card's edges.
+ */
+const ListVariantContext = createContext<ListVariant>(LIST_VARIANT.PLAIN);
 
 /** The act of a row that offers no swipe. */
 const NO_ACT = (): void => undefined;
@@ -266,7 +285,9 @@ export function List({
       aria-label={label}
       {...(moves ? motionRows() : {})}
     >
-      <ListDensityContext.Provider value={density}>{children}</ListDensityContext.Provider>
+      <ListVariantContext.Provider value={variant}>
+        <ListDensityContext.Provider value={density}>{children}</ListDensityContext.Provider>
+      </ListVariantContext.Provider>
     </ul>
   );
 }
@@ -277,6 +298,7 @@ export function ListRow({
   title,
   description,
   lead,
+  leadAt = LIST_ROW_LEAD.DESCRIPTION,
   attachments,
   meta,
   metaAt = LIST_ROW_META.MIDDLE,
@@ -310,6 +332,8 @@ export function ListRow({
   description?: ReactNode;
   /** What the row belongs to, drawn as a chip of its glyph and its name before the description, on its line. */
   lead?: ListRowLead | undefined;
+  /** Where the lead stands: a chip before the description, on its line, or a line of its own between the title and the description. */
+  leadAt?: ListRowLeadAt | undefined;
   /** What the row's thing carries, its pictures or pages drawn small, on a line of their own under the description; decoration, since its words say what it is. */
   attachments?: ReactNode;
   /** Metadata at the row's end, before its acts ("2h ago", "Owner"). */
@@ -381,6 +405,8 @@ export function ListRow({
   // as the stylesheet reads it, so a list made dense or regular again
   // measures its rows' descriptions or lets them go.
   const listDensity = useContext(ListDensityContext);
+  const pressPulse =
+    useContext(ListVariantContext) === LIST_VARIANT.CARD ? PRESS_PULSE.FLUSH : PRESS_PULSE.QUIET;
   const describedDense = (density ?? listDensity) === LIST_DENSITY.DENSE;
   const described = useCallback(
     (element: HTMLElement | null) => {
@@ -395,7 +421,34 @@ export function ListRow({
       {title}
     </span>
   );
-  const metadata = said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null;
+  // Note that the metadata and the chevron stand together at the row's end,
+  // the place a hover row's acts step into.
+  const end =
+    said(meta) || chevron ? (
+      <span className="luke-list-row-end">
+        {said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null}
+        {chevron ? (
+          <span className="luke-list-row-chevron" aria-hidden="true">
+            <ChevronRightIcon />
+          </span>
+        ) : null}
+      </span>
+    ) : null;
+  const leadMark =
+    lead === undefined ? null : (
+      <span className="luke-list-row-lead" data-at={leadAt}>
+        <span className="luke-list-row-lead-icon" aria-hidden="true">
+          {lead.icon}
+        </span>
+        <span
+          ref={leadMeasured}
+          className="luke-list-row-lead-label"
+          data-overflow={String(leadClipped)}
+        >
+          {lead.label}
+        </span>
+      </span>
+    );
   const face = (
     <>
       {said(leading) ? (
@@ -407,31 +460,19 @@ export function ListRow({
         {metaAt === LIST_ROW_META.TITLE ? (
           <span className="luke-list-row-head">
             {heading}
-            {metadata}
+            {end}
           </span>
         ) : (
           heading
         )}
-        {said(description) || lead !== undefined ? (
+        {leadAt === LIST_ROW_LEAD.LINE ? leadMark : null}
+        {said(description) || (leadAt === LIST_ROW_LEAD.DESCRIPTION && lead !== undefined) ? (
           <span
             ref={described}
             className="luke-list-row-description"
             data-overflow={describedDense ? String(descriptionClipped) : undefined}
           >
-            {lead === undefined ? null : (
-              <span className="luke-list-row-lead">
-                <span className="luke-list-row-lead-icon" aria-hidden="true">
-                  {lead.icon}
-                </span>
-                <span
-                  ref={leadMeasured}
-                  className="luke-list-row-lead-label"
-                  data-overflow={String(leadClipped)}
-                >
-                  {lead.label}
-                </span>
-              </span>
-            )}
+            {leadAt === LIST_ROW_LEAD.DESCRIPTION ? leadMark : null}
             {description}
           </span>
         ) : null}
@@ -441,12 +482,7 @@ export function ListRow({
           </span>
         ) : null}
       </span>
-      {metaAt === LIST_ROW_META.TITLE ? null : metadata}
-      {chevron ? (
-        <span className="luke-list-row-chevron" aria-hidden="true">
-          <ChevronRightIcon />
-        </span>
-      ) : null}
+      {metaAt === LIST_ROW_META.TITLE ? null : end}
     </>
   );
   const press = onPress ? (
@@ -462,7 +498,7 @@ export function ListRow({
       onClick={(event) => {
         // Note that the row around the press is what is pressed, its fill and its actions with it.
         const row = event.currentTarget.closest<HTMLElement>(".luke-list-row");
-        pulsePress(row ?? event.currentTarget, PRESS_PULSE.QUIET);
+        pulsePress(row ?? event.currentTarget, pressPulse);
         onPress(event);
       }}
       onKeyDown={onKeyDown}

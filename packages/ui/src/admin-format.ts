@@ -1,9 +1,10 @@
 /**
- * admin-format.ts -- how the admin page draws its counts, shares, dollars, and trends; its days are `time-format.ts`'s.
+ * admin-format.ts -- how the admin page draws its trends and charts' days; its counts, shares, and dollars are `number-format.ts`'s and its days `time-format.ts`'s.
  */
 
+import { formatCount, formatPercent } from "@luke/features/number-format";
 import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL } from "@luke/features/sign-in-provider";
-import { formatCount, formatDayTick } from "./time-format.js";
+import { formatDayTick } from "@luke/features/time-format";
 
 /**
  * The two runs a trend compares. The service's `AdminTrend` carries them, and
@@ -15,52 +16,8 @@ interface Trend {
   prior: number;
 }
 
-/**
- * A share of some whole, drawn as a percentage to one place, e.g. "1.4%",
- * or a dash where there was no whole to take a share of.
- */
-export function formatShare(share: number | null): string {
-  if (share === null) return "—";
-  return `${(share * 100).toFixed(1)}%`;
-}
-
-const compactFormat = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-/** A large count drawn short, e.g. "1.9M", where the exact figure would only be noise. */
-export function formatCompact(value: number): string {
-  return compactFormat.format(value);
-}
-
-/** From here a dollar figure drops its cents: they are noise beside the thousands. */
-const WHOLE_DOLLARS_FROM = 1_000;
-
-const centsFormat = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-const dollarsFormat = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-
-/**
- * Dollars as a maintainer reads a bill, e.g. "$38,210" or "$6.42". A figure
- * above nothing that rounds to no cent says it is under one, so a real
- * spend never reads as free.
- */
-export function formatUsd(value: number): string {
-  if (value > 0 && value < 0.005) return "<$0.01";
-  return Math.abs(value) >= WHOLE_DOLLARS_FROM
-    ? dollarsFormat.format(value)
-    : centsFormat.format(value);
-}
+/** The places a failure rate or a share of a few is drawn to, "1.4%", where a whole percent would hide a small one. */
+export const RATE_PLACES = 1;
 
 /**
  * How faded today's bar draws. The series' last day is still filling, so a
@@ -100,7 +57,7 @@ export function formatTrendMove(trend: Trend): string {
   if (delta === 0) return "flat";
   const sign = delta > 0 ? "+" : "−";
   if (trend.prior === 0) return `${sign}${formatCount(Math.abs(delta))}`;
-  return `${sign}${Math.abs(Math.round((delta / trend.prior) * 100))}%`;
+  return `${sign}${formatPercent(Math.abs(delta / trend.prior))}`;
 }
 
 /** A linked provider's row value drawn as its label where the page knows one. */

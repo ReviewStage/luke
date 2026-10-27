@@ -1,4 +1,5 @@
 import {
+  ALIGN,
   BUTTON_VARIANT,
   BusyLabel,
   Button,
@@ -35,7 +36,7 @@ function LoadingIndicators(): React.JSX.Element {
         <Shimmer>Working…</Shimmer>
       </CatalogSection>
       <CatalogSection id="delayed-busy" title="A busy control that waits a moment to show its ring">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           <Button variant={BUTTON_VARIANT.OUTLINE}>
             <BusyLabel busy delay label="Saving">
               Save

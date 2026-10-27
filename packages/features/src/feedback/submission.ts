@@ -1,4 +1,5 @@
 import { isRecord, isWireString, type UnparsedWireValue } from "@luke/wire";
+import { Option, Schema } from "effect";
 import { PICTURE_TYPE, type PictureType } from "../picture-wire.js";
 
 /**
@@ -17,12 +18,6 @@ export const FEEDBACK_KIND = {
 } as const;
 
 export type FeedbackKind = (typeof FEEDBACK_KIND)[keyof typeof FEEDBACK_KIND];
-
-const FEEDBACK_KINDS: readonly string[] = Object.values(FEEDBACK_KIND);
-
-function isFeedbackKind(value: UnparsedWireValue): value is FeedbackKind {
-  return isWireString(value) && FEEDBACK_KINDS.includes(value);
-}
 
 /**
  * The image formats a screenshot arrives in. A fixed set rather than anything
@@ -99,28 +94,48 @@ function decodedByteLength(base64: string): number {
   return (base64.length / 4) * 3 - padding;
 }
 
-function feedbackImage(value: UnparsedWireValue): FeedbackImage | undefined {
-  if (!isRecord(value)) return undefined;
-  const { name, mediaType, base64 } = value;
-  if (!isWireString(name) || name.trim().length === 0 || name.length > 255) return undefined;
-  if (!isFeedbackImageType(mediaType)) return undefined;
-  if (!isWireString(base64) || base64.length === 0) return undefined;
-  if (!BASE64_PATTERN.test(base64)) return undefined;
-  if (decodedByteLength(base64) > FEEDBACK_LIMITS.IMAGE_MAX_BYTES) return undefined;
-  return { name: name.trim(), mediaType, base64 };
+/** One line of credit, trimmed: not a second message, so a line break refuses it rather than being stripped into something the user did not type. */
+function creditLineSchema(maxLength: number) {
+  return Schema.Trim.check(
+    Schema.isMaxLength(maxLength),
+    Schema.makeFilter((line: string) => !/[\r\n]/.test(line)),
+  );
 }
 
-function optionalLine(value: UnparsedWireValue, maxLength: number): string | undefined | null {
-  if (value === undefined) return undefined;
-  if (!isWireString(value)) return null;
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return undefined;
-  // One line of credit, not a second message: a name or address has no
-  // business containing a line break, and stripping one quietly would sign
-  // the message with something the user did not type.
-  if (trimmed.length > maxLength || /[\r\n]/.test(trimmed)) return null;
-  return trimmed;
-}
+/** One screenshot as it arrives: a name with something in it, a fixed type, and bounded base64. */
+const feedbackImageSchema = Schema.Struct({
+  name: Schema.String.check(
+    Schema.isMaxLength(255),
+    Schema.makeFilter((name: string) => name.trim().length > 0),
+  ),
+  mediaType: Schema.Literals(Object.values(FEEDBACK_IMAGE_TYPE)),
+  base64: Schema.String.check(
+    Schema.isNonEmpty(),
+    Schema.isPattern(BASE64_PATTERN),
+    Schema.makeFilter(
+      (base64: string) => decodedByteLength(base64) <= FEEDBACK_LIMITS.IMAGE_MAX_BYTES,
+    ),
+  ),
+});
+
+/**
+ * A submission as the window sends it. A name or an address may be absent,
+ * `undefined`, or blank, each read as unsigned; anything else that is no
+ * string, `null` among it, refuses the whole message.
+ */
+const feedbackSubmissionSchema = Schema.Struct({
+  kind: Schema.Literals(Object.values(FEEDBACK_KIND)),
+  message: Schema.Trim.check(
+    Schema.isNonEmpty(),
+    Schema.isMaxLength(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH),
+  ),
+  name: Schema.optional(creditLineSchema(FEEDBACK_LIMITS.NAME_MAX_LENGTH)),
+  email: Schema.optional(creditLineSchema(FEEDBACK_LIMITS.EMAIL_MAX_LENGTH)),
+  images: Schema.Array(feedbackImageSchema).check(Schema.isMaxLength(FEEDBACK_LIMITS.MAX_IMAGES)),
+  experiment: Schema.optional(Schema.String.check(Schema.isPattern(EXPERIMENT_KEY_PATTERN))),
+});
+
+const readFeedbackSubmission = Schema.decodeUnknownOption(feedbackSubmissionSchema);
 
 /**
  * Reads a renderer message into a submission, or nothing if it is malformed.
@@ -130,36 +145,15 @@ function optionalLine(value: UnparsedWireValue, maxLength: number): string | und
  */
 export function feedbackSubmission(value: UnparsedWireValue): FeedbackSubmission | undefined {
   if (!isRecord(value)) return undefined;
-  const { kind, message, name, email, images, experiment } = value;
-  if (!isFeedbackKind(kind)) return undefined;
-  if (!isWireString(message)) return undefined;
-  const messageText = message.trim();
-  if (messageText.length === 0 || messageText.length > FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH) {
-    return undefined;
-  }
-  const nameLine = optionalLine(name, FEEDBACK_LIMITS.NAME_MAX_LENGTH);
-  if (nameLine === null) return undefined;
-  const emailLine = optionalLine(email, FEEDBACK_LIMITS.EMAIL_MAX_LENGTH);
-  if (emailLine === null) return undefined;
-  if (!Array.isArray(images) || images.length > FEEDBACK_LIMITS.MAX_IMAGES) return undefined;
-  if (
-    experiment !== undefined &&
-    !(isWireString(experiment) && EXPERIMENT_KEY_PATTERN.test(experiment))
-  ) {
-    return undefined;
-  }
-  const parsedImages: FeedbackImage[] = [];
-  for (const candidate of images) {
-    const image = feedbackImage(candidate);
-    if (!image) return undefined;
-    parsedImages.push(image);
-  }
+  const read = Option.getOrUndefined(readFeedbackSubmission(value));
+  if (read === undefined) return undefined;
+  const { kind, message, name, email, images, experiment } = read;
   return {
     kind,
-    message: messageText,
-    ...(nameLine ? { name: nameLine } : undefined),
-    ...(emailLine ? { email: emailLine } : undefined),
-    images: parsedImages,
+    message,
+    ...(name ? { name } : undefined),
+    ...(email ? { email } : undefined),
+    images: images.map((image) => ({ ...image, name: image.name.trim() })),
     ...(experiment === undefined ? undefined : { experiment }),
   };
 }

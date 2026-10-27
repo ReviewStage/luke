@@ -1,4 +1,4 @@
-import { accountGateOpen } from "@luke/credentials";
+import { accountGateOpen, SignInFailed } from "@luke/credentials";
 import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
@@ -11,6 +11,7 @@ import {
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "@luke/features";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@luke/features/analytics";
+import { SIGN_IN_FAILURE, type SignInFailure } from "@luke/features/words";
 import {
   carried,
   GATEWAY_EVENT,
@@ -295,6 +296,26 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
       );
 
   /**
+   * A sign-in that ended without landing, answered as the key the panel says
+   * it in rather than as a refusal, which the act port would replace with its
+   * own fixed sentence. The key is all that crosses: the source's own detail,
+   * which may name what a provider or a client answered, goes to the host's
+   * log alone.
+   */
+  const signInAnswer = (step: Effect.Effect<AccountSnapshot, Error>) =>
+    step.pipe(
+      Effect.map((snapshot) => ({ account: carried(snapshot) })),
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          report(`${SIGN_IN_REFUSED}: ${error.message}`);
+          const failure: SignInFailure =
+            error instanceof SignInFailed ? error.failure : SIGN_IN_FAILURE.UNFINISHED;
+          return { failure };
+        }),
+      ),
+    );
+
+  /**
    * The count of a sign-in's start, left before the step that may take the
    * window away: a browser tab navigates to the provider, and a queued count
    * would go with the page.
@@ -315,8 +336,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
         if (!isAccountProvider(provider))
           return yield* invalid("provider is not one this build knows");
         yield* recordSignInStart;
-        const snapshot = yield* refusedAs(SIGN_IN_REFUSED)(session.beginSignIn(provider));
-        return { account: carried(snapshot) };
+        return yield* signInAnswer(session.beginSignIn(provider));
       }),
     [GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN]: (params) =>
       Effect.gen(function* () {

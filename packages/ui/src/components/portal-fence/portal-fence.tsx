@@ -7,7 +7,7 @@ import type { ReactNode, SyntheticEvent } from "react";
  * page's, so a viewer opened over the window from inside a section that
  * opens to be edited at a press, or steps its blocks at an arrow, would do
  * both. The fence stops each press and key at itself. It takes nothing of
- * its own, lays nothing out (`display: contents`), and plays no pulse: the
+ * its own, lays nothing out (`contents`), and plays no pulse: the
  * controls inside it are the presses.
  */
 
@@ -21,7 +21,7 @@ export function PortalFence({ children }: { children: ReactNode }): React.JSX.El
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the fence takes nothing itself; it keeps what the controls it holds took from reaching the tree around it.
     <span
-      className="luke-portal-fence"
+      className="luke-portal-fence contents"
       onClick={stopped}
       onKeyDown={stopped}
       onPointerDown={stopped}

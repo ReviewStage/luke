@@ -1,6 +1,6 @@
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import { Spinner } from "@luke/ui";
+import { ErrorState, Spinner } from "@luke/ui";
 import { HarnessMark } from "../harness-marks.js";
 import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import {
@@ -16,6 +16,7 @@ import {
   fastRestingNote,
   longWindowNote,
   MODEL_NOT_CONNECTED,
+  MODELS_READ_FAILED,
   type ModelChoiceRead,
   modelLabel,
   offeredModels,
@@ -113,6 +114,10 @@ export function ModelMenu(props: {
   className?: string | undefined;
   /** The catalog as last read; nothing before the first read lands. */
   models: readonly CatalogModel[] | undefined;
+  /** Whether the last read of the catalog did not land; the menu says so, with Retry, where there is no catalog to list. */
+  failed: boolean;
+  /** Reads the catalog again: Retry's press. */
+  onRetry: () => void;
   /** The choice standing now, settled against the catalog (`settledChoice`). */
   chosen: ModelChoice | undefined;
   /** A choice made; the menu has already closed where the row closes it. */
@@ -236,7 +241,11 @@ export function ModelMenu(props: {
       value={read?.base}
       note={
         models === undefined ? (
-          <Spinner delay label="Loading models" />
+          props.failed ? (
+            <ErrorState onRetry={props.onRetry}>{MODELS_READ_FAILED}</ErrorState>
+          ) : (
+            <Spinner delay label="Loading models" />
+          )
         ) : models.length === 0 ? (
           MENU_NOTE.NONE
         ) : undefined

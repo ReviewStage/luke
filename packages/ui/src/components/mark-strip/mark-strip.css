@@ -26,20 +26,9 @@
     background: var(--luke-mark-strip-ink);
   }
 
-  .luke-mark-strip-mark[data-tone="danger"] {
-    --luke-mark-strip-ink: var(--luke-color-danger-text);
-  }
-
-  .luke-mark-strip-mark[data-tone="attention"] {
-    --luke-mark-strip-ink: var(--luke-color-attention);
-  }
-
-  .luke-mark-strip-mark[data-tone="complete"] {
-    --luke-mark-strip-ink: var(--luke-color-complete);
-  }
-
-  .luke-mark-strip-mark[data-tone="working"] {
-    --luke-mark-strip-ink: var(--luke-color-working);
+  /* A row's mark is in its status tone's ink (`tokens/status-tone.css`). */
+  .luke-mark-strip-mark[data-tone] {
+    --luke-mark-strip-ink: var(--luke-tone-ink);
   }
 
   .luke-mark-strip-mark[data-viewed] {

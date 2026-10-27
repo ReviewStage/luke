@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { IconSize } from "../../icons/icon-size.js";
 
 /**
  * glyph-slot.tsx -- the seat a glyph stands in before a line's words: a square a row's glyph fills, so every line's words start on one edge whatever glyph leads them.
@@ -16,6 +17,10 @@ import type { ReactNode } from "react";
  * holder sets; or Luke's own blue, the colour his voice and face answer in.
  * A glyph that only repeats its words is hidden from a reader; one that says
  * something its words do not is named by `label`.
+ *
+ * A slot takes its size from the seat it names (`ICON_SIZE`: 12, 16, 20, or
+ * 40 for an empty state) where the caller has one, so an icon is drawn at a
+ * seat rather than a size of its own; with none, the size above stands.
  *
  * A glyph that arrives as its line changes, a step taken up or done, rides
  * in on its `arrival` when the slot mounts: a small scale for a step, a
@@ -45,12 +50,15 @@ export type GlyphArrival = (typeof GLYPH_ARRIVAL)[keyof typeof GLYPH_ARRIVAL];
 /** A glyph's seat before a line's words, in `ink`, named `label` where it says more than its words. */
 export function GlyphSlot({
   ink = GLYPH_INK.MUTED,
+  size,
   line = false,
   label,
   arrival,
   children,
 }: {
   ink?: GlyphInk;
+  /** The seat it stands in, one of `ICON_SIZE`; none leaves the size to its container. */
+  size?: IconSize | undefined;
   /** Whether it stands as tall as the line it leads, centred on its first line, rather than square. */
   line?: boolean | undefined;
   /** What the glyph says that its words do not; none where it only repeats them. */
@@ -65,6 +73,7 @@ export function GlyphSlot({
       <span
         className="luke-glyph-slot"
         data-ink={ink}
+        data-size={size}
         data-line={line ? "true" : undefined}
         data-arrival={arrival}
         aria-hidden="true"
@@ -77,6 +86,7 @@ export function GlyphSlot({
     <span
       className="luke-glyph-slot"
       data-ink={ink}
+      data-size={size}
       data-line={line ? "true" : undefined}
       data-arrival={arrival}
       role="img"

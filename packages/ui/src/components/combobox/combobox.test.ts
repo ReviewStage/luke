@@ -526,13 +526,14 @@ test("an option's name and detail cut short fade out rather than ending in an el
   vi.stubGlobal(
     "ResizeObserver",
     class {
-      readonly #heard: () => void;
-      constructor(heard: () => void) {
+      readonly #heard: (entries: ResizeObserverEntry[], observer: unknown) => void;
+      constructor(heard: (entries: ResizeObserverEntry[], observer: unknown) => void) {
         this.#heard = heard;
       }
       observe(): void {
-        this.#heard();
+        this.#heard([], this);
       }
+      unobserve(): void {}
       disconnect(): void {}
     },
   );

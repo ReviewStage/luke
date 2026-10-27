@@ -1,7 +1,6 @@
 import {
   BUTTON_VARIANT,
   Button,
-  CHOICE_BAR_INSET,
   CHOICE_BAR_LOOK,
   ChoiceBar,
   DETAIL_PAGE_INSET,
@@ -163,7 +162,6 @@ function TaskInPanel(): React.JSX.Element {
           onChange={() => undefined}
           look={CHOICE_BAR_LOOK.FILL}
           panels={(value) => ({ tab: `panel-${value}-tab`, panel: `panel-${value}-panel` })}
-          inset={CHOICE_BAR_INSET.READING}
         />
       }
     >

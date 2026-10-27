@@ -4,8 +4,24 @@
  * A motion played with `element.animate` takes its duration and easing from
  * the same tokens a stylesheet's transition does, read as they stand at the
  * element, so reduced motion and a capture run, which zero the durations,
- * hold it still with no check of its own.
+ * hold it still with no check of its own. Where a script must choose between
+ * motion and none, rather than play a timing, `motionHeld` reads the same
+ * tokens, never the OS setting, which a capture run does not touch.
  */
+
+/** The custom properties a script-played motion reads, the same a stylesheet's transition does. */
+export const MOTION_TOKEN = {
+  DURATION_FAST: "--luke-duration-fast",
+  DURATION_PANE: "--luke-duration-pane",
+  DURATION_QUICK: "--luke-duration-quick",
+  DURATION_EXIT: "--luke-duration-exit",
+  DURATION_SHAPE: "--luke-duration-shape",
+  SPRING: "--luke-spring",
+  SPRING_FAST: "--luke-spring-fast",
+  EASE_EXIT: "--luke-motion-exit",
+  EASE_PANE: "--luke-motion-pane",
+  ROW_STAGGER: "--luke-row-stagger",
+} as const;
 
 /** A CSS time, `240ms` or `0.24s`, in milliseconds; anything else is none. */
 export function milliseconds(value: string): number {
@@ -30,4 +46,19 @@ export function tokenTiming(
   // Note that reduced motion leaves 1ms rather than none, which is no motion either.
   if (duration <= 1 || easing === "") return undefined;
   return { duration, easing };
+}
+
+/**
+ * Whether motion is held still where `element` stands, as reduced motion and a
+ * capture run hold it: the tokens' durations zeroed. Note that the body is
+ * where it reads by default, because a capture run zeroes the tokens on the
+ * body and its stage rather than on the root, and the body inherits the root's
+ * for reduced motion. A document no
+ * stylesheet has drawn sets none, and is not held, so a script plays its motion
+ * there as it would on a window that asked for nothing.
+ */
+export function motionHeld(element: Element = document.body): boolean {
+  const duration = getComputedStyle(element).getPropertyValue(MOTION_TOKEN.DURATION_FAST);
+  if (duration.trim() === "") return false;
+  return milliseconds(duration) <= 1;
 }

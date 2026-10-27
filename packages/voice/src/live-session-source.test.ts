@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { HOSTED_API_ERROR, VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
+import { VOICE_FAILURE } from "@luke/features/words";
 import { LIVE_SESSION_OUTCOME, LIVE_VOICE } from "@luke/live";
 import type { ParsedJsonObject } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { type HostedLiveSessionOptions, HostedLiveSessionSource } from "./live-session-source.js";
 import { SOCKET_OPEN_FAULT } from "./live-socket.js";
-import { hostedVoiceUnavailableNote } from "./microphone-access.js";
+import { hostedVoiceFailure } from "./microphone-access.js";
 import { type ScriptedOpening, type ScriptedSocketSeam, scriptedOpenSocket } from "./testing.js";
 
 const NOW = 1_800_000_000_000;
@@ -142,9 +143,25 @@ it.effect(
         yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID, agentId: AGENT_ID }),
         undefined,
       );
-      assert.equal(
-        hostedVoiceUnavailableNote(source.diagnostics()),
-        "This agent runs on Claude or Codex and can't take calls yet.",
-      );
+      assert.equal(hostedVoiceFailure(source.diagnostics()), VOICE_FAILURE.NATIVE_AGENT);
+    }),
+);
+
+it.effect(
+  "a call whose OpenAI key OpenAI refused, or found out of credit, fails as that, not as a call that did not start",
+  () =>
+    Effect.gen(function* () {
+      const cases = [
+        [HOSTED_API_ERROR.OPENAI_KEY_REFUSED, VOICE_FAILURE.OPENAI_KEY_REFUSED],
+        [HOSTED_API_ERROR.OPENAI_KEY_UNFUNDED, VOICE_FAILURE.OPENAI_KEY_UNFUNDED],
+      ] as const;
+      for (const [error, failure] of cases) {
+        const source = hosted(scriptedOpenSocket([answering({ error })]));
+        assert.equal(
+          yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID, agentId: AGENT_ID }),
+          undefined,
+        );
+        assert.equal(hostedVoiceFailure(source.diagnostics()), failure);
+      }
     }),
 );

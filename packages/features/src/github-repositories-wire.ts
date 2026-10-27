@@ -1,5 +1,10 @@
 import { Schema as EffectSchema } from "effect";
 import { PULL_REQUEST_STATE } from "./coding-agent-wire.js";
+import {
+  GITHUB_REPOSITORY_BOUNDS,
+  GITHUB_REPOSITORY_PATTERN,
+  issueAddressOf,
+} from "./link-grammar.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -24,27 +29,12 @@ import { countedNumber } from "./service-wire.js";
  * installation has not granted the App issues.
  */
 
-const GITHUB_REPOSITORY_BOUNDS = {
-  /** GitHub's own bound on an owner's login. */
-  MAX_OWNER_CHARS: 39,
-  /** GitHub's own bound on a repository's name. */
-  MAX_NAME_CHARS: 100,
-} as const;
-
-/**
- * `owner/name`: a login, which GitHub spells in letters, digits, and single
- * hyphens between them, one slash, and a name in letters, digits, dots,
- * underscores, and hyphens, which GitHub never lets be `.` or `..`. Nothing
- * else, so a path cannot ride in a repository's name.
- */
-const FULL_NAME_PATTERN = /^[A-Za-z0-9](?:-?[A-Za-z0-9])*\/(?!\.{1,2}$)[A-Za-z0-9_.-]+$/u;
-
 /** A repository's full name as the wire takes it: trimmed, and held to GitHub's own shape and bounds. */
 export const githubRepositoryFullNameSchema = EffectSchema.Trim.check(
   EffectSchema.isMaxLength(
     GITHUB_REPOSITORY_BOUNDS.MAX_OWNER_CHARS + 1 + GITHUB_REPOSITORY_BOUNDS.MAX_NAME_CHARS,
   ),
-  EffectSchema.isPattern(FULL_NAME_PATTERN),
+  EffectSchema.isPattern(GITHUB_REPOSITORY_PATTERN),
 );
 
 /**
@@ -239,62 +229,6 @@ export const githubRepositoryIssueAnswerSchema = EffectSchema.Struct({
 });
 
 export type GitHubRepositoryIssueAnswer = typeof githubRepositoryIssueAnswerSchema.Type;
-
-/** GitHub's own host, whose `/<owner>/<name>/pull/<number>` pages are its pull requests and `/<owner>/<name>/issues/<number>` its issues. */
-const GITHUB_HOST = "github.com";
-
-/** The step before a numbered page's number in its path: a pull request's, or an issue's. */
-const NUMBERED_STEP = { PULL: "pull", ISSUES: "issues" } as const;
-
-type NumberedStep = (typeof NUMBERED_STEP)[keyof typeof NUMBERED_STEP];
-
-/** A pull request's or an issue's number as its page's path spells it: whole, from one. */
-const PAGE_NUMBER = /^[1-9]\d{0,8}$/u;
-
-/** A pull request or an issue a page's address names: its repository, `owner/name`, and its number. */
-export interface NumberedAddress {
-  readonly repository: string;
-  readonly number: number;
-}
-
-/** The repository and number a page of GitHub's under the step given names; nothing for any other address. */
-function numberedAddressOf(href: string, wanted: NumberedStep): NumberedAddress | undefined {
-  let url: URL;
-  try {
-    url = new URL(href);
-  } catch {
-    return undefined;
-  }
-  if (url.hostname !== GITHUB_HOST) return undefined;
-  const [first, owner, name, step, number] = url.pathname.split("/");
-  if (first !== "" || owner === undefined || name === undefined || step !== wanted) {
-    return undefined;
-  }
-  if (number === undefined || !PAGE_NUMBER.test(number)) return undefined;
-  const repository = `${owner}/${name}`;
-  return EffectSchema.is(githubRepositoryFullNameSchema)(repository)
-    ? { repository, number: Number(number) }
-    : undefined;
-}
-
-/**
- * The pull request a page of GitHub's is, `acme/relay` and `42` from
- * `https://github.com/acme/relay/pull/42` or any page under it, its Files
- * tab say; nothing for any other address, another of GitHub's pages among
- * them.
- */
-export function pullRequestAddressOf(href: string): NumberedAddress | undefined {
-  return numberedAddressOf(href, NUMBERED_STEP.PULL);
-}
-
-/**
- * The issue a page of GitHub's is, `acme/relay` and `7` from
- * `https://github.com/acme/relay/issues/7`; nothing for any other address,
- * the repository's list of issues among them.
- */
-export function issueAddressOf(href: string): NumberedAddress | undefined {
-  return numberedAddressOf(href, NUMBERED_STEP.ISSUES);
-}
 
 /** The bounds of a read of a repository's issues for New task's picker. */
 export const GITHUB_ISSUES_BOUNDS = {

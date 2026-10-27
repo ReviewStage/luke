@@ -8,19 +8,13 @@ import {
   type AutomationScope,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import { dayAndTimeText, momentText } from "@luke/ui/time-format";
+import { dayAndTimeText, momentText, weekdayAndTimeText } from "@luke/features/time-format";
 
 /** What the Automations list says to a reader while it is first read, on its page and in the frame standing while the page's code loads. */
 export const READING_AUTOMATIONS = "Reading your automations…";
 
 /** How near a next run is still named by its weekday alone: under a week, so no weekday stands for two days. */
 const WEEKDAY_REACH_MS = 6 * 24 * 60 * 60 * 1000;
-
-const WEEKDAY_AND_TIME = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  hour: "numeric",
-  minute: "2-digit",
-});
 
 /** When an automation runs next, in a few words: within the week by its weekday, further off by its date. */
 export function automationNextText(automation: AutomationSummary, now: number): string {
@@ -32,7 +26,7 @@ export function automationNextText(automation: AutomationSummary, now: number): 
       return "Not scheduled";
     case AUTOMATION_NEXT.AT:
       return next.at - now < WEEKDAY_REACH_MS
-        ? `Next ${WEEKDAY_AND_TIME.format(next.at)}`
+        ? `Next ${weekdayAndTimeText(next.at)}`
         : `Next ${dayAndTimeText(next.at)}`;
   }
 }

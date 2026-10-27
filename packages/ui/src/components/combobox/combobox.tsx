@@ -1,7 +1,21 @@
 import type { ComponentPropsWithRef, ReactNode, Ref } from "react";
 import { useId, useImperativeHandle, useLayoutEffect, useRef } from "react";
+import { cn } from "../../cn.js";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import {
+  COMBOBOX_EMPTY,
+  COMBOBOX_ITEM,
+  COMBOBOX_ITEM_DETAIL,
+  COMBOBOX_ITEM_END,
+  COMBOBOX_ITEM_GLYPH,
+  COMBOBOX_ITEM_HINT,
+  COMBOBOX_ITEM_LABEL,
+  COMBOBOX_ITEM_LEAD,
+  COMBOBOX_LABEL,
+  COMBOBOX_LIST,
+  COMBOBOX_WELL,
+} from "../../shadcn/combobox.js";
 import { OneLine } from "../one-line/one-line.js";
 import { Tooltip } from "../tooltip/hint.js";
 import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
@@ -73,6 +87,8 @@ export interface ComboboxOption {
   /** The caller's own key for the option, stable while it stands. */
   readonly id: string;
   readonly label: ReactNode;
+  /** Before its glyph, in a column the options leading with one line up in, as a task's key leads its row in the Tasks list. */
+  readonly lead?: ReactNode;
   readonly icon?: ReactNode;
   /** Words after the name, quieter, which give way to it in a narrow list. */
   readonly detail?: ReactNode;
@@ -106,8 +122,8 @@ export type ComboboxOptionEngineProps = Omit<
 >;
 
 /**
- * One option as every list draws it: its glyph, its name, its detail, its
- * hint, and its end, lit while it is `aria-selected`. It is the row to use
+ * One option as every list draws it: its lead, its glyph, its name, its
+ * detail, its hint, and its end, lit while it is `aria-selected`. It is the row to use
  * where a list engine of the app's (cmdk) owns the item, handed through the
  * engine's `asChild`: the engine's role, names, handlers, and ref pass
  * through, and no class or style does, so the row is drawn only as here.
@@ -130,31 +146,47 @@ export function ComboboxOptionItem({
       onClick={
         option.disabled === true ? undefined : pulseOnPress(engine.onClick, PRESS_PULSE.QUIET)
       }
-      className="luke-combobox-option"
+      className={cn("luke-combobox-option", COMBOBOX_ITEM)}
       style={undefined}
     >
+      {option.lead === undefined ? null : (
+        <span className={cn("luke-combobox-option-lead", COMBOBOX_ITEM_LEAD)}>{option.lead}</span>
+      )}
       {option.icon === undefined ? null : (
-        <span className="luke-combobox-option-glyph">{option.icon}</span>
+        <span className={cn("luke-combobox-option-glyph", COMBOBOX_ITEM_GLYPH)}>{option.icon}</span>
       )}
       {/* Note that the name and its detail fade where the row cuts them short, as every cut line of the app does, rather than ending in an ellipsis. */}
-      <span className="luke-combobox-option-label">
+      <span className={cn("luke-combobox-option-label", COMBOBOX_ITEM_LABEL)}>
         <OneLine>{option.label}</OneLine>
       </span>
+      {/* Note that the first of the detail, the hint, and the end to stand pushes the rest to the row's end. */}
       {option.detail === undefined ? null : (
-        <span className="luke-combobox-option-detail">
+        <span className={cn("luke-combobox-option-detail", COMBOBOX_ITEM_DETAIL, "ml-auto")}>
           <OneLine>{option.detail}</OneLine>
         </span>
       )}
       {option.hint === undefined ? null : (
-        <span className="luke-combobox-option-hint">{option.hint}</span>
-      )}
-      {option.opens === true ? (
-        <span className="luke-combobox-option-end">
-          <ChevronRightIcon />
+        <span
+          className={cn(
+            "luke-combobox-option-hint",
+            COMBOBOX_ITEM_HINT,
+            option.detail === undefined && "ml-auto",
+          )}
+        >
+          {option.hint}
         </span>
-      ) : option.current === undefined ? null : (
-        <span className="luke-combobox-option-end">{option.current ? <CheckIcon /> : null}</span>
       )}
+      {option.opens === true || option.current !== undefined ? (
+        <span
+          className={cn(
+            "luke-combobox-option-end",
+            COMBOBOX_ITEM_END,
+            option.detail === undefined && option.hint === undefined && "ml-auto",
+          )}
+        >
+          {option.opens === true ? <ChevronRightIcon /> : option.current ? <CheckIcon /> : null}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -220,8 +252,9 @@ export function ComboboxListBox({
       role="listbox"
       tabIndex={-1}
       {...engine}
-      className="luke-combobox-list"
+      className={cn("luke-combobox-list", COMBOBOX_LIST)}
       style={undefined}
+      data-slot="combobox-list"
       data-height={height}
     >
       {children}
@@ -314,7 +347,8 @@ export function ComboboxList({
     <div
       ref={list}
       id={listId}
-      className="luke-combobox-list"
+      className={cn("luke-combobox-list", COMBOBOX_LIST)}
+      data-slot="combobox-list"
       role="listbox"
       aria-label={label}
       aria-activedescendant={steer?.field["aria-activedescendant"]}
@@ -341,7 +375,7 @@ export function ComboboxList({
           // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
           <div key={start} role="group" aria-label={group.label}>
             {headed ? (
-              <div className="luke-combobox-heading" aria-hidden="true">
+              <div className={cn("luke-combobox-heading", COMBOBOX_LABEL)} aria-hidden="true">
                 {group.label}
               </div>
             ) : null}
@@ -350,10 +384,12 @@ export function ComboboxList({
         );
       })}
       {options.length === 0 && empty !== undefined ? (
-        <p className="luke-combobox-empty">{empty}</p>
+        <p className={cn("luke-combobox-empty", COMBOBOX_EMPTY)}>{empty}</p>
       ) : null}
       {note === undefined || note === null ? null : (
-        <div className="luke-combobox-note">{note}</div>
+        <div className={cn("luke-combobox-note", COMBOBOX_EMPTY, "flex-col gap-luke-4")}>
+          {note}
+        </div>
       )}
     </div>
   );
@@ -429,11 +465,12 @@ export function Combobox({
   });
 
   return (
-    <div className="luke-combobox" data-open={shown}>
+    <div className={cn("luke-combobox", COMBOBOX_WELL)} data-open={shown}>
       <input
         ref={ref}
         type="text"
-        className="luke-text-field"
+        // Note that the field's foot is square while the list stands, so the two read as one well.
+        className={cn("luke-text-field", shown && "rounded-b-none")}
         {...keys.field}
         aria-label={label}
         aria-keyshortcuts={keyShortcuts}

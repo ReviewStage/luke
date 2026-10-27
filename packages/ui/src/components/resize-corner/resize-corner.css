@@ -21,7 +21,7 @@
     opacity: 0;
     outline: none; /* no ring: the bracket lights in the focus colour */
     touch-action: none;
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-resize-frame[data-reveal="true"] .luke-resize-corner,

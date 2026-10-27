@@ -118,7 +118,7 @@
     align-items: baseline;
     gap: var(--luke-space-4);
     margin-left: var(--luke-space-4);
-    font-weight: 600;
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   .luke-retry-row-label svg {

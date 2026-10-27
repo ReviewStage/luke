@@ -5,6 +5,7 @@ import {
   type TaskStatus,
 } from "@luke/features/task-wire";
 import React from "react";
+import { STATUS_TONE, type StatusTone } from "../status-tone.js";
 
 // `tsx` executes imported workspace-package JSX with the classic runtime.
 void React;
@@ -17,7 +18,9 @@ void React;
  * filled disc once settled, with a check for done and a cross for
  * canceled. A priority is three bars, as many lit as it matters, an
  * attention square for urgent, and three dashes for one no one weighed.
- * Each mark draws in its own ink (`task-marks.css`) at the glyph cell of
+ * A status draws in its status tone's ink, under way in the working blue
+ * and done in the green every other done wears, and a priority in its own
+ * (`task-marks.css`), each at the glyph cell of
  * whatever leads with it, which sizes it, and says nothing of its own: the
  * words beside it, or the caller's label, are what a reader hears.
  */
@@ -37,6 +40,15 @@ const BARS = [
   { x: 6, y: 5, height: 7 },
   { x: 10, y: 2, height: 10 },
 ] as const;
+
+/** The tone each status is drawn in: at rest, under way, or finished well. */
+const STATUS_MARK_TONE = {
+  [TASK_STATUS.BACKLOG]: STATUS_TONE.NEUTRAL,
+  [TASK_STATUS.TODO]: STATUS_TONE.NEUTRAL,
+  [TASK_STATUS.IN_PROGRESS]: STATUS_TONE.WORKING,
+  [TASK_STATUS.DONE]: STATUS_TONE.COMPLETE,
+  [TASK_STATUS.CANCELED]: STATUS_TONE.NEUTRAL,
+} as const satisfies Record<TaskStatus, StatusTone>;
 
 /** The ring every status but the settled ones draws, dashed for the backlog. */
 function Ring({ dashed }: { dashed: boolean }): React.JSX.Element {
@@ -82,12 +94,13 @@ function statusBody(status: TaskStatus): React.JSX.Element {
   }
 }
 
-/** A task's status as its mark, coloured by the status it stands for. */
+/** A task's status as its mark, in the tone of the status it stands for. */
 export function TaskStatusMark({ status }: { status: TaskStatus }): React.JSX.Element {
   return (
     <svg
       className="luke-task-mark luke-task-status-mark"
       data-status={status}
+      data-tone={STATUS_MARK_TONE[status]}
       viewBox="0 0 14 14"
       aria-hidden="true"
     >

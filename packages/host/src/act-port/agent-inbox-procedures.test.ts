@@ -23,9 +23,10 @@ import {
   INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import {
+  INBOX_ASK_STATUS,
   INBOX_IMAGE_TYPE,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -70,8 +71,6 @@ const ITEM: InboxItem = {
   revision: 2,
   version: INBOX_WIRE_VERSION,
   title: "Push to the release branch?",
-  blocks: [],
-  response: { type: INBOX_RESPONSE.APPROVAL },
   needsReply: true,
   status: INBOX_STATUS.OPEN,
   postedAt: 1_800_000_000_000,
@@ -85,7 +84,7 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]:
-    "Could not answer the inbox item on this system.",
+    "Could not acknowledge the inbox item on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_CLOSE]:
     "Could not close the inbox item on this system.",
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: "Could not send the message on this system.",
@@ -113,7 +112,7 @@ const ACTS: readonly {
 }[] = [
   {
     kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER,
-    payload: { itemId: ITEM.id, revision: 2, reply: INBOX_REPLY.APPROVED, clientKey: "answer-1" },
+    payload: { itemId: ITEM.id, revision: 2, reply: INBOX_REPLY.ACKNOWLEDGED, clientKey: "nod-1" },
     ask: "codingAgentInboxAnswer",
   },
   {
@@ -245,7 +244,12 @@ it("a panel answers, closes, and messages on an item, and hears the item as it t
     attachments: [{ name: "pager.txt", mediaType: "text/plain", data: "b24tY2FsbA==" }],
     clientKey: "message-1",
   };
-  const answer = { itemId: ITEM.id, revision: 2, reply: INBOX_REPLY.APPROVED, clientKey: "a-1" };
+  const answer = {
+    itemId: ITEM.id,
+    revision: 2,
+    reply: INBOX_REPLY.ACKNOWLEDGED,
+    clientKey: "a-1",
+  };
   const close = { itemId: ITEM.id, revision: 2, clientKey: "close-1" };
 
   assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER, answer), {
@@ -441,11 +445,18 @@ it("a payload its kind's schema refuses, or none where the kind takes one, is re
   assert.deepEqual(asked, []);
 });
 
-it("an item carrying a block and a response type this build does not know reaches the panel unchanged, so it draws them as a newer Luke's", async () => {
+it("an item whose thread carries an ask of a type this build does not know reaches the panel unchanged, so it draws it as a newer Luke's", async () => {
   const newer = {
     ...ITEM,
-    blocks: [{ type: "hologram" }, { type: "markdown", text: "Ship it?" }],
-    response: { type: "signature" },
+    thread: [
+      {
+        id: "7a1c3e5b-2d4f-4a6c-8e0b-1d3f5a7c9e2b",
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: "Ship it?",
+        ask: { type: "signature", status: INBOX_ASK_STATUS.OPEN },
+        createdAt: 1_800_000_000_000,
+      },
+    ],
   };
   const { call } = windowPort(PANEL, {
     answers: { codingAgentInboxMessage: () => Effect.succeed({ item: newer }) },

@@ -51,7 +51,6 @@ export const windowInboxFollower: InboxFollower = {
         return;
       }
       for await (const inbox of stream) hear(inbox);
-      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- What ended a stream is unknown until this reads it.
     })().catch((_error: unknown) => {
       if (!stopped) hear(UNANSWERED);
     });

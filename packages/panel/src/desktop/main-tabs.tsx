@@ -4,7 +4,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -12,6 +12,7 @@ import {
   Fill,
   INLINE_EDIT_LOOK,
   InlineEdit,
+  RetryButton,
   TABS_GROUND,
   VisuallyHidden,
 } from "@luke/ui";
@@ -22,14 +23,13 @@ import { useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
-import { RetryButton } from "../retry-button.js";
 import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { agentCardReading } from "../tasks/agent-ref.js";
 import { AgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import type { ChatNoticeDoors } from "../tasks/chat-notice.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import { DraftAgentTab } from "../tasks/draft-agent-tab.js";
 import { agentForkDoors, ForkProvider } from "../tasks/fork-action.js";
 import type { AgentFork } from "../tasks/fork-model.js";
@@ -81,7 +81,8 @@ import { TabStrip } from "./tab-strip.js";
  * ended on while no one was looking at it reads in semibold until shown. The
  * draft's tab, named New agent as the "+" row that opens it is, stands after
  * the agents until its first message, or its Call, starts the agent, and
- * closing it lets the draft go. A task with no other tab standing shows a
+ * closing it lets the draft go at once, a toast's Undo bringing it back with
+ * its words and files where it held any (`use-coding-agents.ts`). A task with no other tab standing shows a
  * draft's (`use-main-tabs.ts`), so a voice chat or a typed one is the
  * developer's to start from its composer. Every tab wears its kind's look (`tab-look.tsx`), and an
  * agent's or the draft's, while its box holds words and another tab is
@@ -236,7 +237,7 @@ function agentTabs(input: {
   const open = (agents.agents ?? []).filter((agent) => main.openAgents?.includes(agent.id));
   const own = open.map((agent) => {
     const tab = { agent: agent.id };
-    const label = agentTabLabel(agent, agents.models);
+    const label = agentName(agent, agents.models);
     const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
     const draftMark = drafted.includes(agent.id) && !chosen(tab) ? <DraftMark /> : undefined;
     return {
@@ -290,7 +291,7 @@ export function agentEntries(
   held?: HeldTranscripts,
 ): AddEntry[] {
   return (agents.agents ?? []).map((agent) => {
-    const label = agentTabLabel(agent, agents.models);
+    const label = agentName(agent, agents.models);
     const chosen = main.tab !== undefined && sameTab({ agent: agent.id }, main.tab);
     return {
       row: {
@@ -542,7 +543,7 @@ export function MainTabStrip({
 export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
   if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
-  return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
+  return agent === undefined ? undefined : agentName(agent, agents.models);
 }
 
 /**

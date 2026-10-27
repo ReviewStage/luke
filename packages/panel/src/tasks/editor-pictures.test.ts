@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
+import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import type { Task } from "@luke/features/task-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -23,7 +25,9 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
  * at once from the Mac's own bytes, dimmed, with "Uploading" where its
  * caption will stand, and as the kept picture once the service kept it; a
  * keep that failed says why with Retry and Remove, and Remove takes it out;
- * and Insert image is offered while the text is edited, and only then; and
+ * a video of another plan pasted in is kept on this one as it is, waiting
+ * as a quiet box rather than a picture its bytes cannot draw; and Insert
+ * image is offered while the text is edited, and only then; and
  * a selected picture's tools are each still named in a narrow column.
  * Synthetic plan and pictures.
  */
@@ -199,6 +203,52 @@ test("a keep that failed says why with Retry and Remove, and Remove takes the pi
   act(() => remove?.click());
   await settle();
   assert.equal(container.querySelector(".editor-picture"), null);
+});
+
+test("a video of another plan pasted in is kept on this plan as it is, waiting as a quiet box", async () => {
+  const OTHER_TASK = "6e2f4a8b-1c3d-4e5f-9a0b-2c4d6e8f0a1b";
+  const video = `data:${CONVERSATION_MEDIA_TYPE.WEBM};base64,GkXfow==`;
+  const kept: string[] = [];
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.TASKS_PICTURE_READ]: ({ planId }) =>
+      Promise.resolve(
+        planId === OTHER_TASK
+          ? { contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }
+          : { failure: "not-found" },
+      ),
+    [ACT_KIND.TASKS_PICTURE_KEEP]: ({ picture }) => {
+      kept.push(picture);
+      return new Promise((resolve) => {
+        keeping = { resolve };
+      });
+    },
+  });
+  const container = await editing();
+  const editable = container.querySelector(".ProseMirror") ?? assert.fail("the editor stands");
+  const address = planAttachmentAddress(
+    { taskId: OTHER_TASK, attachmentId: "9a1b3c5d-7e9f-4a2b-8c4d-6e8f0a2b4c6d" },
+    "acme",
+  );
+  const html = `<img src="${address}" alt="Inviting a member">`;
+  const paste = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(paste, "clipboardData", {
+    value: {
+      files: [],
+      types: ["text/html"],
+      getData: (type: string) => (type === "text/html" ? html : ""),
+    },
+  });
+  act(() => {
+    editable.dispatchEvent(paste);
+  });
+
+  await keepAsked();
+
+  assert.deepEqual(kept, [video]);
+  const uploading = container.querySelector(".picture-block[data-upload='sending']");
+  assert.ok(uploading?.querySelector(".picture-pending"), "the video waits as a quiet box");
+  assert.equal(uploading?.querySelector("img"), null);
 });
 
 test("Insert image is offered while the plan's text is edited, and lays in the files chosen", async () => {

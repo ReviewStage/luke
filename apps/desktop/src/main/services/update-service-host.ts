@@ -44,6 +44,13 @@ interface UpdateServiceHostDependencies {
    * installer asks to leave.
    */
   beforeRestart: () => Promise<void>;
+  /**
+   * Asks before Restart to update while a call stands, a panel holds unsaved
+   * work, or a terminal of this Mac is open, answering whether to restart;
+   * yes at once while nothing would be lost. It is asked before the install
+   * begins, never inside it, because Squirrel's own quit must not be held.
+   */
+  askBeforeRestart: () => Promise<boolean>;
   /** Every state the row draws, written to the document the windows are told from. */
   state: AppStateStore;
   /**
@@ -144,11 +151,16 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
         });
         return service.check({ asked: true });
       },
+      // Note that the press is counted only once the developer says to
+      // restart, since a Cancel installs nothing.
       install: () => {
-        recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {
-          update_action: PRODUCT_UPDATE_ACTION.INSTALL,
+        void dependencies.askBeforeRestart().then((restart) => {
+          if (!restart) return;
+          recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {
+            update_action: PRODUCT_UPDATE_ACTION.INSTALL,
+          });
+          service.install();
         });
-        service.install();
       },
       openLatestRelease: () => {
         recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {

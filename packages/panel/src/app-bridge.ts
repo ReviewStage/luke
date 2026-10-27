@@ -74,7 +74,6 @@ export function actPort(): ActPortClient {
 
 /** One listener on one push, held as its own entry so a listener subscribed twice hears twice. */
 interface PushEntry {
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The push's guard has read the payload before any listener hears it.
   readonly listener: (payload: unknown) => void;
 }
 
@@ -127,7 +126,6 @@ export function openPushStream(client: ActPortClient): PushStream {
   const opened = client.pushes().then((stream) => {
     void (async () => {
       for await (const event of stream) deliver(held, event);
-      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- What ended a stream is unknown until this reads it.
     })().catch((error: unknown) => {
       // Note that a stream ends this way only with its page, its port closing under it, unless something broke.
       if (!(error instanceof Error && error.name === "AbortError")) {

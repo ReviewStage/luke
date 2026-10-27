@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
-  INBOX_RESPONSE,
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -737,10 +739,21 @@ function approval(revision: number): InboxItem {
     revision,
     version: INBOX_WIRE_VERSION,
     title: "Expire after 7 days?",
-    blocks: [],
-    response: { type: INBOX_RESPONSE.APPROVAL },
     needsReply: true,
     status: INBOX_STATUS.OPEN,
+    thread: [
+      {
+        id: "e1b2c3d4-0000-4000-8000-000000000001",
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: "Invites expire after 24 hours today.",
+        ask: {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "Approve" }, { label: "Decline" }],
+          status: INBOX_ASK_STATUS.OPEN,
+        },
+        createdAt: 1_000,
+      },
+    ],
     postedAt: 1_000,
     updatedAt: 1_000,
   };
@@ -847,6 +860,7 @@ async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
       kind: INBOX_SCOPE_KIND.AGENT,
       shown: true,
       waiting: true,
+      readerId: undefined,
       agents: {
         heldIds: [agentId],
         inboxFollower: main.follower,

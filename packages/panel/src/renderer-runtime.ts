@@ -53,3 +53,14 @@ export const rendererServicesNow = (): Context.Context<never> =>
  */
 export const rendererPause = (ms: number): Promise<void> =>
   Effect.runPromiseWith(rendererServicesNow())(Effect.sleep(Duration.millis(ms)));
+
+/**
+ * An effect run as a fiber of its own on the renderer's services, for a
+ * caller that holds it from a React effect (`act-stream.ts`'s followed
+ * streams): the stop handed back interrupts it, and returns without waiting
+ * on its finalizers, as a cleanup must.
+ */
+export const rendererFork = (effect: Effect.Effect<void>): (() => void) => {
+  const fiber = Effect.runForkWith(rendererServicesNow())(effect);
+  return () => fiber.interruptUnsafe();
+};

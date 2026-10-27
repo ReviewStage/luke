@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Context, Effect } from "effect";
-import type { AppStateSnapshot } from "../app-state.js";
+import type { AppStateDelivery } from "../app-state.js";
 import { runModeFor } from "../run-mode.js";
 import { AppStateStore, createInProcessBridge, initialAppState } from "./index.js";
 
@@ -37,20 +37,25 @@ const bridgeFixture = Effect.gen(function* () {
   return { ...made, state, reported };
 });
 
-it.effect("the document is read on request and every change of it reaches a subscription", () =>
-  Effect.gen(function* () {
-    const { bridge, state } = yield* bridgeFixture;
-    const read = yield* Effect.promise(() => bridge.requestAppState());
-    assert.deepEqual(read, { ...state.snapshot(), window: { fullScreen: false } });
+it.effect(
+  "the document is read whole on request and every change of it reaches a subscription as what moved",
+  () =>
+    Effect.gen(function* () {
+      const { bridge, state } = yield* bridgeFixture;
+      const read = yield* Effect.promise(() => bridge.requestAppState());
+      assert.deepEqual(read, { ...state.snapshot(), window: { fullScreen: false } });
 
-    const heard: AppStateSnapshot[] = [];
-    bridge.onAppState((snapshot) => heard.push(snapshot));
-    state.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
-    yield* Effect.yieldNow;
-    assert.equal(heard.length, 1);
-    assert.equal(heard[0]?.version, read.version + 1);
-    assert.equal(heard[0]?.audio.microphoneStatus, MICROPHONE_STATUS.GRANTED);
-  }).pipe(Effect.scoped),
+      const heard: AppStateDelivery[] = [];
+      bridge.onAppState((delivery) => heard.push(delivery));
+      state.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
+      yield* Effect.yieldNow;
+      assert.deepEqual(heard, [
+        {
+          version: read.version + 1,
+          entries: { audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } },
+        },
+      ]);
+    }).pipe(Effect.scoped),
 );
 
 it.effect("a voice subscription ends cleanly", () =>
@@ -66,7 +71,7 @@ it.effect("an ended subscription hears neither the document nor an event again",
     const { bridge, events, state } = yield* bridgeFixture;
     const versions: number[] = [];
     const shown: unknown[] = [];
-    const endState = bridge.onAppState((snapshot) => versions.push(snapshot.version));
+    const endState = bridge.onAppState((delivery) => versions.push(delivery.version));
     const endShow = bridge.onShowAgent((place) => shown.push(place));
 
     state.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });

@@ -36,7 +36,7 @@ import {
 } from "@luke/features/automation-wire";
 import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
-import { INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
+import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, type PlanActor } from "@luke/features/task-wire";
 import { Effect } from "effect";
@@ -168,8 +168,6 @@ const answerInboxItem = (userId: string, organizationId: string, agentId: string
       revision: 1,
       version: 1,
       title: "Synthetic item",
-      blocks: [],
-      response: { type: INBOX_RESPONSE.APPROVAL },
       needsReply: true,
       status: INBOX_STATUS.ANSWERED,
       answeredBy: userId,

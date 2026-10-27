@@ -13,19 +13,17 @@
  * - `GET /api/account/integrations` answers where every provider's
  *   connection stands. For a caller with a bearer, a sign-in still under
  *   way is settled here too, by asking Connect for a token afresh, so a
- *   desktop that reads again after
- *   the browser closed learns the outcome whatever address the browser was
- *   returned to; one with no token yet is asked after by the handle Connect
- *   began it with, and one Connect says was cancelled or refused is ended
- *   here and answered once among the read's `signInFailures`, with
- *   Connect's own line where it is shaped like no credential, since a
- *   sign-in that failed on Connect's own page never returns to Luke. A provider the deployment does not offer the account
+ *   desktop that reads again after the browser closed learns the outcome
+ *   whatever address the browser was returned to; one with no token yet
+ *   stands pending until its window runs out, since Connect documents no
+ *   way to ask why a sign-in that never returned to Luke ended. A provider
+ *   the deployment does not offer the account
  *   (`accountIntegrationConnect`) stands unavailable, and every route below
  *   refuses it as one with no connector here. A caller with only the
  *   session cookie is answered where each row stands as stored, a sign-in
  *   under way `pending`, and nothing is settled, ended, or labelled: a Lax
  *   cookie rides a link another site's page sends a browser on, which must
- *   not settle the account's sign-in or spend its one failure notice.
+ *   not settle the account's sign-in.
  * - `POST /api/account/integrations/settle` is that read with its settling,
  *   for any caller; a POST a cookie carries is held to the deployment's own
  *   pages by the origin guard before it gets here.
@@ -86,7 +84,6 @@ import {
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationAccount,
   type IntegrationProvider,
-  type IntegrationSignInFailure,
   type IntegrationStatus,
   type IntegrationToolsProblemReason,
   type integrationAccountAnswerSchema,
@@ -121,10 +118,8 @@ import {
 import type { IntegrationAccountKey, IntegrationConnectionRow } from "./integration-store.js";
 import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
 import {
-  connectSignInFailure,
   INTEGRATION_CALLBACK_QUERY,
   type IntegrationsAppSeams,
-  type SignInFailure,
   signInStands,
 } from "./integrations-app.js";
 import {
@@ -283,10 +278,9 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { completed, ...(accountName !== undefined ? { accountName } : undefined) };
 });
 
-/** Where one provider stands for the statuses read, and why a sign-in this read ended failed. */
+/** Where one provider stands for the statuses read. */
 interface Standing {
   readonly status: IntegrationStatus;
-  readonly failure?: SignInFailure;
   /** The account's name at the provider a sign-in this read settled was granted with, where its grant named one. */
   readonly accountName?: string;
 }
@@ -300,9 +294,8 @@ function standingWithoutSignIn(row: IntegrationConnectionRow): IntegrationStatus
 
 /**
  * Where a stored row stands, settling a sign-in still under way with the
- * provider's connector: connected where Connect now holds a grant, ended
- * with its reason where Connect says it was cancelled or refused, and
- * pending otherwise.
+ * provider's connector: connected where Connect now holds a grant, and
+ * pending otherwise, until the sign-in's window runs out.
  */
 const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
@@ -324,10 +317,7 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
       ...(settled.accountName !== undefined ? { accountName: settled.accountName } : undefined),
     };
   }
-  const failure = yield* connectSignInFailure(connector, row);
-  if (failure === undefined) return { status: INTEGRATION_STATUS.PENDING };
-  yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.connectionName, underWay));
-  return { status: standingWithoutSignIn(row), failure };
+  return { status: INTEGRATION_STATUS.PENDING };
 });
 
 /**
@@ -356,11 +346,10 @@ const labelledRow = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { ...row, label };
 });
 
-/** Where one provider stands for the statuses read: its first account's word, its accounts, and why each sign-in this read ended failed. */
+/** Where one provider stands for the statuses read: its first account's word, and its accounts. */
 interface ProviderStanding {
   readonly status: IntegrationStatus;
   readonly accounts: readonly IntegrationAccount[];
-  readonly failures: readonly IntegrationSignInFailure[];
 }
 
 /**
@@ -400,11 +389,6 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
     accounts: settled
       .filter(({ standing }) => standing.status !== INTEGRATION_STATUS.DISCONNECTED)
       .map(({ row, standing }) => accountOf(row, standing.status)),
-    failures: settled.flatMap(({ row, standing }) =>
-      standing.failure === undefined
-        ? []
-        : [{ provider, connection: row.connectionName, ...standing.failure }],
-    ),
   };
 });
 
@@ -413,8 +397,8 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
  * way settled first where the read `settles`; a provider with no connector
  * here, or not offered to the account, is unavailable, and one the
  * account's GitHub sign-in grants stands where that sign-in does. Beside
- * each provider's word, every account it holds, the providers it may add
- * another account at, and why each sign-in this read ended failed.
+ * each provider's word, every account it holds, and the providers it may
+ * add another account at.
  */
 const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
@@ -432,14 +416,13 @@ const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   const unavailable: ProviderStanding = {
     status: INTEGRATION_STATUS.UNAVAILABLE,
     accounts: [],
-    failures: [],
   };
   const standings = yield* Effect.forEach(INTEGRATION_PROVIDER_LIST, (provider) =>
     Effect.map(
       INTEGRATION_GRANT_OF[provider] === INTEGRATION_GRANT.GITHUB_SIGN_IN
         ? Effect.map(
             githubIntegrationStatus(userId),
-            (status): ProviderStanding => ({ status, accounts: [], failures: [] }),
+            (status): ProviderStanding => ({ status, accounts: [] }),
           )
         : connect[provider].configured
           ? providerStanding(seams, connect[provider], provider, rows, settles)
@@ -460,12 +443,10 @@ const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
         held.length < INTEGRATION_ACCOUNTS_MAX,
     )
     .map(({ provider }) => provider);
-  const signInFailures = standings.flatMap((standing) => standing.failures);
   return {
     integrations,
     ...(accounts.length > 0 ? { accounts } : undefined),
     ...(addable.length > 0 ? { addable } : undefined),
-    ...(signInFailures.length > 0 ? { signInFailures } : undefined),
   };
 });
 
@@ -702,7 +683,7 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
       const account = yield* signInAccount(seams, connector, userId, asked, adding);
       const state = seams.mintState();
       const prompt = adding ? connector.addAccountPrompt : undefined;
-      const { url, verifier } = yield* connector
+      const { url } = yield* connector
         .authorize(
           account.connectSubject,
           callbackUrl(context.request.url, state),
@@ -717,9 +698,7 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
           ),
           Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
         );
-      const begun = yield* hostedStoreOrUnavailable(
-        seams.beginSignIn(userId, account, state, verifier),
-      );
+      const begun = yield* hostedStoreOrUnavailable(seams.beginSignIn(userId, account, state));
       // Another sign-in took the name meanwhile: this one would settle a grant no row names, so it is refused.
       if (!begun) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return { url, connection: account.connectionName };

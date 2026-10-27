@@ -29,7 +29,13 @@ export function Facts({
 }
 
 /** One fact: its name, then its value at the line's end. */
-export function Fact({ label, children }: { label: ReactNode; children: ReactNode }): React.JSX.Element {
+export function Fact({
+  label,
+  children,
+}: {
+  label: ReactNode;
+  children: ReactNode;
+}): React.JSX.Element {
   return (
     <div className="luke-fact">
       <dt className="luke-fact-label">{label}</dt>

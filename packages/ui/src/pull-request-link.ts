@@ -1,4 +1,4 @@
-import { pullRequestAddressOf } from "@luke/features/github-repositories-wire";
+import { pullRequestAddressOf } from "@luke/features/link-grammar";
 
 /**
  * pull-request-link.ts -- which agent's pull request a link names, so a press on it opens the agent's Pull request tab rather than GitHub.

@@ -61,6 +61,8 @@ export interface SentToGitHub {
   readonly method: string;
   readonly headers: Headers;
   readonly body: string;
+  /** The caller's own, which a fake holding the request answers on giving up. */
+  readonly signal?: AbortSignal;
 }
 
 export interface FakeGitHub {
@@ -144,6 +146,7 @@ export function fakeGitHub(
       method: init.method ?? "GET",
       headers: new Headers(init.headers),
       body: init.body === undefined ? "" : await new Response(init.body).text(),
+      ...(init.signal ? { signal: init.signal } : {}),
     };
     sent.push(request);
     return answer(request);

@@ -33,6 +33,7 @@ import {
   type PullRequestMoment,
 } from "./automation-wire.js";
 import type { ModelChoice } from "./models-wire.js";
+import { formatCount } from "./number-format.js";
 import {
   SENTRY_TRIGGER_EVENT,
   type SentryTriggerEvent,
@@ -494,7 +495,7 @@ export function draftProblems(draft: AutomationDraft, held: boolean, now: Date):
     draft.prompt,
     AUTOMATION_BOUNDS.MAX_PROMPT_CHARS,
     "Tell the agent what to do.",
-    `Keep the prompt under ${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS.toLocaleString("en-US")} characters.`,
+    `Keep the prompt under ${formatCount(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS)} characters.`,
   );
   const read = readSchedule({ cron: cronOf(draft.schedule), timezone: draft.timezone }, now);
   const schedule =

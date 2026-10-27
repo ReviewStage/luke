@@ -123,6 +123,7 @@ export function ComposerField({
   onKey,
   onEnter,
   onPasteFiles,
+  onPasteCut,
   onTrigger,
   chip,
   quote,
@@ -148,6 +149,8 @@ export function ComposerField({
   onKey: (event: KeyboardEvent) => boolean;
   onEnter: () => void;
   onPasteFiles: (files: readonly File[]) => boolean;
+  /** Told once a paste past `maxLength` has been cut to fit; a box that gives no word of it cuts silently. */
+  onPasteCut?: (() => void) | undefined;
   onTrigger: (trigger: ComposerTrigger | undefined) => void;
   chip: (chip: ComposerChip) => ReactNode;
   /** How a quote block the editor holds is drawn; its words alone where none is given. */
@@ -188,6 +191,7 @@ export function ComposerField({
     onKey,
     onEnter,
     onPasteFiles,
+    onPasteCut,
     onTrigger,
     mentions,
     takesFocus,
@@ -201,6 +205,7 @@ export function ComposerField({
     onKey,
     onEnter,
     onPasteFiles,
+    onPasteCut,
     onTrigger,
     mentions,
     takesFocus,
@@ -233,6 +238,7 @@ export function ComposerField({
       onKey: (event) => latest.current.onKey(event),
       onEnter: () => latest.current.onEnter(),
       onPasteFiles: (files) => latest.current.onPasteFiles(files),
+      onPasteCut: () => latest.current.onPasteCut?.(),
       onTrigger: (trigger) => latest.current.onTrigger(trigger),
       drawChip: (element, drawnChip) => draw(element, drawnChip),
       drawQuote: (element, drawnQuote) => draw(element, { quote: drawnQuote }),

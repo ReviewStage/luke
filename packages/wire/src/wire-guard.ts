@@ -15,7 +15,6 @@ import {
  * stands for.
  */
 export interface WireGuard<Value> {
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A wire guard is the parser at a process boundary.
   (value: unknown): boolean;
   readonly wireType?: Value;
 }

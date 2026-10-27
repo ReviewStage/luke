@@ -1,6 +1,8 @@
+import { DAY_MS } from "@luke/runtime/vocabulary";
 import { SCHEMA_REFUSAL } from "@luke/wire";
 import { wireRefusal } from "@luke/wire/effect";
 import { DateTime, Option, Schema } from "effect";
+import { distanceText } from "./time-format.js";
 
 /**
  * date-mention.ts -- a date a mention names: a day, a time on one, or a range of either, read from the words typed after an `@`, and said as its written label, its chip's words, and its card's.
@@ -16,7 +18,7 @@ import { DateTime, Option, Schema } from "effect";
  * agent's prompt or a pull request among them, and never go stale. Its chip
  * says it from where the reader stands, in the reader's own zone and on the
  * reader's own day: Today, Tomorrow, Friday, Oct 20. Every word is US
- * English, as the window's are (`@luke/ui/time-format`).
+ * English, as the window's are (`time-format.ts`).
  *
  * The words an `@` reads as a date are a short list people type, not a
  * language: a named day (`today`, `tomorrow`, `yesterday`), a weekday,
@@ -31,10 +33,6 @@ import { DateTime, Option, Schema } from "effect";
  */
 
 const LOCALE = "en-US";
-
-const DAY_MS = 86_400_000;
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
 
 /** A day as a date mention spells it. */
 const DAY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/u;
@@ -554,17 +552,10 @@ export function dateWhole(span: DateSpan, zone: string): string {
   return span.end === undefined ? start : `${start}${RANGE_ARROW}${momentWhole(span.end, zone)}`;
 }
 
-/** A count and its noun, `in` before it or `ago` after it. */
-function away(count: number, unit: string): string {
-  const size = Math.abs(count);
-  const noun = `${size} ${unit}${size === 1 ? "" : "s"}`;
-  return count > 0 ? `in ${noun}` : `${noun} ago`;
-}
-
 /**
  * How far a date's start stands from `now`, for its card: a day by days,
  * today, tomorrow, and yesterday by name; a time by minutes inside the
- * hour, by hours inside the day, else by days.
+ * hour, by hours inside the day, else by days, in `time-format.ts`'s letters.
  */
 export function dateDistance(span: DateSpan, now: number, zone: string): string {
   const today = todayIn(now, zone);
@@ -573,12 +564,10 @@ export function dateDistance(span: DateSpan, now: number, zone: string): string 
   const days = daysBetween(today, wall.day);
   if (isTimed(span.start)) {
     const ahead = Date.parse(span.start) - now;
-    if (Math.abs(ahead) < MINUTE_MS) return "now";
-    if (Math.abs(ahead) < HOUR_MS) return away(Math.trunc(ahead / MINUTE_MS), "minute");
-    if (Math.abs(ahead) < DAY_MS) return away(Math.trunc(ahead / HOUR_MS), "hour");
+    if (Math.abs(ahead) < DAY_MS) return distanceText(ahead);
   }
   const named = NAMED_DAYS.find((each) => each.shift === days);
-  return named === undefined ? away(days, "day") : named.word;
+  return named === undefined ? distanceText(days * DAY_MS) : named.word;
 }
 
 /* ----- A date as a picker edits it ----- */

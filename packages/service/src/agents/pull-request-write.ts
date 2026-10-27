@@ -25,6 +25,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import type { CodingAgent, WithRepository } from "@luke/database/models/coding-agent-store";
 import {
   PULL_REQUEST_WRITE_OUTCOME,
+  type PullRequestRefusal,
   type PullRequestWriteAnswer,
 } from "@luke/features/pull-request-write-wire";
 import { Effect, type Redacted } from "effect";
@@ -44,11 +45,15 @@ export interface MemberPullRequest {
   readonly token: Redacted.Redacted;
 }
 
-/** How a write went: made, with what it answered; the member to sign in with GitHub again; or GitHub's refusal in its words. */
+/** How a write went: made, with what it answered; the member to sign in with GitHub again; or GitHub's refusal in its words, and why where the tab acts on it. */
 export type MemberWritten<A> =
   | { readonly outcome: typeof PULL_REQUEST_WRITE_OUTCOME.DONE; readonly value: A }
   | { readonly outcome: typeof PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED }
-  | { readonly outcome: typeof PULL_REQUEST_WRITE_OUTCOME.REFUSED; readonly words: string };
+  | {
+      readonly outcome: typeof PULL_REQUEST_WRITE_OUTCOME.REFUSED;
+      readonly words: string;
+      readonly reason?: PullRequestRefusal;
+    };
 
 type WriteServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
@@ -113,7 +118,11 @@ function writtenOf<A>(failure: GitHubWriteFailure): Effect.Effect<MemberWritten<
     case "GitHubTokenRefused":
       return Effect.succeed(SIGN_IN_REQUIRED);
     case "GitHubWriteRefused":
-      return Effect.succeed({ outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: failure.words });
+      return Effect.succeed({
+        outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+        words: failure.words,
+        ...(failure.reason === undefined ? undefined : { reason: failure.reason }),
+      });
     case "GitHubUnavailable":
       return Effect.andThen(logGitHubReadFailure(failure), Effect.fail(HOSTED_REFUSAL.UNAVAILABLE));
   }

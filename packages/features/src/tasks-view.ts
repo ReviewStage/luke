@@ -5,11 +5,7 @@ import {
 } from "./agent-browser-tab-wire.js";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  codingAgentSummarySchema,
-  tasklessAgentSchema,
-} from "./coding-agent-wire.js";
+import { codingAgentSummarySchema, tasklessAgentSchema } from "./coding-agent-wire.js";
 import {
   GITHUB_ISSUES_BOUNDS,
   githubIssueSummarySchema,
@@ -32,13 +28,14 @@ import {
 } from "./page-wire.js";
 import { pictureDataUrlSchema } from "./picture-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
+import { planAttachmentTypeSchema } from "./plan-attachment-wire.js";
 import {
   planCommentActionRequestSchema,
   planCommentStartRequestSchema,
   planCommentsAnswerSchema,
   planCommentThreadAnswerSchema,
 } from "./plan-comment-wire.js";
-import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
+import { PLAN_EDIT_REFUSAL, planEditConflictSchema, planEditRequestSchema } from "./plan-edit.js";
 import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
@@ -128,6 +125,20 @@ export const TASKS_READ = {
 } as const;
 
 const tasksReadSchema = EffectSchema.Literals(Object.values(TASKS_READ));
+
+/**
+ * Whether what the host follows live is current, as the task list's follow
+ * last found it: live while its rows arrive, catching up while a poll that
+ * failed is asked again or a follow that broke is started again, and
+ * offline while the service answers no seal at all.
+ */
+export const HOST_LIVE = {
+  LIVE: "live",
+  CATCHING_UP: "catching-up",
+  OFFLINE: "offline",
+} as const;
+
+export type HostLive = (typeof HOST_LIVE)[keyof typeof HOST_LIVE];
 
 /**
  * The active task's document as last read: the plan whole while a read has
@@ -258,6 +269,8 @@ export const tasksViewSchema = EffectSchema.Struct({
    */
   taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
   listStatus: tasksReadSchema,
+  /** Whether what the host follows live is current (`HOST_LIVE`); absent before the list's follow first says, which reads as live. */
+  live: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(HOST_LIVE))),
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
   /** Where the read of the workspaces stands, a failed one keeping those held; absent before the first is asked. */
@@ -505,12 +518,12 @@ export type TasksEditFailure = (typeof EDIT_FAILURES)[number];
 
 /**
  * An edit as the window hears it: saved, the task arriving on the document
- * as the service answered it; a conflict, with what the field holds now; or
- * why nothing was saved.
+ * as the service answered it; a conflict, with what the field holds now and
+ * who wrote it; or why nothing was saved.
  */
 export const tasksEditAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ saved: EffectSchema.Literal(true) }),
-  EffectSchema.Struct({ conflict: EffectSchema.Struct({ current: planEditValueSchema }) }),
+  EffectSchema.Struct({ conflict: planEditConflictSchema }),
   EffectSchema.Struct({ failure: EffectSchema.Literals(EDIT_FAILURES) }),
 ]);
 
@@ -857,13 +870,13 @@ export type TasksPictureParams = typeof tasksPictureParamsSchema.Type;
  * One attachment of a plan, as the window hears it: its bytes in base64
  * under its media type, which the window draws or offers from a `data:` URL
  * of its own making, or why there is none: not the account's to read, or no
- * answer. A picture the plan's text names is an image; a file a comment
- * carries is any type a coding agent's file may be. The host fetched it
+ * answer. A picture the plan's text names is an image or a video; a file a
+ * comment carries is any type a coding agent's file may be. The host fetched it
  * under the account, so the window holds no bearer and no address.
  */
 export const tasksPictureAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    contentType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+    contentType: planAttachmentTypeSchema,
     base64: EffectSchema.String,
   }),
   EffectSchema.Struct({
@@ -873,7 +886,7 @@ export const tasksPictureAnswerSchema = EffectSchema.Union([
 
 export type TasksPictureAnswer = typeof tasksPictureAnswerSchema.Type;
 
-/** A picture kept on a plan, as the editor that took it asks: the plan, and the picture as a `data:` URL. */
+/** A picture kept on a plan, as the editor that took it asks: the plan, and the picture or video as a `data:` URL. */
 export const tasksPictureKeepParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   picture: pictureDataUrlSchema,
@@ -881,9 +894,10 @@ export const tasksPictureKeepParamsSchema = EffectSchema.Struct({
 
 export type TasksPictureKeepParams = typeof tasksPictureKeepParamsSchema.Type;
 
-/** Why a picture was not kept: the plan holds its bound of pictures, the plan is not the account's to write, or no answer. */
+/** Why a picture was not kept: the plan holds its bound of pictures, or of videos, the plan is not the account's to write, or no answer. */
 export const PICTURE_KEEP_FAILURE = {
   TOO_MANY: "too-many",
+  TOO_MANY_VIDEOS: "too-many-videos",
   NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,
   UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
 } as const;

@@ -45,7 +45,6 @@ export interface BridgeHostDependencies {
   snapshotFor: (sender: WebContents) => Promise<AppStateSnapshot>;
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- This is the erased callable shape at Electron's IPC boundary.
 type ErasedHandler = (context: BridgeContext, ...args: never[]) => unknown;
 
 /**

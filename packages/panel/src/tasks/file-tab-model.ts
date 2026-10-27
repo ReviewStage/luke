@@ -1,6 +1,6 @@
+import { GITHUB_PAGE, gitHubPageLink } from "@luke/features/link-grammar";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
 import type { TaskCode, TaskCodeShowing, TasksFileAnswer } from "@luke/features/tasks-view";
-import { githubPath } from "./coding-agent-model.js";
 import type { OpenFile } from "./use-side-panel.js";
 
 /**
@@ -147,10 +147,17 @@ export function notesOf(
  * shortened past them, which the tab lights nothing of, opens at its top.
  */
 export function fileUrl(held: FileText, file: OpenFile): string {
-  const page = `https://github.com/${held.repository}/blob/${githubPath(held.commit ?? held.branch)}/${githubPath(file.path)}`;
-  if (file.range === undefined || file.range.startLine > held.lineCount) return page;
+  const page = {
+    kind: GITHUB_PAGE.FILE,
+    repository: held.repository,
+    ref: held.commit ?? held.branch,
+    path: file.path,
+  } as const;
+  if (file.range === undefined || file.range.startLine > held.lineCount) {
+    return gitHubPageLink(page);
+  }
   const { startLine, endLine } = file.range;
-  return startLine === endLine ? `${page}#L${startLine}` : `${page}#L${startLine}-L${endLine}`;
+  return gitHubPageLink({ ...page, lines: { startLine, endLine } });
 }
 
 /** Whether a refusal may pass with time, so the tab offers to read again. */

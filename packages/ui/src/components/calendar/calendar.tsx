@@ -1,7 +1,24 @@
 import { type FocusEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { DAYS_PER_WEEK } from "../../activity-calendar.js";
+import { cn } from "../../cn.js";
 import { BackIcon, ForwardIcon } from "../../face/glyphs.js";
 import { pulseOnPress } from "../../press-pulse.js";
+import {
+  CALENDAR,
+  CALENDAR_CAPTION,
+  CALENDAR_CAPTION_LABEL,
+  CALENDAR_DAY,
+  CALENDAR_DAY_BUTTON,
+  CALENDAR_DAY_FACE,
+  CALENDAR_DAY_INK,
+  CALENDAR_MONTH_GRID,
+  CALENDAR_NAV,
+  CALENDAR_PLACE,
+  CALENDAR_RANGE,
+  CALENDAR_TODAY,
+  CALENDAR_WEEKDAY,
+  type CalendarPlace,
+} from "../../shadcn/calendar.js";
 import { BUTTON_SIZE, IconButton } from "../button/button.js";
 
 /**
@@ -28,6 +45,12 @@ import { BUTTON_SIZE, IconButton } from "../button/button.js";
  * the month it lands in, and the keyboard follows it there once it does,
  * however many renders later. The calendar pages through the four-digit
  * years alone, 0001 to 9999, the span a `YYYY-MM-DD` day spells.
+ *
+ * It is drawn in shadcn/ui's calendar classes over the Tailwind theme
+ * (`../../shadcn/calendar.ts`), with none of react-day-picker under it,
+ * whose local dates and own focus would keep none of the above. Each part
+ * keeps its `luke-calendar-*` name beside its classes, which draws nothing
+ * but the keyboard's ring (`calendar.css`).
  */
 
 /** Weeks drawn whatever the month, enough for any month to fit. */
@@ -48,16 +71,6 @@ const DAY_SHAPE = /^\d{4}-\d{2}-\d{2}$/u;
 
 /** A Sunday, from which the weekday headings are spelled in order. */
 const A_SUNDAY = "2026-10-18";
-
-/** Where a day stands against the selection, which its fill is drawn from. */
-const DAY_PLACE = {
-  SINGLE: "single",
-  START: "start",
-  END: "end",
-  BETWEEN: "between",
-} as const;
-
-type DayPlace = (typeof DAY_PLACE)[keyof typeof DAY_PLACE];
 
 /** How many days each arrow steps the keyboard. */
 const ARROW_STEPS = new Map([
@@ -147,13 +160,13 @@ function placeOf(
   day: string,
   start: string | undefined,
   end: string | undefined,
-): DayPlace | undefined {
+): CalendarPlace | undefined {
   if (start === undefined) return undefined;
-  if (end === undefined || end === start) return day === start ? DAY_PLACE.SINGLE : undefined;
+  if (end === undefined || end === start) return day === start ? CALENDAR_PLACE.SINGLE : undefined;
   const [low, high] = start < end ? [start, end] : [end, start];
-  if (day === low) return DAY_PLACE.START;
-  if (day === high) return DAY_PLACE.END;
-  return day > low && day < high ? DAY_PLACE.BETWEEN : undefined;
+  if (day === low) return CALENDAR_PLACE.START;
+  if (day === high) return CALENDAR_PLACE.END;
+  return day > low && day < high ? CALENDAR_PLACE.BETWEEN : undefined;
 }
 
 /** The day a key steps to from `day`, wherever it lands, or none for a key that moves nothing. */
@@ -173,6 +186,13 @@ function restingDay(month: string, start: string | undefined, today: string): st
   if (start !== undefined && monthOf(start) === month) return start;
   if (monthOf(today) === month) return today;
   return `${month}-01`;
+}
+
+/** The ink a day's number is drawn in: on the accent where picked, then today's, then a neighbouring month's, then the text's own. */
+function dayInk(place: CalendarPlace | undefined, today: boolean, outside: boolean): string {
+  if (place !== undefined && place !== CALENDAR_PLACE.BETWEEN) return CALENDAR_DAY_INK.PICKED;
+  if (today) return CALENDAR_DAY_INK.TODAY;
+  return outside ? CALENDAR_DAY_INK.OUTSIDE : CALENDAR_DAY_INK.OWN;
 }
 
 /** The weekday headings, Sunday first: two letters drawn, the whole name read. */
@@ -271,12 +291,16 @@ export function Calendar({
   };
 
   return (
-    <div className="luke-calendar">
-      <div className="luke-calendar-head">
-        <span className="luke-calendar-title" id={titleId} aria-live="polite">
+    <div className={cn("luke-calendar", CALENDAR)}>
+      <div className={cn("luke-calendar-head", CALENDAR_CAPTION)}>
+        <span
+          className={cn("luke-calendar-title", CALENDAR_CAPTION_LABEL)}
+          id={titleId}
+          aria-live="polite"
+        >
           {spelled(first, { month: "long", year: "numeric" })}
         </span>
-        <span className="luke-calendar-steps">
+        <span className={cn("luke-calendar-steps", CALENDAR_NAV)}>
           <IconButton
             icon={<BackIcon />}
             label="Previous month"
@@ -295,7 +319,7 @@ export function Calendar({
       </div>
       <table
         ref={grid}
-        className="luke-calendar-grid"
+        className={cn("luke-calendar-grid", CALENDAR_MONTH_GRID)}
         // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: a date grid is a table the arrows move through, which is what ARIA's grid is for, as the APG's date picker draws it.
         role="grid"
         aria-labelledby={titleId}
@@ -308,7 +332,7 @@ export function Calendar({
             {WEEKDAYS.map((weekday) => (
               <th
                 key={weekday.day}
-                className="luke-calendar-weekday"
+                className={cn("luke-calendar-weekday", CALENDAR_WEEKDAY)}
                 scope="col"
                 aria-label={weekday.long}
               >
@@ -323,17 +347,30 @@ export function Calendar({
               {week.days.map((day, slot) => {
                 if (day === undefined) return <td key={WEEKDAYS[slot]?.day} />;
                 const place = placeOf(day, start, end);
+                const isToday = day === today;
+                const outside = monthOf(day) !== month;
+                const picked = place !== undefined && place !== CALENDAR_PLACE.BETWEEN;
                 return (
                   // biome-ignore lint/a11y/useAriaPropsSupportedByRole: inside a grid a cell is a gridcell, which takes aria-selected; the rule reads it as a plain table's cell.
                   <td
                     key={day}
-                    className="luke-calendar-cell"
+                    className={cn(
+                      "luke-calendar-cell",
+                      CALENDAR_DAY,
+                      place === undefined ? undefined : CALENDAR_RANGE[place],
+                    )}
                     aria-selected={place !== undefined}
                     data-place={place}
                   >
                     <button
                       type="button"
-                      className="luke-calendar-day"
+                      className={cn(
+                        "luke-calendar-day",
+                        CALENDAR_DAY_BUTTON,
+                        picked ? CALENDAR_DAY_FACE.PICKED : CALENDAR_DAY_FACE.OPEN,
+                        dayInk(place, isToday, outside),
+                        isToday && CALENDAR_TODAY,
+                      )}
                       tabIndex={day === focusDay ? 0 : -1}
                       aria-label={spelled(day, {
                         weekday: "long",
@@ -341,9 +378,9 @@ export function Calendar({
                         day: "numeric",
                         year: "numeric",
                       })}
-                      aria-current={day === today ? "date" : undefined}
+                      aria-current={isToday ? "date" : undefined}
                       data-day={day}
-                      data-outside={monthOf(day) !== month ? "true" : undefined}
+                      data-outside={outside ? "true" : undefined}
                       onClick={pulseOnPress(() => pick(day))}
                     >
                       {dateOf(day).getUTCDate()}

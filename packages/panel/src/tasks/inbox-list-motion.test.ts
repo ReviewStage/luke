@@ -2,7 +2,9 @@
 
 import assert from "node:assert/strict";
 import {
-  INBOX_RESPONSE,
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -63,8 +65,19 @@ function item(letter: string): InboxItem {
     revision: 1,
     version: INBOX_WIRE_VERSION,
     title: letter,
-    blocks: [],
-    response: { type: INBOX_RESPONSE.APPROVAL },
+    thread: [
+      {
+        id: `e1b2c3d4-0000-4000-8000-00000000000${letter.charCodeAt(0) - 64}`,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: "Approve or decline.",
+        ask: {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "Approve" }, { label: "Decline" }],
+          status: INBOX_ASK_STATUS.OPEN,
+        },
+        createdAt: 1_000,
+      },
+    ],
     needsReply: true,
     status: INBOX_STATUS.OPEN,
     postedAt: 1_000,

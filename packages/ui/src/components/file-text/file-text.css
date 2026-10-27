@@ -9,7 +9,7 @@
 
     box-sizing: border-box;
     min-width: 0;
-    padding: var(--luke-space-8) var(--luke-space-12);
+    padding: var(--luke-row-inset) var(--luke-list-inset);
     border: 1px solid var(--luke-color-border);
     border-radius: var(--luke-control-radius);
     background: var(--luke-color-code-ground);

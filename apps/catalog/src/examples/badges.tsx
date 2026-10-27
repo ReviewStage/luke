@@ -1,4 +1,4 @@
-import { BADGE_TONE, Badge, CheckIcon, GAP, Inline, Text, VISUALLY_HIDDEN_UNDER } from "@luke/ui";
+import { Badge, CheckIcon, GAP, Inline, STATUS_TONE, Text, VISUALLY_HIDDEN_UNDER } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -12,12 +12,12 @@ import { CatalogSection } from "../section";
  */
 
 const SAYS = {
-  [BADGE_TONE.NEUTRAL]: "Draft",
-  [BADGE_TONE.WORKING]: "Working",
-  [BADGE_TONE.ATTENTION]: "Needs you",
-  [BADGE_TONE.COMPLETE]: "Connected",
-  [BADGE_TONE.MERGED]: "Merged",
-  [BADGE_TONE.DANGER]: "Failed",
+  [STATUS_TONE.NEUTRAL]: "Draft",
+  [STATUS_TONE.WORKING]: "Working",
+  [STATUS_TONE.ATTENTION]: "Needs you",
+  [STATUS_TONE.COMPLETE]: "Connected",
+  [STATUS_TONE.MERGED]: "Merged",
+  [STATUS_TONE.DANGER]: "Failed",
 } as const;
 
 /** GitHub labels as GitHub answers them: six hex digits, or a colour the badge cannot paint. */
@@ -33,12 +33,12 @@ function Badges(): React.JSX.Element {
     <>
       <CatalogSection id="badge-tones" title="Tones">
         <Inline gap={GAP.CONTROL}>
-          {Object.values(BADGE_TONE).map((tone) => (
+          {Object.values(STATUS_TONE).map((tone) => (
             <Badge key={tone} tone={tone}>
               {SAYS[tone]}
             </Badge>
           ))}
-          <Badge tone={BADGE_TONE.COMPLETE} icon={<CheckIcon />}>
+          <Badge tone={STATUS_TONE.COMPLETE} icon={<CheckIcon />}>
             Signed in
           </Badge>
           <Badge dot>Waiting on a teammate</Badge>
@@ -75,8 +75,8 @@ function Badges(): React.JSX.Element {
       <CatalogSection id="badge-line" title="On a line of words">
         <div className="catalog-column">
           <Text>
-            The release build is <Badge tone={BADGE_TONE.WORKING}>Working</Badge> and the
-            notarization step <Badge tone={BADGE_TONE.ATTENTION}>Needs you</Badge> before it can
+            The release build is <Badge tone={STATUS_TONE.WORKING}>Working</Badge> and the
+            notarization step <Badge tone={STATUS_TONE.ATTENTION}>Needs you</Badge> before it can
             finish.
           </Text>
         </div>
@@ -84,13 +84,13 @@ function Badges(): React.JSX.Element {
       <CatalogSection id="badge-room" title="Words given up in a narrow room">
         <div className="catalog-narrow catalog-room">
           <Badge
-            tone={BADGE_TONE.COMPLETE}
+            tone={STATUS_TONE.COMPLETE}
             icon={<CheckIcon />}
             hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}
           >
             Ready to merge
           </Badge>
-          <Badge tone={BADGE_TONE.ATTENTION} hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}>
+          <Badge tone={STATUS_TONE.ATTENTION} hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}>
             Pending
           </Badge>
           <Badge dot hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}>
@@ -101,8 +101,8 @@ function Badges(): React.JSX.Element {
       <CatalogSection id="badge-narrow" title="Narrow column, long words">
         <div className="catalog-narrow">
           <Inline gap={GAP.CONTROL}>
-            <Badge tone={BADGE_TONE.ATTENTION}>Waiting for administrator approval</Badge>
-            <Badge tone={BADGE_TONE.COMPLETE}>Connected</Badge>
+            <Badge tone={STATUS_TONE.ATTENTION}>Waiting for administrator approval</Badge>
+            <Badge tone={STATUS_TONE.COMPLETE}>Connected</Badge>
           </Inline>
         </div>
       </CatalogSection>

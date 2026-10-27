@@ -101,7 +101,8 @@
     margin: var(--luke-space-16) 0 0;
     font-size: var(--luke-type-title-size);
     line-height: var(--luke-type-title-leading);
-    font-weight: var(--luke-weight-bold);
+    font-weight: var(--luke-type-title-weight);
+    letter-spacing: var(--luke-type-title-tracking);
     /* A title that wraps splits its words evenly rather than leaving one alone. */
     text-wrap: balance;
   }

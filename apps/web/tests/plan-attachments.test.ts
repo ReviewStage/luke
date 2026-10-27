@@ -8,7 +8,7 @@ import { attachment } from "@luke/database/schemas/attachment";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
-import { PICTURE_BOUNDS, PICTURE_TYPE } from "@luke/features/picture-wire";
+import { PICTURE_BOUNDS, PICTURE_MEDIA_TYPE, PICTURE_TYPE } from "@luke/features/picture-wire";
 import {
   PLAN_ATTACHMENT_BOUNDS,
   PLAN_ATTACHMENT_REFUSAL,
@@ -34,6 +34,7 @@ import {
 } from "@luke/service/testing/integration-connect";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { paddedTo, webmBytes } from "@luke/wire/testing";
 import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -44,8 +45,9 @@ import { SqlClient } from "effect/sql";
  * of the workspace reads its bytes back under the type they were sniffed
  * to be, never cached on the way; an account outside the workspace keeps
  * and reads nothing, exactly as for a plan that does not exist; bytes that
- * are not the image their label names are refused; and a plan at its bound
- * refuses in band. An upload is answered by the hosted oRPC router at the
+ * are not the image their label names are refused; a recording is kept as
+ * it was sent and served as a video, up to a sent video's bound and the
+ * plan's count of videos; and a plan at its bound refuses in band. An upload is answered by the hosted oRPC router at the
  * plan's public path, and refuses exactly as the old route did. A file a
  * comment on the plan carries is served at the same path, under the type
  * it travelled as, to the same members alone.
@@ -286,7 +288,9 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
           bare(
             yield* ask(
               upload(taskId, owner, pictureBody(PNG_URL), {
-                "content-length": String(Math.ceil(PICTURE_BOUNDS.MAX_BYTES / 3) * 4 + 1_025),
+                "content-length": String(
+                  Math.ceil(PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES / 3) * 4 + 1_025,
+                ),
               }),
             ),
           ),
@@ -326,5 +330,42 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
       assert.equal(refused.status, HOSTED_HTTP_STATUS.OK);
       assert.deepEqual(uploaded(refused), { refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY });
     }),
+  );
+
+  it.effect(
+    "a recording a member keeps is served as the video it was sent, and one past a sent video's bound, or past the plan's videos, is not kept",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, planId: taskId } = yield* openSharedTask;
+        const recording = webmBytes(1280, 800);
+        const videoUrl = (bytes: Uint8Array) =>
+          `data:${PICTURE_MEDIA_TYPE.WEBM};base64,${Buffer.from(bytes).toString("base64")}`;
+
+        const kept = uploaded(yield* ask(upload(taskId, owner, pictureBody(videoUrl(recording)))));
+        assert.ok("id" in kept);
+        const served = yield* ask(read(taskId, kept.id, teammate));
+        const long = paddedTo(recording, PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES + 1);
+        const tooLong = yield* ask(upload(taskId, owner, pictureBody(videoUrl(long))));
+        const db = yield* Database;
+        yield* db.insert(attachment).values(
+          Array.from({ length: PLAN_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_PLAN - 1 }, () => ({
+            taskId: taskId,
+            userId: owner,
+            contentType: PICTURE_MEDIA_TYPE.WEBM,
+            byteCount: recording.length,
+            bytes: recording,
+            createdAt: new Date(0),
+          })),
+        );
+        const past = yield* ask(upload(taskId, owner, pictureBody(videoUrl(recording))));
+
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(served.contentType, PICTURE_MEDIA_TYPE.WEBM);
+        assert.deepEqual([...served.bytes], [...recording]);
+        assert.equal(tooLong.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
+        assert.equal(past.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(uploaded(past), { refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY_VIDEOS });
+        assert.ok("id" in uploaded(yield* ask(upload(taskId, owner, pictureBody(PNG_URL)))));
+      }),
   );
 });

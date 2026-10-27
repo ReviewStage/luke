@@ -16,7 +16,7 @@ export const DROP_LEAVE = {
   WINDOW: "window",
 } as const;
 
-export type DropLeave = (typeof DROP_LEAVE)[keyof typeof DROP_LEAVE];
+type DropLeave = (typeof DROP_LEAVE)[keyof typeof DROP_LEAVE];
 
 /** What a card takes: whether a drag over it may ring it, whether a drop on it is taken, and when a drag has left. */
 export interface FileDropOptions {

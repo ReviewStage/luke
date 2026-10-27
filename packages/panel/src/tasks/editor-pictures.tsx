@@ -12,6 +12,7 @@ import {
   ErrorState,
   FoldingButton,
   FormField,
+  isVideoDataUrl,
   MENU_SURFACE_ELEMENT,
   MENU_SURFACE_FLOW,
   MenuSurface,
@@ -48,7 +49,9 @@ import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures.js";
  * then the text writes nothing of it. A keep that fails says so in the same
  * place, as every failure is said (`@luke/ui`'s `ErrorState`): its sentence, then
  * Retry and Remove. A picture of another plan pasted in is read as that
- * plan's and kept again on this one, so this plan's readers can see it.
+ * plan's and kept again on this one, so this plan's readers can see it; a
+ * video an agent recorded is carried across as it is, and waits as a quiet
+ * box, since its bytes draw no picture.
  * Selected, a picture offers its tools: Alt text and Caption, each a field
  * under it, Enlarge, and Delete. They hang above the picture from its left
  * edge, as wide as their own names, so a skinny picture neither squeezes
@@ -63,6 +66,7 @@ const UPLOAD_WORDS = {
   SENDING: "Uploading",
   NOT_A_PICTURE: "This file is not a picture Luke can keep.",
   TOO_MANY: "This plan already holds as many pictures as it can.",
+  TOO_MANY_VIDEOS: "This plan already holds as many videos as it can.",
   NOT_COPIED: "The picture could not be read from its plan.",
   FAILED: "The image could not be uploaded.",
 } as const;
@@ -121,6 +125,13 @@ interface DrawnPicture {
   readonly doors: PictureNodeDoors;
 }
 
+/** Why a keep failed, in the words said where its caption will stand. */
+function keepFailedWords(failure: string | undefined): string {
+  if (failure === PICTURE_KEEP_FAILURE.TOO_MANY) return UPLOAD_WORDS.TOO_MANY;
+  if (failure === PICTURE_KEEP_FAILURE.TOO_MANY_VIDEOS) return UPLOAD_WORDS.TOO_MANY_VIDEOS;
+  return UPLOAD_WORDS.FAILED;
+}
+
 /** A `data:` URL of bytes the Mac encoded. */
 function dataUrlOf(mediaType: string, base64: string): string {
   return `data:${mediaType};base64,${base64}`;
@@ -153,7 +164,7 @@ function UploadingPicture({
         padding={CARD_PADDING.FLUSH}
         className="picture-frame"
       >
-        {url === undefined ? (
+        {url === undefined || isVideoDataUrl(url) ? (
           <span className="picture-pending" />
         ) : (
           <img className="picture-image" src={url} alt={alt} draggable={false} />
@@ -393,13 +404,7 @@ export function useEditorPictures(
       const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId: taskId, picture: url }).catch(
         () => undefined,
       );
-      if (kept === undefined || "failure" in kept) {
-        return failed(
-          kept?.failure === PICTURE_KEEP_FAILURE.TOO_MANY
-            ? UPLOAD_WORDS.TOO_MANY
-            : UPLOAD_WORDS.FAILED,
-        );
-      }
+      if (kept === undefined || "failure" in kept) return failed(keepFailedWords(kept?.failure));
       keepPictureRead(taskId, kept.id, url);
       handle.current?.settlePicture(
         taken.upload,

@@ -113,7 +113,7 @@ test("a task box is named by its item, asks with its item's place in the words, 
       return Promise.resolve(false);
     },
   });
-  const boxes = [...container.querySelectorAll<HTMLInputElement>("input[type=checkbox]")];
+  const boxes = [...container.querySelectorAll<HTMLElement>('[role="checkbox"]')];
   assert.deepEqual(
     boxes.map((box) => box.getAttribute("aria-label")),
     ["Write the migration", "Wire the row"],
@@ -122,5 +122,9 @@ test("a task box is named by its item, asks with its item's place in the words, 
   assert.ok(second !== undefined, "each task item draws a box");
   await act(async () => second.click());
   assert.deepEqual(asked, [words.indexOf("- [ ] Wire")]);
-  assert.equal(second.checked, false, "a change not saved flips the box back");
+  assert.equal(
+    second.getAttribute("aria-checked"),
+    "false",
+    "a change not saved flips the box back",
+  );
 });

@@ -17,7 +17,7 @@ import { Database, queryBuilder } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
-import { getTestDB } from "../../testing/index.js";
+import { getTestDB, plansOf } from "../../testing/index.js";
 import {
   awaitingLinesOf,
   listMessagesBefore,
@@ -29,6 +29,7 @@ import {
   readMessageById,
   runningChildTurns,
   turnStoppedUnderReached,
+  turnUsagesOf,
 } from "../message-reads.js";
 import { storeWriter } from "../writer.js";
 
@@ -417,6 +418,18 @@ it.layer(getTestDB())("a conversation's reader", (it) => {
         yield* client.unsafe("reset enable_seqscan");
 
         assert.match(JSON.stringify(plan), /messages_awaiting_line/);
+      }),
+  );
+});
+
+it.layer(getTestDB())("a transcript's usage", (it) => {
+  it.effect(
+    "the usage read finds the conversations delegated from the one read through their parent's index",
+    () =>
+      Effect.gen(function* () {
+        const [usages] = yield* plansOf(turnUsagesOf(`user-${randomUUID()}`, randomUUID()));
+
+        assert.match(usages?.plan ?? "", /conversations_parent/);
       }),
   );
 });

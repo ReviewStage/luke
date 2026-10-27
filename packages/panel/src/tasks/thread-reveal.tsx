@@ -1,5 +1,5 @@
 import type { ReviewThread } from "@luke/features/coding-agent-wire";
-import type { PullRequestThreadView } from "@luke/features/luke-link";
+import type { PullRequestThreadView } from "@luke/features/link-grammar";
 import {
   type AnimationEvent,
   createContext,

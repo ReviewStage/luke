@@ -6,24 +6,31 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChangesAnswerView,
 } from "@luke/features/coding-agent-view";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { PLAN_ACTOR, type PlanRevisionLine, type TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS } from "@luke/settings/update";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DesktopInbox } from "./desktop/desktop-inbox.js";
 import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
+import { DesktopVersionHistory, taskVersionSubject } from "./desktop/desktop-version-history.js";
 import { SIDEBAR_OVERLAY } from "./desktop/sidebar-collapse.js";
 import { PANEL_TAB } from "./panel-tabs.js";
 import { AgentAuthSection } from "./settings/agent-auth-section.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
+import { SHELL_ROOM } from "./shell-room.js";
+import { useInboxListing } from "./tasks/use-inbox-listing.js";
+import { HISTORY_READ } from "./tasks/use-plan-history.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { ChangesTabReading } from "./testing/changes-tab.js";
 import { onRegistry } from "./testing/copy-feedback.js";
+import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { followedInboxes } from "./testing/followed-inboxes.js";
+import { installScrollIntoView } from "./testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
 
 /**
@@ -53,6 +60,7 @@ let answering = false;
 const host = followedInboxes(() => (answering ? { items: [] } : UNANSWERED));
 
 beforeEach(() => {
+  installScrollIntoView();
   fakeAppPlatform(QUIET_PANEL);
   answering = false;
   window.localStorage.clear();
@@ -258,5 +266,154 @@ test("Settings says a page's failed read alike in its card's place, the keys and
   const workspacesFailure = readFailure(workspaces);
   assertSaidAlike(workspacesFailure, "Your workspaces could not be read.");
   workspacesFailure.retry();
+  assert.equal(retried, 1);
+});
+
+/** The Inbox page as the tests draw it: open, nothing chosen. */
+const INBOX_VIEW = {
+  open: true,
+  chosen: undefined,
+  onOpen: ignore,
+  onOpenList: () => undefined,
+  onClose: ignore,
+  onChoose: ignore,
+  onOpenItem: () => undefined,
+  listed: false,
+  onListed: ignore,
+  pages: undefined,
+  onTaskAgents: () => undefined,
+} as const;
+
+/** The Inbox whose sidebar lists it, so the page shows the chosen item alone. */
+function PanedInbox({ tasks }: { tasks: ReturnType<typeof tasksControl> }): React.JSX.Element {
+  const listing = useInboxListing(tasks);
+  return createElement(DesktopInbox, { tasks, listing });
+}
+
+test("an Inbox whose task list could not be read says so, never that nothing needs you, and Retry reads the list again", async () => {
+  let retried = 0;
+  const tasks = tasksControl({
+    listFailed: true,
+    onRetryList: () => {
+      retried += 1;
+    },
+    inboxView: INBOX_VIEW,
+  });
+  const page = await mount(createElement(DesktopInbox, { tasks }));
+  const failure = readFailure(page);
+  assertSaidAlike(failure, "Some items could not be read.");
+  assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u);
+  assert.equal(page.querySelector('[role="status"]'), null, "no loading placeholder");
+  failure.retry();
+  assert.equal(retried, 1);
+});
+
+test("an Inbox the sidebar lists says a failed read across its page, never that nothing needs you, and Retry reads again", async () => {
+  let retried = 0;
+  const tasks = tasksControl({
+    listFailed: true,
+    onRetryList: () => {
+      retried += 1;
+    },
+    inboxView: INBOX_VIEW,
+  });
+  const page = await mount(createElement(PanedInbox, { tasks }));
+  const failure = readFailure(page);
+  assertSaidAlike(failure, "Some items could not be read.");
+  assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u);
+  assert.equal(page.querySelector('[role="status"]'), null, "no loading placeholder");
+  failure.retry();
+  assert.equal(retried, 1);
+});
+
+const REVISION: PlanRevisionLine = {
+  seq: 2,
+  lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: true },
+  startedAt: 20,
+  changes: 2,
+};
+
+/** The plan's version history whose chosen version could not be read, its sections open where `sections` says. */
+async function versionNotRead(sections: boolean, onRetryVersion: () => void): Promise<HTMLElement> {
+  const base = tasksControl();
+  const history = {
+    ...base.history,
+    open: true,
+    list: { kind: HISTORY_READ.READY, revisions: [REVISION], earlier: undefined } as const,
+    selected: REVISION.seq,
+    viewing: { line: REVISION, current: true, read: { kind: HISTORY_READ.FAILED } } as const,
+    spot: sections
+      ? { revision: REVISION.seq, opened: { seq: REVISION.seq, heading: undefined } }
+      : undefined,
+    onRetryVersion,
+  };
+  const tasks = tasksControl({
+    page: TASKS_PAGE.DOCUMENT,
+    activeTaskId: DOCUMENT_TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    history,
+  });
+  return mount(
+    createElement(DesktopVersionHistory, {
+      sidebar: {
+        collapsed: false,
+        compact: false,
+        overlay: SIDEBAR_OVERLAY.CLOSED,
+        width: 264,
+        onToggle: ignore,
+        onOverlay: ignore,
+        onResize: ignore,
+        staged: false,
+      },
+      room: SHELL_ROOM.WIDE,
+      history: {
+        canGoBack: false,
+        canGoForward: false,
+        onBack: ignore,
+        onForward: ignore,
+        steps: { back: [], forward: [] },
+        onGoTo: ignore,
+      },
+      subject: taskVersionSubject(tasks),
+      account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },
+      onExit: ignore,
+      onRestored: ignore,
+    }),
+  );
+}
+
+/** The Retry in a region's alert, which reads the version again. */
+function retryIn(region: Element | null): HTMLButtonElement | undefined {
+  const alert = region?.querySelector('[role="alert"]');
+  return [...(alert?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+    (each) => each.textContent === "Retry",
+  );
+}
+
+test("a version history whose version could not be read says so on its page and over the sections it opened, each with Retry, and no placeholder", async () => {
+  let retried = 0;
+  const page = await versionNotRead(true, () => {
+    retried += 1;
+  });
+  const sections = page.querySelector("section[aria-label='Sections changed']");
+  const version = page.querySelector(".version-page");
+  assert.match(sections?.textContent ?? "", /The sections it changed could not be read\./u);
+  assert.match(version?.textContent ?? "", /The version could not be read\./u);
+  assert.equal(page.querySelector('[role="status"]'), null, "no placeholder stands");
+  assert.equal(page.querySelector(".luke-skeleton"), null, "no block stands");
+  act(() => retryIn(sections)?.click());
+  act(() => retryIn(version)?.click());
+  assert.equal(retried, 2, "each Retry reads the version again");
+});
+
+test("a version history whose version could not be read says so on its page with Retry where no sections are open", async () => {
+  let retried = 0;
+  const page = await versionNotRead(false, () => {
+    retried += 1;
+  });
+  const version = page.querySelector(".version-page");
+  assert.match(version?.textContent ?? "", /The version could not be read\./u);
+  assert.equal(page.querySelectorAll('[role="alert"]').length, 1);
+  act(() => retryIn(version)?.click());
   assert.equal(retried, 1);
 });

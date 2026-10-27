@@ -404,13 +404,17 @@ function containsAcross(root: Element, element: Element): boolean {
 }
 
 /**
- * Calls `onChange` whenever the text under `root` changes, or the text in
- * a shadow root searched in a host's place (`FIND_SHADOW_ATTRIBUTE`), each
- * such root watched from the moment its host stands under `root`, until the
- * answer is called.
+ * Calls `onChange` once in the frame after the text under `root` changes,
+ * or the text in a shadow root searched in a host's place
+ * (`FIND_SHADOW_ATTRIBUTE`), each such root watched from the moment its host
+ * stands under `root`, until the answer is called. Note that every change
+ * landing before that frame is heard in its one call, because an agent at
+ * work streams its words a few at a time, and a search of the whole tab on
+ * each would outrun the frames that draw them.
  */
 export function watchText(root: Element, onChange: () => void): () => void {
   const watched = new WeakSet<Node>();
+  let frame: number | undefined;
   const watchShadows = () => {
     for (const host of root.querySelectorAll(`[${FIND_SHADOW_ATTRIBUTE}]`)) {
       const shadow = host.shadowRoot;
@@ -420,12 +424,19 @@ export function watchText(root: Element, onChange: () => void): () => void {
     }
   };
   const observer = new MutationObserver(() => {
-    watchShadows();
-    onChange();
+    if (frame !== undefined) return;
+    frame = requestAnimationFrame(() => {
+      frame = undefined;
+      watchShadows();
+      onChange();
+    });
   });
   observer.observe(root, WATCHED);
   watchShadows();
-  return () => observer.disconnect();
+  return () => {
+    observer.disconnect();
+    if (frame !== undefined) cancelAnimationFrame(frame);
+  };
 }
 
 /**

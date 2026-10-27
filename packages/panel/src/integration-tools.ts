@@ -4,7 +4,7 @@ import {
 } from "@luke/features/integration-view";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 
 /**
@@ -17,7 +17,9 @@ import { useAct } from "./act.js";
  * working server nothing, and holds no refusal, so a mended one reads as
  * mended. Each read stands until the next one answers, so a surface does
  * not blink back to checking, and an answer to an older ask never lands over
- * a newer one; a provider that stops standing connected forgets its read.
+ * a newer one; a provider that stops standing connected forgets its read. A
+ * read that failed is asked again on a press of Retry, which stands it
+ * back at checking until the next answer.
  * What a read means for the row is
  * `integration-health.ts`'s to say.
  */
@@ -27,11 +29,25 @@ export type IntegrationToolsReads = Readonly<Record<string, IntegrationToolsView
 
 const UNANSWERED: IntegrationToolsView = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
 
+/** The reads of every connected server, and the way to ask one server again. */
+export interface IntegrationToolReads {
+  readonly reads: IntegrationToolsReads;
+  /** Asks one server for its tools again, standing its read at checking until it answers. */
+  readonly retry: (server: string) => void;
+}
+
 /** The tools read of every server in `connected` (an account by its connection name, or a provider), asked once per focus of the window while the caller is drawn. */
 export function useIntegrationTools(connected: readonly string[]): IntegrationToolsReads {
+  return useIntegrationToolReads(connected).reads;
+}
+
+/** `useIntegrationTools`, with the Retry a surface that says a read failed offers beside it. */
+export function useIntegrationToolReads(connected: readonly string[]): IntegrationToolReads {
   const { act } = useAct();
   const [reads, setReads] = useState<IntegrationToolsReads>({});
   const [focus, setFocus] = useState(0);
+  // Counts the presses of Retry, so the next render asks the server again.
+  const [, setRetried] = useState(0);
   // The focus each server was last asked under, so each is asked once per focus.
   const asked = useRef(new Map<string, number>());
   // Each server's newest ask, so an answer to an older one never lands over it.
@@ -74,5 +90,15 @@ export function useIntegrationTools(connected: readonly string[]): IntegrationTo
     }
   });
 
-  return reads;
+  const retry = useCallback((server: string) => {
+    asked.current.delete(server);
+    setReads((read) => {
+      const kept = { ...read };
+      delete kept[server];
+      return kept;
+    });
+    setRetried((count) => count + 1);
+  }, []);
+
+  return { reads, retry };
 }

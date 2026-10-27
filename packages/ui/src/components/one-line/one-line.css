@@ -16,6 +16,6 @@
   }
 
   .luke-one-line[data-end="fade"][data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 }

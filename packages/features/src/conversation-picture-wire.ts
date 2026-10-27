@@ -76,13 +76,15 @@ export function isVideoType(
 }
 
 /** A kept picture as a stored output names it: the row, the type its bytes were sniffed to be, its size in pixels, and its size in bytes. */
-export interface KeptPicture {
-  readonly id: string;
-  readonly mediaType: ConversationMediaType;
-  readonly width: number;
-  readonly height: number;
-  readonly byteCount: number;
-}
+export const keptPictureSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  mediaType: conversationMediaTypeSchema,
+  width: EffectSchema.Number,
+  height: EffectSchema.Number,
+  byteCount: EffectSchema.Number,
+});
+
+export type KeptPicture = typeof keptPictureSchema.Type;
 
 /**
  * The provider key an image file part of a coding agent's line names what

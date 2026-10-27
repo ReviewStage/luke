@@ -2,14 +2,13 @@
 
 import assert from "node:assert/strict";
 import {
-  BADGE_TONE,
   Badge,
   CHIP_LOOK,
   CHIP_SIZE,
-  CHIP_TONE,
   Chip,
   ChipName,
   PROFILE,
+  STATUS_TONE,
   type SurfaceAttributes,
   surfaceAttributes,
   THEME,
@@ -106,7 +105,7 @@ const CHIPS: readonly (readonly [string, ReactElement])[] = [
     "a pull request's state",
     createElement(
       Chip,
-      { look: CHIP_LOOK.PILL, size: CHIP_SIZE.COMPACT, tone: CHIP_TONE.MERGED, chevron: true },
+      { look: CHIP_LOOK.PILL, size: CHIP_SIZE.COMPACT, tone: STATUS_TONE.MERGED, chevron: true },
       createElement(ChipName, null, "Merged"),
     ),
   ],
@@ -118,7 +117,10 @@ const CHIPS: readonly (readonly [string, ReactElement])[] = [
       createElement(ChipName, null, "luke/expire-invites"),
     ),
   ],
-  ["a badge in a tone", createElement(Badge, { tone: BADGE_TONE.COMPLETE, children: "Connected" })],
+  [
+    "a badge in a tone",
+    createElement(Badge, { tone: STATUS_TONE.COMPLETE, children: "Connected" }),
+  ],
   ["a neutral badge", createElement(Badge, { children: "Outdated" })],
 ];
 

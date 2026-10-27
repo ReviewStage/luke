@@ -16,12 +16,12 @@ import {
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { andList } from "@luke/features/words";
 import {
   ConfirmDialog,
   DIALOG_TONE,
   type DialogQuestion,
   EmptyState,
-  isVideoDataUrl,
   MESSAGE_ACTIONS_PLACEMENT,
   ONE_LINE_ELEMENT,
   OneLine,
@@ -33,7 +33,6 @@ import {
   Time,
   useConfirmDialog,
   useMinute,
-  VideoPlayer,
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, actorName, distinctActors } from "@luke/ui/actor-model";
@@ -231,7 +230,7 @@ const UNSAVEABLE = /[/\\:]/gu;
 /** The picture as the viewer takes a file: its file's name, under its type's own extension where the name lacks it, since the viewer saves it by that name. */
 function viewerFile(block: ChatImageBlock, url: string): FileChip {
   const mediaType = url.slice("data:".length, url.indexOf(";"));
-  const extension = `.${mediaType.slice("image/".length)}`;
+  const extension = `.${mediaType.slice(mediaType.indexOf("/") + 1)}`;
   const name = block.alt.replace(UNSAVEABLE, "-");
   return { name: name.endsWith(extension) ? name : `${name}${extension}`, mediaType, url };
 }
@@ -240,7 +239,7 @@ function viewerFile(block: ChatImageBlock, url: string): FileChip {
  * A picture a message carries: its own block at its own size up to the
  * column's, a quiet box while its bytes are read, its words where it is
  * gone, and pressed to open it larger over the window; a recording an agent
- * posted plays there instead.
+ * posted is drawn as its still, and the viewer plays it.
  */
 function ChatPicture({
   messageId,
@@ -257,16 +256,6 @@ function ChatPicture({
     [readPicture, messageId],
   );
   const state = usePicture(messageId, block.attachmentId, read);
-  // A recording an agent posted plays in its place, and no press opens it, since the viewer draws pictures alone.
-  if (state.kind === PICTURE_STATE.READY && isVideoDataUrl(state.url)) {
-    return (
-      <div className="chat-picture">
-        <span className="picture-block ph-no-capture" data-video="">
-          <VideoPlayer dataUrl={state.url} label={block.alt} />
-        </span>
-      </div>
-    );
-  }
   return (
     <div className="chat-picture">
       <PictureBlock
@@ -302,8 +291,7 @@ function Block({
   code: InboxCodeDoors | undefined;
   context: MessageContext;
 }): React.JSX.Element {
-  const { openLink } = context;
-  if (!knownBlock(block)) return <Text tone={TEXT_TONE.SUBTLE}>{NEWER_LUKE}</Text>;
+  if (!knownBlock(block)) return <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>;
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
       // Note that every message is drawn as a document, as an Inbox item's words are, so a link alone on its line is its card; whoever wrote it, a selection inside may be replied to.
@@ -318,8 +306,8 @@ function Block({
       );
     case CHAT_BLOCK.LINK:
       return (
-        <Text>
-          <LinkBlock url={block.url} label={block.label} openLink={openLink} />
+        <Text as={TEXT_ELEMENT.DIV}>
+          <LinkBlock url={block.url} label={block.label} />
         </Text>
       );
     case CHAT_BLOCK.CODE:
@@ -1179,7 +1167,7 @@ function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): 
 
 /** A direct message's two, each by name, as its foot names them where the reader is neither. */
 function dmPair(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
-  return (channel.members ?? []).map((id) => chatWho(chat, names, id).name).join(" and ");
+  return andList((channel.members ?? []).map((id) => chatWho(chat, names, id).name));
 }
 
 /** What a channel's composer is called: "Message" and the channel's `#name`, or who a DM is with. */

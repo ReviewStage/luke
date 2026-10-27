@@ -12,7 +12,9 @@ import { Schema as EffectSchema } from "effect";
  * change itself, in GitHub's own words: a branch protection, a conflict, or
  * a permission the member's account does not hold. A merge, and turning
  * auto-merge on, name the head commit the member saw, so GitHub refuses one
- * made against a head pushed since. Which of the pull request's files the
+ * made against a head pushed since; an edit of the description names the
+ * words it began from, and the service refuses it, writing nothing, where
+ * GitHub's have changed since. Which of the pull request's files the
  * member marked viewed on GitHub is read the same way, on their own sign-in,
  * since GitHub keeps the mark per account
  * (`GET /api/agents/{id}/pull-request/viewed`), and set by two of the
@@ -95,6 +97,8 @@ export const PULL_REQUEST_ACTION = {
   REOPEN: "reopen",
   /** Its title changed to the one named. */
   EDIT_TITLE: "edit-title",
+  /** Its description changed to the one named, where GitHub's still reads as the one the member opened. */
+  EDIT_DESCRIPTION: "edit-description",
   /** A review submitted: the member's own pending review where they hold one, else a new one. */
   SUBMIT_REVIEW: "submit-review",
   /** A user or a team asked for a review. */
@@ -164,7 +168,7 @@ const reviewCommentSideSchema = EffectSchema.Literals(Object.values(REVIEW_COMME
 /** A line of a file, counted from one. */
 const fileLineSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
-/** A review's words, Markdown, which may be empty where GitHub allows it; GitHub's bound. */
+/** A review's or a description's words, Markdown, which may be empty where GitHub allows it; GitHub's bound. */
 const reviewBodySchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS),
 );
@@ -245,6 +249,16 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
       EffectSchema.isNonEmpty(),
       EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_TITLE_CHARS),
     ),
+  }),
+  /**
+   * The description as the member wrote it (`body`), and as it stood when
+   * they began (`expectedBody`), which the service holds GitHub's to before
+   * it writes, so an edit made on GitHub meanwhile is never written over.
+   */
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.EDIT_DESCRIPTION),
+    body: reviewBodySchema,
+    expectedBody: reviewBodySchema,
   }),
   EffectSchema.Struct({
     action: EffectSchema.Literal(PULL_REQUEST_ACTION.SUBMIT_REVIEW),
@@ -342,6 +356,17 @@ export const PULL_REQUEST_WRITE_OUTCOME = {
   REFUSED: "refused",
 } as const;
 
+/**
+ * Why a change was refused, where the tab does more with it than say its
+ * words; absent for every other refusal.
+ */
+export const PULL_REQUEST_REFUSAL = {
+  /** The description changed on GitHub since the member opened it, so nothing was written; the draft is theirs to keep or drop. */
+  DESCRIPTION_CHANGED: "description-changed",
+} as const;
+
+export type PullRequestRefusal = (typeof PULL_REQUEST_REFUSAL)[keyof typeof PULL_REQUEST_REFUSAL];
+
 /** How GitHub took a change, as the service answers it. */
 export const pullRequestWriteAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ outcome: EffectSchema.Literal(PULL_REQUEST_WRITE_OUTCOME.DONE) }),
@@ -354,6 +379,8 @@ export const pullRequestWriteAnswerSchema = EffectSchema.Union([
     words: EffectSchema.String.check(
       EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_REFUSAL_CHARS),
     ),
+    /** Why, where the tab acts on it; absent from a service before it, and for any other refusal. */
+    reason: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(PULL_REQUEST_REFUSAL))),
   }),
 ]);
 

@@ -1,19 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { STATUS_TONE } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "./testing/copy-feedback.js";
-import {
-  TOAST_HOLD,
-  TOAST_TONE,
-  ToastHost,
-  type ToastNotice,
-  useToast,
-  useWorkingToast,
-} from "./toast.js";
+import { TOAST_HOLD, ToastHost, type ToastNotice, useToast, useWorkingToast } from "./toast.js";
 
 /**
  * toast.test.ts -- the window's toasts against the window they stand in: a
@@ -72,7 +66,7 @@ function mount(height: number): void {
 function persisting(words: string): ToastNotice {
   return {
     words,
-    tone: TOAST_TONE.DONE,
+    tone: STATUS_TONE.COMPLETE,
     action: { label: "View", onPress: () => undefined },
     persists: true,
   };
@@ -185,12 +179,12 @@ test("a toast with an action and a hold draws its countdown over that hold, and 
   act(() =>
     show?.({
       words: "Task archived",
-      tone: TOAST_TONE.DONE,
+      tone: STATUS_TONE.COMPLETE,
       action: { label: "Undo", onPress: () => undefined },
     }),
   );
   act(() => show?.(persisting("Retry the webhook finished")));
-  act(() => show?.({ words: "Link copied", tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE }));
+  act(() => show?.({ words: "Link copied", tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }));
 
   const countdowns = [...document.querySelectorAll<HTMLElement>(".luke-toast")].map((toast) =>
     toast
@@ -210,14 +204,16 @@ test("two pieces of work under way stand apart, each settles its own card in pla
   });
   const working = [...document.querySelectorAll(".luke-toast")];
 
-  act(() => second?.({ words: "Couldn't save", tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }));
-  act(() => first?.({ words: "Saved", tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE }));
+  act(() =>
+    second?.({ words: "Couldn't save", tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+  );
+  act(() => first?.({ words: "Saved", tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }));
 
   assert.deepEqual(standing(), ["Saved", "Couldn't save"]);
   assert.deepEqual([...document.querySelectorAll(".luke-toast")], working, "the same two cards");
   assert.deepEqual(
     working.map((toast) => (toast as HTMLElement).dataset.tone),
-    [TOAST_TONE.DONE, TOAST_TONE.FAILED],
+    [STATUS_TONE.COMPLETE, STATUS_TONE.DANGER],
   );
   assert.equal(document.querySelector('[role="alert"]')?.textContent, "Couldn't save");
 });

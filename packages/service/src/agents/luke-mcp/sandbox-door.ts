@@ -34,16 +34,18 @@ import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import type { RepositorySandbox, RepositorySandboxDoor } from "../repository-shell.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
-import { type OidcTokenRead, SandboxUnavailable, vercelSandboxApi } from "../vercel-sandbox-api.js";
+import {
+  type OidcTokenRead,
+  SandboxUnavailable,
+  UP_STATUSES,
+  vercelSandboxApi,
+} from "../vercel-sandbox-api.js";
 
 /** The most of one file a door reads: past every bound a tool holds a file to, a page's HTML and a kept picture among them. */
 export const SANDBOX_DOOR_MAX_BYTES = 8 * 1024 * 1024;
 
 /** How the read exits where the path is no regular file the sandbox's user may read. */
 const READ_EXIT = { NO_FILE: 3 } as const;
-
-/** The states a sandbox is up in, which a file can be read from. */
-const UP_STATUSES: ReadonlySet<string> = new Set(["pending", "running"]);
 
 /** How the edge runs the door's effects, on its own runtime. */
 export type SandboxDoorRunner = <A, E>(

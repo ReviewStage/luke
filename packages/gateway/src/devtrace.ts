@@ -11,7 +11,13 @@
  */
 
 import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@luke/live";
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@luke/wire";
+import {
+  isRecord,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+  WireRecordShapeSchema,
+} from "@luke/wire";
 import { Schema } from "effect";
 
 /**
@@ -37,19 +43,18 @@ export type TraceDirection = (typeof TRACE_DIRECTION)[keyof typeof TRACE_DIRECTI
 const TraceDirectionSchema = Schema.Literals(Object.values(TRACE_DIRECTION));
 
 /** One live event as the tap saw it cross the data channel. */
-export interface AgentWireTrace {
-  readonly direction: TraceDirection;
-  readonly event: WireRecord;
-}
+const AgentWireTraceSchema = Schema.Struct({
+  direction: TraceDirectionSchema,
+  event: WireRecordShapeSchema,
+});
 
-const readsTraceDirection = Schema.is(TraceDirectionSchema);
+export type AgentWireTrace = typeof AgentWireTraceSchema.Type;
 
-function isTraceDirection(value: UnparsedWireValue): value is TraceDirection {
-  return readsTraceDirection(value);
-}
+const readsAgentWireTrace = Schema.is(AgentWireTraceSchema);
 
+/** Whether a value is one tapped event: a plain record of a direction and the event it carried. */
 export function isAgentWireTrace(value: UnparsedWireValue): value is AgentWireTrace & WireRecord {
-  return isRecord(value) && isTraceDirection(value.direction) && isRecord(value.event);
+  return isRecord(value) && readsAgentWireTrace(value);
 }
 
 /**

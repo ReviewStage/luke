@@ -1,16 +1,18 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SettingsRow, type SettingsRowDensity, Switch } from "@luke/ui";
-import { useSettingWrite } from "@luke/ui/use-setting-write";
+import { SettingsRow, type SettingsRowDensity, STATUS_TONE, Switch } from "@luke/ui";
+import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
+import { showToast, TOAST_HOLD } from "../toast.js";
 import { SettingMarks } from "./marks.js";
 
 /**
  * A settings switch: `@luke/ui`'s `SettingsRow` holding its `Switch`, the
  * row's name, optional why, and the thumb. The visible name is the switch's
  * own name and the why is its description, so a reader hears the words a
- * sighted hand clicks. The write and the refusal live here, so two switches
- * can be in flight at once and a refusal stands under the row that asked, in
- * the row's own error line.
+ * sighted hand clicks. The switch flips at once, from a local value, and the
+ * write lives here, so two switches can be in flight at once; a write the
+ * store refuses puts the switch back and says why in a FAILED toast, and the
+ * switch never rests disabled for a write (Dean, 2026-10-23).
  */
 export function SwitchRow({
   label,
@@ -30,7 +32,7 @@ export function SwitchRow({
   anchor?: string;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean;
-  /** Whether the switch rests for a reason of its caller's, beside its own write in flight. */
+  /** Whether the switch rests for a reason of its caller's; a write in flight never rests it. */
   disabled?: boolean;
   /** How the row stands; in a settings card where none is named. */
   density?: SettingsRowDensity | undefined;
@@ -38,13 +40,14 @@ export function SwitchRow({
   // biome-ignore lint/suspicious/noConfusingVoidType: a draft's switch cannot be refused, so its change answers void
   onChange: (enabled: boolean) => void | Promise<ActionResult>;
 }): React.JSX.Element {
-  const { busy, rejection, saves, run } = useSettingWrite(onChange);
+  const { value, saves, run } = useOptimisticSettingWrite(checked, onChange, (words) =>
+    showToast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+  );
   return (
     <SettingsRow
       label={label}
       adornment={<SettingMarks changed={changed} saves={saves} />}
       description={detail}
-      error={rejection}
       density={density}
       labelsControl
     >
@@ -52,11 +55,11 @@ export function SwitchRow({
         <Switch
           id={control.controlId}
           {...(anchor === undefined ? undefined : searchAnchorProps(anchor))}
-          checked={checked}
+          checked={value}
           label={label}
           describedBy={control["aria-describedby"]}
           aria-invalid={control["aria-invalid"]}
-          disabled={busy || disabled}
+          disabled={disabled}
           onChange={(next) => run(next)}
         />
       )}

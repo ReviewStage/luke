@@ -1,5 +1,6 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
+import { callHeading, WORKED_SEPARATOR } from "@luke/features/time-format";
 import {
   CARD_CORNER,
   CARD_ELEMENT,
@@ -12,7 +13,6 @@ import {
   SCROLL_FADE_INSET,
   Tooltip,
 } from "@luke/ui";
-import { callHeading, WORKED_SEPARATOR } from "@luke/ui/time-format";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,
@@ -117,11 +117,14 @@ function CopyLinesButton({ lines }: { lines: string }): React.JSX.Element {
  */
 export function CodeCardHeader({
   codeRef,
+  repository,
   note,
   copied,
   onOpen,
 }: {
   codeRef: CodeRef;
+  /** The repository the lines were read from, `owner/name`, which the file's card names. */
+  repository: string;
   /** The agent's note on the lines, which the file's card says; none where the card has none. */
   note: string | undefined;
   /** The lines a copy carries; none where the card holds no lines yet. */
@@ -131,7 +134,7 @@ export function CodeCardHeader({
 }): React.JSX.Element {
   return (
     <header className="code-card-header">
-      <FileRef codeRef={codeRef} note={note} onOpen={onOpen} />
+      <FileRef codeRef={codeRef} repository={repository} note={note} onOpen={onOpen} />
       <span className="code-card-actions">
         {copied === undefined ? null : <CopyLinesButton lines={copied} />}
         {onOpen === undefined ? null : (
@@ -186,6 +189,7 @@ function CodeCardContent({
     >
       <CodeCardHeader
         codeRef={code.ref}
+        repository={code.repository}
         note={code.note}
         copied={copiedLines(code)}
         onOpen={onOpenFile === undefined ? undefined : () => onOpenFile(code.ref, code.commit)}

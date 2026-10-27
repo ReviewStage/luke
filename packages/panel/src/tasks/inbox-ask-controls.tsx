@@ -79,7 +79,7 @@ const CHOICE_LEGEND = "Options";
 const RECOMMENDED = "Recommended";
 
 /** A choice's options as `@luke/ui`'s ChoiceList draws them, each the agent recommends wearing its badge. */
-export function choiceOptions(
+function choiceOptions(
   options: readonly { label: string; detail?: string | undefined; recommended: boolean }[],
 ): ChoiceOption<string>[] {
   return options.map((option) => ({
@@ -91,7 +91,7 @@ export function choiceOptions(
 }
 
 /** Where a choice's open options stand, which a number key and Enter's way to what is missing find them by. */
-export const OPTIONS_ATTRIBUTE = "data-inbox-options";
+const OPTIONS_ATTRIBUTE = "data-inbox-options";
 
 /** The options of the open item's choice, in their order. */
 export function optionRows(pane: HTMLElement): HTMLButtonElement[] {
@@ -110,7 +110,7 @@ export function optionRows(pane: HTMLElement): HTMLButtonElement[] {
  * it is the choice as it was answered, the picks checked, which no press,
  * key, or number reaches, and which Enter's way to an option passes by.
  */
-export function ChoiceOptions({
+function ChoiceOptions({
   choice,
   draft,
   disabled,
@@ -163,7 +163,7 @@ function FieldLabel({ field }: { field: InboxField }): React.JSX.Element {
 }
 
 /** How a form's text fields are drawn where the caller draws its own: the Inbox's composer field. */
-export type FormText = (props: FormTextProps) => React.ReactNode;
+type FormText = (props: FormTextProps) => React.ReactNode;
 
 /**
  * The parts of a field a frame's attributes name, which Enter's way to an
@@ -328,7 +328,7 @@ function InboxFormField({
 }
 
 /** A form's fields, stacked in the agent's order; its text fields drawn by `text` where it is given; read-only, as an answer filled them. */
-export function FormFields({
+function FormFields({
   form,
   draft,
   disabled,
@@ -361,7 +361,7 @@ export function FormFields({
 }
 
 /** Answers no change, for the controls of an answer already given. */
-export function heldStill(): void {}
+function heldStill(): void {}
 
 /** What an editor's own element matches, its words written in place, and a field of several lines. */
 const WRITES_LINES = 'textarea, [contenteditable]:not([contenteditable="false"])';

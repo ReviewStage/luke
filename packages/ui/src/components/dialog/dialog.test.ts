@@ -300,6 +300,33 @@ test("a dialog given a title and actions is named by its title, and what it hold
   expect(holds(field.current)).toBe(true);
 });
 
+test("what a dialog holds stands in one middle between its head and its foot, so a short window scrolls the middle and keeps the title and the answers", () => {
+  draw(
+    createElement(Dialog, {
+      title: "New section",
+      onDismiss: () => undefined,
+      actions: createElement("button", { type: "button" }, "Save"),
+      children: [
+        createElement("input", { key: "title", "aria-label": "Section title" }),
+        createElement("p", { key: "icons" }, "Icons"),
+      ],
+    }),
+  );
+  const dialog = card() ?? expect.fail("the dialog opens");
+  const middle =
+    dialog.querySelector('[data-slot="dialog-body"]') ?? expect.fail("a middle stands");
+  const head = dialog.querySelector("h2") ?? expect.fail("a head stands");
+  expect(middle.contains(dialog.querySelector("input"))).toBe(true);
+  expect(middle.contains(dialog.querySelector("p"))).toBe(true);
+  expect(middle.contains(head)).toBe(false);
+  expect(middle.contains(button("Save"))).toBe(false);
+  // Note that the head comes before the middle and the foot after it, in the card's own column.
+  expect(head.compareDocumentPosition(middle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(
+    middle.compareDocumentPosition(button("Save")) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
 /** A dialog whose act its owner refuses or lets through, at the owner's word. */
 function Refusing({ refused }: { refused: boolean }): React.JSX.Element {
   return createElement(Dialog, {
@@ -388,4 +415,47 @@ test("an owner asks its dialog away through its handle as Escape would, a draft 
   expect(afterFirst).toBe(0);
   expect(card()?.getAttribute("data-nudge")).toBe("true");
   expect(dismissals).toBe(1);
+});
+
+/** A dialog that opens a second over itself, as a confirm asked from inside a settings card is. */
+function Stacked({ onOuter, onInner }: { onOuter: () => void; onInner: () => void }) {
+  const [inner, setInner] = useState(false);
+  return createElement(Dialog, {
+    title: "Settings",
+    onDismiss: onOuter,
+    children: [
+      createElement("button", { key: "ask", type: "button", onClick: () => setInner(true) }, "Ask"),
+      inner
+        ? createElement(Dialog, {
+            key: "inner",
+            role: DIALOG_ROLE.ALERT_DIALOG,
+            title: "Delete key?",
+            onDismiss: () => {
+              onInner();
+              setInner(false);
+            },
+            children: createElement("button", { type: "button" }, "Keep"),
+          })
+        : null,
+    ],
+  });
+}
+
+test("a dialog opened over another is the one Escape puts away, and the one beneath stays until the next", () => {
+  const dismissed: string[] = [];
+  draw(
+    createElement(Stacked, {
+      onOuter: () => dismissed.push("outer"),
+      onInner: () => dismissed.push("inner"),
+    }),
+  );
+  act(() => button("Ask").click());
+  expect(card(DIALOG_ROLE.ALERT_DIALOG)).not.toBeNull();
+  key("Escape");
+  const afterFirst = [...dismissed];
+  key("Escape");
+
+  expect(afterFirst).toEqual(["inner"]);
+  expect(card(DIALOG_ROLE.ALERT_DIALOG)).toBeNull();
+  expect(dismissed).toEqual(["inner", "outer"]);
 });

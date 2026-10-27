@@ -28,6 +28,7 @@ import {
 import { CircleDotIcon } from "lucide-react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PICKER_ALIGN } from "../settings/picker-row.js";
+import { IssueCard } from "./issue-card.js";
 import { IssueMark } from "./issue-mark.js";
 import { IssuePickerChip } from "./issue-picker-chip.js";
 import { linksFull, RELATION_DETAIL, standingWords } from "./task-issue-links-model.js";
@@ -40,8 +41,8 @@ import type { TasksControl } from "./use-tasks-tab.js";
  *
  * Each chip is the issue's live mark, GitHub's for where it stands or
  * Linear's own, its key in the code face, and its title, cut short; its
- * tooltip says where the issue stands now and the keyword its pull requests
- * write. Its menu, headed by the same, opens the issue with its provider,
+ * card says where the issue stands now and the keyword its pull requests
+ * write, under its repository's key. Its menu, headed by the same, opens the issue with its provider,
  * offers Closes and Part of with the one chosen checked, and unlinks it,
  * which leaves the issue itself as it is with its provider. Where it
  * stands is read as the row opens and never kept (`use-task-issue-links.ts`),
@@ -85,6 +86,17 @@ function LinkMark({ link }: { link: TaskIssueLinkView }): React.JSX.Element {
   return <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} size={PROVIDER_MARK_SIZE.CAPTION} />;
 }
 
+/**
+ * What a link's chip calls its issue's number: `#42` for a GitHub issue, whose
+ * key is `owner/name#42` in the service, and Linear's own key, so the chip
+ * reads as every other chip of an issue does and the repository stays in its
+ * tooltip.
+ */
+function keyWords(link: TaskIssueLinkView): string {
+  const at = link.key.lastIndexOf("#");
+  return link.provider === TASK_ISSUE_PROVIDER.GITHUB && at >= 0 ? link.key.slice(at) : link.key;
+}
+
 /** What a link's chip says of it beyond its key and title: where it stands, where its provider answered, and its keyword. */
 function linkSummary(link: TaskIssueLinkView): string {
   const state = standingWords(link.standing);
@@ -106,6 +118,7 @@ function LinkChip({
 }): React.JSX.Element {
   const { drawn, close, trigger } = useMenu(true);
   const summary = linkSummary(link);
+  const stateWords = standingWords(link.standing);
   const open: MenuAction = {
     label: OPEN_WORDS[link.provider],
     icon: <ExternalIcon />,
@@ -127,7 +140,17 @@ function LinkChip({
   };
   return (
     <li className="task-issue-link" data-provider={link.provider} data-relation={link.relation}>
-      <Tooltip label={`${link.title} · ${summary}`}>
+      <Tooltip
+        label={`${link.key} ${link.title} · ${summary}`}
+        card={
+          <IssueCard
+            mark={<LinkMark link={link} />}
+            title={link.title}
+            heading={stateWords === undefined ? link.key : `${link.key} · ${stateWords}`}
+            note={`${LINKS_WORDS[link.relation]}: ${RELATION_DETAIL[link.relation]}`}
+          />
+        }
+      >
         <Chip
           look={CHIP_LOOK.FIELD}
           width={CHIP_WIDTH.AUTO}
@@ -136,7 +159,7 @@ function LinkChip({
           {...trigger(dropBelowStart)}
         >
           <LinkMark link={link} />
-          <span className="task-issue-link-key">{link.key}</span>
+          <span className="task-issue-link-key">{keyWords(link)}</span>
           <ChipName>{link.title}</ChipName>
         </Chip>
       </Tooltip>

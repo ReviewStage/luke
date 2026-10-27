@@ -16,6 +16,7 @@ import {
 } from "@luke/features/installed-skill-wire";
 import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { STATUS_TONE } from "@luke/ui";
 import { test } from "vitest";
 import {
   ADD_SKILL_SCREEN,
@@ -26,7 +27,6 @@ import {
   candidateMarks,
   candidateNote,
   confirmView,
-  DETECTED_TONE,
   everyTicked,
   failureLine,
   fencedSkillFile,
@@ -223,7 +223,7 @@ test("the box says at once what it was read as, and a source on another host say
   assert.equal(pastedLine(parseSkillPaste("   ")), undefined);
   assert.deepEqual(pastedLine(parseSkillPaste("npx skills add vercel-labs/agent-skills")), {
     text: "Reading vercel-labs/agent-skills…",
-    tone: DETECTED_TONE.WAITING,
+    tone: STATUS_TONE.NEUTRAL,
   });
   assert.equal(
     pastedLine(parseSkillPaste("---\nname: pr-style\ndescription: How PRs read.\n---\n# PR style"))
@@ -232,7 +232,7 @@ test("the box says at once what it was read as, and a source on another host say
   );
   assert.deepEqual(pastedLine(parseSkillPaste("npx skills add https://gitlab.com/acme/skills")), {
     text: "Only GitHub sources for now.",
-    tone: DETECTED_TONE.PROBLEM,
+    tone: STATUS_TONE.ATTENTION,
   });
 });
 
@@ -240,7 +240,7 @@ test("a preview with skills says nothing under the box, and a repository with no
   assert.equal(previewLine(SOURCE), undefined);
   assert.deepEqual(previewLine({ ...SOURCE, skills: [] }), {
     text: "No skills found in vercel-labs/agent-skills @ 3f9c2e1.",
-    tone: DETECTED_TONE.PROBLEM,
+    tone: STATUS_TONE.ATTENTION,
   });
 });
 
@@ -302,7 +302,7 @@ test("the title names the one skill confirmed or the repository browsed, and the
       bytes: 1229,
       problems: [],
     }),
-    "Pasted text · 1.2 KB",
+    "Pasted text · 1.2 kB",
   );
   assert.equal(
     missingLine({ ...MATT, missing: ["grill-mee"] }),

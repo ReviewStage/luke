@@ -7,6 +7,8 @@ import {
   HoverCardRow,
   INLINE_REF_LOOK,
   InlineRef,
+  Skeleton,
+  SkeletonRegion,
 } from "@luke/ui";
 import { type SkillOption, skillWord } from "@luke/ui/skill-mention";
 import { BookOpenIcon } from "lucide-react";
@@ -18,9 +20,11 @@ import { SkillSourceBadge } from "./skill-source-badge.js";
  *
  * A skill is named as the words that load it, `/name`, wherever it is
  * drawn: a sent message's chip, the composer's chip, the composer's list,
- * the card, and a coding agent's "Loaded skill" row. Wherever a list draws
- * one it leads with the same book (`SkillMark`), as Settings › Skills does
- * and the Add skill dialog, and hangs this card. Each place that can
+ * the card, and a coding agent's "Loaded skill" row. Wherever a list or a
+ * chip draws one it leads with the same book (`SkillMark`), as Settings ›
+ * Skills does and the Add skill dialog, and hangs this card. The chip is one
+ * pill (`SkillRef`) in a sent message and in the composer's box alike, and
+ * its card is the one a skill's row hangs, read as the skills land. Each place that can
  * open the skill's file hangs the one card while the pointer rests on the
  * name, drawn from every card's parts (`@luke/ui`'s `HoverCard`) and a task card's
  * rows (`task-card.tsx`): the skill's mark and name at its head, with where
@@ -29,8 +33,8 @@ import { SkillSourceBadge } from "./skill-source-badge.js";
  * from the repository's root, which says and does not open, since every
  * place hanging the card opens that file itself. A press on the name, or
  * Enter once it has the focus, opens it; an installed skill has no file
- * of the repository's to open, so its name hangs the card alone. A name inside a message is the chip the composer drew it as
- * (`SkillRef`); a transcript's row that loaded the skill is a call's row,
+ * of the repository's to open, so its name hangs the card alone. A name
+ * inside a message is the chip the composer drew it as (`SkillRef`); a transcript's row that loaded the skill is a call's row,
  * which hangs the same card (`agent-tab.tsx`), as a row that opens an
  * agent's tab hangs that tab's card.
  */
@@ -53,6 +57,12 @@ export interface SkillSubject {
   readonly skill: SkillOption;
   readonly onOpen: () => void;
 }
+
+/** What a card says while the skill it hangs for is still being read. */
+const SKILL_READING = "Reading skill…";
+
+/** How much of its line the card's description stands in for while it is read. */
+const SKILL_CARD_NOTE_WIDTH = "80%";
 
 /** The skill's card: its mark, name, and source, what it is for, and its file's line where it has one. */
 export function SkillCard({ subject }: { subject: SkillSubject }): React.JSX.Element {
@@ -93,15 +103,48 @@ export function skillOption(skill: SkillOption): ComboboxOption {
   };
 }
 
-/** A skill named in place: its `/name` as a mention's pill, one button that hangs its card and opens its file. */
-export function SkillRef({ subject }: { subject: SkillSubject }): React.JSX.Element {
+/** The skill's card while its skill is read: its mark and name, which the chip knows, and the line of what it is for as a placeholder. */
+function SkillCardSkeleton({ name }: { name: string }): React.JSX.Element {
+  return (
+    <HoverCard data-skill-card="">
+      <HoverCardHead glyph={<SkillMark />} name={skillWord(name)} />
+      <SkeletonRegion label={SKILL_READING}>
+        <Skeleton width={SKILL_CARD_NOTE_WIDTH} />
+      </SkeletonRegion>
+    </HoverCard>
+  );
+}
+
+/**
+ * A skill named in place: the book and its `/name` as a mention's pill, which
+ * hangs its card and, handed `onOpen`, is one button that opens its file. Note
+ * that a skill not yet read (`skill` none) still stands as its name and hangs
+ * the card's placeholder, which the read fills in.
+ */
+export function SkillRef({
+  name,
+  skill,
+  onOpen,
+}: {
+  name: string;
+  skill: SkillOption | undefined;
+  /** Opens the skill's file; none where the place cannot, so the pill is words that hang the card. */
+  onOpen: (() => void) | undefined;
+}): React.JSX.Element {
   return (
     <InlineRef
       look={INLINE_REF_LOOK.PILL}
-      label={skillWord(subject.skill.name)}
-      onPress={() => subject.onOpen()}
-      hintLabel={subject.skill.path}
-      card={<SkillCard subject={subject} />}
+      glyph={<SkillMark />}
+      label={skillWord(name)}
+      onPress={onOpen === undefined ? undefined : () => onOpen()}
+      hintLabel={skill?.path}
+      card={
+        skill === undefined ? (
+          <SkillCardSkeleton name={name} />
+        ) : (
+          <SkillCard subject={{ skill, onOpen: () => onOpen?.() }} />
+        )
+      }
       data-skill-ref=""
     />
   );

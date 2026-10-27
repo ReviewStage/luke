@@ -198,7 +198,7 @@ test("a signed-out visitor is offered the providers, and a sign-in that cannot s
 
   await vi.waitFor(() =>
     expect(page.querySelector('[role="alert"]')?.textContent).toBe(
-      "Sign-in could not start. Try again.",
+      "Sign-in didn't finish. Try again.",
     ),
   );
   expect(buttonNames(page)).toEqual(["Continue with Google", "Continue with GitHub"]);

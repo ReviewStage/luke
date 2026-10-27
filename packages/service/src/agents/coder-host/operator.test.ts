@@ -21,7 +21,7 @@ import {
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
-import { agentTabLabel } from "@luke/features/model-label";
+import { agentName } from "@luke/features/model-label";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
@@ -198,7 +198,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
               0,
               new Map(),
             );
-            return agentTabLabel(summary);
+            return agentName(summary);
           });
 
         const ensured = yield* ensure(member, workspaceId);

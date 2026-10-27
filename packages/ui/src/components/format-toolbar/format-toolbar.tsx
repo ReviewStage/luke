@@ -9,7 +9,8 @@ import {
   type WritingShortcut,
 } from "@luke/settings/shortcuts";
 import { Fragment, type KeyboardEvent, type ReactNode, type Ref, useRef, useState } from "react";
-import { ChevronDownIcon, CommentAddIcon } from "../../face/glyphs.js";
+import { ChevronDownIcon } from "../../face/glyphs.js";
+import { CommentAddIcon } from "../../icons/lucide-glyphs.js";
 import { Button, IconButton } from "../button/button.js";
 import { dropBelowStart, useMenu } from "../menu/menu.js";
 import { MENU_SURFACE_FLOW, MenuSurface } from "../menu/menu-surface.js";

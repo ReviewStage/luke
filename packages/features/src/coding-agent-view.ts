@@ -35,8 +35,8 @@ import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
+  inboxAcknowledgeRequestSchema,
   inboxAnsweredSchema,
-  inboxAnswerRequestSchema,
   inboxAnswerSchema,
   inboxCloseRequestSchema,
   inboxItemSchema,
@@ -293,7 +293,7 @@ export type CodingAgentListParams = typeof codingAgentListParamsSchema.Type;
 export const codingAgentWorkspaceListParamsSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,
   repository: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
-  /** Only the agents whose shown name (`agentTabLabel`) or task's name holds these words, whatever their case. */
+  /** Only the agents whose shown name (`agentName`) or task's name holds these words, whatever their case. */
   words: EffectSchema.optionalKey(
     EffectSchema.NonEmptyString.check(
       EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SEARCH_CHARS),
@@ -677,15 +677,15 @@ const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, 
 
 export type CodingAgentInboxAnswerView = typeof codingAgentInboxAnswerViewSchema.Type;
 
-/** An answer to one item of the inbox, as the window asks it: the item, and the answer request the service takes, its key the window's own. */
+/** A nod on one notice of the inbox, Got it, as the window asks it: the item, and the acknowledgement the service takes, its key the window's own. */
 export const codingAgentInboxAnswerParamsSchema = EffectSchema.Struct({
   itemId: EffectSchema.NonEmptyString,
-  ...inboxAnswerRequestSchema.fields,
+  ...inboxAcknowledgeRequestSchema.fields,
 });
 
 export type CodingAgentInboxAnswerParams = typeof codingAgentInboxAnswerParamsSchema.Type;
 
-/** The answer, as the window hears it: the item as it then stands and whether the answer was taken, or why there is no answer. */
+/** A nod or a close, as the window hears it: the item as it then stands and whether it was taken, or why there is no answer. */
 export const codingAgentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnsweredSchema, failed]);
 
 export type CodingAgentInboxAnsweredView = typeof codingAgentInboxAnsweredViewSchema.Type;

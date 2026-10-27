@@ -1,7 +1,5 @@
 import { PACKAGED_ARCHITECTURE } from "./package-layout.mjs";
 
-export { PACKAGED_ARCHITECTURE };
-
 export const MACOS_DEPLOYMENT_TARGET = "14.0";
 export const SWIFT_TARGET_TRIPLE = `${PACKAGED_ARCHITECTURE}-apple-macos${MACOS_DEPLOYMENT_TARGET}`;
 export const LICENSE_RESOURCE_NAME = "LUKE-LICENSE.txt";

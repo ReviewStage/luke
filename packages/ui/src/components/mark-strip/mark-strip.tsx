@@ -1,5 +1,6 @@
 import type { PointerEvent } from "react";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import type { StatusTone } from "../../status-tone.js";
 /**
  * mark-strip.tsx -- the thin strip a hidden rail leaves in its place: one mark for each of its rows, a press on which shows the rail again, or the pointer resting on which peeks it.
  *
@@ -17,16 +18,6 @@ import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
  * edge it keeps from the rail's neighbour.
  */
 
-/** The tones a mark comes in, from the state palette. */
-export const MARK_STRIP_TONE = {
-  DANGER: "danger",
-  ATTENTION: "attention",
-  COMPLETE: "complete",
-  WORKING: "working",
-} as const;
-
-export type MarkStripTone = (typeof MARK_STRIP_TONE)[keyof typeof MARK_STRIP_TONE];
-
 /** How a strip draws its marks: a dot for each row, or a bar for each, sharing the strip's height. */
 export const MARK_STRIP_LOOK = {
   DOTS: "dots",
@@ -37,7 +28,7 @@ export type MarkStripLook = (typeof MARK_STRIP_LOOK)[keyof typeof MARK_STRIP_LOO
 
 /** One row's mark: its tone, whether its row was viewed, and whether its row is the one shown. */
 export interface StripMark {
-  readonly tone?: MarkStripTone | undefined;
+  readonly tone?: StatusTone | undefined;
   readonly viewed?: boolean | undefined;
   readonly current?: boolean | undefined;
 }

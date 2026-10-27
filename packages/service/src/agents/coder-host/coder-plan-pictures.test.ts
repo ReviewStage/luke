@@ -12,11 +12,17 @@ import {
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
+import {
+  PICTURE_BOUNDS,
+  PICTURE_MEDIA_TYPE,
+  PICTURE_TYPE,
+  type Picture,
+} from "@luke/features/picture-wire";
 import { planAttachmentOf } from "@luke/features/plan-attachment-link";
 import { PLAN_ATTACHMENT_BOUNDS } from "@luke/features/plan-attachment-wire";
 import { planSections } from "@luke/features/plan-document";
 import { unparsedWire, type WireRecord } from "@luke/wire";
+import { paddedTo, webmBytes } from "@luke/wire/testing";
 import { Effect, Option } from "effect";
 import { Base64 } from "effect/encoding";
 import { ACTION_RESULT_STATUS } from "../../core.js";
@@ -36,8 +42,9 @@ import { CODER_TOOL, opensSandbox } from "./tool-set.js";
  * plan, through the tool's public function against a real dialect: the
  * picture is kept as one of the plan's pictures, which every member of the
  * plan's workspace reads and nobody else does, and its line lands under its
- * section in a save that is the agent's; a file that is missing, no image,
- * or too large, a plan at its bound of pictures, and an archived plan are
+ * section in a save that is the agent's; a recording is kept as it was
+ * recorded, up to a video's bound; a file that is missing, no image,
+ * or too large, a plan at its bound of pictures or of videos, and an archived plan are
  * each refused with nothing saved; and the picture's bytes never travel in
  * what the tool answers. The sandbox is the boundary, played by a double
  * holding synthetic files.
@@ -225,6 +232,62 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           taken: 1,
         });
+      }),
+  );
+
+  it.effect(
+    "a recording lands as its line, kept as it was recorded up to a video's bound, and one past that bound, one that states no size, or one past the plan's videos is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId, agentId } = yield* openAgentTask;
+        const full = yield* openAgentTask;
+        const recording = paddedTo(webmBytes(1280, 800), PICTURE_BOUNDS.MAX_VIDEO_BYTES);
+        const sandbox = sandboxWith({
+          "videos/invite.webm": recording,
+          "videos/long.webm": paddedTo(recording, PICTURE_BOUNDS.MAX_VIDEO_BYTES + 1),
+          "videos/sizeless.webm": paddedTo(webmBytes(1280, 800).subarray(0, 24), 64),
+        });
+        for (let kept = 0; kept < PLAN_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_PLAN; kept += 1) {
+          const video = { contentType: PICTURE_MEDIA_TYPE.WEBM, bytes: webmBytes(640, 400) };
+          const answer = yield* keepPlanAttachment(full.owner, full.taskId, video);
+          assert.equal(answer.status, PLAN_ATTACHMENT_KEEP.KEPT);
+        }
+        const edit = (at: { owner: string; taskId: string; agentId: string }, path: string) =>
+          recordPlanEdit(
+            { userId: at.owner, taskId: at.taskId },
+            { agentId: at.agentId },
+            unparsedWire(pictureCall(path)),
+            0,
+            sandbox,
+          );
+        const own = { owner, taskId, agentId };
+
+        const answers = [
+          yield* edit(own, "videos/long.webm"),
+          yield* edit(own, "videos/sizeless.webm"),
+          yield* edit(full, "videos/invite.webm"),
+          yield* edit(own, "videos/invite.webm"),
+        ];
+
+        assert.deepEqual(answers, [
+          planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.TOO_LARGE} videos/long.webm`),
+          planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.NOT_IMAGE} videos/sizeless.webm`),
+          planEditRejected(PLAN_EDIT_REFUSAL.TOO_MANY_VIDEOS),
+          { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 1 },
+        ]);
+        const stored = Option.getOrThrow(yield* readTask(owner, taskId));
+        const [, address] = /\]\((\S+) "/u.exec(stored.text) ?? [];
+        const named = address === undefined ? undefined : planAttachmentOf(address);
+        assert.ok(named, stored.text);
+        const read = yield* readPlanAttachment(teammate, taskId, named.attachmentId);
+        assert.deepEqual(
+          Option.map(read, ({ contentType }) => contentType),
+          Option.some(PICTURE_MEDIA_TYPE.WEBM),
+        );
+        assert.deepEqual(
+          Option.map(read, ({ bytes }) => bytes.length),
+          Option.some(recording.length),
+        );
       }),
   );
 

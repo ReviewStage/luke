@@ -2,9 +2,11 @@ import { type ReactNode, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { CheckIcon, RemoveIcon } from "../../face/glyphs.js";
 import { pulseOnPress } from "../../press-pulse.js";
+import { HoverCard, HoverCardHead } from "../hover-card/hover-card.js";
 import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { SPINNER_SIZE, Spinner } from "../spinner/spinner.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * attachment-chip.tsx -- a file coming along with a message or a note, as a chip: its thumbnail, or its type's glyph, its name, and its size.
@@ -35,6 +37,11 @@ import { SPINNER_SIZE, Spinner } from "../spinner/spinner.js";
  * up while drawn takes a check that springs in on its corner and, after a
  * beat, fades, so a file seen going up is seen landing; one drawn up already
  * stands still.
+ *
+ * A file that is here hangs its card while the pointer rests on the chip: its
+ * glyph, its whole name, and what more the chip says of it, as every other
+ * chip hangs its kind's card. A file not here yet, or gone, hangs its name in
+ * a pill instead, since there is no more to say.
  *
  * A chip is one item of a list its caller draws and names, so the caller
  * owns the row's layout; the chip takes no class or style.
@@ -198,44 +205,50 @@ export function AttachmentChip({
     ((ready || uploading) && image !== undefined) ||
     state === ATTACHMENT_CHIP_STATE.LOADING ||
     (state === ATTACHMENT_CHIP_STATE.FAILED && failure === undefined && detail === undefined);
+  const card = ready ? (
+    <HoverCard data-attachment-card="">
+      <HoverCardHead glyph={icon} name={name} sub={detail} />
+    </HoverCard>
+  ) : undefined;
   return (
-    <li
-      className="luke-attachment-chip"
-      data-image={thumbnail ? "true" : undefined}
-      data-removable={onRemove === undefined ? undefined : "true"}
-      {...(motionKey === undefined ? {} : motionKeyAttribute(motionKey))}
-      data-state={state}
-      title={name}
-    >
-      {onOpen === undefined || !ready ? (
-        <span className="luke-attachment-chip-face">{face}</span>
-      ) : (
-        <button
-          type="button"
-          className="luke-attachment-chip-face"
-          aria-label={`Open ${name}`}
-          onClick={pulseOnPress(onOpen)}
-        >
-          {face}
-        </button>
-      )}
-      {uploading ? <UploadMeter name={name} progress={progress} /> : null}
-      {landed ? (
-        <span className="luke-attachment-chip-landed" aria-hidden="true">
-          <CheckIcon />
-        </span>
-      ) : null}
-      {onRemove === undefined ? null : (
-        <button
-          type="button"
-          className="luke-attachment-chip-remove"
-          aria-label={`Remove ${name}`}
-          disabled={removeDisabled === true}
-          onClick={pulseOnPress(onRemove)}
-        >
-          <RemoveIcon />
-        </button>
-      )}
-    </li>
+    <Tooltip label={name} card={card}>
+      <li
+        className="luke-attachment-chip"
+        data-image={thumbnail ? "true" : undefined}
+        data-removable={onRemove === undefined ? undefined : "true"}
+        {...(motionKey === undefined ? {} : motionKeyAttribute(motionKey))}
+        data-state={state}
+      >
+        {onOpen === undefined || !ready ? (
+          <span className="luke-attachment-chip-face">{face}</span>
+        ) : (
+          <button
+            type="button"
+            className="luke-attachment-chip-face"
+            aria-label={`Open ${name}`}
+            onClick={pulseOnPress(onOpen)}
+          >
+            {face}
+          </button>
+        )}
+        {uploading ? <UploadMeter name={name} progress={progress} /> : null}
+        {landed ? (
+          <span className="luke-attachment-chip-landed" aria-hidden="true">
+            <CheckIcon />
+          </span>
+        ) : null}
+        {onRemove === undefined ? null : (
+          <button
+            type="button"
+            className="luke-attachment-chip-remove"
+            aria-label={`Remove ${name}`}
+            disabled={removeDisabled === true}
+            onClick={pulseOnPress(onRemove)}
+          >
+            <RemoveIcon />
+          </button>
+        )}
+      </li>
+    </Tooltip>
   );
 }

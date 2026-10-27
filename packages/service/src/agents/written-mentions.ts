@@ -49,7 +49,7 @@ export const workspaceNamingOf = (
   });
 
 /** The step a task's links are written under, its workspace's as the member reads the task; nothing for a task the member cannot read. */
-export const taskStepOf = (
+const taskStepOf = (
   userId: string,
   taskId: string,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> =>

@@ -26,7 +26,7 @@ import {
   desktopSessionReturnUrl,
 } from "@luke/features/desktop-session-wire";
 import { LANDING_TONE } from "@luke/features/landing-outcome";
-import { AuthMark, AuthPage, SIGN_IN_FAILURE, SocialSignInChoices } from "@luke/ui";
+import { AuthMark, AuthPage, SIGN_IN_UNFINISHED, SocialSignInChoices } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
 import { useEffect, useRef, useState } from "react";
@@ -124,7 +124,7 @@ function DesktopSession(): React.JSX.Element {
       mark={<AuthMark tone={view.kind === VIEW.SAID ? LANDING_TONE.FAILED : undefined} />}
       title={view.kind === VIEW.WORKING ? "Finishing sign-in…" : view.title}
       description={view.kind === VIEW.WORKING ? undefined : view.body}
-      error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_FAILURE : undefined}
+      error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_UNFINISHED : undefined}
       action={view.kind === VIEW.SAID ? openLukeFromMac() : undefined}
     >
       {view.kind === VIEW.SIGN_IN ? (

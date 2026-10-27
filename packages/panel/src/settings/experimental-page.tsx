@@ -22,7 +22,7 @@ import {
   TextButton,
 } from "@luke/ui";
 import { FlaskConicalIcon } from "lucide-react";
-import { useAct } from "../act.js";
+import { askActResult, useAct } from "../act.js";
 import { useOpenFeedback } from "../open-feedback.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import { SwitchRow } from "./switch-row.js";
@@ -82,7 +82,9 @@ function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): 
         </>
       }
       checked={on}
-      onChange={(next) => act(ACT_KIND.EXPERIMENT_SET, { experiment: entry.key, on: next })}
+      onChange={(next) =>
+        askActResult(act(ACT_KIND.EXPERIMENT_SET, { experiment: entry.key, on: next }))
+      }
     />
   );
 }
@@ -106,7 +108,7 @@ export function ExperimentalPage({
 }): React.JSX.Element {
   if (!signedIn) {
     return (
-      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {SIGN_IN_NOTE}
       </Text>
     );

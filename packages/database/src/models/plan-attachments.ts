@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { type Picture, pictureTypeSchema } from "@luke/features/picture-wire";
+import {
+  isVideoPicture,
+  PICTURE_MEDIA_TYPE,
+  type Picture,
+  pictureMediaTypeSchema,
+} from "@luke/features/picture-wire";
 import { PLAN_ATTACHMENT_BOUNDS } from "@luke/features/plan-attachment-wire";
 import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -13,8 +18,9 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
 /**
  * plan-attachments.ts -- a plan's pictures: keep one, read one, stamp the ones a save names, and sweep the uploads no save named.
  *
- * A picture is kept under the plan row's own lock, so the count it is held
- * to cannot be crossed by a second upload. Every read names the account beside the
+ * A picture, or a video an agent recorded, is kept under the plan row's own
+ * lock, so the counts it is held to, every picture's and every video's,
+ * cannot be crossed by a second upload. Every read names the account beside the
  * plan and gates on its membership of the plan's workspace, so a member
  * reads a picture a teammate pasted and a plan of a workspace the account is
  * not in reads as no plan, exactly as in `plan-store.ts`. A save stamps the
@@ -22,16 +28,18 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * picture no save ever stamped, a sweep's worth at a time.
  */
 
-/** What keeping a picture came to: kept under its new id, refused for the plan's count, or no plan to keep it on. */
+/** What keeping a picture came to: kept under its new id, refused for the plan's count of pictures or of videos, or no plan to keep it on. */
 export const PLAN_ATTACHMENT_KEEP = {
   KEPT: "kept",
   TOO_MANY: "too-many",
+  TOO_MANY_VIDEOS: "too-many-videos",
   NO_TASK: "no-plan",
 } as const;
 
 export type PlanAttachmentKeep =
   | { readonly status: typeof PLAN_ATTACHMENT_KEEP.KEPT; readonly id: string }
   | { readonly status: typeof PLAN_ATTACHMENT_KEEP.TOO_MANY }
+  | { readonly status: typeof PLAN_ATTACHMENT_KEEP.TOO_MANY_VIDEOS }
   | { readonly status: typeof PLAN_ATTACHMENT_KEEP.NO_TASK };
 
 /** The most unsaved pictures one sweep deletes, so a sweep stays bounded however many piled up. */
@@ -54,13 +62,17 @@ const lockOpenTask = SqlSchema.findOneOption({
     ),
 });
 
+/** How many pictures the plan holds, and how many of them are videos. */
 const countPictures = SqlSchema.findOne({
   Request: Schema.Struct({ taskId: Schema.String }),
-  Result: Schema.Struct({ count: Schema.Number }),
+  Result: Schema.Struct({ count: Schema.Number, videos: Schema.Number }),
   execute: ({ taskId }) =>
     Database.use((db) =>
       db
-        .select({ count: sql<number>`count(*)::int` })
+        .select({
+          count: sql<number>`count(*)::int`,
+          videos: sql<number>`(count(*) filter (where ${eq(attachment.contentType, PICTURE_MEDIA_TYPE.WEBM)}))::int`,
+        })
         .from(attachment)
         .where(and(eq(attachment.taskId, taskId), planPicture)),
     ),
@@ -72,7 +84,7 @@ const insertPicture = SqlSchema.void({
     taskId: Schema.String,
     organizationId: Schema.String,
     userId: Schema.String,
-    contentType: pictureTypeSchema,
+    contentType: pictureMediaTypeSchema,
     byteCount: Schema.Number,
     bytes: Schema.Uint8Array,
     createdAt: Schema.Date,
@@ -86,7 +98,7 @@ const findPicture = SqlSchema.findOneOption({
     taskId: Schema.String,
     attachmentId: Schema.String,
   }),
-  Result: Schema.Struct({ contentType: pictureTypeSchema, bytes: Schema.Uint8Array }),
+  Result: Schema.Struct({ contentType: pictureMediaTypeSchema, bytes: Schema.Uint8Array }),
   execute: ({ userId, taskId, attachmentId }) =>
     Database.use((db) =>
       db
@@ -157,9 +169,10 @@ const deletePictures = SqlSchema.void({
 });
 
 /**
- * Keeps one picture on the plan, uploaded by the account, under a new id;
- * refused where the plan already holds its bound of pictures, and nothing
- * where the account reaches no such plan.
+ * Keeps one picture or video on the plan, uploaded by the account, under a
+ * new id; refused where the plan already holds its bound of pictures, or a
+ * video where it holds its bound of videos, and nothing where the account
+ * reaches no such plan.
  */
 export function keepPlanAttachment(
   userId: string,
@@ -172,11 +185,14 @@ export function keepPlanAttachment(
         const locked = yield* lockOpenTask({ userId, taskId });
         if (Option.isNone(locked)) return { status: PLAN_ATTACHMENT_KEEP.NO_TASK } as const;
         // A count that returned no row is the database breaking its own contract, not an outcome.
-        const { count } = yield* countPictures({ taskId }).pipe(
+        const { count, videos } = yield* countPictures({ taskId }).pipe(
           Effect.catchTag("NoSuchElementError", Effect.die),
         );
         if (count >= PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN) {
           return { status: PLAN_ATTACHMENT_KEEP.TOO_MANY } as const;
+        }
+        if (isVideoPicture(picture) && videos >= PLAN_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_PLAN) {
+          return { status: PLAN_ATTACHMENT_KEEP.TOO_MANY_VIDEOS } as const;
         }
         const id = randomUUID();
         yield* insertPicture({
@@ -195,7 +211,7 @@ export function keepPlanAttachment(
   );
 }
 
-/** One picture of the plan, its type and bytes; nothing where the account reaches no such plan or the plan no such picture. */
+/** One picture or video of the plan, its type and bytes; nothing where the account reaches no such plan or the plan no such picture. */
 export function readPlanAttachment(
   userId: string,
   taskId: string,

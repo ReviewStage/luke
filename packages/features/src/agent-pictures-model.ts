@@ -6,11 +6,11 @@ import {
   type WireRecord,
   type WireValue,
 } from "@luke/wire";
+import { Option, Schema } from "effect";
 import { AGENT_TOOL } from "./agent-tools.js";
 import {
-  CONVERSATION_MEDIA_TYPE,
-  type ConversationMediaType,
   type KeptPicture,
+  keptPictureSchema,
   PICTURE_OMISSION,
   type PictureOmission,
 } from "./conversation-picture-wire.js";
@@ -25,28 +25,20 @@ import {
  * picture the service did not keep is named by why, with its size.
  */
 
-const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(CONVERSATION_MEDIA_TYPE));
-
 const OMISSIONS: ReadonlySet<string> = new Set(Object.values(PICTURE_OMISSION));
 
 /** The kinds of block an MCP tool answers that can carry a picture. */
 const PICTURE_BLOCK = { IMAGE: "image", RESOURCE: "resource" } as const;
 
-function isPictureType(value: UnparsedWireValue): value is ConversationMediaType {
-  return isWireString(value) && PICTURE_TYPES.has(value);
-}
-
 function isOmission(value: UnparsedWireValue): value is PictureOmission {
   return isWireString(value) && OMISSIONS.has(value);
 }
 
+const readKeptPicture = Schema.decodeUnknownOption(keptPictureSchema);
+
 /** A kept picture as a stored output names it, or nothing for a value that is not one. */
 function keptPictureOf(value: UnparsedWireValue): KeptPicture | undefined {
-  if (!isRecord(value)) return undefined;
-  const { id, mediaType, width, height, byteCount } = value;
-  if (!isWireString(id) || !isPictureType(mediaType)) return undefined;
-  if (!isWireNumber(width) || !isWireNumber(height) || !isWireNumber(byteCount)) return undefined;
-  return { id, mediaType, width, height, byteCount };
+  return Option.getOrUndefined(readKeptPicture(value));
 }
 
 /** One picture of a set an agent showed: what it was kept as, once the call answered, and its words. */

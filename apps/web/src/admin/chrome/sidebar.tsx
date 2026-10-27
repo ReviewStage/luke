@@ -12,9 +12,10 @@
  * inert while it stands, as the app's is (`stage-room.ts` measures the room).
  *
  * The account stands at the sidebar's foot, as the app's does: its face and
- * name, raising its menu above it, whose one act is Log out, asked first.
+ * name, raising its menu above it, whose one act is Sign out, asked first.
  */
 
+import { VERB } from "@luke/features/words";
 import "@luke/panel/styles/shell.css";
 import { AccountAvatar, type ViewerAccount } from "@luke/panel/admin/chrome/page-header";
 import { ADMIN_PLACES } from "@luke/panel/admin/chrome/places";
@@ -62,13 +63,13 @@ const SIDEBAR_OVERLAY = {
 
 type SidebarOverlay = (typeof SIDEBAR_OVERLAY)[keyof typeof SIDEBAR_OVERLAY];
 
-/** What the Log out dialog says where signing out failed, in the app's words. */
+/** What the Sign out dialog says where signing out failed, in the app's words. */
 const LOG_OUT_REFUSED = "Luke could not log out. Try again.";
 
 /**
  * The foot's account: the signed-in account's face and name, raising its
- * menu over the column, whose heading says whose account it is over Log out.
- * Log out asks first, as the app's does: getting back in costs a whole trip
+ * menu over the column, whose heading says whose account it is over Sign out.
+ * Sign out asks first, as the app's does: getting back in costs a whole trip
  * through the provider's sign-in.
  */
 function AccountFoot({
@@ -112,16 +113,16 @@ function AccountFoot({
               <Text tone={TEXT_TONE.MUTED}>{account.email}</Text>
             </>
           }
-          groups={[[{ label: "Log out", icon: <LogOutIcon />, onSelect: logOut.ask }]]}
+          groups={[[{ label: VERB.SIGN_OUT, icon: <LogOutIcon />, onSelect: logOut.ask }]]}
           onClose={menu.close}
         />
       )}
       <ConfirmDialog
         confirm={logOut}
         question={{
-          title: `Log out of ${account.email}?`,
-          verb: "Log out",
-          running: "Logging out",
+          title: `${VERB.SIGN_OUT} of ${account.email}?`,
+          verb: VERB.SIGN_OUT,
+          running: "Signing out",
           tone: DIALOG_TONE.PRIMARY,
         }}
       />
@@ -190,7 +191,7 @@ function AdminSidebar({
  * it, which hands the keyboard back to the toggle. Opened, it takes the keyboard
  * to the place shown, as the app's drawer does. Note that a press outside
  * the shell, or Escape there, is not the view's: the account's menu and the
- * Log out question are drawn over the page from the body, and what is
+ * Sign out question are drawn over the page from the body, and what is
  * pressed in them is theirs, so it must not put the drawer, and them with
  * it, away.
  */

@@ -162,6 +162,16 @@ function EngineRows(): React.JSX.Element {
           option={{ id: "src", label: "src/", icon: <FolderIcon />, detail: "packages/ui" }}
           aria-selected={false}
         />
+        <ComboboxOptionItem
+          option={{
+            id: "task",
+            lead: "ACME-42",
+            label: "Teammate invitations",
+            icon: <DocumentIcon />,
+            detail: "relay",
+          }}
+          aria-selected={false}
+        />
       </ComboboxListBox>
     </div>
   );

@@ -228,7 +228,9 @@ function WholeWords({
   const drawn = useMemo<Components>(() => {
     const own = look === MARKDOWN_LOOK.NOTE ? NOTE_COMPONENTS : {};
     if (!toggles) return { ...own, ...components };
-    const input = taskInput((at) => toggler.current?.(at) ?? Promise.resolve(false));
+    const input = taskInput(
+      (at, ticked) => toggler.current?.(at, ticked) ?? Promise.resolve(false),
+    );
     return { ...own, input, ...components };
   }, [look, toggles, components]);
   // Note that the block is keyed by its rewriter, because its memo compares the words, the components, and the steps, never the rewriter.

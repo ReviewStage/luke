@@ -3,6 +3,7 @@ import type {
   WorkspaceSentry,
   WorkspaceSentryInstallation,
 } from "@luke/features/sentry-install-wire";
+import { dayAndTimeText } from "@luke/features/time-format";
 import {
   INVITATION_ROLE,
   type WorkspaceInvitation,
@@ -57,6 +58,7 @@ import {
   SettingsSection,
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
+  STATUS_TONE,
   Stack,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
@@ -69,7 +71,6 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
-import { dayAndTimeText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   CrownIcon,
@@ -94,7 +95,7 @@ import { encodeImage } from "../feedback-images.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useCapability } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
@@ -616,7 +617,7 @@ function MemberLeave({
     act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then(() => {
       show({
         words: LEAVE_WORDS.LEFT(workspace.name),
-        tone: TOAST_TONE.DONE,
+        tone: STATUS_TONE.COMPLETE,
         hold: TOAST_HOLD.DONE,
       });
       onLeft();
@@ -973,6 +974,7 @@ function Invitations({
     setPendingState(next);
   };
   const [email, setEmail] = useState("");
+  const emailField = useRef<HTMLInputElement>(null);
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const [note, setNote] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -1080,6 +1082,7 @@ function Invitations({
         <div className="workspace-invite">
           <Inline as={LAYOUT_ELEMENT.FORM} justify={JUSTIFY.END} grow growFirst onSubmit={invite}>
             <TextField
+              ref={emailField}
               type={TEXT_FIELD_TYPE.EMAIL}
               required
               label="Email address"
@@ -1088,6 +1091,8 @@ function Invitations({
               spellCheck={false}
               value={email}
               disabled={busy}
+              // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
+              onEscape={() => emailField.current?.blur()}
               onChange={setEmail}
             />
             <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />

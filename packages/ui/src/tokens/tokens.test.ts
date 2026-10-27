@@ -17,7 +17,7 @@ interface TokenRule {
 /** The spacing scale every app shares, in pixels. */
 const SPACE_STEPS = [0, 2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 96];
 
-const SHEETS = ["scale", "profiles", "palettes", "display", "viewport"] as const;
+const SHEETS = ["scale", "profiles", "palettes", "status-tone", "display", "viewport"] as const;
 
 /** The rules of `tokens/<sheet>.css`, comments dropped; a rule inside a media query is read as any other, since the sheets nest nothing deeper. */
 function rulesOf(sheet: (typeof SHEETS)[number]): TokenRule[] {
@@ -269,10 +269,17 @@ test("every shared token a sheet reads is one some sheet sets", () => {
   }
 });
 
-/** The light grounds words stand on, each opaque: the page's, a card's, a well's, the
+/** `name`'s colour in `palette`, followed through any `var()` alias to the role it names there. */
+function paletteColour(palette: ReadonlyMap<string, string>, name: string, scheme: Scheme): Colour {
+  const value = palette.get(name) ?? "";
+  const alias = /^var\((--luke-[\w-]+)\)$/.exec(value)?.[1];
+  return alias === undefined ? colourOf(value, scheme) : paletteColour(palette, alias, scheme);
+}
+
+/** The grounds words stand on in `scheme`, each opaque: the page's, a card's, a well's, the
  * sidebar's, and the sidebar's current row, its selected fill laid over the sidebar. */
-function lightGroundsOf(palette: ReadonlyMap<string, string>): Map<string, Colour> {
-  const read = (name: string) => colourOf(palette.get(name) ?? "", SCHEME.LIGHT);
+function groundsOf(palette: ReadonlyMap<string, string>, scheme: Scheme): Map<string, Colour> {
+  const read = (name: string) => paletteColour(palette, name, scheme);
   const grounds = new Map(
     [
       "--luke-color-ground",
@@ -281,38 +288,59 @@ function lightGroundsOf(palette: ReadonlyMap<string, string>): Map<string, Colou
       "--luke-color-sidebar",
     ].map((name) => [name, read(name)] as const),
   );
-  for (const [name, ground] of grounds) assert.equal(ground.alpha, 1, `${name} is not opaque`);
-  const sidebar = read("--luke-color-sidebar");
+  for (const [name, ground] of grounds) {
+    if (ground.alpha < 1) grounds.set(name, over(ground, read("--luke-color-ground")));
+  }
   grounds.set(
     "the selected fill over the sidebar",
-    over(read("--luke-color-fill-selected"), sidebar),
+    over(read("--luke-color-fill-selected"), read("--luke-color-sidebar")),
   );
   return grounds;
 }
 
-/** Whether `ink` in `palette` reads at AA (4.5:1) on every light ground of `palette`. */
-function assertLightAA(palette: ReadonlyMap<string, string>, ink: string): void {
-  const value = palette.get(ink) ?? "";
-  for (const [ground, behind] of lightGroundsOf(palette)) {
-    const ratio = contrastOf(colourOf(value, SCHEME.LIGHT), behind);
-    assert.ok(ratio >= 4.5, `${ink} (${value}) on ${ground} is ${ratio.toFixed(2)}:1`);
+/** Whether `ink` in `palette` reads at AA (4.5:1) on every ground of `palette` in `scheme`. */
+function assertAA(palette: ReadonlyMap<string, string>, ink: string, scheme: Scheme): void {
+  for (const [ground, behind] of groundsOf(palette, scheme)) {
+    const ratio = contrastOf(paletteColour(palette, ink, scheme), behind);
+    assert.ok(ratio >= 4.5, `${ink} on ${ground} in the ${scheme} is ${ratio.toFixed(2)}:1`);
   }
 }
 
-test("the web's light muted and subtle words read at AA on every light ground, a current sidebar row's included", () => {
-  const light = ruleOf(
-    "palettes",
-    '[data-luke-profile="web"], [data-luke-profile="web"][data-luke-theme="light"]',
-  ).values;
-  assertLightAA(light, "--luke-color-text-muted");
-  assertLightAA(light, "--luke-color-text-subtle");
+/** Each palette's rule, with the themes it is read in. */
+const PALETTE_SCHEMES = [
+  [PALETTES[0], [SCHEME.LIGHT, SCHEME.DARK]],
+  [PALETTES[1], [SCHEME.LIGHT]],
+  [PALETTES[2], [SCHEME.DARK]],
+] as const;
+
+test("every grey words are drawn in reads at AA on every ground, a current sidebar row's included, in every palette and theme", () => {
+  for (const [selector, schemes] of PALETTE_SCHEMES) {
+    const palette = ruleOf("palettes", selector).values;
+    const greys = [...palette.keys()].filter((name) => name.startsWith("--luke-color-text-"));
+    for (const scheme of schemes) for (const grey of greys) assertAA(palette, grey, scheme);
+  }
 });
 
-test("the desktop's light accent ink reads at AA on every light ground, a current sidebar row's included", () => {
-  assertLightAA(
-    ruleOf("palettes", '[data-luke-profile="desktop"]').values,
-    "--luke-color-accent-text",
-  );
+test("the desktop's light accent ink, which work under way shares, reads at AA on every light ground, a current sidebar row's included", () => {
+  const desktop = ruleOf("palettes", '[data-luke-profile="desktop"]').values;
+  assertAA(desktop, "--luke-color-accent-text", SCHEME.LIGHT);
+  assertAA(desktop, "--luke-color-working", SCHEME.LIGHT);
+});
+
+test("the quieter words on the accent, a primary button's shortcut, read at AA on its fill in every palette and theme", () => {
+  for (const [selector, schemes] of PALETTE_SCHEMES) {
+    const palette = ruleOf("palettes", selector).values;
+    for (const scheme of schemes) {
+      const ratio = contrastOf(
+        paletteColour(palette, "--luke-color-on-accent-muted", scheme),
+        paletteColour(palette, "--luke-color-accent", scheme),
+      );
+      assert.ok(
+        ratio >= 4.5,
+        `${selector}'s on-accent-muted in the ${scheme} is ${ratio.toFixed(2)}:1`,
+      );
+    }
+  }
 });
 
 /** The parts of a list row that are marks, whose meaning its words carry, so a muted row may fade them. */

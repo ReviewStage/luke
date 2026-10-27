@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "@luke/panel/call/call-card";
 import { CALL_VIDEO_LABEL } from "@luke/panel/call/call-video-tile";
 import { AgentCallVideo, useCallCardVideo } from "@luke/panel/call/panel-avatar";
 import { fakeActPortAnswering, fakeAppBridge } from "@luke/panel/testing/app-bridge";
-import { stateWith } from "@luke/panel/testing/app-state";
+import { deliveryOf, stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
@@ -90,7 +90,8 @@ function onCall(avatar: AvatarState, version = 1): AppStateSnapshot {
 function handBridge(first: AppStateSnapshot): void {
   fakeAppBridge({
     requestAppState: () => Promise.resolve(first),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       deliver = listener;
       return () => undefined;
     },
@@ -242,4 +243,35 @@ test("the floating call window draws Luke's video while the avatar is live, its 
   await settle();
   assert.equal(tileIn(card(page)), null);
   assert.equal(page.querySelector(`button[aria-label="${CALL_VIDEO_LABEL.VIDEO_ON}"]`), null);
+});
+
+/** ⇧⌘ and a letter, as the window hears the chord a hint names. */
+function pressShiftCommand(code: string, key: string): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", {
+    code,
+    key,
+    metaKey: true,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    window.dispatchEvent(event);
+  });
+  return event;
+}
+
+test("in the floating call window ⇧⌘M and ⇧⌘S answer, as the mute hints name them, and are claimed from the menu bar", async () => {
+  handBridge(onCall({ status: AVATAR_STATUS.OFF }));
+  mount(createElement(CallWindowCard));
+  await settle();
+
+  const microphone = pressShiftCommand("KeyM", "M");
+  await settle();
+  assert.equal(microphone.defaultPrevented, true);
+  assert.deepEqual(sent, [{ kind: "voice.command", payload: { command: "toggle-microphone" } }]);
+
+  pressShiftCommand("KeyS", "S");
+  await settle();
+  assert.deepEqual(sent.at(-1), { kind: "voice.command", payload: { command: "mute-speaker" } });
 });

@@ -1,4 +1,5 @@
 import { desktopSessionPageUrl } from "@luke/features/desktop-session-wire";
+import { SIGN_IN_FAILURE, type SignInFailure } from "@luke/features/words";
 import { singleFlightEffect } from "@luke/runtime/effect";
 import {
   Cause,
@@ -96,10 +97,25 @@ interface AccountSessionStore {
 /** A sign-in the developer withdrew, or a later attempt took the generation from: an ordinary end, never reported. */
 class SignInCancelled extends Data.TaggedError("SignInCancelled") {}
 
-/** A sign-in that could not be completed, worded as the consent's own reason; the panel reports it. */
+/**
+ * A sign-in that could not be completed: `failure` is the key the panel says
+ * it in, and `message` the consent's own reason, for the host's log alone.
+ */
 export class SignInFailed extends Data.TaggedError("SignInFailed")<{
+  readonly failure: SignInFailure;
   readonly message: string;
 }> {}
+
+/** The failure a trip's refusal stands for: the consent's own where it named one, else that it did not finish. */
+function signInFailed(outcome: {
+  reason: string;
+  failure?: SignInFailure | undefined;
+}): SignInFailed {
+  return new SignInFailed({
+    failure: outcome.failure ?? SIGN_IN_FAILURE.UNFINISHED,
+    message: outcome.reason,
+  });
+}
 
 /** A deletion asked for with no stored credential to make it under. */
 export class NoStoredAccount extends Data.TaggedError("NoStoredAccount")<{
@@ -445,7 +461,7 @@ export class AccountSessionManager {
       const outcome = yield* Effect.scoped(consent.signInEffect());
       if (!("reason" in outcome)) return true;
       if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return false;
-      return yield* Effect.fail(new SignInFailed({ message: outcome.reason }));
+      return yield* Effect.fail(signInFailed(outcome));
     }).pipe(
       Effect.ensuring(
         Effect.sync(() => {
@@ -477,7 +493,7 @@ export class AccountSessionManager {
       // taking the generation out from under this one — is an ordinary end.
       // Anything else is a failure the panel has to be able to report.
       if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return this.#account;
-      return yield* Effect.fail(new SignInFailed({ message: outcome.reason }));
+      return yield* Effect.fail(signInFailed(outcome));
     }).pipe(
       Effect.ensuring(
         Effect.sync(() => {
@@ -506,7 +522,7 @@ export class AccountSessionManager {
         const outcome = yield* restore(Fiber.join(fiber));
         if (!("reason" in outcome)) return true;
         if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return false;
-        return yield* Effect.fail(new SignInFailed({ message: outcome.reason }));
+        return yield* Effect.fail(signInFailed(outcome));
       }),
     );
   }
@@ -678,7 +694,9 @@ export class AccountSessionManager {
           const replaced = options.again ? yield* this.#options.store.readAccount() : undefined;
           if (!this.#isCurrent(generation)) return yield* Effect.fail(new SignInCancelled());
           if (replaced !== undefined && !sameAccount(replaced, identity)) {
-            return yield* Effect.fail(new SignInFailed({ message: OTHER_ACCOUNT }));
+            return yield* Effect.fail(
+              new SignInFailed({ failure: SIGN_IN_FAILURE.UNFINISHED, message: OTHER_ACCOUNT }),
+            );
           }
           // Note that a sign-in again takes the generation from the session it
           // replaces, so a refresh of the old one still out stores nothing over it.

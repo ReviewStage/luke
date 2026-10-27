@@ -59,7 +59,9 @@ its `queue_question` call's input, because that call exists only to hand the
 voice its words; the one other call whose words are told is `show_code`, whose
 lines travel on the `plan.code` frame rather than as an event. The kinds are the brain's own run-stream words (`brain/run-events.ts`),
 spelled apart from them because the two were separate packages until the brain
-joined this one; a test in the web app holds the two sets equal.
+joined this one; a test in the service holds every event kind a member of the
+run stream's set. The slow step's set is one value, `TURN_SLOW_STEP`, which the
+brain names `SLOW_STEP_KIND`.
 
 Each event is numbered from one inside its turn, so a reader that took some hears
 the rest exactly once. The service stores no event of this kind; the voice's live

@@ -45,7 +45,7 @@ const SPRING_FAST = [
 
 const MOTION_DURATION_MS = {
   FAST: 280,
-  SURFACE: 460,
+  SHAPE: 460,
   EXIT: 90,
   QUICK: 140,
   HOVER: 70,
@@ -61,6 +61,10 @@ const MOTION_DELAY_MS = {
   // How long a confirmation that a write landed (an autosave's Saved)
   // stands before it fades.
   CONFIRM: 1200,
+  // A beat to see whether a state settles before it is acted on: a hover
+  // card standing after the pointer leaves it, a spinner's ring waiting to see
+  // whether a read lands at once.
+  SETTLE: 180,
 };
 const MOTION_EXIT = "cubic-bezier(0.4, 0, 0.6, 1)";
 // The desktop window's panes (the sidebar, the side panel) open and close on
@@ -142,13 +146,14 @@ function uiMotionTokensCss() {
   --luke-duration-quick: ${ms(MOTION_DURATION_MS.QUICK)};
   --luke-duration-pane: ${ms(MOTION_DURATION_MS.PANE)};
   --luke-duration-fast: ${ms(MOTION_DURATION_MS.FAST)};
-  --luke-duration-shape: ${ms(MOTION_DURATION_MS.SURFACE)};
+  --luke-duration-shape: ${ms(MOTION_DURATION_MS.SHAPE)};
   --luke-motion-exit: ${MOTION_EXIT};
   --luke-motion-pane: ${MOTION_PANE};
   --luke-row-stagger: ${ms(MOTION_DELAY_MS.ROW_STAGGER)};
   --luke-hint-delay: ${ms(MOTION_DELAY_MS.HINT)};
   --luke-late-delay: ${ms(MOTION_DELAY_MS.LATE)};
   --luke-confirm-delay: ${ms(MOTION_DELAY_MS.CONFIRM)};
+  --luke-settle-delay: ${ms(MOTION_DELAY_MS.SETTLE)};
 }
 `;
 }

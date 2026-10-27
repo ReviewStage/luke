@@ -41,6 +41,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { Clock, Effect, Option, Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
+import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import { PLAN_REFUSAL } from "../brain-host/eve-sessions.js";
@@ -200,6 +201,8 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
         integrations: yield* options.integrations(agent),
         allowedDomains: [...ALLOWED_DOMAINS],
         installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
+        // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
+        warm: true,
       };
       return written;
     });
@@ -226,6 +229,7 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
 
   return {
     name: "Claude Code",
+    runtime: SERVER_AGENT_HARNESS.CLAUDE_CODE,
     sessionPrefix: NATIVE_SESSION_PREFIX[CONVERSATION_RUNTIME.CLAUDE_CODE],
     launch: (agent) =>
       Effect.flatMap(onApiKey(agent), (keyed) => (keyed ? apiKeyCredential : planCredential)),

@@ -51,8 +51,10 @@
  */
 
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
+import { readFailedWords, TERM } from "@luke/features/words";
 import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import type { ExperimentChoices, HostCapability } from "@luke/settings";
@@ -98,13 +100,13 @@ import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens
 import {
   agentRow,
   orderTaskRows,
+  repositoryLabel,
   TASK_ORDER,
   TASK_ROW,
   type TaskRow,
   taskRow,
 } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
-import { formatCount } from "@luke/ui/time-format";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -129,18 +131,19 @@ import {
 } from "../settings-search.js";
 import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { useChatOn } from "../tasks/chat-gate.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
 import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts.js";
 import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-model.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
+import { TaskKey } from "../tasks/task-standing.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
-import { SIDE_PANEL_TAB_KIND, SIDE_PANEL_TABS } from "../tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -153,7 +156,13 @@ import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
 import { strandedHome } from "./move-task-dialog.js";
-import { changesOffers, panelEntries } from "./side-panel.js";
+import {
+  changesOffers,
+  inboxOffered,
+  offeredPanelKinds,
+  panelEntries,
+  SIDE_PANEL_HOLDER,
+} from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
 import { homeTaskCardOf, TaskRowMark } from "./task-card.js";
 import { WorkspaceRef } from "./workspace-ref.js";
@@ -243,7 +252,7 @@ const READING_LINE = "Reading the repository's files…";
 
 /** What the Tasks filter says while the account's tasks are first read, and where that read did not land. */
 const TASKS_READING_LINE = "Reading your tasks…";
-const TASKS_FAILED_LINE = "Your tasks could not be read.";
+const TASKS_FAILED_LINE = readFailedWords(`your ${TERM.TASK.many}`);
 
 /** What the Inbox filter says while its items are first read, and where a read did not land. */
 const INBOX_READING_LINE = "Reading your inbox…";
@@ -354,17 +363,18 @@ interface PaletteRow {
   command?: KeyedCommand | undefined;
   /** The short words the search scores, the name first. */
   terms: readonly string[];
-  /** A task's key, as `ACME-42`, which typed whole finds the task first. */
-  key?: string | undefined;
+  /** A task's key, as `ACME-42`, which leads its row as it leads the Tasks list's, and which typed whole finds the task first. */
+  taskKey?: { readonly workspaceName: string; readonly number: number } | undefined;
   /** Longer words the row is found by as the settings search finds it, every word of the query somewhere in them. */
   keywords?: readonly string[] | undefined;
   onChoose: () => void;
 }
 
-/** One kind's rows, ranked and cut to what the filter lists. */
+/** One kind's rows, ranked and cut to what the filter lists, and its source's notice where it stands. */
 interface PaletteSection {
   kind: PaletteKind;
   rows: readonly PaletteRow[];
+  notice: PaletteNotice | undefined;
 }
 
 /** The score a row found only by its keywords takes: after every row its own words matched. */
@@ -384,7 +394,9 @@ const KEY_SCORE = 1;
  * almost any letters in order.
  */
 function rowScore(row: PaletteRow, query: string, tokens: readonly string[]): number {
-  if (row.key !== undefined && namesTaskKey(query, row.key)) return KEY_SCORE;
+  const key =
+    row.taskKey === undefined ? undefined : taskKey(row.taskKey.workspaceName, row.taskKey.number);
+  if (key !== undefined && namesTaskKey(query, key)) return KEY_SCORE;
   const score = defaultFilter(row.terms.join(" "), query);
   if (score > 0 || row.keywords === undefined) return score;
   return matchesTokens(row.keywords, tokens) ? KEYWORD_SCORE : 0;
@@ -489,22 +501,6 @@ function inboxNotice(search: InboxSearch): PaletteNotice | undefined {
     : undefined;
 }
 
-/**
- * What an empty list says for the filter shown: its kind's own notice, or,
- * under All, the first kind still reading, else the first refused, since
- * either could still have matched; nothing where "Nothing matches." is true.
- */
-function emptyNotice(
-  filter: PaletteFilter,
-  notices: readonly (PaletteNotice | undefined)[],
-): PaletteNotice | undefined {
-  if (filter !== PALETTE_FILTER.ALL) return notices[0];
-  return (
-    notices.find((notice) => notice?.kind === PALETTE_NOTICE.READING) ??
-    notices.find((notice) => notice?.kind === PALETTE_NOTICE.FAILED)
-  );
-}
-
 /** The list's notice where its rows would stand: a refusal with Retry, a reading line a reader hears, or a line of its own. */
 function NoticeLine({ notice }: { notice: PaletteNotice }): React.JSX.Element {
   if (notice.kind === PALETTE_NOTICE.FAILED) {
@@ -569,9 +565,13 @@ function PaletteTaskCard({
   return homeTaskCardOf(tasks, task, useMinute());
 }
 
-/** A task's muted words: its repository. */
-function taskDetail(task: TaskSummary): string | undefined {
-  return task.repository ?? undefined;
+/**
+ * A task's muted words: its repository, by its name alone as the Tasks
+ * list's row says it, unless another listed task's repository shares the
+ * name (`repositoryLabel`).
+ */
+function taskDetail(task: TaskSummary, listed: readonly TaskSummary[]): string | undefined {
+  return task.repository === null ? undefined : repositoryLabel(task.repository, listed);
 }
 
 /**
@@ -582,9 +582,10 @@ function taskDetail(task: TaskSummary): string | undefined {
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it. A task wears at its end who is on it and its
- * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowMark`), and
- * is found by its key, its assignee's name, and its creator's, a key typed
- * whole listing its task first. An agent opens on its own page, as its
+ * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowMark`),
+ * leads with its key and says its repository by its name, as the Tasks
+ * list's row does, and is found by its key, its assignee's name, and its
+ * creator's, a key typed whole listing its task first. An agent opens on its own page, as its
  * sidebar row does. An agent's line on a task's card opens the task on its
  * tab through `showAgent`, which leaves the palette as a row does.
  */
@@ -607,20 +608,24 @@ function taskRows(
       ? undefined
       : tasks.workspaces.find((each) => each.id === task.workspaceId);
   // Note that a task is found by its key, as its card and the Tasks list say it, read under its own workspace's name.
-  const keyOf = (task: TaskSummary): string | null => {
+  const keyOf = (task: TaskSummary): PaletteRow["taskKey"] => {
     const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
-    return home === undefined || task.number === undefined ? null : taskKey(home.name, task.number);
+    return home === undefined || task.number === undefined
+      ? undefined
+      : { workspaceName: home.name, number: task.number };
   };
   const taskOf = (task: TaskSummary): PaletteRow => {
     const elsewhere = elsewhereOf(task);
-    const key = keyOf(task) ?? undefined;
+    const numbered = keyOf(task);
+    const key =
+      numbered === undefined ? undefined : taskKey(numbered.workspaceName, numbered.number);
     const worn = assigneeFace(task, readerOf(task));
     const createdBy = task.createdBy?.name ?? null;
     const assignedTo = task.assignee?.name ?? null;
     // Note that a task Luke or an agent made says them in its detail, so it is found by them.
     const origin = originOf(task);
     const madeBy = origin === undefined ? null : actorName(origin);
-    const detail = taskDetail(task);
+    const detail = taskDetail(task, tasks.tasks);
     return {
       ...tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }),
       detail:
@@ -646,12 +651,12 @@ function taskRows(
         madeBy,
         origin === undefined ? null : MADE_BY_WORDS[origin.kind],
       ].filter((term) => term !== null && term !== undefined),
-      key,
+      taskKey: numbered,
       onChoose: () => open(task.id),
     };
   };
   const agentOf = (agent: TasklessAgent, archived: boolean): PaletteRow => {
-    const name = agentTabLabel(agent, tasks.agents.models);
+    const name = agentName(agent, tasks.agents.models);
     const words = [agent.repository, archived ? ARCHIVED_WORD : null].filter(
       (word) => word !== null,
     );
@@ -660,10 +665,7 @@ function taskRows(
       detail: words.length === 0 ? undefined : words.join(" · "),
       endMark: agentEndMark(agent, archived),
       card: (
-        <AgentCard
-          subject={tasklessRowSubject(agent, tasks.agents)}
-          models={tasks.agents.models}
-        />
+        <AgentCard subject={tasklessRowSubject(agent, tasks.agents)} models={tasks.agents.models} />
       ),
       terms: [name, agent.repository, agent.automationName ?? null].filter((term) => term !== null),
       onChoose: () => openAgent(agent.id),
@@ -773,7 +775,7 @@ function archivedAgentRows(
   return (agents.archived ?? []).map((agent) => {
     const look = tabLook({
       kind: TAB_KIND.AGENT,
-      name: agentTabLabel(agent, agents.models),
+      name: agentName(agent, agents.models),
       agent,
     });
     return {
@@ -954,18 +956,28 @@ function copyLinkRows(
  * The side panel's kinds, listed with the commands as Show board and the
  * rest, a command's verb before the name its tab wears, each wearing its
  * kind's glyph as its tab does (`tab-look.tsx`) and showing the panel on
- * its tab as the panel's "+" does, over the version history; none while
+ * its tab as the panel's "+" does, over the version history, and only the
+ * kinds the "+" offers (`offeredPanelKinds`), so none opens blank; none while
  * the plan is not drawn, since there is no panel to show, nor while an
  * agent's page holds the panel, which is that agent's. No chord reaches
  * them.
  */
 function panelTabRows(
   tasks: TasksControl,
+  chatOn: boolean,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
   if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
   const plan = openPlanStanding(tasks);
-  return SIDE_PANEL_TABS.map((tab) => {
+  const kinds = offeredPanelKinds(SIDE_PANEL_HOLDER.TASK, {
+    // Note that an item main says waits on the task holds its Inbox with no agent read yet (`use-tasks-tab.ts`'s `inboxHeld`).
+    inbox:
+      inboxOffered(tasks.agents, tasks.sidePanel) ||
+      tasks.listed.inbox.some((waiting) => waiting.taskId === tasks.activeTaskId),
+    chat: chatOn && tasks.chatView.available,
+    code: true,
+  });
+  return kinds.map((tab) => {
     // Note that the row says the kind, Show plan, while its glyph is the Plan tab's, the task's status.
     const { icon } = tabLook({ kind: TAB_KIND.PANEL, tab, plan });
     const label = `Show ${SIDE_PANEL_TAB_KIND[tab].label.toLowerCase()}`;
@@ -1190,6 +1202,14 @@ function PaletteItem({
       <ComboboxOptionItem
         option={{
           id: value,
+          lead:
+            row.taskKey === undefined ? undefined : (
+              <TaskKey
+                workspaceName={row.taskKey.workspaceName}
+                number={row.taskKey.number}
+                tokens={tokens}
+              />
+            ),
           label: <Highlighted text={row.label} tokens={tokens} />,
           icon: row.icon,
           detail: words,
@@ -1564,7 +1584,7 @@ export function CommandPalette({
       [
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
         ...actionRows((command) => choose(() => runAppCommand(command))),
-        ...panelTabRows(tasks, onTasks),
+        ...panelTabRows(tasks, chatOn, onTasks),
         ...readMarkRows(tasks, reads, choose),
         ...agentReadMarkRows(listedTasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
@@ -1591,11 +1611,6 @@ export function CommandPalette({
   const kinds = PALETTE_FILTERS.filter((each): each is PaletteKind =>
     filter === PALETTE_FILTER.ALL ? each !== PALETTE_FILTER.ALL : each === filter,
   );
-  const sections: readonly PaletteSection[] = open
-    ? kinds
-        .map((kind) => ({ kind, rows: rowsFor(kind) }))
-        .filter((section) => section.rows.length > 0)
-    : [];
   // Each kind's word for its rows' absence: still reading, refused, or a line of its own.
   const noticeOf = {
     [PALETTE_FILTER.TASKS]: () => tasksNotice(tasks),
@@ -1607,13 +1622,21 @@ export function CommandPalette({
     [PALETTE_FILTER.ACTIONS]: () => undefined,
     [PALETTE_FILTER.SETTINGS]: () => undefined,
   } as const satisfies Record<PaletteKind, () => PaletteNotice | undefined>;
-  const notice =
-    open && sections.length === 0 && !askLukeShown
-      ? emptyNotice(
-          filter,
-          kinds.map((kind) => noticeOf[kind]()),
-        )
-      : undefined;
+  // Note that each kind's notice stands in its own group, beside the rows other kinds matched,
+  // so a source that failed or is still reading is never taken for no match; under All a
+  // line of a kind's own (no repository open) stays out, since that kind is simply not searched.
+  const noticeFor = (kind: PaletteKind): PaletteNotice | undefined => {
+    const notice = noticeOf[kind]();
+    return filter === PALETTE_FILTER.ALL && notice?.kind === PALETTE_NOTICE.SAID
+      ? undefined
+      : notice;
+  };
+  const sections: readonly PaletteSection[] = open
+    ? kinds
+        .map((kind) => ({ kind, rows: rowsFor(kind), notice: noticeFor(kind) }))
+        .filter((section) => section.rows.length > 0 || section.notice !== undefined)
+    : [];
+  const nothingMatches = open && sections.length === 0;
   const cut =
     filesOpen &&
     filter === PALETTE_FILTER.FILES &&
@@ -1648,13 +1671,11 @@ export function CommandPalette({
       <PaletteFilters filter={filter} onFilter={changeFilter} />
       <Command.List asChild label="Results">
         <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
-          {notice === undefined ? (
+          {nothingMatches ? (
             <Command.Empty>
               <NoteLine>Nothing matches.</NoteLine>
             </Command.Empty>
-          ) : (
-            <NoticeLine notice={notice} />
-          )}
+          ) : null}
           {askLukeShown && askLuke !== undefined ? (
             <Command.Group>
               <PaletteItem row={askLuke} value={FIRST_ROW} query={query} tokens={tokens} />
@@ -1664,7 +1685,7 @@ export function CommandPalette({
             <Command.Group
               key={section.kind}
               heading={
-                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                   {FILTER_LABEL[section.kind]}
                 </Text>
               }
@@ -1681,11 +1702,12 @@ export function CommandPalette({
                   />
                 );
               })}
+              {section.notice === undefined ? null : <NoticeLine notice={section.notice} />}
             </Command.Group>
           ))}
           {cut ? (
             <div className="command-palette-notice">
-              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                 {TRUNCATED_LINE}
               </Text>
             </div>

@@ -1,3 +1,4 @@
+import { isVoiceFailure, type VoiceFailure } from "@luke/features/words";
 import { LIVE_STATUS, type LiveStatus, TRANSCRIPT_SPEAKER } from "@luke/live";
 import {
   isOptionalWireString,
@@ -39,11 +40,12 @@ type VoiceCallLine = typeof voiceCallLineSchema.Type;
  * ends, and its lines in the order they opened.
  *
  * It is not part of {@link VoiceView}, because it grows for the whole call
- * and the view is reported at the heard lines' rate. It is the app-state slice
- * `voice.callTranscript`, beside `voice.view`: the voice window reports only
- * a {@link VoiceCallTranscriptChange} with each view, main splices it in
- * with {@link withCallTranscriptChange}, and a panel opened mid-call reads
- * the whole of it from the document. Its one reader is the agent tab's live
+ * and the view is reported at the heard lines' rate. It is the app document's
+ * `callTranscript`, beside the voice slice: the voice window reports only a
+ * {@link VoiceCallTranscriptChange} with each view, main splices it in with
+ * {@link withCallTranscriptChange}, a panel is handed only what moved in it
+ * since the last it was handed ({@link callTranscriptChangeBetween}), and a
+ * panel opened mid-call reads the whole of it from the document. Its one reader is the agent tab's live
  * transcript (`transcript-model.ts`'s `heardCalls`), which matches it to
  * `view.call`'s agent; it is none while no call stands or before its first line.
  */
@@ -60,7 +62,9 @@ export interface VoiceCallTranscript {
  * Applied twice it is applied once, so a report heard again changes nothing.
  */
 const voiceCallTranscriptChangeSchema = Schema.Struct({
-  voiceSessionId: Schema.UndefinedOr(Schema.String),
+  // Note that a session not yet named may cross as no key at all, because a
+  // window's push is JSON and JSON keeps no key whose value is undefined.
+  voiceSessionId: Schema.optional(Schema.String),
   from: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   lines: Schema.Array(voiceCallLineSchema),
 });
@@ -102,8 +106,10 @@ export interface VoiceView extends VoiceSpeakers {
    * above, since a full-duplex session can carry both at once.
    */
   voiceStatus: LiveStatus;
-  voiceError: string | undefined;
-  voiceNotice: string | undefined;
+  /** What went wrong, as its key: never free text, so nothing a browser or provider said can reach app state. */
+  voiceError: VoiceFailure | undefined;
+  /** What is unavailable, as its key, on the same terms. */
+  voiceNotice: VoiceFailure | undefined;
   talkOpening: boolean;
   /** The agent the standing call speaks into, and its task where it has one; none for no call. */
   call: VoiceCallAbout | undefined;
@@ -147,6 +153,25 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   lukeEndedCall: undefined,
   speakerMuted: false,
 };
+
+/**
+ * Which of the notice line's two lines speech hides: a failure yields to
+ * either speaker being heard, since words being said are the thing to read
+ * over words that already failed, and a notice yields to Luke's voice alone,
+ * since a refusal answered while the developer speaks is exactly what the
+ * line should say. Read by the panel, which draws the line, and by the voice
+ * window, whose clock stands still while a line is hidden.
+ */
+export function noticeLinesHidden(speakers: VoiceSpeakers): { error: boolean; notice: boolean } {
+  return {
+    error: speakers.listening || speakers.lukeSpeaking,
+    notice: speakers.lukeSpeaking,
+  };
+}
+
+function isOptionalVoiceFailure(value: UnparsedWireValue): boolean {
+  return value === undefined || isVoiceFailure(value);
+}
 
 /** The statuses of a call still in progress, the ones a call holds the panel open through. */
 const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
@@ -205,10 +230,31 @@ export function withCallTranscriptChange(
   return lines.length === 0 ? undefined : { voiceSessionId: change.voiceSessionId, lines };
 }
 
+/**
+ * What moved from `sent` to `next`, as the change that turns the one into the
+ * other: the lines from the first that is not the line it was, and the empty
+ * change from 0 for a call gone. A line keeps its object while it does not
+ * move, so the walk is one comparison per line kept. None where nothing did.
+ */
+export function callTranscriptChangeBetween(
+  sent: VoiceCallTranscript | undefined,
+  next: VoiceCallTranscript | undefined,
+): VoiceCallTranscriptChange | undefined {
+  if (sent === next) return undefined;
+  if (next === undefined) return { voiceSessionId: undefined, from: 0, lines: [] };
+  const kept = sent !== undefined && sent.voiceSessionId === next.voiceSessionId ? sent.lines : [];
+  let from = 0;
+  while (from < kept.length && from < next.lines.length && kept[from] === next.lines[from]) {
+    from += 1;
+  }
+  if (from === kept.length && from === next.lines.length) return undefined;
+  return { voiceSessionId: next.voiceSessionId, from, lines: next.lines.slice(from) };
+}
+
 export function isVoiceView(value: UnparsedWireValue): value is VoiceView & WireRecord {
   if (!isRecord(value)) return false;
   if (!isLiveStatus(value.voiceStatus)) return false;
-  if (!isOptionalWireString(value.voiceError) || !isOptionalWireString(value.voiceNotice))
+  if (!isOptionalVoiceFailure(value.voiceError) || !isOptionalVoiceFailure(value.voiceNotice))
     return false;
   if (!isWireBoolean(value.talkOpening)) return false;
   if (!isOptionalCallAbout(value.call)) return false;

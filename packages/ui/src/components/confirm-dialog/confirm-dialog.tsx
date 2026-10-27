@@ -1,5 +1,6 @@
 import type { ActionResult } from "@luke/wire";
 import { useId, useMemo, useRef, useState } from "react";
+import { isComposingKey } from "../../composing-key.js";
 import {
   CONFIRM_STAGE,
   type ConfirmSurroundings,
@@ -77,6 +78,17 @@ export function useConfirmDialog(
   return useMemo(() => ({ ...held, standing }), [held, standing]);
 }
 
+/**
+ * What the act takes with it, the name a gate asks for, and a refusal,
+ * between the shared dialog's title and its answers, which hold them in the
+ * middle that gives way and scrolls (`Dialog`), so the title and the answers
+ * stay on screen however short the window is; the gate's name is set apart
+ * from the words around it so it reads as exactly what to type.
+ */
+const BODY = "m-0 text-body text-muted-foreground wrap-anywhere";
+const GATE = "font-mono text-foreground wrap-anywhere";
+const REFUSAL = "m-0 text-caption text-danger wrap-anywhere";
+
 /** What the act's button is told by the stage of its answer. */
 interface ActState {
   acting: boolean;
@@ -124,9 +136,10 @@ function ConfirmCard({
   };
   // Enter in the question's field, or in its gate, answers it as a press of
   // the act would, which a gate still locked refuses with the act's own
-  // shake; anywhere else Enter is the focused button's own.
+  // shake; anywhere else Enter is the focused button's own. An Enter that
+  // confirms an input method's composition is the input method's, not the act's.
   const fieldKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" || settling) return;
+    if (event.key !== "Enter" || settling || isComposingKey(event)) return;
     if (event.target !== field?.current && event.target !== gateField.current) return;
     event.preventDefault();
     actButton.current?.click();
@@ -164,7 +177,7 @@ function ConfirmCard({
       }
     >
       {question.body ? (
-        <p id={bodyId} className="luke-confirm-dialog-body">
+        <p id={bodyId} className={BODY}>
           {question.body}
         </p>
       ) : null}
@@ -173,7 +186,7 @@ function ConfirmCard({
         <FormField
           label={
             <>
-              Type <span className="luke-confirm-dialog-gate">{gate}</span> to confirm
+              Type <span className={GATE}>{gate}</span> to confirm
             </>
           }
         >
@@ -191,7 +204,7 @@ function ConfirmCard({
         </FormField>
       )}
       {rejection !== undefined && !acting ? (
-        <p className="luke-confirm-dialog-refusal" role="alert">
+        <p className={REFUSAL} role="alert">
           {rejection}
         </p>
       ) : null}

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { WindowPushes } from "../act-port/push-procedures.js";
-import { type AppState, type AppStateSnapshot, sessionReplayBootstrap } from "../app-state.js";
+import { type AppState, sessionReplayBootstrap } from "../app-state.js";
 import { PUSH, type PushEvent } from "../contract/index.js";
 import type { HostBootstrap } from "../host-operator.js";
 import { runModeFor } from "../run-mode.js";
@@ -15,8 +16,9 @@ import {
   bootstrapPatch,
   initialAppState,
   publishAppStateChanges,
+  voiceWindowGaveUp,
   voiceWindowGone,
-  WindowAppStates,
+  windowAppState,
 } from "./app-state-store.js";
 
 /**
@@ -260,44 +262,73 @@ it.effect(
   },
 );
 
-it("the voice window is not handed back the view it reported, while a panel and the call window are, and it still hears what moved after", async () => {
+/** One line said on a call, its words as given. */
+function said(rowId: string, words: string) {
+  return { rowId, speaker: TRANSCRIPT_SPEAKER.USER, words, startMs: 0, endMs: 100 };
+}
+
+it("a caption on a standing call hands a panel the voice and the line that grew, never the tasks, the call window the voice alone, and the voice window nothing", async () => {
   const pushes = new WindowPushes<object>();
   const voiceWindow = { handle: {}, role: { voice: true, call: false } };
-  const windows = [
-    voiceWindow,
-    { handle: {}, role: { voice: false, call: false } },
-    { handle: {}, role: { voice: false, call: true } },
-  ];
+  const panelWindow = { handle: {}, role: { voice: false, call: false } };
+  const callWindow = { handle: {}, role: { voice: false, call: true } };
+  const windows = [voiceWindow, panelWindow, callWindow];
   const [voice, panel, call] = windows.map(({ handle }) => pushes.stream(handle, undefined));
   if (voice === undefined || panel === undefined || call === undefined) throw new Error("unopened");
-  const sent = new WindowAppStates<object>();
   const app = store();
   const publish = () => {
-    const held: AppStateSnapshot = { ...app.snapshot(), window: { fullScreen: false } };
     for (const { handle, role } of windows) {
-      sent.offer(handle, role, held, (shown) => pushes.push(handle, PUSH.APP_STATE, shown));
+      pushes.pushState(handle, windowAppState(app.snapshot(), role, { fullScreen: false }));
     }
   };
-  const versionOf = (read: IteratorResult<PushEvent>) =>
-    !read.done && read.value.push === PUSH.APP_STATE ? read.value.payload.version : read.value;
+  const delivered = async (stream: AsyncIteratorObject<PushEvent>) => {
+    const read = await stream.next();
+    if (read.done || read.value.push !== PUSH.APP_STATE) throw new Error("no document was sent");
+    return read.value.payload;
+  };
+  const first = said("row-1", "Invite a teammate");
+  app.update({
+    voice: { avatar: AVATAR_OFF, view: IDLE_VOICE_VIEW },
+    callTranscript: { voiceSessionId: "session-1", lines: [first] },
+  });
   publish();
-  for (const stream of [voice, panel, call]) assert.equal(versionOf(await stream.next()), 0);
+  for (const stream of [voice, panel, call]) await delivered(stream);
 
-  // The voice window reports its view: every window but it is told.
-  app.update({ voice: { ...app.snapshot().voice, view: IDLE_VOICE_VIEW } });
+  // The voice window reports the next caption: the line said grows.
+  const view = { ...IDLE_VOICE_VIEW, listening: true };
+  app.update({
+    voice: { ...app.snapshot().voice, view },
+    callTranscript: { voiceSessionId: "session-1", lines: [first, said("row-2", "by email")] },
+  });
   publish();
-  assert.equal(versionOf(await panel.next()), 1);
-  assert.equal(versionOf(await call.next()), 1);
+  assert.deepEqual(await delivered(panel), {
+    version: 2,
+    entries: { voice: { avatar: AVATAR_OFF, view } },
+    callTranscript: {
+      voiceSessionId: "session-1",
+      from: 1,
+      lines: [said("row-2", "by email")],
+    },
+  });
+  assert.deepEqual(await delivered(call), {
+    version: 2,
+    entries: { voice: { avatar: AVATAR_OFF, view } },
+  });
   pushes.push(voiceWindow.handle, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
   assert.deepEqual((await voice.next()).value, {
     push: PUSH.SHOW_AGENT,
     payload: { taskId: "task-1", agentId: "agent-1" },
   });
+});
 
-  // Something it draws moves, and it is told, view and all.
-  app.update({ network: { online: false } });
-  publish();
-  const after = await voice.next();
-  assert.equal(versionOf(after), 2);
-  assert.ok(!after.done && after.value.push === PUSH.APP_STATE && after.value.payload.voice.view);
+it("a voice window given up on sets voice unavailable for the run: no view, the avatar standing, and a later bootstrap keeps it", () => {
+  const app = store();
+  assert.equal(app.snapshot().voice.unavailable, undefined);
+  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true }, avatar: AVATAR_OFF } });
+  app.update({ voice: voiceWindowGaveUp(app.snapshot().voice) });
+  assert.equal(app.snapshot().voice.unavailable, true);
+  assert.equal(app.snapshot().voice.view, undefined);
+  assert.deepEqual(app.snapshot().voice.avatar, AVATAR_OFF);
+  app.update(bootstrapPatch(app.snapshot(), BOOT));
+  assert.equal(app.snapshot().voice.unavailable, true);
 });

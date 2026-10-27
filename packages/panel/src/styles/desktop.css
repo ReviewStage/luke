@@ -31,14 +31,6 @@
   /* The window's zoom as a factor, which the page draws every pixel at and
      the renderer keeps here (`window-zoom.ts`). */
   --zoom: 1;
-  /* What a top row at the window's right edge leaves past its last control
-     for the side panel's toggle: the toggle, a row's inset from the edge,
-     and a row's gap between its items. */
-  --panel-toggle-clearance: calc(
-    var(--column-inset) +
-    var(--luke-control-height) +
-    var(--luke-control-gap)
-  );
   /* The margin a comment thread stands in beside the reading width, and the
      gap between them (`tasks/plan-comments.tsx`, which mirrors both). */
   --comment-card-width: 288px;
@@ -111,7 +103,7 @@ body,
   * {
     scrollbar-color: transparent transparent;
     scrollbar-width: thin;
-    transition: scrollbar-color var(--luke-duration-quick) ease;
+    transition: scrollbar-color var(--luke-duration-quick) var(--luke-motion-exit);
   }
 
   *:hover,
@@ -466,7 +458,7 @@ body,
    inset as a row's words are. */
 .sidebar-hidden-statuses {
   margin: var(--luke-space-4) var(--row-inset);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -573,7 +565,7 @@ body,
 
 .actor-mark[data-kind="someone"] {
   box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* A member who left keeps their own face, their picture or their letter on
@@ -824,7 +816,7 @@ ul.actor-stack {
 .sidebar-task-time {
   flex: none;
   min-width: calc(2 * var(--sidebar-plan-mark) + var(--luke-space-2));
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -850,7 +842,7 @@ ul.actor-stack {
   max-width: 7em;
   overflow: hidden;
   margin-right: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   vertical-align: bottom;
   white-space: nowrap;
 }
@@ -868,7 +860,7 @@ ul.actor-stack {
   width: 12px;
   height: 12px;
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   vertical-align: -1.5px; /* off-scale */
 }
 
@@ -911,7 +903,7 @@ ul.actor-stack {
   position: relative;
   transition:
     transform var(--luke-duration-fast) var(--luke-spring-fast),
-    background-color var(--luke-duration-hover) ease,
+    background-color var(--luke-duration-hover) var(--luke-motion-exit),
     opacity var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
@@ -984,7 +976,7 @@ ul.actor-stack {
   margin-bottom: var(--luke-list-gap);
   padding-right: var(--luke-space-4);
   border-radius: var(--luke-control-radius);
-  transition: background-color var(--luke-duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 [data-luke-profile="desktop"] .sidebar-repository-header {
@@ -1185,14 +1177,14 @@ ul.actor-stack {
 
 .section-emoji-group-name {
   margin: 0 0 var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-medium);
 }
 
 .section-icon-note {
   margin: var(--luke-space-8) 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -1208,7 +1200,7 @@ ul.actor-stack {
 .sidebar-repository-pinned {
   display: inline-flex;
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .sidebar-repository-pinned svg {
@@ -1221,7 +1213,7 @@ ul.actor-stack {
   flex: none;
   align-items: center;
   opacity: 0;
-  transition: opacity var(--luke-duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .sidebar-repository-header:is(:focus-within, [data-menu-open="true"]) .sidebar-repository-actions {
@@ -1378,6 +1370,21 @@ ul.actor-stack {
   -webkit-app-region: drag;
 }
 
+/* What a top row at the sheet's right edge leaves past its last control for
+   the side panel's toggle: the toggle, a row's inset from the window's edge,
+   and a row's gap between its items. Note that it is declared on the sheet
+   and less the sheet's own gap, because the toggle stands on the window
+   while the row stands in the sheet, a gap in from the window's edge
+   wherever the sidebar is open. */
+.desktop-main {
+  --panel-toggle-clearance: calc(
+    var(--column-inset) +
+    var(--luke-control-height) +
+    var(--luke-control-gap) -
+    var(--sheet-gap)
+  );
+}
+
 /* Beneath the side panel's toggle, at the window's top right, the toolbar
    stops short of it. Only a plan's page draws the toggle, so Settings' rows
    end as far in as they start. */
@@ -1475,8 +1482,8 @@ ul.actor-stack {
   font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
   transition:
-    background-color var(--luke-duration-hover) ease,
-    color var(--luke-duration-hover) ease;
+    background-color var(--luke-duration-hover) var(--luke-motion-exit),
+    color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .toolbar-button svg {
@@ -1563,7 +1570,7 @@ ul.actor-stack {
 }
 
 .account-menu-email {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* Empty and waiting states ---------------------------------------------- */
@@ -1668,7 +1675,7 @@ ul.actor-stack {
 }
 
 .inbox-compose-label {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -1780,7 +1787,7 @@ ul.actor-stack {
   place-items: center;
   width: 16px;
   height: 16px;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .agent-origin-glyph > svg {
@@ -2439,7 +2446,7 @@ ul.actor-stack {
   overflow: hidden;
   flex: 0 100 auto;
   min-width: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-regular);
@@ -2491,7 +2498,7 @@ ul.actor-stack {
   overflow: hidden;
   flex: 0 100 auto;
   min-width: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
   white-space: nowrap;
@@ -2532,7 +2539,7 @@ ul.actor-stack {
   align-items: baseline;
   gap: var(--luke-space-6);
   margin: 0 0 var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
 }
@@ -2573,7 +2580,7 @@ ul.actor-stack {
 }
 
 .integration-tool-parameter-type {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
 }
@@ -2605,7 +2612,7 @@ ul.actor-stack {
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .integration-tool-parameter-values code {
@@ -2687,28 +2694,14 @@ ul.actor-stack {
   border-right: 1px solid var(--luke-color-border);
 }
 
-/* The list's search, open, stands in its head's name and takes the room the
-   name had, on the page's bar and in the sidebar's head alike. */
+/* The list's search stands under a page's head (`inbox-list.tsx`'s
+   `ListSearch`), always, as Settings' does, on the column's inset so its
+   magnifier stands over the rows' glyphs; nothing in the head moves as it is
+   used, so it has no motion of its own. The sidebar's unfolds from its
+   magnifier instead (`@luke/ui`'s `FoldingSearch`). */
 .inbox-search {
-  min-width: 0;
-  flex: 1;
-  animation:
-    inbox-search-unfold var(--luke-duration-pane) var(--luke-motion-pane),
-    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-pane);
-}
-
-/* Opening, the field unfolds leftward from where the magnifier stood at its
-   end, over the name it takes the place of: revealed rather than stretched,
-   so its words never squash. It is uncovered a little past its edge, so the
-   focus ring the caret brings is never clipped on the way. Reduced motion
-   zeroes the durations (`base.css`), so it then simply stands. */
-@keyframes inbox-search-unfold {
-  from {
-    clip-path: inset(0 0 0 100%);
-  }
-  to {
-    clip-path: inset(calc(-1 * var(--luke-space-4)));
-  }
+  display: block;
+  padding: 0 var(--column-inset) var(--luke-space-8);
 }
 
 /* Its buttons end as far in from the list's edge as the side panel's toggle
@@ -2858,7 +2851,7 @@ ul.actor-stack {
 }
 
 /* An unread Inbox item wears a mail app's blue dot in a gutter before its
-   tile (`inbox-list.tsx`); the gutter stands on every row, so the tiles
+   words (`inbox-list.tsx`); the gutter stands on every row, so the words
    line up whether a row wears the dot or not. */
 .inbox-row-gutter {
   display: inline-flex;
@@ -2871,16 +2864,19 @@ ul.actor-stack {
   --inbox-unread-dot: 7px;
 }
 
+/* Note that the dot is the accent's ink rather than its fill, because the
+   web's cyan fill reads at 1.7:1 on its light page, under a mark's 3:1. */
 .inbox-row-unread {
   width: var(--inbox-unread-dot);
   height: var(--inbox-unread-dot);
   border-radius: 50%;
-  background: var(--luke-color-accent);
+  background: var(--luke-color-accent-text);
 }
 
 /* An Inbox item that needs the developer wears the attention mark before
-   its time (`inbox-list.tsx`), a size under a row glyph's, as a sidebar plan
-   wears it, so the disc's edge reads at the time's height. */
+   its time where its end says where it stands (`InboxItemEnd`: ⌘K's row,
+   the Next row), a size under a row glyph's, as a sidebar plan wears it, so
+   the disc's edge reads at the time's height. */
 .inbox-row-attention {
   display: inline-flex;
 }
@@ -2912,7 +2908,7 @@ ul.actor-stack {
 }
 
 /* A task's key (`TaskKey`, `task-standing.tsx`), drawn alike wherever it
-   stands: its words are `Text`'s caption, subtle and monospace, with even
+   stands: its words are `Text`'s caption, muted and monospace, with even
    figures. It is short and read whole, so it never shrinks, and what stands
    beside it gives way instead; it sits centred on the row it leads. */
 .task-key {
@@ -3158,7 +3154,7 @@ ul.actor-stack {
    over its pills in the label's type, as a field's label stands. */
 .inbox-field-optional {
   margin-left: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-regular);
 }
@@ -3396,7 +3392,7 @@ ul.actor-stack {
 
 .inbox-next-lead {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-regular);
 }
@@ -3417,7 +3413,7 @@ ul.actor-stack {
 
 .inbox-pager-count {
   margin-right: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -3697,7 +3693,7 @@ ul.actor-stack {
 
 .automation-suggestion-add {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .automation-suggestion:hover:not([data-disabled="true"]) .automation-suggestion-add {
@@ -3712,7 +3708,7 @@ ul.actor-stack {
 }
 
 .automation-suggestion-detail {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -4066,7 +4062,7 @@ ul.actor-stack {
   padding: var(--luke-space-6) var(--luke-space-8);
   margin: 0 calc(-1 * var(--luke-space-8));
   border-radius: var(--luke-menu-row-radius);
-  transition: background-color var(--luke-duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 /* A post of the reader's on its way reads quieter until the chat holds it,
@@ -4461,8 +4457,10 @@ ul.actor-stack {
 
 /* Over a File tab the bar stands just under the file's own bar
    (`tasks.css`), whose controls it would otherwise cover: that bar's
-   buttons, its padding, and its hairline. */
-.find-scope:has(> .file-view) > .find-bar {
+   buttons, its padding, and its hairline. The side panel holds its tab in
+   `.side-panel-keeps`, which lays nothing out but stands between the scope
+   and the tab, so the tab is looked for there too. */
+.find-scope:has(> .file-view, > .side-panel-keeps > .file-view) > .find-bar {
   top: calc(var(--luke-control-height) + 2 * var(--luke-space-4) + 1px + var(--luke-space-8));
 }
 
@@ -4837,9 +4835,9 @@ ul.actor-stack {
 .task-summary-collapse {
   opacity: 0;
   transition:
-    opacity var(--luke-duration-hover) ease,
-    background-color var(--luke-duration-hover) ease,
-    color var(--luke-duration-hover) ease;
+    opacity var(--luke-duration-hover) var(--luke-motion-exit),
+    background-color var(--luke-duration-hover) var(--luke-motion-exit),
+    color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .task-summary[data-mode="column"] > .task-summary-chevron {
@@ -4910,7 +4908,7 @@ ul.actor-stack {
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
   text-align: left;
-  transition: background-color var(--luke-duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .task-summary-glyph {
@@ -4941,7 +4939,7 @@ ul.actor-stack {
    folded sidebar group shows after its name. */
 .inbox-row-count {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
 }
@@ -4989,7 +4987,7 @@ ul.actor-stack {
 .task-summary-archived-agent:has(:focus-visible) > .task-summary-marks {
   opacity: 1;
   pointer-events: auto;
-  transition: opacity var(--luke-duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .task-summary-archived-agent:has(:focus-visible) .failed-mark {
@@ -5004,7 +5002,7 @@ ul.actor-stack {
   .task-summary-archived-agent:hover > .task-summary-marks {
     opacity: 1;
     pointer-events: auto;
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .task-summary-archived-agent:hover .failed-mark {
@@ -5404,7 +5402,7 @@ ul.actor-stack {
   z-index: var(--luke-z-dialog);
   inset: 0;
   background: var(--luke-color-scrim);
-  animation: luke-dialog-fade var(--luke-duration-quick) ease-out;
+  animation: luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 [data-luke-profile="desktop"] .command-palette-backdrop {
@@ -5455,7 +5453,7 @@ ul.actor-stack {
   height: 44px;
   padding: 0 var(--luke-space-16);
   border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .command-palette-search svg {
@@ -5477,7 +5475,7 @@ ul.actor-stack {
 }
 
 .command-palette-search input::placeholder {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* The band under the field the filters stand in. Note that it is a block,
@@ -5500,7 +5498,7 @@ ul.actor-stack {
   height: 36px;
   padding: 0 var(--luke-space-16);
   border-top: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -5584,7 +5582,7 @@ ul.actor-stack {
   z-index: var(--luke-z-dialog);
   inset: 0;
   background: var(--luke-color-scrim);
-  animation: luke-dialog-fade var(--luke-duration-quick) ease-out;
+  animation: luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 .tab-switcher {
@@ -5668,7 +5666,7 @@ ul.actor-stack {
 
 .feedback-dialog-identity {
   margin-left: auto;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -5709,7 +5707,7 @@ ul.actor-stack {
   overflow: hidden;
   min-width: min(16ch, 35%);
   flex: 1;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
@@ -5814,7 +5812,11 @@ ul.actor-stack {
    New task's composer, the card as wide as the page's measure. */
 .home-welcome {
   align-items: center;
-  justify-content: center;
+  /* Note that `safe` keeps the page's top reachable where it is taller than
+     the window, because plain centring overflows both ends and the shell
+     clips what stands above its top; the page scrolls instead. */
+  justify-content: safe center;
+  overflow-y: auto;
   gap: var(--luke-space-12);
   padding: var(--luke-page-inset);
   text-align: center;
@@ -6001,6 +6003,13 @@ ul.actor-stack {
   height: 12px;
 }
 
+.new-task-issue-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-6);
+}
+
 .new-task-issue-key {
   flex: none;
   font-family: var(--luke-font-mono);
@@ -6118,7 +6127,7 @@ ul.actor-stack {
 }
 
 .task-card-number {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -6259,7 +6268,7 @@ ul.actor-stack {
   align-items: center;
   gap: var(--luke-space-6);
   margin-left: auto;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;
@@ -6283,7 +6292,7 @@ ul.actor-stack {
    agent, named muted before their square, cut short rather than pushing
    the key aside. */
 .tasks-board-maker {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* A card's name stands whole under its line, in the label's weight,
@@ -6352,7 +6361,7 @@ ul.actor-stack {
 
 .tasks-board-repository {
   margin-left: var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   pointer-events: none;
@@ -6376,7 +6385,7 @@ ul.actor-stack {
 @media (hover: hover) {
   .tasks-board-card-more {
     opacity: 0;
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .tasks-board-card:hover .tasks-board-card-more,
@@ -6453,7 +6462,7 @@ ul.actor-stack {
 .tasks-list-group {
   row-gap: var(--luke-space-2);
   border-radius: var(--luke-radius-10);
-  transition: background-color var(--luke-duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .tasks-list-group > :not(.tasks-list-rows) {
@@ -6490,7 +6499,7 @@ ul.actor-stack {
 .tasks-list-chevron {
   display: inline-flex;
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
 }
 
@@ -6532,7 +6541,7 @@ ul.actor-stack {
   color: var(--luke-color-text);
   transition:
     transform var(--luke-duration-fast) var(--luke-spring-fast),
-    background-color var(--luke-duration-hover) ease,
+    background-color var(--luke-duration-hover) var(--luke-motion-exit),
     opacity var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
@@ -6591,7 +6600,7 @@ ul.actor-stack {
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;
@@ -6707,7 +6716,7 @@ ul.actor-stack {
 @media (hover: hover) {
   .tasks-list-cell[data-cell="more"] {
     opacity: 0;
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .tasks-list-row:hover .tasks-list-cell[data-cell="more"],
@@ -6726,7 +6735,7 @@ ul.actor-stack {
   flex: none;
   align-items: center;
   gap: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;

@@ -1,4 +1,9 @@
 import { pulseOnPress } from "../../press-pulse.js";
+import {
+  PAGINATION_ITEM,
+  PaginationEllipsis,
+  Pagination as PaginationRow,
+} from "../../shadcn/pagination.js";
 
 /**
  * pagination.tsx -- links to the pages beside this one: a step back, a step on, and between them, where the pages are numbered, each page's number with the current one held.
@@ -12,6 +17,8 @@ import { pulseOnPress } from "../../press-pulse.js";
  * elide to the first, the last, and the current page's neighbours, so the
  * row stays one short line however many pages there are. Without numbers
  * the two steps stand at either end of the row, each saying where it goes.
+ * The row and its elision are shadcn/ui's (`../../shadcn/pagination.tsx`);
+ * the steps and numbers are links of the row's own items.
  */
 
 /** How many page numbers show on each side of the current one before the rest elide. */
@@ -68,7 +75,7 @@ function Step({
   const arrow = rel === "prev" ? "←" : "→";
   if (step === undefined) {
     return (
-      <span className="luke-pagination-item" data-idle="true" aria-hidden="true">
+      <span className={PAGINATION_ITEM} data-idle="true" aria-hidden="true">
         {arrow}
       </span>
     );
@@ -78,7 +85,7 @@ function Step({
     words = rel === "prev" ? `${arrow} ${step.text}` : `${step.text} ${arrow}`;
   return (
     <a
-      className="luke-pagination-item"
+      className={PAGINATION_ITEM}
       href={step.href}
       rel={rel}
       aria-label={step.label}
@@ -109,7 +116,7 @@ export function Pagination({
 }): React.JSX.Element | null {
   if (pages !== undefined && pages.count < 2) return null;
   return (
-    <nav className="luke-pagination" aria-label={label} data-numbered={pages ? "true" : undefined}>
+    <PaginationRow aria-label={label} data-numbered={pages ? "true" : undefined}>
       <Step step={previous} rel="prev" />
       {pages
         ? pageNumbers(pages.current, pages.count).map((number, index, numbers) => {
@@ -118,15 +125,11 @@ export function Pagination({
                 (numbers[index + 1] ?? 0) <= pages.current
                   ? ELISION_SIDE.BEFORE
                   : ELISION_SIDE.AFTER;
-              return (
-                <span key={side} className="luke-pagination-item" data-idle="true">
-                  …
-                </span>
-              );
+              return <PaginationEllipsis key={side}>…</PaginationEllipsis>;
             }
             if (number === pages.current) {
               return (
-                <span key={number} className="luke-pagination-item" aria-current="page">
+                <span key={number} className={PAGINATION_ITEM} aria-current="page">
                   {number}
                 </span>
               );
@@ -134,7 +137,7 @@ export function Pagination({
             return (
               <a
                 key={number}
-                className="luke-pagination-item"
+                className={PAGINATION_ITEM}
                 href={pages.href(number)}
                 onClick={pulseOnPress()}
               >
@@ -144,6 +147,6 @@ export function Pagination({
           })
         : null}
       <Step step={next} rel="next" />
-    </nav>
+    </PaginationRow>
   );
 }

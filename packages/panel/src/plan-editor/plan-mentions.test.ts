@@ -186,14 +186,25 @@ test("an @ inside a word, or inside code, opens nothing", () => {
   assert.ok(task.triggers.every((trigger) => trigger === undefined));
 });
 
-test("renaming a heading in the editor renames the text's own mentions of it, in the same edit", () => {
+test("renaming a heading in the editor renames the text's own mentions of it, target and name, in the same edit", () => {
   const task = mounted(TEXT);
 
   task.typeAfter("Rollout", " plan");
 
   assert.equal(
     task.last(),
-    `## Goal\n\nShip as ${named("rollout-plan", "Rollout")} says.\n\n## Rollout plan\n\nStore first.\n`,
+    `## Goal\n\nShip as ${named("rollout-plan", "Rollout plan")} says.\n\n## Rollout plan\n\nStore first.\n`,
+  );
+});
+
+test("renaming a heading in a way that keeps its anchor renames the text's own mentions of it, under the same target", () => {
+  const task = mounted(TEXT);
+
+  task.typeAfter("Rollout", "!");
+
+  assert.equal(
+    task.last(),
+    `## Goal\n\nShip as ${named("rollout", "Rollout!")} says.\n\n## Rollout!\n\nStore first.\n`,
   );
 });
 
@@ -204,7 +215,7 @@ test("renaming a heading renames a mention of it written before the link was set
 
   task.typeAfter("Rollout", " plan");
 
-  assert.ok(task.last().includes(named("rollout-plan", "Rollout")), task.last());
+  assert.ok(task.last().includes(named("rollout-plan", "Rollout plan")), task.last());
 });
 
 test("a heading laid in above another of the same words moves that one's mentions onto its new anchor", () => {

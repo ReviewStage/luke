@@ -55,7 +55,7 @@
      place's own at more than twice its size. */
   .luke-empty-state-icon {
     display: flex;
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     opacity: 0.6;
   }
 

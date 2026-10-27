@@ -106,6 +106,19 @@ const findRows = SqlSchema.findAll({
     ),
 });
 
+const findAccountRows = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String }),
+  Result: SealedRowSchema,
+  execute: (read) =>
+    Database.use((db) =>
+      db
+        .select(ROW_COLUMNS)
+        .from(accountProviderKey)
+        .where(eq(accountProviderKey.userId, read.userId))
+        .orderBy(asc(accountProviderKey.provider), asc(accountProviderKey.kind)),
+    ),
+});
+
 const findEveryRow = SqlSchema.findAll({
   Request: Schema.Void,
   Result: OwnedRowSchema,
@@ -403,6 +416,17 @@ export function listProviderKeyRows(
   kind: ProviderKeyKind,
 ): TaskStoreEffect<readonly ProviderKeyRow[]> {
   return findRows({ userId, kind });
+}
+
+/**
+ * The account's stored keys of every kind, sealed, in the providers' order,
+ * in one statement: what a request that decides several things from them,
+ * such as a Start's model menu and its payer, reads once.
+ */
+export function listAccountProviderKeyRows(
+  userId: string,
+): TaskStoreEffect<readonly ProviderKeyRow[]> {
+  return findAccountRows({ userId });
 }
 
 /**

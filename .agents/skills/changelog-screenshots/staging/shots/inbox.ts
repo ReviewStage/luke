@@ -32,7 +32,7 @@ import {
   type InboxItem,
   type InboxMessage,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { ACT_KIND } from "@luke/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { MAIN_TAB } from "../tasks/use-main-tabs";

@@ -1,47 +1,48 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
-  askStillAsked,
   INBOX_ASK,
   INBOX_ASK_STATUS,
-  INBOX_RESPONSE,
+  INBOX_STATUS,
   type InboxReadAsk,
   inboxStartTitle,
+  standingAsk,
 } from "./inbox-wire.js";
 
 /**
- * inbox-wire.test.ts -- an item's open ask is still the one its response
- * asks while the two say the same, though each is built apart, and is no
- * longer once the response says otherwise.
+ * inbox-wire.test.ts -- an ask kept open reads as the item stands: open
+ * while the item holds it open, replaced where it holds another, and
+ * answered or withdrawn, with the close's reason, once the item settled
+ * on it; and a thread a member starts is titled by its words.
  */
 
-const OPTIONS = [{ label: "Operating" }, { label: "Payroll" }];
+const ASK_ID = "6f1c2a4e-1b9d-4c7e-9a52-3d8e0f4b7c11";
 
-/** The decide ask held open with those options. */
+/** The decide ask kept open. */
 const DECIDE: InboxReadAsk = {
   type: INBOX_ASK.DECIDE,
-  options: OPTIONS,
+  options: [{ label: "Operating" }, { label: "Payroll" }],
   status: INBOX_ASK_STATUS.OPEN,
 };
 
-test("a decide ask and an answer ask stand for the response that says the same, and a decide ask no longer once its options change", () => {
+test("an ask kept open reads as the item holds it: open, replaced, answered, or withdrawn with why", () => {
+  const open = { status: INBOX_STATUS.OPEN, openAskMessageId: ASK_ID, closedReason: null };
+  assert.deepEqual(standingAsk(DECIDE, ASK_ID, open), DECIDE);
   assert.equal(
-    askStillAsked(
-      { type: INBOX_RESPONSE.CHOICE, options: OPTIONS.map((option) => ({ ...option })) },
-      DECIDE,
-    ),
-    true,
+    standingAsk(DECIDE, ASK_ID, { ...open, openAskMessageId: null }).status,
+    INBOX_ASK_STATUS.REPLACED,
   );
   assert.equal(
-    askStillAsked(
-      { type: INBOX_RESPONSE.TEXT },
-      { type: INBOX_ASK.ANSWER, status: INBOX_ASK_STATUS.OPEN },
-    ),
-    true,
+    standingAsk(DECIDE, ASK_ID, { ...open, status: INBOX_STATUS.ANSWERED }).status,
+    INBOX_ASK_STATUS.ANSWERED,
   );
-  assert.equal(
-    askStillAsked({ type: INBOX_RESPONSE.CHOICE, options: [{ label: "Operating" }] }, DECIDE),
-    false,
+  assert.deepEqual(
+    standingAsk(DECIDE, ASK_ID, {
+      ...open,
+      status: INBOX_STATUS.CLOSED,
+      closedReason: "Found the key.",
+    }),
+    { ...DECIDE, status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnReason: "Found the key." },
   );
 });
 

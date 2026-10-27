@@ -19,7 +19,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { TASK_SECTION_ICON_KIND } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
@@ -28,6 +28,7 @@ import {
   type TaskAgentLine,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import { pasteCutWords } from "@luke/features/words";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { type ChatPlace, type ChatPost, FOR_YOU } from "@luke/ui/chat-model";
@@ -54,10 +55,12 @@ import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { FAKE_ANSWER, fakeActPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { attachmentChipName } from "../testing/attachment-chip.js";
 import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
+  pasteInComposer,
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
@@ -848,6 +851,44 @@ test("an approval's Approve is held until Send sends it, a note with no decision
       "  ↳ Thanks, both.",
     ],
   );
+});
+
+test("an ask's note and decision are there again when Chat closes and opens again", async () => {
+  const page = mount();
+  const card = openAsk(page, UNIQUE_INDEX);
+  typeInComposer(card, "go ahead");
+  act(() => pressNamed(card, "Approve").click());
+  reopen();
+
+  const again = openAsk(page, UNIQUE_INDEX);
+  assert.equal(boxWords(again), "go ahead");
+  assert.equal(pressNamed(again, "Approve").getAttribute("aria-pressed"), "true");
+  act(() => sendOf(again).click());
+  await settle();
+  assert.equal(rail(page)[0], "▸ For you (3)");
+  act(() => railRow(page, "teammate-invitations").click());
+  assert.equal(
+    settledAsk(page, 51).querySelector("[data-inbox-note]")?.textContent?.trim(),
+    "go ahead",
+  );
+});
+
+test("a paste past an ask note's cap is cut to the room left and the card's note line says so, until the words change", () => {
+  const page = mount();
+  const card = openAsk(page, UNIQUE_INDEX);
+  const cap = CHAT_BOUNDS.MAX_NOTE_CHARS;
+  const note = () => card.querySelector(".agent-composer-note")?.textContent;
+
+  pasteInComposer(card, "x".repeat(cap + 100));
+  assert.equal(boxWords(card).length, cap);
+  assert.equal(note(), pasteCutWords(cap));
+
+  const editor = composerEditor(card).editor;
+  assert.ok(editor, "the editor is running");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  assert.equal(note(), undefined, "the note goes once the words change again");
 });
 
 test("a form's text field is the composer's own field, its answer stands in its fields read-only, and the reply in its thread says the same", async () => {
@@ -1774,9 +1815,7 @@ async function handFiles(box: HTMLElement, files: readonly File[], how: "pick" |
 
 /** The names of the files a box holds, as its chips say them. */
 function chipNames(box: HTMLElement): (string | null)[] {
-  return [...box.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
-    chip.getAttribute("title"),
-  );
+  return [...box.querySelectorAll('[aria-label="Attached files"] > li')].map(attachmentChipName);
 }
 
 test("a channel's box takes pictures picked or dropped as chips, says why a file that is no picture did not come, and posts them with words or alone, each drawn in the channel over the words and opened larger on a press", async () => {
@@ -1839,7 +1878,7 @@ test("a channel's box takes pictures picked or dropped as chips, says why a file
   );
 });
 
-test("a recording a message carries plays in its own player, left out of the replay, with no press opening it as a picture", async () => {
+test("a recording a message carries plays where it stands, left out of the replay, and its Expand opens the viewer a picture does, which plays it", async () => {
   const created: string[] = [];
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
@@ -1865,13 +1904,38 @@ test("a recording a message carries plays in its own player, left out of the rep
     await settle();
 
     const posted = [...page.querySelectorAll(".chat-message")].at(-1);
-    const player = posted?.querySelector("video");
-    assert.ok(player, "the recording is played, not drawn");
-    assert.equal(player.getAttribute("src"), "blob:video-1");
+    const inline = posted?.querySelector("video");
+    assert.ok(inline, "the recording plays where the message draws it");
+    assert.equal(inline.getAttribute("src"), "blob:video-1");
+    assert.deepEqual(
+      [...(inline.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Expand", "Full screen"],
+      "under Luke's own bar, with an Expand into the viewer",
+    );
+    assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
+    assert.ok(inline.closest(".ph-no-capture"), "the player is left out of the replay");
+    assert.equal(posted?.querySelector('button[aria-label^="Enlarge"]'), null);
+    const expand = posted?.querySelector<HTMLButtonElement>('button[aria-label="Expand"]');
+    assert.ok(expand, "the recording's Expand opens the viewer");
+    act(() => expand.click());
+    await settle();
+
+    const player = document.querySelector('[role="dialog"] video');
+    assert.ok(player, "the viewer plays the recording");
+    assert.deepEqual(
+      [...(player.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Full screen"],
+      "under Luke's own bar",
+    );
+    assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
+    assert.equal(player.getAttribute("src"), "blob:video-2");
     assert.equal(player.getAttribute("aria-label"), "Video: invite-flow.webm");
     assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
-    assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM]);
-    assert.equal(posted?.querySelector(".picture-block img, .picture-block button"), null);
+    assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM, CONVERSATION_MEDIA_TYPE.WEBM]);
   } finally {
     URL.createObjectURL = own.create;
     URL.revokeObjectURL = own.revoke;

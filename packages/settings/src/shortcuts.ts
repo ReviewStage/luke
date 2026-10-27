@@ -387,17 +387,44 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.FULL_SCREEN]: {
     label: "Toggle full screen",
     chord: { key: SHORTCUT_KEY.F, control: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
   },
-  [APP_COMMAND.MINIMIZE]: { label: "Minimize", chord: { key: SHORTCUT_KEY.M } },
-  [APP_COMMAND.HIDE]: { label: "Hide Luke", chord: { key: SHORTCUT_KEY.H } },
+  [APP_COMMAND.MINIMIZE]: {
+    label: "Minimize",
+    chord: { key: SHORTCUT_KEY.M },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [APP_COMMAND.HIDE]: {
+    label: "Hide Luke",
+    chord: { key: SHORTCUT_KEY.H },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
   [APP_COMMAND.HIDE_OTHERS]: {
     label: "Hide others",
     chord: { key: SHORTCUT_KEY.H, option: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
   },
-  [APP_COMMAND.QUIT]: { label: "Quit Luke", chord: { key: SHORTCUT_KEY.Q } },
-  [APP_COMMAND.ACTUAL_SIZE]: { label: "Actual size", chord: { key: SHORTCUT_KEY.ZERO } },
-  [APP_COMMAND.ZOOM_IN]: { label: "Zoom in", chord: { key: SHORTCUT_KEY.PLUS } },
-  [APP_COMMAND.ZOOM_OUT]: { label: "Zoom out", chord: { key: SHORTCUT_KEY.MINUS } },
+  [APP_COMMAND.QUIT]: {
+    label: "Quit Luke",
+    chord: { key: SHORTCUT_KEY.Q },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  // Note that the zoom chords are the desktop's alone, because only its window zooms: on the web the browser's own zoom keeps them.
+  [APP_COMMAND.ACTUAL_SIZE]: {
+    label: "Actual size",
+    chord: { key: SHORTCUT_KEY.ZERO },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [APP_COMMAND.ZOOM_IN]: {
+    label: "Zoom in",
+    chord: { key: SHORTCUT_KEY.PLUS },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [APP_COMMAND.ZOOM_OUT]: {
+    label: "Zoom out",
+    chord: { key: SHORTCUT_KEY.MINUS },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
   [APP_COMMAND.TOGGLE_MICROPHONE]: {
     label: "Toggle microphone",
     chord: { key: SHORTCUT_KEY.M, shift: true },
@@ -425,6 +452,7 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.CLOSE_WINDOW]: {
     label: "Close window",
     chord: { key: SHORTCUT_KEY.W, shift: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
   },
   [APP_COMMAND.SETTINGS]: { label: "Settings", chord: { key: SHORTCUT_KEY.COMMA } },
   [APP_COMMAND.KEYBOARD_SHORTCUTS]: {

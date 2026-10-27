@@ -313,7 +313,7 @@ function SearchRow({
 function ServersNote({ words }: { words: string }): React.JSX.Element {
   return (
     <div className="agent-servers-note">
-      <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {words}
       </Text>
     </div>
@@ -324,7 +324,7 @@ function ServersNote({ words }: { words: string }): React.JSX.Element {
 function ServersHeading({ words }: { words: string }): React.JSX.Element {
   return (
     <div className="agent-servers-heading" aria-hidden="true">
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {words}
       </Text>
     </div>

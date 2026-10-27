@@ -16,7 +16,7 @@ import {
   TEXT_FIELD_FONT,
   TextField,
 } from "@luke/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 
 /**
@@ -103,6 +103,7 @@ function MacRepositoryRow({
   const { act } = useAct();
   const savedCommand = saved?.command ?? "";
   const [command, setCommand] = useState(savedCommand);
+  const field = useRef<HTMLInputElement>(null);
   useEffect(() => setCommand(savedCommand), [savedCommand]);
   const [busy, setBusy] = useState(false);
   const [landed, setLanded] = useState(false);
@@ -139,6 +140,7 @@ function MacRepositoryRow({
         {(control) => (
           <>
             <TextField
+              ref={field}
               label={`${repository} run command`}
               describedBy={control["aria-describedby"]}
               invalid={control["aria-invalid"]}
@@ -149,6 +151,8 @@ function MacRepositoryRow({
               maxLength={MAC_REPOSITORY_BOUNDS.MAX_COMMAND_CHARS}
               value={command}
               disabled={busy}
+              // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
+              onEscape={() => field.current?.blur()}
               onChange={setCommand}
             />
             <Button

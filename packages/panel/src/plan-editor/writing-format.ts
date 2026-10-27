@@ -99,7 +99,7 @@ function selectedBlocks(editor: Editor): ReadonlySet<WritingBlock | undefined> {
 }
 
 /** The selection as a format toolbar reads it now. */
-export function formatOf(editor: Editor): EditorFormat {
+function formatOf(editor: Editor): EditorFormat {
   const { from, to, empty } = editor.state.selection;
   const blocks = selectedBlocks(editor);
   const linked = editor.isActive(MARK_NAMES[WRITING_MARK.LINK]);

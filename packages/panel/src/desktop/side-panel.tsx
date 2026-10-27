@@ -6,7 +6,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import type { CodeRef } from "@luke/features/task-wire";
@@ -115,8 +115,8 @@ import {
 import { CodePane, centreWithin } from "../tasks/code-pane.js";
 import {
   agentGlyphState,
+  agentName,
   agentStateWords,
-  agentTabLabel,
   subagentActor,
 } from "../tasks/coding-agent-model.js";
 import { fileLook, newestFileNote } from "../tasks/file-ref.js";
@@ -311,7 +311,7 @@ export const SIDE_PANEL_HOLDER = {
   INBOX: "inbox",
 } as const;
 
-type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER];
+export type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER];
 
 /** What the panel's pages stand on: the agent on no task an agent's page holds the panel under, else the task. */
 function pagePlaceOf(holder: SidePanelHolder, id: string): PagePlace {
@@ -333,6 +333,33 @@ const HOLDER_KINDS = {
   [SIDE_PANEL_HOLDER.AGENT]: CODE_KINDS,
   [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
 } as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
+
+/**
+ * The fixed kinds a holder's panel offers: the Inbox only on a task holding an
+ * agent, the Chat only where the task's page draws one, which it does while
+ * Chat is on, and an agent's page Code only while a call into its agent showed
+ * some. The panel's "+" and ⌘K both ask here, so neither offers a tab that
+ * would open blank.
+ */
+export function offeredPanelKinds(
+  holder: SidePanelHolder,
+  drawn: { readonly inbox: boolean; readonly chat: boolean; readonly code: boolean },
+): readonly FixedSidePanelTab[] {
+  return HOLDER_KINDS[holder].filter(
+    (kind) =>
+      (kind !== SIDE_PANEL_TAB.INBOX || drawn.inbox) &&
+      (kind !== SIDE_PANEL_TAB.CHAT || drawn.chat) &&
+      (kind !== SIDE_PANEL_TAB.CODE || holder === SIDE_PANEL_HOLDER.TASK || drawn.code),
+  );
+}
+
+/** Whether a task's panel offers its Inbox: it holds an agent, an archived one among them, or already holds the tab, since only an agent posts. */
+export function inboxOffered(
+  agents: Pick<CodingAgentsControl, "heldIds">,
+  panel: Pick<SidePanelControl, "tabs">,
+): boolean {
+  return (agents.heldIds?.length ?? 0) > 0 || panel.tabs.includes(SIDE_PANEL_TAB.INBOX);
+}
 
 /** Which of a page's two columns holds the window's focus, which ⌘T, ⌘W, and ⌘F answer to: its own, or the side panel beside it. */
 export const COLUMN = {
@@ -513,7 +540,7 @@ export function changesOffers(
     const agent = every.find((other) => other.id === agentId) ?? each;
     // The row shows the pull request as the agent its tab stands for last read it, as its tab's card does.
     const shown = agents.pullRequests.get(agent.id) ?? pullRequest;
-    const label = agentTabLabel(agent, agents.models);
+    const label = agentName(agent, agents.models);
     return [{ agentId: agent.id, agent, label, pullRequest: shown }];
   });
 }
@@ -820,7 +847,7 @@ function terminalOffers(
   const chord = target.kind === TERMINAL_TARGET.AGENT ? target.agentId : undefined;
   return listed.map((agent) => ({
     agent,
-    label: agentTabLabel(agent, agents.models),
+    label: agentName(agent, agents.models),
     showsOnChord: agent.id === chord,
   }));
 }
@@ -1188,7 +1215,7 @@ function PanelTabs({
     pagePlace: pagePlaceOf(holder, taskId),
     plan: task,
     planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
-    inboxWaiting: inbox?.open.length ?? 0,
+    inboxWaiting: inbox?.waiting.length ?? 0,
     inboxDrafted,
     inbox,
   });
@@ -1665,7 +1692,7 @@ export function taskCards(input: {
 /** An agent on the task as its tab names it, which heads the code it showed and its notes on it; none for an agent the task does not list. */
 function taskAgentLabel(agents: CodingAgentsControl, agentId: string): string | undefined {
   const agent = agents.agents?.find((each) => each.id === agentId);
-  return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
+  return agent === undefined ? undefined : agentName(agent, agents.models);
 }
 
 /** What the chosen tab shows. */
@@ -2424,21 +2451,13 @@ export function SidePanel({
   const openTerminal = useOpenTerminal(panel, noFocusMove);
   // A Pull request tab's Run opens the agent's branch on this Mac in this panel, which already holds the keys.
   const macTerminalDoors = useAgentTerminalDoors(panel, repository, noFocusMove);
-  // The Inbox is offered only on a task holding an agent, an archived one among them, since only an agent posts.
-  const inboxOffered =
-    (agents.heldIds?.length ?? 0) > 0 || panel.tabs.includes(SIDE_PANEL_TAB.INBOX);
   const offers = panelEntries({
     panel,
-    // The Chat is offered only where the task's page draws one, which it does while Chat is on.
-    // An agent's page offers Code only while a call into its agent showed some.
-    kinds: HOLDER_KINDS[holder].filter(
-      (kind) =>
-        (kind !== SIDE_PANEL_TAB.INBOX || inboxOffered) &&
-        (kind !== SIDE_PANEL_TAB.CHAT || chat !== undefined) &&
-        (kind !== SIDE_PANEL_TAB.CODE ||
-          holder === SIDE_PANEL_HOLDER.TASK ||
-          (shownCode?.length ?? 0) > 0),
-    ),
+    kinds: offeredPanelKinds(holder, {
+      inbox: inboxOffered(agents, panel),
+      chat: chat !== undefined,
+      code: (shownCode?.length ?? 0) > 0,
+    }),
     files: offered,
     changes: changesOffers(agents, changes),
     pages: taskPages,

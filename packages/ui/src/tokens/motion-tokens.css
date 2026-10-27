@@ -76,4 +76,5 @@
   --luke-hint-delay: 500ms;
   --luke-late-delay: 1000ms;
   --luke-confirm-delay: 1200ms;
+  --luke-settle-delay: 180ms;
 }

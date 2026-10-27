@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { appLinkClaim, appLinkInArguments, appLinkInbox, placeOfAppLink } from "./app-links.js";
-import { LINK_PLACE, type ReadLink } from "./luke-link.js";
+import { LINK_PLACE, type ReadLink } from "./link-grammar.js";
 
 /**
  * A Luke link the system hands the app: read only as a place in Luke, in

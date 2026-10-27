@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { FIND_SHADOW_ATTRIBUTE, findRanges, matchFrom, watchText } from "./find-matches.js";
 
 /**
@@ -11,12 +11,33 @@ import { FIND_SHADOW_ATTRIBUTE, findRanges, matchFrom, watchText } from "./find-
  * names there, as a diff's gutter of numbers; an unmarked shadow root, as
  * the file tree's, is not read. A find kept at a match keeps to it across
  * the shadow's edge, and a change inside the shadow root is a change of
- * the tab's text. Synthetic words only.
+ * the tab's text, heard once in the frame after it however many land
+ * before. Synthetic words only.
  */
+
+/** The frames asked for and not yet run, which a test runs as the window would draw its next. */
+let frames: FrameRequestCallback[] = [];
 
 afterEach(() => {
   document.body.innerHTML = "";
+  frames = [];
+  vi.restoreAllMocks();
 });
+
+/** Asks for frames into `frames` rather than the window's clock, so a test says when the next is drawn. */
+function holdFrames(): void {
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((heard) => frames.push(heard));
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((frame) => {
+    delete frames[frame - 1];
+  });
+}
+
+/** Draws the next frame: every frame asked for so far runs. */
+function drawFrame(): void {
+  const due = frames;
+  frames = [];
+  for (const heard of due) heard?.(0);
+}
 
 /** A tab: a line of its own, a marked host drawing a gutter and two lines, an unmarked host, and a line after. */
 function drawTab() {
@@ -61,6 +82,7 @@ test("a find kept at a match in the shadow root keeps to it, and one at the tab'
 });
 
 test("a change inside a marked shadow root is a change of the tab's text", async () => {
+  holdFrames();
   const { tab, shadow } = drawTab();
   let changes = 0;
   const stop = watchText(tab, () => {
@@ -70,8 +92,33 @@ test("a change inside a marked shadow root is a change of the tab's text", async
   const code = shadow.querySelector("[data-code]") ?? assert.fail("the code stands");
   code.append(document.createElement("div"));
   await Promise.resolve();
+  drawFrame();
   stop();
 
+  assert.equal(changes, 1);
+});
+
+test("words streamed in a few at a time are heard once in the frame after them, and none after the watch stops", async () => {
+  holdFrames();
+  const tab = document.body.appendChild(document.createElement("div"));
+  const line = tab.appendChild(document.createElement("p"));
+  let changes = 0;
+  const stop = watchText(tab, () => {
+    changes += 1;
+  });
+
+  for (const words of ["Invites ", "expire ", "after a week."]) {
+    line.append(words);
+    await Promise.resolve();
+  }
+  assert.equal(changes, 0);
+  drawFrame();
+  assert.equal(changes, 1);
+
+  line.append(" Resend one.");
+  await Promise.resolve();
+  stop();
+  drawFrame();
   assert.equal(changes, 1);
 });
 

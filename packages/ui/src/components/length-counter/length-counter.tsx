@@ -11,8 +11,18 @@ import { useDisclosure } from "../../use-disclosure.js";
  * way it went. At the limit it is drawn in the danger ink, since the field
  * takes no more. Below four fifths again it fades out, held through its
  * exit (`useDisclosure`). It takes no class or style: where it stands is its
- * caller's, a `FormField`'s label line.
+ * caller's, a `FormField`'s label line. It is drawn in Tailwind utilities
+ * over the theme's caption and motion roles, and keeps the
+ * `luke-length-counter` names a test finds it by.
  */
+
+/** The counter: a caption's tabular figures in the muted ink, the danger ink at the limit, fading in and out. */
+const COUNTER =
+  "luke-length-counter inline-flex flex-none whitespace-nowrap font-body text-caption font-text text-muted-foreground tabular-nums animate-arrive data-[full=true]:text-danger data-[leaving=true]:animate-leave";
+
+/** The count: a figure of its own that ticks in from the way it moved. */
+const COUNT =
+  "luke-length-counter-count inline-block data-[move=up]:animate-tick-up data-[move=down]:animate-tick-down";
 
 /** How far toward its limit a field's words go before the counter shows. */
 export const COUNTER_FROM = 0.8;
@@ -47,12 +57,12 @@ export function LengthCounter({
   return (
     <span
       ref={shown.ref}
-      className="luke-length-counter"
+      className={COUNTER}
       data-full={length >= limit ? "true" : undefined}
       data-leaving={shown.leaving ? "true" : undefined}
     >
       {/* Note that each count is a figure of its own, so a change plays its tick from the start. */}
-      <span key={length} className="luke-length-counter-count" data-move={move}>
+      <span key={length} className={COUNT} data-move={move}>
         {length}
       </span>
       /{limit}

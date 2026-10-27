@@ -131,7 +131,7 @@ function SlottedRows(): React.JSX.Element {
       <SettingsRow
         label="Show captions"
         adornment={
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE} as={TEXT_ELEMENT.SPAN}>
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
             Modified
           </Text>
         }

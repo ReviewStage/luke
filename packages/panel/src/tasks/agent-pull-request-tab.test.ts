@@ -13,6 +13,7 @@ import {
   CHANGED_FILE_STATUS,
   CHECK_STATE,
   CHECK_SUMMARY,
+  type CheckSummary,
   CODING_AGENT_STATUS,
   CONVERSATION_ENTRY,
   type CodingAgentOverviewChecks,
@@ -32,7 +33,7 @@ import {
   REVIEW_STATE,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, PULL_REQUEST_THREAD_VIEW, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, PULL_REQUEST_THREAD_VIEW, type ReadLink } from "@luke/features/link-grammar";
 import {
   FILE_VIEWED_STATE,
   MERGE_METHOD,
@@ -44,9 +45,14 @@ import {
   REVIEW_COMMENT_MODE,
   REVIEW_EVENT,
 } from "@luke/features/pull-request-write-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { timeRuntime } from "@luke/ui";
+import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -68,14 +74,17 @@ import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { handSettings } from "../testing/app-state.js";
+import { deliveryOf, handSettings, stateWith } from "../testing/app-state.js";
+import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { type ThreadReveal, ThreadRevealProvider } from "./thread-reveal.js";
@@ -264,6 +273,7 @@ beforeAll(async () => {
     landedBundles({
       diffView: () => Promise.resolve(DIFF_STAND_IN),
       fileTree: () => Promise.resolve(TREE_STAND_IN),
+      planEditor: () => import("../plan-editor/index.js").then((entry) => entry.planEditor),
     }),
   );
 });
@@ -284,6 +294,7 @@ let listReveals: string[] = [];
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
+  installEditorLayout();
   window.localStorage.clear();
   opened = [];
   images = [];
@@ -450,6 +461,42 @@ async function settle(): Promise<void> {
   });
 }
 
+/** The words of the Markdown box inside `within`, the one named `label` where given. */
+function boxWordsElement(within: ParentNode, label?: string): TiptapEditorHTMLElement | null {
+  return within.querySelector<TiptapEditorHTMLElement>(
+    label === undefined ? '.ProseMirror[role="textbox"]' : `.ProseMirror[aria-label="${label}"]`,
+  );
+}
+
+/** The editor of the Markdown box inside `within`, the one named `label` where given. */
+function boxEditor(within: ParentNode, label?: string): Editor {
+  const element = boxWordsElement(within, label) ?? assert.fail(`a box for ${label ?? "words"}`);
+  return element.editor ?? assert.fail("the box's editor is running");
+}
+
+/** Writes `words` as the whole of the box's text, read as Markdown, as the member would. */
+function writeBox(within: ParentNode, words: string, label?: string): void {
+  const editor = boxEditor(within, label);
+  act(() => {
+    editor.commands.setContent(words, { contentType: "markdown" });
+  });
+}
+
+/** The words the box inside `within` reads, as drawn; none where no box stands. */
+function boxWords(within: ParentNode, label?: string): string | undefined {
+  return boxWordsElement(within, label)?.textContent ?? undefined;
+}
+
+/** Presses a key in the box's words, as the member would. */
+function pressInBox(within: ParentNode, init: KeyboardEventInit, label?: string): void {
+  const element = boxWordsElement(within, label) ?? assert.fail("a box to press in");
+  act(() => {
+    element.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
+    );
+  });
+}
+
 /** Nothing connected, and presses that do nothing, as outside the window. */
 const NO_GITHUB: GitHubConnectControl = {
   connection: undefined,
@@ -498,10 +545,14 @@ async function drawn(
             children: createElement(MemberDirectory, {
               workspace: { id: "workspace-acme", memberCount: 2 },
               readerId: "user-dana",
-              children:
+              children: createElement(
+                Fragment,
+                null,
+                createElement(ToastHost),
                 openPlace === undefined
                   ? tab
                   : createElement(OpenLinkProvider, { value: openPlace, children: tab }),
+              ),
             }),
           }),
         ),
@@ -2026,7 +2077,7 @@ test("a view that runs on past its box by less than the header stands never fold
   assert.equal(folded(), false);
 });
 
-test("a box scrolled inside the view, a comment's field or its preview, folds nothing; only the view's own scroller does", async () => {
+test("a box scrolled inside the view, a comment's field, folds nothing; only the view's own scroller does", async () => {
   const { conversation, folded } = await phoneTab(2000);
   const field = conversation.appendChild(document.createElement("textarea"));
   sized(field, { height: 100, content: 1000 });
@@ -2584,7 +2635,7 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
     [
       "checking",
       merging(MERGE_STATE.UNKNOWN),
-      held("Checking", "neutral", "GitHub is still checking whether it merges"),
+      held("Checking", "working", "GitHub is still checking whether it merges"),
     ],
     [
       "review required",
@@ -2618,6 +2669,103 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
     act(() => root?.unmount());
     root = undefined;
   }
+});
+
+/** The agent's task as the task list pushes it, the line of its pull request saying its checks stand as given; none where the list holds no line of it. */
+function tasksPushing(checks: CheckSummary | undefined): AppStateSnapshot["tasks"] {
+  const line = {
+    number: PULL_REQUEST.number,
+    title: PULL_REQUEST.title,
+    state: PULL_REQUEST_STATE.OPEN,
+    additions: 4,
+    deletions: 1,
+    url: PAGE,
+    agentId: AGENT.id,
+  };
+  const task: TaskSummary = {
+    id: AGENT.planId ?? assert.fail("the agent stands on a task"),
+    workspaceId: "workspace-acme",
+    name: "Invitation expiry",
+    createdAt: 1,
+    updatedAt: 2,
+    repository: "acme/relay",
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: checks === undefined ? [] : [{ ...line, checks }],
+    },
+  };
+  return { ...IDLE_TASKS_VIEW, tasks: [task] };
+}
+
+test("an open tab reads its checks and merge state again as the task list pushes its pull request's line moved, its checks finishing or the line leaving the list as it merges, and draws them with no press; a push that moves nothing reads nothing", async () => {
+  const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  const push = (checks: CheckSummary | undefined) => {
+    const delivery = deliveryOf(stateWith({}, { tasks: tasksPushing(checks) }));
+    act(() => {
+      for (const listener of listeners) listener(delivery);
+    });
+  };
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () =>
+      Promise.resolve(stateWith({}, { tasks: tasksPushing(CHECK_SUMMARY.PENDING) })),
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+  const merge = (state: MergeState) => ({
+    pullRequest: { ...PULL_REQUEST, merge: state, merging: MERGING },
+  });
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+        merge(MERGE_STATE.UNKNOWN),
+        merge(MERGE_STATE.CLEAN),
+        {
+          pullRequest: {
+            ...PULL_REQUEST,
+            state: PULL_REQUEST_STATE.MERGED,
+            mergedAt: 9_000,
+            merge: MERGE_STATE.CLEAN,
+            merging: MERGING,
+          },
+        },
+      ),
+      checks: inTurn<CodingAgentOverviewChecksAnswerView>(
+        { pullRequest: { checks: [check("build", CHECK_STATE.PENDING)] } },
+        { pullRequest: { checks: [check("build", CHECK_STATE.PASSED)] } },
+      ),
+    }),
+  );
+  await choose(tab, "Checks");
+  const running = words(tab, "li .luke-list-row-title");
+  assert.notDeepEqual(running, ["build, passed"]);
+  assert.equal(mergeShown(tab)?.chip, "Checking");
+
+  push(CHECK_SUMMARY.PENDING);
+  await settle();
+  assert.deepEqual(
+    words(tab, "li .luke-list-row-title"),
+    running,
+    "nothing moved, so nothing is read",
+  );
+  assert.equal(mergeShown(tab)?.chip, "Checking");
+
+  push(CHECK_SUMMARY.PASSING);
+  await settle();
+  assert.deepEqual(words(tab, "li .luke-list-row-title"), ["build, passed"]);
+  assert.equal(mergeShown(tab)?.chip, undefined);
+  assert.equal(mergeShown(tab)?.press, "Squash and merge");
+
+  // The list holds only a few lines, so one merging can fall out of it, which is a move too.
+  push(undefined);
+  await settle();
+  assert.equal(standing(tab), "Merged");
+  assert.equal(mergeShown(tab), undefined, "a merged pull request offers no merge");
 });
 
 test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press merges at once, as stage-cli's does, at the head it read", async () => {
@@ -2779,14 +2927,7 @@ function openReview(tab: HTMLElement): HTMLElement {
 
 /** Writes the review's words as the member would. */
 function writeReview(panel: HTMLElement, words: string): void {
-  const field =
-    panel.querySelector<HTMLTextAreaElement>('textarea[aria-label="Review comment"]') ??
-    assert.fail("the panel has a field for the review's words");
-  act(() => {
-    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    set?.call(field, words);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  writeBox(panel, words, "Review comment");
 }
 
 /** Chooses what the review says by its label, and submits it. */
@@ -2839,7 +2980,7 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   assert.equal(conversationReads, 2, "the conversation is read again once GitHub took the review");
   assert.equal(tab.querySelector('[role="dialog"]'), null, "the panel closes");
   const reopened = openReview(tab);
-  assert.equal(reopened.querySelector("textarea")?.value, "", "the submitted words are let go");
+  assert.equal(boxWords(reopened), "", "the submitted words are let go");
   assert.equal(
     reopened
       .querySelector('[aria-label="What the review says"] [aria-checked="true"]')
@@ -2865,7 +3006,7 @@ test("a review GitHub refuses says so in GitHub's own words inside the panel, ne
     "GitHub said: Review Can not approve your own pull request",
   );
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
-  assert.equal(panel.querySelector("textarea")?.value, "LGTM");
+  assert.equal(boxWords(panel), "LGTM");
 });
 
 test("a merged pull request still takes a review, sent for the agent as one on an open one is, and keeps its comment box, as GitHub does", async () => {
@@ -2920,7 +3061,7 @@ test("a press outside the review panel closes it, its words kept, and one on a s
     });
 
     assert.equal(tab.querySelector('[role="dialog"]'), null);
-    assert.equal(openReview(tab).querySelector("textarea")?.value, "Half a thought");
+    assert.equal(boxWords(openReview(tab)), "Half a thought");
   } finally {
     vi.restoreAllMocks();
   }
@@ -3543,14 +3684,7 @@ function threadPress(thread: HTMLElement, label: string): HTMLButtonElement {
 /** Writes a reply on the thread as the member would, the field opened first. */
 function writeReply(thread: HTMLElement, words: string): void {
   act(() => threadPress(thread, "Reply…").click());
-  const field =
-    thread.querySelector<HTMLTextAreaElement>('textarea[aria-label="Reply"]') ??
-    assert.fail("Reply… opens the reply's field");
-  act(() => {
-    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    set?.call(field, words);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  writeBox(thread, words, "Reply");
 }
 
 /** The thread as GitHub holds it once the changes asked so far were made: their replies after its comment, and resolved by the last resolve or unresolve. */
@@ -3587,7 +3721,7 @@ test("a thread is replied on, resolved, and opened again from under its comments
   writeReply(card(), "Renamed in the next push.");
   act(() => threadPress(card(), "Reply").click());
   await settle();
-  assert.equal(card().querySelector("textarea"), null, "the field closes once GitHub took it");
+  assert.equal(boxWordsElement(card()), null, "the field closes once GitHub took it");
   assert.match(
     card().querySelector(".annotation-comments")?.textContent ?? "",
     /Renamed in the next push\./u,
@@ -3630,16 +3764,11 @@ test("while a thread's resolve is out, its reply stands still, neither sent nor 
 
   writeReply(card(), "Done.");
   act(() => threadPress(card(), "Resolve conversation").click());
-  const field = card().querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail();
-  act(() => {
-    field.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
-    );
-    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  });
+  pressInBox(card(), { key: "Enter", metaKey: true });
+  pressInBox(card(), { key: "Escape" });
 
   assert.equal(threadPress(card(), "Reply").disabled, true);
-  assert.equal(card().querySelector("textarea")?.value, "Done.", "Escape lets nothing go");
+  assert.equal(boxWords(card()), "Done.", "Escape lets nothing go");
   held.resolve();
   await settle();
   assert.deepEqual(
@@ -3675,7 +3804,7 @@ test("a reply GitHub refuses says so under its thread in GitHub's own words, its
     withId.querySelector(".pull-request-thread-note [role='alert']")?.textContent,
     "GitHub said: Pull request review thread is locked",
   );
-  assert.equal(withId.querySelector("textarea")?.value, "Done.");
+  assert.equal(boxWords(withId), "Done.");
   assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
 });
 
@@ -3699,7 +3828,14 @@ test("a tab naming another pull request of the agent's repository by its number 
   const control = {
     ...controlAnswering({
       pullRequest: recorded("pull request", {
-        pullRequest: { ...PULL_REQUEST, number: 41, title: earlier.title, url },
+        pullRequest: {
+          ...PULL_REQUEST,
+          number: 41,
+          title: earlier.title,
+          url,
+          merge: MERGE_STATE.CLEAN,
+          merging: MERGING,
+        },
       }),
       conversation: recorded("conversation", { pullRequest: CONVERSATION }),
     }),
@@ -3758,7 +3894,7 @@ test("a numbered pull request nothing published shows how its checks went on its
 });
 
 test("an open pull request's pill offers Close and a closed one's Reopen, each asked of the service for the agent", async () => {
-  const open = await draw(controlAnswering());
+  const open = await draw(merging(MERGE_STATE.CLEAN));
   await pressAction(open, "Close pull request");
   act(() => root?.unmount());
   root = undefined;
@@ -3777,7 +3913,98 @@ test("an open pull request's pill offers Close and a closed one's Reopen, each a
   ]);
 });
 
-test("an open pull request GitHub holds in its merge queue says Queued and its place in the pill, in the attention tone, its menu offering Close and never Convert to draft; the merge control draws no chip, only Remove from queue", async () => {
+test("Close acts at once on an open pull request and a draft, a toast offering Reopen, which sends the reopen and goes", async () => {
+  const question = () => document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
+  const tab = await draw(merging(MERGE_STATE.CLEAN));
+  await pressAction(tab, "Close pull request");
+
+  assert.equal(question(), false, "closing is not asked about");
+  assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }]]);
+  assert.equal(newestToastSays(), "Pull request closedReopen");
+
+  act(() => newestToastAction()?.click());
+  await settle();
+  assert.deepEqual(changes, [
+    [AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.REOPEN }],
+  ]);
+  assert.notEqual(newestToastSays(), "Pull request closedReopen", "the toast goes with its press");
+  act(() => root?.unmount());
+  root = undefined;
+  changes.length = 0;
+
+  const draft = await draw(
+    controlAnswering(
+      {
+        pullRequest: () =>
+          Promise.resolve({
+            pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.DRAFT },
+          }),
+      },
+      PULL_REQUEST_STATE.DRAFT,
+    ),
+  );
+  await pressAction(draft, "Close pull request");
+  assert.equal(question(), false, "a draft's Close is not asked about either");
+  assert.equal(newestToastSays(), "Pull request closedReopen");
+});
+
+test("a Close GitHub would not take offers no Reopen", async () => {
+  changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Not allowed." };
+  const tab = await draw(merging(MERGE_STATE.CLEAN));
+  await pressAction(tab, "Close pull request");
+
+  assert.equal(newestToastSays(), undefined);
+  assert.match(tab.querySelector(".pull-request-write-note")?.textContent ?? "", /Not allowed\./u);
+});
+
+test("Close on an open pull request whose merge status could not be read asks first, since it may be queued, and sends nothing until it is answered", async () => {
+  const tab = await draw(controlAnswering());
+  await pressAction(tab, "Close pull request");
+
+  const question = document.querySelector('[role="dialog"], [role="alertdialog"]');
+  assert.match(
+    question?.textContent ?? "",
+    /could not read whether this pull request is in the merge queue/u,
+  );
+  assert.deepEqual(changes, []);
+});
+
+test("Close on a pull request in the merge queue asks first with the queue's warning, sending nothing until it is answered, and Cancel leaves it queued", async () => {
+  const tab = await draw(
+    merging(MERGE_STATE.CLEAN, {
+      queue: true,
+      queued: { position: 2 },
+      autoMerge: { method: null },
+    }),
+  );
+  const question = () =>
+    document.querySelector('[role="dialog"], [role="alertdialog"]')?.textContent ?? undefined;
+  await pressAction(tab, "Close pull request");
+
+  assert.match(question() ?? "", /Close this pull request\?/u);
+  assert.match(
+    question() ?? "",
+    /Removing this pull request from the queue could impact other pull requests in the queue\./u,
+  );
+  assert.deepEqual(changes, [], "nothing is sent while it is asked");
+
+  await answerQuestion("Cancel");
+  assert.equal(question(), undefined);
+  assert.deepEqual(changes, []);
+  assert.equal(newestToastSays(), undefined);
+
+  await pressAction(tab, "Close pull request");
+  await answerQuestion("Close pull request");
+  assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }]]);
+  assert.equal(
+    newestToastSays(),
+    undefined,
+    "reopening does not queue it again, so none is offered",
+  );
+});
+
+test("an open pull request GitHub holds in its merge queue says Queued and its place in the pill, in the working tone rather than the needs-you one, its menu offering Close and never Convert to draft; the merge control draws no chip, only Remove from queue", async () => {
   const tab = await draw(
     merging(MERGE_STATE.CLEAN, {
       queue: true,
@@ -3788,7 +4015,7 @@ test("an open pull request GitHub holds in its merge queue says Queued and its p
   const pill = pillOf(tab) ?? assert.fail("the pill stands");
   assert.deepEqual(
     [standing(tab), pill.getAttribute("data-tone"), pill.getAttribute("aria-label")],
-    ["Queued #2", "attention", "Pull request Queued #2"],
+    ["Queued #2", "working", "Pull request Queued #2"],
   );
   assert.deepEqual(offered(tab), ["Close pull request"]);
   assert.equal(mergeControl(tab)?.querySelector(".merge-chip"), null, "no chip says it again");
@@ -3917,8 +4144,6 @@ test("Files changed draws each review thread under its line, its comments throug
       },
     });
   handSettings();
-  // The View settings popover opens on the window's appearance.
-  vi.stubGlobal("matchMedia", () => ({ matches: false }));
   const tab = await draw(
     controlAnswering(
       {
@@ -3993,8 +4218,6 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     ],
   } as const;
   handSettings();
-  // The View settings popover opens on the window's appearance.
-  vi.stubGlobal("matchMedia", () => ({ matches: false }));
   const tab = await draw(
     controlAnswering(
       {
@@ -4155,17 +4378,12 @@ test("a review thread on its line in Files changed is replied on and resolved fr
 });
 
 /** Writes in the comment box at the Conversation's foot as the member would. */
-function writeComment(tab: HTMLElement, words: string): HTMLTextAreaElement {
-  const field =
-    tab.querySelector<HTMLTextAreaElement>(
-      '.pull-request-comment-box textarea[aria-label="Comment"]',
-    ) ?? assert.fail("the Conversation ends in a comment box");
-  act(() => {
-    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    set?.call(field, words);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  return field;
+function writeComment(tab: HTMLElement, words: string): HTMLElement {
+  const box =
+    tab.querySelector<HTMLElement>(".pull-request-comment-box") ??
+    assert.fail("the Conversation ends in a comment box");
+  writeBox(box, words, "Comment");
+  return box;
 }
 
 /** The comment box's Comment press. */
@@ -4206,19 +4424,15 @@ test("a comment written at the Conversation's foot is asked of the service for t
   );
   assert.equal(commentPress(tab).disabled, true, "a blank comment is not sent");
 
-  const field = writeComment(tab, "Shipping after **lunch**.");
-  act(() => {
-    field.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
-    );
-  });
+  const box = writeComment(tab, "Shipping after **lunch**.");
+  pressInBox(box, { key: "Enter", metaKey: true });
   await settle();
 
   assert.deepEqual(changes, [
     [AGENT.id, { action: PULL_REQUEST_ACTION.COMMENT, body: "Shipping after **lunch**." }],
   ]);
   assert.equal(
-    tab.querySelector<HTMLTextAreaElement>(".pull-request-comment-box textarea")?.value,
+    boxWords(tab.querySelector(".pull-request-comment-box") ?? tab),
     "",
     "the box lets its words go",
   );
@@ -4243,10 +4457,7 @@ test("a comment GitHub refuses says so under the box in GitHub's own words, its 
     tab.querySelector(".pull-request-comment-note [role='alert']")?.textContent,
     "GitHub said: Conversation is locked to collaborators",
   );
-  assert.equal(
-    tab.querySelector<HTMLTextAreaElement>(".pull-request-comment-box textarea")?.value,
-    "Ping?",
-  );
+  assert.equal(boxWords(tab.querySelector(".pull-request-comment-box") ?? tab), "Ping?");
 });
 
 test("a comment being written outlives a read of the conversation that failed, standing in the box again once Retry reads it", async () => {
@@ -4280,10 +4491,7 @@ test("a comment being written outlives a read of the conversation that failed, s
   await act(async () => retry.click());
   await settle();
 
-  assert.equal(
-    tab.querySelector<HTMLTextAreaElement>(".pull-request-comment-box textarea")?.value,
-    "Half a thought",
-  );
+  assert.equal(boxWords(tab.querySelector(".pull-request-comment-box") ?? tab), "Half a thought");
 });
 
 /** The head the changes were read at, which a comment on their lines names. */
@@ -4363,14 +4571,7 @@ function commentNotes() {
 
 /** Writes the comment's words as the member would. */
 function writeLineComment(comment: HTMLElement, words: string): void {
-  const field =
-    comment.querySelector<HTMLTextAreaElement>('textarea[aria-label="Comment"]') ??
-    assert.fail("the comment has a field for its words");
-  act(() => {
-    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    set?.call(field, words);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  writeBox(comment, words, "Comment");
 }
 
 /** The comment's press of the words given. */
@@ -4436,7 +4637,7 @@ test("the gutter's + opens a comment under the last line picked, however the pic
     end: 12,
     endSide: DIFF_SELECTION_SIDE.DELETIONS,
   });
-  assert.equal(again.querySelector("textarea")?.value, "", "its words were let go");
+  assert.equal(boxWords(again), "", "its words were let go");
   assert.equal(again.querySelector(".line-comment-head")?.textContent, "Comment on line 12");
 });
 
@@ -4459,7 +4660,7 @@ test("several comments stand open at once, each under its own lines with its own
 
   const heads = () =>
     commentNotes().map((note) => note.element.querySelector(".line-comment-head")?.textContent);
-  const words = () => commentNotes().map((note) => note.element.querySelector("textarea")?.value);
+  const words = () => commentNotes().map((note) => boxWords(note.element));
   assert.deepEqual(heads(), ["Comment on lines 12–13", "Comment on line 12"]);
   assert.deepEqual(words(), ["Why twice?", "Gone?"]);
   assert.deepEqual(lists.at(-1)?.selected, { path: INVITE_FILE.path, selection: removed });
@@ -4489,8 +4690,7 @@ test("a comment opened on lines takes the keyboard once the list stands its note
     end: 13,
     endSide: DIFF_SELECTION_SIDE.ADDITIONS,
   });
-  const field =
-    comment.querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail("the comment has words");
+  const field = boxWordsElement(comment) ?? assert.fail("the comment has words");
   assert.notEqual(document.activeElement, field, "a note not yet in the window takes nothing");
 
   document.body.append(comment);
@@ -4541,13 +4741,33 @@ test("code selected as text on lines GitHub takes a comment on is offered a Comm
   );
 });
 
-/** The comment's formatting press named `label`, where its toolbar offers one. */
-function formatPress(comment: HTMLElement, label: string): HTMLButtonElement | null {
-  return comment.querySelector<HTMLButtonElement>(`[role="toolbar"] button[aria-label="${label}"]`);
+/** The rows the `/` menu inside `within` offers now, by their words; none while it stands closed. */
+function slashRows(within: ParentNode): string[] {
+  return [...within.querySelectorAll(".luke-block-menu .luke-combobox-option-label")].map(
+    (row) => row.textContent ?? "",
+  );
 }
 
-test("a comment on the head's lines offers a suggestion, which writes them as they read now for the member to change, previewed as a suggested change and sent as GitHub's suggestion block; one on the old side offers none", async () => {
-  await drawCommentable();
+/** Types `words` on a line of their own after the box's text, the caret in the box, as the member would; a comment's note is stood in the window first, as the list stands it. */
+async function typeOnNewLine(within: HTMLElement, words: string): Promise<void> {
+  if (!within.isConnected) document.body.append(within);
+  await settle();
+  const editor = boxEditor(within);
+  act(() => {
+    editor.view.focus();
+    editor.view.dispatch(
+      editor.state.tr
+        .setSelection(TextSelection.atEnd(editor.state.doc))
+        .split(editor.state.doc.content.size - 1),
+    );
+  });
+  act(() => {
+    editor.view.dispatch(editor.state.tr.insertText(words));
+  });
+}
+
+test("a comment on the head's lines offers a Suggestion in its / menu and over its words, which lays in GitHub's suggestion block holding the lines as they read now, sent as written; one on the old side, and the Conversation's comment, offer none", async () => {
+  const { tab } = await drawCommentable();
   const comment = await pickLines({
     start: 12,
     side: DIFF_SELECTION_SIDE.ADDITIONS,
@@ -4555,34 +4775,35 @@ test("a comment on the head's lines offers a suggestion, which writes them as th
     endSide: DIFF_SELECTION_SIDE.ADDITIONS,
   });
   writeLineComment(comment, "Say it once:");
-  const field =
-    comment.querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail("the comment has words");
-  field.setSelectionRange(field.value.length, field.value.length);
 
-  act(() =>
-    (formatPress(comment, "Add a suggestion") ?? assert.fail("a suggestion is offered")).click(),
-  );
+  await typeOnNewLine(comment, "/sugg");
+  assert.deepEqual(slashRows(comment), ["Suggestion"]);
+  pressInBox(comment, { key: "Enter" });
 
-  const block = "```suggestion\n  once();\n  done();\n```";
-  assert.equal(field.value, `Say it once:\n${block}`);
   assert.equal(
-    field.value.slice(field.selectionStart, field.selectionEnd),
+    comment.querySelector("pre > code.language-suggestion")?.textContent,
     "  once();\n  done();",
-    "the lines stand selected to be changed",
+    "the lines stand in the block as they read now, to be changed",
   );
-  act(() =>
-    (
-      [...comment.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
-        (each) => each.textContent === "Preview",
-      ) ?? assert.fail("the comment offers Preview")
-    ).click(),
-  );
-  assert.equal(comment.querySelector(".transcript-code-header")?.textContent, "Suggested change");
   act(() => commentOffer(comment, "Add single comment").click());
   await settle();
   const sent = changes.at(-1)?.[1];
   assert.ok(sent?.action === PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT, "the comment is sent");
-  assert.equal(sent.body, `Say it once:\n${block}`);
+  assert.equal(sent.body, "Say it once:\n\n```suggestion\n  once();\n  done();\n```");
+
+  const pressed = await pickLines({
+    start: 13,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 13,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  });
+  act(() =>
+    (
+      pressed.querySelector<HTMLButtonElement>('button[aria-label="Add a suggestion"]') ??
+      assert.fail("a suggestion is offered over the words")
+    ).click(),
+  );
+  assert.equal(pressed.querySelector("pre > code.language-suggestion")?.textContent, "  done();");
 
   const old = await pickLines({
     start: 12,
@@ -4590,41 +4811,19 @@ test("a comment on the head's lines offers a suggestion, which writes them as th
     end: 12,
     endSide: DIFF_SELECTION_SIDE.DELETIONS,
   });
-  assert.equal(
-    formatPress(old, "Add a suggestion"),
-    null,
-    "the old side's lines take no suggestion",
-  );
-  assert.notEqual(formatPress(old, "Bold"), null, "it still formats its words");
-});
+  await typeOnNewLine(old, "/");
+  assert.ok(slashRows(old).includes("Code block"), "the / menu stands");
+  assert.ok(!slashRows(old).includes("Suggestion"), "the old side's lines take no suggestion");
+  assert.equal(old.querySelector('button[aria-label="Add a suggestion"]'), null);
 
-test("the toolbar wraps the comment's selection, and ⌘B in its words does the same without the window's keymap hearing it", async () => {
-  await drawCommentable();
-  const comment = await pickLines({
-    start: 13,
-    side: DIFF_SELECTION_SIDE.ADDITIONS,
-    end: 13,
-    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
-  });
-  writeLineComment(comment, "Why twice?");
-  const field =
-    comment.querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail("the comment has words");
-  const heard: string[] = [];
-  const hear = (event: KeyboardEvent) => heard.push(event.key);
-  window.addEventListener("keydown", hear);
-  try {
-    field.setSelectionRange(4, 9);
-    act(() => {
-      field.dispatchEvent(new KeyboardEvent("keydown", { key: "b", metaKey: true, bubbles: true }));
-    });
-    assert.equal(field.value, "Why **twice**?");
-    assert.deepEqual(heard, [], "the chord is the field's");
-
-    act(() => (formatPress(comment, "Italic") ?? assert.fail("italic is offered")).click());
-    assert.equal(field.value, "Why **_twice_**?");
-  } finally {
-    window.removeEventListener("keydown", hear);
-  }
+  await act(async () => option(tab, "Conversation").click());
+  await settle();
+  const box =
+    tab.querySelector<HTMLElement>(".pull-request-comment-box") ??
+    assert.fail("the Conversation ends in a comment box");
+  await typeOnNewLine(box, "/");
+  assert.ok(slashRows(box).includes("Code block"), "the / menu stands");
+  assert.ok(!slashRows(box).includes("Suggestion"), "a comment on no lines takes no suggestion");
 });
 
 test("a member holding a pending review adds a comment to it and nothing else, and Review counts its comments and offers to discard it, asking first", async () => {
@@ -4699,7 +4898,7 @@ test("a comment GitHub refuses says so under it in GitHub's own words, its words
     comment.querySelector(".line-comment-note [role='alert']")?.textContent,
     "GitHub said: Pull request review thread line must be part of the diff",
   );
-  assert.equal(comment.querySelector("textarea")?.value, "Here.");
+  assert.equal(boxWords(comment), "Here.");
   assert.match(lines() ?? "", /\+2/u);
   act(() => commentOffer(comment, "Refresh changes").click());
   await settle();
@@ -4915,7 +5114,6 @@ async function threadMenuItem(card: Element, label: string): Promise<void> {
 
 test("a thread's file and lines in the Conversation take it to Files changed through the window's route for its link: its collapsed file opened, its minimized chip shown, the list scrolled to its line, its lines lit, the thread ringed and focused, and the lines let go as the ring ends", async () => {
   handSettings();
-  vi.stubGlobal("matchMedia", () => ({ matches: false }));
   const heard: ReadLink[] = [];
   const tab = await drawn(
     createElement(Routed, { control: jumpControl([thread({ id: JUMPED })]), heard }),
@@ -5540,15 +5738,45 @@ function draftOf(overrides: Partial<PendingReviewComment> = {}): PendingReviewCo
 
 /** Writes words into the field labelled as given, as the member would. */
 function typeInto(within: Element, label: string, words: string): void {
-  const field =
-    within.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`) ??
-    assert.fail(`a field for ${label}`);
-  act(() => {
-    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    set?.call(field, words);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  writeBox(within, words, label);
 }
+
+test("a pending comment edited and saved untouched sends its Markdown back byte for byte, GitHub's alert, mention, issue, and suggestion as written", async () => {
+  const body = "> [!NOTE]\n> cc @dana, see #123.\n\n```suggestion\n  once();\n```";
+  const tab = await draw(
+    controlAnswering(
+      {
+        conversation: () =>
+          Promise.resolve({
+            pullRequest: {
+              ...reviewWith([]),
+              pendingReview: { comments: 1, drafts: [draftOf({ html: null, body })] },
+            },
+          }),
+      },
+      PULL_REQUEST_STATE.OPEN,
+      () =>
+        Promise.resolve({
+          pullRequest: { url: PAGE, headSha: READ_HEAD, truncated: false, files: [INVITE_FILE] },
+        }),
+    ),
+  );
+  await act(async () => option(tab, "Files changed").click());
+  await settle();
+  const card = (lists.at(-1) ?? assert.fail("the files are drawn")).renderAnnotation(
+    INVITE_FILE.path,
+    "PRRC_start",
+  );
+
+  act(() => commentOffer(card, "Edit").click());
+  assert.ok(card.querySelector("pre > code.language-suggestion"), "the edit opens on its Markdown");
+  act(() => commentOffer(card, "Save").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    [AGENT.id, { action: PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT, commentId: "PRRC_start", body }],
+  ]);
+});
 
 test("the member's pending comments stand on their lines in Files changed, marked Pending in their own name: a reply as its thread's last comment, a new one as a card of its own; Edit sends new words, Delete asks first, and the Review panel lists them", async () => {
   const reply = draftOf({
@@ -5614,9 +5842,9 @@ test("the member's pending comments stand on their lines in Files changed, marke
   act(() => commentOffer(card, "Edit").click());
   typeInto(card, "Pending comment", "Thrown away");
   act(() => commentOffer(card, "Cancel").click());
-  assert.equal(card.querySelector("textarea"), null);
+  assert.equal(boxWordsElement(card), null);
   act(() => commentOffer(card, "Edit").click());
-  assert.equal(card.querySelector("textarea")?.value, "Why **four**?");
+  assert.equal(boxWords(card), "Why four?", "the edit opens on the comment's own words");
   typeInto(card, "Pending comment", "Why **five**?");
   act(() => commentOffer(card, "Save").click());
   await settle();
@@ -5657,17 +5885,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
   const entry = panel.querySelector<HTMLElement>('ol[aria-label="Pending"] > li') ?? assert.fail();
   act(() => commentOffer(entry, "Edit").click());
   typeInto(entry, "Pending comment", "Still once, really?");
-  const field = entry.querySelector("textarea") ?? assert.fail("the edit's field");
-  act(() => {
-    field.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "Enter",
-        metaKey: true,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
-  });
+  pressInBox(entry, { key: "Enter", metaKey: true }, "Pending comment");
   await settle();
   assert.deepEqual(
     changes.slice(2).map(([, change]) => change),

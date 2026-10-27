@@ -318,7 +318,9 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, key: KEY }],
   );
   const saved =
-    card(dialog, "API key").querySelector<HTMLInputElement>("input") ?? assert.fail("no hint");
+    card(dialog, "API key").querySelector<HTMLInputElement>(
+      'input[aria-label="Anthropic API key"]',
+    ) ?? assert.fail("no hint");
   assert.equal(saved.value, "sk-ant-…wxyz");
   assert.equal(saved.readOnly, true);
   assert.ok(radio(dialog, "API key").querySelector(".luke-settings-saved-mark"));

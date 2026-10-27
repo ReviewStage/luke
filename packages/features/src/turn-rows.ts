@@ -37,6 +37,8 @@
  * after it below, as Claude Code and Cursor draw a message sent mid-turn.
  */
 
+import { countWords } from "./words.js";
+
 /** The kinds of call a row can be, across both tabs. */
 export const CALL_KIND = {
   COMMAND: "command",
@@ -120,8 +122,30 @@ export const CALL_KIND = {
   READ_PAGE: "read-page",
   /** Pictures a coding agent showed from its sandbox (`show_image`), drawn as a row only where the call was refused; a shown set draws as its pictures. */
   SHOW_IMAGE: "show-image",
+  /** A pull request a coding agent opened (`open_pull_request`), its row naming it by its number and title, which opens its Pull request tab; a refusal folds open its reason instead. */
+  OPEN_PULL_REQUEST: "open-pull-request",
   /** A pause a coding agent took (`sleep`) before it checked again on what takes time, its row naming how long. */
   SLEEP: "sleep",
+  /** The workspace's tasks listed (`list_tasks`). */
+  LIST_TASKS: "list-tasks",
+  /** A fact kept in the workspace's shared memory (`remember`), its row saying it. */
+  REMEMBER: "remember",
+  /** The workspace's shared memory searched (`recall`), its row naming the query where there was one. */
+  RECALL: "recall",
+  /** Every open ask waiting on the member listed (`list_open_asks`). */
+  LIST_OPEN_ASKS: "list-open-asks",
+  /** The plan's comment threads read (`read_comments`). */
+  READ_COMMENTS: "read-comments",
+  /** An answer written in one of the plan's comment threads (`reply_to_comment`), its row saying it. */
+  REPLY_TO_COMMENT: "reply-to-comment",
+  /** A comment thread of the plan resolved (`resolve_thread`). */
+  RESOLVE_THREAD: "resolve-thread",
+  /** A resolved comment thread of the plan brought back (`reopen_thread`). */
+  REOPEN_THREAD: "reopen-thread",
+  /** A connection's tools searched (`connection_search`), its row naming the server it searched. */
+  SEARCH_TOOLS: "search-tools",
+  /** A tool of an MCP server or an integration run (`connection_execute`, an integration's own call, a native harness's MCP call), its row naming the tool and the server it ran on. */
+  MCP_TOOL: "mcp-tool",
   OTHER: "other",
 } as const;
 
@@ -187,7 +211,18 @@ export const CALL_WORDS = {
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
   [CALL_KIND.READ_PAGE]: { verb: "Read the page", code: false },
   [CALL_KIND.SHOW_IMAGE]: { verb: "Showed", code: true },
+  [CALL_KIND.OPEN_PULL_REQUEST]: { verb: "Opened pull request", code: false },
   [CALL_KIND.SLEEP]: { verb: "Waited", code: false },
+  [CALL_KIND.LIST_TASKS]: { verb: "Listed the tasks", code: false },
+  [CALL_KIND.REMEMBER]: { verb: "Saved to memory:", code: false },
+  [CALL_KIND.RECALL]: { verb: "Searched memory", code: false },
+  [CALL_KIND.LIST_OPEN_ASKS]: { verb: "Listed the open asks", code: false },
+  [CALL_KIND.READ_COMMENTS]: { verb: "Read the comments", code: false },
+  [CALL_KIND.REPLY_TO_COMMENT]: { verb: "Replied to a comment:", code: false },
+  [CALL_KIND.RESOLVE_THREAD]: { verb: "Resolved a thread", code: false },
+  [CALL_KIND.REOPEN_THREAD]: { verb: "Reopened a thread", code: false },
+  [CALL_KIND.SEARCH_TOOLS]: { verb: "Searched the tools", code: false },
+  [CALL_KIND.MCP_TOOL]: { verb: "Ran", code: true },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
 
@@ -274,9 +309,11 @@ export function isCommandKind(kind: CallKind): boolean {
 /**
  * Where a call ran, as its row says beside its line, or nothing for a call
  * that ran where its tab says. A command on a Mac ran on the Mac of the
- * agent's starter, whom a row that knows them draws in these words' place.
+ * agent's starter, whom a row that knows them draws in these words' place;
+ * a call of an MCP server's tool ran on the server it names.
  */
-export function callPlace(kind: CallKind): string | undefined {
+export function callPlace(kind: CallKind, server?: string): string | undefined {
+  if (kind === CALL_KIND.MCP_TOOL || kind === CALL_KIND.SEARCH_TOOLS) return server;
   if (kind === CALL_KIND.MAC_COMMAND) return ON_YOUR_MAC;
   return kind === CALL_KIND.BROWSER ? IN_THE_BROWSER : undefined;
 }
@@ -294,7 +331,8 @@ export interface CallLine {
  * place, as Claude Code and Cursor name a command, and the command's first
  * line after them as its preview, the whole of it in the row's body; or,
  * for a browser call, what it did (`browserCallWords`) before the tab's
- * title, which is words.
+ * title, which is words; or, for a pull request that was refused, that it
+ * opened none, before the title it asked for.
  */
 export function callLine(
   kind: CallKind,
@@ -303,7 +341,9 @@ export function callLine(
 ): CallLine {
   const words = CALL_WORDS[kind];
   if (description === undefined) return { verb: words.verb, subject, code: words.code };
-  if (kind === CALL_KIND.BROWSER) return { verb: description, subject, code: false };
+  if (kind === CALL_KIND.BROWSER || kind === CALL_KIND.OPEN_PULL_REQUEST) {
+    return { verb: description, subject, code: false };
+  }
   return {
     verb: description,
     subject: subject === undefined ? undefined : firstLine(subject),
@@ -399,10 +439,6 @@ export type TurnRow<B> =
       readonly failed: boolean;
     };
 
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
 /** What a lead's blocks hold, as its fold's line counts them. */
 interface Held {
   readonly calls: number;
@@ -414,10 +450,12 @@ interface Held {
 /** What a finished turn's folded lead says it holds. */
 function foldedSummary({ calls, subagents, codingAgents, messages }: Held): string {
   const line = [
-    ...(calls > 0 ? [plural(calls, "tool call", "tool calls")] : []),
-    ...(subagents > 0 ? [plural(subagents, "subagent", "subagents")] : []),
-    ...(codingAgents > 0 ? [plural(codingAgents, "coding agent", "coding agents")] : []),
-    ...(messages > 0 ? [plural(messages, "message", "messages")] : []),
+    ...(calls > 0 ? [countWords(calls, { one: "tool call", many: "tool calls" })] : []),
+    ...(subagents > 0 ? [countWords(subagents, { one: "subagent", many: "subagents" })] : []),
+    ...(codingAgents > 0
+      ? [countWords(codingAgents, { one: "coding agent", many: "coding agents" })]
+      : []),
+    ...(messages > 0 ? [countWords(messages, { one: "message", many: "messages" })] : []),
   ];
   return line.join(", ");
 }
@@ -426,8 +464,8 @@ function foldedSummary({ calls, subagents, codingAgents, messages }: Held): stri
 function groupSummary({ calls, subagents, codingAgents }: Held): string {
   const tools = calls + codingAgents;
   const said = [
-    ...(tools > 0 ? [plural(tools, "tool called", "tools called")] : []),
-    ...(subagents > 0 ? [plural(subagents, "subagent", "subagents")] : []),
+    ...(tools > 0 ? [countWords(tools, { one: "tool called", many: "tools called" })] : []),
+    ...(subagents > 0 ? [countWords(subagents, { one: "subagent", many: "subagents" })] : []),
   ];
   return said.join(", ");
 }

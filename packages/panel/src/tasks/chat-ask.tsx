@@ -8,6 +8,7 @@ import {
   knownResponse,
 } from "@luke/features/chat-wire";
 import { type InboxAsk, inboxResponseAsk } from "@luke/features/inbox-wire";
+import { andList, pasteCutWords } from "@luke/features/words";
 import {
   CARD_LOOK,
   CARD_PADDING,
@@ -27,6 +28,7 @@ import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { CheckIcon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActorLine, ActorRef } from "../actor-ref.js";
+import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import {
   chatAnsweredAt,
@@ -98,7 +100,11 @@ import { SentWords } from "./skill-chip.js";
  * again taking it off, and the box's Send sends it, lit once the card holds
  * anything; a send that lacks something sends nothing and takes the keyboard
  * there, and Enter on an option or in a field sends as Send does. An
- * acknowledgement's Send reads Got it until a word is written. The note line
+ * acknowledgement's Send reads Got it until a word is written. What the
+ * card holds unsent, its picks and its note, is a draft kept by message at
+ * the ask's revision (`composer-drafts.ts`), so the chat closing, a switch
+ * away, or the card scrolling out finds it as it was; an answer taken lets
+ * it go. The note line
  * takes mentions where the page hands them, and a dictation, but no files,
  * which a chat answer does not carry. Words selected in the card, its
  * title, its blocks, and its options, steps, and fields' names, and
@@ -123,9 +129,6 @@ const NEWER_LUKE = "Answer this in a newer Luke.";
 
 /** Whom a pill says an ask waits on where it names no one but is not the reader's to answer. */
 const ANYONE = "an answer";
-
-/** Joins a few names as a reader says them: "Ada and Bob". */
-const NAMES = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
 /** What a card is handed by the row it stands in. */
 interface AskCardProps {
@@ -158,6 +161,31 @@ function focusLacking(box: HTMLElement | null, missing: InboxMissing): void {
   focusMissing(box, missing);
 }
 
+/** A card's draft as the drafts keep it, its note as their words. */
+function keptAskDraft(draft: InboxDraft): Draft {
+  return {
+    text: draft.note,
+    attachments: draft.attachments,
+    choices: draft.choices,
+    values: draft.values,
+    steps: draft.steps,
+    press: draft.press,
+  };
+}
+
+/** A kept draft as the card holds it. */
+function askDraftOf(kept: Draft): InboxDraft {
+  return {
+    ...EMPTY_INBOX_DRAFT,
+    note: kept.text,
+    attachments: kept.attachments,
+    choices: kept.choices,
+    values: kept.values,
+    ...(kept.steps === undefined ? undefined : { steps: kept.steps }),
+    ...(kept.press === undefined ? undefined : { press: kept.press }),
+  };
+}
+
 /**
  * An open card's answer: the ask's controls as the box's body, the note
  * line, and the foot's microphone and Send, as an Inbox item's box draws
@@ -185,9 +213,18 @@ function Answer({
   onAnswer: AskCardProps["onAnswer"];
 }): React.JSX.Element {
   const box = useRef<HTMLDivElement>(null);
-  const [draft, setDraft] = useState<InboxDraft>(EMPTY_INBOX_DRAFT);
+  const kept = useDraft({
+    kind: DRAFT_PLACE.CHAT_ASK,
+    messageId: message.id,
+    revision: ask.revision,
+  });
+  const draft = askDraftOf(kept.draft);
+  const setDraft = (next: InboxDraft | ((was: InboxDraft) => InboxDraft)) =>
+    kept.update((was) => keptAskDraft(typeof next === "function" ? next(askDraftOf(was)) : next));
   const [sending, setSending] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Whether the last paste was cut to the room the box has left, until the words change again.
+  const [cut, setCut] = useState(false);
   const statuses = useIntegrationStatuses();
   const asks = asked !== undefined && hasControls(asked);
   const placeholder = answerPlaceholder(
@@ -218,10 +255,13 @@ function Answer({
     }
     setSending(true);
     setRefusal(undefined);
+    setCut(false);
     onAnswer({ seq: message.seq, revision: ask.revision, reply }).then(
       (refused) => {
         setSending(false);
         setRefusal(refused);
+        // Note that an answer taken lets the draft go, and one refused keeps it to send again.
+        if (refused === undefined) kept.update(() => EMPTY_DRAFT);
       },
       (failed: Error) => {
         setSending(false);
@@ -264,7 +304,10 @@ function Answer({
         : [...box.current.querySelectorAll<HTMLButtonElement>(".inbox-ask-presses button")];
     options[number - 1]?.focus();
   };
-  const note = refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
+  const note =
+    refusal ??
+    (cut ? pasteCutWords(CHAT_BOUNDS.MAX_NOTE_CHARS) : undefined) ??
+    (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose numbers pick.
     <div ref={box} className="chat-ask-box" onKeyDown={onNumber}>
@@ -274,7 +317,11 @@ function Answer({
         messages={false}
         controls={controls}
         note={draft.note}
-        onNote={(words) => setDraft((was) => ({ ...was, note: words }))}
+        onNote={(words) => {
+          setCut(false);
+          setDraft((was) => ({ ...was, note: words }));
+        }}
+        onPasteCut={() => setCut(true)}
         placeholder={placeholder}
         maxLength={CHAT_BOUNDS.MAX_NOTE_CHARS}
         onEnter={() => field.room.current?.closest("form")?.requestSubmit()}
@@ -380,7 +427,7 @@ function Waiting({
   actorOf: AskCardProps["actorOf"];
 }): React.JSX.Element {
   const names = waitsOn.map((memberId) => actorName(actorOf(memberId), { sentence: true }));
-  return <WaitingMarker on={names.length === 0 ? ANYONE : NAMES.format(names)} />;
+  return <WaitingMarker on={names.length === 0 ? ANYONE : andList(names)} />;
 }
 
 /** An ask's card: its head, its title, the blocks the row hands it, and its answer as the ask stands. */

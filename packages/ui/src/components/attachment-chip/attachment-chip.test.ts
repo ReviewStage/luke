@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -98,6 +99,21 @@ function buttonNames(list: HTMLElement): (string | null)[] {
   return [...list.querySelectorAll("button")].map((each) => each.getAttribute("aria-label"));
 }
 
+/** Rests the pointer on `target` for as long as a hint waits before it shows. */
+function hover(target: Element): void {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => {
+      target.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 /**
  * A keyboard press: the button is a Tab stop and takes the focus, and a
  * native button turns Enter and Space into its click, which is the browser's.
@@ -120,11 +136,19 @@ test("a chip with an open opens its file by pointer and by keyboard", () => {
 test("a file drawn by name shows its name and what more is said of it", () => {
   const list = drawn({ name: "a-very-long-file-name-that-will-be-cut.yml", detail: "3 KB" });
   assert.equal(list.textContent, "a-very-long-file-name-that-will-be-cut.yml3 KB");
-  assert.equal(
-    list.querySelector("li")?.getAttribute("title"),
-    "a-very-long-file-name-that-will-be-cut.yml",
-    "the whole name stands on the chip's hint where its words are cut short",
-  );
+  assert.equal(list.querySelector("li")?.hasAttribute("title"), false, "no native tooltip");
+});
+
+test("a file that is here hangs its card while the pointer rests: its icon, whole name, and size", () => {
+  const list = drawn({
+    name: "a-very-long-file-name-that-will-be-cut.yml",
+    icon: createElement("i", { "data-file-icon": "" }),
+    detail: "3 KB",
+  });
+  hover(list.querySelector("li") ?? assert.fail("a chip"));
+  const card = document.querySelector("[data-attachment-card]");
+  assert.equal(card?.textContent, "a-very-long-file-name-that-will-be-cut.yml3 KB");
+  assert.ok(card?.querySelector("[data-file-icon]"), "the file's own icon leads the card");
 });
 
 test("a chip without an open or a way off presses nothing", () => {
@@ -192,7 +216,13 @@ test("a file that failed to come says why and its size, and opens nothing", () =
   assert.deepEqual(buttonNames(list), []);
   assert.equal(list.textContent, "Not kept2.4 MB");
   assert.equal(list.querySelector("img"), null, "no picture stands for a file that failed");
-  assert.equal(list.querySelector("li")?.getAttribute("title"), "shot.png");
+  hover(list.querySelector("li") ?? assert.fail("a chip"));
+  assert.equal(
+    document.querySelector("[data-attachment-card]"),
+    null,
+    "a file not here has no card",
+  );
+  assert.equal(document.querySelector("[role=tooltip]")?.textContent, "shot.png");
 });
 
 test("a file's name fades out at its end only while the chip cuts it short", () => {

@@ -13,13 +13,12 @@ import {
   type InstalledSkillScope,
 } from "@luke/features/installed-skill-wire";
 import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
+import { countWords, TERM } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ALIGN,
-  BADGE_TONE,
   Badge,
-  type BadgeTone,
   BUTTON_VARIANT,
   Button,
   CARD_LOOK,
@@ -30,6 +29,7 @@ import {
   ChoiceBar,
   DIALOG_SIZE,
   Dialog,
+  ErrorState,
   FILE_TEXT_EXTENT,
   FileText,
   FormField,
@@ -43,6 +43,7 @@ import {
   ScrollArea,
   SearchField,
   Spinner,
+  STATUS_TONE,
   Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
@@ -68,7 +69,6 @@ import {
   candidateMarks,
   candidateNote,
   confirmView,
-  DETECTED_TONE,
   type DetectedLine,
   type DetectedTone,
   everyTicked,
@@ -84,14 +84,14 @@ import {
   type PulledSkill,
   pastedAtOnce,
   pastedLine,
+  previewFailureLine,
   previewLine,
+  previewRetries,
   previewSourceLine,
   problemsLine,
   pulledLine,
-  SKILL_MARK_TONE,
   SKILLS_LINE,
   type SkillListGroup,
-  type SkillMarkTone,
   type SkillTicks,
   skillList,
   type TextDeclares,
@@ -130,18 +130,10 @@ const PREVIEW_PAUSE_MS = 400;
 
 /** How the line under the box is drawn: understood with its dot, a problem in the attention tint, or plain while it waits. */
 const LINE_STATE = {
-  [DETECTED_TONE.DETECTED]: "connected",
-  [DETECTED_TONE.PROBLEM]: "attention",
-  [DETECTED_TONE.WAITING]: "plain",
+  [STATUS_TONE.COMPLETE]: "connected",
+  [STATUS_TONE.ATTENTION]: "attention",
+  [STATUS_TONE.NEUTRAL]: "plain",
 } as const satisfies Record<DetectedTone, string>;
-
-/** The badge each mark wears. */
-const MARK_BADGE = {
-  [SKILL_MARK_TONE.NEUTRAL]: BADGE_TONE.NEUTRAL,
-  [SKILL_MARK_TONE.COMPLETE]: BADGE_TONE.COMPLETE,
-  [SKILL_MARK_TONE.WORKING]: BADGE_TONE.WORKING,
-  [SKILL_MARK_TONE.ATTENTION]: BADGE_TONE.ATTENTION,
-} as const satisfies Record<SkillMarkTone, BadgeTone>;
 
 /** The service's preview as the dialog holds it: of which text, and what it answered. */
 interface Previewed {
@@ -202,12 +194,12 @@ function SkillName({
         {title}
       </Text>
       {marks.map((mark) => (
-        <Badge key={mark.text} tone={MARK_BADGE[mark.tone]}>
+        <Badge key={mark.text} tone={mark.tone}>
           {mark.text}
         </Badge>
       ))}
       {warnings.map((part) => (
-        <Badge key={part.text} tone={BADGE_TONE.ATTENTION}>
+        <Badge key={part.text} tone={STATUS_TONE.ATTENTION}>
           {part.text}
         </Badge>
       ))}
@@ -228,12 +220,12 @@ function AuditLine({
       {parts.map((part, index) => (
         <Inline key={part.text} gap={GAP.ICON}>
           {index === 0 ? null : (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE} as={TEXT_ELEMENT.SPAN}>
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
               ·
             </Text>
           )}
           {part.warn ? (
-            <Badge tone={BADGE_TONE.ATTENTION}>{part.text}</Badge>
+            <Badge tone={STATUS_TONE.ATTENTION}>{part.text}</Badge>
           ) : (
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
               {part.text}
@@ -267,7 +259,7 @@ function SkillFile({
   if (!files.opened.has(candidate.name) || read === undefined) return null;
   if ("reading" in read) return <Spinner label={`Reading ${candidate.name}'s SKILL.md`} />;
   if ("failed" in read) {
-    return <DetectedText line={{ text: read.failed, tone: DETECTED_TONE.PROBLEM }} />;
+    return <DetectedText line={{ text: read.failed, tone: STATUS_TONE.ATTENTION }} />;
   }
   return <FileText text={read.markdown} label={`${candidate.name}'s SKILL.md`} />;
 }
@@ -489,7 +481,7 @@ function BrowseHead({
     <Stack gap={GAP.CONTROL}>
       <SearchField
         label={SKILLS_LINE.SEARCH}
-        placeholder={`Search ${count} skills`}
+        placeholder={`Search ${countWords(count, TERM.SKILL)}`}
         value={query}
         onChange={onQuery}
         onClear={() => onQuery("")}
@@ -528,7 +520,7 @@ function BrowseSkills({
   return (
     <Stack gap={GAP.CONTROL}>
       {missing === undefined ? null : (
-        <DetectedText line={{ text: missing, tone: DETECTED_TONE.PROBLEM }} />
+        <DetectedText line={{ text: missing, tone: STATUS_TONE.ATTENTION }} />
       )}
       {groups.length === 0 ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
@@ -538,7 +530,7 @@ function BrowseSkills({
       {groups.map((group) => (
         <Stack key={group.title ?? ""} gap={GAP.ITEM} aria-label={group.title ?? "Skills found"}>
           {group.title === undefined ? null : (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {`${group.title} · ${group.skills.length}`}
             </Text>
           )}
@@ -621,7 +613,7 @@ function TextSkill({
           )}
         </FormField>
         {shown.length === 0 ? null : (
-          <DetectedText line={{ text: problemsLine(shown), tone: DETECTED_TONE.PROBLEM }} />
+          <DetectedText line={{ text: problemsLine(shown), tone: STATUS_TONE.ATTENTION }} />
         )}
         <FileText text={markdown} label="Pasted text" extent={FILE_TEXT_EXTENT.PEEK} />
       </Stack>
@@ -683,6 +675,8 @@ export function AddSkillDialog({
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const [read, setRead] = useState<ReadonlyMap<string, FileRead>>(new Map());
   const [installing, setInstalling] = useState(false);
+  // Note that Retry asks again by changing this, which the preview's effect reads.
+  const [attempt, setAttempt] = useState(0);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Note that only a change that came at once folds the box, so a skill typed by hand keeps its box while the writer pauses.
   const pasted = useRef(false);
@@ -702,8 +696,10 @@ export function AddSkillDialog({
           : undefined,
       )
       .catch(() => undefined)
-      .then((view) => {
-        if (!current || view === undefined) return;
+      .then((answer) => {
+        if (!current) return;
+        // Note that a call with no answer is a failed preview, so the line under the box stops reading.
+        const view = answer ?? { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED };
         setPreviewed({ text, view });
         if ("failure" in view) return;
         setTicks(initialTicks(view));
@@ -720,7 +716,7 @@ export function AddSkillDialog({
     return () => {
       current = false;
     };
-  }, [act, asks, pause, text, workspace.id]);
+  }, [act, asks, attempt, pause, text, workspace.id]);
 
   const view = asks && previewed?.text === text ? previewed.view : undefined;
   const preview = view === undefined || "failure" in view ? undefined : view;
@@ -732,12 +728,17 @@ export function AddSkillDialog({
     .flatMap((group) => group.skills)
     .filter((each) => installable(each, scope))
     .map((each) => each.name);
+  const failed = view !== undefined && "failure" in view ? view : undefined;
   const line =
     view === undefined
       ? pastedLine(paste)
       : "failure" in view
-        ? { text: failureLine(view), tone: DETECTED_TONE.PROBLEM }
+        ? { text: previewFailureLine(view), tone: STATUS_TONE.ATTENTION }
         : previewLine(view);
+  const retry = () => {
+    setPreviewed(undefined);
+    setAttempt((was) => was + 1);
+  };
   const request = installRequest({
     workspaceId: workspace.id,
     text,
@@ -820,6 +821,7 @@ export function AddSkillDialog({
       title={addSkillTitle(screen, preview)}
       size={DIALOG_SIZE.WIDE}
       busy={installing}
+      holding={text.trim() !== ""}
       onDismiss={onClose}
       actionsStart={
         scopes.length > 1 ? (
@@ -886,7 +888,11 @@ export function AddSkillDialog({
             )}
           </FormField>
         )}
-        {folded || line === undefined ? null : <DetectedText line={line} />}
+        {folded || line === undefined ? null : failed !== undefined && previewRetries(failed) ? (
+          <ErrorState onRetry={retry}>{line.text}</ErrorState>
+        ) : (
+          <DetectedText line={line} />
+        )}
         {screen === ADD_SKILL_SCREEN.BROWSE ? (
           <BrowseHead
             count={skills.length}
@@ -901,7 +907,7 @@ export function AddSkillDialog({
         {folded && refusal !== undefined ? (
           <span
             className="settings-state"
-            data-state={LINE_STATE[DETECTED_TONE.PROBLEM]}
+            data-state={LINE_STATE[STATUS_TONE.ATTENTION]}
             role="alert"
           >
             {refusal}

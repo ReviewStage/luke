@@ -48,6 +48,7 @@ import { Clock, Effect, Layer, Option, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { type AfterResponse, keptAfterResponse } from "../../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { EVE_CANCEL_OUTCOME } from "../brain-host/eve-sessions.js";
@@ -85,6 +86,7 @@ const NONCE = "a1b2c3d4e5f6";
 const standingWith = (
   options: RunnerEventsOptions,
   native: Layer.Layer<NativeAgentSessions> = Layer.empty as Layer.Layer<NativeAgentSessions>,
+  after: Layer.Layer<AfterResponse> = Layer.empty as Layer.Layer<AfterResponse>,
 ) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -92,6 +94,7 @@ const standingWith = (
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       native,
+      after,
     );
     const web = HttpRouter.toWebHandler(
       runnerEventsApp(options).pipe(HttpRouter.provideRequest(services)),
@@ -730,6 +733,44 @@ it.layer(getTestDB())("the runner events route", (it) => {
           ended.map((turn) => turn.status),
           [TURN_STATUS.CANCELLED],
         );
+      }),
+  );
+
+  it.effect(
+    "a warm launch's IDLE settles its turn as a turn's end does, and the END that retires it later settles nothing more",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        const turn = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "system", subtype: "init", ...envelope },
+          {
+            type: "assistant",
+            message: { content: [{ type: "text", text: "Done." }] },
+            ...envelope,
+          },
+          { type: "result", subtype: "success", is_error: false, ...envelope },
+          { type: RUNNER_EVENT.IDLE },
+        ];
+        const retired = [{ type: RUNNER_EVENT.END, reason: RUNNER_END.IDLED }];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = [...turn, ...retired].map(
+          (message, sequence) => ({ sequence, message }) as RunnerEvent,
+        );
+
+        yield* post(agent.bearer, events.slice(0, turn.length));
+        const idle = yield* transcriptOf(agent.target.conversationId);
+        yield* post(agent.bearer, events.slice(turn.length));
+        const ended = yield* transcriptOf(agent.target.conversationId);
+
+        assert.deepEqual(
+          idle.turns.map(({ status, failureDetail }) => ({ status, failureDetail })),
+          [{ status: TURN_STATUS.SETTLED, failureDetail: null }],
+        );
+        assert.deepEqual(idle.rows.at(-1)?.parts.map(drawn), [["step-start"], ["text", "Done."]]);
+        assert.deepEqual(ended, idle);
       }),
   );
 
@@ -2153,5 +2194,36 @@ it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", 
         assert.equal(task.name, "Fix the flaky invite test");
         assert.equal(asked.calls, 1);
       }),
+  );
+
+  it.effect("a turn's start answers the runner before the title model is asked", () =>
+    Effect.gen(function* () {
+      const { model, asked } = scriptedTitleModel("Fix the flaky invite test");
+      const after = keptAfterResponse();
+      const post = yield* standingWith(
+        { title: (target, agent) => Effect.orDie(titleCodingAgent(model, target, agent)) },
+        undefined,
+        after.layer,
+      );
+      const agent = yield* agentOn(HARNESS.CLAUDE_CODE, ["Fix the flaky invite test."]);
+      const answer = yield* post(
+        agent.bearer,
+        numbered([
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "system", subtype: "init", ...top },
+        ]),
+      );
+      const answeredUntitled = Option.getOrThrow(
+        yield* readCodingAgent(agent.userId, agent.agentId),
+      ).title;
+      const callsAtAnswer = asked.calls;
+      yield* after.run;
+      const named = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+
+      assert.equal(answer.status, HOSTED_HTTP_STATUS.OK);
+      assert.equal(callsAtAnswer, 0);
+      assert.notEqual(answeredUntitled, "Fix the flaky invite test");
+      assert.equal(named.title, "Fix the flaky invite test");
+    }),
   );
 });

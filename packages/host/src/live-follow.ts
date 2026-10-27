@@ -41,7 +41,7 @@ import {
  * read is polled quietly and not subscribed to again. A poll names where
  * the rows last stood (`liveDigestOf`), the service holds it until they move
  * or a while passes, and it is asked again at once, a failed one a second
- * later and then up to five.
+ * later and then up to five, the caller told it may be behind meanwhile.
  */
 
 /** How long before a sealed statement expires it is renewed, as Neon's own bindings renew it. */
@@ -219,6 +219,12 @@ export interface LiveFollowDependencies<Part extends string> {
    * included, which has no transaction to wait on.
    */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
+  /**
+   * Hears that the rows last handed on may be behind: a poll failed and is
+   * asked again. The next rows a poll answers are handed on even where they
+   * did not move, so the caller hears that it caught up.
+   */
+  readonly behind?: () => void;
 }
 
 /** The earliest any of the read's sealed statements expires, in epoch milliseconds. */
@@ -552,6 +558,10 @@ export function liveRows<Part extends string>(
                 gone();
                 return yield* Effect.never;
               }
+              // Note that the next poll asks for the rows whole, past no digest, and hands them on moved or not, since the caller was told they may be behind.
+              last = undefined;
+              seen = undefined;
+              dependencies.behind?.();
               return yield* Effect.fail(read);
             }
             seen = liveDigestOf(read.queries) ?? seen;
@@ -683,3 +693,28 @@ export function decodedLiveRows<Part extends string, Rows>(
     ),
   );
 }
+
+/** How long a follow that stopped, or whose seal the service did not answer, waits before it is sealed again. */
+export const LIVE_RESTART = Duration.seconds(5);
+
+/**
+ * `attempt` run until it answers that the follow ended, each run that
+ * answers it goes on followed by the next `LIVE_RESTART` later. Note that a
+ * run that ends the follow is followed by no wait, since `while` ends the
+ * repeat before the schedule sleeps.
+ */
+export function restarting<E, R>(attempt: Effect.Effect<boolean, E, R>): Effect.Effect<void, E, R> {
+  return Effect.asVoid(
+    Effect.repeat(attempt, { schedule: Schedule.spaced(LIVE_RESTART), while: (again) => again }),
+  );
+}
+
+/** Where a follow held in a map stands: its entry live or refused, and its state waiting, standing, broken, or unsealed. */
+export const LIVE_STATE = {
+  WAITING: "waiting",
+  STANDING: "standing",
+  BROKEN: "broken",
+  LIVE: "live",
+  REFUSED: "refused",
+  UNSEALED: "unsealed",
+} as const;

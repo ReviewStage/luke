@@ -1,4 +1,4 @@
-import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import {
   DisclosureAction,
   GLYPH_INK,

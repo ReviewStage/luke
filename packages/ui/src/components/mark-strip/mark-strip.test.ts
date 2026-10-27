@@ -3,7 +3,8 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
-import { MARK_STRIP_LOOK, MARK_STRIP_TONE, MarkStrip } from "./mark-strip.js";
+import { STATUS_TONE } from "../../status-tone.js";
+import { MARK_STRIP_LOOK, MarkStrip } from "./mark-strip.js";
 
 /**
  * mark-strip.test.ts -- a hidden rail's strip draws a mark for each row, in
@@ -37,8 +38,8 @@ test("a mark stands for each row, the strip is hidden from a reader, and a press
     root.render(
       createElement(MarkStrip, {
         marks: [
-          { tone: MARK_STRIP_TONE.DANGER, viewed: true },
-          { tone: MARK_STRIP_TONE.COMPLETE, current: true },
+          { tone: STATUS_TONE.DANGER, viewed: true },
+          { tone: STATUS_TONE.COMPLETE, current: true },
           {},
         ],
         onPress: () => shown.push("rail"),
@@ -74,7 +75,7 @@ test("a strip of bars that takes no press hears the pointer come to rest on it a
     root.render(
       createElement(MarkStrip, {
         look: MARK_STRIP_LOOK.BARS,
-        marks: [{ tone: MARK_STRIP_TONE.WORKING, current: true }, {}],
+        marks: [{ tone: STATUS_TONE.WORKING, current: true }, {}],
         onPointerEnter: () => heard.push("rest"),
         onPointerLeave: () => heard.push("leave"),
       }),

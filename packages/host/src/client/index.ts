@@ -5,8 +5,9 @@ export {
   AppStateStore,
   initialAppState,
   publishAppStateChanges,
+  voiceWindowGaveUp,
   voiceWindowGone,
-  WindowAppStates,
+  windowAppState,
 } from "./app-state-store.js";
 export { linkClientNotices } from "./client-notices.js";
 export { createInProcessBridge } from "./in-process-bridge.js";

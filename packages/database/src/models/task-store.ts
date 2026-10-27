@@ -1,7 +1,8 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_KIND, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import { INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
+import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { agentName } from "@luke/features/model-label";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -40,6 +41,7 @@ import {
   Database,
   type DatabaseServices,
   type QueryError,
+  readConcurrency,
   type StoreFailure,
 } from "../core/query.js";
 import { attachment } from "../schemas/attachment.js";
@@ -53,6 +55,7 @@ import { taskPin } from "../schemas/task-pin.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { readPlanTemplate } from "./account-store.js";
+import { agentAutomationNameSql } from "./agent-name.js";
 import { moveTaskChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { waitOutConversationDispatch } from "./dispatch-lock.js";
@@ -136,12 +139,13 @@ export interface TaskStandingAgent {
 }
 
 /**
- * What a finish of a task's work runs under the task's lock: whether each
- * of its standing agents stands idle, neither starting nor running, read
- * under its conversation's lock.
+ * What a finish of a task's work runs under the task's lock: whether every
+ * one of its standing agents stands idle, neither starting nor running, read
+ * under their conversations' locks, all of them at once, since they share
+ * the transaction's one connection.
  */
 export type TaskFinishGuard<R> = (
-  agent: TaskStandingAgent,
+  agents: readonly TaskStandingAgent[],
 ) => Effect.Effect<boolean, QueryError | Schema.SchemaError, R>;
 
 /** One save a coding agent made, with the agent named as its row names it now. */
@@ -391,16 +395,20 @@ const findAgentLabels = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String, agentIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
     id: Schema.String,
+    kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
     model: Schema.String,
     title: Schema.NullOr(Schema.String),
+    automationName: Schema.NullOr(Schema.String),
   }),
   execute: ({ taskId, agentIds }) =>
     Database.use((db) =>
       db
         .select({
           id: codingAgent.id,
+          kind: codingAgent.kind,
           model: codingAgent.model,
           title: codingAgent.title,
+          automationName: agentAutomationNameSql(codingAgent),
         })
         .from(codingAgent)
         .where(and(eq(codingAgent.taskId, taskId), inArray(codingAgent.id, agentIds))),
@@ -410,8 +418,8 @@ const findAgentLabels = SqlSchema.findAll({
 /**
  * The agents the journal and the sections' writers name, by id, as their rows
  * name them now, so a renamed agent reads renamed everywhere: the label is
- * the row's title, or its model while it has none. The row's own account is
- * the one they are read under.
+ * the name its tab shows (`agentName`), Luke for an operator. The row's own
+ * account is the one they are read under.
  */
 function agentLabelsOf(
   row: TaskRow,
@@ -425,7 +433,7 @@ function agentLabelsOf(
   if (agentIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     findAgentLabels({ taskId: row.id, agentIds }),
-    (agents) => new Map(agents.map((agent) => [agent.id, agent.title ?? agent.model])),
+    (agents) => new Map(agents.map((agent) => [agent.id, agentName(agent)])),
   );
 }
 
@@ -479,19 +487,35 @@ function startedText(row: TaskRow): TaskStoreEffect<string> {
  * agents are read under. Its last edit is its newest revision, or, before its
  * history begins, the newest save a coding agent made. A task is saved once
  * a save has moved its last save past its start, which no creation and no
- * carrying over does.
+ * carrying over does. Its issue links are `issueLinks`, which a read that
+ * answers the plan alone hands as none. The reads but the agents' labels,
+ * which wait on the section writers, run together outside a transaction.
  */
-function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask> {
+function storedTaskOf(
+  userId: string,
+  row: TaskRow,
+  issueLinks: TaskStoreEffect<readonly TaskIssueLink[]> = listTaskIssues(userId, row.id),
+): TaskStoreEffect<StoredTask> {
   return Effect.gen(function* () {
-    const pin = Option.getOrNull(yield* findPin({ userId, taskId: row.id }));
-    const summary = summaryOf(row, pin, yield* readAccountNames(namedAccountsOf([row])));
-    const sectionWriters = yield* readSectionWriters(row.id, startedText(row));
-    const labels = yield* agentLabelsOf(row, sectionWriters);
+    const read = yield* Effect.all(
+      {
+        pin: findPin({ userId, taskId: row.id }),
+        names: readAccountNames(namedAccountsOf([row])),
+        written: Effect.flatMap(readSectionWriters(row.id, startedText(row)), (sectionWriters) =>
+          Effect.map(agentLabelsOf(row, sectionWriters), (labels) => ({ sectionWriters, labels })),
+        ),
+        lastRevision: readLastEdit(row.id),
+        issueLinks,
+      },
+      { concurrency: yield* readConcurrency },
+    );
+    const { sectionWriters, labels } = read.written;
+    const summary = summaryOf(row, Option.getOrNull(read.pin), read.names);
     const agentEdits = row.agentEdits.map((edit) => ({
       ...edit,
       label: labels.get(edit.agentId) ?? UNKNOWN_AGENT_LABEL,
     }));
-    const lastEdit = Option.orElse(yield* readLastEdit(row.id), () =>
+    const lastEdit = Option.orElse(read.lastRevision, () =>
       Option.map(Option.fromUndefinedOr(agentEdits.at(-1)), journaledEdit),
     );
     return {
@@ -508,15 +532,15 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
       agentEdits,
       saved: row.updatedAt.getTime() > row.createdAt.getTime(),
       sectionWriters,
-      issueLinks: yield* listTaskIssues(userId, row.id),
+      issueLinks: read.issueLinks,
       brief: row.brief ?? undefined,
     };
   });
 }
 
-/** The row's plan alone, as the reader reads it, for the writes that answer one. */
+/** The row's plan alone, as the reader reads it, for the reads and writes that answer one: its issue links are not read. */
 function taskOf(userId: string, row: TaskRow): TaskStoreEffect<Task> {
-  return Effect.map(storedTaskOf(userId, row), (stored) => stored.task);
+  return Effect.map(storedTaskOf(userId, row, Effect.succeed([])), (stored) => stored.task);
 }
 
 /** The accounts a line of the list names: each row's owner, and its assignee where it has one. */
@@ -950,14 +974,22 @@ export function createTask(
   userId: string,
   started: NewTask,
 ): Effect.Effect<Task, TaskStoreFailure | TaskAssigneeNotMember, DatabaseServices> {
-  return Effect.map(createTaskCommitted(userId, started), (created) => created.task);
+  return Effect.map(createTaskCommitted(userId, started), (created) => created.task.task);
 }
 
-/** A task started, as `createTask` starts one, and the transaction its row was written in. */
+/**
+ * A task started, as `createTask` starts one, as the service holds it, so a
+ * Start on it in the same request need not read it again, and the
+ * transaction its row was written in.
+ */
 export function createTaskCommitted(
   userId: string,
   started: NewTask,
-): Effect.Effect<TaskCommitted<Task>, TaskStoreFailure | TaskAssigneeNotMember, DatabaseServices> {
+): Effect.Effect<
+  TaskCommitted<StoredTask>,
+  TaskStoreFailure | TaskAssigneeNotMember,
+  DatabaseServices
+> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -975,7 +1007,12 @@ export function createTaskCommitted(
             }),
           );
         }
-        return { task: yield* taskOf(userId, row), txid };
+        // A task that links no issue reads none back.
+        const links = started.issueLinks === undefined || started.issueLinks.length === 0;
+        const stored = yield* links
+          ? storedTaskOf(userId, row, Effect.succeed([]))
+          : storedTaskOf(userId, row);
+        return { task: stored, txid };
       }),
     ),
   );
@@ -1037,6 +1074,18 @@ export function readTask(
 ): TaskStoreEffect<Option.Option<StoredTask>> {
   return Effect.flatMap(findTask({ userId, taskId }), (found) =>
     Effect.transposeOption(Option.map(found, (row) => storedTaskOf(userId, row))),
+  );
+}
+
+/**
+ * The task as `readTask` answers it to the window, without the rest the
+ * service holds beside it, so its issue links are never read: what opening
+ * a plan and answering one after a write need. Nothing for a task of a
+ * workspace the account is not in.
+ */
+export function readTaskPlan(userId: string, taskId: string): TaskStoreEffect<Option.Option<Task>> {
+  return Effect.flatMap(findTask({ userId, taskId }), (found) =>
+    Effect.transposeOption(Option.map(found, (row) => taskOf(userId, row))),
   );
 }
 
@@ -1526,8 +1575,8 @@ const findStandingPullRequestStates = SqlSchema.findAll({
 
 /**
  * One inbox item of the task holding a question open for the developer:
- * open, and asking something, which a notice, a post that asked nothing and
- * waits on their nod alone, never does (the inbox store's own `ASKING`,
+ * open, and holding an ask open, which a notice, a post that asked nothing
+ * and waits on their nod alone, never does (the inbox store's own `ASKING`,
  * `packages/service/src/inbox/inbox-store.ts`).
  */
 const findOpenQuestion = SqlSchema.findOneOption({
@@ -1542,7 +1591,7 @@ const findOpenQuestion = SqlSchema.findOneOption({
           and(
             eq(inboxItem.taskId, taskId),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
-            sql`${inboxItem.response} ->> 'type' <> ${INBOX_RESPONSE.NONE}`,
+            isNotNull(inboxItem.openAskMessageId),
           ),
         )
         .limit(1),
@@ -1595,8 +1644,7 @@ export function finishTaskWork<R = never>(
         if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED)) return false;
         if (Option.isSome(yield* findOpenQuestion({ taskId }))) return false;
         const agents = yield* lockStandingAgentsAfterHandOvers(taskId);
-        const standings = yield* Effect.forEach(agents, idle);
-        if (standings.includes(false)) return false;
+        if (!(yield* idle(agents))) return false;
         const now = yield* DateTime.nowAsDate;
         const finished = yield* finishTask({ taskId, now });
         return Option.isSome(finished);

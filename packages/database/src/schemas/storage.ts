@@ -120,6 +120,11 @@ export const conversations = pgTable(
     index("conversations_runtime_session")
       .on(table.runtimeSessionId)
       .where(sql`${table.runtimeSessionId} is not null`),
+    // A conversation's children are found by their parent: by the purge's cascade from a parent it
+    // deletes, by a delete's stamp, and by the usage a transcript reads.
+    index("conversations_parent")
+      .on(table.parentConversationId)
+      .where(sql`${table.parentConversationId} is not null`),
   ],
 );
 
@@ -229,6 +234,9 @@ export const messages = pgTable(
     index("messages_awaiting_line")
       .on(table.conversationId, table.seq)
       .where(turnlessUserLine(table)),
+    // The foreign key's check on every turn deleted, by the purge, an agent's delete, or a rewind,
+    // finds the messages that turn wrote, which a scan of the table would read through to the last.
+    index("messages_turn").on(table.turnId).where(sql`${table.turnId} is not null`),
   ],
 );
 

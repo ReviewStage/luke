@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
+import { SIGN_IN_FAILURE } from "@luke/features/words";
 import { Deferred, Duration, Effect, Exit, Option, Result, type Scope, Semaphore } from "effect";
 import * as HttpServer from "effect/http/HttpServer";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
@@ -64,6 +65,7 @@ const SHARED_REASON = {
   ALREADY_WAITING: "A sign-in is already waiting in your browser.",
   BROWSER: "Luke could not open the sign-in page in your browser.",
   CHALLENGE: "Luke could not prepare a secure sign-in on this machine.",
+  OFFLINE: "This machine is offline.",
 } as const;
 
 /**
@@ -186,6 +188,12 @@ export function loopbackConsent<Grant extends object>(
     never,
     Scope.Scope
   > {
+    // A machine with no network is answered before anything is bound or
+    // opened: the provider's page could not load, and the wait would only
+    // run out the timeout on a tab that shows an error.
+    if (options.isOnline?.() === false) {
+      return { reason: SHARED_REASON.OFFLINE, failure: SIGN_IN_FAILURE.OFFLINE };
+    }
     const codeVerifier = createCodeVerifier();
     const state = loopbackState(options.statePrefix);
     const settled = yield* Deferred.make<LoopbackConsentOutcome<Grant>>();
@@ -204,7 +212,10 @@ export function loopbackConsent<Grant extends object>(
     abandon = () => {
       if (claimed) return;
       withdrawn = true;
-      Deferred.doneUnsafe(settled, Exit.succeed({ reason: LOOPBACK_CONSENT_CANCELLED }));
+      Deferred.doneUnsafe(
+        settled,
+        Exit.succeed<LoopbackConsentOutcome<Grant>>({ reason: LOOPBACK_CONSENT_CANCELLED }),
+      );
     };
 
     const callback = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -226,6 +237,7 @@ export function loopbackConsent<Grant extends object>(
       // a deadline its claim disarmed.
       let outcome: LoopbackConsentOutcome<Grant> = {
         reason: options.reasons.refused,
+        failure: SIGN_IN_FAILURE.REFUSED,
       };
       yield* Effect.addFinalizer(() => Deferred.succeed(settled, outcome));
       const refused = parameter(parameters, "error");
@@ -302,7 +314,9 @@ export function loopbackConsent<Grant extends object>(
     );
     // A page that never opened is a trip nobody can complete, and saying
     // so beats waiting out the timeout on a tab that does not exist.
-    if (Result.isFailure(opened)) return { reason: SHARED_REASON.BROWSER };
+    if (Result.isFailure(opened)) {
+      return { reason: SHARED_REASON.BROWSER, failure: SIGN_IN_FAILURE.BROWSER };
+    }
 
     yield* Effect.forkScoped(
       Effect.sleep(Duration.millis(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)).pipe(
@@ -324,7 +338,12 @@ export function loopbackConsent<Grant extends object>(
           }),
         ),
         Effect.flatMap(() =>
-          claimed ? Effect.void : Deferred.succeed(settled, { reason: options.reasons.timedOut }),
+          claimed
+            ? Effect.void
+            : Deferred.succeed(settled, {
+                reason: options.reasons.timedOut,
+                failure: SIGN_IN_FAILURE.TIMED_OUT,
+              }),
         ),
       ),
     );
@@ -343,7 +362,10 @@ export function loopbackConsent<Grant extends object>(
         ),
       ),
       Option.getOrElse(
-        (): LoopbackConsentOutcome<Grant> => ({ reason: SHARED_REASON.ALREADY_WAITING }),
+        (): LoopbackConsentOutcome<Grant> => ({
+          reason: SHARED_REASON.ALREADY_WAITING,
+          failure: SIGN_IN_FAILURE.ALREADY_WAITING,
+        }),
       ),
     );
   }

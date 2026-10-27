@@ -19,9 +19,7 @@ import {
 } from "@luke/features/integration-wire";
 import { type Config, ConfigProvider, Effect, Layer, Redacted } from "effect";
 import {
-  CONNECT_SIGN_IN_RESULT,
   type ConnectorService,
-  type ConnectSignInResult,
   INTEGRATION_CONNECT_FAILURE,
   IntegrationConnect,
   IntegrationConnectFailure,
@@ -64,16 +62,12 @@ export const CONNECTOR_ASKED_NOTHING: ConnectorService = {
   configured: true,
   multipleAccounts: false,
   authorize: () => Effect.die(new Error("this suite asks Connect nothing")),
-  signInResult: () => Effect.die(new Error("this suite asks Connect nothing")),
   token: () => Effect.die(new Error("this suite asks Connect nothing")),
   revoke: () => Effect.die(new Error("this suite asks Connect nothing")),
 };
 
 /** A sign-in address as the granting Connect below answers one. */
 export const GRANTING_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
-
-/** The handle the granting Connect below answers every sign-in with. */
-export const GRANTING_SIGN_IN_VERIFIER = "connect-verifier-fixture";
 
 /** A Connect that holds no account's grant, as one answers a sign-in the developer declined or never finished. */
 const NOT_AUTHORIZED = new IntegrationConnectFailure({
@@ -87,8 +81,7 @@ const NOT_AUTHORIZED = new IntegrationConnectFailure({
  * variable is set keeps the accounts its allowlist names, and asks a Connect
  * that begins every sign-in, issues every account a token, and revokes
  * anything, or, where it `declines`, holds no grant at all; one unset stays
- * unconfigured. Asked how a sign-in it began stands, it answers `ends` of
- * the handle it began it with, and under way otherwise. Each token it
+ * unconfigured. Each token it
  * issues carries the account's name at the provider where `names` gives one
  * for its subject, as a grant's fields carry a workspace's name; where it
  * `grantsOnce`, every token read after the first refuses, as a grant revoked
@@ -98,12 +91,10 @@ export function integrationConnectOver(
   variables: Readonly<Record<string, string>>,
   {
     declines = false,
-    ends = { kind: CONNECT_SIGN_IN_RESULT.PENDING },
     names = () => undefined,
     grantsOnce = false,
   }: {
     readonly declines?: boolean;
-    readonly ends?: ConnectSignInResult;
     readonly names?: (subject: string) => string | undefined;
     readonly grantsOnce?: boolean;
   } = {},
@@ -114,17 +105,7 @@ export function integrationConnectOver(
     connector.configured
       ? {
           ...connector,
-          authorize: () =>
-            Effect.succeed({
-              url: GRANTING_SIGN_IN_URL,
-              verifier: Redacted.make(GRANTING_SIGN_IN_VERIFIER),
-            }),
-          signInResult: (verifier) =>
-            Effect.succeed(
-              Redacted.value(verifier) === GRANTING_SIGN_IN_VERIFIER
-                ? ends
-                : { kind: CONNECT_SIGN_IN_RESULT.PENDING },
-            ),
+          authorize: () => Effect.succeed({ url: GRANTING_SIGN_IN_URL }),
           token: (subject) => {
             if (declines || (grantsOnce && issued > 0)) return Effect.fail(NOT_AUTHORIZED);
             issued += 1;

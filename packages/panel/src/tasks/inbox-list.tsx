@@ -1,5 +1,6 @@
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { readFailedWords, TERM } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -21,6 +22,7 @@ import {
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
+  LIST_ROW_LEAD,
   LIST_ROW_META,
   List,
   ListMotion,
@@ -37,8 +39,6 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SearchField,
-  SearchIcon,
-  SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
   Stack,
@@ -81,15 +81,7 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
@@ -125,13 +117,7 @@ import {
   VIEW_OPTIONS,
 } from "./inbox-columns.js";
 import { NEW_THREAD } from "./inbox-compose.js";
-import {
-  HolderGlyph,
-  InboxItemCard,
-  InboxItemEnd,
-  ItemMark,
-  useInboxStanding,
-} from "./inbox-item-parts.js";
+import { HolderGlyph, InboxItemCard, InboxItemEnd, useInboxStanding } from "./inbox-item-parts.js";
 import {
   EVERYONES,
   holderKey,
@@ -278,9 +264,6 @@ const SKELETON_ROWS = [
 /** How wide a placeholder row's time stands, as wide as a short "2h". */
 const SKELETON_TIME = "20px";
 
-/** How wide a placeholder row's mark stands, an agent's tile at its inline size (`.actor-mark`). */
-const SKELETON_MARK = "16px";
-
 /** What each scope is called, in the view's menu and, but for To do, after the Inbox's name at its head, and its glyph in the menu. */
 const SCOPE_WORDS = {
   [INBOX_SHOW.TO_DO]: { label: "To do", icon: <ListTodoIcon /> },
@@ -372,18 +355,22 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
 }
 
 /**
- * One item as a `ListRow` of two lines, as a mail app lists a thread: the
- * agent's mark, the title, its task's status (`TaskStatusChip`), and how
- * long ago it changed, then the last word
- * in its thread, muted, led on a thread by what its open ask asks, the
- * steps its draft ticks counted (`inboxPreview`). One that needs the developer wears
- * the attention mark before its time, and a teammate's item their face
- * there where `face` allows it, the mark of their open item being theirs to
- * wear. The title hangs in the window's pill, since a narrow list cuts it
- * short. An unread item, changed since the developer last read it or marked
- * unread, wears the blue dot in a gutter before its tile, its title in the
- * unread weight and its preview in the body's ink; the gutter stands on
- * every row, so the tiles line up whether a row wears a dot or not. Where
+ * One item as a `ListRow` of up to three lines, as a mail app lists a
+ * thread, one thing to a line so nothing is cut short to make room for
+ * another: the title and how long ago it changed; then, in a list its tasks
+ * do not head, what holds it, its task's status and whole name (`chip`);
+ * then the last word in its thread, muted, led on a thread by what its open
+ * ask asks, the steps its draft ticks counted (`inboxPreview`). The agent
+ * that asked, and whether it needs the developer, are its card's to say
+ * (`InboxItemCard`), a reader still hearing the latter, since an open item
+ * nearly always does and a mark on every row would say nothing. A
+ * teammate's item wears their face before its time where `face` allows it,
+ * the mark of their open item being theirs to wear. The title hangs in the
+ * window's pill, since a narrow list cuts it short. An unread item, changed
+ * since the developer last read it or marked unread, wears the blue dot in
+ * a gutter before its words, its title in the unread weight and its
+ * preview in the body's ink; the gutter stands on every row, so the words
+ * line up whether a row wears a dot or not. Where
  * an answer or a message waits unsent in the item's box and that box is not
  * the one standing beside the list, which shows its own words, the row wears
  * the Draft pencil before its marks, as a sidebar task's row does
@@ -395,9 +382,8 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
  * chosen item (`APP_COMMAND.TOGGLE_INBOX_ITEM_READ`); and a swipe right, a
  * short one leaving the row open on a Read or Unread button, a long one
  * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). A list its tasks
- * do not head, the person page's or the Inbox's own grouped by anything but
- * task, names the item's task in a chip before the preview (`chip`), its
- * glyph and its name cut short, so the title keeps its whole line. Its right-click offers
+ * do not head is the person page's, or the Inbox's own grouped by anything
+ * but task. Its right-click offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under. Where the list hands
  * down its media reads (`media`), the row shows the pictures and pages its
@@ -434,7 +420,7 @@ export function InboxItemRow({
   readerId: string | undefined;
   /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
-  /** Whether the row names its task, or its automation, in a chip before its preview, as a list its tasks do not head does. */
+  /** Whether the row names its task, or its automation, on a line of its own over its preview, as a list its tasks do not head does. */
   chip?: boolean;
   /** Whether the row draws its second line, what its item asks or how it ended; off, the row is its title's line alone, as the view's menu may choose. */
   line?: boolean;
@@ -502,20 +488,7 @@ export function InboxItemRow({
           ref={hold}
           motionKey={listed.item.id}
           ink={LIST_ROW_INK.SIDEBAR}
-          leading={
-            <>
-              {/* Note that the tile hangs no card of its own, as a sidebar task's mark hangs none: the row's card names the agent. */}
-              <InboxRowLeading unread={unread}>
-                <ItemMark
-                  holder={holder}
-                  agentId={item.agentId}
-                  models={models}
-                  readerId={readerId}
-                  plain
-                />
-              </InboxRowLeading>
-            </>
-          }
+          leading={<InboxRowLeading unread={unread} />}
           title={title}
           description={
             line ? (
@@ -530,6 +503,7 @@ export function InboxItemRow({
               ? { icon: <HolderGlyph holder={holder} />, label: holderName(holder) }
               : undefined
           }
+          leadAt={LIST_ROW_LEAD.LINE}
           attachments={
             !line || media === undefined || carried.length === 0 ? undefined : (
               <RowMedia media={carried} reads={media} />
@@ -542,6 +516,7 @@ export function InboxItemRow({
               readerId={readerId}
               open={open}
               face={face}
+              standing={false}
               before={unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
             />
           }
@@ -991,31 +966,22 @@ export function ShowEmpty({
 
 /**
  * An item row's leading: the gutter the unread dot stands in, on every row so
- * the tiles line up whether a row wears the dot or not, and the tile after
- * it. The list's rows and its placeholder rows both lead with it, so a tile
- * lands where its block stood.
+ * the words line up whether a row wears the dot or not. The list's rows and
+ * its placeholder rows both lead with it, so a title lands where its block
+ * stood.
  */
-function InboxRowLeading({
-  unread,
-  children,
-}: {
-  unread: boolean;
-  children: ReactNode;
-}): React.JSX.Element {
+function InboxRowLeading({ unread }: { unread: boolean }): React.JSX.Element {
   return (
-    <>
-      <span className="inbox-row-gutter">
-        {unread ? <span className="inbox-row-unread" /> : null}
-      </span>
-      <span className="inbox-row-mark">{children}</span>
-    </>
+    <span className="inbox-row-gutter">
+      {unread ? <span className="inbox-row-unread" /> : null}
+    </span>
   );
 }
 
 /**
  * The list while its items are first read: rows in an item's own row, a
- * block where its agent's tile, its title, its time, and the line under
- * them will stand, so the
+ * block where its title, its time, and the line under them will stand,
+ * so the
  * items land where the blocks stood rather than a lone ring in the list's
  * corner. The rows open nothing and the region says what is being read. A
  * short list asks for fewer rows than the five a whole Inbox stands.
@@ -1038,11 +1004,7 @@ export function InboxListSkeleton({
         {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}
-            leading={
-              <InboxRowLeading unread={false}>
-                <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />
-              </InboxRowLeading>
-            }
+            leading={<InboxRowLeading unread={false} />}
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
             meta={<Skeleton width={SKELETON_TIME} />}
@@ -1054,83 +1016,29 @@ export function InboxListSkeleton({
   );
 }
 
-/** The words naming the list's search, on its magnifier and its field alike. */
+/** The words naming the list's search, on its field and the sidebar's magnifier alike. */
 const SEARCH_INBOX = "Search inbox";
 
 /**
- * The list's search as its head draws it: a magnifier beside the view's
- * menu, which a press opens into a field standing in the head's name, the
- * caret in it. The field narrows the list as it is typed in, standing open
- * while it holds words; Escape empties and folds it, and so does the focus
- * leaving it empty, the keyboard then handed back to the magnifier where
- * Escape folded it, or, on a phone's head, which draws no magnifier, to the
- * ⋯ the search was opened from.
+ * The list's search under a page's head, on the window's Inbox and a task's
+ * own, a phone's head's as a desk's: a field always standing, as Settings'
+ * search does, so nothing in the head moves or hides as it is used. It
+ * narrows the list as it is typed in, and Escape empties it; an empty one
+ * leaves Escape to the surface behind it.
  */
-function useListSearch(search: InboxSearchHead | undefined) {
-  const [asked, setAsked] = useState(false);
-  const open = search !== undefined && (asked || search.query !== "");
-  const field = useRef<HTMLInputElement | null>(null);
-  const magnifier = useRef<HTMLButtonElement | null>(null);
-  // The ⋯ a phone's head opened the search from, which stands in the magnifier's place.
-  const opener = useRef<HTMLElement | null>(null);
-  const backToMagnifier = useRef(false);
-  useEffect(() => {
-    if (open) {
-      field.current?.focus();
-      return;
-    }
-    if (!backToMagnifier.current) return;
-    backToMagnifier.current = false;
-    (magnifier.current ?? opener.current)?.focus();
-  }, [open]);
-  const fold = (handBack: boolean) => {
-    backToMagnifier.current = handBack;
-    search?.onQuery("");
-    setAsked(false);
-  };
-  const button =
-    search === undefined || open ? null : (
-      <Tooltip label={SEARCH_INBOX}>
-        <IconButton
-          ref={magnifier}
-          icon={<SearchIcon />}
-          label={SEARCH_INBOX}
-          onClick={() => setAsked(true)}
-        />
-      </Tooltip>
-    );
-  const fieldDrawn =
-    search === undefined || !open ? null : (
-      <search
-        className="inbox-search"
-        onBlur={(event) => {
-          // Note that a press on the field's own clear moves the focus within it, which folds nothing.
-          if (event.currentTarget.contains(event.relatedTarget)) return;
-          if (search.query === "") fold(false);
-        }}
-      >
-        <SearchField
-          ref={field}
-          label={SEARCH_INBOX}
-          placeholder={SEARCH_INBOX}
-          value={search.query}
-          onChange={search.onQuery}
-          onClear={() => search.onQuery("")}
-          onEscape={() => fold(true)}
-        />
-      </search>
-    );
-  return {
-    button,
-    field: fieldDrawn,
-    onOpen:
-      search === undefined
-        ? undefined
-        : (from: HTMLElement) => {
-            opener.current = from;
-            setAsked(true);
-          },
-  };
+function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element {
+  return (
+    <search className="inbox-search">
+      <SearchField
+        label={SEARCH_INBOX}
+        placeholder={SEARCH_INBOX}
+        value={search.query}
+        onChange={search.onQuery}
+        onClear={() => search.onQuery("")}
+        onEscape={search.query === "" ? undefined : () => search.onQuery("")}
+      />
+    </search>
+  );
 }
 
 /**
@@ -1141,9 +1049,10 @@ function useListSearch(search: InboxSearchHead | undefined) {
  * alone. On the window's Inbox its heading and its button glide as the
  * sidebar folds, the name moving to the list's middle, clear of the
  * sidebar's toggle, and the button keeping to the list's edge. Where the
- * list offers a search, its magnifier stands before the menu, and its field
- * in the name's place while it is open (`useListSearch`), in the sidebar's
- * head as on the page.
+ * list offers a search, a page stands its field under the head
+ * (`ListSearch`), and the sidebar's head, too tight for one, a magnifier
+ * after the name that unfolds a field over it (`FoldingSearch`), the
+ * buttons after it standing still either way.
  */
 function ListHead({
   head,
@@ -1156,16 +1065,15 @@ function ListHead({
 }): React.JSX.Element {
   const { shown, show, view } = head;
   const title = inboxTitle(show.show);
-  const search = useListSearch(head.search);
   const asked = useMenuAsk();
+  const search = head.search === undefined ? null : <ListSearch search={head.search} />;
   if (head.phone !== undefined && placement === INBOX_LIST_PLACEMENT.PAGE) {
-    const { onOpen } = search;
     return (
       <>
         <PhoneHead
           place="inbox"
           start={head.phone.start}
-          title={search.field ?? <h1 className="desktop-toolbar-title">{title}</h1>}
+          title={<h1 className="desktop-toolbar-title">{title}</h1>}
           end={
             <PlaceMore
               shown={shown}
@@ -1174,15 +1082,6 @@ function ListHead({
                   ...(head.onCompose === undefined
                     ? []
                     : [{ label: NEW_THREAD, icon: <ComposeIcon />, onSelect: head.onCompose }]),
-                  ...(onOpen === undefined
-                    ? []
-                    : [
-                        {
-                          label: SEARCH_INBOX,
-                          icon: <SearchIcon />,
-                          onSelect: () => onOpen(opener),
-                        },
-                      ]),
                   {
                     label: VIEW_OPTIONS,
                     icon: <SlidersHorizontalIcon />,
@@ -1202,6 +1101,7 @@ function ListHead({
           readAll={head.readAll}
           asked={{ ask: asked.ask }}
         />
+        {search}
         {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
       </>
     );
@@ -1213,7 +1113,6 @@ function ListHead({
           <IconButton icon={<ComposeIcon />} label={NEW_THREAD} onClick={head.onCompose} />
         </Tooltip>
       )}
-      {search.button}
       <ViewOptions
         shown={shown}
         show={show}
@@ -1228,14 +1127,20 @@ function ListHead({
     <>
       {/* In the sidebar the list is headed as the sidebar's own sections are, under its places, rather than as a page. */}
       {sidebar ? (
-        // Note that the field stands in the name's place in one head, so View options stays mounted as the field gives way.
-        <SidebarSectionHead name={title} field={search.field}>
+        <SidebarSectionHead
+          name={title}
+          search={
+            head.search === undefined
+              ? undefined
+              : { label: SEARCH_INBOX, value: head.search.query, onChange: head.search.onQuery }
+          }
+        >
           {options}
         </SidebarSectionHead>
       ) : (
-        <header className="desktop-toolbar inbox-tasks-bar">
-          <div className="desktop-toolbar-heading">
-            {search.field ?? (
+        <>
+          <header className="desktop-toolbar inbox-tasks-bar">
+            <div className="desktop-toolbar-heading">
               <OneLine
                 as={ONE_LINE_ELEMENT.H1}
                 end={ONE_LINE_END.ELLIPSIS}
@@ -1243,10 +1148,11 @@ function ListHead({
               >
                 {title}
               </OneLine>
-            )}
-          </div>
-          <div className="desktop-toolbar-actions">{options}</div>
-        </header>
+            </div>
+            <div className="desktop-toolbar-actions">{options}</div>
+          </header>
+          {search}
+        </>
       )}
       {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
     </>
@@ -1258,8 +1164,8 @@ export function SearchEmpty({ searched }: { searched: string }): React.JSX.Eleme
   return <p className="sidebar-note">{`No items match “${searched.trim()}”.`}</p>;
 }
 
-/** What the list says where a task's read did not answer. */
-const NOT_READ = "Some items could not be read.";
+/** What the Inbox says where a read of its items, or of the tasks holding them, did not answer. */
+export const INBOX_NOT_READ = readFailedWords(`some ${TERM.INBOX_ITEM.many}`);
 
 /** The words of the way on from an Inbox with nothing in it. */
 const NEW_TASK_LABEL = "New task";
@@ -1314,7 +1220,7 @@ export function InboxListNote({
   if (failed) {
     return (
       <div className="sidebar-note">
-        <ErrorState onRetry={onRetry}>{NOT_READ}</ErrorState>
+        <ErrorState onRetry={onRetry}>{INBOX_NOT_READ}</ErrorState>
       </div>
     );
   }
@@ -1352,14 +1258,14 @@ export interface InboxListHead {
   readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
   /** Mark all as read, in the view's menu, where the list marks its items. */
   readonly readAll?: InboxReadAll | undefined;
-  /** The list's search, which its head's magnifier opens, on the window's Inbox and a task's own alike; none where the list offers none. */
+  /** The list's search, under a page's head or unfolded from the sidebar's magnifier, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;
   /** Opens a New thread in the pane, from the head's compose button; none where the list offers none. */
   readonly onCompose?: (() => void) | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the window's Inbox stands on a
    * phone's places: its one start control, New task, the title centred, and
-   * the ⋯ holding New thread, the search, and View options; none elsewhere.
+   * the ⋯ holding New thread and View options, the search standing under it; none elsewhere.
    */
   readonly phone?: { readonly start: React.ReactNode } | undefined;
 }
@@ -1435,8 +1341,9 @@ function InboxRows({
   row: (listed: InboxListed, leaving: boolean) => React.ReactNode;
 }): React.JSX.Element {
   const drawn = useLeaving(items, (listed) => listed.item.id);
+  // Note that the rows stand a step further apart than a list's, because a row of three lines standing clear on its ground is told from the next by the room between them alone.
   return (
-    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks" moves>
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} className="sidebar-tasks" moves>
       {drawn.map(({ value, leaving }) => row(value, leaving))}
     </Stack>
   );

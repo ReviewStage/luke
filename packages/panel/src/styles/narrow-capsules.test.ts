@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import {
-  BADGE_TONE,
   Badge,
   CHOICE_LOOK,
   ChoiceList,
   PROFILE,
+  STATUS_TONE,
   surfaceAttributes,
   THEME,
 } from "@luke/ui";
@@ -133,7 +133,7 @@ test("an option's badge drops under its label in a narrow column rather than squ
 
 test("a badge whose words wrap stands as a rounded box, never a bubble", () => {
   const holder = draw(
-    createElement(Badge, { tone: BADGE_TONE.ATTENTION, children: "Needs a long look" }),
+    createElement(Badge, { tone: STATUS_TONE.ATTENTION, children: "Needs a long look" }),
   );
   const badge = holder.querySelector(".luke-badge") ?? assert.fail("the badge");
   // Note that jsdom drops a padding shorthand that names a token, so a line's height is its leading and the badge's padding token above and below it.

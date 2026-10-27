@@ -1,9 +1,10 @@
 import { MemoryPublisher } from "@orpc/publisher/memory";
+import { type AppStateSnapshot, appStateDelivery } from "../app-state.js";
 import {
+  type EventPushName,
   PUSH,
   PUSH_PROCEDURE,
   type PushEvent,
-  type PushName,
   type PushPayload,
 } from "../contract/index.js";
 import { actPort } from "./base.js";
@@ -27,6 +28,13 @@ import { actPort } from "./base.js";
  * falls behind sends the newest document next and never an older one, and an
  * event pushed after a document is still heard after a document at least as
  * new.
+ *
+ * What a stream sends of a document is what moved in it since the one it last
+ * sent (`AppStateDelivery`), worked out as it is sent rather than as it is
+ * pushed, so a document replaced unsent takes nothing it moved with it, and
+ * a document in which nothing the window is handed moved is not sent at all.
+ * A stream's first sends every entry, which is what makes a reloaded page's
+ * new stream whole whatever its old one sent.
  *
  * A window the platform says is hidden may have its document held
  * (`holdState`): a document pushed to it still takes the unsent one's place,
@@ -52,14 +60,16 @@ const UNBOUNDED = Number.POSITIVE_INFINITY;
 /** Where a stream's unsent document stands in its queue; the document itself is read as the marker is sent. */
 const LATEST_STATE = Object.freeze({ latest: PUSH.APP_STATE });
 
-type StatePush = Extract<PushEvent, { readonly push: typeof PUSH.APP_STATE }>;
+type EventPush = Exclude<PushEvent, { readonly push: typeof PUSH.APP_STATE }>;
 
 type Queued = PushEvent | typeof LATEST_STATE;
 
 interface WindowStream {
   readonly publisher: MemoryPublisher<{ [PUSHED]: Queued }>;
   /** The newest document pushed since this stream last sent one. */
-  unsent: StatePush | undefined;
+  unsent: AppStateSnapshot | undefined;
+  /** The document this stream last sent what moved in, none before its first. */
+  sent: AppStateSnapshot | undefined;
   /** Whether a marker is in the queue, which there is whenever a document is unsent and the window's document is not held. */
   marked: boolean;
   /** Whether the window's document is held, so a marker read now leaves the unsent document for the release. */
@@ -75,24 +85,32 @@ function mark(stream: WindowStream): void {
 }
 
 /**
- * One push queued on one stream: an event behind the others, a document in
- * its unsent one's place, queued only while the window's document is not
- * held.
+ * The stream's unsent document as the push it sends, what moved since the
+ * one it last sent, taken off the stream; none where there is no document
+ * unsent or nothing in it moved.
  */
-function offer(stream: WindowStream, event: PushEvent): void {
-  if (event.push !== PUSH.APP_STATE) {
-    // Note that a held document goes out itself before the event, because an
-    // event must never be heard ahead of a document pushed before it, and a
-    // marker read while held would send nothing.
-    const latest = stream.held ? stream.unsent : undefined;
-    if (latest !== undefined) {
-      stream.unsent = undefined;
-      void stream.publisher.publish(PUSHED, latest);
-    }
-    void stream.publisher.publish(PUSHED, event);
-    return;
-  }
-  stream.unsent = event;
+function takeUnsent(stream: WindowStream): PushEvent | undefined {
+  const latest = stream.unsent;
+  stream.unsent = undefined;
+  if (latest === undefined) return undefined;
+  const delivery = appStateDelivery(stream.sent, latest);
+  stream.sent = latest;
+  return delivery === undefined ? undefined : { push: PUSH.APP_STATE, payload: delivery };
+}
+
+/** One event queued on one stream, behind the others. */
+function offerEvent(stream: WindowStream, event: EventPush): void {
+  // Note that a held document goes out itself before the event, because an
+  // event must never be heard ahead of a document pushed before it, and a
+  // marker read while held would send nothing.
+  const latest = stream.held ? takeUnsent(stream) : undefined;
+  if (latest !== undefined) void stream.publisher.publish(PUSHED, latest);
+  void stream.publisher.publish(PUSHED, event);
+}
+
+/** One document queued on one stream, in its unsent one's place, queued only while the window's document is not held. */
+function offerDocument(stream: WindowStream, document: AppStateSnapshot): void {
+  stream.unsent = document;
   if (!stream.held) mark(stream);
 }
 
@@ -103,16 +121,32 @@ export class WindowPushes<Sender = unknown> {
   readonly #held = new Set<Sender>();
 
   /**
-   * Pushes one payload to every stream the window holds open, in the order
-   * pushed, a document in place of the one still unsent and held while the
-   * window's document is; whether any stood to hear it.
+   * Pushes one event to every stream the window holds open, in the order
+   * pushed; whether any stood to hear it.
    */
-  push<Name extends PushName>(sender: Sender, push: Name, payload: PushPayload<Name>): boolean {
+  push<Name extends EventPushName>(
+    sender: Sender,
+    push: Name,
+    payload: PushPayload<Name>,
+  ): boolean {
     const streams = this.#windows.get(sender);
     if (streams === undefined) return false;
     // SAFETY: `push` and `payload` are paired by this method's own signature, which is the pairing PushEvent names.
-    const event = { push, payload } as PushEvent;
-    for (const stream of streams) offer(stream, event);
+    const event = { push, payload } as EventPush;
+    for (const stream of streams) offerEvent(stream, event);
+    return true;
+  }
+
+  /**
+   * Pushes the document as this window is handed it to every stream the
+   * window holds open, in place of the one still unsent and held while the
+   * window's document is; each stream sends what moved in it. Whether any
+   * stood to hear it.
+   */
+  pushState(sender: Sender, document: AppStateSnapshot): boolean {
+    const streams = this.#windows.get(sender);
+    if (streams === undefined) return false;
+    for (const stream of streams) offerDocument(stream, document);
     return true;
   }
 
@@ -145,6 +179,7 @@ export class WindowPushes<Sender = unknown> {
     const stream: WindowStream = {
       publisher: new MemoryPublisher<{ [PUSHED]: Queued }>({ maxBufferedEvents: UNBOUNDED }),
       unsent: undefined,
+      sent: undefined,
       marked: false,
       held: this.#held.has(sender),
     };
@@ -180,8 +215,7 @@ async function* untilClosed(
       }
       stream.marked = false;
       if (stream.held) continue;
-      const latest = stream.unsent;
-      stream.unsent = undefined;
+      const latest = takeUnsent(stream);
       if (latest !== undefined) yield latest;
     }
   } finally {

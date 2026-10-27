@@ -12,11 +12,11 @@
  */
 
 import { Effect, Result } from "effect";
-import { OPEN_INTERNET_POLICY } from "../agents/terminal/agent-sandbox.js";
 import {
   LIST_ORDER,
   type ListedSandbox,
   type ListOrder,
+  OPEN_INTERNET_POLICY,
   type VercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
 

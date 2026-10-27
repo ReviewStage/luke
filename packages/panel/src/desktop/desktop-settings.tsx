@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { type HostCapability, SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {
@@ -20,6 +20,7 @@ import {
   LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
+  PageToolbar,
   ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
@@ -123,9 +124,9 @@ function SettingsPageRow({
 function PageBar({ onList }: { onList: (() => void) | undefined }): React.JSX.Element {
   if (onList === undefined) return <div className="desktop-drag-strip" />;
   return (
-    <header className="desktop-toolbar">
-      <FoldingButton label={SETTINGS_LIST} icon={<BackIcon />} onClick={onList} />
-    </header>
+    <PageToolbar
+      lead={<FoldingButton label={SETTINGS_LIST} icon={<BackIcon />} onClick={onList} />}
+    />
   );
 }
 

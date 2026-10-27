@@ -66,7 +66,7 @@ test("Edit writes again a person's lines, a teammate's among them, and never an 
     { ...message("agent", MESSAGE_ROLE.USER), sentBy: { name: "Jack", agent: true } },
   ];
 
-  const { editable, revertsAt } = rewindPoints(lines);
+  const { editable, revertsAt } = rewindPoints(lines, false);
 
   assert.deepEqual([...editable].toSorted(), ["plan", "teammate"]);
   assert.equal(revertsAt.get("teammate-reply"), "automation");
@@ -74,7 +74,7 @@ test("Edit writes again a person's lines, a teammate's among them, and never an 
 });
 
 test("Edit writes again every line that opened a turn, the first included, and a reply reverts to the next of them", () => {
-  const { editable, revertsAt } = rewindPoints(TRANSCRIPT);
+  const { editable, revertsAt } = rewindPoints(TRANSCRIPT, false);
 
   assert.deepEqual([...editable].toSorted(), ["plan", "second-line", "third-line"]);
   assert.deepEqual(

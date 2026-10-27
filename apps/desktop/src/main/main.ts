@@ -93,14 +93,21 @@ const quit = desktopQuit();
  * The whole quit: the one scope every service and the host were built in
  * closes, so each gives back what it began in the reverse of the order it
  * began in and the host's drain is the first of those steps — no runtime work
- * of Luke's continues after an intentional quit. The close is forked so the
+ * of Luke's continues after an intentional quit. Every terminal of this Mac
+ * Luke opened is hung up beside it, with what it started, since neither
+ * waits on the other. The close is forked so the
  * bound above cannot interrupt it: a close that outran its wait is still
  * closing when this process leaves, which is the same answer an unsettled
  * drain leaves behind.
  */
 const closeRuntime = (runtime: { readonly disposeEffect: Effect.Effect<void> }) =>
   Effect.gen(function* () {
-    const closing = yield* Effect.forkDetach(runtime.disposeEffect);
+    const closing = yield* Effect.forkDetach(
+      Effect.all([closeEveryMacTerminal, runtime.disposeEffect], {
+        concurrency: "unbounded",
+        discard: true,
+      }),
+    );
     const closed = yield* Effect.timeoutOption(
       Fiber.join(closing),
       Duration.millis(RUNTIME_CLOSE_WAIT_MS),
@@ -165,8 +172,6 @@ async function main(): Promise<void> {
  */
 function registerQuit(): void {
   app.on("before-quit", (event) => {
-    // Every terminal of this Mac Luke opened is hung up, with what it started, before anything else is let go.
-    closeEveryMacTerminal();
     if (quit.stage() === QUIT_STAGE.TORN_DOWN) return;
     event.preventDefault();
     // A quit a hold asks about first is asked for again once it is agreed to.

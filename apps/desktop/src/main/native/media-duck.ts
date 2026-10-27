@@ -1,4 +1,4 @@
-import { NativeHelper, type NativeHelperProcess } from "./native-helper";
+import { NativeHelper } from "./native-helper";
 
 /**
  * The two words the helper takes. It holds the player-facing knowledge — which
@@ -20,12 +20,6 @@ type MediaDuckCommand = (typeof MEDIA_DUCK_COMMAND)[keyof typeof MEDIA_DUCK_COMM
  */
 const MEDIA_DUCK_RELEASE_DELAY_MS = 1_000;
 
-interface MediaDuckControllerOptions {
-  /** Injectable so the ordering can be exercised without a Mac or a binary. */
-  spawnHelper?: () => NativeHelperProcess | undefined;
-  releaseDelayMs?: number;
-}
-
 /**
  * Holds the one decision — should the players be quiet right now — and tells
  * the helper only when the answer changes. The two inputs are the user's
@@ -35,18 +29,11 @@ interface MediaDuckControllerOptions {
  * that is the user's own hand asking for their volume back.
  */
 export class MediaDuckController {
-  readonly #spawnHelper: (() => NativeHelperProcess | undefined) | undefined;
-  readonly #releaseDelayMs: number;
   #helper: NativeHelper | undefined;
   #enabled = false;
   #exchangeActive = false;
   #ducked = false;
   #releaseTimer: NodeJS.Timeout | undefined;
-
-  constructor(options: MediaDuckControllerOptions = {}) {
-    this.#spawnHelper = options.spawnHelper;
-    this.#releaseDelayMs = options.releaseDelayMs ?? MEDIA_DUCK_RELEASE_DELAY_MS;
-  }
 
   setEnabled(enabled: boolean): void {
     this.#enabled = enabled;
@@ -104,7 +91,7 @@ export class MediaDuckController {
     this.#releaseTimer = setTimeout(() => {
       this.#releaseTimer = undefined;
       this.#restore();
-    }, this.#releaseDelayMs);
+    }, MEDIA_DUCK_RELEASE_DELAY_MS);
   }
 
   #restore(): void {
@@ -129,7 +116,6 @@ export class MediaDuckController {
       binary: "mac-media-duck",
       input: "pipe",
       output: "inherit",
-      ...(this.#spawnHelper ? { spawnProcess: this.#spawnHelper } : undefined),
     });
     helper.onExit(() => this.#drop(helper));
     if (!helper.start()) return undefined;

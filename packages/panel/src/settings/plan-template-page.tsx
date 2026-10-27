@@ -42,7 +42,6 @@ import { DocumentScroll } from "../tasks/document-frame.js";
 import type { TaskReader } from "../tasks/edit-ref.js";
 import { PlanBody, PlanBodyColumn, PlanPageHead } from "../tasks/plan-body.js";
 import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
-import { TOAST_TONE, useToast } from "../toast.js";
 
 /**
  * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.
@@ -69,9 +68,10 @@ import { TOAST_TONE, useToast } from "../toast.js";
  * leave the editor (`../tasks/use-plan-editing.ts`), here as a write of
  * the whole template, which is the developer's alone and so never meets
  * words of Luke's to merge. A save that failed says so under the editor
- * with a Retry, or, once the page has gone, in a toast whose Retry sends the
- * same words; a template past its bound is refused before it is sent. With
- * no account signed in there is no template to show, and the page says so.
+ * with a Retry, or, once the page has gone, in the document's toast whose
+ * Retry sends the same words, and coming back opens the editor on them; a
+ * template past its bound is refused before it is sent. With no account
+ * signed in there is no template to show, and the page says so.
  * The document stands under `ph-no-capture`, so the session recording keeps
  * neither the words nor the rhythm of the typing.
  */
@@ -86,7 +86,6 @@ const PAGE_LINE = {
   SIGNED_OUT: "Sign in to edit the template your new plans start from.",
   READ_FAILED: "The template could not be read.",
   READING: "Loading your plan template",
-  LEFT_UNSAVED: "Your plan template could not be saved.",
   RESET_FAILED: "The template could not be reset. Try again.",
 } as const;
 
@@ -173,15 +172,12 @@ interface TemplateControl {
  * What the page's writes read and change as they land, which no render
  * stands between: the template as the service last kept it, which every
  * edit the document sends was written from; the write out; whether a reset
- * is under way; words whose save failed while the page stood, until another
- * save is sent; and whether the page still stands.
+ * is under way.
  */
 interface HeldWrites {
   kept: string;
   flight: Promise<unknown> | undefined;
   resetting: boolean;
-  failed: string | undefined;
-  standing: boolean;
 }
 
 /**
@@ -189,11 +185,8 @@ interface HeldWrites {
  * written through the document's edit door. Note that an edit written from
  * a template the service no longer keeps is dropped, because it was queued
  * behind a reset the developer confirmed, and landing after the reset it
- * would undo it. Words whose save failed are sent once more as the
- * page goes, because the editor holds a failed save back from its own
- * leaving; and a save that fails once the page has gone is said in a toast
- * whose Retry sends the same words, because the page and its Retry are gone
- * with them.
+ * would undo it. Words whose save failed as the page went are kept and
+ * said by the document's own leaving (`../tasks/use-plan-editing.ts`).
  */
 function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl {
   const [read, setRead] = useState<TemplateRead>(TEMPLATE_READ.READING);
@@ -205,10 +198,7 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     kept: "",
     flight: undefined,
     resetting: false,
-    failed: undefined,
-    standing: true,
   });
-  const toast = useToast();
 
   const take = useCallback((answer: PlanTemplateAnswer, edited: PlanLastEdit | undefined) => {
     held.current.kept = answer.template;
@@ -246,42 +236,17 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
 
   const save = (words: string): Promise<TasksEditAnswer> => {
     const writes = held.current;
-    writes.failed = undefined;
     if (words.length > PLAN_TEMPLATE_BOUNDS.MAX_CHARS) {
       return Promise.resolve({ failure: PLAN_EDIT_REFUSAL.TOO_LONG });
     }
     const sent = written(act, words).then((answer): TasksEditAnswer => {
-      if (answer !== undefined) {
-        if (writes.standing) take(answer, editedNow());
-        return { saved: true };
-      }
-      if (writes.standing) {
-        writes.failed = words;
-      } else {
-        toast({
-          words: PAGE_LINE.LEFT_UNSAVED,
-          tone: TOAST_TONE.FAILED,
-          persists: true,
-          action: { label: "Retry", onPress: () => save(words) },
-        });
-      }
-      return { failure: TASK_CALL_FAILURE.UNANSWERED };
+      if (answer === undefined) return { failure: TASK_CALL_FAILURE.UNANSWERED };
+      take(answer, editedNow());
+      return { saved: true };
     });
     writes.flight = sent;
     return sent;
   };
-
-  // The page going sends words whose save failed a turn later, once the document's own leaving has sent anything newer.
-  useEffect(() => {
-    const writes = held.current;
-    writes.standing = true;
-    return () => {
-      writes.standing = false;
-      Promise.resolve().then(() => {
-        if (writes.failed !== undefined) save(writes.failed);
-      });
-    };
-  }, []);
 
   return {
     read,
@@ -300,7 +265,6 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
       // The write already out lands before the null is sent, so the default is what the service keeps.
       const writes = held.current;
       writes.resetting = true;
-      writes.failed = undefined;
       await writes.flight;
       const answer = await written(act, null);
       writes.resetting = false;
@@ -436,7 +400,6 @@ function TemplateSkeleton(): React.JSX.Element {
                   </Text>
                   <div>
                     {section.lines.map((width, at) => (
-                      // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
                       <Skeleton key={at} width={width} />
                     ))}
                   </div>

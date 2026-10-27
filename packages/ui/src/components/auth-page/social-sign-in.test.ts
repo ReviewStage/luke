@@ -3,7 +3,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { SIGN_IN_FAILURE, SocialSignInCard } from "./social-sign-in.js";
+import { SIGN_IN_UNFINISHED, SocialSignInCard } from "./social-sign-in.js";
 
 /**
  * social-sign-in.test.ts -- the card offers a button for every provider, a press names its provider, one opening holds the rest, and a failure is said in the alert region.
@@ -68,5 +68,5 @@ test("a sign-in that could not start is said in the alert region", () => {
       onPress: () => undefined,
     }),
   );
-  expect(container.querySelector('[role="alert"]')?.textContent).toBe(SIGN_IN_FAILURE);
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(SIGN_IN_UNFINISHED);
 });

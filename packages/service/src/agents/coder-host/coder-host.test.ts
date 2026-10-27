@@ -1513,10 +1513,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           );
           assert.ok(sectionText("Approach").endsWith("\n\n- Invites expire after 7 days."));
           assert.equal(stored.task.document.body, stored.text);
-          // The save is journaled as the agent's, with the notes that were taken and the agent named by its row.
+          // The save is journaled as the agent's, with the notes that were taken and the agent named as its tab names it.
           const at = yield* Clock.currentTimeMillis;
           assert.deepEqual(stored.task.agentEdits, [
-            { agentId: agent.id, label: agent.title ?? agent.model, at },
+            { agentId: agent.id, label: agent.title ?? "Opus 5.5", at },
           ]);
           assert.deepEqual(
             stored.agentEdits.map((edit) => edit.notes.map((note) => note.kind)),

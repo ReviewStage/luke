@@ -1,14 +1,14 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
+import { ConfirmDialog, type DialogQuestion, STATUS_TONE, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { CircleSlashIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
 import { DRAFT_PLACE, useDraftWriter } from "../composer-drafts.js";
 import type { MenuAction } from "../desktop/action-menu.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import { useInboxSettler } from "./inbox-settling.js";
 import { cardTitle } from "./tool-call-model.js";
@@ -84,7 +84,7 @@ export function useInboxCloser({
       out.current.add(item.id);
       const sent = settler.close(item);
       const say = (words: string) =>
-        toast({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       void act(ACT_KIND.CODING_AGENTS_INBOX_CLOSE, {
         itemId: item.id,
         revision: item.revision,

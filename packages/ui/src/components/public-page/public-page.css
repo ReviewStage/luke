@@ -92,7 +92,8 @@
     margin: 0;
     font-size: var(--luke-type-title-size);
     line-height: var(--luke-type-title-leading);
-    font-weight: var(--luke-weight-bold);
+    font-weight: var(--luke-type-title-weight);
+    letter-spacing: var(--luke-type-title-tracking);
     text-wrap: pretty;
   }
 
@@ -102,7 +103,7 @@
   .luke-public-page-title[data-style="hero"] {
     font-size: var(--luke-display-hero-size, var(--luke-type-title-size));
     line-height: var(--luke-display-hero-leading, var(--luke-type-title-leading));
-    font-weight: var(--luke-display-hero-weight, var(--luke-weight-bold));
+    font-weight: var(--luke-display-hero-weight, var(--luke-type-title-weight));
     letter-spacing: var(--luke-display-hero-tracking, normal);
   }
 
@@ -170,7 +171,7 @@
     margin: 0 0 var(--luke-section-gap);
     font-size: var(--luke-type-section-size);
     line-height: var(--luke-type-section-leading);
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-section-weight);
   }
 
   /* The footer opens under a rule across the whole page. */

@@ -32,6 +32,7 @@ import {
   type IssueState,
 } from "@luke/features/github-repositories-wire";
 import { LINEAR_BOUNDS } from "@luke/features/linear-wire";
+import { issueAddressOf } from "@luke/features/link-grammar";
 import { TASK_ISSUE_PROVIDER } from "@luke/features/task-issue-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -209,7 +210,6 @@ export function searchIssues(
   fullName: string,
   words: string,
 ): Effect.Effect<readonly GitHubIssuePick[], GitHubUnavailable, HttpClient.HttpClient> {
-  const page = `https://github.com/${fullName}/issues/`.toLowerCase();
   const request = githubRead("/search/issues", token).pipe(
     HttpClientRequest.setUrlParams({
       q: `${words} repo:${fullName} is:issue is:open`,
@@ -223,7 +223,10 @@ export function searchIssues(
       Effect.map(readBody(response, SearchedIssuesSchema), (answer) =>
         picksOf(
           fullName,
-          answer.items.filter((item) => item.html_url.toLowerCase().startsWith(page)),
+          answer.items.filter(
+            (item) =>
+              issueAddressOf(item.html_url)?.repository.toLowerCase() === fullName.toLowerCase(),
+          ),
         ),
       ),
     ),

@@ -1,9 +1,10 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
+import { readFailedWords } from "@luke/features/words";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
@@ -26,6 +27,7 @@ import {
   ListRow,
   NavItem,
   OneLine,
+  PageToolbar,
   ResizeEdge,
   RetryRowLabel,
   RowHint,
@@ -177,6 +179,9 @@ const LOG_SKELETON = [
   { author: "28%", summary: "84%" },
   { author: "40%", summary: "56%" },
 ] as const;
+
+/** What the sections' pane says where the revision's version did not read. */
+const SECTIONS_FAILED = readFailedWords("the sections it changed");
 
 /** How wide each placeholder row of a revision's sections stands, a section's name as a share of its line. */
 const SECTIONS_SKELETON = ["46%", "62%", "38%"] as const;
@@ -567,6 +572,18 @@ function openedSections(
   return changedSections(versionDiff(read.previous, read.document), read.previous === null);
 }
 
+/** Whether the open revision's version failed to read, so its sections will not stand until it is read again. */
+function sectionsFailed(
+  viewing: ViewedVersion | undefined,
+  opened: OpenedSections | undefined,
+): boolean {
+  return (
+    opened !== undefined &&
+    viewing?.line.seq === opened.seq &&
+    viewing.read.kind === HISTORY_READ.FAILED
+  );
+}
+
 /**
  * The version history's page beside the list: the version chosen, or the
  * state standing in its place.
@@ -595,6 +612,7 @@ function VersionPage({
         section={section}
         task={subject.task}
         lead={lead}
+        onRetry={versions.onRetryVersion}
       />
     );
   }
@@ -606,11 +624,7 @@ function VersionPage({
   }
   return (
     <>
-      {lead === undefined ? (
-        <div className="desktop-drag-strip" />
-      ) : (
-        <header className="desktop-toolbar">{lead}</header>
-      )}
+      {lead === undefined ? <div className="desktop-drag-strip" /> : <PageToolbar lead={lead} />}
       <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
@@ -702,6 +716,7 @@ export function DesktopVersionHistory({
   // A restore that lands leaves for the task it restored, which is not always the one Back returns to.
   const restore = useVersionRestore(versions, subject.shown, onRestored);
   const sections = openedSections(versions.viewing, opened);
+  const failed = sectionsFailed(versions.viewing, opened);
   const sourceOf = (line: PlanRevisionLine, author: Actor): SourceDoor | undefined => {
     const source = revisionSource(line);
     const { onShowSource } = subject;
@@ -845,7 +860,13 @@ export function DesktopVersionHistory({
                       source={openedSource}
                       onBack={closeSections}
                     />
-                    {sections === undefined ? <SectionsSkeleton /> : null}
+                    {failed ? (
+                      <div className="sidebar-note">
+                        <ErrorState onRetry={versions.onRetryVersion}>{SECTIONS_FAILED}</ErrorState>
+                      </div>
+                    ) : sections === undefined ? (
+                      <SectionsSkeleton />
+                    ) : null}
                     <List label={LIST_LABEL.SECTIONS}>
                       {sections?.map((section) => (
                         <SectionRow

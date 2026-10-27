@@ -24,6 +24,7 @@ import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
+import { orList } from "@luke/features/words";
 
 export interface IntegrationDefinition {
   /**
@@ -180,6 +181,6 @@ export const INTEGRATION = {
 } as const satisfies Record<IntegrationProvider, IntegrationDefinition>;
 
 /** Every integration's name as one phrase an instruction can say: "Linear or Notion". */
-export const INTEGRATION_NAMES_SAID = new Intl.ListFormat("en", { type: "disjunction" }).format(
+export const INTEGRATION_NAMES_SAID = orList(
   INTEGRATION_PROVIDER_LIST.map((provider) => INTEGRATION_NAME[provider]),
 );

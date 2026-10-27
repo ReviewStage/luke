@@ -94,12 +94,7 @@ function fakeConnect(grants: Map<string, FakeGrant>): ConnectorService {
   return {
     configured: true,
     multipleAccounts: false,
-    authorize: () =>
-      Effect.succeed({
-        url: "https://vercel.com/connect/authorize/fixture",
-        verifier: Redacted.make("connect-verifier"),
-      }),
-    signInResult: () => Effect.die(new Error("this suite never asks how a sign-in stands")),
+    authorize: () => Effect.succeed({ url: "https://vercel.com/connect/authorize/fixture" }),
     token: (userId) =>
       Effect.gen(function* () {
         const grant = grants.get(userId);
@@ -198,7 +193,6 @@ const connected = (userId: string) =>
       userId,
       firstIntegrationAccount(userId, LINEAR),
       `state-${userId}`,
-      Redacted.make("connect-verifier"),
     );
     assert.equal(yield* completeIntegrationSignIn(userId, LINEAR, `state-${userId}`), true);
   });
@@ -251,7 +245,6 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
           session.userId,
           { provider: LINEAR, connectionName: "linear-2", connectSubject: subject },
           `state-second-${session.userId}`,
-          Redacted.make("connect-verifier"),
         );
         yield* completeIntegrationSignIn(
           session.userId,
@@ -289,7 +282,6 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
               session.userId,
               { provider: LINEAR, connectionName: "linear-2", connectSubject: subject },
               `state-${subject}`,
-              Redacted.make("connect-verifier"),
             );
             yield* completeIntegrationSignIn(session.userId, "linear-2", `state-${subject}`);
           });
@@ -349,13 +341,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
         const session = yield* plannedSession(host, typedSeat);
         yield* connected(session.userId);
         const state = `workspace-state-${session.workspaceId}`;
-        yield* beginWorkspaceIntegrationSignIn(
-          session.workspaceId,
-          LINEAR,
-          session.userId,
-          state,
-          Redacted.make("connect-verifier"),
-        );
+        yield* beginWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, session.userId, state);
         assert.equal(
           yield* completeWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, state),
           true,
@@ -389,7 +375,6 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
           session.userId,
           { provider: LINEAR, connectionName: "linear-2", connectSubject: subject },
           `state-second-${session.userId}`,
-          Redacted.make("connect-verifier"),
         );
         yield* completeIntegrationSignIn(
           session.userId,
@@ -397,13 +382,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
           `state-second-${session.userId}`,
         );
         const state = `workspace-state-${session.workspaceId}`;
-        yield* beginWorkspaceIntegrationSignIn(
-          session.workspaceId,
-          LINEAR,
-          session.userId,
-          state,
-          Redacted.make("connect-verifier"),
-        );
+        yield* beginWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, session.userId, state);
         yield* completeWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, state);
         const grants = new Map([
           [session.userId, {}],
@@ -445,13 +424,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
         const session = yield* plannedSession(host, typedSeat);
         yield* connected(session.userId);
         const state = `workspace-state-${session.workspaceId}`;
-        yield* beginWorkspaceIntegrationSignIn(
-          session.workspaceId,
-          LINEAR,
-          session.userId,
-          state,
-          Redacted.make("connect-verifier"),
-        );
+        yield* beginWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, session.userId, state);
         yield* completeWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, state);
         const grants = new Map([[session.userId, {}]]);
         // SAFETY: one entry per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
@@ -529,7 +502,6 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
           getTokenResponse: () =>
             Promise.reject(new ConnectError(`upstream said Bearer ${secret}`, { status: 502 })),
           revokeToken: () => Promise.reject(new Error(secret)),
-          readAuthorizationResult: () => Promise.reject(new Error(secret)),
         });
         const logged: string[] = [];
         const capture = Logger.make((options) => {

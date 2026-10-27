@@ -80,7 +80,7 @@ function pixels(element: Element, length: string): number {
   return Number(new Function(`return (${sum});`)());
 }
 
-/** The shell in the room given, its task's column and its side panel standing full screen, each bar with its tabs and its actions. */
+/** The shell in the room given, its sheet holding its task's column and its side panel standing full screen, each bar with its tabs and its actions. */
 function shell(room: string): void {
   const bar = (className: string, tabs: string, actions: string): Piece => ({
     className,
@@ -91,16 +91,26 @@ function shell(room: string): void {
     data: { room, sidebarCollapsed: "true", panelToggle: "true" },
     children: [
       {
-        className: "desktop-task-main",
+        tag: "main",
+        className: "desktop-main",
         children: [
-          bar("desktop-toolbar", "desktop-toolbar-heading main-tabs", "desktop-toolbar-actions"),
+          {
+            className: "desktop-task-main",
+            children: [
+              bar(
+                "desktop-toolbar",
+                "desktop-toolbar-heading main-tabs",
+                "desktop-toolbar-actions",
+              ),
+            ],
+          },
+          {
+            tag: "aside",
+            className: "side-panel",
+            data: { fullScreen: "true" },
+            children: [bar("side-panel-bar", "side-panel-tabs", "toolbar-tab-actions")],
+          },
         ],
-      },
-      {
-        tag: "aside",
-        className: "side-panel",
-        data: { fullScreen: "true" },
-        children: [bar("side-panel-bar", "side-panel-tabs", "toolbar-tab-actions")],
       },
     ],
   });

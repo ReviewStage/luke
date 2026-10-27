@@ -20,6 +20,7 @@ import {
   mentionMarkdown,
   mentionName,
   mentionsIn,
+  pageRepositoryOf,
   pastedLinkMention,
   sectionAnchors,
 } from "./mention-link.js";
@@ -209,6 +210,29 @@ test("a GitHub page is a file or a folder only of the plan's own repository, and
     "https://github.com/acme/checkout/blob/HEAD/",
   ]) {
     assert.ok(namesNoFile(target, REPOSITORY), target);
+  }
+});
+
+test("words of no repository read a GitHub page of a file or a folder as of the repository its address names, and any other page as of none", () => {
+  const file =
+    "https://github.com/Acme/Relay/blob/0123456789abcdef0123456789abcdef01234567/src/a.ts#L3-L5";
+  const repository = pageRepositoryOf(file);
+
+  assert.equal(repository, "Acme/Relay");
+  assert.deepEqual(decodeMention(file, repository ?? null), {
+    kind: MENTION_KIND.FILE,
+    path: "src/a.ts",
+    lines: { commit: "0123456789abcdef0123456789abcdef01234567", startLine: 3, endLine: 5 },
+  });
+  assert.equal(pageRepositoryOf("https://github.com/acme/relay/tree/HEAD/src/"), "acme/relay");
+  for (const target of [
+    "https://github.com/acme/relay/blob/main/src/a.ts",
+    "https://github.com/acme/relay/pull/12",
+    "https://github.com/acme/relay",
+    "https://gitlab.com/acme/relay/blob/HEAD/src/a.ts",
+    "luke://file/src/a.ts",
+  ]) {
+    assert.equal(pageRepositoryOf(target), undefined, target);
   }
 });
 

@@ -5,8 +5,9 @@ import {
   type TurnTokens,
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { formatCount } from "@luke/features/number-format";
+import { spanText } from "@luke/features/time-format";
 import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
-import { spanText } from "@luke/ui/time-format";
 import { HarnessMark } from "../harness-marks.js";
 import { providerOf } from "./coding-agent-model.js";
 import { ModelLabel } from "./model-label.js";
@@ -66,8 +67,6 @@ const TOKEN_ROW = {
 /** What the card's figures are, for a reader. */
 const TOKENS_LABEL = "Tokens";
 
-const COUNT = new Intl.NumberFormat("en-US");
-
 /** The effort a turn whose row recorded none says, which the label leaves unsaid. */
 const UNRECORDED_EFFORT = "";
 
@@ -90,12 +89,12 @@ function tokenRows(tokens: TurnTokens): readonly RunFigure[] {
   const read = Math.min(tokens.cachedInputTokens, tokens.inputTokens);
   const written = Math.min(tokens.cacheWriteTokens ?? 0, tokens.inputTokens - read);
   const rows: RunFigure[] = [
-    [TOKEN_ROW.INPUT, COUNT.format(tokens.inputTokens - read - written)],
-    [TOKEN_ROW.OUTPUT, COUNT.format(tokens.outputTokens)],
-    [TOKEN_ROW.CACHE_READ, COUNT.format(read)],
+    [TOKEN_ROW.INPUT, formatCount(tokens.inputTokens - read - written)],
+    [TOKEN_ROW.OUTPUT, formatCount(tokens.outputTokens)],
+    [TOKEN_ROW.CACHE_READ, formatCount(read)],
   ];
   if (tokens.cacheWriteTokens !== undefined) {
-    rows.push([TOKEN_ROW.CACHE_WRITE, COUNT.format(written)]);
+    rows.push([TOKEN_ROW.CACHE_WRITE, formatCount(written)]);
   }
   return rows;
 }

@@ -6,6 +6,13 @@ import {
   type TaskStanding,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import {
+  noneYetWords,
+  REFRESH_FAILED_WORDS,
+  readFailedWords,
+  readingWords,
+  TERM,
+} from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -147,10 +154,10 @@ import { useRowDrag } from "./use-row-drag.js";
  */
 
 /** What the page is read as while the tasks are. */
-const READING_LINE = "Reading tasks";
+const READING_LINE = readingWords(TERM.TASK.many);
 
 /** What the page says where the tasks could not be read. */
-const UNREAD_LINE = "Your tasks could not be read.";
+const UNREAD_LINE = readFailedWords(`your ${TERM.TASK.many}`);
 
 /** What a column with no task says in its own place. */
 const NO_TASKS = "No tasks";
@@ -531,7 +538,7 @@ function TaskBoardColumnView({
           {words}
         </Text>
         {column.tasks.length === 0 ? null : (
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             {column.tasks.length}
           </Text>
         )}
@@ -668,13 +675,17 @@ export function TasksBoard({
       filters={filters}
       state={boardState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
-      empty={<EmptyState icon={<SquareKanbanIcon />}>No tasks yet</EmptyState>}
+      empty={<EmptyState icon={<SquareKanbanIcon />}>{noneYetWords(TERM.TASK)}</EmptyState>}
       error={
         <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}
         </ErrorState>
       }
     >
+      {/* A refresh that failed after the tasks were read leaves them drawn, with a line over them. */}
+      {tasks.listFailed && listed.length > 0 ? (
+        <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
+      ) : null}
       <ListMotion root={board}>
         <div ref={board} className="tasks-board" data-row-drop-scope="">
           {columns.length === 0 ? (

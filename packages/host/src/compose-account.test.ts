@@ -7,6 +7,7 @@ import type { OpenConsent } from "@luke/credentials";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { HOSTED_SERVICE_PATH, VOICE_SERVICE_PATH } from "@luke/features";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@luke/features/analytics";
+import { SIGN_IN_FAILURE } from "@luke/features/words";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -90,6 +91,19 @@ const signedInAccount = (input: {
   readonly kernel: HostKernel;
   readonly machine: Layer.Layer<AppIdentity>;
   readonly openSocket: OpenSocket;
+}) => desktopAccount({ ...input, consent: grantingConsent, signedIn: true });
+
+/**
+ * The account concern over the desktop's own account source and the real
+ * settings store, holding a signed-in account where `signedIn` asks for one,
+ * its sign-ins taken through `consent`.
+ */
+const desktopAccount = (input: {
+  readonly kernel: HostKernel;
+  readonly machine: Layer.Layer<AppIdentity>;
+  readonly openSocket: OpenSocket;
+  readonly consent: OpenConsent;
+  readonly signedIn: boolean;
 }) =>
   Effect.gen(function* () {
     const machine = Layer.mergeAll(
@@ -106,7 +120,7 @@ const signedInAccount = (input: {
             encrypt: (plainText) => new TextEncoder().encode(plainText),
             decrypt: (cipherText) => new TextDecoder().decode(cipherText),
           }),
-          Layer.succeed(SignInConsent, { open: grantingConsent }),
+          Layer.succeed(SignInConsent, { open: input.consent }),
         ),
       ),
       NodeFileSystem.layer,
@@ -114,15 +128,17 @@ const signedInAccount = (input: {
     );
     // Settings' lifetime is not run, so its counted events stay disarmed and send nothing.
     const settings = yield* Effect.provide(composeSettings(), machine);
-    yield* Effect.orDie(
-      settings.store.setAccount({
-        accessToken: "access-1",
-        refreshToken: "refresh-1",
-        id: "user-1",
-        email: "dev@example.com",
-        provider: ACCOUNT_PROVIDER.GITHUB,
-      }),
-    );
+    if (input.signedIn) {
+      yield* Effect.orDie(
+        settings.store.setAccount({
+          accessToken: "access-1",
+          refreshToken: "refresh-1",
+          id: "user-1",
+          email: "dev@example.com",
+          provider: ACCOUNT_PROVIDER.GITHUB,
+        }),
+      );
+    }
     const account = yield* Effect.provide(
       composeAccount({ settings, openSocket: input.openSocket }),
       machine,
@@ -182,6 +198,54 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
     Effect.provideService(FetchHttpClient.Fetch, accountService),
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),
   ),
+);
+
+it.effect(
+  "a sign-in that ends without landing answers why as its key, and none of the consent's own words",
+  () =>
+    Effect.gen(function* () {
+      const stateRoot = yield* temporaryDirectoryScoped("luke-account-failure-");
+      const reported: string[] = [];
+      const kernel = hostKernelOver({
+        stateRoot,
+        runMode: runModeFor({ capture: false, fixture: false }),
+        accountBaseUrl: ACCOUNT_BASE_URL,
+        now: () => 0,
+        createId: () => "id",
+        report: (line) => {
+          reported.push(line);
+        },
+        emit: () => undefined,
+      });
+      // A reason a provider's answer could have shaped, which must stay in the host's log.
+      const reason = "callback carried code=secret-code";
+      for (const failure of Object.values(SIGN_IN_FAILURE)) {
+        const account = yield* desktopAccount({
+          kernel,
+          machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+          openSocket: scriptedOpenSocket([]).openSocket,
+          consent: () => ({
+            signInEffect: () => Effect.succeed({ reason, failure }),
+            cancel: () => undefined,
+            reopen: () => undefined,
+          }),
+          signedIn: false,
+        });
+        const handler = account.methods[GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN];
+        assert.ok(handler);
+        const answer = yield* Effect.orDie(handler({ provider: ACCOUNT_PROVIDER.GOOGLE }, CONTEXT));
+
+        assert.deepEqual(answer, { failure }, failure);
+        assert.equal(account.signedIn(), false, failure);
+      }
+      assert.ok(
+        reported.some((line) => line.includes(reason)),
+        "the reason is kept in the log",
+      );
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, accountService),
+      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+    ),
 );
 
 it.effect("an admin's access reaches the windows once read, and a sign-out takes it away", () =>
@@ -437,7 +501,7 @@ it.effect(
 );
 
 it.effect(
-  "in a browser, a sign-in the service could not start is refused, reported to no one, and leaves the tab signed out",
+  "in a browser, a sign-in the service could not start answers that it did not finish, reported to no one, and leaves the tab signed out",
   () => {
     const sentry = recordingReporter();
     const service = tabService({ signedIn: false, stepsDown: true });
@@ -445,14 +509,17 @@ it.effect(
       const { account, gateway, launched, departures } = yield* browserAccount(service);
       yield* Fiber.join(launched);
 
-      for (const method of [
-        GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN,
-        GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN,
-      ] as const) {
-        const answer = yield* gateway.call(method, { provider: ACCOUNT_PROVIDER.GITHUB });
-        assert.equal(!answer.ok && answer.error.code, GATEWAY_ERROR.REFUSED, method);
-        assert.deepEqual(account.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT }, method);
-      }
+      // A sign-in answers that it did not finish, in the key the gate says it in.
+      const begun = yield* gateway.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, {
+        provider: ACCOUNT_PROVIDER.GITHUB,
+      });
+      assert.deepEqual(begun.ok && begun.result, { failure: SIGN_IN_FAILURE.UNFINISHED });
+      assert.deepEqual(account.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+      const again = yield* gateway.call(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, {
+        provider: ACCOUNT_PROVIDER.GITHUB,
+      });
+      assert.equal(!again.ok && again.error.code, GATEWAY_ERROR.REFUSED);
+      assert.deepEqual(account.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
       assert.deepEqual(departures, []);
       assert.deepEqual(sentry.reported, []);
     }).pipe(Effect.provide(sentry.layer), (body) => inTab(service, body));

@@ -176,7 +176,7 @@ function closeToApp(event: MouseEvent<HTMLAnchorElement>): void {
  * or, where neither, the Mac app at its home, on a Mac; nothing on any other
  * platform, where there is no app to open and the page's words stand alone.
  */
-export function openLuke(back: ConnectReturn, platform: LinkPlatform): AuthAction | undefined {
+function openLuke(back: ConnectReturn, platform: LinkPlatform): AuthAction | undefined {
   switch (back.kind) {
     case CONNECT_RETURN.APP:
       return { label: OPEN_LUKE, href: back.href, onClick: closeToApp };

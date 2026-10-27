@@ -109,7 +109,7 @@ export function workspaceLinearProcedures(seams: WorkspaceLinearProcedureSeams) 
         return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       }
       const state = seams.mintState();
-      const { url, verifier } = yield* connector
+      const { url } = yield* connector
         .authorize(workspace.id, callbackUrl(context.request.url, state))
         .pipe(
           Effect.tapError((failure) =>
@@ -121,7 +121,7 @@ export function workspaceLinearProcedures(seams: WorkspaceLinearProcedureSeams) 
           Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
         );
       yield* hostedStoreOrUnavailable(
-        beginWorkspaceIntegrationSignIn(workspace.id, LINEAR, userId, state, verifier),
+        beginWorkspaceIntegrationSignIn(workspace.id, LINEAR, userId, state),
       );
       return { url };
     }),

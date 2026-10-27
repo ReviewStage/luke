@@ -1,6 +1,6 @@
 import { RETENTION_BASIS, type RetentionBasis } from "@luke/features/admin-overview-vocabulary";
+import { formatCount } from "@luke/features/number-format";
 import { TEXT_TONE, Text } from "@luke/ui";
-import { formatCount } from "@luke/ui/time-format";
 
 /** A note under the cards of the section it explains, in the muted body role; the section stands it. */
 function SectionNote({ children }: { children: React.ReactNode }): React.JSX.Element {

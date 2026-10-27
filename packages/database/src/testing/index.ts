@@ -1,6 +1,7 @@
 export * from "./hosted-store-database.js";
 export * from "./live-immutability.js";
 export * from "./migrations.js";
+export * from "./query-plans.js";
 export * from "./sql-client.js";
 export * from "./store-rows.js";
 export * from "./task-issues.js";

@@ -71,7 +71,7 @@ export const AggregateColumnSchema = Schema.Union([
 export const NullableAggregateColumnSchema = Schema.NullOr(AggregateColumnSchema);
 
 /** The `role` column as the auth plugin writes it: one of the roles this build knows, or none yet. */
-export const UserRoleSchema = Schema.NullOr(Schema.Literals(Object.values(USER_ROLE)));
+const UserRoleSchema = Schema.NullOr(Schema.Literals(Object.values(USER_ROLE)));
 
 /** The fields an account is drawn by wherever the dashboard names one: who it is, its picture, and its role. */
 export const ACCOUNT_FACE_FIELDS = {

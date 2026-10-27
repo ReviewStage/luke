@@ -5,6 +5,7 @@ import {
   Skeleton,
   SkeletonRegion,
   Stack,
+  TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
@@ -23,7 +24,7 @@ const MEMBER_WIDTHS = ["70%", "45%", "60%"] as const;
 /** Each shape, its box the catalog's own size for it. */
 function ShapesSkeleton(): React.JSX.Element {
   return (
-    <Inline gap={GAP.FIELD} align="center">
+    <Inline gap={GAP.FIELD}>
       <span className="catalog-skeleton-line">
         <Skeleton width="160px" />
       </span>
@@ -43,13 +44,13 @@ function PlanSkeleton(): React.JSX.Element {
   return (
     <SkeletonRegion label="Reading the plan">
       <Stack gap={GAP.TIGHT}>
-        <Text variant={TEXT_VARIANT.TITLE} as="div">
+        <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.DIV}>
           <Skeleton width="55%" />
         </Text>
-        <Text as="div">
+        <Text as={TEXT_ELEMENT.DIV}>
           <Skeleton />
         </Text>
-        <Text as="div">
+        <Text as={TEXT_ELEMENT.DIV}>
           <Skeleton width="80%" />
         </Text>
       </Stack>
@@ -66,7 +67,7 @@ function MembersSkeleton(): React.JSX.Element {
           <Inline key={width} gap={GAP.ICON} wrap={false}>
             <Skeleton shape={SKELETON_SHAPE.CIRCLE} width="20px" />
             <div className="catalog-skeleton-grow">
-              <Text as="div">
+              <Text as={TEXT_ELEMENT.DIV}>
                 <Skeleton width={width} />
               </Text>
             </div>

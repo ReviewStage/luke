@@ -12,12 +12,12 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { messages, turns } from "@luke/database/schemas/storage";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
-import { INBOX_REPLY, INBOX_RESPONSE, type InboxPost } from "@luke/features/inbox-wire";
+import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@luke/features/inbox-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
-import { answerInboxItem, postInboxItem } from "../inbox/inbox-store.js";
+import { answerInboxAsk, INBOX_ASK_ANSWER, postInboxThread } from "../inbox/inbox-store.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "./task-finish.js";
 
 /**
@@ -188,32 +188,34 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
           pullRequestIn(PULL_REQUEST_STATE.MERGED),
         );
         const poster = { userId, taskId: task.id, agentId: agent.id };
-        const question: InboxPost = {
+        const posted = yield* postInboxThread(poster, {
           key: "branch-protection",
           title: "Require a review on main",
-          response: { type: INBOX_RESPONSE.TODO },
+          body: "Turn on a required review for main in the repository's settings.",
+          ask: { type: INBOX_ASK.DO, steps: [] },
           needsReply: false,
-        };
-        const notice: InboxPost = {
+        });
+        assert.ok(Result.isSuccess(posted));
+        const notice = {
           key: "merged",
           title: "The refresh fix merged",
-          response: { type: INBOX_RESPONSE.NONE },
-          needsReply: false,
+          body: "The refresh fix merged into main.",
         };
-        const posted = yield* postInboxItem(poster, question);
-        assert.ok(Result.isSuccess(posted));
-        assert.ok(Result.isSuccess(yield* postInboxItem(poster, notice)));
+        assert.ok(Result.isSuccess(yield* postInboxThread(poster, notice)));
 
         yield* settleTaskIfFinished(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.TODO);
 
-        yield* answerInboxItem(
-          userId,
-          posted.success.id,
-          1,
-          { reply: INBOX_REPLY.DONE },
-          randomUUID(),
+        const ask = posted.success.thread?.find(
+          (message) => message.ask?.status === INBOX_ASK_STATUS.OPEN,
         );
+        assert.ok(ask !== undefined);
+        const answered = yield* answerInboxAsk(userId, posted.success.id, {
+          answers: { ask: ask.id, reply: INBOX_REPLY.DONE },
+          text: "",
+          clientKey: randomUUID(),
+        });
+        assert.equal(Option.getOrThrow(answered).outcome, INBOX_ASK_ANSWER.TAKEN);
         yield* settleTaskIfFinished(userId, task.id);
         assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
       }),

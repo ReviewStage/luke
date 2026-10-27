@@ -6,7 +6,6 @@ import {
   INBOX_ASK_STATUS,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
 } from "@luke/features/inbox-wire";
@@ -105,10 +104,11 @@ it.layer(getTestDB())("inbox_message_ask over a database from before it", (it) =
         for (const statement of UNDO) yield* sql.unsafe(statement);
 
         // Written as a deployment from before the migration writes them, naming none of its columns.
+        // Note that the view columns a later migration dropped are left out, since only this migration is undone.
         const itemId = randomUUID();
         const memberMessageId = randomUUID();
-        yield* sql`insert into inbox_item (id, user_id, task_id, organization_id, agent_id, key, revision, version, title, blocks, response, needs_reply, status, posted_at, updated_at)
-          values (${itemId}, ${place.userId}, ${place.taskId}, ${place.organizationId}, ${place.agentId}, 'branch-protection', 1, 4, 'Require a review on main', '[{"type":"markdown","text":"Main takes pushes."}]'::jsonb, '{"type":"approval"}'::jsonb, true, 'open', '2026-10-17T09:00:00Z', '2026-10-17T09:00:00Z')`;
+        yield* sql`insert into inbox_item (id, user_id, task_id, organization_id, agent_id, key, revision, version, title, needs_reply, status, posted_at, updated_at)
+          values (${itemId}, ${place.userId}, ${place.taskId}, ${place.organizationId}, ${place.agentId}, 'branch-protection', 1, 4, 'Require a review on main', true, 'open', '2026-10-17T09:00:00Z', '2026-10-17T09:00:00Z')`;
         yield* sql`insert into inbox_message (id, item_id, author, user_id, text, client_key, created_at)
           values (${memberMessageId}, ${itemId}, 'member', ${place.userId}, 'Which branches?', 'key-1', '2026-10-17T09:05:00Z')`;
         const before = yield* readBefore(itemId);
@@ -160,11 +160,6 @@ it.layer(getTestDB())("inbox messages carrying an ask and its answers", (it) => 
             revision: 1,
             version: INBOX_WIRE_VERSION,
             title: "Which invite copy?",
-            blocks: [],
-            response: {
-              type: INBOX_RESPONSE.CHOICE,
-              options: [{ label: "Short" }, { label: "Warm" }],
-            },
             needsReply: true,
             status: INBOX_STATUS.OPEN,
             postedAt: now,

@@ -16,8 +16,8 @@ import {
   REACH_FEATURE,
   type ReachFeature,
 } from "@luke/features/admin-overview-vocabulary";
+import { formatCount, formatPercent } from "@luke/features/number-format";
 import { Skeleton, TEXT_ELEMENT, TEXT_TONE, Text } from "@luke/ui";
-import { formatCount } from "@luke/ui/time-format";
 import { AsideSkeleton, ChartEmpty, ChartFrame } from "./chart-frame.js";
 
 /** What each funnel step is called, in the words a maintainer reads it by. */
@@ -46,10 +46,6 @@ const REACH_TITLE = "Feature reach · this week";
 /** The funnel's heading, which names the window its accounts were created in. */
 function funnelTitle(windowDays: number): string {
   return `Activation · accounts created in the last ${windowDays} days`;
-}
-
-function formatShare(share: number | null): string {
-  return share === null ? "—" : `${Math.round(share * 100)}%`;
 }
 
 /** The bones standing for a row's count and share, about their figures' width. */
@@ -124,7 +120,7 @@ function ShareRow({
         </span>
       }
       count={formatCount(count)}
-      share={formatShare(share)}
+      share={formatPercent(share)}
     />
   );
 }

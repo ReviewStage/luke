@@ -1,5 +1,7 @@
+import { VOICE_FAILURE, type VoiceFailure } from "@luke/features/words";
 import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@luke/gateway";
 import {
+  LIVE_CLOSE_REASON,
   LIVE_STATUS,
   type LiveStatus,
   liveExchangeActive,
@@ -7,8 +9,19 @@ import {
   type TranscriptSpeaker,
 } from "@luke/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@luke/wire/conversation";
-import { type Context, Deferred, Duration, Effect, Exit, Fiber, Option, type Scope } from "effect";
 import {
+  Clock,
+  Context,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Option,
+  type Scope,
+} from "effect";
+import {
+  noticeLinesHidden,
   sameCallAbout,
   type VoiceCallAbout,
   type VoiceCallTranscriptChange,
@@ -61,8 +74,8 @@ interface LiveCallTranscript {
  */
 export interface LiveVoiceView extends LiveVoiceSpeakers {
   voiceStatus: LiveStatus;
-  voiceError: string | undefined;
-  voiceNotice: string | undefined;
+  voiceError: VoiceFailure | undefined;
+  voiceNotice: VoiceFailure | undefined;
   /** Whether a press is still waiting on the session it opened. */
   talkOpening: boolean;
   /** The agent the standing call speaks into, and its task; none while no call stands. */
@@ -87,8 +100,8 @@ export interface LiveVoiceBridge {
   ): void;
   /** Asks the system for the microphone, answering whether it is granted. */
   requestMicrophone(): Effect.Effect<boolean>;
-  /** The neutral note said when the hosted service's ceiling refuses a session. */
-  hostedUnavailableNote(): Effect.Effect<string | undefined>;
+  /** Why the service refused the last session, where the reason is one the developer can act on or read; none otherwise. */
+  hostedFailure(): Effect.Effect<VoiceFailure | undefined>;
   /** Tells the host to stop Luke speaking, answering whether a session stood to tell; Escape's ask alone, and only while he speaks. */
   stopSpeaking(): Effect.Effect<boolean>;
 }
@@ -113,6 +126,15 @@ const SPEAKER_OF_KIND = {
  * reports at once and carries the lines as they stand.
  */
 const CAPTION_REPORT_MS = 100;
+
+/**
+ * What a call reported going wrong while it opened: held rather than said,
+ * since the service may have a better reason, until its open has answered.
+ */
+interface CallFailures {
+  opening: boolean;
+  failure: VoiceFailure | undefined;
+}
 
 /** Nobody heard on either side, which is what a call that is gone carries. */
 const SILENT: LiveVoiceSpeakers = { listening: false, lukeSpeaking: false };
@@ -158,9 +180,6 @@ function developerWordsOf(rows: readonly LiveCaptionRow[]): string {
     .trim();
 }
 
-const MICROPHONE_REFUSED_NOTE =
-  "A call needs the microphone. Allow it in System Settings › Privacy & Security › Microphone.";
-
 function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
   return (
     left.voiceStatus === right.voiceStatus &&
@@ -205,6 +224,7 @@ export class LiveVoiceOrchestrator {
   readonly #strip = new NoticeStrip({
     onChanged: () => this.#touch(),
     fork: (effect) => Effect.runForkWith(this.#services)(effect),
+    now: () => Context.get(this.#services, Clock.Clock).currentTimeMillisUnsafe(),
   });
   #call: LiveVoiceCall | undefined;
   #surroundings: LiveVoiceSurroundings = {
@@ -282,7 +302,7 @@ export class LiveVoiceOrchestrator {
   talkTo(about: VoiceCallAbout): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       if (this.#surroundings.voiceAvailable === false) {
-        const unavailable = yield* this.#bridge.hostedUnavailableNote();
+        const unavailable = yield* this.#bridge.hostedFailure();
         if (unavailable) this.#strip.showNotice(unavailable);
         return;
       }
@@ -326,7 +346,7 @@ export class LiveVoiceOrchestrator {
       if (!this.#surroundings.microphoneGranted) {
         const granted = yield* this.#bridge.requestMicrophone();
         if (!granted) {
-          this.#strip.showError(MICROPHONE_REFUSED_NOTE);
+          this.#strip.showError(VOICE_FAILURE.MICROPHONE_REFUSED);
           return;
         }
         if (!this.#pressHeld) return;
@@ -442,6 +462,15 @@ export class LiveVoiceOrchestrator {
           // finishes its own hang-up behind.
           this.#releasePress();
           if (this.#call) {
+            // Note that a connection the host lost, every try to get it back
+            // spent, is said as dropped, because nobody asked for this end; a
+            // call the host was already closing was asked to end, and says nothing.
+            if (
+              this.#closing === undefined &&
+              change.reason === LIVE_CLOSE_REASON.CONNECTION_LOST
+            ) {
+              this.#strip.showError(VOICE_FAILURE.CALL_DROPPED);
+            }
             this.#status = LIVE_STATUS.IDLE;
             this.#speakers = SILENT;
             this.#rows = [];
@@ -639,10 +668,11 @@ export class LiveVoiceOrchestrator {
       this.#opening = opened;
       this.#callAbout = about;
       this.#strip.clear();
+      const failures: CallFailures = { opening: true, failure: undefined };
       const call = this.#createCall({
         onStatus: (status, speakers) => this.#onStatus(call, status, speakers),
         onCaptions: (rows) => this.#onCaptions(call, rows),
-        onError: (message) => this.#strip.showError(message),
+        onError: (failure) => this.#onFailure(failures, failure),
       });
       this.#call = call;
       this.#talkOpening = true;
@@ -654,7 +684,7 @@ export class LiveVoiceOrchestrator {
       // status it reports — a task behind the view this verb has already
       // touched.
       this.#lifecycle = yield* Effect.forkDetach(
-        Effect.scoped(this.#lifecycleEffect(call, about, opened)),
+        Effect.scoped(this.#lifecycleEffect(call, about, opened, failures)),
         { startImmediately: true },
       );
       return yield* Deferred.await(opened);
@@ -669,20 +699,27 @@ export class LiveVoiceOrchestrator {
    * interruption that lands before the open itself decided anything, so a
    * concurrent ask waiting on it is never left hanging on a call `stop`
    * dropped before it stood.
+   *
+   * A call that fails to open says why once: the service's own reason where
+   * it gave one, since that is an instruction ("add a key") where the call's
+   * failure is only that it did not start, and the call's failure otherwise.
    */
   #lifecycleEffect(
     call: LiveVoiceCall,
     about: VoiceCallAbout,
     opened: Deferred.Deferred<LiveVoiceCall | undefined>,
+    failures: CallFailures,
   ): Effect.Effect<void, never, Scope.Scope> {
     return Effect.gen({ self: this }, function* () {
       const standing = yield* Effect.acquireRelease(call.open(about), () => call.close());
+      failures.opening = false;
       if (this.#opening === opened) this.#opening = undefined;
       if (!standing) {
         this.#talkOpening = false;
         if (this.#call === call) this.#letGo();
-        const unavailable = yield* this.#bridge.hostedUnavailableNote();
-        if (unavailable) this.#strip.showNotice(unavailable);
+        const reason = yield* this.#bridge.hostedFailure();
+        const failure = reason ?? failures.failure;
+        if (failure) this.#strip.showError(failure);
         this.#touch();
         yield* Deferred.succeed(opened, undefined);
         return;
@@ -693,6 +730,19 @@ export class LiveVoiceOrchestrator {
       this.#ending = ending;
       yield* Deferred.await(ending);
     }).pipe(Effect.onExit(() => Effect.asVoid(Deferred.succeed(opened, undefined))));
+  }
+
+  /**
+   * A failure the call reports: held while it is still opening, so the
+   * lifecycle says the one reason the open failed for, and said at once
+   * after.
+   */
+  #onFailure(failures: CallFailures, failure: VoiceFailure): void {
+    if (failures.opening) {
+      failures.failure = failure;
+      return;
+    }
+    this.#strip.showError(failure);
   }
 
   #onStatus(call: LiveVoiceCall, status: LiveStatus, speakers: LiveVoiceSpeakers): void {
@@ -746,7 +796,10 @@ export class LiveVoiceOrchestrator {
    * becomes a version of the document this same window reads.
    */
   #touch(): void {
-    if (this.#stopped || this.#queued) return;
+    if (this.#stopped) return;
+    // Note that the strip's clocks follow who is heard as it moves, because a line hidden behind speech is not being read.
+    this.#strip.conceal(noticeLinesHidden(this.#speakers));
+    if (this.#queued) return;
     this.#queued = true;
     queueMicrotask(() => {
       this.#queued = false;

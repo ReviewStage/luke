@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
+import type { LoopbackConsentOptions } from "@luke/credentials";
 import { loopbackConsent } from "@luke/credentials/node";
 import type { SecretCipher as SecretCipherSeam } from "@luke/host";
 import {
@@ -24,6 +25,7 @@ import {
 import { openTerminalSocketOverWs, openVoiceSocketOverWs } from "@luke/host/node";
 import { ConfigProvider, Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import { net } from "electron";
 import type { DesktopConfig } from "./desktop-config";
 
 interface HostSeamDependencies {
@@ -36,7 +38,12 @@ interface HostSeamDependencies {
 function hostSeamLayersFor(dependencies: HostSeamDependencies) {
   const { config, cipher } = dependencies;
   const { runMode } = config;
-  const consent = Layer.succeed(SignInConsent, { open: loopbackConsent });
+  // A press on a Mac with no network is answered at once, from Electron's own
+  // probe, rather than opening a page nobody can load.
+  const consent = Layer.succeed(SignInConsent, {
+    open: <Grant extends object>(options: LoopbackConsentOptions<Grant>) =>
+      loopbackConsent({ ...options, isOnline: () => net.isOnline() }),
+  });
   return Layer.mergeAll(
     Layer.succeed(StateRoot, config.stateRoot),
     Layer.succeed(RunMode, runMode),

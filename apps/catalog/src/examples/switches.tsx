@@ -1,4 +1,4 @@
-import { GAP, Inline, Stack, Switch, SwitchMark, TEXT_TONE, Text } from "@luke/ui";
+import { GAP, Inline, JUSTIFY, Stack, Switch, SwitchMark, TEXT_TONE, Text } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -28,7 +28,7 @@ function Switches(): React.JSX.Element {
         <Stack gap={GAP.TIGHT}>
           {[true, false].map((on) => (
             <div key={String(on)} className="catalog-frame catalog-frame-wide">
-              <Inline justify="between">
+              <Inline justify={JUSTIFY.BETWEEN}>
                 <Text tone={TEXT_TONE.MUTED}>{on ? "Archive runs" : "Keep runs"}</Text>
                 <SwitchMark checked={on} />
               </Inline>

@@ -1,7 +1,7 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { ConfirmDialog, type DialogQuestion, TrashIcon, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import type { MenuAction } from "./action-menu.js";
 
@@ -62,10 +62,7 @@ export function useAgentDelete(
     dialog: (
       <ConfirmDialog
         confirm={confirm}
-        question={deleteQuestion(
-          agentTabLabel(agent, agents.models),
-          agent.archivedAt !== undefined,
-        )}
+        question={deleteQuestion(agentName(agent, agents.models), agent.archivedAt !== undefined)}
       />
     ),
   };

@@ -1,4 +1,5 @@
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
+import { countWords, TERM } from "@luke/features/words";
 import {
   ALIGN,
   Badge,
@@ -54,11 +55,6 @@ const SEPARATOR = " · ";
 /** The most labels a card names, so one with many stays a card's height; the rest are counted in a last pill. */
 const MAX_LABELS = 6;
 
-/** A count and the noun it counts, the noun in the plural unless the count is one. */
-function counted(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
 /** The first line: where it stands, and the lines it adds and removes across the files it changes. */
 function SizeNote({
   heading,
@@ -68,7 +64,7 @@ function SizeNote({
   pullRequest: StandingPullRequest;
 }): React.JSX.Element {
   const { lines, files } = pullRequest;
-  const filesWords = files === undefined ? undefined : counted(files, "file", "files");
+  const filesWords = files === undefined ? undefined : countWords(files, TERM.FILE);
   return (
     <HoverCardNote>
       {heading}

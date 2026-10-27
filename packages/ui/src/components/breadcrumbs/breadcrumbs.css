@@ -1,43 +1,21 @@
-/* breadcrumbs.css -- a path's crumbs in a row, each its glyph where it
-   wears one then its words, the chevrons between them plain. A bar's path narrows crumb by crumb, cut short at their ends,
-   clipped past the keyboard's ring on a crumb, and gives way at the widths
-   of the `BreadcrumbBar` holding it; a
-   toolbar's heading keeps its way back whole and cuts the page's name
-   short. */
+/* breadcrumbs.css -- what a path's utilities cannot say: the widths of the
+   `BreadcrumbBar` a crumb and its chevron are drawn at, each crumb's share
+   of a narrow bar and its floor, the clip past the keyboard's ring, and the
+   motions of a crumb that comes and goes. The rest of its look is the
+   utilities `breadcrumbs.tsx` spells. */
 
 @layer components {
-  /* Note that the row's gap is the bar's own, inherited, because the bar it
-     fills is what spaces its controls, and two bars space theirs apart. */
-  .luke-breadcrumb-bar {
-    container: luke-breadcrumb-bar / inline-size;
-    display: flex;
-    min-width: 0;
-    flex: 1 1 auto;
-    align-items: center;
-    gap: inherit;
-  }
-
+  /* Note that the path clips past the keyboard's ring on a crumb, which no
+     utility spells. */
   .luke-breadcrumbs {
-    position: relative;
-    min-width: 0;
-    flex: 0 1 auto;
-    overflow: clip;
     overflow-clip-margin: padding-box
       calc(var(--luke-focus-ring-width) + var(--luke-focus-ring-offset));
   }
 
-  .luke-breadcrumbs ol {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
+  /* Note that a crumb's and a chevron's display stay here, because the
+     widths below hide them, and a display utility would outrank that. */
   .luke-breadcrumbs li {
     display: flex;
-    align-items: center;
   }
 
   /* A crumb that keeps its size, so a narrow bar cuts the crumbs after it
@@ -48,62 +26,6 @@
 
   .luke-breadcrumb-separator {
     display: flex;
-    flex: none;
-    align-items: center;
-  }
-
-  /* A crumb's glyph, where it wears one, then its words, cut short at
-     their end. */
-  .luke-breadcrumb-words,
-  .luke-breadcrumb-button {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: var(--luke-space-4);
-  }
-
-  .luke-breadcrumb-words {
-    color: var(--luke-color-text);
-  }
-
-  .luke-breadcrumb-glyph {
-    display: flex;
-    flex: none;
-  }
-
-  .luke-breadcrumb-glyph svg {
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
-  }
-
-  /* A crumb's words cut short fade out over their last few pixels
-     (`one-line.css`), as a browser's tab ends a long title. */
-  .luke-breadcrumb-label {
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-  }
-
-  .luke-breadcrumb-button {
-    padding: var(--luke-space-2) var(--luke-space-4);
-    border: 0;
-    border-radius: var(--luke-radius-6);
-    background: none;
-    color: var(--luke-color-text-muted);
-    font: inherit;
-    transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease;
-  }
-
-  .luke-breadcrumb-button:hover,
-  .luke-breadcrumb-button[aria-expanded="true"] {
-    background: var(--luke-color-fill-selected);
-    color: var(--luke-color-text);
-  }
-
-  .luke-breadcrumb-button[aria-current="page"] {
-    color: var(--luke-color-text);
   }
 
   /* A crumb that comes and goes (`shown`) lands in the path at once and
@@ -112,7 +34,7 @@
      rise, and its tokens hold the fade still. */
   .luke-breadcrumbs li[data-motion="arriving"] {
     animation:
-      luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
+      luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-breadcrumb-rise var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 
@@ -122,7 +44,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .luke-breadcrumbs li[data-motion="arriving"] {
-      animation: luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards;
+      animation: luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards;
     }
   }
 
@@ -144,14 +66,10 @@
     }
   }
 
-  /* A bar's path, in the caption type. A crumb gives way, by its share, down
-     to its first letters, fading out, its chevron always standing
-     before it, and the current one, last, gives way last of all. */
-  .luke-breadcrumbs[data-variant="caption"] {
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-  }
-
+  /* A bar's path: a crumb gives way, by its share, down to its first
+     letters, fading out, its chevron always standing before it, and the
+     current one, last, gives way last of all. Note that the floors stay
+     here, because they hang on `:has()` and on the bar's widths. */
   .luke-breadcrumbs[data-variant="caption"] li {
     min-width: 2.5em;
     flex: 0 9 auto;
@@ -177,45 +95,6 @@
   /* A crumb standing for others a narrow bar leaves out keeps its width. */
   .luke-breadcrumbs[data-variant="caption"] li:is([data-shown="narrow"], [data-shown="narrowest"]) {
     flex-shrink: 0;
-  }
-
-  .luke-breadcrumbs[data-variant="caption"] .luke-breadcrumb-separator {
-    color: var(--luke-color-text-subtle);
-  }
-
-  .luke-breadcrumbs[data-variant="caption"] .luke-breadcrumb-separator svg {
-    width: 12px;
-    height: 12px;
-  }
-
-  /* A toolbar's heading: the way back whole, then the page's name in the
-     dialog heading type, cut short where the toolbar is narrow. */
-  .luke-breadcrumbs[data-variant="title"] {
-    color: var(--luke-color-text-muted);
-  }
-
-  .luke-breadcrumbs[data-variant="title"] :is(ol, li) {
-    gap: var(--luke-space-4);
-  }
-
-  .luke-breadcrumbs[data-variant="title"] li {
-    flex: none;
-  }
-
-  .luke-breadcrumbs[data-variant="title"] li[data-words="true"] {
-    min-width: 0;
-    flex: 0 1 auto;
-  }
-
-  .luke-breadcrumbs[data-variant="title"] .luke-breadcrumb-separator svg {
-    width: 13px; /* off-scale: the crumbs' separator, a size under a control's glyph */
-    height: 13px;
-  }
-
-  .luke-breadcrumbs[data-variant="title"] .luke-breadcrumb-words {
-    font-size: var(--luke-type-dialog-size);
-    font-weight: var(--luke-weight-semibold);
-    line-height: var(--luke-type-dialog-leading);
   }
 
   /* The widths a crumb is drawn at (`shownAt`): a wide bar, or none, draws

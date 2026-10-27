@@ -105,6 +105,7 @@ export const INPUT_LINE = {
   MESSAGE: "message",
   STOP: "stop",
   MODEL: "model",
+  RETIRE: "retire",
 } as const;
 
 /**
@@ -184,7 +185,10 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   /** The hosts a command the agent runs may reach, besides nothing else. */
   allowedDomains: Schema.Array(Schema.String),
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), loaded as a local plugin where the folder holds one. */
-  installedSkills: Schema.optionalKey(Schema.String),
+  installedSkills: Schema.optionalKey(
+    Schema.String,
+  ) /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */,
+  warm: Schema.optionalKey(Schema.Boolean),
 });
 export type ClaudeCodeConfig = typeof ClaudeCodeConfigSchema.Type;
 
@@ -229,7 +233,10 @@ export const CodexConfigSchema = Schema.Struct({
    */
   tokenUrl: Schema.String,
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), whose `skills/` is set as an extra skills root where it is there. */
-  installedSkills: Schema.optionalKey(Schema.String),
+  installedSkills: Schema.optionalKey(
+    Schema.String,
+  ) /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */,
+  warm: Schema.optionalKey(Schema.Boolean),
 });
 export type CodexConfig = typeof CodexConfigSchema.Type;
 
@@ -290,7 +297,24 @@ const ModelLineSchema = Schema.Struct({
   fast: Schema.optionalKey(Schema.Boolean),
 });
 
-export const InputLineSchema = Schema.Union([MessageLineSchema, StopLineSchema, ModelLineSchema]);
+/**
+ * End the launch if it is warm: its turn over, nothing in flight, no
+ * message of Luke's unanswered, and no turn of the CLI's own begun since.
+ * Luke writes it once a warm launch has idled past its window
+ * (`coder-host/runner-sessions.ts`'s `retireWarmRunner`), and a launch in
+ * any other state skips it, so a message Luke wrote ahead of it on the same
+ * stdin always wins.
+ */
+const RetireLineSchema = Schema.Struct({
+  type: Schema.Literal(INPUT_LINE.RETIRE),
+});
+
+export const InputLineSchema = Schema.Union([
+  MessageLineSchema,
+  StopLineSchema,
+  ModelLineSchema,
+  RetireLineSchema,
+]);
 export type InputLine = typeof InputLineSchema.Type;
 
 /**
@@ -302,12 +326,17 @@ export type InputLine = typeof InputLineSchema.Type;
  * it: the CLI never echoes a prompt back. WAITING follows a `result` the run
  * outlives, because the Stop hook before it reported background work or a
  * scheduled wakeup still to come: the agent is waiting, not done, and the
- * sandbox must stay up. END is the last event a launch posts, with why it
- * ended.
+ * sandbox must stay up. IDLE follows a `result`, or Codex's
+ * `turn/completed`, that leaves nothing in flight or unanswered: the agent's
+ * turn is over, as a `turn_ended` END says, but the launch stays warm
+ * (`RUNNER_WARM`), so Luke's next message is a line on its stdin rather than
+ * a resumed sandbox and a relaunched CLI. END is the last event a launch
+ * posts, with why it ended.
  */
 export const RUNNER_EVENT = {
   ACCEPTED: "luke_runner_accepted",
   WAITING: "luke_runner_waiting",
+  IDLE: "luke_runner_idle",
   END: "luke_runner_end",
 } as const;
 
@@ -328,8 +357,27 @@ export const RUNNER_END = {
    * come due. The turn is over, as a `turn_ended` one is.
    */
   RELEASED: "released",
+  /** A warm launch ended with no turn under way: retired by Luke past its window, or past `RUNNER_WARM.IDLE_CAP_MS` on its own. Its turn was already over at its IDLE. */
+  IDLED: "idled",
 } as const;
 export type RunnerEnd = (typeof RUNNER_END)[keyof typeof RUNNER_END];
+
+/**
+ * How long a warm launch waits on its own. Luke retires a warm launch once
+ * it idled past its window (`CODER.RUNNER_WARM`), under the runner lease, so
+ * no message it writes is lost to the end; this cap is the launch's own
+ * bound where Luke never does, since the heartbeat keeps its sandbox alive
+ * for as long as it runs. A message Luke writes in the instant the cap ends
+ * the launch stays unaccepted, as one a released wait ends on does.
+ */
+export const RUNNER_WARM = {
+  IDLE_CAP_MS: 60 * 60 * 1_000,
+} as const;
+
+/** The IDLE event: the agent's turn is over, and the launch stays warm for the next message. */
+export interface RunnerIdle {
+  readonly type: typeof RUNNER_EVENT.IDLE;
+}
 
 /** The ACCEPTED event: the message line, by its `uuid`, handed to the SDK, or taken by Codex's app-server. */
 export interface RunnerAccepted {
@@ -460,6 +508,7 @@ export type RunnerMessage =
   | CodexNotification
   | RunnerAccepted
   | RunnerWaiting
+  | RunnerIdle
   | RunnerEndEvent;
 
 /** One event as posted: its number and its message. */

@@ -26,7 +26,8 @@ import { layContainersAt } from "../testing/container-width.js";
  * (`testing/container-width.ts`) and the surface is drawn as its owners draw
  * it. jsdom resolves no `var()` in a shorthand, so what the rules matching
  * the surface declare is read, the later rule's winning, as they are laid in
- * the cascade's order.
+ * the cascade's order: the longhands the theme's utilities declare, and the
+ * shadow the shadow utility hands its `box-shadow` (`--tw-shadow`).
  */
 
 let laid: HTMLStyleElement | undefined;
@@ -88,9 +89,9 @@ test("a list hung by its owner wears the menu's own ground, edge, corner, and sh
     "find-bar",
   ]) {
     const says = surface(owner);
-    assert.equal(says("background"), "var(--luke-color-overlay)", owner);
+    assert.equal(says("background-color"), "var(--luke-color-overlay)", owner);
     assert.equal(says("border-radius"), "var(--luke-menu-radius)", owner);
-    assert.equal(says("box-shadow"), "var(--luke-menu-shadow)", owner);
+    assert.equal(says("--tw-shadow"), "var(--luke-menu-shadow)", owner);
     assert.match(says("animation") ?? "", /^luke-menu-arrive .*luke-menu-drop /s, owner);
   }
 });
@@ -126,9 +127,10 @@ test("a toolbar floats on the menu's ground, edge, and shadow, a hair round its 
     "comment-bubble",
   ]) {
     const says = surface(owner, undefined, undefined, MENU_SURFACE_FLOW.TOOLBAR);
-    assert.equal(says("background"), "var(--luke-color-overlay)", owner);
-    assert.equal(says("border"), "1px solid var(--luke-color-border-strong)", owner);
-    assert.equal(says("box-shadow"), "var(--luke-menu-shadow)", owner);
+    assert.equal(says("background-color"), "var(--luke-color-overlay)", owner);
+    assert.equal(says("border-width"), "1px", owner);
+    assert.equal(says("border-color"), "var(--luke-color-border-strong)", owner);
+    assert.equal(says("--tw-shadow"), "var(--luke-menu-shadow)", owner);
     assert.equal(says("flex-direction"), "row", owner);
     assert.equal(says("padding"), "var(--luke-space-2)", owner);
     assert.equal(says("animation"), "none", owner);

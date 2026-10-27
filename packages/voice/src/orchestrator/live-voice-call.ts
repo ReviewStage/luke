@@ -1,3 +1,4 @@
+import type { VoiceFailure } from "@luke/features/words";
 import type { LiveStatus } from "@luke/live";
 import type { LiveConversationLine } from "@luke/wire/conversation";
 import type { Effect } from "effect";
@@ -82,8 +83,8 @@ export interface LiveVoiceCallEvents {
    * speaks are the captions.
    */
   onCaptions(rows: readonly LiveCaptionRow[]): void;
-  /** The one failure a session can end in that the panel should say. */
-  onError(message: string): void;
+  /** A failure the panel should say, as its key: never a browser's text. */
+  onError(failure: VoiceFailure): void;
 }
 
 /** One caption row: whose it is, its words so far, and whether a fragment may still join it; the line the panel is handed, under the name the captions know it by. */

@@ -3,14 +3,9 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
-import {
-  type GitHubPullRequestSummary,
-  type IssueState,
-  issueAddressOf,
-  pullRequestAddressOf,
-} from "@luke/features/github-repositories-wire";
+import type { GitHubPullRequestSummary, IssueState } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { linearIssueIdentifierOf } from "@luke/features/linear-wire";
+import { issueAddressOf, pullRequestAddressOf, readLinearIssue } from "@luke/features/link-grammar";
 import { MENTION_KIND, type Mention } from "@luke/features/mention-link";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -211,7 +206,7 @@ function askedOf(mention: Mention): Asked | undefined {
   // Note that a well-known site's page names no provider to ask.
   if (mention.kind !== MENTION_KIND.LINK || !("provider" in mention)) return undefined;
   if (mention.provider === INTEGRATION_PROVIDER.LINEAR) {
-    const identifier = linearIssueIdentifierOf(mention.url);
+    const identifier = readLinearIssue(mention.url);
     return identifier === undefined ? undefined : { provider: mention.provider, identifier };
   }
   if (mention.provider === INTEGRATION_PROVIDER.GITHUB) return githubAskedOf(mention.url);

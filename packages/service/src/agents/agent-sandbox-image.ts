@@ -13,6 +13,8 @@
  * `ImagePreparing`, which a launch answers with `IMAGE_PREPARING_STATUS` for
  * its caller to show as the agent's status and to retry; the build goes on
  * meanwhile, moved on by the next launch or the scheduled sweep. A launch
+ * that runs past its request's answer waits on the build's own end
+ * (`prepared`) before it asks again. A launch
  * whose create finds the snapshot gone hands it back (`snapshotGone`), and
  * answers `ImagePreparing` too.
  */
@@ -51,6 +53,13 @@ export interface AgentSandboxImageService {
    * same snapshot.
    */
   readonly snapshotGone: (snapshotId: string) => Effect.Effect<void, SandboxUnavailable>;
+  /**
+   * Waits on a template being built until its build ends, for at most
+   * `NATIVE_TEMPLATE.WAIT` whatever `snapshotId` waits, and answers whether
+   * the image is no longer being prepared, so a launch past its request's
+   * answer that found it preparing asks again the moment it is worth asking.
+   */
+  readonly prepared: Effect.Effect<boolean, SandboxUnavailable>;
 }
 
 export class AgentSandboxImage extends Context.Service<
@@ -83,6 +92,10 @@ export const agentSandboxImageFromTemplate = (
         }),
         snapshotGone: (snapshotId) =>
           Effect.asVoid(Effect.flatMap(build, (built) => forgetSnapshot(api, built, snapshotId))),
+        prepared: Effect.map(
+          Effect.flatMap(build, (built) => awaitTemplate(api, built, NATIVE_TEMPLATE.WAIT)),
+          (template) => template.state !== TEMPLATE_STATE.PREPARING,
+        ),
       };
     }),
   );

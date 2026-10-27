@@ -154,6 +154,7 @@ export function useInboxListing(
     waiting:
       tasks.inbox.some((each) => each.taskId === taskId) ||
       waitingTaskless.some((each) => each.agentId === chosenAgentId),
+    readerId: tasks.me,
     agents,
   });
   // Note that the models come from the open task's agents where this task's have not read them, so an agent is named alike in both.
@@ -297,9 +298,12 @@ export function useInboxListing(
   }, [standIn, choose]);
   // Note that a close the agent hears may open its turn, so its agents are read again once it is taken.
   const closeItem = useInboxCloser({ act, onHeard: agents.onRetryList });
+  // Note that a task list that failed leaves the Inbox holding nothing to read, which would otherwise say it was empty.
+  const failed = read.failed || taskless.failed || tasks.listFailed;
   const onRetry = () => {
     read.onRetry();
     taskless.onRetry();
+    if (tasks.listFailed) tasks.onRetryList();
   };
   return {
     view,
@@ -328,6 +332,7 @@ export function useInboxListing(
     searched,
     missing,
     reading,
+    failed,
     choose,
     closeItem,
     onRetry,

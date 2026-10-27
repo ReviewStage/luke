@@ -1,3 +1,4 @@
+import { VOICE_FAILURE, type VoiceFailure } from "@luke/features/words";
 import { LIVE_SESSION_OUTCOME, type LiveDiagnostics } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "./audio.js";
 
@@ -10,33 +11,32 @@ import { MICROPHONE_STATUS, type MicrophoneStatus } from "./audio.js";
  */
 export const VOICE_KEYLESS_NOTE = "Voice is off: sign in to turn it on.";
 
-const HOSTED_VOICE_UNAVAILABLE_NOTE = "Voice is temporarily unavailable. Try again later.";
-
 /** Why a call or a dictated clip cannot run: it runs on the account's own OpenAI key, and none is saved. */
 export const OPENAI_KEY_MISSING_NOTE = "Add an OpenAI API key in Settings";
 
-const NATIVE_AGENT_CALL_NOTE = "This agent runs on Claude or Codex and can't take calls yet.";
-
-const CREDENTIAL_MISSING_CALL_NOTE = "Connect an API key in Settings to call this agent.";
-
 /**
- * A plain customer-facing answer when the service refuses a session for a
- * reason the developer can read: the hosted emergency brake, a call into
- * an agent that runs natively, which takes no call yet, or one into an
- * agent no credential of its starter's pays for.
+ * The failure a session the service refused is said as, where the reason is
+ * one the developer can read: the hosted emergency brake, a call into an
+ * agent that runs natively, which takes no call yet, a call with no OpenAI
+ * key saved, or one whose saved key OpenAI refused or found unfunded, or one
+ * into an agent no credential of its starter's pays for.
  */
-export function hostedVoiceUnavailableNote(
+export function hostedVoiceFailure(
   diagnostics: LiveDiagnostics | undefined,
-): string | undefined {
+): VoiceFailure | undefined {
   switch (diagnostics?.lastOutcome) {
     case LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED:
-      return HOSTED_VOICE_UNAVAILABLE_NOTE;
+      return VOICE_FAILURE.VOICE_UNAVAILABLE;
     case LIVE_SESSION_OUTCOME.NATIVE_AGENT_NOT_HERE:
-      return NATIVE_AGENT_CALL_NOTE;
+      return VOICE_FAILURE.NATIVE_AGENT;
     case LIVE_SESSION_OUTCOME.OPENAI_KEY_MISSING:
-      return OPENAI_KEY_MISSING_NOTE;
+      return VOICE_FAILURE.OPENAI_KEY_MISSING;
+    case LIVE_SESSION_OUTCOME.OPENAI_KEY_REFUSED:
+      return VOICE_FAILURE.OPENAI_KEY_REFUSED;
+    case LIVE_SESSION_OUTCOME.OPENAI_KEY_UNFUNDED:
+      return VOICE_FAILURE.OPENAI_KEY_UNFUNDED;
     case LIVE_SESSION_OUTCOME.AGENT_CREDENTIAL_MISSING:
-      return CREDENTIAL_MISSING_CALL_NOTE;
+      return VOICE_FAILURE.AGENT_KEY_MISSING;
     default:
       return undefined;
   }

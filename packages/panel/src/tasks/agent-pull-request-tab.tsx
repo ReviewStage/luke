@@ -32,7 +32,9 @@ import {
   type LinkPlace,
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
-} from "@luke/features/luke-link";
+} from "@luke/features/link-grammar";
+import { formatCount } from "@luke/features/number-format";
+import { workingTime } from "@luke/features/time-format";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   AVATAR_SHAPE,
@@ -51,9 +53,7 @@ import {
   ChipName,
   ChoiceBar,
   type ChoiceItem,
-  COUNT_TONE,
   type CountPart,
-  type CountTone,
   DETAIL_PAGE_INSET,
   DetailPage,
   DISCLOSURE_SUMMARY,
@@ -83,7 +83,9 @@ import {
   Skeleton,
   SkeletonRegion,
   SpinnerRegion,
+  STATUS_TONE,
   Stack,
+  type StatusTone,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -98,7 +100,6 @@ import {
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
-import { formatLocaleCount, workingTime } from "@luke/ui/time-format";
 import {
   BookOpenIcon,
   BotIcon,
@@ -138,7 +139,7 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { type HandTabActions, useHandedTabActions } from "../desktop/strip-tabs.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import {
   AgentChangesTab,
   type ChangesReads,
@@ -189,6 +190,7 @@ import {
   PullRequestCommentBox,
   usePullRequestComment,
 } from "./pull-request-comment-box.js";
+import { PullRequestDescription } from "./pull-request-description.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
 import { PullRequestNumberProvider, pullRequestOfTab } from "./pull-request-number.js";
 import {
@@ -226,6 +228,7 @@ import {
   useWindowThreadReveal,
 } from "./thread-reveal.js";
 import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
+import { usePushedLineMoved } from "./use-agent-pull-request.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { type OpenHere, OpenHereFirst, useOpenLink, useOpenPlace } from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
@@ -361,7 +364,7 @@ const PULL_REQUEST_WORDS = {
   LEFT: "left",
   /** What the Files changed tab's hint says of every line the pull request changes. */
   total: (additions: number, deletions: number) =>
-    `+${formatLocaleCount(additions)} −${formatLocaleCount(deletions)} total`,
+    `+${formatCount(additions)} −${formatCount(deletions)} total`,
 } as const;
 
 /** The lines a review thread is on, as its head names them: where it stands now, else where it was made; none for a thread on the whole file. */
@@ -803,7 +806,6 @@ function PartSkeleton({
     <SkeletonRegion label={label}>
       <div className="pull-request-skeleton">
         {widths.map((width, at) => (
-          // oxlint-disable-next-line react/no-array-index-key -- a skeleton's blocks never move.
           <Skeleton key={at} width={width} />
         ))}
       </div>
@@ -1540,7 +1542,7 @@ function Deployments({
 }): React.JSX.Element | null {
   if (deployments.length === 0) return null;
   return (
-    <Section title="Deployments" count={formatLocaleCount(deployments.length)}>
+    <Section title="Deployments" count={formatCount(deployments.length)}>
       <List label="Deployment list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
         {deployments.map((deployment) => (
           <DeploymentRow key={deployment.environment} agentId={agentId} deployment={deployment} />
@@ -1604,7 +1606,7 @@ function PreviewControl({
         variant={BUTTON_VARIANT.OUTLINE}
         icon={<ScanSearchIcon />}
         label={PULL_REQUEST_WORDS.PREVIEWS}
-        trailing={formatLocaleCount(serving.length)}
+        trailing={formatCount(serving.length)}
         {...menu.trigger()}
       >
         {PULL_REQUEST_WORDS.PREVIEW}
@@ -1651,15 +1653,20 @@ function ChecksPart({
   );
 }
 
-/** The description, as the pull request's read carries it, with the reactions it wears once the conversation's read, which carries them, lands; a skeleton while its read is out, and nothing where it failed, whose failure stands under the title. */
+/** The description, as the pull request's read carries it, edited in place where the member may edit it (`./pull-request-description.tsx`), with the reactions it wears once the conversation's read, which carries them, lands; a skeleton while its read is out, and nothing where it failed, whose failure stands under the title. */
 function DescriptionPart({
+  agentId,
   part,
+  onRead,
   reactions,
   subject,
   picture,
   fold,
 }: {
+  agentId: string;
   part: Part<CodingAgentOverviewPullRequest>;
+  /** Asks the pull request's read again, as an edit of the description does once GitHub answered it. */
+  onRead: () => void;
   reactions: readonly ReactionGroup[] | undefined;
   /** The GraphQL id a reaction is given to the description by, which the conversation's read names. */
   subject: string | undefined;
@@ -1667,6 +1674,16 @@ function DescriptionPart({
   fold: SectionFold;
 }): React.JSX.Element | null {
   if (part.kind === PART.FAILED || part.kind === PART.NONE) return null;
+  const words =
+    part.kind !== PART.LANDED || part.value.html === "" ? undefined : (
+      <div className="pull-request-words">
+        <EntryPictures html={part.value.html}>
+          <Anchored>
+            <GitHubWords html={part.value.html} picture={picture} />
+          </Anchored>
+        </EntryPictures>
+      </div>
+    );
   return (
     <Section title="Description" fold={fold}>
       {part.kind === PART.PENDING ? (
@@ -1674,16 +1691,22 @@ function DescriptionPart({
           label={PULL_REQUEST_WORDS.READING_DESCRIPTION}
           widths={["90%", "75%", "82%", "40%"]}
         />
-      ) : part.value.html === "" ? (
-        <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_DESCRIPTION}</p>
+      ) : part.value.canEditDescription === true && part.value.body !== undefined ? (
+        // Note that it is keyed by its pull request, so words left in one pull request's editor are never another's.
+        <PullRequestDescription
+          key={part.value.number}
+          agentId={agentId}
+          pullRequest={part.value}
+          body={part.value.body}
+          drawn={words}
+          onRead={onRead}
+        />
       ) : (
-        <div className="pull-request-words">
-          <EntryPictures html={part.value.html}>
-            <Anchored>
-              <GitHubWords html={part.value.html} picture={picture} />
-            </Anchored>
-          </EntryPictures>
-        </div>
+        (words ?? (
+          <p className="pull-request-quiet pull-request-none">
+            {PULL_REQUEST_WORDS.NO_DESCRIPTION}
+          </p>
+        ))
       )}
       {part.kind === PART.PENDING ? null : <Reactions reactions={reactions} subject={subject} />}
     </Section>
@@ -1819,11 +1842,11 @@ const SUMMARY_WORDS = {
 
 /** The tone the Checks tab's count takes for how its checks went, as its glyph does. */
 const SUMMARY_TONES = {
-  [CHECK_SUMMARY.FAILING]: COUNT_TONE.DANGER,
-  [CHECK_SUMMARY.PENDING]: COUNT_TONE.ATTENTION,
-  [CHECK_SUMMARY.PASSING]: COUNT_TONE.COMPLETE,
-  [CHECK_SUMMARY.NONE]: COUNT_TONE.QUIET,
-} as const satisfies Record<CheckSummary, CountTone>;
+  [CHECK_SUMMARY.FAILING]: STATUS_TONE.DANGER,
+  [CHECK_SUMMARY.PENDING]: STATUS_TONE.WORKING,
+  [CHECK_SUMMARY.PASSING]: STATUS_TONE.COMPLETE,
+  [CHECK_SUMMARY.NONE]: STATUS_TONE.NEUTRAL,
+} as const satisfies Record<CheckSummary, StatusTone>;
 
 /** What the Checks tab counts: how they went in its colour from the first frame, and how many once read; nothing where neither stands. */
 function checksCount(
@@ -1832,7 +1855,7 @@ function checksCount(
 ): readonly CountPart[] | undefined {
   const glyph = SUMMARY_GLYPHS[summary];
   if (glyph === null && count === undefined) return undefined;
-  const text = count === undefined ? "" : formatLocaleCount(count);
+  const text = count === undefined ? "" : formatCount(count);
   const tone = SUMMARY_TONES[summary];
   return [
     glyph === null ? { text, tone } : { text, tone, glyph, glyphLabel: SUMMARY_WORDS[summary] },
@@ -1921,8 +1944,7 @@ function tabsOf(
       value: PULL_REQUEST_VIEW.CONVERSATION,
       icon: <MessagesSquareIcon />,
       label: "Conversation",
-      count:
-        conversation === undefined ? undefined : formatLocaleCount(conversationCount(conversation)),
+      count: conversation === undefined ? undefined : formatCount(conversationCount(conversation)),
     },
     {
       value: PULL_REQUEST_VIEW.CHECKS,
@@ -1940,7 +1962,7 @@ function tabsOf(
       value: PULL_REQUEST_VIEW.CHAPTERS,
       icon: <BookOpenIcon />,
       label: "Chapters",
-      count: chapterCount === undefined ? undefined : formatLocaleCount(chapterCount),
+      count: chapterCount === undefined ? undefined : formatCount(chapterCount),
     },
     {
       value: PULL_REQUEST_VIEW.FILES,
@@ -1979,7 +2001,7 @@ function ConversationFilter({
         onClick={() => onChange(!on)}
       >
         <ChipName>{label}</ChipName>
-        {count === undefined ? null : <ChipCount>{formatLocaleCount(count)}</ChipCount>}
+        {count === undefined ? null : <ChipCount>{formatCount(count)}</ChipCount>}
       </Chip>
       {note === undefined ? null : (
         <span id={noteId} hidden>
@@ -2071,7 +2093,9 @@ function ConversationView({
     >
       <div className="pull-request-page">
         <DescriptionPart
+          agentId={agentId}
           part={parts.pullRequest}
+          onRead={parts.ask.pullRequest}
           reactions={landed(parts.conversation)?.descriptionReactions}
           subject={landed(parts.conversation)?.descriptionSubject}
           picture={picture}
@@ -2208,7 +2232,7 @@ function useThreadJumps(input: {
   const gone = jump !== undefined && conversation.kind === PART.LANDED && target === undefined;
   useEffect(() => {
     if (!gone) return;
-    toast({ words: THREAD_REVEAL_WORDS.GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+    toast({ words: THREAD_REVEAL_WORDS.GONE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     setJump(undefined);
   }, [gone, toast]);
   const letGo = useCallback((ask: number) => {
@@ -2235,7 +2259,7 @@ function useThreadJumps(input: {
             if (jump.ask !== ask || target.id === undefined) return;
             toast({
               words: THREAD_REVEAL_WORDS.FILE_GONE,
-              tone: TOAST_TONE.FAILED,
+              tone: STATUS_TONE.DANGER,
               hold: TOAST_HOLD.FAILED,
             });
             latestView.current(PULL_REQUEST_VIEW.CONVERSATION);
@@ -2522,6 +2546,8 @@ function PullRequestTabBody({
     [url, reading],
   );
   useHandedTabActions(onActions, handed);
+  // Note that the reads Refresh runs run again as the task list's pushed line of the pull request moves (its state, its checks, or its place in the queue), so an open tab and its merge box never go stale.
+  usePushedLineMoved(url, shown, () => refreshNow.current());
   // Files changed's reads, held here so its tab's count reads the same marks it draws, and the
   // Chapters view draws the same files and marks; asked as either is first shown.
   const changes = useChangesReads(
@@ -2622,6 +2648,7 @@ function PullRequestTabBody({
                         <PullRequestStateMenu
                           pullRequest={held}
                           queued={overview?.merging?.queued}
+                          shown={shown}
                           writes={writes}
                         />
                       </div>

@@ -7,7 +7,7 @@ import { type Effect, Stream } from "effect";
 import { decodedLiveRows, type LiveBroken, type LiveClient } from "./live-follow.js";
 
 /**
- * task-record-follow.ts -- where an open task's pages and agents' code stand, followed by the host over a Neon Realtime subscription, so a part is read again only once its mark moved.
+ * task-record-follow.ts -- where an open task's plan, pages, and agents' code stand, followed by the host over a Neon Realtime subscription, so a part is read again only once its mark moved.
  *
  * The service seals one statement a part (`task-record-live.ts`), each a
  * mark that moves as its rows do and carries none of their words. The host
@@ -22,6 +22,7 @@ import { decodedLiveRows, type LiveBroken, type LiveClient } from "./live-follow
 
 /** A part of the record the panel reads again once its mark moves. */
 export const TASK_RECORD_PART = {
+  PLAN: "plan",
   PAGES: "pages",
   CODE: "code",
 } as const;
@@ -30,6 +31,12 @@ export type TaskRecordPart = (typeof TASK_RECORD_PART)[keyof typeof TASK_RECORD_
 
 /** Every part, which the first delivery moves, since the reads the task opened with may have missed what it says. */
 const EVERY_TASK_RECORD_PART: readonly TaskRecordPart[] = Object.values(TASK_RECORD_PART);
+
+/** What a delivery moved: its parts, and when the plan was last saved as it delivered it, none for a task the account no longer reaches. */
+export interface TaskRecordMove {
+  readonly parts: readonly TaskRecordPart[];
+  readonly planSavedAt: number | undefined;
+}
 
 /** A seal the service did not answer, `gone` where the task is no longer the account's. */
 type Unsealed = { readonly failure: string; readonly gone?: boolean };
@@ -50,8 +57,8 @@ function markOf<Row>(rows: readonly Row[], key: (row: Row) => string): string {
 }
 
 /**
- * The parts a delivery moved from the one before: the pages where their
- * rows differ, and the code where the `show_code` calls the agents'
+ * The parts a delivery moved from the one before: the plan where its last
+ * save moved, the pages where their rows differ, and the code where the `show_code` calls the agents'
  * journals answered do. The first delivery moves every part.
  */
 function movedParts(
@@ -59,16 +66,19 @@ function movedParts(
   rows: TaskRecordLiveRows,
 ): readonly TaskRecordPart[] {
   if (before === undefined) return EVERY_TASK_RECORD_PART;
+  const planOf = (read: TaskRecordLiveRows) => markOf(read.plan, (plan) => plan.taskId);
   const pagesOf = (read: TaskRecordLiveRows) => markOf(read.pages, (page) => page.pageId);
   const codeOf = (read: TaskRecordLiveRows) => markOf(read.code, (journal) => journal.id);
   return [
+    ...(planOf(before) === planOf(rows) ? [] : [TASK_RECORD_PART.PLAN]),
     ...(pagesOf(before) === pagesOf(rows) ? [] : [TASK_RECORD_PART.PAGES]),
     ...(codeOf(before) === codeOf(rows) ? [] : [TASK_RECORD_PART.CODE]),
   ];
 }
 
 /**
- * The parts of the record each delivery moved, from the first seal for as
+ * The parts of the record each delivery moved, with the plan's last save as
+ * it delivered it, from the first seal for as
  * long as the caller's scope stands, a delivery that moved none left out.
  * It fails where the subscription stops for good or a row does not decode,
  * which the caller answers by sealing it again.
@@ -76,7 +86,7 @@ function movedParts(
 export function taskRecordMoves(
   dependencies: TaskRecordFollowDependencies,
   first: TaskRecordLiveAnswer,
-): Stream.Stream<readonly TaskRecordPart[], LiveBroken> {
+): Stream.Stream<TaskRecordMove, LiveBroken> {
   return decodedLiveRows(
     {
       openLive: dependencies.openLive,
@@ -90,8 +100,9 @@ export function taskRecordMoves(
     Stream.mapAccum(
       (): TaskRecordLiveRows | undefined => undefined,
       (before: TaskRecordLiveRows | undefined, rows: TaskRecordLiveRows) => {
-        const moved = movedParts(before, rows);
-        return [rows, moved.length === 0 ? [] : [moved]] as const;
+        const parts = movedParts(before, rows);
+        const planSavedAt = rows.plan[0]?.savedAt;
+        return [rows, parts.length === 0 ? [] : [{ parts, planSavedAt }]] as const;
       },
     ),
   );

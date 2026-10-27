@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { callHeading } from "@luke/ui/time-format";
+import { callHeading } from "@luke/features/time-format";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";

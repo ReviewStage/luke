@@ -1,6 +1,5 @@
 import type { OutputAudioState } from "@luke/voice/audio";
 import { LINE_UNAVAILABLE, lineWatcher } from "./line-watcher";
-import type { NativeHelperProcess } from "./native-helper";
 
 /**
  * The line the helper says when it has nothing to report. Parsed rather than
@@ -24,11 +23,6 @@ interface OutputVolumeEdges {
   onUnavailable(): void;
 }
 
-interface OutputVolumeWatcherOptions extends OutputVolumeEdges {
-  /** Injectable so the reader can be exercised without a Mac or a binary. */
-  spawnHelper?: () => NativeHelperProcess | undefined;
-}
-
 export interface OutputVolumeWatch {
   /**
    * Starts the helper, reporting whether it could be launched at all. A `true`
@@ -45,8 +39,7 @@ export interface OutputVolumeWatch {
  * else and can write nothing at all. What it learns drives only what the
  * renderer draws — a hint asking for volume while Luke speaks unheard.
  */
-export function outputVolumeWatcher(options: OutputVolumeWatcherOptions): OutputVolumeWatch {
-  const { spawnHelper } = options;
+export function outputVolumeWatcher(options: OutputVolumeEdges): OutputVolumeWatch {
   const watch = lineWatcher<OutputAudioState>({
     binary: "mac-output-volume",
     parse: (line) =>
@@ -57,14 +50,11 @@ export function outputVolumeWatcher(options: OutputVolumeWatcherOptions): Output
     // device can change to one the helper can read, so the watcher stays up
     // and only the current answer is withdrawn.
     unavailableLineEnds: false,
-    ...(spawnHelper ? { spawnProcess: spawnHelper } : undefined),
   });
 
   return {
     start: () => watch.start(),
-    stop: () => {
-      void watch.stop();
-    },
+    stop: () => watch.stop(),
   };
 }
 

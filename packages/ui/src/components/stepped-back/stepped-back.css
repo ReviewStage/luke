@@ -20,10 +20,6 @@
     color: var(--luke-color-text-muted);
   }
 
-  .luke-stepped-back .luke-field-label {
-    color: var(--luke-color-text-muted);
-  }
-
   /* A button keeps its shape, its words and edge going quiet rather than
      the whole of it fading, as an unavailable one does. */
   .luke-stepped-back .luke-button {

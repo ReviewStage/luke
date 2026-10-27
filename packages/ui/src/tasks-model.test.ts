@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { TASK_BOUNDS, TASK_STATUS } from "@luke/features/task-wire";
 import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
+import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
 import { LIVE_STATUS } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
@@ -20,6 +21,7 @@ import {
   settleChanges,
   settledNote,
   settleOffered,
+  standingCallStatus,
   statusedView,
   TASK_MARK,
   taskNameOfIssue,
@@ -98,6 +100,36 @@ test("an agent's Call button asks for the permission first, then calls the agent
   );
   // Another agent's call heard is one the press hangs up, not one it mutes.
   assert.equal(microphoneButton({ ...input, listening: true, call: other }).label, CALL_LABEL);
+});
+
+test("a voice window given up on for the run says so on the Call button, and how to get voice back, in place of a press", () => {
+  const input = {
+    voiceAvailable: true,
+    microphoneStatus: MICROPHONE_STATUS.GRANTED,
+    agentId: "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40",
+    listening: false,
+    call: undefined,
+    voiceStatus: LIVE_STATUS.IDLE,
+  };
+  assert.deepEqual(microphoneButton({ ...input, voiceLost: true }), {
+    press: MICROPHONE_PRESS.NONE,
+    label: VOICE_FAILURE_WORDS[VOICE_FAILURE.VOICE_WINDOW_LOST].words,
+    muted: false,
+  });
+  // Signed out still says so first: no window would make a call run then.
+  assert.equal(
+    microphoneButton({ ...input, voiceAvailable: false, voiceLost: true }).label,
+    VOICE_KEYLESS_NOTE,
+  );
+  assert.equal(microphoneButton({ ...input, voiceLost: false }).label, CALL_LABEL);
+});
+
+test("a call that failed still has a word on its bar, where an idle voice has none", () => {
+  assert.equal(
+    standingCallStatus({ voiceStatus: LIVE_STATUS.FAILED }, undefined)?.voiceWord,
+    "Call failed",
+  );
+  assert.equal(standingCallStatus({ voiceStatus: LIVE_STATUS.IDLE }, undefined), undefined);
 });
 
 test("an account known to have no OpenAI API key is sent to add one before the microphone is asked for, unknown asks nothing, and its own standing call keeps its mute", () => {

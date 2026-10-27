@@ -21,6 +21,7 @@ import {
   LIVE_GONE,
   type LiveClient,
   liveShown,
+  restarting,
   type SealedRead,
   type TxWait,
 } from "./live-follow.js";
@@ -42,9 +43,6 @@ import {
  * session is no longer the account the follow started for ends it unsaid,
  * and the next sign-in's window follows it again.
  */
-
-/** How long after a read went unanswered, or a follow stopped for good, it is asked again. */
-const LIVE_RESTART = Duration.seconds(5);
 
 /** A live read as the follow asks for it: sealed, or with `poll` its rows inline; a failure where the service answered none. */
 type Sealed<Answer> = Answer | { readonly failure: string };
@@ -128,7 +126,6 @@ function followed<Part extends string, Rows, View>(
         return false;
       }
       kind.failed(AUTOMATION_CALL_FAILURE.UNANSWERED);
-      yield* Effect.sleep(LIVE_RESTART);
       return true;
     }
     /**
@@ -173,10 +170,9 @@ function followed<Part extends string, Rows, View>(
       }
       return false;
     }
-    yield* Effect.sleep(LIVE_RESTART);
     return true;
   });
-  return Effect.asVoid(Effect.repeat(attempt, { while: (again) => again }));
+  return restarting(attempt);
 }
 
 /** What the window follows, followed until interrupted or signed out, each change published under what it is of. */

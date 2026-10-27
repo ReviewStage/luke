@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { BUTTON_SHAPE } from "@luke/ui";
-import { AVATAR_STATUS } from "@luke/voice/avatar";
+import { AVATAR_END_REASON, AVATAR_STATUS, type AvatarEndReason } from "@luke/voice/avatar";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -144,6 +144,15 @@ test("an ended avatar offers Restart video, and the press puts video up again", 
   assert.match(container.textContent ?? "", new RegExp(CALL_VIDEO_LABEL.ENDED));
   act(() => button(container, CALL_VIDEO_LABEL.RESTART)?.click());
   assert.deepEqual(onSetVideo.mock.calls, [[true]]);
+});
+
+test("an ended avatar says why beside Video ended, and says nothing of a reason it is not given", () => {
+  const says = (endReason: AvatarEndReason | undefined) =>
+    mountRoot(tile({ status: AVATAR_STATUS.ENDED, endReason })).container.textContent ?? "";
+  assert.match(says(AVATAR_END_REASON.NO_CAPACITY), /Every video session on your plan is in use\./);
+  assert.match(says(AVATAR_END_REASON.SERVER_CLOSED), /Keyframe closed the video session\./);
+  assert.match(says(AVATAR_END_REASON.ERROR), /The video session failed\./);
+  assert.doesNotMatch(says(undefined), /session|turned|call ended/i);
 });
 
 test("the tile has no hang-up of its own, which the call bar already is", () => {

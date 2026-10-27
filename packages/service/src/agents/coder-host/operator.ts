@@ -55,7 +55,7 @@ import {
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { EXPERIMENT } from "@luke/settings";
-import { Clock, Effect, Option } from "effect";
+import { DateTime, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   HOSTED_REFUSAL,
@@ -130,7 +130,7 @@ const aimedItsHeartbeat = (
   timeZone: string | undefined,
 ) =>
   Effect.gen(function* () {
-    const now = new Date(yield* Clock.currentTimeMillis);
+    const now = yield* DateTime.nowAsDate;
     const trigger = heartbeatTrigger(timeZone, now);
     const aimed = yield* aimOperatorHeartbeat(userId, {
       operatorId: operator.id,

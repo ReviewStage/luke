@@ -2,7 +2,6 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { readTaskHeader } from "@luke/database/models/task-store";
 import { workspaceOf } from "@luke/database/models/workspace-store";
-import { sniffImageType } from "@luke/features/image-signature";
 import { PICTURE_BOUNDS, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress, taskPictureMarkdown } from "@luke/features/plan-attachment-link";
 import { PLAN_ATTACHMENT_BOUNDS } from "@luke/features/plan-attachment-wire";
@@ -27,7 +26,7 @@ import {
   saveNotes,
 } from "../../tasks/plan-notes.js";
 import { CODER } from "./bounds.js";
-import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from "./inbox-image.js";
+import { type InboxSandboxDoor, readSandboxMedia } from "./inbox-image.js";
 
 /**
  * plan-edit.ts -- the coding agent's `edit_plan` tool: the notetaker's own notes, taken into the agent's plan, and pictures from its sandbox added to it.
@@ -49,8 +48,9 @@ import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from 
  * the plan under the developer.
  *
  * Beside its notes the agent may add pictures, which the notetaker cannot,
- * having none: a screenshot it took, named by its file in its sandbox, read
- * as an inbox image's is (`inbox-image.ts`), kept as one of the plan's
+ * having none: a screenshot it took, or a WebM it recorded of a flow, named
+ * by its file in its sandbox, read as an inbox post's is (`inbox-image.ts`),
+ * a recording as it is and up to a video's bound, kept as one of the plan's
  * pictures as the member the turn runs for, and written as the picture's
  * line at the end of its section, an added point like any other, so the
  * save is the agent's and its byline names it. Every file is read before any
@@ -79,8 +79,9 @@ const pictureSchema = Schema.Struct({
   section: planNoteSectionSchema,
   path: describeWire(
     trimmedText(PLAN_EDIT.MAX_PATH_CHARS),
-    "The picture's file in your sandbox, such as a screenshot you took, relative to the " +
-      `checkout: a PNG, JPEG, or WebP of at most ${PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB.`,
+    "The picture's file in your sandbox, such as a screenshot you took or a recording you made of " +
+      `a flow, relative to the checkout: a PNG, JPEG, or WebP of at most ${PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB, ` +
+      `or a WebM video of at most ${PICTURE_BOUNDS.MAX_VIDEO_BYTES / 1_000_000} MB, which the plan plays.`,
   ),
   alt: describeWire(
     trimmedText(PLAN_EDIT.MAX_ALT_CHARS),
@@ -140,6 +141,7 @@ export const PLAN_EDIT_REFUSAL = {
   UNAVAILABLE: "Not saved: the service could not reach its store.",
   NO_TASK: "Not saved: you work on no task, so there is no plan of yours to update.",
   TOO_MANY_PICTURES: `Not saved: the plan holds ${PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN} pictures, as many as a plan may. Leave the pictures out.`,
+  TOO_MANY_VIDEOS: `Not saved: the plan holds ${PLAN_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_PLAN} videos, as many as a plan may. Leave the videos out, or show them with show_image instead.`,
   TASK_GONE: "Not saved: this task no longer exists, so no picture can be added to its plan.",
   CONFLICT:
     "Not saved: none of this call's notes was taken, because one names what the plan does not hold exactly once. The plan as it stands is in current; retry from it.",
@@ -151,17 +153,11 @@ const MISSED_FIND_CHARS = 200;
 /** Why a picture's file was not read (`inbox-image.ts`), in the words the model reads; each is followed by the path. */
 export const TASK_PICTURE_FILE_REFUSAL = {
   NO_FILE: "Not saved: a picture names no file in your sandbox:",
-  NOT_IMAGE: "Not saved: a picture names a file that is not a PNG, JPEG, or WebP image:",
-  TOO_LARGE: `Not saved: a picture names a file larger than ${PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB; take it smaller, or at one screen scale:`,
+  NOT_IMAGE:
+    "Not saved: a picture names a file that is not a PNG, JPEG, or WebP image, or a WebM video that states its size:",
+  TOO_LARGE: `Not saved: a picture names an image larger than ${PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB, or a video larger than ${PICTURE_BOUNDS.MAX_VIDEO_BYTES / 1_000_000} MB; take it smaller, or at one screen scale, or record a shorter flow:`,
   UNREADABLE: "Not saved: a picture's file could not be read from your sandbox:",
 } as const;
-
-/** What a picture's file is read under: a plan picture's bound, and the refusals in this tool's words. */
-const TASK_PICTURE_TERMS: SandboxImageTerms = {
-  maxBytes: PICTURE_BOUNDS.MAX_BYTES,
-  sniff: sniffImageType,
-  refusals: TASK_PICTURE_FILE_REFUSAL,
-};
 /** How many notes a turn has taken, kept in eve's durable session state: the turn and its count. */
 export interface NotesTaken {
   readonly turnId?: string;
@@ -259,7 +255,12 @@ interface PictureRead {
   readonly file: Picture;
 }
 
-/** Every picture's file read from the sandbox, in order, or the refusal of the first that is not, naming its path. */
+/**
+ * Every picture's file read from the sandbox, in order, or the refusal of
+ * the first that is not, naming its path. Note that a file is read under an
+ * inbox post's bounds, because a plan holds an image and a recording to the
+ * same two (`PICTURE_BOUNDS`).
+ */
 function readPictureFiles(
   pictures: readonly TaskPicture[],
   sandbox: InboxSandboxDoor,
@@ -268,7 +269,12 @@ function readPictureFiles(
     const read: PictureRead[] = [];
     for (const picture of pictures) {
       const { path } = picture;
-      const file = yield* readSandboxImage(sandbox, CODER.CHECKOUT_PATH, path, TASK_PICTURE_TERMS);
+      const file = yield* readSandboxMedia(
+        sandbox,
+        CODER.CHECKOUT_PATH,
+        path,
+        TASK_PICTURE_FILE_REFUSAL,
+      );
       if (Result.isFailure(file)) return Result.fail(file.failure);
       read.push({ picture, file: file.success });
     }
@@ -329,6 +335,9 @@ function keptAsNotes(
       const kept = yield* keepPlanAttachment(binding.userId, binding.taskId, file);
       if (kept.status === PLAN_ATTACHMENT_KEEP.TOO_MANY) {
         return yield* new EditRefused({ refusal: refused(PLAN_EDIT_REFUSAL.TOO_MANY_PICTURES) });
+      }
+      if (kept.status === PLAN_ATTACHMENT_KEEP.TOO_MANY_VIDEOS) {
+        return yield* new EditRefused({ refusal: refused(PLAN_EDIT_REFUSAL.TOO_MANY_VIDEOS) });
       }
       if (kept.status === PLAN_ATTACHMENT_KEEP.NO_TASK) {
         return yield* new EditRefused({ refusal: refused(PLAN_EDIT_REFUSAL.TASK_GONE) });

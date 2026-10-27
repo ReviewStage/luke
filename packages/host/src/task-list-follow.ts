@@ -15,6 +15,7 @@ import {
   type LiveBroken,
   type LiveClient,
   liveShown,
+  restarting,
   type TxWait,
 } from "./live-follow.js";
 
@@ -33,13 +34,12 @@ import {
  *
  * A seal the service did not answer is asked for again, and a subscription
  * that stops for good started again, after `LIVE_RESTART`; while Realtime
- * fails it, the rows are polled inline (`live-follow.ts`). A seal refused
+ * fails it, the rows are polled inline (`live-follow.ts`). Each says so as
+ * it happens: an unanswered seal as `failed`, a broken follow or a failed
+ * poll as `behind`, until the next list is published. A seal refused
  * because the session is no longer the account the follow started for ends
  * the follow, which the next sign-in starts again.
  */
-
-/** How long after a seal went unanswered, or a subscription stopped for good, it is asked again. */
-const LIVE_RESTART = Duration.seconds(5);
 
 /** A seal as the follow asks for it: sealed, or with `poll` its rows inline; a failure where the service answered none, `gone` where it never will again. */
 type Sealed = TaskListLiveAnswer | { readonly failure: string; readonly gone?: boolean };
@@ -59,6 +59,12 @@ export interface TaskListFollowDependencies {
   readonly publish: (read: LiveTaskList) => void;
   /** That the list could not be read, each time a seal goes unanswered; the list already drawn stands. */
   readonly failed: () => void;
+  /**
+   * That the list drawn may be behind what the service holds: a poll failed
+   * and is asked again, or the follow broke and is sealed again after
+   * `LIVE_RESTART`. The next list published is caught up.
+   */
+  readonly behind: () => void;
   /** Hears the list's wait for a write's transaction once every part is live, and none once it is let go or polled. */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
@@ -94,6 +100,7 @@ function liveLists(
       poll: (after) => dependencies.live(true, after),
       now: dependencies.now,
       onTxWait: dependencies.onTxWait,
+      behind: dependencies.behind,
     },
     first,
     taskListLiveRowsSchema,
@@ -108,7 +115,6 @@ export function followTaskList(dependencies: TaskListFollowDependencies): Effect
     if ("failure" in sealed) {
       if (sealed.gone === true) return false;
       dependencies.failed();
-      yield* Effect.sleep(LIVE_RESTART);
       return true;
     }
     // A read the service refused for good, as one under another session, ends the follow rather than starting it again.
@@ -118,9 +124,9 @@ export function followTaskList(dependencies: TaskListFollowDependencies): Effect
       Effect.as(false),
       Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
     );
-    if (gone) return false;
-    yield* Effect.sleep(LIVE_RESTART);
-    return true;
+    // A follow that broke draws the list it had until it is sealed again, so it says the list may be behind.
+    if (!gone) dependencies.behind();
+    return !gone;
   });
-  return Effect.asVoid(Effect.repeat(attempt, { while: (again) => again }));
+  return restarting(attempt);
 }

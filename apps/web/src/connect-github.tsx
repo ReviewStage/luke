@@ -25,7 +25,7 @@ import {
   AuthMark,
   AuthPage,
   MARK_PROVIDER,
-  SIGN_IN_FAILURE,
+  SIGN_IN_UNFINISHED,
   SocialSignInChoices,
   TEXT_LINK_LOOK,
   TextLink,
@@ -203,7 +203,7 @@ function ConnectGitHub(): React.JSX.Element {
           </>
         )
       }
-      error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_FAILURE : undefined}
+      error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_UNFINISHED : undefined}
       action={open}
     >
       {view.kind === VIEW.SIGN_IN ? (

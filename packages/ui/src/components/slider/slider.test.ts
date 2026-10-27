@@ -6,7 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { Slider } from "./slider.js";
 
-/** slider.test.ts -- a slider is a named range input at its value, and tells of a change as a number. */
+/** slider.test.ts -- a slider is a named range input at its value, and tells of a change, a drag's or a key's, as a number. */
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -54,4 +54,18 @@ test("a change is told as a number", () => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
   assert.deepEqual(seen, [70]);
+});
+
+test("an arrow key on the thumb steps the value by one, told as a number", () => {
+  const seen: number[] = [];
+  const container = render(
+    createElement(Slider, { value: 30, label: "Swipe", onChange: (v: number) => seen.push(v) }),
+  );
+  const input = container.querySelector("input");
+  assert.ok(input);
+  act(() => {
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  });
+  assert.deepEqual(seen, [31]);
 });

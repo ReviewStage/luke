@@ -989,7 +989,7 @@ function composed(
         const { itemId, ...request } = yield* readParams(
           codingAgentInboxAnswerParamsSchema,
           params,
-          "answering an inbox item names the item, the revision it answers, the answer, and the answer's key",
+          "acknowledging an inbox notice names the item, the revision it acknowledges, the acknowledgement, and the nod's key",
         );
         const answer = yield* confirmed(asked(client.answerInbox(itemId, request)));
         return carried<CodingAgentInboxAnsweredView>(answer);

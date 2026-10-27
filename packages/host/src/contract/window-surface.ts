@@ -162,6 +162,11 @@ export const windowSurfaceActsContract = {
   [WINDOW_SURFACE_ACT_KIND.WINDOW_CAPTURE]: actProcedure("Could not take a still of the window.")
     .input(exactInput(capturedRect))
     .output(EffectSchema.NullOr(EffectSchema.String)),
+  [WINDOW_SURFACE_ACT_KIND.WINDOW_UNSAVED_WORK]: actProcedure(
+    "Could not tell this system about unsaved work.",
+  )
+    .input(exactInput(EffectSchema.Struct({ holding: EffectSchema.Boolean })))
+    .output(EffectSchema.Void),
   [WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND]: actProcedure("Could not send that on this system.")
     .input(exactInput(EffectSchema.Struct({ submission: feedbackSubmissionSchema })))
     .output(feedbackResultSchema),

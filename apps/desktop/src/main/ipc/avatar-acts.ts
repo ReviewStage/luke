@@ -18,7 +18,7 @@
 import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
 import type { AppStateStore } from "@luke/host/client";
 import { AVATAR_ACT_KIND } from "@luke/host/contract";
-import { AVATAR_STATUS, avatarStanding } from "@luke/voice/avatar";
+import { avatarStanding } from "@luke/voice/avatar";
 import { AVATAR_VIEW_SIGNAL } from "@luke/voice/avatar-view";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
@@ -81,8 +81,7 @@ export function avatarReports({
     // because it has expired by the time one could draw it.
     feedAvatar(context, feed) {
       if (!voiceOwns(context.sender)) return;
-      const { status } = state.snapshot().voice.avatar;
-      if (status !== AVATAR_STATUS.STARTING && status !== AVATAR_STATUS.LIVE) return;
+      if (!avatarStanding(state.snapshot().voice.avatar)) return;
       panel.feedAvatar(feed);
     },
     // Note that an offer is dropped while no avatar stands, because the

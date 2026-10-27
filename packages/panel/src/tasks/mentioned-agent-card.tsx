@@ -1,17 +1,28 @@
 import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_BOUNDS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_BOUNDS,
+  type CodingAgentPullRequest,
+  type CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
+import { LINK_PLACE, pullRequestAddressOf } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { listedPullRequestOf, pullRequestAgentOf } from "@luke/ui/pull-request-link";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, type ReactNode, useContext } from "react";
 import { askAct } from "../act.js";
+import { tabCard } from "../desktop/tab-card.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { pullRequestAsked } from "./pull-request-number.js";
+import { TAB_KIND } from "./tab-look.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { useKnownNames } from "./use-known-names.js";
+import { useOpenPlace } from "./use-open-link.js";
 
 /**
  * mentioned-agent-card.tsx -- the card a chip of a coding agent hangs where the place drawing it holds no tab of the agent: the agent's tab's own card, read when it is first hung, and the task it works on.
@@ -294,98 +305,208 @@ export function ReadAgentModel({
   );
 }
 
-/** The card read from the agents a read answered, or the chip's own while it is out or where it answered nothing. */
-function ReadAgentCard({
-  read,
-  agentId,
-  foot,
-  fallback,
-}: {
-  read: AsyncResult.AsyncResult<AgentsRead>;
-  agentId: string;
-  foot: string;
-  fallback: ReactNode;
-}): ReactNode {
-  const { models, me } = useContext(MentionedAgentsContext);
-  const agents = AsyncResult.isSuccess(read) ? read.value : UNREAD;
-  if (agents === UNREAD) return fallback;
-  const subject = agentSubject(
-    { agents, archived: undefined, models, me, pullRequests: NO_PULL_REQUESTS },
+/** What a card of an agent's says of the task it works on: its name as the window lists it, none, or another the window does not list. */
+function useTaskFoot(agent: CodingAgentSummary | undefined): string | undefined {
+  const tasks = useKnownNames().tasks;
+  if (agent === undefined) return undefined;
+  if (agent.planId === null) return TASK_WORDS.NONE;
+  const task = tasks.get(agent.planId);
+  return task === undefined ? TASK_WORDS.UNKNOWN : `On ${task}`;
+}
+
+/** An agent as its tab's card names it, from the agents a read answered. */
+function readSubject(
+  agents: readonly CodingAgentSummary[],
+  agentId: string,
+  place: MentionedAgentsPlace,
+): AgentSubject {
+  return agentSubject(
+    {
+      agents,
+      archived: undefined,
+      models: place.models,
+      me: place.me,
+      pullRequests: NO_PULL_REQUESTS,
+    },
     agentId,
     NOTHING_HELD,
     false,
   );
+}
+
+/** The agent's tab's card read from the agents a read answered (`tabCard`), with the task it works on under a rule; `reading` while the read is out, and the chip's own where it answered nothing. */
+function ReadAgentCard({
+  read,
+  agentId,
+  reading,
+  fallback,
+}: {
+  read: AsyncResult.AsyncResult<AgentsRead>;
+  agentId: string;
+  reading: ReactNode;
+  fallback: ReactNode;
+}): ReactNode {
+  const place = useContext(MentionedAgentsContext);
+  const agents = AsyncResult.isSuccess(read) ? read.value : UNREAD;
+  const subject = agents === UNREAD ? undefined : readSubject(agents, agentId, place);
   // An agent not found works nowhere the card can say.
-  return (
-    <AgentCard
-      subject={subject}
-      models={models}
-      foot={subject.agent === undefined ? undefined : foot}
-    />
-  );
-}
-
-function TaskAgentCard({
-  taskId,
-  agentId,
-  fallback,
-}: {
-  taskId: string;
-  agentId: string;
-  fallback: ReactNode;
-}): ReactNode {
-  const read = useAtomValue(taskAgentsAtom(taskId));
-  const task = useKnownNames().tasks.get(taskId);
-  const foot = task === undefined ? TASK_WORDS.UNKNOWN : `On ${task}`;
-  return <ReadAgentCard read={read} agentId={agentId} foot={foot} fallback={fallback} />;
-}
-
-function TasklessAgentCard({
-  workspaceId,
-  agentId,
-  name,
-  fallback,
-}: {
-  workspaceId: string;
-  agentId: string;
-  name: string;
-  fallback: ReactNode;
-}): ReactNode {
-  const read = useAtomValue(tasklessAgentsAtom(workspaceId)(agentId)(name));
-  return <ReadAgentCard read={read} agentId={agentId} foot={TASK_WORDS.NONE} fallback={fallback} />;
+  const foot = useTaskFoot(subject?.agent);
+  if (AsyncResult.isInitial(read)) return reading;
+  if (subject === undefined) return fallback;
+  return tabCard({ kind: TAB_KIND.AGENT, subject, models: place.models, foot });
 }
 
 /**
  * The card of an agent a chip names where the place holds no tab of it:
- * the agent's tab's card, read as it is hung, or `fallback` while it is
- * read, where the read answered nothing, and for an agent on no task where
- * no workspace is known to read it in.
+ * the agent's tab's card, read as it is hung, `reading` while it is read,
+ * or `fallback` where the read answered nothing. An agent on a task is
+ * read by its task's agents, one on no task by the workspace's agents its
+ * name finds, and one whose task and workspace the place does not know by
+ * its own id.
  */
 export function MentionedAgentCard({
   agentId,
   taskId,
   name,
   workspaceId,
+  reading,
   fallback,
 }: {
   agentId: string;
-  /** The task the agent works on; none for an agent on none. */
+  /** The task the agent works on; none for an agent on none, or where the place does not say. */
   taskId: string | undefined;
   /** The name the chip was written with, which an agent on no task is searched by. */
   name: string;
   /** The workspace the words are of, which an agent on no task is read in. */
   workspaceId: string | undefined;
+  reading: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
-  if (taskId !== undefined) {
-    return <TaskAgentCard taskId={taskId} agentId={agentId} fallback={fallback} />;
-  }
-  if (workspaceId === undefined) return fallback;
+  const atom =
+    taskId !== undefined
+      ? taskAgentsAtom(taskId)
+      : workspaceId !== undefined
+        ? tasklessAgentsAtom(workspaceId)(agentId)(name)
+        : agentByIdAtom(agentId);
+  const read = useAtomValue(atom);
+  return <ReadAgentCard read={read} agentId={agentId} reading={reading} fallback={fallback} />;
+}
+
+/** An agent's pull request of the number given, as its Pull request tab reads it; none where it opened no such one, and nothing where the service refused. */
+function agentPullRequest(
+  agentId: string,
+  number: number | undefined,
+): Effect.Effect<CodingAgentPullRequest | null | typeof UNREAD> {
+  return Effect.promise(() =>
+    askAct(ACT_KIND.CODING_AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then(
+      (answer) => ("failure" in answer ? UNREAD : answer.pullRequest),
+      () => UNREAD,
+    ),
+  );
+}
+
+/** One agent's pull request by its number, read once for every card hung of it while one stands. */
+const agentPullRequestAtom = Atom.family((agentId: string) =>
+  Atom.family((number: number | undefined) =>
+    rendererRuntime.atom(agentPullRequest(agentId, number)),
+  ),
+);
+
+/** A pull request one of the workspace's agents opened, as the window lists it: the agent, the task it works on, none for one on none, and its number. */
+interface OwnedPullRequest {
+  readonly agentId: string;
+  readonly taskId: string | undefined;
+  readonly number: number | undefined;
+}
+
+/** The agent that opened the pull request a link names, among the tasks and the agents on no task the window lists; none where none of them did. */
+function useOwnedPullRequest(url: string): OwnedPullRequest | undefined {
+  const tasks = useAppSlice(APP_SLICE.TASKS);
+  if (tasks === undefined) return undefined;
+  const number = pullRequestAddressOf(url)?.number;
+  const listed = listedPullRequestOf(url, tasks.tasks);
+  if (listed !== undefined) return { ...listed, number };
+  const taskless = (tasks.tasklessAgents ?? []).flatMap((agent) =>
+    agent.pullRequest === undefined ? [] : [{ agentId: agent.id, url: agent.pullRequest.url }],
+  );
+  const agentId = pullRequestAgentOf(url, taskless);
+  return agentId === undefined ? undefined : { agentId, taskId: undefined, number };
+}
+
+/** The Pull request tab's card of a pull request the window lists an agent of opening, read as it is hung. */
+function OwnedPullRequestCard({
+  owned,
+  reading,
+  fallback,
+}: {
+  owned: OwnedPullRequest;
+  reading: ReactNode;
+  fallback: ReactNode;
+}): ReactNode {
+  const place = useContext(MentionedAgentsContext);
+  const openPlace = useOpenPlace();
+  const { agentId, taskId } = owned;
+  const agentsRead = useAtomValue(
+    taskId === undefined ? agentByIdAtom(agentId) : taskAgentsAtom(taskId),
+  );
+  const pullRequestRead = useAtomValue(agentPullRequestAtom(agentId)(owned.number));
+  if (AsyncResult.isInitial(agentsRead) || AsyncResult.isInitial(pullRequestRead)) return reading;
+  const agents = AsyncResult.isSuccess(agentsRead) ? agentsRead.value : UNREAD;
+  const pullRequest = AsyncResult.isSuccess(pullRequestRead) ? pullRequestRead.value : UNREAD;
+  if (agents === UNREAD || pullRequest === UNREAD || pullRequest === null) return fallback;
+  const card = tabCard({
+    kind: TAB_KIND.CHANGES,
+    subject: readSubject(agents, agentId, place),
+    models: place.models,
+    pullRequest,
+    people: undefined,
+    onOpenAgent: () =>
+      openPlace?.({
+        kind: LINK_PLACE.AGENT,
+        ...(taskId === undefined ? undefined : { planId: taskId }),
+        agentId,
+      }),
+  });
+  return card ?? fallback;
+}
+
+/**
+ * The card of a pull request a chip names: the card its Pull request tab
+ * hangs (`tabCard`), wherever the chip stands, for any pull request one of
+ * the agents the window lists opened, a task's or one on no task, read as
+ * it is first hung; `reading` while it is read, and `fallback`, what
+ * GitHub answered of it, for any other and where the read answers nothing.
+ */
+export function PullRequestChipCard({
+  url,
+  reading,
+  fallback,
+}: {
+  url: string;
+  reading: ReactNode;
+  fallback: ReactNode;
+}): ReactNode {
+  const owned = useOwnedPullRequest(url);
+  if (owned === undefined) return fallback;
+  return <OwnedPullRequestCard owned={owned} reading={reading} fallback={fallback} />;
+}
+
+/** The card of an agent's own pull request a chip names by the agent, a link to its Pull request tab: the card that tab hangs, read as it is hung, as a link to the pull request's page on GitHub hangs it. */
+export function AgentPullRequestChipCard({
+  agentId,
+  taskId,
+  reading,
+  fallback,
+}: {
+  agentId: string;
+  taskId: string;
+  reading: ReactNode;
+  fallback: ReactNode;
+}): ReactNode {
   return (
-    <TasklessAgentCard
-      workspaceId={workspaceId}
-      agentId={agentId}
-      name={name}
+    <OwnedPullRequestCard
+      owned={{ agentId, taskId, number: undefined }}
+      reading={reading}
       fallback={fallback}
     />
   );

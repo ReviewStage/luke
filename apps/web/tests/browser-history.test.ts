@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { ReadLink } from "@luke/features/luke-link";
+import type { ReadLink } from "@luke/features/link-grammar";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
 import { Effect } from "effect";

@@ -27,6 +27,12 @@
   --luke-radius-14: 14px;
   --luke-radius-full: 9999px;
 
+  /* The seats an icon stands in (`icons/icon-size.ts`): beside a caption's words, in a button or a menu row, as a row's lead, over an empty state. */
+  --luke-icon-12: 12px;
+  --luke-icon-16: 16px;
+  --luke-icon-20: 20px;
+  --luke-icon-40: 40px;
+
   /* Body and captions, labels, section and dialog headings, page titles. */
   --luke-weight-regular: 400;
   --luke-weight-medium: 500;

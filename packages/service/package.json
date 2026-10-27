@@ -1,6 +1,6 @@
 {
   "name": "@luke/service",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -303,6 +303,7 @@
     "@types/node": "catalog:",
     "@types/pg": "8.21.0",
     "@types/ws": "8.18.1",
+    "jsdom": "^30.0.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "4.5.4"

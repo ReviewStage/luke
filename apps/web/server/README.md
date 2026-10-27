@@ -682,7 +682,7 @@ been, the production address whose callback the two providers registered.
 Without this a preview refuses its own sign-in before it reaches a provider at
 all — Better Auth trusts the origin of its own base URL, and the browser on a
 preview sends the preview's, which is the 403 behind the admin dashboard's
-"Sign-in could not start. Try again."
+"Sign-in didn't finish. Try again."
 
 On a Preview the desktop's pending authorization resumes on its own: the
 provider plugin stores the desktop's signed authorize request with the sign-in's

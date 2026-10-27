@@ -123,6 +123,8 @@ export interface PlanHistoryControl {
   /** Stands the history open where `spot` says, as the window's history goes back or forward within it. */
   onStand: (spot: HistorySpot) => void;
   onRetry: () => void;
+  /** Reads the version chosen again after its read failed, leaving its sections open. */
+  onRetryVersion: () => void;
   /** Reads the page of revisions older than the oldest read; answers whether it landed. */
   onLoadEarlier: () => Promise<boolean>;
   /** Restores the version chosen as the plan's content; the caller hears it landed through `onRestored`. */
@@ -402,6 +404,19 @@ export function usePlanHistory(input: {
     [taskId, newest],
   );
   const onRetry = useCallback(() => setRetries((was) => was + 1), []);
+  // Note that the sections stay open, since they are drawn from the very version this reads again.
+  const onRetryVersion = useCallback(
+    () =>
+      setVersion(
+        (held) =>
+          held && {
+            ...held,
+            read: { kind: HISTORY_READ.READING },
+            asked: held.asked + 1,
+          },
+      ),
+    [],
+  );
   // Note that a revision's sections are listed where the versions are, so opening them keeps to the list.
   const onOpenSections = (sectionsOf: number) => {
     onSelect(sectionsOf);
@@ -506,6 +521,7 @@ export function usePlanHistory(input: {
     onList,
     onStand,
     onRetry,
+    onRetryVersion,
     onLoadEarlier,
     onRestore,
   };

@@ -93,6 +93,7 @@ function ChatGptPlanNote(): React.JSX.Element {
 export function AgentModelChip({
   model,
   models,
+  modelsFailed,
   readModels,
   usage,
   payer,
@@ -103,7 +104,9 @@ export function AgentModelChip({
   model: AgentModelControl;
   /** The catalog as last read; nothing before the first read lands. */
   models: readonly CatalogModel[] | undefined;
-  /** Reads the catalog now, for the chip's name and for a menu opening. */
+  /** Whether the last read of the catalog did not land. */
+  modelsFailed: boolean;
+  /** Reads the catalog now, for the chip's name, for a menu opening, and for the menu's Retry. */
   readModels: () => void;
   /** What the agent has cost, as its transcript's last page said; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
@@ -170,6 +173,8 @@ export function AgentModelChip({
             id={menuId}
             className="agent-model-menu"
             models={offered}
+            failed={modelsFailed}
+            onRetry={readModels}
             chosen={settledChoice(offered, model.choice)}
             offersFast={runtimeModelRule(model.runtime).fast}
             onChoose={model.choose}

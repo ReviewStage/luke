@@ -3,7 +3,7 @@
  */
 
 import { ACT_KIND } from "@luke/host/acts";
-import { tellAct } from "../act.js";
+import { pressAct } from "../act.js";
 import type { AppPlatform } from "../app-platform.js";
 import { installAppPlatform } from "../app-platform.js";
 
@@ -27,8 +27,8 @@ export const QUIET_PANEL: Pick<AppPlatform, "onMenuCommand" | "recordSurfaceEven
  * sent reads it from its bridge's acts.
  */
 export const DESKTOP_LINKS: Pick<AppPlatform, "openGitHub" | "openWeb"> = {
-  openGitHub: (url) => tellAct(ACT_KIND.GITHUB_OPEN, { url }),
-  openWeb: (url) => tellAct(ACT_KIND.WEB_OPEN, { url }),
+  openGitHub: (url) => pressAct(ACT_KIND.GITHUB_OPEN, { url }),
+  openWeb: (url) => pressAct(ACT_KIND.WEB_OPEN, { url }),
 };
 
 /** A clipboard that takes every copy, pushing its words onto `copied` in the order they were copied. */

@@ -29,21 +29,9 @@
     stroke-linejoin: round;
   }
 
-  .luke-task-status-mark[data-status="backlog"],
-  .luke-task-status-mark[data-status="canceled"] {
-    color: var(--luke-color-text-subtle);
-  }
-
-  .luke-task-status-mark[data-status="todo"] {
-    color: var(--luke-color-text-muted);
-  }
-
-  .luke-task-status-mark[data-status="in-progress"] {
-    color: var(--luke-color-attention);
-  }
-
-  .luke-task-status-mark[data-status="done"] {
-    color: var(--luke-color-merged);
+  /* A status is in its tone's ink (`tokens/status-tone.css`). */
+  .luke-task-status-mark {
+    color: var(--luke-tone-ink);
   }
 
   .luke-task-priority-mark {
@@ -51,7 +39,7 @@
   }
 
   .luke-task-priority-mark[data-priority="none"] {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   .luke-task-priority-mark [data-lit="false"] {

@@ -1,7 +1,7 @@
 import type { TurnRecord } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { callHeading, WORKED_SEPARATOR, workingTime } from "@luke/features/time-format";
 import { cn, Shimmer, TIME_LOOK, Time, Tooltip, useMinute } from "@luke/ui";
-import { callHeading, WORKED_SEPARATOR, workingTime } from "@luke/ui/time-format";
 import type { ReactNode } from "react";
 import { TurnCard } from "./turn-card.js";
 

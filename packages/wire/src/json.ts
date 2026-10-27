@@ -32,9 +32,7 @@ export type UnparsedWireValue = WireValue | undefined;
  * decided; {@link isWireRecordValue}, {@link WireValueSchema}, and
  * {@link isPlainRecord} below all read it back rather than restating it.
  */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Schema.declare's predicate is the wire boundary's own decoder, called from Schema.is below and from the typed guard over held data.
 function isPlainWireRecordShape(value: unknown): value is WireRecord {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This predicate is the wire boundary's own decoder; every guard above narrows by calling it.
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   if (Object.prototype.toString.call(value) !== "[object Object]") return false;
   const prototype = Object.getPrototypeOf(value);
@@ -42,7 +40,6 @@ function isPlainWireRecordShape(value: unknown): value is WireRecord {
 }
 
 /** A record whose own shape is a wire record and whose every value is itself one. */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Schema.declare's predicate is the wire boundary's own decoder, called only from Schema.is below.
 function isWireRecordValue(value: unknown): value is WireRecord {
   if (!isPlainWireRecordShape(value)) return false;
   return Object.values(value).every((entry) => readsWireValue(entry));
@@ -114,7 +111,11 @@ export function isWireBoolean(value: UnparsedWireValue): value is boolean {
   return readsWireBoolean(value);
 }
 
-const readsWireRecordShape = Schema.is(Schema.declare(isPlainWireRecordShape));
+/** A record's own shape as a Schema, for a struct field that holds a record whose values nothing reads yet. */
+export const WireRecordShapeSchema: Schema.Codec<WireRecord> =
+  Schema.declare(isPlainWireRecordShape);
+
+const readsWireRecordShape = Schema.is(WireRecordShapeSchema);
 
 /**
  * A record's own shape, not whether its values are wire values: a record

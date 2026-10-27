@@ -1,7 +1,5 @@
 import {
-  BADGE_TONE,
   Badge,
-  type BadgeTone,
   CARD_CORNER,
   CARD_ELEMENT,
   CARD_PADDING,
@@ -11,7 +9,9 @@ import {
   DisclosureSummary,
   GAP,
   LAYOUT_ELEMENT,
+  STATUS_TONE,
   Stack,
+  type StatusTone,
   Tooltip,
   useDisclosureState,
   VISUALLY_HIDDEN_UNDER,
@@ -57,10 +57,10 @@ const COUNT_WORDS = {
 
 /** A state a card is in, by its word and the tone it is drawn in. */
 export const ANNOTATION_TONE = {
-  NEUTRAL: BADGE_TONE.NEUTRAL,
-  ATTENTION: BADGE_TONE.ATTENTION,
-  COMPLETE: BADGE_TONE.COMPLETE,
-} as const satisfies Record<string, BadgeTone>;
+  NEUTRAL: STATUS_TONE.NEUTRAL,
+  ATTENTION: STATUS_TONE.ATTENTION,
+  COMPLETE: STATUS_TONE.COMPLETE,
+} as const satisfies Record<string, StatusTone>;
 
 type AnnotationTone = (typeof ANNOTATION_TONE)[keyof typeof ANNOTATION_TONE];
 

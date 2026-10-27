@@ -22,7 +22,7 @@
  * frame with nothing easing behind it.
  */
 
-import { tokenTiming } from "@luke/ui";
+import { MOTION_TOKEN, tokenTiming } from "@luke/ui";
 import { Component, type RefObject, useLayoutEffect, useRef, useState } from "react";
 
 /** The content that glides where a pane displaced it, each by its own left edge. */
@@ -79,7 +79,7 @@ type PaneGlideState = Record<never, never>;
  * here as everywhere else, without a check of their own.
  */
 export function paneTiming(element: Element): KeyframeAnimationOptions | undefined {
-  return tokenTiming(element, "--luke-duration-pane", "--luke-motion-pane");
+  return tokenTiming(element, MOTION_TOKEN.DURATION_PANE, MOTION_TOKEN.EASE_PANE);
 }
 
 function sameLayout(a: PaneLayout, b: PaneLayout): boolean {

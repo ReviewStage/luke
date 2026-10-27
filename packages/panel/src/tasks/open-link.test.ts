@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";

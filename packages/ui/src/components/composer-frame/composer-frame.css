@@ -28,7 +28,7 @@
     border-color: var(--luke-color-border-strong);
     border-radius: var(--luke-control-radius);
     background: var(--luke-color-input);
-    transition: background-color var(--luke-duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-composer-frame[data-look="input"]:focus-within {

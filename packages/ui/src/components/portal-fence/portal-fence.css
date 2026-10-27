@@ -1,5 +1,0 @@
-/* A portal's fence (portal-fence.tsx) draws no box: what it holds is laid
-   out as its parent's own. */
-.luke-portal-fence {
-  display: contents;
-}

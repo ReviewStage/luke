@@ -3,6 +3,7 @@ import {
   SOCIAL_PROVIDER_LABEL,
   type SocialProvider,
 } from "@luke/features/sign-in-provider";
+import { SIGN_IN_FAILURE, SIGN_IN_FAILURE_WORDS } from "@luke/features/words";
 import type { ReactNode } from "react";
 import { ProviderButton } from "../provider-button/provider-button.js";
 import { AuthPage } from "./auth-page.js";
@@ -16,8 +17,8 @@ import { AuthPage } from "./auth-page.js";
  * while one does.
  */
 
-/** What the card says when a sign-in could not start. */
-export const SIGN_IN_FAILURE = "Sign-in could not start. Try again.";
+/** What the card says when a sign-in could not start: the sign-in gate's own sentence for one that did not finish. */
+export const SIGN_IN_UNFINISHED = SIGN_IN_FAILURE_WORDS[SIGN_IN_FAILURE.UNFINISHED];
 
 /**
  * One provider's button: its mark and "Continue with" its name, or the ring
@@ -97,7 +98,7 @@ export function SocialSignInCard({
       mark={mark}
       title={title}
       description={description}
-      error={failed ? SIGN_IN_FAILURE : undefined}
+      error={failed ? SIGN_IN_UNFINISHED : undefined}
       footnote={footnote}
     >
       <SocialSignInChoices pending={pending} onPress={onPress} />

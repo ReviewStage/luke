@@ -202,6 +202,7 @@ it("a native harness's calls replay named as eve's are, its edits by the files t
         ],
       }),
       settled("ScheduleWakeup", { delaySeconds: 60 }),
+      settled("open_pull_request", { head: "feat/export", title: "feat: export invoices" }),
     ],
     [
       "Ran: pnpm test",
@@ -212,6 +213,7 @@ it("a native harness's calls replay named as eve's are, its edits by the files t
       "Ran: pnpm lint",
       "Edited: src/c.ts, src/d.ts, src/e.ts, src/f.ts",
       "Used: ScheduleWakeup",
+      "Opened pull request: feat: export invoices",
     ],
   );
 });

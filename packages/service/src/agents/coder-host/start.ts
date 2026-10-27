@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseServices } from "@luke/database/core/query";
+import { type DatabaseServices, READ_CONCURRENCY } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
 import type { HandedFile } from "@luke/database/models/attached-file-parts";
 import { ensureMember } from "@luke/database/models/chat-store";
@@ -12,12 +12,14 @@ import {
   readCodingAgentByKey,
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
+import { listAccountProviderKeyRows } from "@luke/database/models/provider-key-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
 import {
   assignUnassignedTaskCommitted,
   beginTaskWorkCommitted,
   readTask,
   readTaskWorkspace,
+  type StoredTask,
 } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -58,7 +60,7 @@ import {
   type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
 import type { Task } from "@luke/features/task-wire";
-import { failureKind } from "@luke/runtime/effect";
+import { bothInOrder, failureKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -71,6 +73,7 @@ import { GitHubApp } from "../../github/github-app.js";
 import { githubReachOrRefusal } from "../../github/github-refusal.js";
 import { readBranchHead } from "../../github/repository-file.js";
 import { workspaceRepository } from "../../github/workspace-repository.js";
+import { afterResponse } from "../../http/after-response.js";
 import {
   credentialMissing,
   HOSTED_REFUSAL,
@@ -98,6 +101,7 @@ import { fenceable } from "../fenced-text.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import {
+  type AccountKeyRows,
   AgentCredentialMissing,
   accountFastOffer,
   agentRuntimeChoice,
@@ -412,6 +416,8 @@ export type StartAsk = StartPlace & {
   readonly call?: boolean | undefined;
   /** The repository the task's own start reached in the same request, which the agent's Start takes rather than asking GitHub again; none for every other Start. */
   readonly reached?: StartReach | undefined;
+  /** The task the task's own start made in the same request, as it was made, which the agent's Start lands on rather than reading it again; none for every other Start. */
+  readonly landed?: StoredTask | undefined;
 };
 
 /** A repository as a task's start reached it: the full name its row keeps, and how it was reached. */
@@ -446,23 +452,43 @@ export interface AccountModelChoices {
  * is checked against and the agent tools list the choices from, so the two
  * never disagree. A catalog or a store that could not be read is an outage.
  */
-export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const accountModelChoices = (userId: string) =>
+  Effect.map(modelChoicesRead(userId), (read) => read.choices);
+
+/**
+ * The account's choices as `accountModelChoices` reads them, with its
+ * stored credentials they were decided from, which a Start decides its
+ * payer from too rather than reading them again. Its preferences, its
+ * credentials, and the catalog are read together.
+ */
+const modelChoicesRead = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-): Effect.fn.Return<AccountModelChoices, HostedRefusal, DatabaseServices | ModelCatalog> {
-  const stored = (yield* hostedStoreOrUnavailable(readAccountPreferences(userId)))?.codingAgent;
-  const fastOffer = yield* hostedStoreOrUnavailable(accountFastOffer(userId));
+): Effect.fn.Return<
+  { readonly choices: AccountModelChoices; readonly keys: AccountKeyRows },
+  HostedRefusal,
+  DatabaseServices | ModelCatalog
+> {
   const catalog = yield* ModelCatalog;
-  const read = yield* catalog.read.pipe(
-    Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
-      Effect.logWarning(
-        `the model catalog could not be read: ${failureKind(unavailable.cause)}`,
-      ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
-    ),
+  const { preferences, keys, read } = yield* Effect.all(
+    {
+      preferences: hostedStoreOrUnavailable(readAccountPreferences(userId)),
+      keys: hostedStoreOrUnavailable(listAccountProviderKeyRows(userId)),
+      read: catalog.read.pipe(
+        Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
+          Effect.logWarning(
+            `the model catalog could not be read: ${failureKind(unavailable.cause)}`,
+          ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
+        ),
+      ),
+    },
+    { concurrency: READ_CONCURRENCY },
   );
+  const fastOffer = yield* hostedStoreOrUnavailable(accountFastOffer(userId, keys));
   const offered = yield* hostedStoreOrUnavailable(
-    markedUnconnected(userId, offeredToAccount(read, fastOffer)),
+    markedUnconnected(userId, offeredToAccount(read, fastOffer), keys),
   );
-  return { offered, defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE };
+  const stored = preferences?.codingAgent;
+  return { choices: { offered, defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE }, keys };
 });
 
 /**
@@ -472,18 +498,24 @@ export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
  * refused here rather than at the agent's first step. A catalog that could
  * not be read is an outage; a choice it refuses is its own refusal.
  */
-export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const acceptedAgentChoice = (userId: string, named: ModelChoice | undefined) =>
+  Effect.map(acceptedChoiceRead(userId, named), (accepted) => accepted.choice);
+
+/** The choice as `acceptedAgentChoice` accepts it, with the account's stored credentials it was checked against. */
+const acceptedChoiceRead = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   named: ModelChoice | undefined,
 ): Effect.fn.Return<
-  ModelChoice,
+  { readonly choice: ModelChoice; readonly keys: AccountKeyRows },
   HostedRefusal | ModelChoiceRefused,
   DatabaseServices | ModelCatalog
 > {
-  const { offered, defaultChoice } = yield* accountModelChoices(userId);
-  return yield* Effect.fromResult(validateModelChoice(offered, named ?? defaultChoice)).pipe(
-    Effect.mapError((reason) => new ModelChoiceRefused({ reason, offered })),
-  );
+  const { choices, keys } = yield* modelChoicesRead(userId);
+  const { offered, defaultChoice } = choices;
+  const choice = yield* Effect.fromResult(
+    validateModelChoice(offered, named ?? defaultChoice),
+  ).pipe(Effect.mapError((reason) => new ModelChoiceRefused({ reason, offered })));
+  return { choice, keys };
 });
 
 /** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, none for a blank Start on a task with none or the member's operator, the task where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
@@ -597,6 +629,7 @@ const landingOf = Effect.fnUntraced(function* (
   place: StartPlace,
   fitter: ReplayFitter | undefined,
   noteFiles: NoteFiles | undefined,
+  landed: StoredTask | undefined,
 ): Effect.fn.Return<StartLanding, HostedRefusal, DatabaseServices> {
   const brief = fitter === undefined ? place.prompt : fitter.prompt;
   const operator = place.kind === CODING_AGENT_KIND.OPERATOR;
@@ -643,7 +676,11 @@ const landingOf = Effect.fnUntraced(function* (
       startedFrom: handed.startedFrom,
     };
   }
-  const read = yield* hostedStoreOrUnavailable(readTask(userId, place.taskId));
+  // A task its own start made a moment ago, in the same request, is landed on as it was made.
+  const read =
+    landed !== undefined && landed.task.id === place.taskId
+      ? Option.some(landed)
+      : yield* hostedStoreOrUnavailable(readTask(userId, place.taskId));
   if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { task, ownerId, issueLinks } = read.value;
   const mover = ownerId === userId ? userId : undefined;
@@ -922,8 +959,8 @@ export const startCredentialStands = (userId: string, model: string) =>
  * the account's pays, the Start is refused by name, the provider beside
  * it, and nothing is written.
  */
-function startRuntimeOf(userId: string, model: string) {
-  return Effect.catch(agentRuntimeChoice(userId, model), (failure) =>
+function startRuntimeOf(userId: string, model: string, keys: AccountKeyRows) {
+  return Effect.catch(agentRuntimeChoice(userId, model, keys), (failure) =>
     failure instanceof AgentCredentialMissing
       ? Effect.fail(credentialMissing(failure.provider))
       : hostedStoreOrUnavailable(Effect.fail(failure)),
@@ -1007,41 +1044,40 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     yield* admitsPlanWriter(userId, from.source);
   }
   // An agent started from another runs on that agent's choice unless the Start names one.
-  const choice = yield* acceptedAgentChoice(userId, ask.choice ?? from?.choice);
-  // The note's files go after the source's in each group eve is handed, so the marker counts them by group.
-  const noteFiles = from === undefined ? undefined : noteFilesOf(ask.attachments ?? []);
-  const fitter =
+  const accepted = acceptedChoiceRead(userId, ask.choice ?? from?.choice);
+  // A fresh Start's landing does not wait on its choice, so the two are read together; one from
+  // another agent fits that agent's replay to the choice's window, so its landing waits on it.
+  const [{ choice, keys }, landing] =
     from === undefined
-      ? undefined
-      : yield* replayFitterOf(userId, from, choice, ask.summaryModel, [
-          ...from.attachments,
-          ...(ask.attachments ?? []),
-        ]);
-  const landing = yield* landingOf(userId, ask, fitter, noteFiles);
+      ? yield* bothInOrder(accepted, landingOf(userId, ask, undefined, undefined, ask.landed))
+      : yield* Effect.flatMap(accepted, (read) =>
+          Effect.gen(function* () {
+            const fitter = yield* replayFitterOf(userId, from, read.choice, ask.summaryModel, [
+              ...from.attachments,
+              ...(ask.attachments ?? []),
+            ]);
+            // The note's files go after the source's in each group eve is handed, so the marker counts them by group.
+            const noteFiles = noteFilesOf(ask.attachments ?? []);
+            return [read, yield* landingOf(userId, ask, fitter, noteFiles, ask.landed)] as const;
+          }),
+        );
   // An automation's agent reaches through the workspace's installation alone; a Start by hand, on the starter's token too.
   // A blank agent on a task with no repository reaches none.
   // Note that a task started with its agent reached the repository a moment ago, in the same
   // request and as the same member, so that reach stands rather than a second round of GitHub reads.
   const member = ask.automationOrigin === undefined ? userId : undefined;
-  const reached =
+  const reach: Effect.Effect<
+    { readonly access: GitHubAccess } | undefined,
+    HostedRefusal,
+    StartServices
+  > =
     landing.repository === null
-      ? undefined
+      ? Effect.succeed(undefined)
       : ask.reached !== undefined && ask.reached.repository === landing.repository
-        ? ask.reached
-        : yield* workspaceRepository(
-            landing.workspaceId,
-            landing.repository,
-            member,
-            landing.mover,
-          );
+        ? Effect.succeed(ask.reached)
+        : workspaceRepository(landing.workspaceId, landing.repository, member, landing.mover);
   // An agent started from another goes on from the branch that one was started on.
-  const branch = yield* startBranchOf(
-    userId,
-    ask,
-    from?.source.startBranch ?? null,
-    landing,
-    member,
-  );
+  const branchOf = startBranchOf(userId, ask, from?.source.startBranch ?? null, landing, member);
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note
   // alone; never the replay of another agent, whose words name what it read, not what to hand on.
@@ -1059,20 +1095,22 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       : [...from.attachments, ...(ask.attachments ?? [])];
   // What the words mention of the plan's pages and agents is read before the agent is made, so a
   // read that fails leaves no agent its retry would find and never open a session for.
-  const reads =
+  const mentions =
     words === undefined
-      ? undefined
-      : yield* hostedStoreOrUnavailable(
+      ? Effect.succeed(undefined)
+      : hostedStoreOrUnavailable(
           readMentioned(userId, words, {
             task: landing.task,
             workspaceId: landing.workspaceId,
           }),
         );
+  // GitHub's answers and the store's reads of the mentions wait on none of each other, so they are asked together.
+  const [[reached, branch], reads] = yield* bothInOrder(bothInOrder(reach, branchOf), mentions);
   // A continue is named after its source where the ask names nothing; a fork is named as it starts.
   const continued = from !== undefined && from.told.messageId === undefined;
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   // The runtime and the payer are decided as the agent is made, by the starter's account and model, and never change.
-  const runtime = yield* startRuntimeOf(userId, choice.model);
+  const runtime = yield* startRuntimeOf(userId, choice.model, keys);
   const started = yield* hostedStoreOrUnavailable(
     createCodingAgent(userId, {
       ...brief,
@@ -1174,10 +1212,14 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     }
   }
   // Every agent joins its workspace's chat as it starts, whatever its starter's Chat setting, since the chat is how agents message each other.
-  yield* ensureMember(userId, landing.workspaceId, {
-    kind: MEMBER_KIND.AGENT,
-    agentId: agent.id,
-  }).pipe(Effect.asVoid, Effect.catch(logStoreFailure));
+  // Note that the Start does not wait on it, because the agent's own first post joins it as well (`chat.ts`).
+  yield* afterResponse(
+    "a started agent's chat membership",
+    ensureMember(userId, landing.workspaceId, {
+      kind: MEMBER_KIND.AGENT,
+      agentId: agent.id,
+    }).pipe(Effect.asVoid, Effect.catch(logStoreFailure)),
+  );
   yield* recordServerEvent(SERVER_EVENT.AGENT_START, userId, {
     model: choice.model,
     effort: choice.effort,
@@ -1245,6 +1287,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: CodingAgentStartRequest,
   summaryModel?: SummaryModelOf,
   reached?: StartReach,
+  landed?: StoredTask,
 ): Effect.fn.Return<RequestedStart, HostedRefusal, StartServices> {
   const { note } = request;
   const choice = yield* requestedChoice(request);
@@ -1261,10 +1304,15 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     call: request.call,
     summaryModel,
     reached,
+    landed,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };
-  const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
-  const runtimes = yield* hostedStoreOrUnavailable(nativeRuntimesOfReached([agent.conversationId]));
+  const [names, runtimes] = yield* hostedStoreOrUnavailable(
+    Effect.all(
+      [readAccountNames(summaryAccounts(agent)), nativeRuntimesOfReached([agent.conversationId])],
+      { concurrency: 2 },
+    ),
+  );
   return {
     agent: codingAgentSummary(
       agent,

@@ -57,7 +57,11 @@ function railMarkInk(mark: React.ReactNode): string {
   );
   const glyph = container.querySelector(".chat-rail .inbox-row-mark > svg");
   assert.ok(glyph, "the mark draws an svg");
-  return getComputedStyle(glyph).color;
+  const style = getComputedStyle(glyph);
+  // Note that a status mark draws in its tone's ink, which is read through to the palette's role it names.
+  return style.color === "var(--luke-tone-ink)"
+    ? style.getPropertyValue("--luke-tone-ink").trim()
+    : style.color;
 }
 
 test("a place's glyph is inked muted in the rail", () => {
@@ -68,13 +72,13 @@ test("a place's glyph is inked muted in the rail", () => {
 test("a task's status mark keeps its status colour in the rail", () => {
   assert.equal(
     railMarkInk(createElement(TaskStatusMark, { status: TASK_STATUS.IN_PROGRESS })),
-    "var(--luke-color-attention)",
+    "var(--luke-color-working)",
   );
 });
 
-test("a done task's mark keeps the merged colour in the rail", () => {
+test("a done task's mark keeps the complete colour in the rail", () => {
   assert.equal(
     railMarkInk(createElement(TaskStatusMark, { status: TASK_STATUS.DONE })),
-    "var(--luke-color-merged)",
+    "var(--luke-color-complete)",
   );
 });

@@ -7,7 +7,7 @@
 
 export const MOTION_DURATION_MS = {
   FAST: 280,
-  SURFACE: 460,
+  SHAPE: 460,
   EXIT: 90,
   QUICK: 140,
   HOVER: 70,
@@ -19,4 +19,5 @@ export const MOTION_DELAY_MS = {
   HINT: 500,
   LATE: 1000,
   CONFIRM: 1200,
+  SETTLE: 180,
 } as const;

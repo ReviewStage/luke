@@ -107,6 +107,8 @@ export const voiceSessions = pgTable(
     index("voice_sessions_detached")
       .on(table.detachedAt)
       .where(sql`${table.closedAt} is null and ${table.detachedAt} is not null`),
+    // A task's calls are read by its id, and the sweep removes the ended calls of a deleted task.
+    index("voice_sessions_task").on(table.taskId).where(sql`${table.taskId} is not null`),
   ],
 );
 

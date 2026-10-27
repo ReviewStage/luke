@@ -10,8 +10,14 @@ import {
   workspaceChatLiveRowsSchema,
   workspaceChatOfLiveRows,
 } from "@luke/features/live-wire";
-import { Duration, Effect, Stream } from "effect";
-import { decodedLiveRows, LiveBroken, type LiveClient, type TxWait } from "./live-follow.js";
+import { Effect, Stream } from "effect";
+import {
+  decodedLiveRows,
+  LiveBroken,
+  type LiveClient,
+  restarting,
+  type TxWait,
+} from "./live-follow.js";
 
 /**
  * chat-follow.ts -- a workspace's chat followed over Neon Realtime: joined once, sealed, and each change told whole.
@@ -35,9 +41,6 @@ import { decodedLiveRows, LiveBroken, type LiveClient, type TxWait } from "./liv
  * (`onTxWait`) while it is subscribed over Realtime, and the write waits on
  * it with the txid the service answered (`confirmWrite`).
  */
-
-/** How long after a join or seal went unanswered, or a follow stopped, the chat is followed again. */
-const LIVE_RESTART = Duration.seconds(5);
 
 /** Why the service answered no join or seal. */
 interface Failed {
@@ -125,8 +128,5 @@ function attempt(dependencies: ChatFollowDependencies): Effect.Effect<boolean> {
 
 /** A workspace's chat followed live until interrupted, or until it is told not found. */
 export function followWorkspaceChat(dependencies: ChatFollowDependencies): Effect.Effect<void> {
-  const loop: Effect.Effect<void> = Effect.flatMap(attempt(dependencies), (ended) =>
-    ended ? Effect.void : Effect.andThen(Effect.sleep(LIVE_RESTART), loop),
-  );
-  return loop;
+  return restarting(Effect.map(attempt(dependencies), (ended) => !ended));
 }

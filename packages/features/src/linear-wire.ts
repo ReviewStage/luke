@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { LINEAR_IDENTIFIER, readLinearIssue } from "./link-grammar.js";
 
 /**
  * linear-wire.ts -- a workspace's one Linear connection and the issues it reaches, as the desktop reads them.
@@ -15,7 +16,7 @@ import { Schema as EffectSchema } from "effect";
  * answers the issues a member may start a plan from, newest changed first,
  * or those a search matches, or the one issue an identifier names,
  * as a link to it drawn in Luke's words, or a key or link pasted into New
- * task, asks for its title and state (`linearIssueIdentifierOf`,
+ * task, asks for its title and state (`link-grammar.ts`'s `readLinearIssue`,
  * `linearIssueIdentifierIn`). A plan started from one names it by its id
  * (`taskCreateRequestSchema`'s `linearIssueId`), and the service reads the
  * issue itself through the workspace's grant and links what it read to the
@@ -41,38 +42,10 @@ export const linearIssueIdSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(LINEAR_BOUNDS.MAX_ID_CHARS),
 );
 
-/** A Linear issue's identifier, its team's key and its number, `ENG-123`, as Linear spells it. */
-const LINEAR_IDENTIFIER = /^[A-Z][A-Z0-9_]{0,9}-[1-9]\d{0,8}$/u;
-
 /** A Linear issue's identifier, as a read of one issue names it. */
 export const linearIdentifierSchema = EffectSchema.String.check(
   EffectSchema.isPattern(LINEAR_IDENTIFIER),
 );
-
-/** Linear's own host, whose `/<workspace>/issue/<identifier>` pages are its issues. */
-const LINEAR_HOST = "linear.app";
-
-/** The step before an issue's identifier in its page's path. */
-const ISSUE_STEP = "issue";
-
-/**
- * The identifier of the issue a page of Linear's is, `ENG-123` from
- * `https://linear.app/acme/issue/ENG-123/its-title`; nothing for any other
- * address, another of Linear's pages among them.
- */
-export function linearIssueIdentifierOf(href: string): string | undefined {
-  let url: URL;
-  try {
-    url = new URL(href);
-  } catch {
-    return undefined;
-  }
-  if (url.hostname !== LINEAR_HOST) return undefined;
-  const [first, , step, identifier] = url.pathname.split("/");
-  if (first !== "" || step !== ISSUE_STEP || identifier === undefined) return undefined;
-  const upper = identifier.toUpperCase();
-  return LINEAR_IDENTIFIER.test(upper) ? upper : undefined;
-}
 
 /**
  * The identifier of the issue words typed or pasted name whole: a link to
@@ -82,7 +55,7 @@ export function linearIssueIdentifierOf(href: string): string | undefined {
 export function linearIssueIdentifierIn(typed: string): string | undefined {
   const words = typed.trim();
   const upper = words.toUpperCase();
-  return LINEAR_IDENTIFIER.test(upper) ? upper : linearIssueIdentifierOf(words);
+  return LINEAR_IDENTIFIER.test(upper) ? upper : readLinearIssue(words);
 }
 
 /** One issue as the picker lists it: what a person picks it by. */

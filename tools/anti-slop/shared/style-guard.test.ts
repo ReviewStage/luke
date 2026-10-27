@@ -1,0 +1,219 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  STYLE_RULE,
+  type StyleRule,
+  styleSuppressionLines,
+  styleViolations,
+  themeNames,
+} from "./style-guard.ts";
+
+const THEME = `@theme inline {
+  --color-primary: var(--luke-color-text);
+  --text-body: var(--luke-type-body-size);
+  --text-body--line-height: var(--luke-type-body-leading);
+  --radius-menu: var(--luke-menu-radius);
+  --ease-pane: var(--luke-motion-pane);
+  --animate-menu-in: luke-menu-in var(--luke-duration-quick) var(--luke-spring-fast);
+}`;
+const NAMES = themeNames(THEME);
+const SHEET = "packages/ui/src/components/thing/thing.css";
+const MODULE = "packages/panel/src/thing.tsx";
+
+/** The rules a stylesheet breaks, in order. */
+function sheetRules(css: string, file = SHEET): readonly StyleRule[] {
+  return styleViolations(file, css, NAMES).map((violation) => violation.rule);
+}
+
+/** The rules a module's class strings break, in order. */
+function classRules(source: string, file = MODULE): readonly StyleRule[] {
+  return styleViolations(file, source, NAMES).map((violation) => violation.rule);
+}
+
+describe("a stylesheet", () => {
+  it("refuses a colour literal in a rule, and passes a token", () => {
+    expect(sheetRules(".a { color: #fff; background: rgba(0, 0, 0, 0.5); }")).toEqual([
+      STYLE_RULE.COLOUR,
+      STYLE_RULE.COLOUR,
+    ]);
+    expect(sheetRules(".a { color: var(--luke-color-text); border-color: currentColor; }")).toEqual(
+      [],
+    );
+  });
+
+  it("passes a colour where a token is defined, a brand's ink, and a mask's alpha", () => {
+    const css = `
+      :root { --file-icon-red: light-dark(#d52c36, #ff6762); }
+      :root[data-luke-theme="dark"] { --ink: #fff; }
+      [data-luke-theme="dark"] .integration-mark-neon { color: #34d59a; }
+      .a { mask-image: linear-gradient(#000, transparent); --terminal-red: #f00; }`;
+    expect(sheetRules(css)).toEqual([]);
+  });
+
+  it("refuses a colour under a selector that only starts at :root", () => {
+    expect(sheetRules(":root .a { color: #000; }")).toEqual([STYLE_RULE.COLOUR]);
+  });
+
+  it("refuses a literal font size or weight, and passes the type roles", () => {
+    const css = `.a {
+      font-size: 13px;
+      font-weight: 600;
+      font: 500 12px/1.4 system-ui;
+      font-size: 0.9em;
+    }
+    .b {
+      font-size: var(--luke-type-body-size);
+      font-weight: var(--luke-weight-medium);
+      font: inherit;
+      font-size: calc(var(--luke-avatar-size) * 0.5);
+    }`;
+    expect(sheetRules(css)).toEqual([
+      STYLE_RULE.TYPE,
+      STYLE_RULE.TYPE,
+      STYLE_RULE.TYPE,
+      STYLE_RULE.TYPE,
+    ]);
+  });
+
+  it("refuses a literal radius, 50% among them, and passes a role or a factor of one", () => {
+    const css = `.a { border-radius: 50%; border-top-left-radius: 4px; }
+      .b { border-radius: var(--luke-radius-full); border-radius: 0;
+           border-radius: calc(var(--luke-control-height) / 2); }`;
+    expect(sheetRules(css)).toEqual([STYLE_RULE.RADIUS, STYLE_RULE.RADIUS]);
+  });
+
+  it("refuses an ellipsis", () => {
+    expect(sheetRules(".a { overflow: hidden; text-overflow: ellipsis; }")).toEqual([
+      STYLE_RULE.ELLIPSIS,
+    ]);
+    expect(sheetRules(".a { text-overflow: clip; }")).toEqual([]);
+  });
+
+  it("refuses a literal duration or delay, and passes a token or none", () => {
+    const css = `.a { transition: opacity 200ms; animation-delay: 1s; }
+      .b { transition: opacity var(--luke-duration-quick); transition-delay: 0s; }`;
+    expect(sheetRules(css)).toEqual([STYLE_RULE.DURATION, STYLE_RULE.DURATION]);
+  });
+
+  it("passes a literal duration on an endless loop that answers a play-state token", () => {
+    const loop = `.spin {
+      animation: turn 900ms linear infinite;
+      animation-play-state: var(--luke-loop-motion);
+    }`;
+    expect(sheetRules(loop)).toEqual([]);
+    const unanswered = ".spin { animation: turn 900ms infinite; }";
+    expect(sheetRules(unanswered)).toEqual([STYLE_RULE.DURATION]);
+  });
+
+  it("still refuses a transition beside a loop, and a finite animation that answers the loop token", () => {
+    const beside = `.spin {
+      animation: turn 900ms linear infinite;
+      animation-play-state: var(--luke-loop-motion);
+      transition: opacity 200ms ease;
+    }`;
+    expect(sheetRules(beside)).toEqual([STYLE_RULE.DURATION]);
+    const finite = `.pop {
+      animation: pop 300ms both;
+      animation-play-state: var(--luke-loop-motion);
+    }`;
+    expect(sheetRules(finite)).toEqual([STYLE_RULE.DURATION]);
+  });
+
+  it("refuses a literal easing in a transition or animation, and passes a token", () => {
+    const css = `.a { transition: opacity var(--luke-duration-hover) ease; }
+      .b { transition-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
+      .c { --wobble: steps(4); }
+      .d { transition: transform var(--luke-duration-fast) var(--luke-spring-fast); }
+      .e { transition: opacity var(--luke-duration-hover); }`;
+    expect(sheetRules(css)).toEqual([STYLE_RULE.EASING, STYLE_RULE.EASING, STYLE_RULE.EASING]);
+  });
+
+  it("reads declarations through nesting, layers, strings, and comments", () => {
+    const css = `@layer components {
+      .a {
+        content: "{ color: #fff; }"; /* color: #000; } */
+        background: url(data:image/png;base64,AAAA);
+        &:hover { color: #abc; }
+        @media (width > 4px) { .b { border-radius: 3px; } }
+      }
+    }`;
+    const violations = styleViolations(SHEET, css, NAMES);
+    expect(violations.map((violation) => [violation.rule, violation.line])).toEqual([
+      [STYLE_RULE.COLOUR, 5],
+      [STYLE_RULE.RADIUS, 6],
+    ]);
+  });
+
+  it("checks an @apply's classes", () => {
+    expect(sheetRules(".a { @apply truncate text-sm; }")).toEqual([
+      STYLE_RULE.ELLIPSIS,
+      STYLE_RULE.TYPE,
+    ]);
+  });
+
+  it("is not read where tokens are defined, nor where agents keep their tools", () => {
+    const css = ".a { color: #fff; transition: opacity 90ms ease; }";
+    expect(sheetRules(css, "packages/ui/src/tokens/motion.css")).toEqual([]);
+    expect(sheetRules(css, "packages/ui/src/tailwind/theme.css")).toEqual([]);
+    expect(sheetRules(css, ".agents/skills/shots/shots.css")).toEqual([]);
+  });
+
+  it("passes the face's generated motions their literal phases", () => {
+    const css = ".face { animation: blink 3200ms cubic-bezier(0.2, 0, 0, 1) both; }";
+    expect(sheetRules(css, "packages/ui/src/face/face-motion.css")).toEqual([]);
+  });
+});
+
+describe("a module's class strings", () => {
+  it("refuses Tailwind's own type, radius, motion, and palette", () => {
+    const source = `export const A = <div className="text-sm font-medium rounded-md duration-150 ease-in-out bg-red-500 hover:bg-[#fff]" />;`;
+    expect(classRules(source)).toEqual([
+      STYLE_RULE.TYPE,
+      STYLE_RULE.TYPE,
+      STYLE_RULE.RADIUS,
+      STYLE_RULE.DURATION,
+      STYLE_RULE.EASING,
+      STYLE_RULE.COLOUR,
+      STYLE_RULE.COLOUR,
+    ]);
+  });
+
+  it("passes the utilities @luke/ui's theme maps onto tokens", () => {
+    const source = `const card = cn("text-body bg-primary rounded-menu ease-pane animate-menu-in rounded-full", \`data-open:duration-(--luke-duration-quick) \${x}\`);`;
+    expect(classRules(source)).toEqual([]);
+  });
+
+  it("refuses truncate in a class list, and passes the word in a sentence or a comment", () => {
+    const source = `
+      // a \`truncate\` class cuts with an ellipsis
+      const label = "We truncate the log at a thousand lines.";
+      const cut = <span className="min-w-0 truncate">{name}</span>;
+      const words = <p>Don't truncate what's said</p>;`;
+    const violations = styleViolations(MODULE, source, NAMES);
+    expect(violations.map((violation) => [violation.rule, violation.line])).toEqual([
+      [STYLE_RULE.ELLIPSIS, 4],
+    ]);
+  });
+
+  it("reads a class list whose arbitrary value holds a character no class name has", () => {
+    const source = `const a = <nav className="flex rounded-md [&>*+*]:before:content-['·']" />;`;
+    expect(classRules(source)).toEqual([STYLE_RULE.RADIUS]);
+  });
+
+  it("is not read in a test", () => {
+    const source = `const a = <div className="text-sm" />;`;
+    expect(classRules(source, "packages/panel/src/thing.test.tsx")).toEqual([]);
+  });
+});
+
+describe("styleSuppressionLines", () => {
+  it("finds a comment asking to silence the guard, and passes the markers DESIGN.md defines", () => {
+    const css = [
+      ".a { color: #fff; } /* style-guard-disable */",
+      "/* stylelint-disable-next-line */",
+      ".b { outline: none; /* no ring: the caret marks the field */ }",
+      ".c { padding: 3px; /* off-scale: optical */ }",
+    ].join("\n");
+    expect(styleSuppressionLines(css)).toEqual([1, 2]);
+  });
+});

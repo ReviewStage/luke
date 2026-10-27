@@ -84,3 +84,29 @@ export function withWords(drafts: CommentDrafts, draft: CommentDraft, body: stri
   else onSide.set(line, body);
   return { ...drafts, words: new Map(drafts.words).set(path, new Map(sides).set(side, onSide)) };
 }
+
+/**
+ * The words written in the replies and the edits a member closed unsent,
+ * held by the id of the thread or of the pending comment they were written
+ * on, so opening one again brings them back. A reply or an edit GitHub took
+ * lets its words go, and so does one written back to what it began from.
+ */
+export interface HeldBodies {
+  /** The words held for `id`; none where nothing is held. */
+  readonly of: (id: string) => string | undefined;
+  /** Holds `body` for `id`, or lets the place go where it is `undefined`. */
+  readonly keep: (id: string, body: string | undefined) => void;
+}
+
+/** A place that holds words, empty. */
+export function heldBodies(): HeldBodies {
+  // Note that this is a mutable map, because it is read as a box opens and written as words are typed, and neither should draw every thread of the tab again.
+  const held = new Map<string, string>();
+  return {
+    of: (id) => held.get(id),
+    keep: (id, body) => {
+      if (body === undefined) held.delete(id);
+      else held.set(id, body);
+    },
+  };
+}

@@ -45,7 +45,7 @@ function Avatars(): React.JSX.Element {
       <CatalogSection id="avatar-states" title="Picture, letter, failed picture, no letter, no one">
         <Stack gap={GAP.CONTROL}>
           {Object.values(AVATAR_SIZE).map((size) => (
-            <Inline key={size} gap={GAP.CONTROL} align="center">
+            <Inline key={size} gap={GAP.CONTROL}>
               <Avatar name="Ada Lovelace" src={PICTURE} size={size} />
               <Avatar name="Ada Lovelace" size={size} />
               <Avatar name="Ada Lovelace" src={BROKEN} size={size} />
@@ -58,7 +58,7 @@ function Avatars(): React.JSX.Element {
       <CatalogSection id="avatar-squares" title="Square: picture, glyph, tiled glyph, letter">
         <Stack gap={GAP.CONTROL}>
           {Object.values(AVATAR_SIZE).map((size) => (
-            <Inline key={size} gap={GAP.CONTROL} align="center">
+            <Inline key={size} gap={GAP.CONTROL}>
               <Avatar name="Vercel" src={PICTURE} shape={AVATAR_SHAPE.SQUARE} size={size} />
               <Avatar
                 name="Agent"
@@ -84,7 +84,7 @@ function Avatars(): React.JSX.Element {
       >
         <Stack gap={GAP.CONTROL}>
           {Object.values(AVATAR_SIZE).map((size) => (
-            <Inline key={size} gap={GAP.CONTROL} align="center">
+            <Inline key={size} gap={GAP.CONTROL}>
               <Avatar name="Acme" src={PICTURE} shape={AVATAR_SHAPE.TILE} size={size} />
               <Avatar name="Acme" shape={AVATAR_SHAPE.TILE} size={size} />
               <Avatar name="Acme" src={BROKEN} shape={AVATAR_SHAPE.TILE} size={size} />

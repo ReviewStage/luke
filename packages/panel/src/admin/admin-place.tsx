@@ -15,7 +15,7 @@ import { ADMIN_METRICS_WINDOW_DEFAULT, type AdminMetricsWindow } from "@luke/fea
 import { useState } from "react";
 import { AppAdminDoors } from "./app-admin-doors.js";
 import { ADMINS_HIDDEN } from "./prefs.js";
-import type { AdminTab, AdminView } from "./routing.js";
+import { ADMIN_PAGE, ADMIN_TAB, type AdminTab, type AdminView } from "./routing.js";
 import { AccountScreen } from "./screens/account.js";
 import { CostScreen } from "./screens/cost.js";
 import { DashboardScreen, useMetricsRead } from "./screens/dashboard.js";
@@ -24,20 +24,16 @@ import { ReliabilityScreen } from "./screens/reliability.js";
 import { UsersScreen } from "./screens/users.js";
 import { WorkspacesScreen } from "./screens/workspaces.js";
 
-/** The view a section opens on. */
+/** The view a section opens on; Animations is the web page's alone, so here it opens the Overview. */
 export function adminSectionView(tab: AdminTab): AdminView {
-  if (tab === "cost") return { kind: "cost" };
-  if (tab === "reliability") return { kind: "reliability" };
-  if (tab === "workspaces") return { kind: "workspaces" };
-  if (tab === "users") return { kind: "users" };
-  return { kind: "dashboard" };
+  return { kind: tab === ADMIN_TAB.ANIMATIONS ? ADMIN_TAB.DASHBOARD : tab };
 }
 
 /** The section a view stands under: an account's page under Users, a day's under the Overview. */
 export function adminSectionOf(view: AdminView): AdminTab {
-  if (view.kind === "account") return "users";
-  if (view.kind === "day") return "dashboard";
-  if (view.kind === "animations") return "dashboard";
+  if (view.kind === ADMIN_PAGE.ACCOUNT) return ADMIN_TAB.USERS;
+  if (view.kind === ADMIN_PAGE.DAY) return ADMIN_TAB.DASHBOARD;
+  if (view.kind === ADMIN_TAB.ANIMATIONS) return ADMIN_TAB.DASHBOARD;
   return view.kind;
 }
 
@@ -77,35 +73,35 @@ function AdminViews({ view, onOpen }: AdminPlaceProps): React.JSX.Element {
     setHideAdmins(hide);
   };
   const [windowDays, setWindowDays] = useState<AdminMetricsWindow>(ADMIN_METRICS_WINDOW_DEFAULT);
-  const openAccount = (id: string) => onOpen({ kind: "account", id });
-  const openDay = (day: string) => onOpen({ kind: "day", day });
+  const openAccount = (id: string) => onOpen({ kind: ADMIN_PAGE.ACCOUNT, id });
+  const openDay = (day: string) => onOpen({ kind: ADMIN_PAGE.DAY, day });
   // The overview's read waits while another view stands, as the web page's does.
-  const metrics = useMetricsRead(hideAdmins, windowDays, view.kind === "dashboard");
+  const metrics = useMetricsRead(hideAdmins, windowDays, view.kind === ADMIN_TAB.DASHBOARD);
   const shared = { account: undefined, onSignOut: noSignOut, frame: unframed };
 
   switch (view.kind) {
-    case "account":
+    case ADMIN_PAGE.ACCOUNT:
       return (
         <AccountScreen
           {...shared}
           id={view.id}
           windowDays={windowDays}
           onWindowDaysChange={setWindowDays}
-          onBack={() => onOpen({ kind: "users" })}
+          onBack={() => onOpen({ kind: ADMIN_TAB.USERS })}
         />
       );
-    case "day":
+    case ADMIN_PAGE.DAY:
       return (
         <DayScreen
           {...shared}
           day={view.day}
           hideAdmins={hideAdmins}
           onHideAdminsChange={changeHideAdmins}
-          onBack={() => onOpen({ kind: "dashboard" })}
+          onBack={() => onOpen({ kind: ADMIN_TAB.DASHBOARD })}
           onOpenAccount={openAccount}
         />
       );
-    case "cost":
+    case ADMIN_TAB.COST:
       return (
         <CostScreen
           {...shared}
@@ -116,7 +112,7 @@ function AdminViews({ view, onOpen }: AdminPlaceProps): React.JSX.Element {
           onOpenAccount={openAccount}
         />
       );
-    case "reliability":
+    case ADMIN_TAB.RELIABILITY:
       return (
         <ReliabilityScreen
           {...shared}
@@ -127,7 +123,7 @@ function AdminViews({ view, onOpen }: AdminPlaceProps): React.JSX.Element {
           onOpenAccount={openAccount}
         />
       );
-    case "workspaces":
+    case ADMIN_TAB.WORKSPACES:
       return (
         <WorkspacesScreen
           {...shared}
@@ -136,7 +132,7 @@ function AdminViews({ view, onOpen }: AdminPlaceProps): React.JSX.Element {
           onOpenAccount={openAccount}
         />
       );
-    case "users":
+    case ADMIN_TAB.USERS:
       return (
         <UsersScreen
           {...shared}

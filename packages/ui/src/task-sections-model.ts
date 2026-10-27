@@ -200,11 +200,6 @@ export function sectionEntries(state: TaskSections): ReadonlyMap<string, TaskSec
   return new Map(state.entries.map((entry) => [entry.taskId, entry]));
 }
 
-/** The section each agent stands in, by the agent's id. */
-export function agentSectionEntries(state: TaskSections): ReadonlyMap<string, AgentSectionEntry> {
-  return new Map(state.agentEntries.map((entry) => [entry.agentId, entry]));
-}
-
 /** The section the row stands in, where it stands in one. */
 export function memberSection(state: TaskSections, member: SectionMember): string | undefined {
   return allEntries(state).find((entry) => keeps(entry, member))?.sectionId;

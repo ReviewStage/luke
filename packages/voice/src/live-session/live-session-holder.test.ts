@@ -7,7 +7,12 @@ import {
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@luke/gateway";
-import { LIVE_SERVER_EVENT, type LiveClientEvent, parseLiveServerEvent } from "@luke/live";
+import {
+  LIVE_CLOSE_REASON,
+  LIVE_SERVER_EVENT,
+  type LiveClientEvent,
+  parseLiveServerEvent,
+} from "@luke/live";
 import type { WireRecord } from "@luke/wire";
 import { Effect, type Scope, type Stream } from "effect";
 import { holdSocket, type SocketHold } from "../held-socket.js";
@@ -395,5 +400,23 @@ it.effect(
       f.sidebands[0]?.closedBy("close_requested", 3);
       yield* settle();
       assert.deepEqual(f.callsEnded, [{ agentId: INVITES_AGENT, taskId: INVITES_TASK }]);
+    }),
+);
+
+it.effect(
+  "a sideband whose reconnects ran out closes the call as a lost connection, the reason the window says a dropped call by",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      // The source hands the close up only once every try to re-attach has failed.
+      sideband.dropConnection();
+      yield* settle();
+      assert.deepEqual(f.changes.at(-1), {
+        sessionId: "sess-1",
+        phase: LIVE_SESSION_PHASE.CLOSED,
+        reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
+      });
+      assert.equal(f.holder.sessionStands(), false);
     }),
 );

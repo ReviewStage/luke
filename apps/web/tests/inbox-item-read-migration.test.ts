@@ -7,8 +7,8 @@ import { Database } from "@luke/database/core/query";
 import { user } from "@luke/database/schemas/auth";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
-import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
-import { postInboxItem, readInboxItem } from "@luke/service/inbox/inbox-store";
+import { INBOX_ASK } from "@luke/features/inbox-wire";
+import { postInboxThread, readInboxItem } from "@luke/service/inbox/inbox-store";
 import { Effect, Layer, Option, Result } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -68,12 +68,13 @@ it.effect(
         yield* sql`delete from __drizzle_migrations where name = ${MIGRATION}`;
         yield* runWebMigrations();
 
-        const posted = yield* postInboxItem(
+        const posted = yield* postInboxThread(
           { userId: "dean", taskId: task.id, agentId: agent.id },
           {
             key: "invite-copy",
             title: "What should it say?",
-            response: { type: INBOX_RESPONSE.TEXT },
+            body: "The invitation email needs its words.",
+            ask: { type: INBOX_ASK.ANSWER },
           },
         );
         assert.ok(Result.isSuccess(posted));

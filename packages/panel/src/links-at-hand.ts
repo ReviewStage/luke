@@ -1,4 +1,4 @@
-import { LINK_PLACE, type LinkPlace, linkOf, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace, linkOf, type ReadLink } from "@luke/features/link-grammar";
 import type { Workspace } from "@luke/features/workspace-wire";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";

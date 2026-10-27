@@ -1,17 +1,10 @@
-import {
-  INBOX_STATUS,
-  type InboxBlock,
-  type InboxReply,
-  type InboxResponse,
-  type InboxStatus,
-} from "@luke/features/inbox-wire";
+import { INBOX_STATUS, type InboxStatus } from "@luke/features/inbox-wire";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
   index,
   integer,
-  jsonb,
   pgTable,
   text,
   uniqueIndex,
@@ -28,24 +21,22 @@ import { task } from "./task.js";
  *
  * The agent names the item by its key, unique per agent, so posting under
  * the same key again is a write of this row rather than a second one: the
- * revision moves on, the item opens again, and what it asked replaces what
- * it asked before. The title, the blocks of context, and the response the
- * item asks for are what the agent posted last, the blocks and the response
- * as the wire's own JSON (`@luke/features/inbox-wire`), so a block type
- * added later is a member of that JSON rather than a column; `needs_reply`
- * is whether the agent is to hear the answer as a message. The status is
- * open until a member answers it, which writes the answer, the member, and
- * the key the client sent it under, so an answer sent again after a lost
- * reply is taken once, or until it is closed: by the agent, which writes
- * why, or by a member without an answer, which writes the member. The task is
- * the agent's, kept on the row so a task's inbox is read by one index, and
- * the account's open items are read by another. A message on the item's
- * thread (`inbox-message.ts`) moves when it last changed and never when it
- * was settled. From version 5 an agent's message on the thread may carry
- * an ask, and the one that waits on an answer is named here; the title,
- * blocks, response, and `needs_reply` stay written beside it for a reader
- * from before version 5. The row goes with its
- * account, its task, and its agent alike.
+ * revision moves on, the item opens again, and its title is the one the
+ * agent named last. What the item says and asks is its thread
+ * (`inbox-message.ts`): the agent's messages, each of which may end with an
+ * ask, and the members', each of which may carry the answer to one; the
+ * message whose ask waits on an answer is named here, and an open item that
+ * names none is a notice, waiting on the developer's nod alone.
+ * `needs_reply` is whether the agent hears the answer to its `do` ask as a
+ * message. The status is open until a member answers it or nods, which
+ * writes the member and the key the client sent it under, so an answer sent
+ * again after a lost reply is taken once, or until it is closed: by the
+ * agent, which writes why, or by a member without an answer, which writes
+ * the member. The task is the agent's, kept on the row so a task's inbox is
+ * read by one index, and the account's open items are read by another. A
+ * message on the item's thread moves when it last changed and never when it
+ * was settled. The row goes with its account, its task, and its agent
+ * alike.
  */
 export const inboxItem = pgTable(
   "inbox_item",
@@ -67,18 +58,13 @@ export const inboxItem = pgTable(
     key: text("key").notNull(),
     /** Moved on by every change of the agent's, which an answer names so it answers the item it was shown. */
     revision: integer("revision").notNull(),
-    /** The version of the inbox vocabulary the blocks and the response were written in (`INBOX_WIRE_VERSION`). */
+    /** The version of the inbox vocabulary the item was written in (`INBOX_WIRE_VERSION`). */
     version: integer("version").notNull(),
     title: text("title").notNull(),
-    /** The context under the title, as the wire's blocks; empty where the agent wrote none. */
-    blocks: jsonb("blocks").$type<readonly InboxBlock[]>().notNull(),
-    /** What the item asks of the developer, as the wire's response. */
-    response: jsonb("response").$type<InboxResponse>().notNull(),
+    /** Whether the agent hears the answer to its open `do` ask as a message; false on a notice, which it never hears. */
     needsReply: boolean("needs_reply").notNull(),
     status: text("status").$type<InboxStatus>().notNull(),
-    /** The developer's answer; null until they answer. */
-    answer: jsonb("answer").$type<InboxReply>(),
-    /** The key the answer, or a member's close, was sent under; null until a member answers or closes it. */
+    /** The key the answer, a nod, or a member's close was sent under; null until a member answers or closes it. */
     answerKey: text("answer_key"),
     /**
      * The member who answered, any member of the task's workspace; null until

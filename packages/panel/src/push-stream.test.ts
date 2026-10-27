@@ -130,12 +130,12 @@ it("a document pushed the moment the stream opens is heard, and a burst of them 
   const panel = main.page(PANEL);
   const versions = hearing<number>();
   const shown = hearing<unknown>();
-  panel.listeners.onAppState((snapshot) => versions.hear(snapshot.version));
+  panel.listeners.onAppState((delivery) => versions.hear(delivery.version));
   panel.listeners.onShowAgent(shown.hear);
   await panel.opened;
 
   for (const version of [1, 2, 3]) {
-    main.pushes.push(WINDOW, PUSH.APP_STATE, stateWith({}, { version }));
+    main.pushes.pushState(WINDOW, stateWith({}, { version }));
   }
   main.pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
   await shown.until(1);

@@ -16,22 +16,29 @@ export interface NetworkWatchDependencies {
   state: AppStateStore;
   /** Whether the machine has a network now: Electron's `net.isOnline` on the desktop. */
   isOnline: () => boolean;
+  /** What runs each time a network lost is found again, as the live reads catching up at once rather than on their own backoff. */
+  regained?: Effect.Effect<void>;
 }
 
 /**
  * Asks the probe at once and every `NETWORK_PROBE_INTERVAL` after it for the
  * client's scope, and writes the answer into the document only when it moved,
- * so a steady network costs no version and reaches no window. Note that the
- * probe is polled rather than subscribed to, because Electron announces no
- * change of `net.online` to the main process.
+ * so a steady network costs no version and reaches no window, and runs
+ * `regained` once each time it turns back online. Note that the probe is
+ * polled rather than subscribed to, because Electron announces no change of
+ * `net.online` to the main process.
  */
 export const linkNetworkWatch = /* @__PURE__ */ Effect.fn("client/linkNetworkWatch")(function* (
   dependencies: NetworkWatchDependencies,
 ): Effect.fn.Return<void, never, Scope.Scope> {
-  const { state, isOnline } = dependencies;
-  const probe = Effect.sync(() => {
+  const { state, isOnline, regained = Effect.void } = dependencies;
+  const scope = yield* Effect.scope;
+  // Note that what catches up runs beside the probe, so a slow answer never holds the next probe.
+  const probe = Effect.suspend(() => {
     const online = isOnline();
-    if (state.snapshot().network.online !== online) state.update({ network: { online } });
+    if (state.snapshot().network.online === online) return Effect.void;
+    state.update({ network: { online } });
+    return online ? Effect.asVoid(Effect.forkIn(regained, scope)) : Effect.void;
   });
   yield* Effect.forkScoped(Effect.repeat(probe, Schedule.spaced(NETWORK_PROBE_INTERVAL)));
 });

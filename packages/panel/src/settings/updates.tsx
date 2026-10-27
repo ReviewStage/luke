@@ -81,7 +81,7 @@ export function UpdatesSection({
   /** Whether the platform offers updates; where it does not, the changelog stands alone. */
   offered: boolean;
 }): React.JSX.Element {
-  const { tell } = useAct();
+  const { press } = useAct();
   const row = updateRow(control.update, control.build);
   return (
     <SettingsSection>
@@ -120,7 +120,7 @@ export function UpdatesSection({
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
               icon={<ExternalIcon />}
-              onClick={() => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG)}
+              onClick={() => press(ACT_KIND.UPDATE_OPEN_CHANGELOG)}
             >
               Open
             </Button>

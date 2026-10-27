@@ -13,9 +13,7 @@ import {
 import {
   ALIGN,
   ArrowLeftIcon,
-  BADGE_TONE,
   Badge,
-  type BadgeTone,
   FILL_ELEMENT,
   Fill,
   GAP,
@@ -30,6 +28,8 @@ import {
   ONE_LINE_ELEMENT,
   OneLine,
   ScrollArea,
+  STATUS_TONE,
+  type StatusTone,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -100,15 +100,15 @@ function ToolBadge({ tool }: { tool: IntegrationTool }): React.JSX.Element | nul
   const badge = toolBadge(tool.annotations);
   if (badge === undefined) return null;
   return (
-    <Badge tone={badge === TOOL_BADGE.DESTRUCTIVE ? BADGE_TONE.DANGER : BADGE_TONE.NEUTRAL}>
+    <Badge tone={badge === TOOL_BADGE.DESTRUCTIVE ? STATUS_TONE.DANGER : STATUS_TONE.NEUTRAL}>
       {badge}
     </Badge>
   );
 }
 
 /** The tone a hint is said in: the danger tone for what destroys, the quiet one for the rest. */
-function hintTone(hint: ToolHint): BadgeTone {
-  return hint === TOOL_HINT.DESTRUCTIVE ? BADGE_TONE.DANGER : BADGE_TONE.NEUTRAL;
+function hintTone(hint: ToolHint): StatusTone {
+  return hint === TOOL_HINT.DESTRUCTIVE ? STATUS_TONE.DANGER : STATUS_TONE.NEUTRAL;
 }
 
 /** Whether a tool's name stands beside its title, which it does only where the title is not the name. */
@@ -355,7 +355,7 @@ export function IntegrationToolDetail({
             </Inline>
           ) : null}
           {tool.description === "" ? (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               No description.
             </Text>
           ) : (

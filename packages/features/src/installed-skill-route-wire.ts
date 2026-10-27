@@ -234,7 +234,7 @@ export const installedSkillPreviewFileSchema = EffectSchema.Struct({
 /* ----- A skill ----- */
 
 /** One installed skill as the account sees it. */
-export const installedSkillSummarySchema = EffectSchema.Struct({
+const installedSkillSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   scope: installedSkillScopeSchema,
   name: EffectSchema.String,

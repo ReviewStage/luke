@@ -1,11 +1,10 @@
 import {
-  BADGE_TONE,
+  ALIGN,
   Badge,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
   CHIP_SIZE,
-  CHIP_TONE,
   CHIP_WIDTH,
   Chip,
   ChipCount,
@@ -14,6 +13,7 @@ import {
   Inline,
   MARK_PROVIDER,
   ProviderMark,
+  STATUS_TONE,
   Stack,
 } from "@luke/ui";
 import { useState } from "react";
@@ -158,7 +158,7 @@ function Chips(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="chips-tones" title="Tones">
         <Inline>
-          {Object.values(CHIP_TONE).map((tone) => (
+          {Object.values(STATUS_TONE).map((tone) => (
             <Chip key={tone} look={CHIP_LOOK.PILL} tone={tone} chevron>
               <ProviderMark provider={MARK_PROVIDER.GITHUB} />
               <ChipName>{tone}</ChipName>
@@ -168,19 +168,19 @@ function Chips(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="chips-compact-tones" title="Compact tones, beside a badge">
         <Inline gap={GAP.TIGHT}>
-          {Object.values(CHIP_TONE).map((tone) => (
+          {Object.values(STATUS_TONE).map((tone) => (
             <Chip key={tone} look={CHIP_LOOK.PILL} size={CHIP_SIZE.COMPACT} tone={tone} chevron>
               <ProviderMark provider={MARK_PROVIDER.GITHUB} />
               <ChipName>{tone}</ChipName>
             </Chip>
           ))}
-          <Badge tone={BADGE_TONE.MERGED} icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}>
+          <Badge tone={STATUS_TONE.MERGED} icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}>
             badge
           </Badge>
         </Inline>
       </CatalogSection>
       <CatalogSection id="chips-widths" title="Widths">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           {Object.values(CHIP_WIDTH).map((width) => (
             <Chip key={width} look={CHIP_LOOK.FIELD} width={width} chevron>
               <ChipName>{width}</ChipName>
@@ -209,7 +209,7 @@ function Chips(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="chips-narrow" title="Narrow column, long names">
         <div className="catalog-narrow">
-          <Stack gap={GAP.CONTROL} align="start">
+          <Stack gap={GAP.CONTROL} align={ALIGN.START}>
             {Object.values(CHIP_LOOK).map((look) => (
               <Chip key={look} look={look} chevron>
                 <ChipName>acme/a-repository-whose-name-runs-past-its-column</ChipName>

@@ -38,11 +38,8 @@ export const INSTALLED_SKILL_SOURCE = {
   TEXT: "text",
 } as const;
 
-export type InstalledSkillSourceType =
-  (typeof INSTALLED_SKILL_SOURCE)[keyof typeof INSTALLED_SKILL_SOURCE];
-
 /** A skill read from GitHub: the repository, its folder, the ref asked for, and the commit it resolved to, which the files are pinned at. */
-export const installedSkillGithubSourceSchema = EffectSchema.Struct({
+const installedSkillGithubSourceSchema = EffectSchema.Struct({
   type: EffectSchema.Literal(INSTALLED_SKILL_SOURCE.GITHUB),
   owner: EffectSchema.String,
   repo: EffectSchema.String,
@@ -55,7 +52,7 @@ export const installedSkillGithubSourceSchema = EffectSchema.Struct({
 });
 
 /** A skill pasted as text. */
-export const installedSkillTextSourceSchema = EffectSchema.Struct({
+const installedSkillTextSourceSchema = EffectSchema.Struct({
   type: EffectSchema.Literal(INSTALLED_SKILL_SOURCE.TEXT),
 });
 

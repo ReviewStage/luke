@@ -13,7 +13,6 @@ import { type GatewayEventKind, InvalidParamsRefusal } from "./protocol.js";
 /** A value this build made, carried as the JSON it already is; every field of these shapes is a wire value. */
 export function carried<Value>(value: Value): WireValue {
   // SAFETY: the values carried here (settings, snapshots, rosters, offers, Conversation entries, event properties) are the structured-clone payloads the bridge already guarded; each is JSON data.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The protocol carries JSON; the domain type is set aside at this one boundary.
   return value as unknown as WireValue;
 }
 

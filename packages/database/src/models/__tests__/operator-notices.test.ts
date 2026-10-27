@@ -16,7 +16,7 @@ import { Effect, Option, Result } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { OPERATOR_NOTICE_KIND } from "../../storage-vocabulary.js";
-import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
+import { getTestDB, joinWorkspace, openWorkspace, plansOf } from "../../testing/index.js";
 import { sweepAbandonedTurns, TURN_ABANDON } from "../abandoned-turns.js";
 import {
   type CodingAgent,
@@ -295,6 +295,16 @@ it.layer(getTestDB())("a notice that cannot be written", (it) => {
       assert.ok(Result.isSuccess(ended) && ended.success === STORE_WRITE_EFFECT.WRITTEN);
       const turns = yield* latestTurnsOfReached([agent.conversationId]);
       assert.equal(turns.get(agent.conversationId)?.status, TURN_STATUS.SETTLED);
+    }),
+  );
+});
+
+it.layer(getTestDB())("the wake sweep's read", (it) => {
+  it.effect("the sweep finds the unread failures due a wake through their own index", () =>
+    Effect.gen(function* () {
+      const [due] = yield* plansOf(dueOperatorWakes(new Date("2026-10-20T12:00:00Z"), 60_000, 10));
+
+      assert.match(due?.plan ?? "", /operator_notice_unread_kind_at/);
     }),
   );
 });

@@ -17,6 +17,27 @@
     height: 1lh;
   }
 
+  /* A seat the slot names (`ICON_SIZE`) sets the size itself, ahead of any a container hands down, and draws its glyph whole, whatever weight the glyph's own class gave it. */
+  .luke-glyph-slot[data-size="small"] {
+    --luke-glyph-size: var(--luke-icon-12);
+  }
+
+  .luke-glyph-slot[data-size="medium"] {
+    --luke-glyph-size: var(--luke-icon-16);
+  }
+
+  .luke-glyph-slot[data-size="large"] {
+    --luke-glyph-size: var(--luke-icon-20);
+  }
+
+  .luke-glyph-slot[data-size="empty"] {
+    --luke-glyph-size: var(--luke-icon-40);
+  }
+
+  .luke-glyph-slot[data-size] > svg {
+    opacity: 1;
+  }
+
   .luke-glyph-slot > :is(svg, img) {
     width: var(--luke-glyph-size, var(--luke-space-16));
     height: var(--luke-glyph-size, var(--luke-space-16));
@@ -40,7 +61,7 @@
      the fade alone. */
   .luke-glyph-slot[data-arrival] {
     animation:
-      luke-glyph-slot-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
+      luke-glyph-slot-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-glyph-slot-step var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 
@@ -50,7 +71,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .luke-glyph-slot[data-arrival] {
-      animation: luke-glyph-slot-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards;
+      animation: luke-glyph-slot-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards;
     }
   }
 

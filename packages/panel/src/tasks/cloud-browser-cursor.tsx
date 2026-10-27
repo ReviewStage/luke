@@ -10,7 +10,7 @@
  * drawn as a compact neutral arrowhead on a soft halo, as Codex draws its
  * agent's, in a lighter grey over a dark page (`onDarkPage`). While
  * the agent is active on the tab it rocks gently about its tip, a loop
- * `--loop-motion` holds still; a click presses it, with a soft ripple at
+ * `--luke-loop-motion` holds still; a click presses it, with a soft ripple at
  * the point, and typing bobs it. It fades once the agent has done nothing
  * for `CLOUD_BROWSER_CURSOR_IDLE`, timed on the renderer's runtime, and back
  * in on its next move. Near the page's right or bottom edge it is mirrored
@@ -31,7 +31,7 @@ import { Clock, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type CSSProperties, useMemo } from "react";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { usePrefersReducedMotion } from "../use-reduced-motion.js";
+import { useMotionHeld } from "../use-motion-held.js";
 
 /** How long after the agent last acted on the tab its pointer stands; past it the pointer fades. */
 const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
@@ -98,7 +98,7 @@ export function CloudBrowserCursor({
   /** Whether the page is dark where the pointer stands, which draws it lighter. */
   onDarkPage: boolean;
 }): React.JSX.Element | null {
-  const still = usePrefersReducedMotion();
+  const still = useMotionHeld();
   const idle = useIdle(Math.max(lastActedAt, cursor?.at ?? 0));
   const placed = cursor === undefined ? undefined : cursorPlacement(cursor, frame);
   if (cursor === undefined || placed === undefined) return null;

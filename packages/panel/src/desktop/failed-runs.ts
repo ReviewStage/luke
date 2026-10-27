@@ -14,11 +14,12 @@
  */
 
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
+import { STATUS_TONE } from "@luke/ui";
 import { Schema } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { appBridge } from "../app-bridge.js";
 import { readKept, writeKept } from "../kept-storage.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 
 /** What a failed run's toast offers, to open the run. */
 const VIEW_LABEL = "View";
@@ -53,7 +54,7 @@ export function useFailedRunToasts(view: (place: FailedRunPlace) => void): void 
           detail,
           waits: true,
           hold: TOAST_HOLD.NEWS,
-          tone: TOAST_TONE.FAILED,
+          tone: STATUS_TONE.DANGER,
           action: {
             label: VIEW_LABEL,
             onPress: () => viewing.current({ automationId, runId, workspaceId }),

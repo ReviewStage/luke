@@ -15,6 +15,17 @@
     line-height: var(--luke-type-caption-leading);
   }
 
+  /* A window's days (`daily-bars.tsx`): as wide as its frame and as tall as
+     its caller says, and pointing where a day's column opens a page. */
+  .luke-chart.luke-daily-bars {
+    aspect-ratio: auto;
+    width: 100%;
+  }
+
+  .luke-chart.luke-daily-bars[data-opens] {
+    cursor: pointer;
+  }
+
   .luke-chart .recharts-cartesian-axis-tick text {
     fill: var(--luke-color-text-muted);
   }
@@ -76,7 +87,7 @@
   }
 
   .luke-chart-tooltip-label {
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
   }
 
   .luke-chart-tooltip-rows {
@@ -122,7 +133,7 @@
   .luke-chart-tooltip-value {
     color: var(--luke-color-text);
     font-family: var(--luke-font-mono);
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
     font-variant-numeric: tabular-nums;
   }
 }

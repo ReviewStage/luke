@@ -1,3 +1,5 @@
+import { dayAndTimeText, momentText } from "@luke/features/time-format";
+import { readFailedWords } from "@luke/features/words";
 import {
   BUTTON_VARIANT,
   Button,
@@ -10,17 +12,18 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  PageToolbar,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  STATUS_TONE,
   Tooltip,
   useConfirmDialog,
 } from "@luke/ui";
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
-import { dayAndTimeText, momentText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { MarkdownMessage } from "../markdown-message.js";
-import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast.js";
+import { TOAST_HOLD, type ToastNotice, UNDO_LABEL } from "../toast.js";
 import { DocumentScroll } from "./document-frame.js";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
@@ -146,7 +149,6 @@ function VersionBody({
       {units.map((unit, at) => (
         <MarkdownMessage
           // A unit's heading may stand twice, struck and written again, so its place keys it.
-          // oxlint-disable-next-line react/no-array-index-key -- the units are drawn once per diff, in order.
           key={at}
           words={unit.words}
           className={`plan-unit${CHANGE_CLASS[unit.change]}`}
@@ -167,7 +169,7 @@ function VersionBody({
  * sections in a note's own type, each heading at a section's level over its
  * lines, a section apart.
  */
-export function VersionSkeleton({
+function VersionSkeleton({
   title,
   section,
 }: {
@@ -181,7 +183,6 @@ export function VersionSkeleton({
         {PAGE_SKELETON.map((unit) => (
           <NoteUnit key={unit.heading} heading={<Skeleton width={unit.heading} />}>
             {unit.lines.map((width, at) => (
-              // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
               <Skeleton key={at} width={width} />
             ))}
           </NoteUnit>
@@ -191,17 +192,22 @@ export function VersionSkeleton({
   );
 }
 
+/** What the page says where the version's read did not answer. */
+export const VERSION_FAILED = readFailedWords("the version");
+
 /** The version's content against the one before it, or the state standing in its place. */
 function VersionContent({
   viewing,
   title,
   section,
   task,
+  onRetry,
 }: {
   viewing: ViewedVersion;
   title: string | undefined;
   section: number | undefined;
   task: MentionedTask | undefined;
+  onRetry: () => void;
 }): React.JSX.Element {
   const { read } = viewing;
   if (read.kind === HISTORY_READ.READING)
@@ -209,7 +215,7 @@ function VersionContent({
   if (read.kind === HISTORY_READ.FAILED) {
     return (
       <div className="version-note">
-        <ErrorState>The version could not be read.</ErrorState>
+        <ErrorState onRetry={onRetry}>{VERSION_FAILED}</ErrorState>
       </div>
     );
   }
@@ -265,12 +271,12 @@ export function sayRestored(
   undo: (() => Promise<boolean>) | undefined,
 ): void {
   if (undo === undefined) {
-    toast({ words: VERSION_RESTORED_NOTE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+    toast({ words: VERSION_RESTORED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     return;
   }
   toast({
     words: VERSION_RESTORED_NOTE,
-    tone: TOAST_TONE.DONE,
+    tone: STATUS_TONE.COMPLETE,
     action: {
       label: UNDO_LABEL,
       onPress: () => {
@@ -278,7 +284,7 @@ export function sayRestored(
           if (undone) return;
           toast({
             words: RESTORE_UNDO_REFUSED_NOTE,
-            tone: TOAST_TONE.FAILED,
+            tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
           });
         });
@@ -301,9 +307,9 @@ function VersionPageFrame({
 }): React.JSX.Element {
   return (
     <>
-      <header className="desktop-toolbar">
-        {lead}
-        <div className="desktop-toolbar-heading">
+      <PageToolbar
+        lead={lead}
+        heading={
           <OneLine
             as={ONE_LINE_ELEMENT.H1}
             end={ONE_LINE_END.ELLIPSIS}
@@ -311,9 +317,9 @@ function VersionPageFrame({
           >
             {title}
           </OneLine>
-        </div>
-        <div className="desktop-toolbar-actions">{actions}</div>
-      </header>
+        }
+        actions={actions ?? null}
+      />
       <Fill className="desktop-document">
         <DocumentScroll>{children}</DocumentScroll>
       </Fill>
@@ -333,6 +339,7 @@ export function VersionView({
   section,
   task,
   lead,
+  onRetry,
 }: {
   viewing: ViewedVersion;
   /** The restore's question, held by the history around the page (`useVersionRestore`). */
@@ -347,6 +354,8 @@ export function VersionView({
   task?: MentionedTask | undefined;
   /** What leads the bar, as the way back to the list where the version stands alone. */
   lead?: React.ReactNode;
+  /** Reads the version again, from the Retry its failed read offers. */
+  onRetry: () => void;
 }): React.JSX.Element {
   const { line } = viewing;
   return (
@@ -373,7 +382,13 @@ export function VersionView({
           </Tooltip>
         }
       >
-        <VersionContent viewing={viewing} title={title} section={section} task={task} />
+        <VersionContent
+          viewing={viewing}
+          title={title}
+          section={section}
+          task={task}
+          onRetry={onRetry}
+        />
       </VersionPageFrame>
       <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at, noun)} />
     </>

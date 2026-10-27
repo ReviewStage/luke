@@ -352,13 +352,21 @@ function startupInput(
 
 /**
  * How OpenAI's refusal to create or start a session is answered to the
- * device: a rate limit as the throttle it is, so a device can back off, and
- * everything else as the upstream's error, since which error is nothing a
- * device can act on and nothing this service repeats.
+ * device: the account's key refused, or its account out of credit, as what
+ * the developer fixes, each its own slug and nothing of OpenAI's words; a
+ * rate limit as the throttle it is, so a device can back off; and everything
+ * else as the upstream's error, since which error is nothing a device can act
+ * on and nothing this service repeats.
  */
 function upstreamRefused(
   result: { outcome: typeof LIVE_SESSION_OUTCOME.HTTP_ERROR; status: number } | { outcome: string },
 ): Refusal {
+  if (result.outcome === LIVE_SESSION_OUTCOME.OPENAI_KEY_REFUSED) {
+    return refused(HOSTED_API_ERROR.OPENAI_KEY_REFUSED);
+  }
+  if (result.outcome === LIVE_SESSION_OUTCOME.OPENAI_KEY_UNFUNDED) {
+    return refused(HOSTED_API_ERROR.OPENAI_KEY_UNFUNDED);
+  }
   return refused(
     result.outcome === LIVE_SESSION_OUTCOME.HTTP_ERROR &&
       "status" in result &&

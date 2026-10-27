@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { APP_LINK_CLAIM, APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
-import type { ReadLink } from "@luke/features/luke-link";
+import type { ReadLink } from "@luke/features/link-grammar";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
 import type {
   AgentEndToast,
@@ -15,8 +15,13 @@ import type {
 import type { AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, NativeTheme } from "@luke/host/appearance";
 import type { OperatorClient } from "@luke/host/client";
-import { type AppStateStore, voiceWindowGone, WindowAppStates } from "@luke/host/client";
-import { PUSH, type PushName, type PushPayload } from "@luke/host/contract";
+import {
+  type AppStateStore,
+  voiceWindowGaveUp,
+  voiceWindowGone,
+  windowAppState,
+} from "@luke/host/client";
+import { type EventPushName, PUSH, type PushPayload } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -42,6 +47,7 @@ import { reportRendererErrors } from "../window/renderer-errors";
 import { followResponsiveness } from "../window/renderer-health";
 import { VoiceWindow } from "../window/voice-window";
 import { windowMaterialFor } from "../window/window-material";
+import { grantWindowPermissions } from "../window/window-permissions";
 import { windowPushes } from "../window/window-pushes";
 import { PanelWindows, zoomFactorOf, zoomSteer } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
@@ -74,9 +80,10 @@ export interface WindowService extends DesktopService {
   /** The floating call window, shown while a call stands and no Luke window has the keyboard. */
   readonly callWindow: CallWindow;
   /**
-   * One `app:state` per window, each composed with that window's own facts.
-   * The one place the document becomes a push, so what a window is told and
-   * what `app:state-request` answers it are the same document read twice.
+   * One `app:state` per window, each the document as that window is handed
+   * it (`appStateFor`). The one place the document becomes a push, so what a
+   * window is told and what `app:state-request` answers it are the same
+   * document read twice; its stream sends what moved in it.
    */
   publishAppState: () => void;
   /**
@@ -87,13 +94,13 @@ export interface WindowService extends DesktopService {
    */
   applyAppearance: () => Effect.Effect<void>;
   /**
-   * What one window answers for and the document cannot: which surface it
-   * draws, and whether it stands in full screen. Decided here by which window
-   * asked.
+   * The document as one window is handed it: what that window is handed of
+   * it, and what it answers for and the document cannot, whether it stands
+   * in full screen. Decided here by which window asked.
    */
-  windowFactsFor: (sender: WebContents) => AppWindowFacts;
+  appStateFor: (sender: WebContents) => AppStateSnapshot;
   /** Hands a payload to the voice window alone, the one peer of the host's live session. */
-  sendToVoice: <Name extends PushName>(push: Name, payload: PushPayload<Name>) => void;
+  sendToVoice: <Name extends EventPushName>(push: Name, payload: PushPayload<Name>) => void;
   /** Asks the panels to open a task on one agent's tab: a notification's click. */
   showAgent: (place: AgentPlace) => void;
   /** A panel has painted and hears the links it is handed: every Luke link held opens now, and each later one as it comes. */
@@ -135,7 +142,6 @@ export interface WindowService extends DesktopService {
   /** Only this build's own renderer may reach a bridge entry. */
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   applyLoginItem: (openAtLogin: boolean) => void;
-  recycleVoiceWindow: () => void;
 }
 
 /**
@@ -192,6 +198,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     followResponsiveness: (window) => {
       void run(followResponsiveness(window, reportUnresponsivePanel));
     },
+    onRendererGone: (reason) => config.report(`Panel renderer gone: ${reason}`),
   });
   /** The hidden window that holds the live conversation. */
   const voiceWindow = new VoiceWindow({
@@ -204,11 +211,16 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // The window that held the exchange is gone, so what every panel draws
       // in its place is an idle voice; the document says so by holding no
       // view at all, and keeps the avatar, which the host and the panel say.
-      state.update({ voice: voiceWindowGone(state.snapshot().voice) });
+      state.update({ voice: voiceWindowGone(state.snapshot().voice), callTranscript: undefined });
       panels.setVoiceExchange(false);
     },
     onGaveUp: (reason) => {
       config.report(`Voice window abandoned: ${reason}`);
+      // Nothing stands the window back up this run, so every panel says voice
+      // is unavailable where it offers a call, rather than a press reaching
+      // a window that is not there.
+      state.update({ voice: voiceWindowGaveUp(state.snapshot().voice), callTranscript: undefined });
+      panels.setVoiceExchange(false);
     },
   });
   const voiceWindowWanted = runMode.takesFocus || runMode.sendsNetwork;
@@ -239,15 +251,12 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
         steerZoom(stored?.zoom).pipe(withPanelWindows),
       );
     });
-  /** The document as each window was last handed it, so one is handed it again only when something it draws moved. */
-  const windowStates = new WindowAppStates<WebContents>();
-
   function raiseVoiceWindow(): void {
     if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
   }
 
   /** The one place a payload crosses to a window: its push stream. */
-  function sendTo<Name extends PushName>(
+  function sendTo<Name extends EventPushName>(
     sender: WebContents,
     push: Name,
     payload: PushPayload<Name>,
@@ -255,39 +264,35 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     return windowPushes.push(sender, push, payload);
   }
 
-  function broadcast<Name extends PushName>(
-    push: Name,
-    payload: PushPayload<Name>,
-    except?: WebContents,
-  ): void {
-    panels.broadcast(push, payload, except);
-    const voice = voiceWindow.current();
-    if (!voice || voice.webContents === except) return;
-    sendTo(voice.webContents, push, payload);
+  /** Which window `sender` is, as far as what it is handed of the document goes. */
+  function roleOf(sender: WebContents): { voice: boolean; call: boolean } {
+    return { voice: voiceWindow.owns(sender), call: callWindow.owns(sender) };
   }
 
   function windowFactsFor(sender: WebContents): AppWindowFacts {
-    if (voiceWindow.owns(sender) || callWindow.owns(sender)) return { fullScreen: false };
+    const { voice, call } = roleOf(sender);
+    if (voice || call) return { fullScreen: false };
     return { fullScreen: panels.fullScreen(sender) };
   }
 
-  function publishAppState(): void {
-    const held = state.snapshot();
-    const send = (sender: WebContents, role: { voice: boolean; call: boolean }) => {
-      const snapshot: AppStateSnapshot = { ...held, window: windowFactsFor(sender) };
-      windowStates.offer(sender, role, snapshot, (shown) => sendTo(sender, PUSH.APP_STATE, shown));
-    };
-    for (const sender of panels.senders()) send(sender, { voice: false, call: false });
-    const voice = voiceWindow.current();
-    if (voice && !voice.isDestroyed()) send(voice.webContents, { voice: true, call: false });
-    const call = callWindow.current();
-    if (call) send(call.webContents, { voice: false, call: true });
-    // The call window follows the document it draws, so it stands, goes, and
-    // grows for the avatar on the same version every window is told.
-    callPresence.voiceChanged(held.voice);
+  /** The document as `sender` is handed it, read and pushed alike. */
+  function appStateFor(sender: WebContents): AppStateSnapshot {
+    return windowAppState(state.snapshot(), roleOf(sender), windowFactsFor(sender));
   }
 
-  function sendToVoice<Name extends PushName>(push: Name, payload: PushPayload<Name>): void {
+  function publishAppState(): void {
+    const send = (sender: WebContents) => windowPushes.pushState(sender, appStateFor(sender));
+    for (const sender of panels.senders()) send(sender);
+    const voice = voiceWindow.current();
+    if (voice && !voice.isDestroyed()) send(voice.webContents);
+    const call = callWindow.current();
+    if (call) send(call.webContents);
+    // The call window follows the document it draws, so it stands, goes, and
+    // grows for the avatar on the same version every window is told.
+    callPresence.voiceChanged(state.snapshot().voice);
+  }
+
+  function sendToVoice<Name extends EventPushName>(push: Name, payload: PushPayload<Name>): void {
     const voice = voiceWindow.current();
     if (voice) sendTo(voice.webContents, push, payload);
   }
@@ -389,25 +394,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   function configurePermissions(): void {
-    const ownWindow = (webContents: Electron.WebContents) =>
-      panels.owns(webContents) || voiceWindow.owns(webContents);
-    session.defaultSession.setPermissionCheckHandler(
-      (webContents, permission, _origin, details) =>
-        webContents !== null &&
-        ownWindow(webContents) &&
-        permission === "media" &&
-        details.mediaType === "audio",
-    );
-    session.defaultSession.setPermissionRequestHandler(
-      (webContents, permission, callback, details) => {
-        const mediaTypes = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
-        callback(
-          ownWindow(webContents) &&
-            permission === "media" &&
-            mediaTypes.length > 0 &&
-            mediaTypes.every((mediaType: string) => mediaType === "audio"),
-        );
-      },
+    grantWindowPermissions(
+      session.defaultSession,
+      (webContents) => panels.owns(webContents) || voiceWindow.owns(webContents),
     );
   }
 
@@ -434,9 +423,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   // Named one at a time because Electron's `on` is typed per event name.
   const wake = (eventName: "resume" | "unlock-screen" | "user-did-become-active") => () => {
     handleDisplayChange();
-    broadcast(PUSH.LIFECYCLE, eventName);
     // A terminal's socket may have died in the sleep without a word, and one waiting out a backoff need not wait on.
     if (eventName === "resume") void run(operator.host.terminalWake());
+    // So may the task list's follow; a resume and an unlock landing together seal it again once.
+    if (eventName !== "user-did-become-active") void run(operator.host.tasksResync());
   };
   const wakeHandlers = {
     resume: wake("resume"),
@@ -451,7 +441,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     callWindow,
     publishAppState,
     applyAppearance,
-    windowFactsFor,
+    appStateFor,
     sendToVoice,
     showAgent,
     panelReady: () => config.appLinks.ready(openAppLink),
@@ -471,11 +461,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       return url === rendererUrl || url === voiceUrl || url === callUrl;
     },
     applyLoginItem,
-    recycleVoiceWindow: () => {
-      if (!voiceWindow.current()) return;
-      voiceWindow.close();
-      raiseVoiceWindow();
-    },
     start: async () => {
       followDockIcon(path.join(config.resourceDirectory, "icon"));
       const settings = await run(operator.ensureSettings());

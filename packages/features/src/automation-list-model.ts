@@ -21,7 +21,9 @@ import {
 } from "./automation-wire.js";
 import { agentFailureWords } from "./coding-agent-failure-words.js";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
+import { clockText } from "./time-format.js";
 import { SENTRY_LEVEL, TRIGGER_CATALOG } from "./trigger-catalog.js";
+import { andList, orList } from "./words.js";
 
 /**
  * automation-list-model.ts -- the Automations list as a window draws it: grouped by who owns each, with its trigger in words, where its newest run stands, and when it runs next.
@@ -178,11 +180,6 @@ export interface AutomationGroup {
   readonly automations: readonly AutomationSummary[];
 }
 
-/** A time of day as a schedule says it, the minute in two figures. */
-function clockText(hour: number, minute: number): string {
-  return `${hour}:${String(minute).padStart(2, "0")}`;
-}
-
 /** A whole number a cron field spells, or nothing for any other field. */
 function cronNumber(field: string | undefined): number | undefined {
   return field !== undefined && /^\d+$/u.test(field) ? Number(field) : undefined;
@@ -226,12 +223,6 @@ export function automationGroups(
   })).filter((group) => group.automations.length > 0);
 }
 
-/** Names in a run of words: "a", "a or b", "a, b, or c". */
-function eitherOf(names: readonly string[]): string {
-  if (names.length <= 2) return names.join(" or ");
-  return `${names.slice(0, -1).join(", ")}, or ${names.at(-1)}`;
-}
-
 /**
  * A trigger as one sentence, as a row and the editor say what fires it: a
  * schedule in words, a GitHub event with the repositories it is heard in and
@@ -258,22 +249,22 @@ export function automationTriggerText(
           ? ""
           : senders.length === Object.values(GITHUB_SENDER).length
             ? " by anyone"
-            : ` by ${eitherOf(senders.map((sender) => GITHUB_SENDER_WORDS[sender]))}`;
+            : ` by ${orList(senders.map((sender) => GITHUB_SENDER_WORDS[sender]))}`;
       const happens =
         trigger.event === GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED && moments.length > 0
-          ? `is ${eitherOf(moments.map((moment) => PULL_REQUEST_MOMENT_WORDS[moment]))}`
+          ? `is ${orList(moments.map((moment) => PULL_REQUEST_MOMENT_WORDS[moment]))}`
           : words.happens;
       const pullRequest = PULL_REQUEST_EVENTS.has(trigger.event);
       const included = [
         ...(pullRequest && trigger.drafts === true ? ["drafts"] : []),
         ...(pullRequest && trigger.forks === true ? ["forks"] : []),
       ];
-      const also = included.length === 0 ? "" : `, ${included.join(" and ")} included`;
-      const where = repositories.length === 0 ? "" : ` in ${eitherOf(repositories)}`;
+      const also = included.length === 0 ? "" : `, ${andList(included)} included`;
+      const where = repositories.length === 0 ? "" : ` in ${orList(repositories)}`;
       const labels = trigger.labels ?? [];
       const branches = trigger.branches ?? [];
-      const labelled = labels.length === 0 ? "" : ` labelled ${eitherOf(labels)}`;
-      const on = branches.length === 0 ? "" : ` on ${eitherOf(branches)}`;
+      const labelled = labels.length === 0 ? "" : ` labelled ${orList(labels)}`;
+      const on = branches.length === 0 ? "" : ` on ${orList(branches)}`;
       return `When ${words.what}${by} ${happens}${where}${labelled}${on}${also}`;
     }
     case AUTOMATION_TRIGGER.WEBHOOK:

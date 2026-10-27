@@ -1052,6 +1052,8 @@ const SUCCESS = "success";
 /** A pull request itself as its overview holds it, every account as GitHub names it. */
 export interface GitHubOverviewPullRequest {
   readonly pullRequest: GitHubPullRequest;
+  /** Its description as written, Markdown, empty where it has none. */
+  readonly body: string;
   readonly html: string;
   readonly base: string;
   readonly head: string;
@@ -1981,6 +1983,7 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
   const forkOwner = current.crossRepository ? pull.head.repo?.owner?.login : undefined;
   return Option.some({
     pullRequest,
+    body: pull.body ?? "",
     html: pull.body_html?.trim() ?? "",
     base: nameOf(pull.base.ref),
     head: nameOf(pull.head.ref),
@@ -2620,6 +2623,56 @@ export function viewerPendingReviewOf(
           `the member's own pending review on pull request ${number} was not read: ${failure._tag}`,
         ),
         null,
+      ),
+    ),
+  );
+}
+
+/** Whether the member reading may edit the pull request, as GitHub answers on their own token. */
+const VIEWER_CAN_UPDATE_QUERY = `query ViewerCanUpdate($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { viewerCanUpdate } }
+}`;
+
+const ViewerCanUpdateAnswerSchema = Schema.Struct({
+  data: Schema.optionalKey(
+    Schema.NullOr(
+      Schema.Struct({
+        repository: Schema.NullOr(
+          Schema.Struct({
+            pullRequest: Schema.NullOr(Schema.Struct({ viewerCanUpdate: Schema.Boolean })),
+          }),
+        ),
+      }),
+    ),
+  ),
+});
+
+/**
+ * Whether the member may edit the pull request's description, read on
+ * their own token, since a read on the App's token answers for the App's
+ * bot; not where GitHub would not answer them, which leaves the description
+ * unedited rather than failing the read, said once in the log.
+ */
+export function viewerCanUpdateOf(
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+  const [owner = "", name = ""] = fullName.split("/");
+  const request = githubPost(GRAPHQL_PATH, token, {
+    query: VIEWER_CAN_UPDATE_QUERY,
+    variables: { owner, name, number },
+  });
+  return Effect.scoped(
+    Effect.flatMap(send(request), (response) => readBody(response, ViewerCanUpdateAnswerSchema)),
+  ).pipe(
+    Effect.map((answer) => answer.data?.repository?.pullRequest?.viewerCanUpdate === true),
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(
+          `whether the member may edit pull request ${number} was not read: ${failure._tag}`,
+        ),
+        false,
       ),
     ),
   );

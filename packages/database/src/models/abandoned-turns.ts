@@ -171,7 +171,7 @@ type LostTurnEnd =
     };
 
 /** What a native agent's turn whose runner went away says it failed of, as a runner's own failed end says why. */
-export const RUNNER_LOST_DETAIL = "the agent's runner stopped before its turn ended";
+const RUNNER_LOST_DETAIL = "the agent's runner stopped before its turn ended";
 
 /** The turns still queued or running of the standing coding agent's conversation named, oldest first. */
 const agentRunningTurns = SqlSchema.findAll({

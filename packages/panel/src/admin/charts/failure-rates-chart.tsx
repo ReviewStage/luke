@@ -5,7 +5,9 @@
  */
 
 import type { AdminReliabilityDay } from "@luke/features/admin-answer-wire";
-import { formatShare, formatTooltipDay } from "@luke/ui/admin-format";
+import { formatPercent } from "@luke/features/number-format";
+import { formatDayTick } from "@luke/features/time-format";
+import { formatTooltipDay, RATE_PLACES } from "@luke/ui/admin-format";
 import {
   type ChartConfig,
   ChartContainer,
@@ -13,7 +15,6 @@ import {
   ChartTooltipContent,
 } from "@luke/ui/chart";
 import { partialDayKey } from "@luke/ui/daily-series";
-import { formatDayTick } from "@luke/ui/time-format";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, SeriesLegend } from "./chart-frame.js";
 
@@ -92,13 +93,13 @@ export function FailureRatesChart({
             width={44}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value: number) => formatShare(value)}
+            tickFormatter={(value: number) => formatPercent(value, RATE_PLACES)}
           />
           <ChartTooltip
             content={
               <ChartTooltipContent
                 labelFormatter={(value) => formatTooltipDay(String(value), partialDay)}
-                valueFormatter={formatShare}
+                valueFormatter={(value: number) => formatPercent(value, RATE_PLACES)}
               />
             }
           />

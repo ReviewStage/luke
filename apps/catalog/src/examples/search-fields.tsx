@@ -1,10 +1,16 @@
 import {
+  ComposeIcon,
+  FoldingSearch,
   GAP,
+  IconButton,
+  Inline,
   SEARCH_FIELD_LOOK,
   SearchField,
   type SearchFieldLook,
   type SearchTally,
   Stack,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import { type ReactNode, useState } from "react";
 import type { Example } from "../examples";
@@ -13,9 +19,23 @@ import { CatalogSection } from "../section";
 /**
  * search-fields.tsx -- a SearchField empty with its chord, holding a query
  * with its clear, with a tally of its results and of none, its tally folded
- * as a narrow bar folds it, in a narrow column with a long query, and as a
- * menu's head row.
+ * as a narrow bar folds it, in a narrow column with a long query, as a
+ * menu's head row, and folding over a tight head's name, the button after it
+ * standing still as it unfolds.
  */
+
+/** A tight head's name, its folding search, and a button after it that keeps its place. */
+function FoldingHead(): React.JSX.Element {
+  const [query, setQuery] = useState("");
+  return (
+    <Inline gap={GAP.TIGHT} wrap={false}>
+      <FoldingSearch label="Search inbox" value={query} onChange={setQuery}>
+        <Text variant={TEXT_VARIANT.SECTION}>Inbox</Text>
+      </FoldingSearch>
+      <IconButton icon={<ComposeIcon />} label="New thread" />
+    </Inline>
+  );
+}
 
 /** A search the example holds the query of, as a caller would. */
 function Held({
@@ -104,6 +124,11 @@ function SearchFields(): React.JSX.Element {
             placeholder="Search models"
             look={SEARCH_FIELD_LOOK.MENU}
           />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="search-folding" title="Folding over a head's name">
+        <div className="catalog-narrow">
+          <FoldingHead />
         </div>
       </CatalogSection>
     </>

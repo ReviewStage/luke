@@ -12,11 +12,11 @@
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { AvatarFeed } from "@luke/voice/avatar";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
-import { PUSH, type PushName, type PushPayload } from "./contract/pushes.js";
+import { type EventPushName, PUSH, type PushPayload } from "./contract/pushes.js";
 
 /** The panel's page as the relay reaches it: its own pushes, and nothing wider. */
 export interface AvatarPage {
-  push<Name extends PushName>(push: Name, payload: PushPayload<Name>): void;
+  push<Name extends EventPushName>(push: Name, payload: PushPayload<Name>): void;
 }
 
 /**

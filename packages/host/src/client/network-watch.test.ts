@@ -9,8 +9,8 @@ import { linkNetworkWatch } from "./network-watch.js";
 /**
  * What a window reads of the network: the document's `network` slice follows
  * the platform's probe within one interval, either way, moves the version
- * only when the answer moved, and stops following once the client's scope
- * closes.
+ * only when the answer moved, runs what catches up once each time the
+ * network comes back, and stops following once the client's scope closes.
  */
 
 const RUN = {
@@ -21,13 +21,20 @@ const RUN = {
   platform: "darwin",
 } as const;
 
-/** A store and a probe whose answer the test sets, first `online`, the watch linked into `scope`. */
+/** A store and a probe whose answer the test sets, first `online`, the watch linked into `scope`, and how many times it ran `regained`. */
 function watched(scope: Scope.Closeable, online = true) {
   return Effect.gen(function* () {
     const machine = { online };
+    const regained = { times: 0 };
     const state = new AppStateStore(initialAppState(RUN, false, []), yield* Effect.context());
-    yield* linkNetworkWatch({ state, isOnline: () => machine.online }).pipe(Scope.provide(scope));
-    return { machine, state };
+    yield* linkNetworkWatch({
+      state,
+      isOnline: () => machine.online,
+      regained: Effect.sync(() => {
+        regained.times += 1;
+      }),
+    }).pipe(Scope.provide(scope));
+    return { machine, state, regained };
   });
 }
 
@@ -44,6 +51,24 @@ it.effect("a network lost and regained reaches the document within one interval"
     machine.online = true;
     yield* TestClock.adjust("2 seconds");
     assert.equal(state.snapshot().network.online, true);
+    yield* Scope.close(scope, Exit.void);
+  }),
+);
+
+it.effect("a network found again catches up once, and a loss or a steady network does not", () =>
+  Effect.gen(function* () {
+    const scope = yield* Scope.make();
+    const { machine, regained } = yield* watched(scope);
+    yield* TestClock.adjust("10 seconds");
+    assert.equal(regained.times, 0, "a network there at launch was never lost");
+
+    machine.online = false;
+    yield* TestClock.adjust("10 seconds");
+    assert.equal(regained.times, 0);
+
+    machine.online = true;
+    yield* TestClock.adjust("10 seconds");
+    assert.equal(regained.times, 1);
     yield* Scope.close(scope, Exit.void);
   }),
 );

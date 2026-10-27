@@ -1,10 +1,13 @@
 import {
+  Badge,
   TEXT_ELEMENT,
   TEXT_FONT,
   TEXT_TONE,
   TEXT_TRUNCATE,
   TEXT_VARIANT,
   Text,
+  TIME_LOOK,
+  Time,
   VISUALLY_HIDDEN_UNDER,
   VisuallyHidden,
 } from "@luke/ui";
@@ -16,6 +19,20 @@ import { CatalogSection } from "../section";
  * on elements of other levels, and a long line set in a narrow column, both
  * wrapped and cut to one line, on synthetic words.
  */
+
+/** Each job a role does, in the role that does it. */
+const JOBS = [
+  { job: "A document's title in the page", variant: TEXT_VARIANT.TITLE },
+  { job: "The name in the window's top bar", variant: TEXT_VARIANT.TOOLBAR_TITLE },
+  { job: "A dialog's or a pane's heading", variant: TEXT_VARIANT.DIALOG },
+  { job: "A heading on a page", variant: TEXT_VARIANT.SECTION },
+  { job: "The heading over a group of rows", variant: TEXT_VARIANT.GROUP },
+  { job: "A row's label, a button's words", variant: TEXT_VARIANT.LABEL },
+  { job: "Words read as a sentence", variant: TEXT_VARIANT.BODY },
+  { job: "A row's detail, a time, a note", variant: TEXT_VARIANT.CAPTION },
+] as const;
+
+const NOW = Date.now();
 
 const LONG =
   "A plan's summary runs as long as the developer talked, so it wraps rather than stretching its column: unbrokenwordslikethisoneareweighedtoo.";
@@ -30,6 +47,25 @@ function Typography(): React.JSX.Element {
               The {variant} role sets these words
             </Text>
           ))}
+        </div>
+      </CatalogSection>
+      <CatalogSection id="typography-jobs" title="One role to a job">
+        <div className="catalog-stack">
+          {JOBS.map(({ job, variant }) => (
+            <Text key={variant} variant={variant} as={TEXT_ELEMENT.DIV}>
+              {job}
+            </Text>
+          ))}
+        </div>
+      </CatalogSection>
+      <CatalogSection id="typography-figures" title="Figures that change, in tabular figures">
+        <div className="catalog-stack">
+          <Text variant={TEXT_VARIANT.CAPTION}>
+            Generating · <Time at={NOW - 71_000} look={TIME_LOOK.DURATION} />
+          </Text>
+          <Text variant={TEXT_VARIANT.CAPTION}>
+            <Badge>1,111 files</Badge> <Badge>8,888 files</Badge>
+          </Text>
         </div>
       </CatalogSection>
       <CatalogSection id="typography-tones" title="Tones">

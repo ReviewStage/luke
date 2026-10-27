@@ -8,7 +8,7 @@
     max-width: 100%;
   }
 
-  .luke-link-field > .luke-text-field {
+  .luke-link-field > [data-slot="input"] {
     min-width: 0;
     flex: 1 1 auto;
   }

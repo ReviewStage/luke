@@ -6,9 +6,10 @@ import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/
 import { createTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
+import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { unparsedWire } from "@luke/wire";
+import { webmBytes } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { Base64 } from "effect/encoding";
 import {
@@ -27,7 +28,8 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * dialect: a member's look hands the model the picture as an image while
  * the conversation keeps only that it looked; a picture of another plan, one
  * the plan does not hold, and one read by an account outside the plan's
- * workspace are refused alike; and a turn looks as often as it asks. The
+ * workspace are refused alike; a video is refused, and its bytes reach no
+ * model in any form; and a turn looks as often as it asks. The
  * model is the boundary, played by reading what it would be shown.
  *
  * Synthetic accounts and pictures throughout.
@@ -146,6 +148,48 @@ it.layer(getTestDB())("look_at_picture", (it) => {
           statuses,
           Array.from({ length: 12 }, () => PICTURE_LOOK_STATUS.LOOKED),
         );
+      }),
+  );
+
+  it.effect(
+    "a look at a video the plan holds is refused, pointing at its words, and the model is handed none of its bytes",
+    () =>
+      Effect.gen(function* () {
+        const { owner, planId: taskId } = yield* openPicturedTasks;
+        const video: Picture = {
+          contentType: PICTURE_MEDIA_TYPE.WEBM,
+          bytes: webmBytes(1280, 800),
+        };
+        const kept = yield* keepPlanAttachment(owner, taskId, video);
+        if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("the video was not kept");
+        const address = planAttachmentAddress({ taskId, attachmentId: kept.id }, "acme");
+
+        const answered = yield* look(lookCall(owner, taskId), address);
+        const shown = pictureLookModelOutput(unparsedWire({ ...answered }));
+
+        assert.deepEqual(answered, pictureNotLooked(PICTURE_LOOK_REFUSAL.VIDEO));
+        assert.deepEqual(shown, { type: "json", value: answered });
+      }),
+  );
+
+  it.effect(
+    "a look answering a video's bytes would still reach the model as the refusal, never as its base64",
+    () =>
+      Effect.sync(() => {
+        const base64 = Base64.encode(webmBytes(1280, 800));
+        const forged = unparsedWire({
+          status: PICTURE_LOOK_STATUS.LOOKED,
+          mediaType: PICTURE_MEDIA_TYPE.WEBM,
+          image: base64,
+        });
+
+        const shown = pictureLookModelOutput(forged);
+
+        assert.deepEqual(shown, {
+          type: "json",
+          value: pictureNotLooked(PICTURE_LOOK_REFUSAL.VIDEO),
+        });
+        assert.ok(!JSON.stringify(shown).includes(base64));
       }),
   );
 });

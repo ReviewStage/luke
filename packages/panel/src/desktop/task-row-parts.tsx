@@ -10,13 +10,13 @@ import {
   type TaskSummary,
 } from "@luke/features/task-wire";
 import {
-  BADGE_TONE,
   Badge,
   CHIP_SIZE,
   Chip,
   type ChipLook,
   ChipName,
   dropBelowStart,
+  STATUS_TONE,
   TaskPriorityMark,
   TaskStatusMark,
   Tooltip,
@@ -36,7 +36,7 @@ import {
   TASK_STATUS_WORDS,
 } from "../tasks/task-standing.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
 
 /**
@@ -99,7 +99,7 @@ export function useStandingDoor(
     }
     void tasks.onSetTaskStanding(task.id, standing).then((kept) => {
       if (kept) onKept?.();
-      else toast({ words: UNCHANGED_LINE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      else toast({ words: UNCHANGED_LINE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     });
   };
 }
@@ -262,7 +262,7 @@ export function StatusChip({
 export function WaitingBadge({ count }: { count: number }): React.JSX.Element | null {
   if (count === 0) return null;
   return (
-    <Badge tone={BADGE_TONE.ATTENTION}>
+    <Badge tone={STATUS_TONE.ATTENTION}>
       {`${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
     </Badge>
   );

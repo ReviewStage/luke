@@ -21,9 +21,8 @@ import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-fra
  * header: the toolbar stands still above the columns, and the page is named
  * by the toolbar's title. Content that scrolls sideways stands across the
  * whole room (`PAGE_WIDTH.FULL`) rather than at the measure. A page in a
- * narrow column under rows that stand at a column's inset, as a side
- * panel's tabs do (`CHOICE_BAR_INSET.READING`), stands its words with theirs
- * (`DETAIL_PAGE_INSET.READING`) rather than a page's inset in from them. A
+ * narrow column under rows that stand at a column's inset stands its words
+ * with theirs (`DETAIL_PAGE_INSET.READING`) rather than a page's inset in from them. A
  * `List` laid straight into the content, or straight under one of its
  * sections, reaches past the column by its rows' own inset, as on a
  * collection's page, so its words line up with the title's.

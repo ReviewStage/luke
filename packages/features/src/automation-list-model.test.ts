@@ -91,11 +91,12 @@ test("a schedule the picker writes is said in words in its zone's city, and any 
   const said = (cron: string, timezone = "America/New_York") =>
     automationTriggerText({ kind: AUTOMATION_TRIGGER.SCHEDULE, cron, timezone });
 
-  assert.equal(said("0 9 * * 1-5"), "Weekdays at 9:00 · New York");
-  assert.equal(said("30 7 * * *", "Europe/London"), "Every day at 7:30 · London");
-  assert.equal(said("0 9 * * 1"), "Mondays at 9:00 · New York");
-  assert.equal(said("0 9 * * 0"), "Sundays at 9:00 · New York");
+  assert.equal(said("0 9 * * 1-5"), "Weekdays at 9:00 AM · New York");
+  assert.equal(said("30 7 * * *", "Europe/London"), "Every day at 7:30 AM · London");
+  assert.equal(said("0 9 * * 1"), "Mondays at 9:00 AM · New York");
+  assert.equal(said("0 9 * * 0"), "Sundays at 9:00 AM · New York");
   assert.equal(said("0 * * * *", "UTC"), "Every hour · UTC");
+  assert.equal(said("5 14 * * *"), "Every day at 2:05 PM · New York");
   assert.equal(said("0 9 1 * *"), "0 9 1 * * · New York");
   assert.equal(said("*/30 9-17 * * 1-5"), "*/30 9-17 * * 1-5 · New York");
 });

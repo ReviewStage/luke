@@ -16,6 +16,7 @@ import {
   OneLine,
   PAGE_FRAME,
   PANE_PIN_ELEMENT,
+  PageToolbar,
   PanePin,
   ScrollArea,
   SETTINGS_ROW_MARK_WIDTH,
@@ -124,8 +125,8 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
       frame={PAGE_FRAME.TOOLBAR}
       label="Tasks"
       toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
+        <PageToolbar
+          heading={
             <OneLine
               as={ONE_LINE_ELEMENT.H1}
               end={ONE_LINE_END.ELLIPSIS}
@@ -133,8 +134,8 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
             >
               Tasks
             </OneLine>
-          </div>
-        </header>
+          }
+        />
       }
       state={COLLECTION_STATE.LOADING}
       loadingLabel="Reading tasks"
@@ -162,8 +163,8 @@ function AdminLoading({
           frame={PAGE_FRAME.TOOLBAR}
           label="Admin"
           toolbar={
-            <header className="desktop-toolbar">
-              <div className="desktop-toolbar-heading">
+            <PageToolbar
+              heading={
                 <OneLine
                   as={ONE_LINE_ELEMENT.H1}
                   end={ONE_LINE_END.ELLIPSIS}
@@ -171,8 +172,8 @@ function AdminLoading({
                 >
                   Overview
                 </OneLine>
-              </div>
-            </header>
+              }
+            />
           }
           state={COLLECTION_STATE.LOADING}
           loadingLabel="Reading the dashboard…"
