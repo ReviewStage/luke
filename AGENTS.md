@@ -89,7 +89,7 @@ component, factored out of the surface where it builds the box by hand.
   traces. And an automation webhook secret may be shown once, in the window that
   minted it, at creation or rotation; never anywhere else. And a host install
   token may be shown once, in the window that minted it, inside the install
-  command; never anywhere else. And the Keyframe
+  command or the setup prompt; never anywhere else. And the Keyframe
   session token for a call's own avatar may reach the panel window, which runs
   that session, and never the voice window, a Gateway answer or event, app
   state, a counted event, a trace, or a fixture. And an agent's cloud browser, a

@@ -185,9 +185,44 @@ export function hostInstallCommand(installScriptUrl: string, installToken: strin
   return `curl -fsSL ${installScriptUrl} | sudo sh -s -- --token ${installToken}`;
 }
 
-/** The same command run over SSH on many servers, each named in the loop's list, for the member to fill in. */
+/**
+ * The same command run over SSH on many servers at once, each named in the
+ * loop's list, for the member to fill in. One line that bash and zsh both
+ * run: each ssh is backgrounded and `wait` holds the line until all end.
+ * Note that `-n` keeps a backgrounded ssh off the terminal's input, and
+ * that each server's lines are prefixed with its name, since twelve servers'
+ * output would otherwise run together.
+ */
 export function hostInstallLoopCommand(installScriptUrl: string, installToken: string): string {
-  return `for h in server-1 server-2 server-3; do ssh root@$h 'curl -fsSL ${installScriptUrl} | sh -s -- --token ${installToken}'; done`;
+  return `for h in server-1 server-2 server-3; do ssh -n root@$h 'curl -fsSL ${installScriptUrl} | sh -s -- --token ${installToken}' 2>&1 | sed "s/^/\${h}: /" & done; wait`;
+}
+
+/**
+ * The prompt that has a coding agent on the member's own computer install
+ * every server it can reach, in parallel: plain text to paste into Claude
+ * Code or Codex, with the install command and its token in it, and when the
+ * token stops working. The token is shown in the prompt as in the commands,
+ * once, and the prompt tells the agent to keep it to itself.
+ */
+export function hostSetupPrompt(
+  installScriptUrl: string,
+  installToken: string,
+  expiresAt: number,
+): string {
+  return `Install Luke's host program on my Linux servers, so Luke can run its agents on them.
+
+Follow these steps in order.
+
+1. List the servers you can reach. If Tailscale is installed, use \`tailscale status\`; otherwise ask me for the hostnames. Show me the list and wait for me to confirm it before you go on.
+2. Over SSH, check each server. It must be Linux (\`uname -s\`), x64 or arm64 (\`uname -m\` prints x86_64, aarch64 or arm64), and have \`/dev/kvm\` (\`test -c /dev/kvm\`). Skip any server that fails, and say why.
+3. Run this command over SSH on every remaining server at the same time, as root or with sudo (drop \`sudo\` where you log in as root):
+
+${hostInstallCommand(installScriptUrl, installToken)}
+
+   It prints a ✓ line for each step and ends with "✓ Connected to Luke". It can take several minutes, so wait for it. A failure prints a ✗ line and exits non-zero. If it ends with a ! line instead, the server is installed but not connected yet.
+4. When every server has finished, reply with a table: server, result (installed, skipped or failed) and, for a skip or a failure, the reason. For a failure, give the last error line the server printed.
+5. The install token in the command is a secret, and stops working at ${new Date(expiresAt).toISOString()}. Pass the command straight to ssh. Never write the token to a file, a memory or a note, and never repeat it in your reply or summary.
+`;
 }
 
 /** The command that upgrades an enrolled box in place, keeping its secret: the install command with no token. */
