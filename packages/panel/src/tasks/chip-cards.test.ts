@@ -701,7 +701,7 @@ test("a file's and a folder's chips hang their path, their repository, and where
   );
 });
 
-test("an Inbox item's chip wears its agent's tile and hangs its Inbox row's own card, whether the item waits or was answered, on a task or on an agent with no task", async () => {
+test("an Inbox item's chip hangs its Inbox row's own card, whether the item waits or was answered, on a task or on an agent with no task", async () => {
   const container = await drawn(
     [
       `[waiting](${HOME}/plan/${TASK_ID}/inbox/${ITEM_ID})`,
@@ -711,12 +711,6 @@ test("an Inbox item's chip wears its agent's tile and hangs its Inbox row's own 
   );
   const [waiting, answered, swept] = chipsOf(container);
 
-  for (const chip of [waiting, answered, swept]) {
-    assert.ok(
-      chip?.querySelector('.actor-mark[data-kind="agent"]'),
-      "the chip leads with the agent's tile",
-    );
-  }
   const asking = await cardOf(waiting);
   const settled = await cardOf(answered);
   const sweep = await cardOf(swept);

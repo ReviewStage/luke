@@ -1,5 +1,5 @@
 /**
- * inbox-item-parts.tsx -- the pieces that draw an Inbox item as the Inbox does, for every place that lists one: its agent's tile, its card, and the marks at its row's end.
+ * inbox-item-parts.tsx -- the pieces that draw an Inbox item as the Inbox does, for every place that lists one: its agent's tile, the glyph of what it asks, its card, and the marks at its row's end.
  *
  * The Inbox's own list draws an item as a row of its agent's tile, its
  * title, the last word in its thread, and at its end the teammate's face
@@ -62,8 +62,10 @@ import { HOME_ROW_META } from "./home-row.js";
 import {
   holderName,
   INBOX_HOLDER,
+  INBOX_LINE,
   type InboxHolder,
   type InboxKnownAsk,
+  type InboxLineKind,
   type InboxListed,
   inboxCardThread,
   inboxSettledStanding,
@@ -171,6 +173,22 @@ export function ItemMark({
   ) : (
     <AgentMarkRef subject={subject} models={models} />
   );
+}
+
+/** The glyph saying what an item asks, as its row's second line leads with it: its open ask's kind, a tick where an answer settled it, and none before words alone. */
+export function inboxLineGlyph(kind: InboxLineKind): React.JSX.Element | null {
+  switch (kind) {
+    case INBOX_LINE.DECIDE:
+      return <GLYPH.DECIDE />;
+    case INBOX_LINE.DO:
+      return <SquareCheckIcon aria-hidden="true" />;
+    case INBOX_LINE.ANSWER:
+      return <PenLineIcon aria-hidden="true" />;
+    case INBOX_LINE.SETTLED:
+      return <CheckIcon aria-hidden="true" />;
+    case INBOX_LINE.SAID:
+      return null;
+  }
 }
 
 /** Where an item stands, as its row's card says it under its title. */

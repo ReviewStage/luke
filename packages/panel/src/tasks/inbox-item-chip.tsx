@@ -2,12 +2,14 @@ import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
 import { HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { InboxIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { InboxItemCard, ItemMark } from "./inbox-item-parts.js";
+import { InboxItemCard, inboxLineGlyph } from "./inbox-item-parts.js";
 import {
   type InboxListed,
+  inboxLineKind,
   type TasklessInboxAgent,
   taskHolder,
   tasklessGroups,
@@ -17,17 +19,19 @@ import { useMentionedPlace } from "./mentioned-agent-card.js";
 import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.js";
 
 /**
- * inbox-item-chip.tsx -- a chip of an Inbox item: its agent's tile as its glyph and its Inbox row's own card, whatever the item's standing.
+ * inbox-item-chip.tsx -- a chip of an Inbox item: what it asks as its glyph and its Inbox row's own card, whatever the item's standing.
  *
  * A link to an item names the task, or the agent with no task, that holds it
  * and the item. Main's document holds only what waits, in brief, so the one
  * inbox the link names is followed while its chip stands (`use-followed-inboxes.ts`),
- * and the item is drawn as the Inbox draws it: its agent's tile
- * (`ItemMark`) and the card its row hangs (`InboxItemCard`), waiting or
- * answered. Until the inbox is read, or where the window holds nothing of
- * the task or agent, the chip draws the Inbox's glyph, and the card main's
- * brief makes of an item still waiting, else its own card. An
- * inbox whose follow failed is followed again each time the card is hung.
+ * and the item is drawn as the Inbox draws it: the glyph its row's second
+ * line leads with for what it asks (`inboxLineGlyph`), never its agent's
+ * tile, which would draw it as a chip of the agent, and the card its row
+ * hangs (`InboxItemCard`), waiting or answered. Until the inbox is read, or
+ * where the window holds nothing of the task or agent, the chip draws the
+ * thread's glyph, and the card main's brief makes of an item still
+ * waiting, else its own card. An inbox whose follow failed is followed
+ * again each time the card is hung.
  */
 
 /** Where a link to an item says it stands: under a task, or under an agent with no task. */
@@ -123,20 +127,16 @@ export function useInboxItemTitle(place: InboxItemPlace): string | undefined {
   return listed?.item.title ?? waiting?.title;
 }
 
-/** An item's glyph on its chip: its agent's tile, as its row leads with it; the Inbox's own glyph until the item is read. */
+/**
+ * An item's glyph on its chip: what it asks, as its row's second line leads
+ * with it (`inboxLineGlyph`), so the chip reads as a thread rather than as
+ * the agent that posted it, whose tile its card still wears; the thread's
+ * glyph where it asks nothing, and until the item is read.
+ */
 export function InboxItemChipGlyph({ place }: { place: InboxItemPlace }): ReactNode {
   const listed = useLinkedItem(place);
-  const { models, me } = useMentionedPlace();
-  if (listed === undefined) return <InboxIcon aria-hidden="true" />;
-  return (
-    <ItemMark
-      holder={listed.holder}
-      agentId={listed.item.agentId}
-      models={models}
-      readerId={me}
-      plain
-    />
-  );
+  const asked = listed === undefined ? null : inboxLineGlyph(inboxLineKind(listed.item));
+  return asked ?? <GLYPH.THREAD />;
 }
 
 /** An item's card on its chip: the card its Inbox row hangs, whether it waits or not; while its inbox is read, or where that failed, the brief card of an item still waiting; else `fallback`. */

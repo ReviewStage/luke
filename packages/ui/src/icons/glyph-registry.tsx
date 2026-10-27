@@ -24,6 +24,7 @@ import {
   ListChecks,
   ListTodo,
   MessageSquareHeart,
+  MessagesSquare,
   PhoneOff,
   Pin,
   PinOff,
@@ -129,6 +130,8 @@ export const GLYPH = {
   SKILL: lucideGlyph(BookOpen),
   COMMENT: CommentsIcon,
   CHANNEL: lucideGlyph(Hash),
+  // A thread in a channel, the Inbox's item, where no ask of its own says more.
+  THREAD: lucideGlyph(MessagesSquare),
   TERMINAL: TerminalIcon,
   WHITEBOARD: BoardIcon,
   MEMORY: MemoryIcon,

@@ -38,7 +38,7 @@ import { type ChipWhere, type LinkStanding, useWordsWorkspaceId } from "./use-li
  *
  * A mark that reads where the thing stands, a plan's status, a pull
  * request's or an issue's state, an agent's harness, an automation's last
- * run, an Inbox item's agent, falls back while the window holds none of it
+ * run, what an Inbox item asks, falls back while the window holds none of it
  * to the one glyph `@luke/ui/icons`' `GLYPH` stands for the kind by, never
  * to the mark of the site its address is on; a person falls back to the
  * initials the people rows draw where they have no picture.
