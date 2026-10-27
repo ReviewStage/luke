@@ -25,7 +25,6 @@ import {
   type TaskSummary,
 } from "@luke/features/task-wire";
 import { Clock, Effect } from "effect";
-import { questionsWaitingByTask } from "../inbox/inbox-store.js";
 import {
   codingAgentActivityAt,
   codingAgentRunStartedAt,
@@ -38,16 +37,15 @@ import {
 /**
  * task-agents.ts -- what each listed task's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card, and the agents with no plan the list carries beside the plans.
  *
- * Five statements answer the whole list however many tasks it holds: the
+ * Four statements answer the whole list however many tasks it holds: the
  * agents of every task named with the pull request each last published,
- * their newest turns, which of them hold a line awaiting its turn, the
- * names of the members who started them, and how many questions wait on
- * the reader on each task. An agent's status and its starter
+ * their newest turns, which of them hold a line awaiting its turn, and the
+ * names of the members who started them. An agent's status and its starter
  * are read exactly as its tab's are (`coder-host/status.ts`), and a pull
  * request is the one its row keeps as GitHub last answered, so
- * nothing here asks GitHub. A task with neither an agent nor a question
- * waiting on the reader carries nothing, so the list stays as small as it
- * was for every task nobody has started an agent on.
+ * nothing here asks GitHub. A task with no agent carries nothing, so the
+ * list stays as small as it was for every task nobody has started an agent
+ * on.
  */
 
 /** The statuses under which an agent is at work. */
@@ -117,12 +115,11 @@ const PULL_REQUEST_RANK = {
  * merged, then closed, newest agent's first within each, so the few a row
  * names always hold the one its mark is drawn for; and the latest settled
  * activity of every agent, named or not and archived or not, which the
- * plan's last update is read beside; how many agents failed; and the
- * questions `waiting` on the reader. A plan whose every agent is archived
- * carries its activity alone, with no agent and no pull request counted,
- * and one with no agent the reader sees its questions alone.
+ * plan's last update is read beside; and how many agents failed. A plan
+ * whose every agent is archived carries its activity alone, with no agent
+ * and no pull request counted.
  */
-function summaryOf(read: readonly ReadAgent[], waiting: number): TaskAgentsSummary {
+function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
   const agents = read.filter((agent) => !agent.archived);
   const newest = [...agents].sort((a, b) => b.createdAt - a.createdAt);
   const working = newest.filter((agent) => WORKING_STATUSES.has(agent.line.status));
@@ -147,7 +144,6 @@ function summaryOf(read: readonly ReadAgent[], waiting: number): TaskAgentsSumma
     total: agents.length,
     working: working.length,
     failed: agents.filter((agent) => agent.line.status === CODING_AGENT_STATUS.FAILED).length,
-    waitingOnYou: waiting,
     ...(read.length === 0
       ? undefined
       : { activityAt: Math.max(...read.map((agent) => agent.activityAt)) }),
@@ -177,7 +173,7 @@ function pullRequestOf(published: CodingAgentPullRequest | null | undefined) {
   };
 }
 
-/** The account's listed tasks, each carrying its agents in brief, whichever member started each, and the questions waiting on the account, where it has either; the tasks' order and every other field as listed. */
+/** The account's listed tasks, each carrying its agents in brief, whichever member started each, where it has any; the tasks' order and every other field as listed. */
 export function withTaskAgents(
   userId: string,
   tasks: readonly TaskSummary[],
@@ -185,9 +181,11 @@ export function withTaskAgents(
   return Effect.gen(function* () {
     // Note that the archived agents are read too, because the work one did
     // is still the task's activity, though the row names it no more.
-    const taskIds = tasks.map((task) => task.id);
-    const held = yield* listPublishedCodingAgents(userId, taskIds, { includeArchived: true });
-    const waiting = yield* questionsWaitingByTask(userId, taskIds);
+    const held = yield* listPublishedCodingAgents(
+      userId,
+      tasks.map((task) => task.id),
+      { includeArchived: true },
+    );
     const conversationIds = held.map(({ agent }) => agent.conversationId);
     // The agents were read through the tasks' gate, and each conversation is its starter's, a teammate's as often as the account's.
     const turns = yield* latestTurnsOfReached(conversationIds);
@@ -210,9 +208,7 @@ export function withTaskAgents(
     }
     return tasks.map((task) => {
       const agents = byTask.get(task.id);
-      const questions = waiting.get(task.id) ?? 0;
-      if (agents === undefined && questions === 0) return task;
-      return { ...task, agents: summaryOf(agents ?? [], questions) };
+      return agents === undefined ? task : { ...task, agents: summaryOf(agents) };
     });
   });
 }
