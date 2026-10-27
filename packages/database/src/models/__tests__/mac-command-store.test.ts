@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CODING_AGENT_KIND, type CodingAgentKind } from "@luke/features/coding-agent-wire";
 import { macCommandsLiveRowsSchema, macCommandsOfLiveRows } from "@luke/features/live-wire";
 import {
   MAC_COMMAND_KIND,
@@ -246,8 +247,13 @@ it.layer(getTestDB())("the Mac command store", (it) => {
   );
 });
 
-/** A coding agent's conversation under the account, with the agent itself in the workspace given, started on the prompt given or blank, answering both ids. */
-const openAgent = (userId: string, organizationId: string, prompt: string | null = null) =>
+/** A coding agent's conversation under the account, with the agent itself in the workspace given, started on the prompt given or blank, a coder unless named otherwise, answering both ids. */
+const openAgent = (
+  userId: string,
+  organizationId: string,
+  prompt: string | null = null,
+  kind: CodingAgentKind = CODING_AGENT_KIND.CODER,
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const [id, conversationId] = [randomUUID(), randomUUID()];
@@ -259,6 +265,7 @@ const openAgent = (userId: string, organizationId: string, prompt: string | null
       organizationId,
       userId,
       conversationId,
+      kind,
       prompt,
       model: "anthropic/claude-opus-5.5",
       effort: "high",
@@ -405,6 +412,49 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
       const target = { userId: starter, conversationId: blank.conversationId };
       assert.equal(yield* heardFromAnotherAccount(target), true);
     }),
+  );
+
+  it.effect(
+    "an operator's untagged lines are its owner's, so its opening and its owner's early lines leave it theirs",
+    () =>
+      Effect.gen(function* () {
+        const { starter, workspace } = yield* people;
+        const operator = yield* openAgent(starter, workspace, null, CODING_AGENT_KIND.OPERATOR);
+        yield* sendLine(starter, operator.conversationId, 1);
+        yield* sendLine(starter, operator.conversationId, 2);
+        yield* sendLine(starter, operator.conversationId, 3, {
+          kind: MESSAGE_SENDER.MEMBER,
+          userId: starter,
+        });
+        const target = { userId: starter, conversationId: operator.conversationId };
+        assert.equal(yield* heardFromAnotherAccount(target), false);
+      }),
+  );
+
+  it.effect(
+    "an operator still hears another account: a teammate's line, or a line from their agent",
+    () =>
+      Effect.gen(function* () {
+        const { starter, teammate, workspace } = yield* people;
+        const messaged = yield* openAgent(starter, workspace, null, CODING_AGENT_KIND.OPERATOR);
+        yield* sendLine(starter, messaged.conversationId, 1);
+        yield* sendLine(starter, messaged.conversationId, 2, {
+          kind: MESSAGE_SENDER.MEMBER,
+          userId: teammate,
+        });
+        const theirs = yield* openAgent(teammate, workspace);
+        // A member stands one operator per workspace, so the second is in a workspace of its own.
+        const elsewhere = yield* openWorkspace(starter);
+        const reached = yield* openAgent(starter, elsewhere, null, CODING_AGENT_KIND.OPERATOR);
+        yield* sendLine(starter, reached.conversationId, 1);
+        yield* sendLine(starter, reached.conversationId, 2, {
+          kind: MESSAGE_SENDER.AGENT,
+          agentId: theirs.id,
+        });
+        for (const { conversationId } of [messaged, reached]) {
+          assert.equal(yield* heardFromAnotherAccount({ userId: starter, conversationId }), true);
+        }
+      }),
   );
 
   it.effect("a worker's conversation reads the lines of the agent it was delegated from", () =>

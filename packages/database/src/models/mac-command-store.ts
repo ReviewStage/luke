@@ -1,3 +1,4 @@
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
@@ -226,7 +227,7 @@ const sendingAgent = alias(codingAgent, "sending_agent");
 /** The root's developer lines before one of them, read for whether it is the first, the prompt the agent was started on. */
 const earlierLine = alias(messages, "earlier_line");
 
-/** The agent the root conversation is of, read for whether it was started on a prompt or a plan at all. */
+/** The agent the root conversation is of, read for whether it is an operator, and whether it was started on a prompt or a plan at all. */
 const startedAgent = alias(codingAgent, "started_agent");
 
 /**
@@ -238,7 +239,12 @@ const startedAgent = alias(codingAgent, "started_agent");
  * agent was started on a prompt or a plan, which that first line is, written
  * untagged by eve's relay for every agent started before the start wrote it
  * with its sender (`coder-host/start.ts`). A blank agent was started on
- * none, so its first line is whoever's first steer, and counts.
+ * none, so its first line is whoever's first steer, and counts. An
+ * operator's untagged lines are its owner's and never count, because its
+ * conversation is its owner's alone: anyone else's words reach it tagged,
+ * and its untagged lines are the opening eve's relay wrote before the
+ * service sent it as Luke's (`coder-host/operator.ts`) and its owner's own
+ * from before senders were kept.
  */
 const findForeignLine = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
@@ -274,6 +280,7 @@ const findForeignLine = SqlSchema.findOneOption({
               and(
                 eq(messages.role, MESSAGE_ROLE.USER),
                 isNull(messages.sender),
+                or(isNull(startedAgent.kind), ne(startedAgent.kind, CODING_AGENT_KIND.OPERATOR)),
                 or(
                   and(isNull(startedAgent.prompt), isNull(startedAgent.planSnapshot)),
                   exists(
@@ -318,7 +325,8 @@ export function macListeningSince(userId: string, since: Date): TaskStoreEffect<
 /**
  * Whether anyone but the conversation's owner has put words into it: a line
  * another member sent, one an agent that is not the owner's own sent, or one
- * whose sender was never kept past the opening prompt, in the conversation
+ * whose sender was never kept past the opening prompt, of an agent that is
+ * not an operator, in the conversation
  * or, for a worker's, in the agent's it was delegated from. Note that a line
  * the service itself sends, such as a wake, is not counted, because no other
  * account wrote it.
