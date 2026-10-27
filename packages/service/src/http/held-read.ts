@@ -56,6 +56,12 @@ export function cursorOf(stamps: readonly CursorStamp[]): string {
   return createHash("sha256").update(JSON.stringify(standing)).digest("hex").slice(0, CURSOR_CHARS);
 }
 
+/** A read that moved, and the ids of the transactions whose writes woke the looks before it, each once: none where it moved at the first look or its clock woke it. */
+export interface Held<A> {
+  readonly read: A;
+  readonly txids: readonly string[];
+}
+
 /**
  * Reads until a read is one `moved` says moved, which it answers, or the
  * hold ends, answering none, waiting between reads on a watch of the
@@ -69,16 +75,17 @@ export function heldUntil<A, E, R>(
   topics: readonly SyncTopic[],
   poll: Duration.Duration,
   hold: Duration.Duration,
-): Effect.Effect<Option.Option<A>, E, R> {
+): Effect.Effect<Option.Option<Held<A>>, E, R> {
   return Effect.scoped(
     Effect.gen(function* () {
       const watch = yield* (yield* Sync).watch(topics, poll);
+      const woken = new Set<string>();
       let standing = yield* read;
       while (!moved(standing)) {
-        yield* watch.next;
+        for (const txid of yield* watch.next) woken.add(txid);
         standing = yield* read;
       }
-      return standing;
+      return { read: standing, txids: [...woken] };
     }),
   ).pipe(Effect.timeoutOption(hold));
 }
