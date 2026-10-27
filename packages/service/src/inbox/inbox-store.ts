@@ -281,6 +281,7 @@ const MESSAGE = {
   text: qualified(inboxMessage, inboxMessage.text),
   ask: qualified(inboxMessage, inboxMessage.ask),
   answers: qualified(inboxMessage, inboxMessage.answers),
+  addresseeId: qualified(inboxMessage, inboxMessage.addresseeId),
   createdAt: qualified(inboxMessage, inboxMessage.createdAt),
 };
 
@@ -308,11 +309,12 @@ const THREAD_MESSAGES = messagesAs(
 /**
  * Messages oldest first, each with its author, the member's name as their
  * account holds it now, its words, its files, the ask it ends with and the
- * answer it carries as they were kept, and when it was written in epoch
+ * answer it carries as they were kept, the member an agent's message was
+ * addressed to and their name, and when it was written in epoch
  * milliseconds.
  */
 function messagesOf(source: SQL): SQL<unknown> {
-  return sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('id', ${MESSAGE.id}, 'author', ${MESSAGE.author}, 'userId', ${MESSAGE.userId}, 'name', (select "name" from ${user} where ${user.id} = ${MESSAGE.userId}), 'text', ${MESSAGE.text}, 'files', ${MESSAGE_FILES}, 'ask', ${MESSAGE.ask}, 'answers', ${MESSAGE.answers}, 'createdAt', floor(extract(epoch from ${MESSAGE.createdAt}) * 1000)::bigint) order by ${MESSAGE.createdAt}, ${MESSAGE.id}), '[]'::jsonb) from ${source})`;
+  return sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('id', ${MESSAGE.id}, 'author', ${MESSAGE.author}, 'userId', ${MESSAGE.userId}, 'name', (select "name" from ${user} where ${user.id} = ${MESSAGE.userId}), 'text', ${MESSAGE.text}, 'files', ${MESSAGE_FILES}, 'ask', ${MESSAGE.ask}, 'answers', ${MESSAGE.answers}, 'addresseeId', ${MESSAGE.addresseeId}, 'addresseeName', (select "name" from ${user} where ${user.id} = ${MESSAGE.addresseeId}), 'createdAt', floor(extract(epoch from ${MESSAGE.createdAt}) * 1000)::bigint) order by ${MESSAGE.createdAt}, ${MESSAGE.id}), '[]'::jsonb) from ${source})`;
 }
 
 /** Whether the item is settled: answered, or closed by its agent. */
@@ -438,12 +440,14 @@ const MessageRowSchema = Schema.Struct({
   files: Schema.Array(FileRowSchema),
   ask: Schema.NullOr(inboxReadAskSchema),
   answers: Schema.NullOr(inboxAnswersSchema),
+  addresseeId: Schema.NullOr(Schema.String),
+  addresseeName: Schema.NullOr(Schema.String),
   createdAt: Schema.Number,
 });
 
 type MessageRow = typeof MessageRowSchema.Type;
 
-/** A message as the wire carries it: the member named where their account stands, no files where it carried none, and its ask as it stands on the item. */
+/** A message as the wire carries it: the member named where their account stands, no files where it carried none, its ask as it stands on the item, and whom it was addressed to where their account stands. */
 function storedMessage(row: MessageRow, item: InboxAskStanding): InboxMessage {
   return {
     id: row.id,
@@ -455,6 +459,9 @@ function storedMessage(row: MessageRow, item: InboxAskStanding): InboxMessage {
     ...(row.files.length === 0 ? undefined : { files: row.files }),
     ...(row.ask === null ? undefined : { ask: standingAsk(row.ask, row.id, item) }),
     ...(row.answers === null ? undefined : { answers: row.answers }),
+    ...(row.addresseeId === null || row.addresseeName === null
+      ? undefined
+      : { addressedTo: { userId: row.addresseeId, name: row.addresseeName } }),
     createdAt: row.createdAt,
   };
 }
@@ -651,6 +658,8 @@ const MessageWriteSchema = Schema.Struct({
   // Note that the ask is taken as it is typed, because it is written as the read shape whole and a type a newer deployment named encodes to no other shape.
   ask: Schema.NullOr(Schema.toType(inboxReadAskSchema)),
   answers: Schema.NullOr(inboxAnswersSchema),
+  /** The member an agent's post was addressed to; null where it named none, and on a member's message. */
+  addresseeId: Schema.NullOr(Schema.String),
   clientKey: Schema.NullOr(Schema.String),
   now: Schema.Date,
 });
@@ -2062,6 +2071,7 @@ function keepPost(
       text: post.body(pictureAddressOf(agent, workspace, itemId)),
       ask,
       answers: null,
+      addresseeId: post.addresseeId,
       clientKey: null,
       now,
     });
@@ -2280,7 +2290,10 @@ function followUp(
   return Effect.suspend(() => {
     const { kept, idOf } = picturesByPath(pictures);
     const text = withPictureAddresses(post.body, idOf, pictureAddressOf(agent, workspace, itemId));
-    const writer = { author: INBOX_MESSAGE_AUTHOR.AGENT } as const;
+    const writer = {
+      author: INBOX_MESSAGE_AUTHOR.AGENT,
+      addresseeId: post.addresseeId ?? null,
+    } as const;
     return writeInboxMessage(agent.userId, itemId, writer, text, kept);
   }).pipe(
     // The item was found under the lock on its agent, so a message that finds none is a broken contract.
@@ -3134,6 +3147,7 @@ function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
       text: write.words,
       ask: null,
       answers: write.answers,
+      addresseeId: null,
       clientKey: write.answerKey,
       now,
     });
@@ -3326,7 +3340,11 @@ type InboxMessageWriter =
       /** The revision of the notice the member was shown, which their message settles; absent where it settles none. */
       readonly revision?: number | undefined;
     }
-  | { readonly author: typeof INBOX_MESSAGE_AUTHOR.AGENT };
+  | {
+      readonly author: typeof INBOX_MESSAGE_AUTHOR.AGENT;
+      /** The member the agent's words were addressed to; null where it named none. */
+      readonly addresseeId: string | null;
+    };
 
 /** What a member's message under its key came to. */
 export const INBOX_MESSAGE_OUTCOME = {
@@ -3458,6 +3476,7 @@ function writeInboxMessage(
           text,
           ask: null,
           answers: null,
+          addresseeId: writer.author === INBOX_MESSAGE_AUTHOR.AGENT ? writer.addresseeId : null,
           clientKey: member?.clientKey ?? null,
           now,
         });
@@ -3763,6 +3782,7 @@ export function startInboxThread(
           text,
           ask: null,
           answers: null,
+          addresseeId: null,
           clientKey,
           now,
         });
@@ -3869,7 +3889,7 @@ export function replyInboxItem(
           writeInboxMessage(
             agent.userId,
             found.value.id,
-            { author: INBOX_MESSAGE_AUTHOR.AGENT },
+            { author: INBOX_MESSAGE_AUTHOR.AGENT, addresseeId: null },
             text,
             pictures,
           ),

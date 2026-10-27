@@ -51,6 +51,12 @@ export const inboxMessage = pgTable(
      * a message that answers none and on every message from before version 5.
      */
     answers: jsonb("answers").$type<InboxAnswers>(),
+    /**
+     * The member an agent's message was addressed to, as its post named
+     * them; null where it named none, on a member's message, on every
+     * message from before it was kept, and once their account is gone.
+     */
+    addresseeId: text("addressee_id").references(() => user.id, { onDelete: "set null" }),
     /** The key a member's client wrote it under; null for the agent's. */
     clientKey: text("client_key"),
     createdAt: timestamptz("created_at").notNull(),

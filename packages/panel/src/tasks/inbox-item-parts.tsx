@@ -14,6 +14,7 @@ import {
   INBOX_ASK,
   INBOX_STATUS,
   type InboxItem,
+  type InboxPerson,
   inboxWaitsOn,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
@@ -34,6 +35,9 @@ import {
   InlineRef,
   STATUS_TONE,
   TaskStatusMark,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   Time,
   VisuallyHidden,
 } from "@luke/ui";
@@ -52,7 +56,7 @@ import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor
 import { useAutomation } from "../automation-directory.js";
 import { useInboxItemDraft, useInboxItemDrafted } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
-import { useMemberDirectory } from "../member-directory.js";
+import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
@@ -96,6 +100,30 @@ const INBOX_ROW_ATTENTION =
 /** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
 function waitingOn(starter: Actor): string {
   return `Waiting on ${actorName(starter, { sentence: true })}`;
+}
+
+/** What a message or a thread its agent addressed to a member by name says of them: "To you", or "To" and their name. */
+export function addressedWords(person: Actor): string {
+  return `To ${actorName(person, { sentence: true })}`;
+}
+
+/**
+ * Whom an agent addressed a message or a thread to by name, at the end of
+ * its head: "To", their face, and their name, or "you"; nothing where it
+ * named nobody, which then waits on its task's assignee or its starter.
+ */
+export function AddressedTo({ to }: { to: InboxPerson | undefined }): React.JSX.Element | null {
+  const person = usePerson(to);
+  if (to === undefined) return null;
+  return (
+    <span className="inbox-addressed-to inline-flex min-w-0 items-center gap-tight-gap">
+      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+        To
+      </Text>
+      <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />
+      <Text variant={TEXT_VARIANT.CAPTION}>{actorName(person, { sentence: true })}</Text>
+    </span>
+  );
 }
 
 /** The tile of an agent the window names nothing of. */

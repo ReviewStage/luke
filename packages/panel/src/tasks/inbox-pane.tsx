@@ -101,7 +101,7 @@ import { INBOX_VIEW_ITEMS } from "./inbox-columns.js";
 import { COMMENT, INBOX_THREAD, InboxComment } from "./inbox-comment.js";
 import type { FormTextDoors } from "./inbox-form-text.js";
 import { useInboxItemActions } from "./inbox-item-actions.js";
-import { HolderGlyph } from "./inbox-item-parts.js";
+import { AddressedTo, HolderGlyph } from "./inbox-item-parts.js";
 import {
   AgentName,
   type ItemAgent,
@@ -765,6 +765,7 @@ function ThreadMessage({
       nameRef={writer.nameRef}
       at={message.createdAt}
       now={now}
+      trailing={<AddressedTo to={message.addressedTo} />}
     >
       {answers === undefined ? null : answered !== undefined && knownAsk(answered) ? (
         <AnsweredCard ask={answered} title={cardTitle(item.title)} answers={answers} />

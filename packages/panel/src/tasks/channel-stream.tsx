@@ -4,6 +4,7 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxMessage,
+  inboxAddressedTo,
   openAskOf,
   threadNeedsReader,
 } from "@luke/features/inbox-wire";
@@ -81,6 +82,7 @@ import type { InboxCloser } from "./inbox-close.js";
 import type { InboxCodeDoors } from "./inbox-code-card.js";
 import { VIEW_OPTIONS } from "./inbox-columns.js";
 import { useInboxItemActions } from "./inbox-item-actions.js";
+import { AddressedTo } from "./inbox-item-parts.js";
 import { type ItemAgent, ItemWords, MessageWords, useMessageWriter } from "./inbox-message.js";
 import {
   EMPTY_INBOX_DRAFT,
@@ -675,6 +677,7 @@ function ThreadPost({
         now={now}
         trailing={
           <>
+            <AddressedTo to={inboxAddressedTo(item)} />
             {owned ? <OwnerFace startedBy={item.startedBy} readerId={readerId} /> : null}
             {unread ? <VisuallyHidden>{UNREAD_WORD}</VisuallyHidden> : null}
             {menu.button}
