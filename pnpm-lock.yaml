@@ -395,12 +395,18 @@ importers:
         specifier: 'catalog:'
         version: 4.0.4
     devDependencies:
+      '@luke/agent-runner':
+        specifier: workspace:*
+        version: link:../../packages/agent-runner
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.12
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

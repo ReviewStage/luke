@@ -6,6 +6,7 @@
   "description": "Luke's host daemon: a headless Linux box's own follower of the local agents its member starts on it, and the install script that sets it up",
   "scripts": {
     "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/luke-host.mjs --define:process.env.LUKE_HOST_VERSION='\"'$npm_package_version'\"' --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "package": "tsx scripts/package.ts",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -15,8 +16,10 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@luke/agent-runner": "workspace:*",
     "@types/node": "catalog:",
     "esbuild": "0.28.2",
+    "tsx": "catalog:",
     "typescript": "catalog:"
   }
 }
