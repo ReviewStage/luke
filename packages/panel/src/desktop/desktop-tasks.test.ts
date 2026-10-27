@@ -527,13 +527,13 @@ function showEverything(): void {
   window.localStorage.setItem(TASK_SHOW_KEY, JSON.stringify("all"));
 }
 
-test("a task's Inbox tab too narrow for its list and the item side by side is the item it holds, with no way back to a list of one", async () => {
+test("a task's Inbox tab too narrow for its list and the item side by side opens on the one item it holds, and its way back goes to the task's whole Inbox", async () => {
   const inbox = await narrowTaskInbox([
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
   ]);
   assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
-  assert.equal(inbox.back(), null, "no way back to a list of one");
-  assert.equal(runAppCommand(APP_COMMAND.BACK), false, "nor does Back's chord go to one");
+  act(() => inbox.back()?.click());
+  assert.deepEqual(inbox.standing(), ["list", ""], "the way back stands the task's whole Inbox");
   inbox.unmount();
 });
 

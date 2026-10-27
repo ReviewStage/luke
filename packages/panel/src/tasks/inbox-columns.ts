@@ -10,9 +10,9 @@
  * pressed, or while nothing is chosen, and a row pressed there opens its
  * item again. In a narrow room, a phone's, the list is the place, so an
  * Inbox there opens on its list, and an item stands alone only once a row
- * is pressed or a link asks for it. An Inbox whose
- * list holds nothing but the item has no way back, there being no list worth
- * going back to. The line is drawn by the Inbox's own width rather than the
+ * is pressed or a link asks for it. An item standing alone always has its
+ * way back, even where the list holds nothing but it, since the list holds
+ * the view's menu and its search. The line is drawn by the Inbox's own width rather than the
  * window's, because the window's Inbox and a task's own Inbox tab stand in
  * columns of their own, beside a sidebar, a side panel, or neither. An Inbox
  * narrowed keeps the item it shows, as Material's list-detail layout does,
@@ -55,7 +55,7 @@ export const INBOX_COLUMNS = {
   BOTH: "both",
   /** The list alone, the whole Inbox wide. */
   LIST: "list",
-  /** The item alone, the whole Inbox wide, under a way back to the list where the list holds more. */
+  /** The item alone, the whole Inbox wide, under a way back to the list. */
   ITEM: "item",
 } as const;
 
@@ -118,7 +118,7 @@ export interface InboxColumns {
   readonly onOpen: (itemId: string) => void;
   /** Says K or J stepped to another item, which hands the keyboard to its row while the list stands. */
   readonly onStep: () => void;
-  /** Goes back from the item to the list, while the item stands alone and the list holds more. */
+  /** Goes back from the item to the list, while the item stands alone. */
   readonly onBack: (() => void) | undefined;
   /** Asks for the list, as Show all does turning off a filter that listed nothing, so the item then chosen does not stand in the rows' place. */
   readonly onList: () => void;
@@ -169,21 +169,19 @@ function useListing(kept: InboxListing | undefined): InboxListing {
   return kept ?? { asked, onAsk: setAsked };
 }
 
-/** Which columns stand: both where split, else the item unless the list was asked for and is worth going back to, or nothing is chosen. */
+/** Which columns stand: both where split, else the item unless the list was asked for or nothing is chosen. */
 function shownColumns(
   single: boolean,
   chosen: string | undefined,
   listAsked: boolean,
-  backable: boolean,
 ): InboxColumnsShown {
   if (!single) return INBOX_COLUMNS.BOTH;
-  if (chosen === undefined || (listAsked && backable)) return INBOX_COLUMNS.LIST;
+  if (chosen === undefined || listAsked) return INBOX_COLUMNS.LIST;
   return INBOX_COLUMNS.ITEM;
 }
 
 /**
- * The Inbox's columns, measured as it resizes, for the item chosen and
- * whether the list holds more than it (`backable`). An Inbox that measures
+ * The Inbox's columns, measured as it resizes, for the item chosen. An Inbox that measures
  * nothing is not laid out, and keeps the two columns it starts with. Going
  * one way or the other by a press hands the keyboard on, to the item's bar
  * once an item opens and to its row once the list is back, or split, to the
@@ -199,7 +197,6 @@ function shownColumns(
  */
 export function useInboxColumns(
   chosen: string | undefined,
-  backable: boolean,
   kept?: InboxListing,
   stream?: InboxStream,
 ): InboxColumns {
@@ -226,7 +223,7 @@ export function useInboxColumns(
   useLayoutEffect(() => {
     if (split && listAsked) setListAsked(false);
   }, [split, listAsked, setListAsked]);
-  const shown = shownColumns(single, chosen, listAsked, backable);
+  const shown = shownColumns(single, chosen, listAsked);
   const onSingle = kept?.onSingle;
   useLayoutEffect(() => {
     onSingle?.(single);
@@ -264,7 +261,7 @@ export function useInboxColumns(
   }, [shown, chosen, showAlls, rows]);
 
   const back =
-    shown === INBOX_COLUMNS.ITEM && backable
+    shown === INBOX_COLUMNS.ITEM
       ? () => {
           pressed.current = true;
           setListAsked(true);

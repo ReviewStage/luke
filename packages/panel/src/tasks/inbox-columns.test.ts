@@ -32,7 +32,7 @@ function drawAsked(width: number) {
   function Inbox() {
     const [listAsked, setListAsked] = useState(true);
     asked = listAsked;
-    const columns = useInboxColumns("item-1", true, { asked: listAsked, onAsk: setListAsked });
+    const columns = useInboxColumns("item-1", { asked: listAsked, onAsk: setListAsked });
     shown = columns.shown;
     return createElement("div", { ref: columns.ref });
   }

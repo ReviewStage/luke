@@ -281,7 +281,6 @@ export function DesktopInbox({
   };
   const columns = useInboxColumns(
     compose.on ? COMPOSE_COLUMN : (chosen?.item.id ?? (missing ? asked?.itemId : undefined)),
-    true,
     { asked: listed, onAsk: onListed, onSingle },
     // Note that Back's chord and Escape close a stream's thread, so a phone goes back to the stream rather than to its list of channels.
     streaming ? { onClose: threadOpen ? closeThread : undefined } : undefined,
