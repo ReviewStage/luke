@@ -65,6 +65,7 @@ import { agentAutomationNameSql } from "./agent-name.js";
 import { ensureGeneralChannel } from "./channel-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { type Device, devicesNamed } from "./device-store.js";
+import { INBOX_SETTLED_REASON, settleTaskInboxItems } from "./inbox-settle.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
@@ -1429,7 +1430,8 @@ const lockStandingAgents = SqlSchema.findAll({
  * not a save: the document's `updatedAt` and the list's order stand. The pin
  * is the account's own and no other member's. A task no one is assigned to
  * that the change moves into progress is assigned to the account, unless the
- * change names an assignee of its own.
+ * change names an assignee of its own. A change that moves the task to Done
+ * or Canceled settles its open inbox items (`inbox-settle.ts`).
  */
 export function updateTask<E = never, R = never>(
   userId: string,
@@ -1517,6 +1519,12 @@ export function updateTaskCommitted<E = never, R = never>(
                 Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
               );
         const txid = written ?? Option.getOrUndefined(pinned)?.txid;
+        // A task moved to Done or Canceled settles its open inbox items, which wait on its work no longer.
+        if (columns.status === TASK_STATUS.DONE) {
+          yield* settleTaskInboxItems(taskId, INBOX_SETTLED_REASON.TASK_DONE, now);
+        } else if (columns.status === TASK_STATUS.CANCELED) {
+          yield* settleTaskInboxItems(taskId, INBOX_SETTLED_REASON.TASK_CANCELED, now);
+        }
         if (changes.organizationId !== undefined || changes.repository !== undefined) {
           yield* followingAutomations({
             taskId,
@@ -1697,7 +1705,9 @@ const finishTask = SqlSchema.findOneOption({
  * row lock, each agent under its conversation's,
  * so a start or a turn racing the finish either landed before the read,
  * which then refuses, or waits on the lock and reopens the task after.
- * Like any change it is not a save, so the list's order stands.
+ * Like any change it is not a save, so the list's order stands. A finish
+ * settles the task's open inbox items, notices among them
+ * (`inbox-settle.ts`).
  */
 export function finishTaskWork<R = never>(
   userId: string,
@@ -1719,7 +1729,9 @@ export function finishTaskWork<R = never>(
         if (!(yield* idle(agents))) return false;
         const now = yield* DateTime.nowAsDate;
         const finished = yield* finishTask({ taskId, now });
-        return Option.isSome(finished);
+        if (Option.isNone(finished)) return false;
+        yield* settleTaskInboxItems(taskId, INBOX_SETTLED_REASON.TASK_DONE, now);
+        return true;
       }),
     ),
   );
