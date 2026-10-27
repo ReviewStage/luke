@@ -1978,7 +1978,7 @@ test("an agent whose starter has left the workspace makes no task in it", async 
   assert.deepEqual(await tasksNamed(agents.caller.userId, workspaceId, "Left behind"), []);
 });
 
-test("a task an agent makes runs on the device its member last chose, away or not, and one since removed makes none", async () => {
+test("a task an agent makes runs on the device its member last chose, away or not, one since removed makes none, and with no device left it runs in the cloud", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.teammates, eve.services);
@@ -1988,11 +1988,11 @@ test("a task an agent makes runs on the device its member last chose, away or no
     Effect.gen(function* () {
       yield* writeAccountPreferences(bob, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
       yield* registerDevice(bob, { id: studio, name: "Studio", ...DEVICE_LAYOUT });
-      // The Studio last beat a day ago, so it is away.
+      // The Studio last beat at the epoch, so it is away.
       const db = yield* Database;
       yield* db
         .update(device)
-        .set({ lastSeenAt: new Date(Date.now() - 86_400_000) })
+        .set({ lastSeenAt: new Date(0) })
         .where(eq(device.id, studio));
       yield* keepRunsOnPick(bob, { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: studio });
     }),
@@ -2012,6 +2012,22 @@ test("a task an agent makes runs on the device its member last chose, away or no
     reason: CREATE_TASK_REFUSAL.PICK_REMOVED,
   });
   assert.deepEqual(await tasksNamed(bob, workspaceId, "Nowhere"), []);
+
+  // With no device left at all, the cloud is the only place, which New task offers no chip to pick.
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db
+        .update(device)
+        .set({ removedAt: new Date(0) })
+        .where(eq(device.id, studio)),
+    ),
+  );
+  const cloud = await call(CODER_TOOL.CREATE_TASK, { name: "In the cloud" }, "call-cloud");
+  assert.ok(isRecord(cloud.task) && isWireString(cloud.task.id), JSON.stringify(cloud));
+  assert.equal(
+    Option.getOrThrow(await database.run(readTask(bob, cloud.task.id))).task.runsOn,
+    undefined,
+  );
 });
 
 test("an agent whose starter has left the workspace reaches no other agent", async () => {

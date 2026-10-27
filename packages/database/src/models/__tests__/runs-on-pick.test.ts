@@ -1,3 +1,10 @@
+/**
+ * runs-on-pick.test.ts -- an account's last Runs on pick, over a real
+ * dialect: none until a start names one, the last kept over the one before,
+ * the preferences snapshot left as it stood, and one account's pick no
+ * other's. Synthetic accounts throughout.
+ */
+
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -8,13 +15,6 @@ import { user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
 import { readAccountPreferences, writeAccountPreferences } from "../account-store.js";
 import { keepRunsOnPick, readRunsOnPick } from "../runs-on-pick.js";
-
-/**
- * runs-on-pick.test.ts -- an account's last Runs on pick, over a real
- * dialect: none until a start names one, the last kept over the one before,
- * the preferences snapshot left as it stood, and one account's pick no
- * other's. Synthetic accounts throughout.
- */
 
 const STUDIO = "6f0c1d0e-6b1a-4d43-9a49-2b7b6f1f0a11";
 

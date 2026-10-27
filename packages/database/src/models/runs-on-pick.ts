@@ -1,11 +1,3 @@
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
-import type { TaskRunsOnRequest } from "@luke/features/task-wire";
-import { eq } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
-import { SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
-import { accountPreference } from "../schemas/preferences.js";
-
 /**
  * runs-on-pick.ts -- where an account last chose to run a task, kept so a task an agent makes for it starts there too.
  *
@@ -17,6 +9,14 @@ import { accountPreference } from "../schemas/preferences.js";
  * moves no `updated_at`, because that instant tells a Mac the preferences
  * part was written and a pick is no part of it.
  */
+
+import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import type { TaskRunsOnRequest } from "@luke/features/task-wire";
+import { eq } from "drizzle-orm";
+import { Effect, Option, Schema } from "effect";
+import { SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
+import { accountPreference } from "../schemas/preferences.js";
 
 const PICK_COLUMNS = {
   machine: accountPreference.runsOnMachine,

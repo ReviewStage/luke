@@ -90,7 +90,7 @@ export class LocalAgentRefused extends Data.TaggedError("LocalAgentRefused")<{
 }> {}
 
 /** A task an agent makes for the member, where the device the member last ran a task on has been removed since, so it has nowhere it was asked to run. */
-export class RunsOnPickRemoved extends Data.TaggedError("RunsOnPickRemoved")<{}> {}
+export class RunsOnPickRemoved extends Data.TaggedError("RunsOnPickRemoved") {}
 
 export const THIS_MAC = {
   /** How lately a Mac must have beaten for Start to offer it: one beat, and room for the next to arrive. */
@@ -472,8 +472,9 @@ export const taskRunsOnChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
  * cloud. Note that, unlike a Start's choice, a device that is away is taken,
  * because making the task starts nothing, and a Start on it while it is
  * still away is refused by name (`agentMachineChoice`); and that with the
- * experiment off no device is offered at all, so the cloud is the only place
- * there is, and a pick kept from before stands unread.
+ * experiment off, or no device left at all, none is offered, so the cloud is
+ * the only place there is, New task draws no Runs on to pick it with, and a
+ * pick kept from before stands unread.
  */
 export const agentMadeRunsOn = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -486,7 +487,9 @@ export const agentMadeRunsOn = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Option.isNone(pick) || pick.value.machine === CODING_AGENT_MACHINE.VERCEL) return undefined;
   const kept = pick.value.deviceId;
   if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return undefined;
-  const offered = (yield* macOffers(userId)).find((each) => each.deviceId === kept);
+  const offers = yield* macOffers(userId);
+  if (offers.length === 0) return undefined;
+  const offered = offers.find((each) => each.deviceId === kept);
   if (offered === undefined) return yield* new RunsOnPickRemoved();
   return { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: offered.deviceId };
 });

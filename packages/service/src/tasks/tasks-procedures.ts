@@ -541,9 +541,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
             : hostedStoreOrUnavailable(Effect.fail(failure)),
         ),
       );
-      // Where the task runs is kept as the member's last pick, which a task an agent makes for them starts on (`agentMadeRunsOn`).
-      if (input.runsOn !== undefined)
-        yield* hostedStoreOrUnavailable(keepRunsOnPick(userId, input.runsOn));
+      // Where the task runs is kept as the member's last pick, which a task an agent makes for them starts on
+      // (`agentMadeRunsOn`). Note that a pick that fails to keep fails nothing, because the task is already
+      // committed, and a create answered with an error would be retried into a second task.
+      if (input.runsOn !== undefined) {
+        yield* keepRunsOnPick(userId, input.runsOn).pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning(`the last Runs on pick could not be kept: ${failure._tag}`),
+          ),
+        );
+      }
       yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
         source: SERVER_TASK_SOURCE.SIDEBAR,
         has_issue: issueLinks.length > 0,
