@@ -190,6 +190,7 @@ import {
 } from "./use-channels.js";
 import {
   type CodingAgentsControl,
+  type ModelsRead,
   useCodingAgents,
   withPendingAgents,
 } from "./use-coding-agents.js";
@@ -822,6 +823,8 @@ export interface TasksControl {
     devices: readonly MacOffer[] | undefined;
     /** Whether the last read of the models did not land. */
     modelsFailed: boolean;
+    /** Where the newest read of the models stands, at the generation it took, so the card can wait on a read made since it opened. */
+    modelsRead: ModelsRead;
     /** Reads the models now, for the chip's name, its menu opening, and its Retry. */
     readModels: () => void;
     /** Reads the account's default model, which the composer's chip starts on. */
@@ -3595,6 +3598,7 @@ export function useTasksTab(input: {
       models: agents.models,
       devices: agents.macs,
       modelsFailed: agents.modelsFailed,
+      modelsRead: agents.modelsRead,
       readModels: agents.readModels,
       readDefault: agents.readDefault,
       onClose: () => setNewTaskAsk(undefined),

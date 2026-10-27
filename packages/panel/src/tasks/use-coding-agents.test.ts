@@ -17,7 +17,7 @@ import { ACTION_RESULT_STATUS, type ActionResult, type WireBoundaryInput } from 
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
@@ -25,6 +25,7 @@ import {
   ARCHIVE_DRAWN,
   type CodingAgentsControl,
   type DraftCallStart,
+  MODELS_READ,
   useCodingAgents,
   withPendingAgents,
 } from "./use-coding-agents.js";
@@ -161,6 +162,30 @@ function startPayloads(
 // Note that the refusal raises the window's toast, whose waits stand on the test's clock.
 
 // Note that the refusal raises the window's toast, whose waits stand on the test's clock.
+
+test("a read of the models that never answers is said as failed past its bound, and the Retry that lands reads no device as none", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const tab = mount({ taskId: undefined, repository: null });
+    tab.answer(ACT_KIND.CODING_AGENTS_MODELS, Promise.withResolvers<WireBoundaryInput>().promise);
+    await tab.mount();
+    act(() => tab.control().readModels());
+    await settle();
+    assert.equal(tab.control().modelsRead.state, MODELS_READ.READING);
+
+    // The bound the requirement sets: fifteen seconds, past the host's own ten on the call.
+    await act(() => vi.advanceTimersByTimeAsync(15_000));
+    assert.equal(tab.control().modelsFailed, true);
+
+    tab.answer(ACT_KIND.CODING_AGENTS_MODELS, { models: [] });
+    act(() => tab.control().readModels());
+    await settle();
+    assert.equal(tab.control().modelsRead.state, MODELS_READ.READ);
+    assert.deepEqual(tab.control().macs, []);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 test("the task's agents the followed list carries draw before its list is read, and the read adds the archived ones", async () => {
   const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
