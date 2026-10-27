@@ -24,7 +24,10 @@ import { cn } from "../cn.js";
  *   lit in the selected fill under the pointer and while what it opens
  *   stands open, and drawn in the text ink while it is the current page. Its
  *   hover is a plain `:hover`, as the pill's was, rather than Tailwind's
- *   hover-capable one.
+ *   hover-capable one. On the desktop it claims its presses back from the
+ *   window's drag strip (`-webkit-app-region: no-drag`), because a bar it
+ *   stands on, the toolbar's heading among them, drags the window, and
+ *   Electron hands a drag region's clicks to the window rather than the page.
  * - `BreadcrumbPage` is a crumb of words: it says it is the current page
  *   only where the caller says so, and takes no `role="link"` or
  *   `aria-disabled`, because a crumb of words is words; its weight is
@@ -66,7 +69,7 @@ function BreadcrumbLink({ className, render, ...props }: useRender.ComponentProp
     props: mergeProps<"a">(
       {
         className: cn(
-          "flex min-w-0 items-center gap-breadcrumb-gap rounded-breadcrumb border-0 bg-transparent px-breadcrumb-pill-inline py-breadcrumb-pill-block text-muted-foreground [font:inherit] transition-[background-color,color] duration-(--luke-duration-hover) ease-plain [&:hover]:bg-fill-selected [&:hover]:text-foreground aria-expanded:bg-fill-selected aria-expanded:text-foreground aria-[current=page]:text-foreground",
+          "flex min-w-0 items-center gap-breadcrumb-gap rounded-breadcrumb border-0 bg-transparent px-breadcrumb-pill-inline py-breadcrumb-pill-block text-muted-foreground [font:inherit] transition-[background-color,color] duration-(--luke-duration-hover) ease-plain [&:hover]:bg-fill-selected [&:hover]:text-foreground aria-expanded:bg-fill-selected aria-expanded:text-foreground aria-[current=page]:text-foreground in-data-[luke-profile=desktop]:[-webkit-app-region:no-drag]",
           className,
         ),
       },
