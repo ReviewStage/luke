@@ -12,6 +12,7 @@ import {
   installPanelSpanRecorder,
   leaveWindowSpan,
   markWindowStart,
+  noteListedTasks,
   PANEL_SPAN,
   type PanelSpan,
   useKeystrokeSpans,
@@ -21,13 +22,13 @@ import type { TasksControl } from "./tasks/use-tasks-tab.js";
 import { fakeActPortAnswering } from "./testing/app-bridge.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
-import { keyPressed, reportEventTiming } from "./testing/event-timing.js";
+import { frameHeld, keyPressed, pressed, reportEventTiming } from "./testing/event-timing.js";
 import { tasksControl } from "./testing/tasks-control.js";
 
 /**
- * panel-spans.test.ts -- what the window times of its own start and of a key pressed in a timed box: its start to its first surface drawn and to the sidebar's first task list read, each once, and a keystroke to the paint after it, saying how long it waited and nothing of the key.
+ * panel-spans.test.ts -- what the window times of its own start, of a key pressed in a timed box, and of what is slow anywhere: its start to its first surface drawn and to the sidebar's first task list read, each once, a keystroke to the paint after it, saying how long it waited and nothing of the key, a slow press or key anywhere, and a long frame, each saying where it came.
  *
- * The browser's Event Timing is answered by the test (`testing/event-timing.ts`); the clock is a fake date.
+ * The browser's Event Timing and Long Animation Frames are answered by the test (`testing/event-timing.ts`); the clock is a fake date.
  */
 
 declare global {
@@ -176,7 +177,7 @@ test("a window whose first task list read fails is not timed through its Retry",
   assert.deepEqual(recorded(), []);
 });
 
-test("a key pressed in a timed box is timed to the paint after it, saying how long it waited and ran, and a key pressed elsewhere is not", async () => {
+test("a key pressed in a timed box is timed to the paint after it, saying how long it waited and ran and where, and a slow key pressed elsewhere is timed as a slow interaction", async () => {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   act(() => root.render(createElement(TimedBox, { name: PANEL_SPAN.KEYSTROKE_COMPOSER })));
@@ -201,7 +202,94 @@ test("a key pressed in a timed box is timed to the paint after it, saying how lo
       name: PANEL_SPAN.KEYSTROKE_COMPOSER,
       startedAt: performance.timeOrigin + 1_000,
       waited: 72,
-      measured: { "keystroke.input_delay_ms": 12, "keystroke.processing_ms": 28 },
+      measured: {
+        "keystroke.input_delay_ms": 12,
+        "keystroke.processing_ms": 28,
+        "panel.region": "elsewhere",
+      },
+    },
+    {
+      name: PANEL_SPAN.INTERACTION_SLOW,
+      startedAt: performance.timeOrigin + 2_000,
+      waited: 320,
+      measured: {
+        "interaction.kind": "key",
+        "interaction.input_delay_ms": 1,
+        "interaction.processing_ms": 299,
+        "interaction.presentation_ms": 20,
+        "panel.region": "elsewhere",
+      },
+    },
+  ]);
+});
+
+test("a press anywhere slow enough to feel is timed to the paint after it, saying the part of the window and the page it came on, the workspace's size, and how its wait split; a quick one is not", () => {
+  document.body.innerHTML =
+    '<main data-span-region="main" data-span-page="inbox"><aside data-span-region="side_panel"><p></p></aside></main>';
+  const inside = document.querySelector("p");
+  assert.ok(inside);
+  // Note that the window's observer is heard from the recorder installed after Event Timing is reported.
+  uninstall();
+  uninstall = installPanelSpanRecorder((span) => spans.push(span));
+  noteListedTasks(42);
+
+  pressed(inside, {
+    startTime: 1_000,
+    processingStart: 1_030,
+    processingEnd: 1_110,
+    duration: 180,
+  });
+  pressed(inside, { startTime: 2_000, processingStart: 2_005, processingEnd: 2_040, duration: 60 });
+
+  assert.deepEqual(recorded(), [
+    {
+      name: PANEL_SPAN.INTERACTION_SLOW,
+      startedAt: performance.timeOrigin + 1_000,
+      waited: 180,
+      measured: {
+        "window.task_count": 42,
+        "interaction.kind": "press",
+        "interaction.input_delay_ms": 30,
+        "interaction.processing_ms": 80,
+        "interaction.presentation_ms": 70,
+        "panel.region": "side_panel",
+        "panel.page": "inbox",
+      },
+    },
+  ]);
+});
+
+test("a frame held long enough to stutter is timed, saying how much of it blocked input, ran scripts, and laid out, and the page it held; a short one is not", () => {
+  document.body.innerHTML = '<main data-span-region="main" data-span-page="task"></main>';
+  uninstall();
+  uninstall = installPanelSpanRecorder((span) => spans.push(span));
+
+  frameHeld({
+    startTime: 1_000,
+    duration: 240,
+    blockingDuration: 190,
+    styleAndLayoutStart: 1_200,
+    scripts: [120, 60],
+  });
+  frameHeld({
+    startTime: 2_000,
+    duration: 70,
+    blockingDuration: 20,
+    styleAndLayoutStart: 2_050,
+    scripts: [40],
+  });
+
+  assert.deepEqual(recorded(), [
+    {
+      name: PANEL_SPAN.FRAME_LONG,
+      startedAt: performance.timeOrigin + 1_000,
+      waited: 240,
+      measured: {
+        "frame.blocking_ms": 190,
+        "frame.script_ms": 180,
+        "frame.layout_ms": 40,
+        "panel.page": "task",
+      },
     },
   ]);
 });

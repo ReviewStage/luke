@@ -138,6 +138,8 @@ import {
 import {
   endWindowSpan,
   leaveWindowSpan,
+  noteListedTasks,
+  PANEL_REGION,
   PANEL_SPAN,
   PANEL_SPAN_ATTRIBUTE,
 } from "../panel-spans.js";
@@ -1673,10 +1675,13 @@ function useFirstUsableSpan(tasks: TasksControl): void {
   const listed = tasks.tasks.length;
   useEffect(() => {
     if (listFailed) leaveWindowSpan(PANEL_SPAN.WINDOW_FIRST_USABLE);
-    else if (listRead)
+    else if (listRead) {
       endWindowSpan(PANEL_SPAN.WINDOW_FIRST_USABLE, () => ({
         [PANEL_SPAN_ATTRIBUTE.TASK_COUNT]: listed,
       }));
+      // Every span from now says the workspace's size, so a wait can be read against it.
+      noteListedTasks(listed);
+    }
   }, [listRead, listFailed, listed]);
 }
 
@@ -2126,6 +2131,7 @@ function SidebarColumn({
     <PanePin
       ref={overlay.ref}
       className="desktop-sidebar"
+      data-span-region={PANEL_REGION.SIDEBAR}
       data-row-drop-scope=""
       inert={!overlay.inSight}
       onPin={onPressWithin}

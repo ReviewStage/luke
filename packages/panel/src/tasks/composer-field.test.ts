@@ -75,10 +75,7 @@ test("a box drawn before the editor bundle lands is inert with its placeholder, 
   assert.equal(field?.getAttribute("aria-busy"), "true", "the field stands inert");
   assert.equal(field?.tabIndex, -1, "out of the Tab order");
   assert.equal(container.querySelector(".composer-editor"), null);
-  assert.equal(
-    container.querySelector(".agent-composer-placeholder")?.textContent,
-    "Message Ada",
-  );
+  assert.equal(container.querySelector(".agent-composer-placeholder")?.textContent, "Message Ada");
   assert.equal(
     container.querySelector<HTMLButtonElement>('button[aria-label="Dictate"]')?.disabled,
     true,
@@ -126,7 +123,11 @@ test("a key pressed in the box is timed under the message box's keystroke span, 
       {
         name: PANEL_SPAN.KEYSTROKE_COMPOSER,
         waited: 136,
-        measured: { "keystroke.input_delay_ms": 30, "keystroke.processing_ms": 80 },
+        measured: {
+          "keystroke.input_delay_ms": 30,
+          "keystroke.processing_ms": 80,
+          "panel.region": "elsewhere",
+        },
       },
     ],
   );
