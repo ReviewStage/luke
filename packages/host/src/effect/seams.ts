@@ -5,7 +5,6 @@
  * so a composer states the seams it reaches in its own requirements instead of
  * taking a kernel that holds all of them.
  */
-import type { AgentToolPin } from "@luke/agent-runner/pins";
 import type { OpenConsent } from "@luke/credentials";
 import type {
   DeviceArch,
@@ -180,8 +179,7 @@ export interface LocalAgentSandboxCommand {
  * when the agent is discarded. The agent's GitHub token is kept on the
  * device, outside every folder the VM mounts, where the VM's credential
  * bindings read it on every request, so the VM only ever holds a
- * placeholder. Only the local agents concern asks for it, and only where
- * the device registers as sandboxed.
+ * placeholder. Only the local agents concern asks for it.
  */
 export interface LocalAgentSandbox {
   /** Where the VM's own image keeps what a runner runs on, which the device registers in place of any copy of its own. */
@@ -242,59 +240,27 @@ export class LocalAgentSandboxUnavailable extends Data.TaggedError("LocalAgentSa
 
 /**
  * What a local agent's runner is started with on this device
- * (`compose-local-agents.ts`): how every runner is started (`launch`), the
- * one door an isolation layer would replace, the runner's bundle, and what
- * the start adds to its environment, which the shell chooses by how it
- * runs; the copies of Node and the Claude Code CLI the app or the checkout
- * already has, where it has them, which stand in for the pinned releases the
- * host otherwise fetches (`local-agent-tools.ts`), and those pins; whether a
- * harness's own sign-in on the device counts; the name the device is offered
- * under at Start; and the script that makes an agent's worktree of Luke's
- * shared clone (`@luke/host/node`'s `agentWorktreeScript`). It arrives
- * rather than being built here, because each is the shell's own, a path into
- * its bundle or a script `node:path` builds, and a host that built them could
- * not load in a browser. Only the local agents concern asks for it.
+ * (`compose-local-agents.ts`): the VM each agent runs in (`sandbox`), how
+ * every runner is started in it (`launch`), the runner's bundle, and what
+ * the start adds to its environment; the name, platform, and architecture
+ * the device is offered under at Start; and the scripts that make an
+ * agent's own repository and check it for unsaved work
+ * (`@luke/host/node`'s `agentWorktreeScript` and `agentUnsavedWorkScript`).
+ * It arrives rather than being built here, because each is the shell's own,
+ * a path into its bundle or a script `node:path` builds, and a host that
+ * built them could not load in a browser. Only the local agents concern asks
+ * for it.
  */
 export interface LocalAgentPlatformSeam {
-  /** The process a runner is started as, given what it runs and the environment made for it: the desktop's launcher, or a host's own systemd unit. */
+  /** The process a runner is started as, given what it runs and the environment made for it: `smolvm machine exec` into the agent's VM, through the desktop's launcher on a Mac. */
   readonly launch: (runner: LocalAgentRunner) => LocalAgentCommand;
   readonly runnerBundle: string;
   readonly runnerEnv: Readonly<Record<string, string>>;
-  readonly bundled: {
-    readonly node?: string | undefined;
-    readonly claude?: string | undefined;
-    /** The Codex the app ships, where it ships one; none where the device fetches the pinned build (`pins.codex`). */
-    readonly codex?: string | undefined;
-    /** The `gh` a host ships, which signs each agent in where `githubFromLuke` and which git's credential helper names; none takes `gh` from the runner's PATH. */
-    readonly gh?: string | undefined;
-  };
-  /**
-   * Whether each agent's `gh` is signed in with a token from Luke, in a
-   * `GH_CONFIG_DIR` inside its folder, renewed every `GITHUB_TOKEN_REFRESH`,
-   * with git reading it through `gh auth git-credential`: a host, which has
-   * no developer's git login. False where the developer's own git login
-   * serves, as on This Mac.
-   */
-  readonly githubFromLuke: boolean;
-  /** The pinned builds the device fetches and checks where it bundles none, for its platform and architecture. */
-  readonly pins: {
-    readonly node: AgentToolPin;
-    readonly claude: AgentToolPin;
-    readonly codex: AgentToolPin;
-  };
-  /**
-   * Whether a harness signed in on the device by itself runs its agents: a
-   * Mac's own login does, which a launch prefers to the account's saved
-   * credential; a host's never does, since each agent's home is its own
-   * folder and no login left on the box is ever seen there, so its agents
-   * run on the sign-in saved in Luke.
-   */
-  readonly ownSignIns: boolean;
   readonly deviceName: string;
   /** The platform and architecture the device registers as. */
   readonly devicePlatform: DevicePlatform;
   readonly deviceArch: DeviceArch;
-  /** How the launcher runs each agent, which the device registers as: directly on the machine, or in a VM of its own. */
+  /** How the launcher runs each agent, which the device registers as: in a VM of its own. */
   readonly deviceIsolation: DeviceIsolation;
   /**
    * The lines beyond the first the device registers it takes
@@ -319,22 +285,20 @@ export interface LocalAgentPlatformSeam {
    */
   readonly unsavedWorkScript?: ((input: { readonly worktree: string }) => string) | undefined;
   /**
-   * The VM each agent runs in, where the device registers as sandboxed
-   * (`deviceIsolation`): `launch` then starts the runner inside it, and the
+   * The VM each agent runs in: `launch` starts the runner inside it, and the
    * follower makes, stops and deletes it around the runner, keeps the
    * agent's GitHub token out of its folder, and runs a tool's commands in
-   * it rather than on the device. None where agents run on the device
-   * itself, as on This Mac.
+   * it rather than on the device.
    */
-  readonly sandbox?: LocalAgentSandbox | undefined;
+  readonly sandbox: LocalAgentSandbox;
   /**
-   * The platform this device's agents run on instead while its sandbox
-   * setting is on (`LocalAgentsDependencies.sandboxed`), each in a VM of its
-   * own (`sandbox`): This Mac's, beside the one that runs them directly on
-   * the Mac. None where the device has one way of running them, as a host,
-   * which is always sandboxed.
+   * Whether agents on this device may have run directly on it, before every
+   * agent ran in a VM: This Mac's did, a host's never. On such a device the
+   * follower keeps how each agent ran, takes an agent from before that
+   * record with a checkout as one that ran directly, never starts it in a
+   * VM, and checks its folder on the device before a discard.
    */
-  readonly sandboxed?: LocalAgentPlatformSeam | undefined;
+  readonly formerlyDirect: boolean;
 }
 
 export class LocalAgentPlatform extends Context.Service<

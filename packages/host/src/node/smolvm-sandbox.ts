@@ -372,7 +372,7 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
 
     ready: Effect.gen(function* () {
       if (pinned === undefined) return true;
-      const had = yield* localAgentTool(options.stateRoot, pinned, undefined);
+      const had = yield* localAgentTool(options.stateRoot, pinned);
       return Option.isSome(had) && (yield* imageSeeded);
     }),
 

@@ -45,28 +45,21 @@
  * alone. A launch whose environment holds `OPENAI_API_KEY` (one the
  * account's OpenAI API key pays for) asks no token: app-server reads the key
  * from there, the provider's documented `env_key`, and no command it runs
- * inherits it. A launch on the Mac's own sign-in (`ownLogin`) names no
- * provider of Luke's at all: app-server runs OpenAI's own on the login
- * `codex login` keeps under the user's `CODEX_HOME`, refreshed by Codex
- * itself, after `account/read` says there is one
- * (https://learn.chatgpt.com/docs/app-server, Authentication).
+ * inherits it.
  *
  * Sandbox. Every command Codex runs is under its own sandbox in
  * `workspace-write` with approval `never` (https://learn.chatgpt.com/docs/sandboxing),
  * set as the thread starts and again as the `sandboxPolicy` of each
  * `turn/start`, as app-server documents: the checkout writable, its Git
- * directory, the folders the machine grants (a local agent's own folder),
- * and on a Mac the toolchains' caches, with the network on. On a Mac that
- * sandbox is Codex's Seatbelt, never `danger-full-access` or
- * `externalSandbox`. On a host (`runsOnHost`) Codex runs no sandbox of its
- * own, `danger-full-access`, since the box its member owns is the boundary
- * and Landlock would keep a command from `/dev/kvm`; its commands still
- * inherit no bearer or key (`shell_environment_policy`).
+ * directory, and the folders the machine grants, with the network on. In a
+ * local agent's VM (`runsOnHost`) Codex runs no sandbox of its own,
+ * `danger-full-access`, since the VM is the boundary and Landlock would keep
+ * a command from `/dev/kvm`; its commands still inherit no bearer or key
+ * (`shell_environment_policy`).
  */
 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { Duration, Effect, Exit, Option, Queue, Schema, Scope, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
@@ -83,13 +76,9 @@ import type {
   UserInput,
 } from "./codex-protocol/v2/index.js";
 import {
-  gitCommonDir,
   installedSkillsPath,
   type LaunchContext,
   type LaunchOutcome,
-  MAC_CLONES,
-  MAC_TOOLCHAIN_CACHES,
-  ON_MAC,
   type RunnerSelf,
   runsOnHost,
 } from "./launch.js";
@@ -169,7 +158,6 @@ const CLIENT_INFO = {
 const METHOD = {
   INITIALIZE: "initialize",
   INITIALIZED: "initialized",
-  ACCOUNT_READ: "account/read",
   SKILLS_EXTRA_ROOTS_SET: "skills/extraRoots/set",
   THREAD_START: "thread/start",
   THREAD_RESUME: "thread/resume",
@@ -238,10 +226,7 @@ const TurnsPageSchema = Schema.Struct({
   ),
   nextCursor: Schema.NullOr(Schema.String),
 });
-/** What `account/read` answers, as the launch on the Mac's own sign-in reads it: whether Codex holds an account. */
-const AccountAnswerSchema = Schema.Struct({ account: Schema.NullOr(Schema.Unknown) });
 const decodeThreadAnswer = Schema.decodeUnknownOption(ThreadAnswerSchema);
-const decodeAccountAnswer = Schema.decodeUnknownOption(AccountAnswerSchema);
 const decodeTurnsPage = Schema.decodeUnknownOption(TurnsPageSchema);
 const decodeTurnAnswer = Schema.decodeUnknownOption(TurnAnswerSchema);
 const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSchema));
@@ -271,9 +256,6 @@ interface TokenCommand {
 /** The service tier a fast version runs on: Codex's documented `fast`, which it sends as the API's `priority`. */
 const FAST_TIER = "fast";
 
-/** Codex's built-in OpenAI provider, which runs on Codex's own sign-in (https://learn.chatgpt.com/docs/auth). */
-const OPENAI_PROVIDER = "openai";
-
 /**
  * OpenAI's API as an API key pays for it: the same endpoint, its key read
  * from the launch's environment through the provider's documented `env_key`
@@ -290,24 +272,18 @@ const CODEX_AUTH = {
   TOKEN_COMMAND: "token_command",
   /** The account's OpenAI API key, in the launch's environment. */
   API_KEY: "api_key",
-  /** The Mac's own Codex sign-in, under the user's `CODEX_HOME`. */
-  OWN_LOGIN: "own_login",
 } as const;
 
 type CodexAuth =
   | { readonly kind: typeof CODEX_AUTH.TOKEN_COMMAND; readonly command: TokenCommand }
-  | { readonly kind: typeof CODEX_AUTH.API_KEY }
-  | { readonly kind: typeof CODEX_AUTH.OWN_LOGIN };
+  | { readonly kind: typeof CODEX_AUTH.API_KEY };
 
 /**
  * How Luke's provider is handed its token: from the runner's token command
  * on the plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API
- * key; and its own name. On the Mac's own sign-in, OpenAI's built-in
- * provider alone, which runs on Codex's login.
+ * key; and its own name.
  */
 function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
-  // Note that the developer's own config.toml is read too, so OpenAI's built-in provider is named over any of theirs.
-  if (auth.kind === CODEX_AUTH.OWN_LOGIN) return [["model_provider", toml(OPENAI_PROVIDER)]];
   const named = auth.kind === CODEX_AUTH.API_KEY ? API_KEY_PROVIDER : CHATGPT_PROVIDER;
   const provider = `model_providers.${named.ID}`;
   const credential: (readonly [string, string])[] =
@@ -338,19 +314,12 @@ function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
 
 /**
  * Every folder the agent's commands may write beside the checkout, which
- * `workspace-write` keeps writable itself: the checkout's Git directory, the
- * folders its machine grants, and on a Mac the toolchains' caches under the
- * developer's home. Each is absolute, as app-server's `writableRoots` are.
+ * `workspace-write` keeps writable itself: the checkout's Git directory and
+ * the folders its machine grants. Each is absolute, as app-server's
+ * `writableRoots` are.
  */
-function writableRoots(config: CodexConfig, env: LaunchContext<CodexConfig>["env"]): string[] {
-  const home = env.HOME !== undefined && env.HOME !== "" ? env.HOME : homedir();
-  const caches = ON_MAC ? MAC_TOOLCHAIN_CACHES.map((cache) => join(home, cache)) : [];
-  // Note that a worktree's shared Git folder is granted only inside Luke's own clones, since the agent writes its `.git` file.
-  return [
-    gitCommonDir(config.cwd, join(home, MAC_CLONES)) ?? join(config.cwd, ".git"),
-    ...(config.writableRoots ?? []),
-    ...caches,
-  ];
+function writableRoots(config: CodexConfig): string[] {
+  return [join(config.cwd, ".git"), ...(config.writableRoots ?? [])];
 }
 
 /**
@@ -363,7 +332,7 @@ function sandboxPolicy(config: CodexConfig, env: LaunchContext<CodexConfig>["env
   if (runsOnHost(env)) return { type: "dangerFullAccess" };
   return {
     type: "workspaceWrite",
-    writableRoots: writableRoots(config, env),
+    writableRoots: writableRoots(config),
     networkAccess: true,
     excludeTmpdirEnvVar: false,
     excludeSlashTmp: false,
@@ -560,10 +529,6 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
         PATH: pathWithCodexTools(config.executable, env.PATH),
         [RUNNER_ENV.CLAUDE_TOKEN]: undefined,
         [RUNNER_ENV.API_KEY]: undefined,
-        // Note that on the Mac's own sign-in no key of Luke's reaches app-server, were one handed to the launch.
-        ...(launch.auth.kind === CODEX_AUTH.OWN_LOGIN
-          ? { [RUNNER_ENV.OPENAI_API_KEY]: undefined }
-          : undefined),
       },
     },
     listenerFor(seen),
@@ -571,18 +536,6 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   const opened = Effect.gen(function* () {
     yield* server.request(METHOD.INITIALIZE, { clientInfo: CLIENT_INFO, capabilities: null });
     yield* server.notify(METHOD.INITIALIZED);
-    // Note that a launch on the Mac's own sign-in goes no further where Codex holds none, rather than fail its first turn.
-    if (launch.auth.kind === CODEX_AUTH.OWN_LOGIN) {
-      const account = decodeAccountAnswer(
-        yield* server.request(METHOD.ACCOUNT_READ, { refreshToken: false }),
-      );
-      if (Option.isNone(account) || account.value.account === null) {
-        return yield* new AppServerError({
-          method: METHOD.ACCOUNT_READ,
-          detail: "Codex on this Mac is not signed in",
-        });
-      }
-    }
     // The member's installed skills, beside the checkout's `.agents/skills`, before the thread lists them.
     const skills = installedSkillsPath(config.installedSkills, INSTALLED_SKILLS.SKILLS);
     if (skills !== undefined) {
@@ -867,13 +820,11 @@ function onApiKey(context: LaunchContext<CodexConfig>): boolean {
 }
 
 /**
- * The credential a launch's app-server runs on: the Mac's own sign-in where
- * the config says so, the account's API key where the environment holds it,
- * and the plan's token command otherwise, where the runner knows its own
- * bundle; none where it does not.
+ * The credential a launch's app-server runs on: the account's API key where
+ * the environment holds it, and the plan's token command otherwise, where
+ * the runner knows its own bundle; none where it does not.
  */
 function authOf(context: LaunchContext<CodexConfig>): CodexAuth | undefined {
-  if (context.config.ownLogin === true) return { kind: CODEX_AUTH.OWN_LOGIN };
   if (onApiKey(context)) return { kind: CODEX_AUTH.API_KEY };
   if (context.self === undefined) return undefined;
   return {

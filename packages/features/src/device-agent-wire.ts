@@ -343,9 +343,9 @@ const deviceField = { deviceId: wireUuidSchema };
 
 /**
  * A register: the Mac's id, its name, its home folder, and the CLI it
- * bundles, both absolute, the Codex binary it checked against the pin
- * (`@luke/agent-runner/pins`' `CODEX_MAC_PIN`), absent until it has one,
- * which harnesses it is signed in to, its platform and architecture, and
+ * bundles, both absolute, the Codex binary it runs, absent until it has one,
+ * which harnesses it is signed in to (neither, from a device that
+ * runs its agents in VMs, on the sign-ins saved in Luke), its platform and architecture, and
  * how it runs its agents, absent for one that runs them bare, as every
  * desktop from before the field does, and the capabilities its follower has
  * (`DEVICE_CAPABILITY`), absent for none, as every desktop from before the

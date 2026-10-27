@@ -43,19 +43,10 @@ const settled = (done: () => boolean) =>
     Effect.andThen(Effect.sync(() => expect(done()).toBe(true))),
   );
 
-/** A box's state root, its home with an agent folder in it, and the tools the follower would fetch, each a file standing. */
+/** A box's state root and its home, under a folder of its own. */
 const box = Effect.gen(function* () {
-  const fileSystem = yield* FileSystem.FileSystem;
   const root = yield* temporaryDirectoryScoped("luke-host-daemon-");
-  const tool = (name: string) =>
-    Effect.as(fileSystem.writeFileString(`${root}/${name}`, ""), `${root}/${name}`);
-  return {
-    home: `${root}/home`,
-    stateRoot: `${root}/state`,
-    node: yield* tool("node"),
-    claude: yield* tool("claude"),
-    codex: yield* tool("codex"),
-  };
+  return { home: `${root}/home`, stateRoot: `${root}/state` };
 });
 
 /** Whether a spawn is the runner, started in its agent's VM. */
@@ -128,9 +119,9 @@ describe("a host's daemon", () => {
     "registers on its device secret with its version on every call, hands a launch to its launcher with the claim's secrets, and stops its runner and ends once Luke refuses its secret",
     () =>
       Effect.gen(function* () {
-        const tools = yield* box;
+        const { home, stateRoot } = yield* box;
         const reports: string[] = [];
-        const { spawner, layer } = world(tools.home, reports);
+        const { spawner, layer } = world(home, reports);
         let linesRead = 0;
         let removed = false;
         const http = recordingHttpClient((request) => {
@@ -159,7 +150,7 @@ describe("a host's daemon", () => {
                   seq: 1,
                   kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
                   payload: {
-                    checkoutPath: `${tools.home}/.luke/agents/${AGENT_ID}/repository`,
+                    checkoutPath: `${home}/.luke/agents/${AGENT_ID}/repository`,
                     repository: null,
                     startBranch: null,
                     firstSequence: 1,
@@ -175,23 +166,19 @@ describe("a host's daemon", () => {
         });
         const platform = linuxPlatform({
           installFolder: "/opt/luke-host",
-          node: tools.node,
           arch: DEVICE_ARCH.X64,
           hostname: "fra-01",
-          stateRoot: tools.stateRoot,
+          stateRoot,
           smolvm: SMOLVM,
           user: { uid: 990, gid: 990 },
           kvm: false,
         });
 
         const daemon = yield* hostDaemon({
-          stateRoot: tools.stateRoot,
+          stateRoot,
           device: { deviceId: DEVICE_ID, deviceSecret: DEVICE_SECRET, serviceOrigin: SERVICE },
           version: VERSION,
-          platform: {
-            ...platform,
-            bundled: { node: tools.node, claude: tools.claude, codex: tools.codex },
-          },
+          platform,
         }).pipe(Effect.provide(Layer.merge(layer, http.layer)), Effect.forkScoped);
         yield* settled(() => spawner.spawned.some(isRunner));
 
@@ -201,7 +188,7 @@ describe("a host's daemon", () => {
           name: "fra-01",
           platform: "linux",
           arch: "x64",
-          home: tools.home,
+          home: home,
           signedIn: { claudeCode: false, codex: false },
         });
         expect(new Set(http.requests.map((request) => request.authorization))).toEqual(
@@ -213,7 +200,7 @@ describe("a host's daemon", () => {
         const launched = spawner.spawned.filter(isRunner);
         expect(launched).toHaveLength(1);
         const [runner] = launched;
-        const folder = `${tools.home}/.luke/agents/${AGENT_ID}`;
+        const folder = `${home}/.luke/agents/${AGENT_ID}`;
         expect(runner?.args.slice(0, 4)).toEqual(["machine", "exec", "--name", `luke-${AGENT_ID}`]);
         expect(runner?.args).toContain(`${folder}/repository`);
         expect(runner?.args).toContain(`HOME=${folder}/home`);
@@ -237,9 +224,9 @@ describe("a host's daemon", () => {
     "refused as needing an upgrade, says so once with the command to run and asks Luke nothing until its quiet spell has passed",
     () =>
       Effect.gen(function* () {
-        const tools = yield* box;
+        const { home, stateRoot } = yield* box;
         const reports: string[] = [];
-        const { layer } = world(tools.home, reports);
+        const { layer } = world(home, reports);
         const http = recordingHttpClient(() =>
           jsonResponse(
             { error: "host-upgrade-needed", minimumVersion: "0.2.0" },
@@ -248,10 +235,9 @@ describe("a host's daemon", () => {
         );
         const platform = linuxPlatform({
           installFolder: "/opt/luke-host",
-          node: tools.node,
           arch: DEVICE_ARCH.X64,
           hostname: "fra-01",
-          stateRoot: tools.stateRoot,
+          stateRoot,
           smolvm: SMOLVM,
           user: { uid: 990, gid: 990 },
           kvm: false,
@@ -260,13 +246,10 @@ describe("a host's daemon", () => {
           at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES).length;
 
         yield* hostDaemon({
-          stateRoot: tools.stateRoot,
+          stateRoot,
           device: { deviceId: DEVICE_ID, deviceSecret: DEVICE_SECRET, serviceOrigin: SERVICE },
           version: VERSION,
-          platform: {
-            ...platform,
-            bundled: { node: tools.node, claude: tools.claude, codex: tools.codex },
-          },
+          platform,
         }).pipe(Effect.provide(Layer.merge(layer, http.layer)), Effect.forkScoped);
         yield* settled(() => registers() === 1);
         yield* TestClock.adjust(Duration.minutes(4));

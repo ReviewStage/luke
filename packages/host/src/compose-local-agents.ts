@@ -42,133 +42,94 @@ import type { Composer } from "./composer.js";
 import {
   Environment,
   LocalAgentPlatform,
-  type LocalAgentPlatformSeam,
   type LocalAgentSandbox,
   type LocalAgentSandboxCommand,
   Reporter,
 } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
-import { localCodexSignedIn } from "./local-agent-codex.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
-import { localAgentTool } from "./local-agent-tools.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-local-agents.ts -- runs on this Mac the coding agents the account starts on This Mac: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as the Local agents experiment and Settings › This Mac's Run agents on this Mac are both on.
+ * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each in a VM of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as the Local agents experiment and This Mac's Run agents on this Mac are both on (a host's are always).
  *
- * The service writes a local agent's work as rows under this Mac's device
- * id (`@luke/features/device-agent-wire`, `contract/device-agents.ts`): lines for
- * its runner and requests from its tools. The id is minted once per account
- * and kept in the host's state, and every time the gate opens, an app start
- * among them, the Mac first has what a runner runs on, Node and the Claude
- * Code CLI, each its pinned release fetched and checked the first time
- * (`local-agent-tools.ts`), once per opening, so a Mac offline is not asked
- * again every turn; it then registers the device with its home folder, the Claude Code
- * CLI it bundles, and which harnesses it is signed in to by itself, then
- * beats every `BEAT_EVERY` while it follows. A local agent on a harness its
- * Mac is signed in to launches on that login, so its launch line carries no
- * credential of the account's; the check is the harness's own CLI's, never
- * the credential, made under the environment a runner starts with. Codex
- * is had apart, off the follow, through its own pin, and the Mac registers
- * it, with Codex's own sign-in, once it is checked, so Start offers Codex on
- * this Mac only then, and a Mac runs Claude Code agents meanwhile. It holds
- * one read for its lines and one for its requests, each answered by the
- * service as soon as one waits, and claims each by its id.
+ * The service writes a local agent's work as rows under this device's id
+ * (`@luke/features/device-agent-wire`, `contract/device-agents.ts`): lines
+ * for its runner and requests from its tools. A Mac's id is minted once per
+ * account and kept in the host's state; a host is handed the one it enrolled
+ * under (`LocalAgentsDependencies.deviceId`). Every time the gate opens, an
+ * app start among them, the device first has what its VMs run on
+ * (`LocalAgentSandbox.ready`: a Mac's pinned smolvm, fetched and checked,
+ * and the image pulled once), once per opening, so a device offline is not
+ * asked again every turn; it then registers with its home folder, the VM's
+ * own Claude Code and Codex, and no harness signed in by itself, since no
+ * login of the device's reaches a VM, so every launch carries the sign-in
+ * saved in Luke; then it beats every `BEAT_EVERY` while it follows. It
+ * holds one read for its lines and one for its requests, each answered by
+ * the service as soon as one waits, and claims each by its id.
  *
  * Lines are claimed in the order the service lists them, its id order, and
  * handed to the agent they name, whose worker takes them one at a time, so
  * an agent's lines are delivered strictly in order while agents go on side
- * by side. A launch makes the agent's worktree under its folder
- * (`deviceAgentLayout`) where it has none, through the platform's script over
- * Luke's shared clone and the developer's own Git login, and starts the
- * runner as the leader of a process group of its own, with the claim's
- * secrets in its environment and nowhere else, never a file, an argument,
- * or a log, and its first lines on its stdin; its line is settled with the
- * runner's exit code once it exits. A message or retune line is written to
- * the running runner's stdin; a files line writes its files under the
- * agent's folder; a stop line ends the runner's group; a discard line ends
- * it and removes the agent's folder with everything in it, unless the platform's
- * check of the worktree finds work there that is nowhere else (the desktop's
- * does, a host's names none); a line of a kind
- * it does not know is settled untouched. A launch whose worktree could not
- * be made is settled with the script's failure, and the runner never starts.
+ * by side. A launch makes the agent's own repository under its folder
+ * (`deviceAgentLayout`) where it has none, through the platform's script,
+ * has the agent's VM made and started, and starts the runner in it, with
+ * the claim's secrets in its environment and nowhere else, never a file, an
+ * argument, or a log, and its first lines on its stdin; its line is settled
+ * with the runner's exit code once it exits. A message or retune line is
+ * written to the running runner's stdin; a files line writes its files under
+ * the agent's folder; a stop line ends the runner; a discard line ends it,
+ * deletes its VM, and removes the agent's folder with everything in it,
+ * unless the platform's check of the worktree finds work there that is
+ * nowhere else (a Mac's does, a host's names none); a line of a kind it
+ * does not know is settled untouched. A launch whose repository or VM could
+ * not be made is settled as not started, and the runner never starts.
  *
- * A host has no developer's Git login (`githubFromLuke`), so there each
- * agent working in a repository gets a `gh` sign-in of its own, in a config
- * folder inside its folder (`GH_CONFIG_DIR`): before its worktree is made,
- * and again every `GITHUB_TOKEN_REFRESH` while its runner runs, the host
- * asks the service for an installation token for the agent's repository and
- * signs `gh` in there with it (`gh auth login --with-token`), since such a
- * token lasts an hour and a turn can last a day. Git reads the same token
- * through gh's own credential helper (`gh auth git-credential`, as `gh auth
- * setup-git` sets it), named in the environment the worktree's script and
- * the runner start with, so no file of the developer's and no wrapper of
- * any command stands in. The token goes to `gh`'s stdin and its config
- * folder alone, never an argument, a log, or a report. This Mac keeps the
- * developer's own login and does none of it.
+ * The VM (`LocalAgentPlatformSeam.sandbox`) is made and started before the
+ * runner starts in it; the runner is signalled in it before its command is
+ * killed, since killing it would end the runner with no signal at all; it
+ * stops once the runner has ended, whatever ended it; and it is deleted
+ * before a discard removes the agent's folder. The runner runs on the VM's
+ * own Node, Claude Code and Codex, which the device registers. For an agent
+ * working in a repository, the device asks the service for an installation
+ * token before the repository is made, and again every
+ * `GITHUB_TOKEN_REFRESH` while its runner runs, since such a token lasts an
+ * hour and a turn can last a day, and hands it to the sandbox, which keeps
+ * it outside every folder the VM mounts, so the agent only ever sees a
+ * placeholder. A tool's command runs in the VM rather than on the device,
+ * since the worktree is the agent's to rig.
  *
- * A host (`apps/host`) runs this same follow with a platform of its own: it
- * enrolled under a device id of its own, which it is handed
- * (`LocalAgentsDependencies.deviceId`), and says it is signed in to no
- * harness (`ownSignIns`), since no login left on the box reaches an agent
- * there. It is sandboxed (`LocalAgentPlatformSeam.sandbox`): each agent runs
- * in a VM of its own, which the follower has made and started before the
- * runner starts in it, signals the runner in before its command is killed,
- * since killing it would end the runner with no signal at all, stops once
- * the runner has ended, whatever ended it, and deletes before a discard
- * removes the agent's folder. There the runner runs on the VM's own Node,
- * Claude Code and Codex, which the device registers, so it fetches none of
- * its own; the agent's GitHub token is handed to the sandbox, which keeps
- * it outside every folder the VM mounts, in place of a `gh` sign-in in the
- * agent's folder, where the agent could read it; and a tool's command runs
- * in the VM rather than on the device, since the worktree is the agent's to
- * rig.
+ * Agents on This Mac ran directly on it before every agent ran in a VM
+ * (`LocalAgentPlatformSeam.formerlyDirect`), so there the host keeps how
+ * each agent ran, beside its launches, and takes an agent from before that
+ * record with a checkout as one that ran directly: its Git folder is in the
+ * shared clone no VM mounts and its harness's sessions in the developer's
+ * own home, so its launch is settled unstarted with the refusal that says
+ * so (`DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY`), and a discard checks its folder
+ * on the Mac, since it has no VM to check it in.
  *
- * This Mac runs every agent on its platform's sandboxed alternative
- * (`LocalAgentPlatformSeam.sandboxed`), a VM per agent as on a host, on the
- * sign-ins saved in Luke and a GitHub token from Luke. Each agent runs only
- * the way it first ran, which the host keeps beside its launches, and every
- * agent from before the record that has a checkout ran directly on the Mac:
- * its Git folder is in the shared clone no VM mounts and its harness's
- * sessions in the developer's own home, so its launch is settled unstarted,
- * with the refusal that says so (`DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY`), which
- * the service words as a session that cannot be reached again. A discard
- * deletes the VM of an agent that ran in one.
- *
- * Every launch this Mac claimed is kept in the host's state by its line's
- * id, no secret beside it, until its runner's exit settles it. A launch
- * still kept as the gate opens had its runner end with the app, or with the
- * gate, so it is settled with no exit code, which the service reads as a
- * runner gone: the agent's turn in flight is settled lost, and its next
+ * Every launch this device claimed is kept in the host's state by its
+ * line's id, no secret beside it, until its runner's exit settles it. A
+ * launch still kept as the gate opens had its runner end with the app, or
+ * with the gate, so it is settled with no exit code, which the service reads
+ * as a runner gone: the agent's turn in flight is settled lost, and its next
  * message relaunches the runner on the harness's session.
  *
  * Requests are each answered on a fiber of their own, inside the agent's
  * folder alone (`local-agent-requests.ts`). Turning the switch or the
  * experiment off, signing out, or a run that sends nothing shuts the gate:
- * the reads end, and every runner is stopped with its process group, as the
- * quit stops them.
+ * the reads end, and every runner is stopped, as the quit stops them.
  */
 
 /** How long the follow rests while the gate is shut, and how often an open gate is read again. */
 const IDLE = Duration.seconds(5);
-/** How often a Mac following its agents beats: a third of the service's forty-five-second presence window. */
+/** How often a device following its agents beats: a third of the service's forty-five-second presence window. */
 const BEAT_EVERY = Duration.seconds(15);
-/** How often a Mac found signed in to a harness is checked again, so a sign-out reaches Start and the next launch. */
-const SIGN_IN_EVERY = Duration.minutes(10);
-/** How long a harness's sign-in check has before its answer is taken as signed out. */
-const SIGN_IN_CHECK = Duration.seconds(20);
 /** How long a discard waits on the platform's check of the worktree before it keeps the folder. */
 const UNSAVED_CHECK = Duration.seconds(30);
 /** Why a folder is kept where its check could not say what it holds. */
 const UNSAVED_UNKNOWN = "its worktree could not be checked for work not saved elsewhere";
-/**
- * The `authMethod`s of `claude auth status` a launch with no credential of
- * the account's runs on: a claude.ai login, and a Console key a login saved.
- * The rest come from the environment or settings a runner is not started
- * with (`oauth_token`, `api_key_helper`, `third_party`), or are none.
- */
-const CLAUDE_CODE_LOGINS: ReadonlySet<string> = new Set(["claude.ai", "api_key"]);
 /** How a held read the service did not answer is asked again. */
 const REREAD = Duration.seconds(2);
 /** How many times a runner's exit is settled again where the service did not take it, `REREAD` apart. */
@@ -183,13 +144,8 @@ const STATE_FILE = "local-agents.json";
 const TEMP_FOLDER = "tmp";
 /** The exit code a launch is settled with where its worktree could not be made or its runner started. */
 const NOT_STARTED = 1;
-/** The GitHub host an agent's `gh` signs in to, and whose HTTPS remotes git's credential helper answers for. */
-const GITHUB = {
-  HOST: "github.com",
-  CREDENTIAL_HELPER_KEY: "credential.https://github.com.helper",
-} as const;
-/** How soon a sign-in that failed is tried again, well inside the hour the last token lasts. */
-const GITHUB_SIGN_IN_RETRY = Duration.minutes(1);
+/** How soon a GitHub token the service did not hand is asked for again, well inside the hour the last one lasts. */
+const GITHUB_TOKEN_RETRY = Duration.minutes(1);
 
 const VARIABLE = {
   HOME: "HOME",
@@ -200,34 +156,11 @@ const VARIABLE = {
   PATH: "PATH",
 } as const;
 
-/** A word quoted for a POSIX shell, as git runs a `!` credential helper through one. */
-function shellQuoted(word: string): string {
-  return `'${word.replaceAll("'", `'\\''`)}'`;
-}
-
-/**
- * What a host adds to an agent's environment so its git and its `gh` read
- * the one token Luke signed `gh` in with: gh's config folder, and gh's own
- * credential helper for GitHub over git's environment-borne config, the
- * empty helper first so no helper of the box's stands before it, as `gh auth
- * setup-git` writes it into a file.
- */
-function githubEnvironment(configFolder: string, gh: string): Readonly<Record<string, string>> {
-  return {
-    GH_CONFIG_DIR: configFolder,
-    GIT_CONFIG_COUNT: "2",
-    GIT_CONFIG_KEY_0: GITHUB.CREDENTIAL_HELPER_KEY,
-    GIT_CONFIG_VALUE_0: "",
-    GIT_CONFIG_KEY_1: GITHUB.CREDENTIAL_HELPER_KEY,
-    GIT_CONFIG_VALUE_1: `!${shellQuoted(gh)} auth git-credential`,
-  };
-}
-
 /**
  * A runner in a VM asked to end there, where it still runs, and given
  * `KILL_GRACE` to: killing its command (`smolvm machine exec`) would end it
  * at once with no signal, so every process of the agent's in the VM is
- * signalled first, as a runner on the device is with its group.
+ * signalled first.
  */
 function endedInVm(
   sandbox: LocalAgentSandbox,
@@ -246,10 +179,10 @@ const HANDED_ON = [VARIABLE.HOME, VARIABLE.SHELL, VARIABLE.USER, VARIABLE.LOGNAM
 
 /**
  * What the host keeps of local agents between runs: the device id each
- * account registered under, the launches whose runners this Mac started and
- * no exit has settled yet, and, on a device that runs agents either way, how
- * each agent has run here, in a VM or directly, absent from a state file
- * from before it.
+ * account registered under, the launches whose runners this device started
+ * and no exit has settled yet, and, on a device whose agents may have run
+ * directly on it (`formerlyDirect`), how each agent has run here, in a VM or
+ * directly, absent from a state file from before it.
  */
 const LocalAgentStateSchema = Schema.Struct({
   devices: Schema.Record(Schema.String, Schema.String),
@@ -263,7 +196,7 @@ type LocalAgentState = typeof LocalAgentStateSchema.Type;
 
 const NO_STATE: LocalAgentState = { devices: {}, launches: [] };
 
-/** What a device whose own sign-ins never run its agents says of them (`ownSignIns`). */
+/** What a device says of the harnesses signed in on it by itself: none, since no login of the device's reaches its agents' VMs. */
 const NOT_SIGNED_IN: DeviceSignedIn = { claudeCode: false, codex: false };
 
 const decodeState = Schema.decodeUnknownOption(Schema.fromJsonString(LocalAgentStateSchema));
@@ -271,9 +204,6 @@ const encodeState = Schema.encodeSync(Schema.fromJsonString(LocalAgentStateSchem
 const decodeLaunch = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
 const decodeStdin = Schema.decodeUnknownOption(deviceAgentStdinPayloadSchema);
 const decodeFiles = Schema.decodeUnknownOption(deviceAgentFilesPayloadSchema);
-const decodeAuthStatus = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Struct({ authMethod: Schema.String })),
-);
 
 /** The service's side of local agents, as this concern asks it. */
 type LocalAgentClient = Pick<
@@ -312,12 +242,6 @@ interface Runner {
   readonly exited: Fiber.Fiber<void>;
 }
 
-/** What a runner runs on: the Node it is started under and the Claude Code CLI it drives, both absolute. */
-interface LocalAgentTools {
-  readonly node: string;
-  readonly claude: string;
-}
-
 type LocalAgentServices =
   | Environment
   | Reporter
@@ -332,7 +256,7 @@ export function composeLocalAgents(
 ): Effect.Effect<LocalAgentsComposer, never, LocalAgentServices> {
   return Effect.gen(function* () {
     const { report } = yield* Reporter;
-    const given = yield* LocalAgentPlatform;
+    const platform = yield* LocalAgentPlatform;
     const services = yield* Effect.context<
       | ChildProcessSpawner.ChildProcessSpawner
       | FileSystem.FileSystem
@@ -355,9 +279,6 @@ export function composeLocalAgents(
     }
     const { kernel, account, switchedOn, client } = dependencies;
     const statePath = path.join(kernel.stateRoot, STATE_FILE);
-
-    /** The platform the device's agents run on: its sandboxed alternative where it has one, as This Mac does, the one given otherwise. */
-    const platformNow = Effect.succeed(given.sandboxed ?? given);
 
     // -- the host's state ----------------------------------------------------
 
@@ -407,13 +328,14 @@ export function composeLocalAgents(
 
     /**
      * How the agent has run on this device: as kept, or, for one launched
-     * before the record on a device that runs agents either way, directly,
-     * where its checkout stands, since every such agent did. None for an agent
-     * never launched here, and on a device with one way of running them.
+     * before the record on a device whose agents may have run directly on it
+     * (`formerlyDirect`), directly, where its checkout stands, since every
+     * such agent did. None for an agent never launched here, and on a device
+     * whose agents always ran in VMs.
      */
     const ranAs = (agentId: string, checkoutPath: string) =>
       Effect.gen(function* () {
-        if (given.sandboxed === undefined) return Option.none<DeviceIsolation>();
+        if (!platform.formerlyDirect) return Option.none<DeviceIsolation>();
         const kept = (yield* Ref.get(state)).modes?.[agentId];
         if (kept !== undefined) return Option.some(kept);
         const stands = yield* Effect.orElseSucceed(fileSystem.exists(checkoutPath), () => false);
@@ -437,134 +359,40 @@ export function composeLocalAgents(
         launches: current.launches.filter((launch) => launch.id !== id),
       }));
 
-    // -- the tools a runner runs on ------------------------------------------------
+    // -- what the VMs run on ------------------------------------------------------
 
-    /** The Node and Claude Code CLI this Mac's runners run on, once had, the platform they were had for, and whether a fetch was tried since the gate last opened. */
-    const tools = yield* Ref.make(Option.none<LocalAgentTools>());
-    const toolsFor = yield* Ref.make<LocalAgentPlatformSeam>(given);
-    const fetchTried = yield* Ref.make(false);
-    const fetching = yield* Semaphore.make(1);
+    /** Whether the device had what its VMs run on as it last asked, and whether it asked since the gate last opened. */
+    const readied = yield* Ref.make(false);
+    const readyTried = yield* Ref.make(false);
 
     /**
-     * The Node and the Claude Code CLI this Mac's runners run on: the ones
-     * had already, where both still stand, or each had now through its pin
-     * (`localAgentTool`), the app's or the checkout's own copy first; none
-     * where either cannot be had. One at a time, so two asks never fetch the
-     * same release twice. On a sandboxed platform they are the VM's own,
-     * once the device has what its VMs run on (`LocalAgentSandbox.ready`).
+     * Whether the device has what its VMs run on (`LocalAgentSandbox.ready`),
+     * asked again each time the gate opens once it had it, and otherwise once
+     * per opening, and once per app start, since the app's first opening is
+     * one; one that failed waits for the next, so a device offline is not
+     * asked again every turn.
      */
-    const toolsHad = (platform: LocalAgentPlatformSeam) =>
-      fetching.withPermit(
-        Effect.gen(function* () {
-          // Note that a sandboxed device's runners run on the VM's own tools, so it fetches none of its own.
-          if (platform.sandbox !== undefined) {
-            const inVm = (yield* platform.sandbox.ready)
-              ? Option.some({
-                  node: platform.sandbox.tools.node,
-                  claude: platform.sandbox.tools.claude,
-                })
-              : Option.none<LocalAgentTools>();
-            yield* Ref.set(tools, inVm);
-            return inVm;
-          }
-          const had = yield* Ref.get(tools);
-          if (Option.isSome(had)) {
-            const standing = yield* Effect.all(
-              [fileSystem.exists(had.value.node), fileSystem.exists(had.value.claude)],
-              { concurrency: 2 },
-            ).pipe(Effect.orElseSucceed(() => [false, false]));
-            if (standing.every((each) => each)) return had;
-          }
-          const [node, claude] = yield* Effect.all(
-            [
-              localAgentTool(kernel.stateRoot, platform.pins.node, platform.bundled.node),
-              localAgentTool(kernel.stateRoot, platform.pins.claude, platform.bundled.claude),
-            ],
-            { concurrency: 2 },
-          );
-          const both =
-            Option.isSome(node) && Option.isSome(claude)
-              ? Option.some({ node: node.value, claude: claude.value })
-              : Option.none<LocalAgentTools>();
-          yield* Ref.set(tools, both);
-          return both;
-        }),
-      );
-
-    /**
-     * The tools as the gate opens: had already, or fetched once per opening,
-     * and once per app start, since the app's first opening is one; a fetch
-     * that failed waits for the next, so a Mac offline is not asked again
-     * every turn.
-     */
-    const toolsForOpening = (platform: LocalAgentPlatformSeam) =>
-      Effect.gen(function* () {
-        // Note that a platform other than the last one's starts over, since nothing had for the one runs the other.
-        if ((yield* Ref.getAndSet(toolsFor, platform)) !== platform) {
-          yield* Ref.set(tools, Option.none());
-          yield* Ref.set(codex, Option.none());
-          yield* Ref.set(fetchTried, false);
-        }
-        const had = yield* Ref.get(tools);
-        if (Option.isSome(had)) return yield* toolsHad(platform);
-        if (yield* Ref.getAndSet(fetchTried, true)) return Option.none<LocalAgentTools>();
-        const fetched = yield* toolsHad(platform);
-        if (Option.isNone(fetched)) {
-          report(
-            platform.sandbox === undefined
-              ? "the local agents' Node or Claude Code could not be had"
-              : "the local agents' smolvm or sandbox image could not be had",
-          );
-        }
-        return fetched;
-      });
-
-    /** The Codex this device checked against its pin (`pins.codex`), once had; none until then. */
-    const codex = yield* Ref.make(Option.none<string>());
-    const fetchingCodex = yield* Semaphore.make(1);
-
-    /**
-     * Codex for this Mac's local agents, apart from what a runner needs to
-     * start, so the Mac registers and runs Claude Code agents while it is
-     * fetched: the one had already where it still stands, or had now through
-     * its pin (`localAgentTool`), the app's copy first. A fetch that fails is
-     * reported, and tried again as the gate next opens or a launch finds the
-     * Codex the Mac registered gone.
-     */
-    const codexHad = (platform: LocalAgentPlatformSeam) =>
-      fetchingCodex.withPermit(
-        Effect.gen(function* () {
-          if (platform.sandbox !== undefined) {
-            const inVm = Option.some(platform.sandbox.tools.codex);
-            yield* Ref.set(codex, inVm);
-            return inVm;
-          }
-          const kept = yield* Ref.get(codex);
-          if (Option.isSome(kept) && (yield* fileSystem.exists(kept.value))) return kept;
-          const had = yield* localAgentTool(
-            kernel.stateRoot,
-            platform.pins.codex,
-            platform.bundled.codex,
-          );
-          if (Option.isNone(had)) report("Codex for local agents could not be had");
-          yield* Ref.set(codex, had);
-          return had;
-        }).pipe(Effect.orElseSucceed(() => Option.none<string>())),
-      );
+    const readyForOpening = Effect.gen(function* () {
+      if (!(yield* Ref.get(readied)) && (yield* Ref.getAndSet(readyTried, true))) return false;
+      const ready = yield* platform.sandbox.ready;
+      yield* Ref.set(readied, ready);
+      if (!ready) report("the local agents' smolvm or sandbox image could not be had");
+      return ready;
+    });
 
     // -- the gate --------------------------------------------------------------
 
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
       Effect.provideContext(call, services);
 
-    /** Whether this Mac runs local agents now: an account signed in, a run that sends, a home folder, and both switches on. */
+    /** Whether this device runs local agents now: an account signed in, a run that sends, a home folder, and both switches on. */
     const gateOpen = Effect.map(
       switchedOn,
       (on) =>
         on && Option.isSome(home) && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
     );
 
-    // -- the developer's own environment and sign-ins ----------------------------
+    // -- the developer's own environment ---------------------------------------------
 
     /** The login shell's PATH, which a runner started from the Dock would otherwise go without. */
     const loginPath = Effect.scoped(
@@ -583,10 +411,11 @@ export function composeLocalAgents(
     );
 
     /**
-     * What a runner, a command, and a sign-in check are started with of the
-     * Mac's own: the developer's identity and shell, and their login shell's
-     * PATH, read once each time the gate opens; never the rest of the app's
-     * environment, which is Luke's and none of the agent's.
+     * What a runner and a command are started with of the device's own: the
+     * developer's identity and shell, and their login shell's PATH, which
+     * smolvm runs under and the repository's script finds git on, read once
+     * each time the gate opens; never the rest of the app's environment,
+     * which is Luke's and none of the agent's.
      */
     const shellEnvironment = Effect.map(
       loginPath,
@@ -599,88 +428,14 @@ export function composeLocalAgents(
       }),
     );
 
-    /**
-     * Whether Claude Code is signed in on this Mac by itself, as the CLI the
-     * Mac bundles answers `claude auth status`
-     * (https://code.claude.com/docs/en/cli-reference): exit 0 when logged in,
-     * with its `authMethod` as JSON. Asked under the environment a runner is
-     * started with, so no variable of Luke's or the shell's stands in, and its
-     * config folder left as the developer's, which the Keychain login is kept
-     * under. A claude.ai login, or a Console key saved by a login, counts;
-     * anything else, a check that fails or outlasts `SIGN_IN_CHECK`, does not.
-     * Nothing the CLI prints is kept but that one word.
-     */
-    const claudeCodeSignedIn = (claude: string, env: Readonly<Record<string, string>>) =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const handle = yield* ChildProcess.make(claude, ["auth", "status"], {
-            env,
-            extendEnv: false,
-            stdin: "ignore",
-            stderr: "ignore",
-          });
-          const printed = yield* Stream.mkString(Stream.decodeText(handle.stdout));
-          if (Number(yield* handle.exitCode) !== 0) return false;
-          return Option.exists(decodeAuthStatus(printed), (status) =>
-            CLAUDE_CODE_LOGINS.has(status.authMethod),
-          );
-        }),
-      ).pipe(
-        Effect.timeoutOption(SIGN_IN_CHECK),
-        Effect.map((answer) => Option.getOrElse(answer, () => false)),
-        Effect.orElseSucceed(() => false),
-      );
-
-    /**
-     * Whether Codex is signed in on this Mac by itself, as app-server's
-     * `account/read` answers it for the Codex the Mac checked, under the
-     * environment a runner starts with and the developer's own default
-     * `CODEX_HOME` (`local-agent-codex.ts`); not said at all while the Mac has
-     * no Codex yet, nor where Codex did not answer.
-     */
-    const codexSignedIn = (env: Readonly<Record<string, string>>) =>
-      Effect.gen(function* () {
-        const executable = yield* Ref.get(codex);
-        if (Option.isNone(executable)) return Option.none<boolean>();
-        return yield* localCodexSignedIn(executable.value, env);
-      });
-
-    /**
-     * Which harnesses this device is signed in to by itself, each checked as
-     * its own CLI answers; neither on a device whose own sign-ins never run
-     * its agents (`ownSignIns`), so every launch there carries the sign-in
-     * saved in Luke.
-     */
-    const signedInNow = (
-      platform: LocalAgentPlatformSeam,
-      had: LocalAgentTools,
-      env: Readonly<Record<string, string>>,
-    ) =>
-      Effect.gen(function* () {
-        if (!platform.ownSignIns) return NOT_SIGNED_IN;
-        const claudeCode = yield* claudeCodeSignedIn(had.claude, env);
-        const said = yield* codexSignedIn(env);
-        const signedIn: DeviceSignedIn = Option.match(said, {
-          onNone: () => ({ claudeCode }),
-          onSome: (each) => ({ claudeCode, codex: each }),
-        });
-        return signedIn;
-      });
-
     // -- one account's follow --------------------------------------------------
 
     /** Everything one open gate runs for the account `userId` names, on the device it registered, from its home folder. */
     const follow = (
-      platform: LocalAgentPlatformSeam,
       userId: string,
       deviceId: string,
       folder: string,
       shellVariables: Readonly<Record<string, string>>,
-      had: LocalAgentTools,
-      checkedSignIn: DeviceSignedIn,
-      registered: (
-        signedIn: DeviceSignedIn,
-      ) => Effect.Effect<boolean, never, HttpClient.HttpClient>,
     ) =>
       Effect.gen(function* () {
         const workers = yield* FiberMap.make<string>();
@@ -705,11 +460,7 @@ export function composeLocalAgents(
          * VM, so a command between turns never leaves it running, and never
          * stops it under a runner. A VM a discard deleted is held by nothing.
          */
-        const vmHeld = <E, R>(
-          sandbox: LocalAgentSandbox,
-          agentId: string,
-          start: Effect.Effect<boolean, E, R>,
-        ) =>
+        const vmHeld = <E, R>(agentId: string, start: Effect.Effect<boolean, E, R>) =>
           Effect.gen(function* () {
             const lock = vmLockOf(agentId);
             const up = yield* lock.withPermit(
@@ -728,7 +479,7 @@ export function composeLocalAgents(
                     if (held === undefined) return;
                     if (held > 1) return vmHolds.set(agentId, held - 1);
                     vmHolds.delete(agentId);
-                    if (!(yield* sandbox.stopped(agentId)))
+                    if (!(yield* platform.sandbox.stopped(agentId)))
                       report("a local agent's VM could not be stopped");
                   }),
                 )
@@ -741,7 +492,7 @@ export function composeLocalAgents(
         const settle = (id: string, exitCode?: number, refusal?: DeviceLaunchRefusal) =>
           asked(client.settleLine(deviceId, id, exitCode, refusal));
 
-        /** The agent's worktree made where it has none, on the agent's GitHub sign-in where the host gave it one: a folder for an agent with no repository, and Luke's shared clone's worktree otherwise. */
+        /** The agent's own repository made where it has none, reading the agent's GitHub token where it has one through the sandbox's helper, never the token itself: a folder for an agent with no repository. */
         const madeWorktree = (
           layout: DeviceAgentLayout,
           repository: string | null,
@@ -776,72 +527,33 @@ export function composeLocalAgents(
           }).pipe(Effect.orElseSucceed(() => false));
 
         /**
-         * The agent's `gh` signed in, in its own config folder, with a fresh
-         * token for its repository from the service; whether it was. On a
-         * sandboxed device the token is handed to the sandbox instead, which
-         * keeps it outside every folder the agent's VM mounts, since a token
-         * in the agent's folder would be the agent's to read. A token refused
-         * or unanswered, or a sign-in that failed, is reported in those words
-         * alone.
+         * A fresh token for the agent's repository from the service, handed
+         * to the sandbox, which keeps it outside every folder the agent's VM
+         * mounts, where the VM's bindings read it; whether it was. A token
+         * refused or unanswered is reported in those words alone.
          */
-        const signedInToGithub = (agentId: string, configFolder: string, gh: string) =>
+        const gaveGithubToken = (agentId: string) =>
           Effect.gen(function* () {
             const token = yield* asked(client.githubToken(agentId));
             if (token === undefined) return false;
-            if (platform.sandbox !== undefined) {
-              yield* platform.sandbox.githubToken(agentId, token);
-              return true;
-            }
-            yield* fileSystem.makeDirectory(configFolder, { recursive: true, mode: 0o700 });
-            const code = yield* Effect.scoped(
-              Effect.flatMap(
-                ChildProcess.make(
-                  gh,
-                  [
-                    "auth",
-                    "login",
-                    "--hostname",
-                    GITHUB.HOST,
-                    "--with-token",
-                    // Note that the token is kept in the agent's own config folder, never a keyring every agent on the box shares.
-                    "--insecure-storage",
-                  ],
-                  {
-                    env: { ...shellVariables, GH_CONFIG_DIR: configFolder },
-                    extendEnv: false,
-                    stdin: { stream: Stream.make(new TextEncoder().encode(token)) },
-                    stdout: "ignore",
-                    stderr: "ignore",
-                  },
-                ),
-                (handle) => handle.exitCode,
-              ),
-            );
-            return Number(code) === 0;
+            yield* platform.sandbox.githubToken(agentId, token);
+            return true;
           }).pipe(
             Effect.orElseSucceed(() => false),
-            Effect.tap((signedIn) =>
-              signedIn
+            Effect.tap((had) =>
+              had
                 ? Effect.void
-                : Effect.sync(() => report("a host agent's GitHub sign-in failed")),
+                : Effect.sync(() => report("a local agent's GitHub token was not had")),
             ),
           );
 
-        /** The agent's `gh` signed in again every `GITHUB_TOKEN_REFRESH`, or a minute after a sign-in that failed, for as long as it runs. */
+        /** The agent's GitHub token renewed every `GITHUB_TOKEN_REFRESH`, or a minute after one that was not had, for as long as it runs. */
         const renewingGithub = (
           agentId: string,
-          configFolder: string,
-          gh: string,
-          signedIn: boolean,
-        ): Effect.Effect<
-          never,
-          never,
-          ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem
-        > =>
-          Effect.flatMap(Effect.sleep(signedIn ? GITHUB_TOKEN_REFRESH : GITHUB_SIGN_IN_RETRY), () =>
-            Effect.flatMap(signedInToGithub(agentId, configFolder, gh), (again) =>
-              renewingGithub(agentId, configFolder, gh, again),
-            ),
+          had: boolean,
+        ): Effect.Effect<never, never, FileSystem.FileSystem> =>
+          Effect.flatMap(Effect.sleep(had ? GITHUB_TOKEN_REFRESH : GITHUB_TOKEN_RETRY), () =>
+            Effect.flatMap(gaveGithubToken(agentId), (again) => renewingGithub(agentId, again)),
           );
 
         /** The runner started for a launch line, its first lines written, and its exit settling the line; the line settled as not started where it cannot be. */
@@ -862,75 +574,50 @@ export function composeLocalAgents(
             ) {
               return yield* settle(line.id, NOT_STARTED);
             }
-            // Note that a host signs the agent's own gh in before its worktree is made, since the clone reads the token too.
-            const gh = platform.bundled.gh ?? "gh";
-            const configFolder = layout.githubConfig;
-            const signsIn = platform.githubFromLuke && payload.value.repository !== null;
             const sandbox = platform.sandbox;
-            // Note that a sandboxed agent's worktree is made on the device with the token the sandbox keeps, and its runner reaches GitHub through its VM's bindings alone.
-            const deviceGithub = !signsIn
-              ? undefined
-              : sandbox === undefined
-                ? githubEnvironment(configFolder, gh)
-                : sandbox.deviceGit(agentId);
-            const github = sandbox === undefined ? deviceGithub : undefined;
-            // Note that an agent runs only the way it first ran here: one made directly on the Mac keeps its Git folder in the shared clone no VM mounts, and one made in a VM keeps its harness's sessions in the VM's own home.
+            const withRepository = payload.value.repository !== null;
+            // Note that an agent that ran directly on the Mac keeps its Git folder in the shared clone no VM mounts, and its harness's sessions in the developer's own home, so it never starts in a VM.
             const ran = yield* ranAs(agentId, layout.checkoutPath);
-            if (Option.isSome(ran) && ran.value !== platform.deviceIsolation) {
-              if (ran.value === DEVICE_ISOLATION.SANDBOX) {
-                report("a local agent that ran in a VM was not started directly on this device");
-                return yield* settle(line.id, NOT_STARTED);
-              }
+            if (Option.exists(ran, (mode) => mode === DEVICE_ISOLATION.BARE)) {
               report(
                 "a local agent that ran directly on this Mac was not started, since every agent here runs in a VM now",
               );
               return yield* settle(line.id, NOT_STARTED, DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
             }
-            if (given.sandboxed !== undefined && Option.isNone(ran)) {
-              yield* keepMode(agentId, platform.deviceIsolation);
+            if (platform.formerlyDirect && Option.isNone(ran)) {
+              yield* keepMode(agentId, DEVICE_ISOLATION.SANDBOX);
             }
-            const signedIn = signsIn && (yield* signedInToGithub(agentId, configFolder, gh));
+            // Note that the token is had before the repository is made, since the device's git reads it too, through the sandbox's helper.
+            const hadToken = withRepository && (yield* gaveGithubToken(agentId));
             const made = yield* madeWorktree(
               layout,
               payload.value.repository,
               payload.value.startBranch,
-              deviceGithub,
+              withRepository ? sandbox.deviceGit(agentId) : undefined,
             );
             if (!made) return yield* settle(line.id, NOT_STARTED);
-            // Note that a Codex the Mac registered and lost since is had again before the runner starts, so a Codex agent's launch finds it.
-            const kept = yield* Ref.get(codex);
-            if (
-              sandbox === undefined &&
-              Option.isSome(kept) &&
-              !(yield* Effect.orElseSucceed(fileSystem.exists(kept.value), () => false))
-            ) {
-              yield* codexHad(platform);
-            }
             const temp = path.join(layout.folder, TEMP_FOLDER);
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
             const runnerScope = yield* Scope.fork(agentScope);
             // Note that the runner holds its VM for as long as its scope stands, so the VM is let go of last as the scope closes, once the runner has ended.
-            if (sandbox !== undefined) {
-              // Note that smolvm's reason names no secret, since its credentials are only ever references to their files.
-              const refused = yield* vmHeld(
-                sandbox,
-                agentId,
-                Effect.as(
-                  sandbox.started({ agentId, folder: layout.folder, github: signsIn }),
-                  true,
-                ),
-              ).pipe(
-                Scope.provide(runnerScope),
-                Effect.as(Option.none<string>()),
-                Effect.catchTag("LocalAgentSandboxUnavailable", (unavailable) =>
-                  Effect.succeed(Option.some(unavailable.detail)),
-                ),
-              );
-              if (Option.isSome(refused)) {
-                yield* Scope.close(runnerScope, Exit.void);
-                report(`a local agent's VM could not be started: ${refused.value}`);
-                return yield* settle(line.id, NOT_STARTED);
-              }
+            // Note that smolvm's reason names no secret, since its credentials are only ever references to their files.
+            const refused = yield* vmHeld(
+              agentId,
+              Effect.as(
+                sandbox.started({ agentId, folder: layout.folder, github: withRepository }),
+                true,
+              ),
+            ).pipe(
+              Scope.provide(runnerScope),
+              Effect.as(Option.none<string>()),
+              Effect.catchTag("LocalAgentSandboxUnavailable", (unavailable) =>
+                Effect.succeed(Option.some(unavailable.detail)),
+              ),
+            );
+            if (Option.isSome(refused)) {
+              yield* Scope.close(runnerScope, Exit.void);
+              report(`a local agent's VM could not be started: ${refused.value}`);
+              return yield* settle(line.id, NOT_STARTED);
             }
             const stdin = yield* Queue.unbounded<string>();
             const encoder = new TextEncoder();
@@ -938,15 +625,9 @@ export function composeLocalAgents(
               agentId,
               folder: layout.folder,
               checkout: layout.checkoutPath,
-              node: had.node,
+              node: sandbox.tools.node,
               bundle: platform.runnerBundle,
-              env: {
-                ...shellVariables,
-                TMPDIR: temp,
-                ...platform.runnerEnv,
-                ...github,
-                ...secrets.env,
-              },
+              env: { ...shellVariables, TMPDIR: temp, ...platform.runnerEnv, ...secrets.env },
             });
             const started = yield* ChildProcess.make(command.command, [...command.args], {
               cwd: layout.checkoutPath,
@@ -968,18 +649,12 @@ export function composeLocalAgents(
             }
             const handle = started.value;
             // Note that this runs first as the scope closes, so the runner hears a signal before its command is killed.
-            if (sandbox !== undefined) {
-              yield* Scope.addFinalizer(
-                runnerScope,
-                Effect.provideContext(endedInVm(sandbox, agentId, handle), services),
-              );
-            }
-            if (signsIn) {
-              yield* Effect.forkIn(
-                renewingGithub(agentId, configFolder, gh, signedIn),
-                runnerScope,
-              );
-            }
+            yield* Scope.addFinalizer(
+              runnerScope,
+              Effect.provideContext(endedInVm(sandbox, agentId, handle), services),
+            );
+            if (withRepository)
+              yield* Effect.forkIn(renewingGithub(agentId, hadToken), runnerScope);
             yield* keepLaunch(userId, line.id);
             yield* Queue.offer(stdin, secrets.stdin);
             // Note that the launch is forgotten only once the service took its settle, asked again
@@ -1023,7 +698,7 @@ export function composeLocalAgents(
             const script = platform.unsavedWorkScript({ worktree: layout.checkoutPath });
             return yield* Effect.scoped(
               Effect.gen(function* () {
-                if (vm !== undefined && !(yield* vmHeld(vm, agentId, vm.woken(agentId)))) {
+                if (vm !== undefined && !(yield* vmHeld(agentId, vm.woken(agentId)))) {
                   return (yield* fileSystem.exists(layout.checkoutPath))
                     ? Option.some(UNSAVED_UNKNOWN)
                     : Option.none<string>();
@@ -1058,37 +733,31 @@ export function composeLocalAgents(
           }).pipe(Effect.orElseSucceed(() => Option.some(UNSAVED_UNKNOWN)));
 
         /**
-         * The agent's runner, where one runs, stopped with its group and its
-         * exit waited for, so its line is settled first. In a VM the runner
-         * is signalled there first, since killing its command would end it
-         * with no signal at all.
+         * The agent's runner, where one runs, stopped and its exit waited for,
+         * so its line is settled first. It is signalled in its VM first,
+         * since killing its command would end it with no signal at all.
          */
         const stopped = (agentId: string) =>
           Effect.gen(function* () {
             const runner = runners.get(agentId);
             if (runner === undefined) return;
-            if (platform.sandbox !== undefined) {
-              yield* endedInVm(platform.sandbox, agentId, runner.handle);
-            }
+            yield* endedInVm(platform.sandbox, agentId, runner.handle);
             yield* Effect.ignore(runner.handle.kill({ forceKillAfter: KILL_GRACE }));
             yield* Fiber.await(runner.exited);
           });
 
         /**
-         * The VM a discard lets go of: on a device with one way of running
-         * agents, its platform's; on one that runs them either way, its
-         * sandboxed alternative's for an agent that ran in one, whichever way
-         * it runs them now, and none for one that ran directly, whose folder
-         * the device's own check reads, as it always has.
+         * The VM a discard lets go of: the agent's, unless it ran directly on
+         * the device before every agent ran in a VM (`formerlyDirect`), when
+         * it has none and its folder is checked by the device's own script,
+         * as it always was.
          */
         const vmOf = (agentId: string, checkoutPath: string) =>
-          Effect.gen(function* () {
-            if (given.sandboxed === undefined) return platform.sandbox;
-            const ran = yield* ranAs(agentId, checkoutPath);
-            return Option.exists(ran, (mode) => mode === DEVICE_ISOLATION.SANDBOX)
-              ? given.sandboxed.sandbox
-              : undefined;
-          });
+          Effect.map(ranAs(agentId, checkoutPath), (ran) =>
+            Option.exists(ran, (mode) => mode === DEVICE_ISOLATION.BARE)
+              ? undefined
+              : platform.sandbox,
+          );
 
         /**
          * The agent let go of: its runner stopped and its exit settled, its
@@ -1267,24 +936,14 @@ export function composeLocalAgents(
             );
             if (claimed === undefined || !("agentId" in claimed)) return;
             const layout = deviceAgentLayout(folder, claimed.agentId);
-            // Note that a host's command reads the agent's GitHub sign-in as its runner does, never the token itself.
-            const env = {
-              ...shellVariables,
-              TMPDIR: path.join(layout.folder, TEMP_FOLDER),
-              ...(platform.githubFromLuke && platform.sandbox === undefined
-                ? githubEnvironment(layout.githubConfig, platform.bundled.gh ?? "gh")
-                : undefined),
-            };
-            // Note that a sandboxed agent's command runs in its VM, never on the device, since its worktree is the agent's to rig.
+            const env = { ...shellVariables, TMPDIR: path.join(layout.folder, TEMP_FOLDER) };
+            // Note that an agent's command runs in its VM, never on the device, since its worktree is the agent's to rig.
             const sandbox = platform.sandbox;
-            const inVm =
-              sandbox === undefined
-                ? undefined
-                : {
-                    woken: vmHeld(sandbox, claimed.agentId, sandbox.woken(claimed.agentId)),
-                    exec: (command: Omit<LocalAgentSandboxCommand, "agentId" | "folder">) =>
-                      sandbox.exec({ ...command, agentId: claimed.agentId, folder: layout.folder }),
-                  };
+            const inVm = {
+              woken: vmHeld(claimed.agentId, sandbox.woken(claimed.agentId)),
+              exec: (command: Omit<LocalAgentSandboxCommand, "agentId" | "folder">) =>
+                sandbox.exec({ ...command, agentId: claimed.agentId, folder: layout.folder }),
+            };
             const answer = yield* answeredLocalAgentRequest(layout, claimed, env, inVm).pipe(
               Effect.provideContext(services),
             );
@@ -1301,62 +960,26 @@ export function composeLocalAgents(
         );
 
         /** The beats, for as long as the gate stands and the account signed in is the one the follow is for; it returns once either changes. */
-        /**
-         * The beats, each saying which harnesses the Mac is signed in to, for
-         * as long as the gate stands and the account signed in is the one
-         * the follow is for; it returns once either changes. A sign-in is
-         * checked again every `SIGN_IN_EVERY` only while the last check found
-         * one, so a sign-out is heard; a Mac found signed out is checked again
-         * only as the gate next opens, because the check reads the Keychain,
-         * and a developer who declined its prompt must not be asked again on
-         * every beat.
-         */
         const presence = Effect.gen(function* () {
-          let signedIn = checkedSignIn;
           let sinceBeat = Duration.toMillis(BEAT_EVERY);
-          let sinceCheck = 0;
-          let registeredCodex = yield* Ref.get(codex);
-          // Note that the follow ends once the platform turns, so the next registers the device the other way.
-          while (
-            (yield* gateOpen) &&
-            dependencies.accountId() === userId &&
-            (yield* platformNow) === platform
-          ) {
-            // A Codex had since the Mac registered is registered now, with its sign-in, so Start offers it.
-            const hadCodex = yield* Ref.get(codex);
-            if (Option.getOrUndefined(hadCodex) !== Option.getOrUndefined(registeredCodex)) {
-              signedIn = yield* signedInNow(platform, had, shellVariables);
-              if (yield* asked(registered(signedIn))) registeredCodex = hadCodex;
-              sinceCheck = 0;
-            }
-            if (
-              Object.values(signedIn).some((each) => each === true) &&
-              sinceCheck >= Duration.toMillis(SIGN_IN_EVERY)
-            ) {
-              signedIn = yield* signedInNow(platform, had, shellVariables);
-              sinceCheck = 0;
-              sinceBeat = Duration.toMillis(BEAT_EVERY);
-            }
+          while ((yield* gateOpen) && dependencies.accountId() === userId) {
             if (sinceBeat >= Duration.toMillis(BEAT_EVERY)) {
-              yield* asked(client.beat(deviceId, signedIn));
+              yield* asked(client.beat(deviceId, NOT_SIGNED_IN));
               sinceBeat = 0;
             }
             yield* Effect.sleep(IDLE);
             sinceBeat += Duration.toMillis(IDLE);
-            sinceCheck += Duration.toMillis(IDLE);
           }
         });
 
         yield* Effect.forkScoped(linesFollowed);
         yield* Effect.forkScoped(requestsFollowed);
-        // Note that Codex is had as the gate opens, off the follow, since a fetch takes far longer than a beat.
-        yield* Effect.forkScoped(codexHad(platform));
         yield* presence;
       });
 
     /**
      * One turn of the loop: with the gate shut, a rest; with it open, the
-     * Mac registered, every launch it kept from a runner that ended with the
+     * device registered, every launch it kept from a runner that ended with the
      * app or the gate settled as gone, and the account's agents followed
      * until the gate shuts or the account changes, when the follow's scope
      * closes and every runner it started is stopped with its group.
@@ -1364,52 +987,34 @@ export function composeLocalAgents(
     const turn = Effect.gen(function* () {
       const userId = dependencies.accountId();
       if (!(yield* gateOpen) || userId === undefined || Option.isNone(home)) {
-        // A gate shut lets the next opening fetch the tools again, where they were not had.
-        yield* Ref.set(fetchTried, false);
+        // A gate shut lets the next opening ask again for what the VMs run on, where it was not had.
+        yield* Ref.set(readyTried, false);
         return yield* Effect.sleep(IDLE);
       }
-      const platform = yield* platformNow;
-      // Note that the Mac registers only once it has what a runner runs on, so Start never offers a Mac that cannot run one.
-      const had = yield* toolsForOpening(platform);
-      if (Option.isNone(had)) return yield* Effect.sleep(IDLE);
-      // Note that a sandboxed device's Codex is the VM's, had at once, so it registers with its first registration.
-      if (platform.sandbox !== undefined) yield* codexHad(platform);
+      // Note that the device registers only once it has what its VMs run on, so Start never offers one that cannot run an agent.
+      if (!(yield* readyForOpening)) return yield* Effect.sleep(IDLE);
       const deviceId = yield* deviceOf(userId);
       const shellVariables = yield* shellEnvironment;
-      const signedIn = yield* signedInNow(platform, had.value, shellVariables);
-      /** The Mac registered, with the Codex it checked where it has one, its sign-ins given, and the lines beyond the first it takes. */
-      const registration = (said: DeviceSignedIn) =>
-        Effect.flatMap(Ref.get(codex), (checked) =>
-          client.register(deviceId, {
-            name: platform.deviceName,
-            platform: platform.devicePlatform,
-            arch: platform.deviceArch,
-            isolation: platform.deviceIsolation,
-            home: home.value,
-            claudeExecutable: had.value.claude,
-            codexExecutable: Option.getOrUndefined(checked),
-            signedIn: said,
-            capabilities: platform.deviceCapabilities,
-          }),
-        );
-      const registered = yield* asked(registration(signedIn));
+      const { tools } = platform.sandbox;
+      const registered = yield* asked(
+        client.register(deviceId, {
+          name: platform.deviceName,
+          platform: platform.devicePlatform,
+          arch: platform.deviceArch,
+          isolation: platform.deviceIsolation,
+          home: home.value,
+          claudeExecutable: tools.claude,
+          codexExecutable: tools.codex,
+          signedIn: NOT_SIGNED_IN,
+          capabilities: platform.deviceCapabilities,
+        }),
+      );
       if (!registered) return yield* Effect.sleep(IDLE);
       const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
       for (const launch of left) {
         if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
       }
-      yield* Effect.scoped(
-        follow(
-          platform,
-          userId,
-          deviceId,
-          home.value,
-          shellVariables,
-          had.value,
-          signedIn,
-          registration,
-        ),
-      );
+      yield* Effect.scoped(follow(userId, deviceId, home.value, shellVariables));
     });
 
     const lifetime = Effect.gen(function* () {

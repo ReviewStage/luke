@@ -895,7 +895,7 @@ test("two branches never share a worktree, none reaches outside the repository's
 });
 
 test(
-  "two local agents starting from one branch each get a worktree of it, and one already made keeps the agent's work",
+  "two local agents starting from one branch each get a repository of their own at its head, and one already made keeps the agent's work",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
@@ -927,7 +927,7 @@ test(
 );
 
 test(
-  "an agent in a VM gets a repository of its own at the branch's head, which works with the shared clone out of reach and has the rest from GitHub",
+  "an agent gets a repository of its own at the branch's head, which works with the shared clone out of reach and has the rest from GitHub",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
@@ -944,7 +944,6 @@ test(
         worktree: own,
         branch: "luke/fix-relay",
         remotes: { https: origin, ssh: origin },
-        own: true,
       }),
     );
     // Note that the VM mounts the agent's folder alone, so the shared clone is moved out of reach.

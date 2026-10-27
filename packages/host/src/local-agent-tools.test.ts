@@ -14,7 +14,7 @@ const NODE = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 );
 
-/** A release of the test's own: `tool-1.0/bin/tool` and a file beside it no member names, gzipped, pinned by its own size and digest, signed by no team. */
+/** A release of the test's own: `tool-1.0/bin/tool` and a file beside it no member names, gzipped, pinned by its own size and digest. */
 const release = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const scratch = yield* temporaryDirectoryScoped("luke-tool-release-");
@@ -47,10 +47,10 @@ describe("localAgentTool", () => {
         const root = yield* temporaryDirectoryScoped("luke-tools-");
         const { archive, pin } = yield* release;
 
-        const fetched = yield* localAgentTool(root, pin, undefined).pipe(
+        const fetched = yield* localAgentTool(root, pin).pipe(
           Effect.provide(fakeHttpClientLayer(() => new Response(archive))),
         );
-        const again = yield* localAgentTool(root, pin, undefined).pipe(
+        const again = yield* localAgentTool(root, pin).pipe(
           Effect.provide(fakeHttpClientLayer(() => new Response("never asked", { status: 500 }))),
         );
 
@@ -75,7 +75,7 @@ describe("localAgentTool", () => {
         const tampered = Uint8Array.from(archive);
         tampered[tampered.length - 1] = (tampered[tampered.length - 1] ?? 0) ^ 0xff;
 
-        const found = yield* localAgentTool(root, pin, undefined).pipe(
+        const found = yield* localAgentTool(root, pin).pipe(
           Effect.provide(fakeHttpClientLayer(() => new Response(tampered))),
         );
 
@@ -84,33 +84,31 @@ describe("localAgentTool", () => {
       }).pipe(Effect.scoped, Effect.provide(NODE)),
   );
 
-  it.effect(
-    "fetches again a build whose pinned file changed on disk since it was kept, for a release no team signs",
-    () =>
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const root = yield* temporaryDirectoryScoped("luke-tools-");
-        const { archive, pin } = yield* release;
-        const pinned = {
-          ...pin,
-          FILES: {
-            "bin/tool": createHash("sha256").update("#!/bin/sh\necho tool\n").digest("hex"),
-          },
-        };
-        let fetches = 0;
-        const fetching = fakeHttpClientLayer(() => {
-          fetches += 1;
-          return new Response(archive);
-        });
-        const kept = `${root}/agent-tools/tool/1.0/bin/tool`;
+  it.effect("fetches again a build whose pinned file changed on disk since it was kept", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const root = yield* temporaryDirectoryScoped("luke-tools-");
+      const { archive, pin } = yield* release;
+      const pinned = {
+        ...pin,
+        FILES: {
+          "bin/tool": createHash("sha256").update("#!/bin/sh\necho tool\n").digest("hex"),
+        },
+      };
+      let fetches = 0;
+      const fetching = fakeHttpClientLayer(() => {
+        fetches += 1;
+        return new Response(archive);
+      });
+      const kept = `${root}/agent-tools/tool/1.0/bin/tool`;
 
-        yield* localAgentTool(root, pinned, undefined).pipe(Effect.provide(fetching));
-        yield* fileSystem.writeFileString(kept, "#!/bin/sh\necho swapped\n");
-        const again = yield* localAgentTool(root, pinned, undefined).pipe(Effect.provide(fetching));
+      yield* localAgentTool(root, pinned).pipe(Effect.provide(fetching));
+      yield* fileSystem.writeFileString(kept, "#!/bin/sh\necho swapped\n");
+      const again = yield* localAgentTool(root, pinned).pipe(Effect.provide(fetching));
 
-        assert.deepStrictEqual(again, Option.some(kept));
-        assert.strictEqual(fetches, 2);
-        assert.strictEqual(yield* fileSystem.readFileString(kept), "#!/bin/sh\necho tool\n");
-      }).pipe(Effect.scoped, Effect.provide(NODE)),
+      assert.deepStrictEqual(again, Option.some(kept));
+      assert.strictEqual(fetches, 2);
+      assert.strictEqual(yield* fileSystem.readFileString(kept), "#!/bin/sh\necho tool\n");
+    }).pipe(Effect.scoped, Effect.provide(NODE)),
   );
 });

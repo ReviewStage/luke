@@ -13,12 +13,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import {
-  type AgentToolPin,
-  CLAUDE_CODE_MAC_PIN,
-  CODEX_MAC_PIN,
-  NODE_MAC_PIN,
-} from "@luke/agent-runner/pins";
+import type { AgentToolPin } from "@luke/agent-runner/pins";
 import type { DeviceAgentClaimedLine, DeviceAgentDevice } from "@luke/features";
 import {
   DEVICE_AGENT_LINE_KIND,
@@ -204,10 +199,7 @@ const following = (input: {
         sandbox: vm.sandbox,
         runnerBundle: RUNNER_BUNDLE,
         runnerEnv: { LUKE_RUNNER_PLACE: "host" },
-        bundled: {},
-        pins: { node: NODE_MAC_PIN, claude: CLAUDE_CODE_MAC_PIN, codex: CODEX_MAC_PIN },
-        ownSignIns: false,
-        githubFromLuke: true,
+        formerlyDirect: false,
         deviceName: "rack-1",
         devicePlatform: DEVICE_PLATFORM.LINUX,
         deviceArch: DEVICE_ARCH.X64,
