@@ -14,6 +14,7 @@
     "apps/dev/instructions/prompt.ts",
     "apps/dev/runtime.ts",
     "apps/dev/sandbox.ts",
+    "apps/host/scripts/smolvm-hand-test.ts",
     "apps/host/src/main.ts",
     "apps/web/scripts/preview-probe.ts",
     "apps/web/scripts/sandbox-image.ts",

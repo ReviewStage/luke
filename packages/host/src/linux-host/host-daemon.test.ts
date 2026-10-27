@@ -8,11 +8,11 @@ import { jsonResponse, type RecordedRequest, recordingHttpClient } from "@luke/w
 import { ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
-import { Environment, type LocalAgentRunner, reporterLayer } from "../effect/seams.js";
+import { Environment, reporterLayer } from "../effect/seams.js";
 import { scriptedSpawner } from "../testing/scripted-spawner.js";
 import { hostDaemon } from "./host-daemon.js";
 import { enrollHostDevice, readHostDevice } from "./host-device.js";
-import { linuxPlatform, refusingLaunch } from "./linux-platform.js";
+import { linuxPlatform } from "./linux-platform.js";
 
 const SERVICE = "https://luke.test";
 const VERSION = "0.1.0";
@@ -22,6 +22,8 @@ const LINE_ID = "d1c2b3a4-0000-4000-8000-000000000001";
 const INSTALL_TOKEN = `lkh_${"b".repeat(40)}`;
 const DEVICE_SECRET = `lkd_${"a".repeat(43)}`;
 const RUNNER_TOKEN = "sk-ant-oat01-fixture-not-a-real-token";
+const SMOLVM = "/usr/local/bin/smolvm";
+const RUNNER_BUNDLE = "/opt/luke-host/lib/agent-runner.mjs";
 const HTTP = {
   OK: 200,
   UNAUTHORIZED: 401,
@@ -56,12 +58,17 @@ const box = Effect.gen(function* () {
   };
 });
 
-/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH and whose runners run, and the reports it makes. */
+/** Whether a spawn is the runner, started in its agent's VM. */
+const isRunner = (each: { readonly program: string; readonly args: readonly string[] }) =>
+  each.program === SMOLVM && each.args.includes(RUNNER_BUNDLE);
+
+/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH, whose smolvm does as asked and whose runners run, and the reports it makes. */
 const world = (home: string, reports: string[]) => {
   const spawner = scriptedSpawner((program, args) => {
     if (program === "/bin/bash" && args[0] === "-l")
       return { stdout: "/usr/bin:/bin", exitCode: 0 };
-    return program === "/bin/sh" ? {} : undefined;
+    if (program !== SMOLVM) return undefined;
+    return isRunner({ program, args }) ? {} : { exitCode: 0 };
   });
   const layer = Layer.mergeAll(
     NodeFileSystem.layer,
@@ -126,7 +133,6 @@ describe("a host's daemon", () => {
         const { spawner, layer } = world(tools.home, reports);
         let linesRead = 0;
         let removed = false;
-        const launched: LocalAgentRunner[] = [];
         const http = recordingHttpClient((request) => {
           if (removed) return jsonResponse({ error: "invalid-token" }, HTTP.UNAUTHORIZED);
           switch (`${request.method} ${request.pathname}`) {
@@ -173,10 +179,10 @@ describe("a host's daemon", () => {
           gh: undefined,
           arch: DEVICE_ARCH.X64,
           hostname: "fra-01",
-          launch: (runner) => {
-            launched.push(runner);
-            return { command: "/bin/sh", args: [], env: runner.env };
-          },
+          stateRoot: tools.stateRoot,
+          smolvm: SMOLVM,
+          user: { uid: 990, gid: 990 },
+          kvm: false,
         });
 
         const daemon = yield* hostDaemon({
@@ -188,7 +194,7 @@ describe("a host's daemon", () => {
             bundled: { node: tools.node, claude: tools.claude, codex: tools.codex },
           },
         }).pipe(Effect.provide(Layer.merge(layer, http.layer)), Effect.forkScoped);
-        yield* settled(() => spawner.spawned.some((each) => each.program === "/bin/sh"));
+        yield* settled(() => spawner.spawned.some(isRunner));
 
         const [register] = at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES);
         expect(JSON.parse(register?.body ?? "{}")).toMatchObject({
@@ -205,15 +211,14 @@ describe("a host's daemon", () => {
         expect(
           new Set(http.requests.map((request) => request.headers.get(HOST_WIRE.VERSION_HEADER))),
         ).toEqual(new Set([VERSION]));
+        const launched = spawner.spawned.filter(isRunner);
         expect(launched).toHaveLength(1);
-        expect(launched[0]).toMatchObject({
-          agentId: AGENT_ID,
-          folder: `${tools.home}/.luke/agents/${AGENT_ID}`,
-          checkout: `${tools.home}/.luke/agents/${AGENT_ID}/repository`,
-          node: tools.node,
-          bundle: "/opt/luke-host/lib/agent-runner.mjs",
-        });
-        expect(launched[0]?.env).toMatchObject({
+        const [runner] = launched;
+        const folder = `${tools.home}/.luke/agents/${AGENT_ID}`;
+        expect(runner?.args.slice(0, 4)).toEqual(["machine", "exec", "--name", `luke-${AGENT_ID}`]);
+        expect(runner?.args).toContain(`${folder}/repository`);
+        expect(runner?.args).toContain(`HOME=${folder}/home`);
+        expect(runner?.env).toMatchObject({
           CLAUDE_CODE_OAUTH_TOKEN: RUNNER_TOKEN,
           LUKE_RUNNER_PLACE: "host",
         });
@@ -221,8 +226,10 @@ describe("a host's daemon", () => {
 
         removed = true;
         yield* TestClock.adjust(Duration.seconds(20));
+        // Note that the runner, which never exits here, is signalled in its VM and given its grace before it is ended.
+        yield* settled(() => spawner.spawned.some((each) => each.args.includes("-e")));
+        yield* TestClock.adjust(Duration.seconds(5));
         yield* Fiber.join(daemon);
-        const runner = spawner.spawned.find((each) => each.program === "/bin/sh");
         expect(runner?.ended).not.toBe("running");
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
@@ -246,7 +253,10 @@ describe("a host's daemon", () => {
           gh: undefined,
           arch: DEVICE_ARCH.X64,
           hostname: "fra-01",
-          launch: refusingLaunch,
+          stateRoot: tools.stateRoot,
+          smolvm: SMOLVM,
+          user: { uid: 990, gid: 990 },
+          kvm: false,
         });
         const registers = () =>
           at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES).length;

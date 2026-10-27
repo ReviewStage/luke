@@ -14,7 +14,18 @@ import type {
   DevicePlatform,
 } from "@luke/features/device-agent-wire";
 import type { OpenSocket } from "@luke/voice/live-socket";
-import { type ConfigProvider, Context, Layer, Logger, type Stream } from "effect";
+import {
+  type ConfigProvider,
+  Context,
+  Data,
+  type Effect,
+  Layer,
+  Logger,
+  type Stream,
+} from "effect";
+import type { FileSystem } from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
+import type { ChildProcessSpawner } from "effect/process";
 import type { AccountSourceSeam } from "../account-source.js";
 import type { OpenTerminalSocket } from "../compose-terminals.js";
 import type { RunMode as RunModeFacts } from "../run-mode.js";
@@ -147,6 +158,75 @@ export interface LocalAgentCommand {
   readonly env: Readonly<Record<string, string>>;
 }
 
+/** A command run inside an agent's VM: the agent it is for and its folder, the folder it runs in there, its program and arguments, and the variables it is handed. */
+export interface LocalAgentSandboxCommand {
+  readonly agentId: string;
+  readonly folder: string;
+  readonly cwd: string;
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly env: Readonly<Record<string, string>>;
+}
+
+/**
+ * The VM each of a sandboxed device's agents runs in
+ * (`@luke/host/node`'s `smolvmSandbox`), beside the launch that starts the
+ * runner in it: the VM made and started before a runner starts, each of
+ * the agent's processes in it signalled before the runner's process is
+ * killed, since killing a command run in a VM ends what it runs at once
+ * with no signal, the VM stopped once its runner has ended, and deleted
+ * when the agent is discarded. The agent's GitHub token is kept on the
+ * device, outside every folder the VM mounts, where the VM's credential
+ * bindings read it on every request, so the VM only ever holds a
+ * placeholder. Only the local agents concern asks for it, and only where
+ * the device registers as sandboxed.
+ */
+export interface LocalAgentSandbox {
+  /** Where the VM's own image keeps what a runner runs on, which the device registers in place of any copy of its own. */
+  readonly tools: { readonly node: string; readonly claude: string; readonly codex: string };
+  /** The agent's VM made where it has none, its folder mounted at the same path, and started; it fails where it could not be. */
+  readonly started: (agent: {
+    readonly agentId: string;
+    readonly folder: string;
+    /** Whether the VM sends the agent's GitHub token to GitHub, from the files `githubToken` writes. */
+    readonly github: boolean;
+  }) => Effect.Effect<
+    void,
+    LocalAgentSandboxUnavailable,
+    ChildProcessSpawner.ChildProcessSpawner | FileSystem
+  >;
+  /** The agent's VM started where it was made already, for a command asked between its turns; whether it stands. */
+  readonly woken: (
+    agentId: string,
+  ) => Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner>;
+  /** The process a command run inside the agent's VM is, its variables handed by name and never as arguments. */
+  readonly exec: (command: LocalAgentSandboxCommand) => LocalAgentCommand;
+  /** Every process of the agent's in its VM asked to end (SIGTERM), so the runner ends as it would on a signal of its own. */
+  readonly signalled: (
+    agentId: string,
+  ) => Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner>;
+  /** The agent's VM stopped, with everything still running in it. */
+  readonly stopped: (
+    agentId: string,
+  ) => Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner>;
+  /** The agent's VM deleted, and the token kept for it beside it; its folder is the follower's to remove. */
+  readonly deleted: (
+    agentId: string,
+  ) => Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner | FileSystem>;
+  /** The agent's GitHub token written where its VM's bindings read it, replacing the last, so a renewal needs no restart. */
+  readonly githubToken: (
+    agentId: string,
+    token: string,
+  ) => Effect.Effect<void, PlatformError, FileSystem>;
+  /** What a git run on the device itself, as the worktree's script runs, adds to its environment to read the same token, never naming it. */
+  readonly deviceGit: (agentId: string) => Readonly<Record<string, string>>;
+}
+
+/** Why an agent's VM could not be made or started. */
+export class LocalAgentSandboxUnavailable extends Data.TaggedError("LocalAgentSandboxUnavailable")<{
+  readonly detail: string;
+}> {}
+
 /**
  * What a local agent's runner is started with on this device
  * (`compose-local-agents.ts`): how every runner is started (`launch`), the
@@ -225,6 +305,15 @@ export interface LocalAgentPlatformSeam {
    * never holds the only copy of the developer's work.
    */
   readonly unsavedWorkScript?: ((input: { readonly worktree: string }) => string) | undefined;
+  /**
+   * The VM each agent runs in, where the device registers as sandboxed
+   * (`deviceIsolation`): `launch` then starts the runner inside it, and the
+   * follower makes, stops and deletes it around the runner, keeps the
+   * agent's GitHub token out of its folder, and runs a tool's commands in
+   * it rather than on the device. None where agents run on the device
+   * itself, as on This Mac.
+   */
+  readonly sandbox?: LocalAgentSandbox | undefined;
 }
 
 export class LocalAgentPlatform extends Context.Service<

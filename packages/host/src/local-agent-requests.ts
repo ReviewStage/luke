@@ -35,6 +35,10 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * app's environment, with nothing on its stdin, and is ended with
  * its group at `LOCAL_AGENT_COMMAND.TIMEOUT`, inside the service's own wait
  * for the answer; each of its outputs keeps its first bytes up to the bound.
+ * On a sandboxed device the command runs inside the agent's VM instead
+ * (`LocalAgentVm`), started first where it stands stopped, since its
+ * worktree is the agent's to rig and a Git run over it on the device could
+ * be made to run anything there.
  */
 
 const LOCAL_AGENT_COMMAND = {
@@ -50,6 +54,26 @@ const LOCAL_AGENT_COMMAND = {
 
 /** What a command answers where its worktree does not stand inside the agent's folder. */
 const OUTSIDE = "Not run: the agent's worktree is not inside its folder on this Mac.";
+/** What a command answers where the agent's VM was never made, so there is nowhere to run it. */
+const NO_VM = "Not run: the agent's VM has not been made yet.";
+
+/**
+ * The agent's VM a sandboxed device runs its commands in: started first
+ * where it was made already (`woken`), and the process a command is there.
+ */
+export interface LocalAgentVm {
+  readonly woken: Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner>;
+  readonly exec: (command: {
+    readonly cwd: string;
+    readonly command: string;
+    readonly args: readonly string[];
+    readonly env: Readonly<Record<string, string>>;
+  }) => {
+    readonly command: string;
+    readonly args: readonly string[];
+    readonly env: Readonly<Record<string, string>>;
+  };
+}
 
 /** The most bytes an output keeps, short of the bound by the widest character a cut could leave half of, which decodes as a three-byte replacement. */
 const KEPT_OUTPUT_BYTES = DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES - 4;
@@ -138,13 +162,25 @@ function textOf(kept: Kept): string {
   );
 }
 
-/** A command run whole in the worktree under its timeout, its group ended as its scope closes. */
-const ranCommand = (checkout: string, command: string, env: Readonly<Record<string, string>>) =>
+/** A command run whole in the worktree under its timeout, its group ended as its scope closes; in the agent's VM where it has one. */
+const ranCommand = (
+  checkout: string,
+  command: string,
+  env: Readonly<Record<string, string>>,
+  inVm: LocalAgentVm | undefined,
+) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const handle = yield* ChildProcess.make("/bin/bash", ["-l", "-c", command], {
+      const asked = {
         cwd: checkout,
+        command: "/bin/bash",
+        args: ["-l", "-c", command],
         env: { ...env, PAGER: "cat", GIT_PAGER: "cat", GIT_TERMINAL_PROMPT: "0" },
+      };
+      const run = inVm === undefined ? asked : inVm.exec(asked);
+      const handle = yield* ChildProcess.make(run.command, [...run.args], {
+        cwd: checkout,
+        env: run.env,
         extendEnv: false,
         stdin: "ignore",
         forceKillAfter: LOCAL_AGENT_COMMAND.KILL_GRACE,
@@ -180,6 +216,7 @@ const answeredCommand = (
   layout: DeviceAgentLayout,
   args: unknown,
   base: Readonly<Record<string, string>>,
+  inVm: LocalAgentVm | undefined,
 ) =>
   Effect.gen(function* () {
     const refused = (why: string): DeviceAgentAnswer => ({
@@ -192,17 +229,19 @@ const answeredCommand = (
     if (Option.isNone(asked)) return refused("Not run: the request named no command.");
     const checkout = yield* confinedPath(layout, layout.checkoutPath);
     if (Option.isNone(checkout)) return refused(OUTSIDE);
+    if (inVm !== undefined && !(yield* inVm.woken)) return refused(NO_VM);
     const env = { ...base, ...asked.value.env };
-    return yield* ranCommand(checkout.value, asked.value.command, env).pipe(
+    return yield* ranCommand(checkout.value, asked.value.command, env, inVm).pipe(
       Effect.catch(() => Effect.succeed(refused("Not run: the command could not be started."))),
     );
   });
 
-/** What one request of a local agent's tools answers, inside the agent's folder given, a command under the variables `env` hands on. */
+/** What one request of a local agent's tools answers, inside the agent's folder given, a command under the variables `env` hands on, in the agent's VM where `inVm` names one. */
 export const answeredLocalAgentRequest = (
   layout: DeviceAgentLayout,
   request: Pick<DeviceAgentRequest, "kind" | "args">,
   env: Readonly<Record<string, string>>,
+  inVm?: LocalAgentVm | undefined,
 ): Effect.Effect<
   DeviceAgentAnswer,
   never,
@@ -210,4 +249,4 @@ export const answeredLocalAgentRequest = (
 > =>
   request.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
     ? answeredRead(layout, request.args)
-    : answeredCommand(layout, request.args, env);
+    : answeredCommand(layout, request.args, env, inVm);

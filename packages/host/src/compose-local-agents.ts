@@ -35,7 +35,13 @@ import type * as HttpClient from "effect/http/HttpClient";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
+import {
+  Environment,
+  LocalAgentPlatform,
+  type LocalAgentSandbox,
+  type LocalAgentSandboxCommand,
+  Reporter,
+} from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
 import { localCodexSignedIn } from "./local-agent-codex.js";
@@ -99,10 +105,20 @@ import type { RunMode } from "./run-mode.js";
  *
  * A host (`apps/host`) runs this same follow with a platform of its own: it
  * enrolled under a device id of its own, which it is handed
- * (`LocalAgentsDependencies.deviceId`), fetches the Linux pins, starts each
- * runner in a systemd unit of its own (`LocalAgentPlatformSeam.launch`), and
- * says it is signed in to no harness (`ownSignIns`), since no login left on
- * the box reaches an agent there.
+ * (`LocalAgentsDependencies.deviceId`), and says it is signed in to no
+ * harness (`ownSignIns`), since no login left on the box reaches an agent
+ * there. It is sandboxed (`LocalAgentPlatformSeam.sandbox`): each agent runs
+ * in a VM of its own, which the follower has made and started before the
+ * runner starts in it, signals the runner in before its command is killed,
+ * since killing it would end the runner with no signal at all, stops once
+ * the runner has ended, whatever ended it, and deletes before a discard
+ * removes the agent's folder. There the runner runs on the VM's own Node,
+ * Claude Code and Codex, which the device registers, so it fetches none of
+ * its own; the agent's GitHub token is handed to the sandbox, which keeps
+ * it outside every folder the VM mounts, in place of a `gh` sign-in in the
+ * agent's folder, where the agent could read it; and a tool's command runs
+ * in the VM rather than on the device, since the worktree is the agent's to
+ * rig.
  *
  * Every launch this Mac claimed is kept in the host's state by its line's
  * id, no secret beside it, until its runner's exit settles it. A launch
@@ -189,6 +205,24 @@ function githubEnvironment(configFolder: string, gh: string): Readonly<Record<st
     GIT_CONFIG_KEY_1: GITHUB.CREDENTIAL_HELPER_KEY,
     GIT_CONFIG_VALUE_1: `!${shellQuoted(gh)} auth git-credential`,
   };
+}
+
+/**
+ * A runner in a VM asked to end there, where it still runs, and given
+ * `KILL_GRACE` to: killing its command (`smolvm machine exec`) would end it
+ * at once with no signal, so every process of the agent's in the VM is
+ * signalled first, as a runner on the device is with its group.
+ */
+function endedInVm(
+  sandbox: LocalAgentSandbox,
+  agentId: string,
+  handle: ChildProcessSpawner.ChildProcessHandle,
+): Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner> {
+  return Effect.gen(function* () {
+    if (!(yield* Effect.orElseSucceed(handle.isRunning, () => false))) return;
+    yield* sandbox.signalled(agentId);
+    yield* Effect.timeoutOption(Effect.ignore(handle.exitCode), KILL_GRACE);
+  });
 }
 
 /** The variables of the developer's own a runner and a command are started with, read from the app's environment; nothing else of Luke's is handed on. */
@@ -365,6 +399,15 @@ export function composeLocalAgents(
      */
     const toolsHad = fetching.withPermit(
       Effect.gen(function* () {
+        // Note that a sandboxed device's runners run on the VM's own tools, so it fetches none of its own.
+        if (platform.sandbox !== undefined) {
+          const inVm = Option.some({
+            node: platform.sandbox.tools.node,
+            claude: platform.sandbox.tools.claude,
+          });
+          yield* Ref.set(tools, inVm);
+          return inVm;
+        }
         const had = yield* Ref.get(tools);
         if (Option.isSome(had)) {
           const standing = yield* Effect.all(
@@ -418,6 +461,11 @@ export function composeLocalAgents(
      */
     const codexHad = fetchingCodex.withPermit(
       Effect.gen(function* () {
+        if (platform.sandbox !== undefined) {
+          const inVm = Option.some(platform.sandbox.tools.codex);
+          yield* Ref.set(codex, inVm);
+          return inVm;
+        }
         const kept = yield* Ref.get(codex);
         if (Option.isSome(kept) && (yield* fileSystem.exists(kept.value))) return kept;
         const had = yield* localAgentTool(
@@ -601,14 +649,21 @@ export function composeLocalAgents(
 
         /**
          * The agent's `gh` signed in, in its own config folder, with a fresh
-         * token for its repository from the service; whether it was. A token
-         * refused or unanswered, or a sign-in that failed, is reported in
-         * those words alone.
+         * token for its repository from the service; whether it was. On a
+         * sandboxed device the token is handed to the sandbox instead, which
+         * keeps it outside every folder the agent's VM mounts, since a token
+         * in the agent's folder would be the agent's to read. A token refused
+         * or unanswered, or a sign-in that failed, is reported in those words
+         * alone.
          */
         const signedInToGithub = (agentId: string, configFolder: string, gh: string) =>
           Effect.gen(function* () {
             const token = yield* asked(client.githubToken(agentId));
             if (token === undefined) return false;
+            if (platform.sandbox !== undefined) {
+              yield* platform.sandbox.githubToken(agentId, token);
+              return true;
+            }
             yield* fileSystem.makeDirectory(configFolder, { recursive: true, mode: 0o700 });
             const code = yield* Effect.scoped(
               Effect.flatMap(
@@ -650,7 +705,11 @@ export function composeLocalAgents(
           configFolder: string,
           gh: string,
           signedIn: boolean,
-        ): Effect.Effect<never, never, ChildProcessSpawner.ChildProcessSpawner> =>
+        ): Effect.Effect<
+          never,
+          never,
+          ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem
+        > =>
           Effect.flatMap(Effect.sleep(signedIn ? GITHUB_TOKEN_REFRESH : GITHUB_SIGN_IN_RETRY), () =>
             Effect.flatMap(signedInToGithub(agentId, configFolder, gh), (again) =>
               renewingGithub(agentId, configFolder, gh, again),
@@ -679,18 +738,26 @@ export function composeLocalAgents(
             const gh = platform.bundled.gh ?? "gh";
             const configFolder = layout.githubConfig;
             const signsIn = platform.githubFromLuke && payload.value.repository !== null;
-            const github = signsIn ? githubEnvironment(configFolder, gh) : undefined;
+            const sandbox = platform.sandbox;
+            // Note that a sandboxed agent's worktree is made on the device with the token the sandbox keeps, and its runner reaches GitHub through its VM's bindings alone.
+            const deviceGithub = !signsIn
+              ? undefined
+              : sandbox === undefined
+                ? githubEnvironment(configFolder, gh)
+                : sandbox.deviceGit(agentId);
+            const github = sandbox === undefined ? deviceGithub : undefined;
             const signedIn = signsIn && (yield* signedInToGithub(agentId, configFolder, gh));
             const made = yield* madeWorktree(
               layout,
               payload.value.repository,
               payload.value.startBranch,
-              github,
+              deviceGithub,
             );
             if (!made) return yield* settle(line.id, NOT_STARTED);
             // Note that a Codex the Mac registered and lost since is had again before the runner starts, so a Codex agent's launch finds it.
             const kept = yield* Ref.get(codex);
             if (
+              sandbox === undefined &&
               Option.isSome(kept) &&
               !(yield* Effect.orElseSucceed(fileSystem.exists(kept.value), () => false))
             ) {
@@ -698,7 +765,29 @@ export function composeLocalAgents(
             }
             const temp = path.join(layout.folder, TEMP_FOLDER);
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
+            if (sandbox !== undefined) {
+              // Note that smolvm's reason names no secret, since its credentials are only ever references to their files.
+              const refused = yield* sandbox
+                .started({ agentId, folder: layout.folder, github: signsIn })
+                .pipe(
+                  Effect.as(Option.none<string>()),
+                  Effect.catchTag("LocalAgentSandboxUnavailable", (unavailable) =>
+                    Effect.succeed(Option.some(unavailable.detail)),
+                  ),
+                );
+              if (Option.isSome(refused)) {
+                report(`a local agent's VM could not be started: ${refused.value}`);
+                return yield* settle(line.id, NOT_STARTED);
+              }
+            }
             const runnerScope = yield* Scope.fork(agentScope);
+            // Note that the VM is stopped last as the runner's scope closes, once its runner has ended, and everything the agent left running in it with it.
+            if (sandbox !== undefined) {
+              yield* Scope.addFinalizer(
+                runnerScope,
+                Effect.provideContext(sandbox.stopped(agentId), services),
+              );
+            }
             const stdin = yield* Queue.unbounded<string>();
             const encoder = new TextEncoder();
             const command = platform.launch({
@@ -734,6 +823,13 @@ export function composeLocalAgents(
               return yield* settle(line.id, NOT_STARTED);
             }
             const handle = started.value;
+            // Note that this runs first as the scope closes, so the runner hears a signal before its command is killed.
+            if (sandbox !== undefined) {
+              yield* Scope.addFinalizer(
+                runnerScope,
+                Effect.provideContext(endedInVm(sandbox, agentId, handle), services),
+              );
+            }
             if (signsIn) {
               yield* Effect.forkIn(
                 renewingGithub(agentId, configFolder, gh, signedIn),
@@ -793,11 +889,19 @@ export function composeLocalAgents(
             );
           }).pipe(Effect.orElseSucceed(() => Option.some(UNSAVED_UNKNOWN)));
 
-        /** The agent's runner, where one runs, stopped with its group and its exit waited for, so its line is settled first. */
+        /**
+         * The agent's runner, where one runs, stopped with its group and its
+         * exit waited for, so its line is settled first. In a VM the runner
+         * is signalled there first, since killing its command would end it
+         * with no signal at all.
+         */
         const stopped = (agentId: string) =>
           Effect.gen(function* () {
             const runner = runners.get(agentId);
             if (runner === undefined) return;
+            if (platform.sandbox !== undefined) {
+              yield* endedInVm(platform.sandbox, agentId, runner.handle);
+            }
             yield* Effect.ignore(runner.handle.kill({ forceKillAfter: KILL_GRACE }));
             yield* Fiber.await(runner.exited);
           });
@@ -814,6 +918,8 @@ export function composeLocalAgents(
         const discarded = (agentId: string) =>
           Effect.gen(function* () {
             yield* stopped(agentId);
+            // Note that the VM goes before the folder, so nothing in it is still writing there as it is removed.
+            if (platform.sandbox !== undefined) yield* platform.sandbox.deleted(agentId);
             const layout = deviceAgentLayout(folder, agentId);
             const unsaved = yield* unsavedWork(layout);
             if (Option.isSome(unsaved)) {
@@ -969,11 +1075,21 @@ export function composeLocalAgents(
             const env = {
               ...shellVariables,
               TMPDIR: path.join(layout.folder, TEMP_FOLDER),
-              ...(platform.githubFromLuke
+              ...(platform.githubFromLuke && platform.sandbox === undefined
                 ? githubEnvironment(layout.githubConfig, platform.bundled.gh ?? "gh")
                 : undefined),
             };
-            const answer = yield* answeredLocalAgentRequest(layout, claimed, env).pipe(
+            // Note that a sandboxed agent's command runs in its VM, never on the device, since its worktree is the agent's to rig.
+            const sandbox = platform.sandbox;
+            const inVm =
+              sandbox === undefined
+                ? undefined
+                : {
+                    woken: sandbox.woken(claimed.agentId),
+                    exec: (command: Omit<LocalAgentSandboxCommand, "agentId" | "folder">) =>
+                      sandbox.exec({ ...command, agentId: claimed.agentId, folder: layout.folder }),
+                  };
+            const answer = yield* answeredLocalAgentRequest(layout, claimed, env, inVm).pipe(
               Effect.provideContext(services),
             );
             yield* asked(client.answerRequest(deviceId, claimed.id, answer));
@@ -1054,6 +1170,8 @@ export function composeLocalAgents(
       // Note that the Mac registers only once it has what a runner runs on, so Start never offers a Mac that cannot run one.
       const had = yield* toolsForOpening;
       if (Option.isNone(had)) return yield* Effect.sleep(IDLE);
+      // Note that a sandboxed device's Codex is the VM's, had at once, so it registers with its first registration.
+      if (platform.sandbox !== undefined) yield* codexHad;
       const deviceId = yield* deviceOf(userId);
       const shellVariables = yield* shellEnvironment;
       const signedIn = yield* signedInNow(had.value, shellVariables);

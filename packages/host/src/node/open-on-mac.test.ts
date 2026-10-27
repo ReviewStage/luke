@@ -927,6 +927,39 @@ test(
 );
 
 test(
+  "an agent in a VM gets a repository of its own at the branch's head, which works with the shared clone out of reach and has the rest from GitHub",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const head = push("second\n");
+    const clone = cloneFolder(state, "acme/app");
+    const own = path.join(scratch, "agents", "vm", "repository");
+
+    run(
+      scratch,
+      shell,
+      agentWorktreeScript({
+        repository: "acme/app",
+        clone,
+        worktree: own,
+        branch: "luke/fix-relay",
+        remotes: { https: origin, ssh: origin },
+        own: true,
+      }),
+    );
+    // Note that the VM mounts the agent's folder alone, so the shared clone is moved out of reach.
+    rmSync(clone, { recursive: true, force: true });
+
+    assert.equal(git(own, ["rev-parse", "HEAD"]), head);
+    assert.equal(readFileSync(path.join(own, "README.md"), "utf8"), "second\n");
+    assert.equal(git(own, ["status", "--porcelain"]), "");
+    assert.equal(git(own, ["remote", "get-url", "origin"]), origin);
+    assert.equal(git(own, ["show", "HEAD~1:README.md"]), "first");
+  },
+  GIT_DEADLINE,
+);
+
+test(
   "a discard finds work in an agent's worktree only where it is changed, ahead of its upstream, on no remote branch, or has files and no repository",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);

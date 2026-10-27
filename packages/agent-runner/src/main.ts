@@ -23,6 +23,7 @@ import { Effect, Exit, Layer, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { claudeCodeLive } from "./claude-code.js";
 import { askCodexToken } from "./codex-token.js";
+import { runsOnHost } from "./launch.js";
 import { processTable } from "./processes.js";
 import { CODEX_TOKEN_COMMAND, RUNNER_END } from "./protocol.js";
 import { MAC_PS, psProcessTable } from "./ps-processes.js";
@@ -64,9 +65,13 @@ const launch = runAgent({
       claudeCodeLive,
       FetchHttpClient.layer,
       // The machine's own processes, read beside the runner's, for a wait's release (runner.ts):
-      // the sandbox's `/proc`, or `ps` on a Mac, which has none.
+      // the sandbox's `/proc`, the VM's on a host, keyed on the runner's own user, or `ps` on a Mac, which has none.
       existsSync("/proc/self/status")
-        ? processTable("/proc", process.pid)
+        ? processTable(
+            "/proc",
+            process.pid,
+            runsOnHost(process.env) ? process.getuid?.() : undefined,
+          )
         : psProcessTable(MAC_PS, process.pid),
       // Codex's app-server, spawned as the runner's own child (codex.ts).
       NodeChildProcessSpawner.layer.pipe(
