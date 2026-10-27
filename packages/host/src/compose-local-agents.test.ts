@@ -1,5 +1,5 @@
 /**
- * compose-local-agents.test.ts -- the follower as the operating system sees it launch an agent: on a host, the agent's own `gh` signed in with a token from Luke before its worktree is made and again every fifty minutes, git pointed at gh's credential helper, and none of it on This Mac.
+ * compose-local-agents.test.ts -- the follower as the operating system sees it launch an agent: on a host, the agent's own `gh` signed in with a token from Luke before its worktree is made and again every fifty minutes, git pointed at gh's credential helper, and none of it on This Mac; and This Mac running its agents directly or, while its sandbox setting is on, in VMs on the sign-ins saved in Luke, registered so only once its sandbox is ready.
  *
  * The follower runs over a scripted spawner, a file system that holds only
  * the bundled tools, and a fake service that hands one launch line and a new
@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { CLAUDE_CODE_MAC_PIN, CODEX_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
-import type { DeviceAgentClaimedLine } from "@luke/features";
+import type { DeviceAgentClaimedLine, DeviceAgentDevice } from "@luke/features";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
@@ -25,7 +25,13 @@ import { ConfigProvider, Duration, Effect, Layer, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
-import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
+import {
+  Environment,
+  LocalAgentPlatform,
+  type LocalAgentPlatformSeam,
+  type LocalAgentSandbox,
+  Reporter,
+} from "./effect/seams.js";
 import { type ScriptedSpawner, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const HOME = "/home/luke-host";
@@ -288,6 +294,273 @@ it.effect(
         yield* until(() => spawned.some(isCommand));
         assert.deepEqual(githubVariables(spawned.find(isCommand)?.env), {});
         assert.equal(runner?.env?.LUKE_RUNNER_TOKEN, SECRET_ENV.LUKE_RUNNER_TOKEN);
+      }),
+    ),
+);
+
+/** The program This Mac's sandboxed platform starts a runner through, standing in for `smolvm machine exec`. */
+const VM_LAUNCHER = "/opt/luke/smolvm-exec";
+/** Where the sandbox image keeps the harnesses, which a sandboxed Mac registers in place of its own. */
+const VM_TOOLS = { node: "node", claude: "/usr/local/bin/claude", codex: "/usr/local/bin/codex" };
+
+/**
+ * The follower on This Mac, signed in to Claude Code by itself, whose
+ * platform runs agents directly and has a sandboxed alternative, with its
+ * sandbox setting as `setting` holds it and its sandbox ready as `ready`
+ * says; one launch line is handed once the setting is on, and, after it, a
+ * discard line once it is off where `discardWhenOff` asks. `madeBare` says
+ * the agent's checkout already stands, as a direct launch left it. With
+ * what it registered, spawned, asked, handed the sandbox, settled, deleted,
+ * and reported.
+ */
+const followingMac = (
+  setting: { on: boolean },
+  ready: boolean,
+  options: { readonly madeBare?: boolean; readonly discardWhenOff?: boolean } = {},
+) =>
+  Effect.gen(function* () {
+    const spawner = scriptedSpawner((program, args) => {
+      if (program === "/bin/bash" && args[0] === "-l")
+        return { stdout: "/usr/bin:/bin", exitCode: 0 };
+      if (program === TOOLS.claude) return { stdout: '{"authMethod":"claude.ai"}', exitCode: 0 };
+      if (program === "/bin/bash") return { exitCode: 0 };
+      if (program === LAUNCHER) return {};
+      // Note that the runner in the VM ends by itself a second in, so the test's end has no runner to wait out.
+      if (program === VM_LAUNCHER) return { exitCode: 0, after: Duration.seconds(1) };
+      return undefined;
+    });
+    const registered: DeviceAgentDevice[] = [];
+    const asked: string[] = [];
+    const handedSandbox: string[] = [];
+    const reported: string[] = [];
+    const settled: { id: string; exitCode: number | undefined }[] = [];
+    const deleted: string[] = [];
+    let launched = false;
+    let discardHanded = false;
+    const DISCARD: DeviceAgentClaimedLine = {
+      line: {
+        ...LAUNCH.line,
+        id: "discard-1",
+        seq: 2,
+        kind: DEVICE_AGENT_LINE_KIND.DISCARD,
+        payload: {},
+      },
+    };
+    const client = {
+      register: (_deviceId: string, device: DeviceAgentDevice) =>
+        Effect.sync(() => registered.push(device)).pipe(Effect.as(true)),
+      beat: () => Effect.succeed(true),
+      lines: () => {
+        if (setting.on && !launched) {
+          return Effect.sync(() => {
+            launched = true;
+            return [LAUNCH.line];
+          });
+        }
+        if (!setting.on && launched && options.discardWhenOff === true && !discardHanded) {
+          return Effect.sync(() => {
+            discardHanded = true;
+            return [DISCARD.line];
+          });
+        }
+        return Effect.never;
+      },
+      claimLine: (_deviceId: string, id: string) =>
+        Effect.succeed(id === DISCARD.line.id ? DISCARD : LAUNCH),
+      settleLine: (_deviceId: string, id: string, exitCode?: number) =>
+        Effect.sync(() => settled.push({ id, exitCode })).pipe(Effect.as(true)),
+      requests: () => Effect.never,
+      claimRequest: () => Effect.succeed(COMMAND),
+      answerRequest: () => Effect.succeed(true),
+      githubToken: (agentId: string) =>
+        Effect.sync(() => {
+          asked.push(agentId);
+          return `ghs_fixture_${asked.length}`;
+        }),
+    };
+    const sandbox: LocalAgentSandbox = {
+      tools: VM_TOOLS,
+      ready: Effect.succeed(ready),
+      started: () => Effect.void,
+      woken: () => Effect.succeed(true),
+      exec: (command) => ({ command: VM_LAUNCHER, args: [command.command], env: command.env }),
+      signalled: () => Effect.void,
+      stopped: () => Effect.succeed(true),
+      deleted: (agentId) => Effect.sync(() => deleted.push(agentId)),
+      githubToken: (_agentId, token) => Effect.sync(() => handedSandbox.push(token)),
+      deviceGit: () => ({}),
+    };
+    const bare: LocalAgentPlatformSeam = {
+      launch: ({ env }) => ({ command: LAUNCHER, args: [], env }),
+      runnerBundle: "/opt/luke/agent-runner.mjs",
+      runnerEnv: {},
+      bundled: { node: TOOLS.node, claude: TOOLS.claude },
+      pins: { node: NODE_MAC_PIN, claude: CLAUDE_CODE_MAC_PIN, codex: CODEX_MAC_PIN },
+      ownSignIns: true,
+      githubFromLuke: false,
+      deviceName: "Studio",
+      devicePlatform: DEVICE_PLATFORM.DARWIN,
+      deviceArch: DEVICE_ARCH.ARM64,
+      deviceIsolation: DEVICE_ISOLATION.BARE,
+      deviceCapabilities: [],
+      worktreeScript: () => "exit 0",
+    };
+    const services = Layer.mergeAll(
+      spawner.layer,
+      NodePath.layer,
+      FileSystem.layerNoop({
+        exists: (path) =>
+          Effect.succeed(
+            path === TOOLS.node ||
+              path === TOOLS.claude ||
+              (options.madeBare === true && path === LAYOUT.checkoutPath),
+          ),
+        makeDirectory: () => Effect.void,
+        writeFileString: () => Effect.void,
+        rename: () => Effect.void,
+        remove: () => Effect.void,
+      }),
+      fakeHttpClientLayer(() => Promise.reject(new Error("this test fetches no tool"))),
+      Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash" })),
+      Layer.succeed(Reporter, { report: (line) => reported.push(line) }),
+      Layer.succeed(LocalAgentPlatform, {
+        ...bare,
+        sandboxed: {
+          ...bare,
+          launch: ({ env }) => ({ command: VM_LAUNCHER, args: [], env }),
+          sandbox,
+          bundled: {},
+          ownSignIns: false,
+          githubFromLuke: true,
+          deviceIsolation: DEVICE_ISOLATION.SANDBOX,
+        },
+      }),
+    );
+    const composer = yield* composeLocalAgents({
+      kernel: {
+        stateRoot: "/Users/dev/Library/Application Support/Luke",
+        createId: () => "device-1",
+        runMode: { sendsNetwork: true },
+      },
+      account: { capabilitiesActive: () => true },
+      accountId: () => USER_ID,
+      switchedOn: Effect.succeed(true),
+      sandboxed: Effect.sync(() => setting.on),
+      client,
+    }).pipe(Effect.provide(services));
+    yield* composer.lifetime;
+    return {
+      registered,
+      spawned: spawner.spawned,
+      asked,
+      handedSandbox,
+      settled,
+      deleted,
+      reported,
+    };
+  });
+
+it.effect(
+  "This Mac runs its agents directly on its own sign-in while its sandbox setting is off, and once it is on registers again as sandboxed, signed in to nothing, and launches its agent in a VM with a GitHub token from Luke",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const setting = { on: false };
+        const { registered, spawned, asked, handedSandbox } = yield* followingMac(setting, true);
+        yield* until(() => registered.length === 1);
+
+        assert.equal(registered[0]?.isolation, DEVICE_ISOLATION.BARE);
+        assert.equal(registered[0]?.claudeExecutable, TOOLS.claude);
+        assert.equal(registered[0]?.signedIn.claudeCode, true);
+
+        setting.on = true;
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* until(() => spawned.some((each) => each.program === VM_LAUNCHER));
+
+        // Note that the Mac's Keychain sign-in cannot reach a VM, so the service pays with the one saved in Luke, or refuses.
+        assert.deepEqual(
+          registered.slice(1).map((each) => ({
+            isolation: each.isolation,
+            claudeExecutable: each.claudeExecutable,
+            codexExecutable: each.codexExecutable,
+            signedIn: each.signedIn,
+          })),
+          [
+            {
+              isolation: DEVICE_ISOLATION.SANDBOX,
+              claudeExecutable: VM_TOOLS.claude,
+              codexExecutable: VM_TOOLS.codex,
+              signedIn: { claudeCode: false, codex: false },
+            },
+          ],
+        );
+        assert.deepEqual(asked, [AGENT_ID]);
+        assert.deepEqual(handedSandbox, ["ghs_fixture_1"]);
+        assert.equal(
+          spawned.some((each) => each.program === LAUNCHER),
+          false,
+        );
+        const runner = spawned.find((each) => each.program === VM_LAUNCHER);
+        assert.equal(runner?.env?.LUKE_RUNNER_TOKEN, SECRET_ENV.LUKE_RUNNER_TOKEN);
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* until(() => runner?.ended === "exited");
+      }),
+    ),
+);
+
+it.effect(
+  "a Mac with its sandbox setting on registers nothing until its sandbox is ready, and says what it could not have",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { registered, reported } = yield* followingMac({ on: true }, false);
+        yield* until(() => reported.length > 0);
+        yield* TestClock.adjust(Duration.minutes(1));
+
+        assert.deepEqual(registered, []);
+        assert.deepEqual(reported, ["the local agents' smolvm or sandbox image could not be had"]);
+      }),
+    ),
+);
+
+it.effect(
+  "an agent that ran directly on This Mac is not started in a VM once its sandbox setting is on, and says why",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { spawned, settled, reported } = yield* followingMac({ on: true }, true, {
+          madeBare: true,
+        });
+        yield* until(() => settled.some((each) => each.id === LINE_ID));
+
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 1 }]);
+        assert.equal(
+          spawned.some((each) => each.program === VM_LAUNCHER || each.program === LAUNCHER),
+          false,
+        );
+        assert.deepEqual(reported, [
+          "a local agent that ran directly on this device was not started in a VM; turn its sandbox setting off to run it",
+        ]);
+      }),
+    ),
+);
+
+it.effect(
+  "an agent that ran in a VM, discarded once This Mac runs its agents directly again, has its VM deleted",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const setting = { on: true };
+        const { spawned, settled, deleted } = yield* followingMac(setting, true, {
+          discardWhenOff: true,
+        });
+        yield* until(() => spawned.some((each) => each.program === VM_LAUNCHER));
+        yield* TestClock.adjust(Duration.seconds(1));
+        setting.on = false;
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* until(() => settled.some((each) => each.id === "discard-1"));
+
+        assert.deepEqual(deleted, [AGENT_ID]);
       }),
     ),
 );

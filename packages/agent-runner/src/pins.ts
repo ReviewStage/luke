@@ -84,6 +84,13 @@ export interface AgentToolPin {
    * where the release is not signed, and its digest alone decides.
    */
   readonly TEAM?: string;
+  /**
+   * The SHA-256 of each kept file that runs on the device, by its path under
+   * the kept folder, read off the pinned release, for one no team signs: the
+   * kept build is answered only while each still matches, since anything of
+   * the developer's could have written it since its archive was checked.
+   */
+  readonly FILES?: Readonly<Record<string, string>>;
 }
 
 /** The Node a local agent's runner runs on, on a Mac: the release the runner's bundle targets (`node24`), signed by the Node.js Foundation. */
@@ -132,6 +139,48 @@ export const CODEX_MAC_PIN: AgentToolPin = {
   MEMBERS: ["bin/codex", "bin/codex-code-mode-host", "codex-path/rg", "codex-package.json"],
   BINARY: "bin/codex",
   TEAM: "2DC432GLL2",
+};
+
+/**
+ * smolvm on a Mac whose local agents run sandboxed, one VM each: the
+ * release step 0 and the launcher's hand test passed on, as its GitHub
+ * release keeps the macOS arm64 build. The whole folder is kept, since the
+ * `smolvm` wrapper runs `smolvm-bin` beside it with the `lib/` it links, the
+ * `agent-rootfs/` it boots, and the disk templates it copies. Its binary is
+ * signed ad hoc with the hypervisor entitlement and no Developer ID team,
+ * so its digest decides, and the digests of what of it runs on the Mac, the
+ * wrapper, the binary, and the libraries it loads, as the release's own
+ * `checksums.txt` lists them, are checked again before every use. The same
+ * release as a host's (`SMOLVM_LINUX_PIN`).
+ */
+export const SMOLVM_MAC_PIN: AgentToolPin = {
+  NAME: "smolvm",
+  VERSION: "1.32.3",
+  ARCHIVE:
+    "https://github.com/smol-machines/smolvm/releases/download/v1.32.3/smolvm-1.32.3-darwin-arm64.tar.gz",
+  SHA256: "5d307f7df82886ccb48f3a3b3c77ff35dbeb00fc7dcdde8aa0d1d8b6fdb2d7f6",
+  BYTES: 41_229_365,
+  ROOT: "smolvm-1.32.3-darwin-arm64",
+  MEMBERS: [
+    "smolvm",
+    "smolvm-bin",
+    "lib",
+    "agent-rootfs",
+    "storage-template.ext4.zst",
+    "overlay-template.ext4.zst",
+  ],
+  BINARY: "smolvm",
+  FILES: {
+    smolvm: "b67b25f363403e19deceb6897e5a4d94be30a079f8cb751372782f17fc99003a",
+    "smolvm-bin": "f7540c75f4fe166a6932d84d0ddb7f94e2ebc4100d0994c9dca41084149e88d9",
+    "lib/libMoltenVK.dylib": "945c9d86e886edc19a9cc3975336f4c67279d3ca884bf55638b041d8921fd16f",
+    "lib/libepoxy.0.dylib": "4907b7a0cf4ef3515bde843dc187f22482d142898f6c44f2859b59c6298e3324",
+    "lib/libkrun.dylib": "cdda50c3e92462f853cef0f4392ddbb957f7f6edd5c3632ae7d8c93c4dd58cd5",
+    "lib/libkrunfw.5.dylib": "b83f38cceb26893d67d6d531550e3d3072e216d996b44cae9daa5507688889cd",
+    "lib/libkrunfw.dylib": "b83f38cceb26893d67d6d531550e3d3072e216d996b44cae9daa5507688889cd",
+    "lib/libvirglrenderer.1.dylib":
+      "6ad956b217da875edd64a25f799f3d2036c611626053d39b2cc4e36577645205",
+  },
 };
 
 /**

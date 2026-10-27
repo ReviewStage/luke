@@ -55,7 +55,10 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     reporterLayer(config.report),
     Layer.succeed(VoiceSocket, openVoiceSocketOverWs),
     Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
-    Layer.succeed(LocalAgentPlatform, localAgentPlatform(config.packaged)),
+    Layer.succeed(
+      LocalAgentPlatform,
+      localAgentPlatform({ packaged: config.packaged, stateRoot: config.stateRoot }),
+    ),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's
     // cipher. Every sign-in's consent is a loopback on this Mac: the browser
     // hands the code back to a `node:http` listener on 127.0.0.1, the

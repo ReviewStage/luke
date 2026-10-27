@@ -21,7 +21,9 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * team its binary is signed by, macOS's own `codesign` must verify the
  * binary strictly and name that team before the build is marked, and again
  * each time the kept build is first answered after a start, so a binary
- * changed on disk since is refused and fetched anew. The mark is written
+ * changed on disk since is refused and fetched anew; where it names the
+ * digests of the files that run instead, for a release no team signs, each
+ * must match them, before the mark and at every answer alike. The mark is written
  * last, so a fetch cut off, or a build refused, leaves nothing that is ever
  * run, and the next ask fetches again.
  */
@@ -67,6 +69,25 @@ const signedAsPinned = (binary: string, team: string) =>
     }),
   );
 
+/** A file's SHA-256, in hex. */
+const digestOf = (bytes: Uint8Array) =>
+  Effect.map(
+    Effect.tryPromise(() => crypto.subtle.digest("SHA-256", new Uint8Array(bytes))),
+    (digest) => Hex.encode(new Uint8Array(digest)),
+  );
+
+/** Whether every file the pin names a digest for stands under `folder` with that digest; true where it names none. */
+const filesAsPinned = (pin: AgentToolPin, folder: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    for (const [file, digest] of Object.entries(pin.FILES ?? {})) {
+      const bytes = yield* fileSystem.readFile(path.join(folder, file));
+      if ((yield* digestOf(bytes)) !== digest) return false;
+    }
+    return true;
+  });
+
 /**
  * The pin's archive fetched, checked against its size and digest, and its
  * members kept under `folder`, moved into place whole, checked against its
@@ -94,9 +115,8 @@ const fetchTool = Effect.fnUntraced(function* (pin: AgentToolPin, folder: string
     ),
   );
   if (received !== archive.length) return yield* Effect.fail("short");
-  const digest = yield* Effect.tryPromise(() => crypto.subtle.digest("SHA-256", archive));
   // Note that nothing of an archive whose digest is not the pin's is written anywhere.
-  if (Hex.encode(new Uint8Array(digest)) !== pin.SHA256) return yield* Effect.fail("checksum");
+  if ((yield* digestOf(archive)) !== pin.SHA256) return yield* Effect.fail("checksum");
   const parent = path.dirname(folder);
   yield* fileSystem.makeDirectory(parent, { recursive: true });
   yield* Effect.scoped(
@@ -125,8 +145,21 @@ const fetchTool = Effect.fnUntraced(function* (pin: AgentToolPin, folder: string
     yield* fileSystem.remove(folder, { recursive: true, force: true });
     return yield* Effect.fail("signature");
   }
+  if (!(yield* filesAsPinned(pin, folder))) {
+    yield* fileSystem.remove(folder, { recursive: true, force: true });
+    return yield* Effect.fail("files");
+  }
   yield* fileSystem.writeFileString(path.join(folder, TOOL_FETCH.MARK), `${pin.SHA256}\n`);
 });
+
+/**
+ * Where the pin's binary is kept under the state root once fetched, for a
+ * caller that names it before it is had, as a Mac's `smolvm` is named in
+ * every command of its sandbox's.
+ */
+export function keptToolBinary(stateRoot: string, pin: AgentToolPin): string {
+  return [stateRoot, TOOL_FETCH.FOLDER, pin.NAME, pin.VERSION, pin.BINARY].join("/");
+}
 
 /**
  * The pinned binary for this Mac's local agents: `bundled` where it is given
@@ -154,12 +187,14 @@ export const localAgentTool = Effect.fnUntraced(function* (
   const folder = path.join(stateRoot, TOOL_FETCH.FOLDER, pin.NAME, pin.VERSION);
   const binary = path.join(folder, pin.BINARY);
   const marked = (yield* exists(path.join(folder, TOOL_FETCH.MARK))) && (yield* exists(binary));
-  // Note that a kept build signed by a pinned team is checked again before it is answered, since
-  // anything of the developer's could have written it since: a binary changed since is fetched again.
+  // Note that a kept build signed by a pinned team, or one whose files the pin names digests for, is
+  // checked again before it is answered, since anything of the developer's could have written it
+  // since: a binary changed since is fetched again.
   const kept =
     marked &&
     (pin.TEAM === undefined ||
-      (yield* signedAsPinned(binary, pin.TEAM).pipe(Effect.orElseSucceed(() => false))));
+      (yield* signedAsPinned(binary, pin.TEAM).pipe(Effect.orElseSucceed(() => false)))) &&
+    (yield* filesAsPinned(pin, folder).pipe(Effect.orElseSucceed(() => false)));
   if (kept) return Option.some(binary);
   return yield* fetchTool(pin, folder).pipe(
     Effect.as(Option.some(binary)),

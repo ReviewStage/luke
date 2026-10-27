@@ -522,6 +522,17 @@ waits in our database for your Mac. To run Codex, the app downloads OpenAI's
 Codex from npm once, the release our sandboxes run, and keeps it in Luke's own
 folder on your Mac only once it matches the checksum Luke pins.
 
+Where your Mac is set to run its local agents in a sandbox, each agent runs
+instead in a virtual machine of its own (smolvm) on your Mac, which sees only
+that agent's folder. It runs on the plan or key you saved in Luke, never on
+the sign-in of Claude Code or Codex on your Mac, which the machine cannot
+reach, and it reaches GitHub with a short-lived token our service hands your
+Mac, as for a host below: the token stays on your Mac, outside the machine and
+every folder it can see, and the agent sees only a placeholder. To run them,
+the app downloads smolvm from its GitHub release once, keeps it in Luke's own
+folder on your Mac only once it matches the checksum Luke pins, and pulls the
+public sandbox image our hosts run.
+
 **A local agent on a host.** A host is your own Linux server that you add
 to Luke to run your agents, as This Mac does. It has no git login of yours, so
 for each agent on it that works in a repository, our service hands the host a

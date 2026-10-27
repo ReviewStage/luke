@@ -1,4 +1,9 @@
-import { CLAUDE_CODE_PIN, CODEX_PIN, SANDBOX_IMAGE } from "@luke/agent-runner/pins";
+import {
+  type AgentToolPin,
+  CLAUDE_CODE_PIN,
+  CODEX_PIN,
+  SANDBOX_IMAGE,
+} from "@luke/agent-runner/pins";
 import { Duration, Effect, Option, Schema, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { ChildProcess } from "effect/process";
@@ -9,6 +14,7 @@ import {
   type LocalAgentSandboxCommand,
   LocalAgentSandboxUnavailable,
 } from "../effect/seams.js";
+import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
 
 /**
  * smolvm-sandbox.ts -- a sandboxed device's VM per local agent, through the `smolvm` CLI (https://github.com/smol-machines/smolvm): made from Luke's sandbox image with the agent's folder mounted at the same path, the runner run in it, stopped once the runner ends, and deleted with the agent.
@@ -53,6 +59,15 @@ import {
  * the worktree's script runs, reads the same file through a credential
  * helper of its environment (`deviceGit`), never the token.
  *
+ * A host runs the `smolvm` its service's PATH finds; a Mac runs the pinned
+ * release it fetched and checked itself (`SmolvmSandboxOptions.smolvm`), and
+ * before it registers as sandboxed (`ready`) pulls the image once through a
+ * throwaway machine, which leaves smolvm's own seed of it behind, so every
+ * agent's VM made afterwards starts from a copy of that disk rather than
+ * pulling the image again. A Mac starts every `smolvm` command through its
+ * launcher (`through`), so the VM answers for its own privacy decisions
+ * rather than taking Luke's.
+ *
  * Nothing `smolvm` prints is kept but the last line of a failure to make or
  * start a machine, which names no secret: a credential is only ever a
  * reference to its file there.
@@ -72,6 +87,12 @@ const STOP_TIMEOUT = Duration.minutes(1);
 const SIGNAL_TIMEOUT = Duration.seconds(10);
 /** How much of a failure smolvm printed is kept. */
 const FAILURE_CHARACTERS = 300;
+
+/** The file under the device's credentials folder that names the image a throwaway machine last pulled, so a Mac pulls it once; a dot keeps it from naming an agent. */
+const IMAGE_SEEDED = ".image-seeded";
+
+/** The throwaway machine's command, which only has to boot for smolvm to keep the image's seed. */
+const SEED_COMMAND = ["true"] as const;
 
 /** The folders under the agent's own its VM's home and caches are kept in. */
 const VM_FOLDER = { HOME: "home", CACHE: "cache" } as const;
@@ -121,8 +142,10 @@ const CREDENTIAL_HELPER_KEY = "credential.https://github.com.helper";
 const AGENT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 
 interface SmolvmSandboxOptions {
-  /** The `smolvm` the device runs. */
-  readonly smolvm: string;
+  /** The `smolvm` the device runs: a program its PATH finds, as on a host, or the pinned release it fetches and checks under its state, as on a Mac. */
+  readonly smolvm: string | AgentToolPin;
+  /** The program every `smolvm` command is started through, given `smolvm` and its arguments, as a Mac's launcher is; none starts it directly. */
+  readonly through?: string | undefined;
   /** The device's own state, under which each agent's GitHub credential is kept, outside every folder a VM mounts. */
   readonly stateRoot: string;
   /** The folder of the runner's bundle, mounted read-only at the same path. */
@@ -182,6 +205,16 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
   readonly sandbox: LocalAgentSandbox;
 } {
   const user = `${options.user.uid}:${options.user.gid}`;
+  const pinned = typeof options.smolvm === "string" ? undefined : options.smolvm;
+  const program =
+    typeof options.smolvm === "string"
+      ? options.smolvm
+      : keptToolBinary(options.stateRoot, options.smolvm);
+  /** A `smolvm` command as the process it is started as: through the launcher where the device names one. */
+  const spawned = (args: readonly string[]) =>
+    options.through === undefined
+      ? { command: program, args }
+      : { command: options.through, args: [program, ...args] };
   const credentialsOf = (agentId: string) => {
     const folder = [options.stateRoot, CREDENTIALS_FOLDER, agentId].join("/");
     return {
@@ -195,7 +228,8 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
   const ran = (args: readonly string[], within: Duration.Input) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const handle = yield* ChildProcess.make(options.smolvm, [...args], {
+        const started = spawned(args);
+        const handle = yield* ChildProcess.make(started.command, [...started.args], {
           stdin: "ignore",
           stdout: "ignore",
         });
@@ -217,35 +251,35 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
   const exec = (command: LocalAgentSandboxCommand): LocalAgentCommand => {
     const folders = vmFolders(command.folder);
     const handed = Object.keys(command.env).filter((name) => !DEVICE_VARIABLES.has(name));
+    const started = spawned([
+      "machine",
+      "exec",
+      "--name",
+      machineOf(command.agentId),
+      "-i",
+      "--user",
+      user,
+      "-w",
+      command.cwd,
+      "-e",
+      `HOME=${folders.home}`,
+      "-e",
+      `XDG_CACHE_HOME=${folders.cache}`,
+      "-e",
+      `PNPM_HOME=${folders.pnpm}`,
+      "-e",
+      `NPM_CONFIG_PREFIX=${folders.npm}`,
+      ...handed.flatMap((name) => ["--secret-env", `${name}=${name}`]),
+      "--",
+      "sh",
+      "-c",
+      IN_VM_START,
+      "sh",
+      command.command,
+      ...command.args,
+    ]);
     return {
-      command: options.smolvm,
-      args: [
-        "machine",
-        "exec",
-        "--name",
-        machineOf(command.agentId),
-        "-i",
-        "--user",
-        user,
-        "-w",
-        command.cwd,
-        "-e",
-        `HOME=${folders.home}`,
-        "-e",
-        `XDG_CACHE_HOME=${folders.cache}`,
-        "-e",
-        `PNPM_HOME=${folders.pnpm}`,
-        "-e",
-        `NPM_CONFIG_PREFIX=${folders.npm}`,
-        ...handed.flatMap((name) => ["--secret-env", `${name}=${name}`]),
-        "--",
-        "sh",
-        "-c",
-        IN_VM_START,
-        "sh",
-        command.command,
-        ...command.args,
-      ],
+      ...started,
       // Note that smolvm reads each variable it hands in by name from its own environment, beside the device's own it runs under.
       env: command.env,
     };
@@ -308,8 +342,39 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
 
   const unavailable = (detail: string) => new LocalAgentSandboxUnavailable({ detail });
 
+  /**
+   * Whether smolvm keeps a seed of the image, pulled now where the device
+   * has no record of it: a throwaway machine of the very reference every
+   * agent's machine is made from, which smolvm deletes once its command
+   * exits, and whose pull it keeps beside its own state for every later
+   * machine of that reference. Recorded once it succeeds, so a Mac pulls the
+   * image once; a seed smolvm let go of since is pulled again by the next
+   * agent's first start, as without one.
+   */
+  const imageSeeded = Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const folder = [options.stateRoot, CREDENTIALS_FOLDER].join("/");
+    const record = [folder, IMAGE_SEEDED].join("/");
+    const recorded = yield* fileSystem.readFileString(record).pipe(Effect.orElseSucceed(() => ""));
+    if (recorded.trim() === SANDBOX_IMAGE) return true;
+    const pulled = yield* succeeded(
+      ["machine", "run", "--net", "--image", SANDBOX_IMAGE, "--", ...SEED_COMMAND],
+      START_TIMEOUT,
+    );
+    if (!pulled) return false;
+    yield* fileSystem.makeDirectory(folder, { recursive: true, mode: 0o700 });
+    yield* fileSystem.writeFileString(record, `${SANDBOX_IMAGE}\n`);
+    return true;
+  }).pipe(Effect.orElseSucceed(() => false));
+
   const sandbox: LocalAgentSandbox = {
     tools: { node: "node", claude: CLAUDE_CODE_PIN.LINK, codex: CODEX_PIN.LINK },
+
+    ready: Effect.gen(function* () {
+      if (pinned === undefined) return true;
+      const had = yield* localAgentTool(options.stateRoot, pinned, undefined);
+      return Option.isSome(had) && (yield* imageSeeded);
+    }),
 
     started: ({ agentId, folder, github }) =>
       Effect.gen(function* () {
