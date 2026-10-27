@@ -1567,7 +1567,6 @@ export const PlanBody = memo(function PlanBody({
                     task={task}
                     onSet={taskStanding.onSet}
                     devices={taskStanding.devices}
-                    readDevices={taskStanding.readDevices}
                   />
                 )}
                 {underTitle}

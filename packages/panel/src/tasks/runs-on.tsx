@@ -2,7 +2,16 @@ import { CODING_AGENT_MACHINE, macOnline } from "@luke/features/coding-agent-wir
 import { DEVICE_KIND, type DeviceKind } from "@luke/features/device-agent-wire";
 import type { MacOffer } from "@luke/features/models-wire";
 import type { TaskRunsOn, TaskRunsOnRequest } from "@luke/features/task-wire";
-import { CHIP_WIDTH, type MenuRow, POPOVER_ALIGN, useSecond } from "@luke/ui";
+import {
+  CHIP_LOOK,
+  CHIP_WIDTH,
+  Chip,
+  ChipName,
+  type MenuRow,
+  POPOVER_ALIGN,
+  Tooltip,
+  useSecond,
+} from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { Schema } from "effect";
 import { useState } from "react";
@@ -11,22 +20,22 @@ import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
 
 /**
- * runs-on.tsx -- where a task's coding agents run: the cloud, or one of the member's own devices, as New task's chip and the task's own control choose it.
+ * runs-on.tsx -- where a task's coding agents run: the cloud, or one of the member's own devices, chosen in New task's chip and shown read-only on the task.
  *
- * Where agents run is the task's (`task-wire.ts`'s `runsOn`), and it decides
- * where every agent started on it afterwards runs. Both controls drop the
- * same menu: Cloud first, then each device the member registered, as the
- * models answer lists them, by its name under the glyph of its kind, a Mac
- * running Luke or a host, each saying whether it is online, held against
- * the window's own clock. An offline device is listed but not picked, since
+ * Where agents run is the task's (`task-wire.ts`'s `runsOn`), it decides
+ * where every agent started on it runs, and it is set when the task is
+ * created and never changed. New task's chip drops a menu: Cloud first, then
+ * each device the member registered, as the models answer lists them, by its
+ * name under the glyph of its kind, a Mac running Luke or a host, each saying
+ * whether it is online, held against the window's own clock. An offline device is listed but not picked, since
  * the service refuses a task set to one that has not beat lately. New task's chip
  * starts on the member's last pick, kept in this window, and on Cloud where
  * that device is no longer listed or is offline, which the card then holds
  * until a pick, so a device coming back mid-compose never moves it; it wears the Experimental
  * tag; it stands only while the member has a device to pick. The task's
- * control stands with its status and priority, saying the device it runs on
- * and whether it is online, or that the device was removed, and its hint
- * says a change reaches only the agents started from then on. Both are
+ * chip stands with its status and priority, saying the device it runs on
+ * and whether it is online, or that the device was removed, with no menu, and
+ * its hint says it was set when the task was created. Both are
  * drawn only while the Local agents experiment is on, which their owners
  * ask.
  */
@@ -39,7 +48,7 @@ const RUNS_ON_WORDS = {
   OFFLINE: "Offline",
   REMOVED: "Removed device",
   NO_MATCH: "No devices match",
-  HINT: "A change applies to agents started from now on.",
+  LOCKED_HINT: "Set when the task was created.",
 } as const;
 
 /** The id the Cloud row is picked by, which no device's id is. */
@@ -76,11 +85,6 @@ function runsOnRows(devices: readonly MacOffer[], now: number): readonly MenuRow
       }),
     ),
   ];
-}
-
-/** What a picked row asks: the cloud, or the device it names. */
-function runsOnOf(id: string): TaskRunsOnRequest {
-  return id === CLOUD_ROW ? RUNS_ON_CLOUD : { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: id };
 }
 
 /**
@@ -158,42 +162,24 @@ function standingWords(runsOn: TaskRunsOn | undefined, now: number): string {
 }
 
 /**
- * The task's Runs on control, beside its status and priority: where its
- * agents run now, dropping the menu, a pick other than it handed to `onPick`.
+ * The task's Runs on chip, beside its status and priority: where its agents
+ * run, read-only, since it is set when the task is created. It drops no menu
+ * and takes no press, and its hover says so.
  */
-export function TaskRunsOnPicker({
-  runsOn,
-  devices,
-  onOpen,
-  onPick,
-}: {
-  runsOn: TaskRunsOn | undefined;
-  devices: readonly MacOffer[];
-  /** Reads the devices again as the menu opens, so one that came online since is pickable. */
-  onOpen?: (() => void) | undefined;
-  /** Where a pick is sent; without one the control only says. */
-  onPick: ((runsOn: TaskRunsOnRequest) => void) | undefined;
-}): React.JSX.Element {
+export function TaskRunsOnChip({ runsOn }: { runsOn: TaskRunsOn | undefined }): React.JSX.Element {
   const now = useSecond();
-  const value = runsOn === undefined ? CLOUD_ROW : runsOn.deviceId;
+  const words = standingWords(runsOn, now);
   return (
-    <Picker
-      label={RUNS_ON_WORDS.LABEL}
-      hint={RUNS_ON_WORDS.HINT}
-      value={value}
-      valueLabel={standingWords(runsOn, now)}
-      valueIcon={
-        runsOn === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph kind={runsOn.device?.kind} />
-      }
-      rows={runsOnRows(devices, now)}
-      noMatch={RUNS_ON_WORDS.NO_MATCH}
-      align={POPOVER_ALIGN.START}
-      width={CHIP_WIDTH.AUTO}
-      disabled={onPick === undefined}
-      onOpen={onOpen}
-      onPick={(id) => {
-        if (id !== value) onPick?.(runsOnOf(id));
-      }}
-    />
+    <Tooltip label={RUNS_ON_WORDS.LOCKED_HINT}>
+      <Chip
+        look={CHIP_LOOK.FIELD}
+        width={CHIP_WIDTH.AUTO}
+        aria-label={`${RUNS_ON_WORDS.LABEL}: ${words}`}
+        aria-disabled
+      >
+        {runsOn === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph kind={runsOn.device?.kind} />}
+        <ChipName>{words}</ChipName>
+      </Chip>
+    </Tooltip>
   );
 }

@@ -930,10 +930,10 @@ function PlanDocument({
   const unread = openedId === undefined ? false : reads.markedUnread(openedId);
   const readMark = useMemo(() => ({ unread, onMark: markRead }), [unread, markRead]);
   const workspaceName = home?.name ?? "";
-  const { macs: devices, readModels: readDevices } = agents;
+  const { macs: devices } = agents;
   const standing = useMemo(
-    () => ({ workspaceName, onSet: setStanding, devices, readDevices }),
-    [workspaceName, setStanding, devices, readDevices],
+    () => ({ workspaceName, onSet: setStanding, devices }),
+    [workspaceName, setStanding, devices],
   );
   const reveal = revealed?.taskId === openedId ? revealed?.reveal : undefined;
   const { onSectionRevealed } = tasks;

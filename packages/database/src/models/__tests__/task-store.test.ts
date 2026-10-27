@@ -40,6 +40,7 @@ import {
   readTaskPlan,
   readTaskWorkspace,
   savePlanText,
+  TASK_RUNS_IN_CLOUD,
   TaskAssigneeNotMember,
   updateTask,
 } from "../task-store.js";
@@ -451,6 +452,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           name: SHARED_TASK.name,
           repository: null,
           status: TASK_STATUS.TODO,
+          runsOn: TASK_RUNS_IN_CLOUD,
         };
 
         assert.deepEqual(yield* readTaskHeader(dean, taskId), Option.some(started));
@@ -469,6 +471,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           name: whole.task.name,
           repository: whole.task.repository,
           status: whole.task.status,
+          runsOn: TASK_RUNS_IN_CLOUD,
         });
       }),
   );
