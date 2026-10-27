@@ -157,6 +157,8 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_AGENT_ENROLL: "/api/device-agents/enroll",
   /** The account's hosts, as Settings lists them (GET). `host-wire.ts` declares the bodies. */
   HOSTS: "/api/hosts",
+  /** When the devices named last beat, read to keep a label's online state true while it is drawn (POST). */
+  DEVICE_PRESENCE: "/api/hosts/presence",
   /** One of the account's hosts removed, its secret refused at once (POST). */
   HOST_REMOVE: "/api/hosts/remove",
   /** An install token of the account's kept by its hash, to enroll its hosts (POST). */

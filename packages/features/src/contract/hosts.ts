@@ -12,6 +12,8 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
+  devicePresenceAnswerSchema,
+  devicePresenceRequestSchema,
   hostDoneAnswerSchema,
   hostIdRequestSchema,
   hostInstallTokenAnswerSchema,
@@ -24,10 +26,18 @@ import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 /** Every body here: an id or a hash, and room to spare. */
 const BODY_BYTES = 1_024;
 
+/** A presence read's body: up to `DEVICE_PRESENCE_MAX_IDS` ids at about forty bytes each, and room to spare. */
+const PRESENCE_BODY_BYTES = 4_096;
+
 export const hostsContract = {
   list: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.HOSTS }))
     .output(EffectSchema.flip(hostsAnswerSchema)),
+  presence: hostedProcedure
+    .meta(bodyCap(PRESENCE_BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_PRESENCE }))
+    .input(exactInput(devicePresenceRequestSchema))
+    .output(EffectSchema.flip(devicePresenceAnswerSchema)),
   remove: hostedProcedure
     .meta(bodyCap(BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.HOST_REMOVE }))

@@ -1,4 +1,9 @@
-import { CODING_AGENT_MACHINE, macOnline } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_MACHINE,
+  DEVICE_STANDING,
+  type DeviceStanding,
+  deviceStanding,
+} from "@luke/features/coding-agent-wire";
 import { DEVICE_KIND, type DeviceKind } from "@luke/features/device-agent-wire";
 import type { MacOffer } from "@luke/features/models-wire";
 import type { TaskRunsOn, TaskRunsOnRequest } from "@luke/features/task-wire";
@@ -14,6 +19,8 @@ import {
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { Schema } from "effect";
+import { useMemo } from "react";
+import { type PresenceBook, useDeviceBeat, useDevicePresence } from "../device-presence.js";
 import { ExperimentTag } from "../experiment-marks.js";
 import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
@@ -47,6 +54,7 @@ const RUNS_ON_WORDS = {
   CLOUD: "Cloud",
   ONLINE: "Online",
   OFFLINE: "Offline",
+  UNKNOWN: "Can't check status",
   REMOVED: "Removed device",
   NO_MATCH: "No devices match",
   LOCKED_HINT: "Set when the task was created.",
@@ -66,13 +74,32 @@ function DeviceGlyph({ kind }: { kind: DeviceKind | undefined }): React.JSX.Elem
   return kind === DEVICE_KIND.HOST ? <GLYPH.HOST /> : <GLYPH.DESKTOP />;
 }
 
-/** Whether a device offered is online at `now`; one a service before beats said nothing of is, as it listed only those. */
-function offerOnline(device: MacOffer, now: number): boolean {
-  return device.seenAt === undefined || macOnline(device.seenAt, now);
+/** Where a device offered stands at `now`; one a service before beats said nothing of is online, as it listed only those. */
+function offerStanding(device: MacOffer, book: PresenceBook, now: number): DeviceStanding {
+  if (device.seenAt === undefined) return DEVICE_STANDING.ONLINE;
+  return deviceStanding(device.seenAt, book.beats.get(device.deviceId), now, book.failed);
+}
+
+/** What a menu row says of a device standing as it does: online, or unknown, which is not offered as away, and an offline one muted, unpicked. */
+function standingRow(standing: DeviceStanding): Pick<MenuRow, "detail" | "disabled"> {
+  if (standing === DEVICE_STANDING.ONLINE) return { detail: RUNS_ON_WORDS.ONLINE };
+  return standing === DEVICE_STANDING.OFFLINE
+    ? { disabled: RUNS_ON_WORDS.OFFLINE }
+    : { detail: RUNS_ON_WORDS.UNKNOWN };
+}
+
+/** A device's name, then where it stands where it is not online. */
+function standingName(name: string, standing: DeviceStanding): string {
+  if (standing === DEVICE_STANDING.ONLINE) return name;
+  return `${name} · ${standing === DEVICE_STANDING.OFFLINE ? RUNS_ON_WORDS.OFFLINE : RUNS_ON_WORDS.UNKNOWN}`;
 }
 
 /** Cloud, then each device by name under its kind's glyph, an online one saying so and an offline one muted, unpicked. */
-function runsOnRows(devices: readonly MacOffer[], now: number): readonly MenuRow[] {
+function runsOnRows(
+  devices: readonly MacOffer[],
+  book: PresenceBook,
+  now: number,
+): readonly MenuRow[] {
   return [
     { id: CLOUD_ROW, label: RUNS_ON_WORDS.CLOUD, icon: <GLYPH.CLOUD /> },
     ...devices.map(
@@ -80,9 +107,7 @@ function runsOnRows(devices: readonly MacOffer[], now: number): readonly MenuRow
         id: device.deviceId,
         label: device.name,
         icon: <DeviceGlyph kind={device.kind} />,
-        ...(offerOnline(device, now)
-          ? { detail: RUNS_ON_WORDS.ONLINE }
-          : { disabled: RUNS_ON_WORDS.OFFLINE }),
+        ...standingRow(offerStanding(device, book, now)),
       }),
     ),
   ];
@@ -104,9 +129,9 @@ export function useNewTaskRunsOn(
   return [picked, (deviceId: string | undefined) => keep(deviceId ?? CLOUD_ROW)];
 }
 
-/** What New task's chip says of the device picked: its name while online, and that it is offline otherwise. */
-function offerStateWords(device: MacOffer, now: number): string {
-  return offerOnline(device, now) ? device.name : `${device.name} · ${RUNS_ON_WORDS.OFFLINE}`;
+/** What New task's chip says of the device picked: its name while online, and that it is offline, or cannot be checked, otherwise. */
+function offerStateWords(device: MacOffer, book: PresenceBook, now: number): string {
+  return standingName(device.name, offerStanding(device, book, now));
 }
 
 /** What a start sends of New task's pick: the device it names, or the cloud. */
@@ -129,14 +154,16 @@ export function NewTaskRunsOnChip({
   onChoose: (deviceId: string | undefined) => void;
 }): React.JSX.Element {
   const now = useSecond();
+  const ids = useMemo(() => devices.map((each) => each.deviceId), [devices]);
+  const book = useDevicePresence(ids);
   return (
     <span className="new-task-runs-on inline-flex min-w-0 items-center gap-item-gap">
       <Picker
         label={RUNS_ON_WORDS.LABEL}
         value={device?.deviceId ?? CLOUD_ROW}
-        valueLabel={device === undefined ? RUNS_ON_WORDS.CLOUD : offerStateWords(device, now)}
+        valueLabel={device === undefined ? RUNS_ON_WORDS.CLOUD : offerStateWords(device, book, now)}
         valueIcon={device === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph kind={device.kind} />}
-        rows={runsOnRows(devices, now)}
+        rows={runsOnRows(devices, book, now)}
         noMatch={RUNS_ON_WORDS.NO_MATCH}
         align={POPOVER_ALIGN.START}
         width={CHIP_WIDTH.AUTO}
@@ -149,11 +176,21 @@ export function NewTaskRunsOnChip({
 }
 
 /** What the task's control says of where it runs now: Cloud, the device and whether it is online, or a device since removed. */
-function standingWords(runsOn: TaskRunsOn | undefined, now: number): string {
+function standingWords(runsOn: TaskRunsOn | undefined, book: PresenceBook, now: number): string {
   if (runsOn === undefined) return RUNS_ON_WORDS.CLOUD;
   if (runsOn.device === undefined) return RUNS_ON_WORDS.REMOVED;
-  const online = macOnline(runsOn.device.seenAt, now);
-  return `${runsOn.device.name} · ${online ? RUNS_ON_WORDS.ONLINE : RUNS_ON_WORDS.OFFLINE}`;
+  const standing = deviceStanding(
+    runsOn.device.seenAt,
+    runsOn.deviceId === undefined ? undefined : book.beats.get(runsOn.deviceId),
+    now,
+    book.failed,
+  );
+  const words = {
+    [DEVICE_STANDING.ONLINE]: RUNS_ON_WORDS.ONLINE,
+    [DEVICE_STANDING.OFFLINE]: RUNS_ON_WORDS.OFFLINE,
+    [DEVICE_STANDING.UNKNOWN]: RUNS_ON_WORDS.UNKNOWN,
+  } as const;
+  return `${runsOn.device.name} · ${words[standing]}`;
 }
 
 /**
@@ -163,7 +200,8 @@ function standingWords(runsOn: TaskRunsOn | undefined, now: number): string {
  */
 export function TaskRunsOnChip({ runsOn }: { runsOn: TaskRunsOn | undefined }): React.JSX.Element {
   const now = useSecond();
-  const words = standingWords(runsOn, now);
+  const book = useDeviceBeat(runsOn?.deviceId);
+  const words = standingWords(runsOn, book, now);
   return (
     <Tooltip label={RUNS_ON_WORDS.LOCKED_HINT}>
       <Chip

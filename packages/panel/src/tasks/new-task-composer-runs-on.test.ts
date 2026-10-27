@@ -6,6 +6,7 @@ import { DEVICE_KIND } from "@luke/features/device-agent-wire";
 import { type MacOffer, MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskRunsOnRequest } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
@@ -53,7 +54,8 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
-  fakeActPort({});
+  // The service answers the shared presence read with no beat later than the lists carry.
+  fakeActPort({ [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }) });
 });
 
 afterEach(() => {

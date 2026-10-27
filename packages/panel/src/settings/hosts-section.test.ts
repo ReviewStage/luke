@@ -105,6 +105,7 @@ it.effect("a server that enrolls while Settings stays open is listed within a mi
     const hosts: Host[] = [];
     fakeActPort({
       [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
+      [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
     });
     const registry = AtomRegistry.make({
       initialValues: [
@@ -129,6 +130,9 @@ it.effect("a server that enrolls while Settings stays open is listed within a mi
     yield* TestClock.adjust("1 minute");
     yield* Effect.promise(settle);
     assert.ok(document.body.textContent?.includes("fra-03"), "the server that joined is listed");
+    // Note that the section lets go of the shared presence on the registry as it unmounts, so it unmounts before the registry goes.
+    act(() => root.unmount());
+    roots.splice(roots.indexOf(root), 1);
     registry.dispose();
   }),
 );

@@ -40,6 +40,7 @@ import {
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentReviewOptionsAnswerView,
   type CodingAgentWorkspaceListParams,
+  type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   type GitHubTokenAnswerView,
@@ -489,6 +490,13 @@ export class HostedCodingAgentClient {
   /** The account's hosts, as Settings lists them. */
   hosts(): Effect.Effect<HostsAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.hosts.list, undefined), ROW_REFUSALS);
+  }
+
+  /** When the devices named last beat, and nothing else of them. */
+  devicePresence(
+    ids: readonly string[],
+  ): Effect.Effect<DevicePresenceAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.hosts.presence, { ids }), ROW_REFUSALS);
   }
 
   /** One of the account's hosts removed, its secret refused at once. */

@@ -17,6 +17,7 @@
 
 import { runningTurnIds, settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import { accountExperimentOn } from "@luke/database/models/account-store";
+import { devicesVisibleTo } from "@luke/database/models/device-store";
 import {
   hostAgentConversations,
   hostsOf,
@@ -111,6 +112,16 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
           upgradeNeeded: row.version === null || !hostVersionMeets(row.version, HOST_VERSION.FLOOR),
         })),
         installScriptUrl: installScriptUrlOf(context.request),
+      };
+    }),
+    presence: hosts.presence.effect(function* ({ context, input }) {
+      yield* experimentOn(context.userId);
+      const named = yield* hostedStoreOrUnavailable(devicesVisibleTo(context.userId, input.ids));
+      return {
+        devices: [...named.values()].map((row) => ({
+          deviceId: row.id,
+          seenAt: row.lastSeenAt.getTime(),
+        })),
       };
     }),
     remove: hosts.remove.effect(function* ({ context, input }) {

@@ -57,6 +57,8 @@ import {
   type CodingAgentTranscriptOlderParams,
   type CodingAgentTranscriptPage,
   type CodingAgentWorkspaceListParams,
+  type DevicePresenceAnswerView,
+  type DevicePresenceParams,
   type HostDoneAnswerView,
   type HostInstallTokenAnswerView,
   type HostsAnswerView,
@@ -76,6 +78,7 @@ export interface AgentProceduresDependencies {
     codingAgentDefaultRead(): Effect.Effect<CodingAgentDefaultAnswer>;
     codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
     hostsList(): Effect.Effect<HostsAnswerView>;
+    hostsPresence(params: DevicePresenceParams): Effect.Effect<DevicePresenceAnswerView>;
     hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
     hostsKeepInstallToken(tokenHash: string): Effect.Effect<HostInstallTokenAnswerView>;
     hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
@@ -263,6 +266,14 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.hostsList();
+    }),
+    [AGENT_ACT_KIND.HOSTS_PRESENCE]: actPort[AGENT_ACT_KIND.HOSTS_PRESENCE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.hostsPresence(input);
     }),
     [AGENT_ACT_KIND.HOSTS_REMOVE]: actPort[AGENT_ACT_KIND.HOSTS_REMOVE].effect(function* ({
       input,

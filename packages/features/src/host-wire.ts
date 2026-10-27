@@ -153,6 +153,29 @@ export const hostsAnswerSchema = EffectSchema.Struct({
 
 export type HostsAnswer = typeof hostsAnswerSchema.Type;
 
+/** The most devices one presence read names, which the labels on one screen never reach. */
+export const DEVICE_PRESENCE_MAX_IDS = 64;
+
+/** The devices whose last beats are read (POST): the ids of those a window draws. */
+export const devicePresenceRequestSchema = EffectSchema.Struct({
+  ids: EffectSchema.Array(wireUuidSchema).check(EffectSchema.isMaxLength(DEVICE_PRESENCE_MAX_IDS)),
+});
+
+/**
+ * When each device named last beat, as epoch milliseconds a reader holds
+ * against its own clock (`macOnline`), and nothing else of it: a device that
+ * is gone, or has not registered, is left out, and so is one the reader may
+ * not see: its own, and one a teammate's agent or task names in a workspace
+ * the reader is in.
+ */
+export const devicePresenceAnswerSchema = EffectSchema.Struct({
+  devices: EffectSchema.Array(
+    EffectSchema.Struct({ deviceId: wireUuidSchema, seenAt: countedNumber }),
+  ),
+});
+
+export type DevicePresenceAnswer = typeof devicePresenceAnswerSchema.Type;
+
 /** A SHA-256 in lowercase hex. */
 const sha256Hex = EffectSchema.String.check(
   EffectSchema.makeFilter((value: string) => /^[0-9a-f]{64}$/u.test(value) || "a SHA-256 in hex"),

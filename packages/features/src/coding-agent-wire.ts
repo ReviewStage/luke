@@ -258,6 +258,33 @@ export function macOnline(seenAt: number, now: number): boolean {
   return seenAt >= now - MAC_PRESENCE.FRESH_MS;
 }
 
+export const DEVICE_STANDING = {
+  ONLINE: "online",
+  OFFLINE: "offline",
+  /** The last beat is too old to say it is there and the read that would say otherwise failed, so nothing is known. */
+  UNKNOWN: "unknown",
+} as const;
+
+export type DeviceStanding = (typeof DEVICE_STANDING)[keyof typeof DEVICE_STANDING];
+
+/**
+ * Where a device stands at `now`: online where it beat within `MAC_PRESENCE.FRESH_MS`, by the
+ * later of the beat a read of the list or the agent held (`seenAt`) and the
+ * beat the presence read last answered (`beatAt`, none before one answered);
+ * offline where it did not and the presence read stands; unknown where it did
+ * not and the presence read failed, since a window that cannot read must not
+ * say a device is away. All epoch milliseconds.
+ */
+export function deviceStanding(
+  seenAt: number,
+  beatAt: number | undefined,
+  now: number,
+  presenceFailed: boolean,
+): DeviceStanding {
+  if (macOnline(Math.max(seenAt, beatAt ?? 0), now)) return DEVICE_STANDING.ONLINE;
+  return presenceFailed ? DEVICE_STANDING.UNKNOWN : DEVICE_STANDING.OFFLINE;
+}
+
 /**
  * The whole of what an operator answers a heartbeat that found nothing for
  * its member: a turn whose reply is exactly this, and nothing more, is a
@@ -761,7 +788,12 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
    * service older than it.
    */
   mac: EffectSchema.optionalKey(
-    EffectSchema.Struct({ name: EffectSchema.String, seenAt: countedNumber }),
+    EffectSchema.Struct({
+      name: EffectSchema.String,
+      seenAt: countedNumber,
+      /** Which device it is, so a window keeps `seenAt` true by reading that device's beats; absent from a service older than it. */
+      deviceId: EffectSchema.optionalKey(wireUuidSchema),
+    }),
   ),
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,

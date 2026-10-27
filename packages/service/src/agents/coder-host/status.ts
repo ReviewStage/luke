@@ -292,7 +292,7 @@ function macOf(
   const device = macs.get(agent.deviceId);
   return device === undefined
     ? undefined
-    : { name: device.name, seenAt: device.lastSeenAt.getTime() };
+    : { name: device.name, seenAt: device.lastSeenAt.getTime(), deviceId: device.id };
 }
 
 /** The Macs a read's local agents are pinned to, by id, which `devicesNamed` reads. */
