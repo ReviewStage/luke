@@ -1,4 +1,5 @@
-import type { Channel, ChannelThread } from "@luke/features/channel-wire";
+import type { Channel } from "@luke/features/channel-wire";
+import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   ChoiceList,
   DIALOG_SIZE,
@@ -15,7 +16,7 @@ import { useRef, useState } from "react";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
 
 /**
- * move-thread-dialog.tsx -- Move to channel, from a post's ⋯ in a channel's stream: the workspace's other open channels, one picked, and the thread moved there.
+ * move-thread-dialog.tsx -- Move to channel, from an Inbox row's ⋯ with Channels on: the workspace's other open channels, one picked, and the thread moved there.
  *
  * The dialog lists every open channel but the one the thread stands in,
  * each by its name and its purpose, as the sidebar lists them, the first
@@ -23,47 +24,48 @@ import { useFormDialog } from "../desktop/use-form-dialog.js";
  * itself, at the foot of a `Dialog` that picks a channel rather than a
  * `ConfirmDialog`, which only asks yes or no. The question goes with its
  * thread and its surface (`useConfirmDialog`): a thread that leaves the
- * stream while it is asked, moved or gone by someone else's hand, takes the
+ * Inbox while it is asked, moved or gone by someone else's hand, takes the
  * question with it, so a stale card never moves it a second time; a move
- * landed puts it away and the stream reads its threads again, and a refused
+ * landed puts it away and the Inbox reads its channels again, and a refused
  * one keeps it up saying why under the list.
  */
 
-/** One thread's Move to channel as a stream holds it. */
+/** A thread as Move to channel names it: its id, its title, and the channel it stands in, none from a service that names none. */
+type MovedThread = Pick<InboxItem, "id" | "title" | "channelId">;
+
+/** One thread's Move to channel as the Inbox holds it. */
 interface MoveThreadDoor {
   /** The menu item's press, for the thread it moves; none where no other channel stands to move to. */
-  readonly ask: ((thread: ChannelThread) => void) | undefined;
+  readonly ask: ((thread: MovedThread) => void) | undefined;
   /** The dialog, which stands while the move is asked, running, or refused. */
   readonly dialog: React.JSX.Element;
 }
 
 /**
- * Move to channel for every post of one channel's stream: `channels` are
- * the workspace's open channels, `from` the one the stream shows, and
- * `onMoved` is told once a move lands.
+ * Move to channel for every row of the Inbox: `channels` are the
+ * workspace's open channels, each offered but the one the thread stands
+ * in, and `onMoved` is told once a move lands.
  */
 export function useMoveThreadDialog({
   channels,
-  from,
   threads,
   shown,
   onMove,
   onMoved,
 }: {
   channels: readonly Channel[];
-  from: string;
-  /** The threads the stream holds now, which a thread asked about must stay among for its question to stand. */
-  threads: readonly ChannelThread[];
-  /** Whether the stream is in sight, which the question goes with. */
+  /** The threads the Inbox holds now, which a thread asked about must stay among for its question to stand. */
+  threads: readonly MovedThread[];
+  /** Whether the Inbox is in sight, which the question goes with. */
   shown: boolean;
   /** Moves a thread into another open channel; what refused it, or none where it moved. */
   onMove: (threadId: string, channelId: string) => Promise<string | undefined>;
   onMoved: () => void;
 }): MoveThreadDoor {
-  const [moving, setMoving] = useState<ChannelThread | undefined>(undefined);
+  const [moving, setMoving] = useState<MovedThread | undefined>(undefined);
   const [picked, setPicked] = useState<string | undefined>(undefined);
   const first = useRef<HTMLButtonElement | null>(null);
-  const others = channels.filter((channel) => channel.id !== from);
+  const others = channels.filter((channel) => channel.id !== moving?.channelId);
   const chosen = others.find((channel) => channel.id === picked) ?? others[0];
   const confirm = useConfirmDialog(
     {
@@ -88,7 +90,7 @@ export function useMoveThreadDialog({
   const form = useFormDialog(confirm, chosen !== undefined);
   return {
     ask:
-      others.length === 0
+      channels.length < 2
         ? undefined
         : (thread) => {
             setMoving(thread);

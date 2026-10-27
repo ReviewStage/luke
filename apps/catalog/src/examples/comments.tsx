@@ -4,7 +4,6 @@ import {
   BUTTON_SIZE,
   COMMENT_ELEMENT,
   Comment,
-  CommentSkeleton,
   GAP,
   LAYOUT_ELEMENT,
   MoreButton,
@@ -78,11 +77,6 @@ function Comments(): React.JSX.Element {
           <Comment author={{ name: "Grace Hopper", id: "user-grace" }}>
             Pending review comment.
           </Comment>
-        </div>
-      </CatalogSection>
-      <CatalogSection id="comment-skeleton" title="While it is read">
-        <div className="catalog-frame">
-          <CommentSkeleton name="24%" lines={["88%", "56%"]} />
         </div>
       </CatalogSection>
     </>

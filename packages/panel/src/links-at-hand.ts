@@ -52,11 +52,9 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
  * names no page, and the Admin
  * place's section list, whose link names no view.
  *
- * With Channels on, the Inbox's place shows a channel's stream, so it is
- * the channel's link that names the step, and the thread open beside it,
- * while one is, is at hand before it and names the step in its place; a
- * thread closed since is no longer at hand, though the Inbox still holds
- * it chosen. A phone's list of channels has the Inbox's link.
+ * With Channels on, an Inbox narrowed to a channel has the channel's link
+ * in the Inbox's, and its chosen thread's link is at hand before it as an
+ * item's is, naming the step in its place where it stands alone.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -113,7 +111,7 @@ export interface WindowAt {
   readonly pageWorkspace?: PageWorkspace | undefined;
   /** Whether the room is narrow, showing one pane at a time. */
   readonly narrow?: boolean;
-  /** The channel the Inbox's place shows and the thread opened in it, with Channels on. */
+  /** The channel the Inbox is narrowed to, with Channels on. */
   readonly channel?: ShownChannel | undefined;
 }
 
@@ -167,24 +165,21 @@ function inboxItemPlace(chosen: InboxChoice): LinkPlace {
     : { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
 }
 
-/** The links of a channel's stream standing in the Inbox's place: the thread open beside it, while one is, and the channel; the Inbox's own while a phone lists its channels. */
+/** The links of an Inbox narrowed to a channel: its chosen thread's, a step of its own where it stands alone, and the channel's. */
 function channelLinks(
   tasks: TasksControl,
   shown: ShownChannel,
-  narrow: boolean,
+  alone: boolean,
   at: (place: LinkPlace, thing: LinkThing, step: boolean) => LinkAtHand,
 ): readonly LinkAtHand[] {
-  if (narrow && tasks.inboxView.listed)
-    return [at({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX, true)];
   const channel = channelPlace(shown.channel.id);
   const { chosen } = tasks.inboxView;
-  if (chosen === undefined || shown.threadId !== chosen.itemId) {
-    return [at(channel, LINK_THING.CHANNEL, true)];
+  if (chosen === undefined) return [at(channel, LINK_THING.CHANNEL, true)];
+  const item = inboxItemPlace(chosen);
+  if (alone && !tasks.inboxView.listed) {
+    return [at(item, LINK_THING.THREAD, true), at(channel, LINK_THING.CHANNEL, false)];
   }
-  return [
-    at(inboxItemPlace(chosen), LINK_THING.THREAD, true),
-    at(channel, LINK_THING.CHANNEL, false),
-  ];
+  return [at(item, LINK_THING.THREAD, false), at(channel, LINK_THING.CHANNEL, true)];
 }
 
 /** The links of the task drawn: its version chosen, its tabs', and its own, the most specific first. */
@@ -291,7 +286,8 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     return [at_({ kind: LINK_PLACE.PERSON, userId }, LINK_THING.PERSON, home)];
   }
   if (tasks.inboxView.open && at.channel !== undefined) {
-    return channelLinks(tasks, at.channel, at.narrow === true, (place, thing, step) =>
+    const alone = at.narrow === true || tasks.inboxView.single === true;
+    return channelLinks(tasks, at.channel, alone, (place, thing, step) =>
       step ? at_(place, thing) : within(place, thing),
     );
   }

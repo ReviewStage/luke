@@ -3,48 +3,37 @@ import {
   type ChannelCallFailure,
   type ChannelsView,
 } from "@luke/features/channel-view";
-import type { ArchivedChannel, Channel, ChannelThread } from "@luke/features/channel-wire";
+import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { STATUS_TONE } from "@luke/ui";
-import { Schema } from "effect";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { askAct, useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { TOAST_HOLD, type ToastNotice, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
-import { keptKey, useKept } from "../use-kept.js";
-import {
-  CHANNEL_SHOWN,
-  CHANNEL_VIEW,
-  type ChannelView,
-  channelShown,
-  generalChannel,
-} from "./channels-model.js";
+import { CHANNEL_SHOWN, channelShown, generalChannel } from "./channels-model.js";
 
 /**
- * use-channels.ts -- a workspace's channels as the window holds them, the channel chosen, one channel's threads page by page, and its archived channels, each read through the act port (STAG-547).
+ * use-channels.ts -- a workspace's channels as the window holds them, the channel the Inbox is narrowed to, and its archived channels, each read through the act port (STAG-547).
  *
  * The channels are held once per workspace for the whole window, so the
- * sidebar that lists them and the stream that heads one with its name and
- * purpose draw the same read, and a write made in either, a channel made,
- * edited, archived, or unarchived, or the reader's look, stands in both the
- * moment the service answers it with the workspace's channels as they then
- * stand. They are read as the first surface holding them is drawn, again as
- * the window comes back into view, and followed while any surface draws
- * them in view (`channels.follow`): each time the host tells that channels
- * moved, the channels are read again, and so is a channel's stream that
- * shows one of them, as far back as the older pages it loaded reached. Which channel the
- * window shows, if any, and whether a thread stands open beside it, is the
- * window's own while it runs; with none chosen, as at launch, the Inbox's
- * place shows the Inbox itself, the reader's to-do list across every
- * channel, and a channel's stream only once one is chosen.
- * Which view the stream shows, Mine by default, is kept on this Mac as the
- * Inbox's view choices are. A channel made answers its id, so whoever made
- * it opens it; archiving the channel the window shows moves the window to
- * #general and says so, where an archive by someone else leaves the stream
- * to say the channel is gone.
+ * sidebar that lists them under the Inbox and the Inbox that heads one with
+ * its name and purpose draw the same read, and a write made in either, a
+ * channel made, edited, archived, or unarchived, or the reader's look,
+ * stands in both the moment the service answers it with the workspace's
+ * channels as they then stand. They are read as the first surface holding
+ * them is drawn, again as the window comes back into view, and followed
+ * while any surface draws them in view (`channels.follow`): each time the
+ * host tells that channels moved, the channels are read again, and so are
+ * the archived ones. Which channel the Inbox is narrowed to, if any, is the
+ * window's own while it runs; with none chosen, as at launch, the Inbox
+ * lists every channel's items, the reader's to-do list across all of them,
+ * and one channel's only once one is chosen. A channel made answers its id,
+ * so whoever made it opens it; archiving the channel the window shows moves
+ * the window to #general and says so, where an archive by someone else
+ * leaves the Inbox to say the channel is gone.
  */
 
 /** A workspace's channels as last read: none until a read answers, and whether the last read failed. */
@@ -61,7 +50,7 @@ const held = new Map<string, HeldChannels>();
 /** Each workspace's channels read, by its id, a new map whenever a read is held, which a reader of every workspace's channels draws again by. */
 let heldChannels: ReadonlyMap<string, readonly Channel[]> = new Map();
 
-/** Each workspace's archived channels as last read, by its id, a new map whenever a read is held, so the window's links and history name an archived channel its stream shows. */
+/** Each workspace's archived channels as last read, by its id, a new map whenever a read is held, so the window's links and history name an archived channel the Inbox is narrowed to. */
 let heldArchived: ReadonlyMap<string, readonly ArchivedChannel[]> = new Map();
 
 /** The window's surfaces drawing any workspace's channels, told of each change. */
@@ -70,22 +59,21 @@ const listeners = new Set<() => void>();
 /** Each workspace whose channels the window follows, by its id: how many surfaces hold the follow, and its stop. */
 const follows = new Map<string, { readonly holders: number; readonly stop: () => void }>();
 
-/** The streams drawing a channel's threads, told which channels moved. */
+/** The surfaces reading the archived channels, told which channels moved. */
 const moveListeners = new Set<(moved: readonly string[]) => void>();
 
 /**
- * The channel the window shows and the thread opened in it, by its item's
- * id; no channel where the Inbox's place shows the Inbox, which opens no
- * thread. Note that the thread is named rather than flagged open, so it stands
- * only while the Inbox's choice is that item: the window's history, which
- * keeps the choice, takes the thread away with it on Back.
+ * The channel the Inbox is narrowed to, none where it lists every channel;
+ * and the item opened into it whose channel the place follows once its
+ * item is read (`useThreadChannel`), as a link names its item and not its
+ * channel.
  */
 interface ChannelPlace {
   readonly channelId: string | undefined;
-  readonly threadId: string | undefined;
+  readonly following: string | undefined;
 }
 
-let place: ChannelPlace = { channelId: undefined, threadId: undefined };
+let place: ChannelPlace = { channelId: undefined, following: undefined };
 
 /** The workspace the window lists, whose channels the place names; none until the window lists one. */
 let placeWorkspace: string | undefined;
@@ -102,12 +90,6 @@ const REFUSAL_WORDS = {
 
 /** What a channel's making answered: what refused it, or the channel made. */
 export type ChannelMade = { readonly refused: string } | { readonly channelId: string };
-
-/** Where the stream's view is kept on this Mac. */
-const KEPT_VIEW = keptKey<ChannelView>(
-  "luke.channelView",
-  Schema.fromJsonString(Schema.Literals(Object.values(CHANNEL_VIEW))),
-);
 
 /** The place as it stands, which a server's render reads as the window's does. */
 function placeNow(): ChannelPlace {
@@ -158,7 +140,7 @@ export function listChannelWorkspace(workspaceId: string): void {
   if (placeWorkspace === workspaceId) return;
   const was = placeWorkspace;
   placeWorkspace = workspaceId;
-  if (was !== undefined) moveTo({ channelId: undefined, threadId: undefined });
+  if (was !== undefined) moveTo({ channelId: undefined, following: undefined });
 }
 
 /** Reads a workspace's channels again and holds the answer. */
@@ -172,7 +154,7 @@ function readChannels(workspaceId: string): void {
 /**
  * Follows a workspace's channels for one more surface, opening the follow
  * for the first; the stop lets it go, closing it with the last. Each move
- * the host tells reads the channels again and tells every stream which
+ * the host tells reads the channels again and tells every listener which
  * channels moved; a follow the host ended says nothing, and the channels
  * read as they stand when a surface next shows them.
  */
@@ -205,44 +187,45 @@ function holdFollow(workspaceId: string): () => void {
 
 /** Moves the window's place, telling every surface drawing it. */
 function moveTo(next: ChannelPlace): void {
-  if (next.channelId === place.channelId && next.threadId === place.threadId) return;
+  if (next.channelId === place.channelId && next.following === place.following) return;
   place = next;
   told();
 }
 
-/** Shows a channel, the thread open in it kept only where it is the channel already shown; a door any surface or link opens a channel by. */
+/** Narrows the Inbox to a channel; a door any surface or link opens a channel by. */
 export function chooseChannel(channelId: string): void {
-  moveTo({ channelId, threadId: channelId === place.channelId ? place.threadId : undefined });
+  moveTo({ channelId, following: undefined });
 }
 
 /**
- * Opens a thread, in its channel where that is known and in the channel
- * shown otherwise, until its item is read (`useThreadChannel`); the one
- * door every surface opening a thread goes through (`onOpenItem`). Note
- * that with no channel known or shown the item opens in the Inbox, as any
- * item does there, so no thread is named.
+ * Opens an item while the Inbox is narrowed to a channel: into its own
+ * channel where that is known, and once its item is read otherwise
+ * (`useThreadChannel`), so the list it opens in holds it; the one door
+ * every surface opening an item goes through (`onOpenItem`). Note that an
+ * Inbox narrowed to none stays so, every channel's items being its own.
  */
 export function openChannelThread(itemId: string, channelId?: string): void {
-  const into = channelId ?? place.channelId;
-  if (into !== undefined) moveTo({ channelId: into, threadId: itemId });
+  if (place.channelId === undefined) return;
+  moveTo(
+    channelId === undefined
+      ? { channelId: place.channelId, following: itemId }
+      : { channelId, following: undefined },
+  );
 }
 
-/** Leaves any channel shown, so the Inbox's place shows the Inbox; the door its row and its command open it by. */
+/** Leaves any channel shown, so the Inbox lists every channel; the door its row and its command open it by. */
 export function leaveChannel(): void {
-  moveTo({ channelId: undefined, threadId: undefined });
+  moveTo({ channelId: undefined, following: undefined });
 }
 
-/** Stands the channel and the thread as a step of the window's history held them. */
-export function standChannelPlace(
-  channelId: string | undefined,
-  threadId: string | undefined,
-): void {
-  moveTo({ channelId: channelId ?? place.channelId, threadId });
+/** Stands the channel as a step of the window's history held it, none for the Inbox narrowed to none. */
+export function standChannelPlace(channelId: string | undefined): void {
+  moveTo({ channelId, following: undefined });
 }
 
 /**
  * Moves the window to #general where it showed the channel just archived,
- * before the channels that leave it out are held, so the stream never says
+ * before the channels that leave it out are held, so the Inbox never says
  * the channel it was just showing is gone; and says where it went.
  */
 function leaveArchived(
@@ -254,7 +237,7 @@ function leaveArchived(
   if (place.channelId !== channelId) return;
   const general = generalChannel(channels);
   const name = was?.find((channel) => channel.id === channelId)?.name;
-  moveTo({ channelId: general?.id, threadId: undefined });
+  moveTo({ channelId: general?.id, following: undefined });
   toast({
     words: `${name === undefined ? "The channel" : `#${name}`} is archived. You're in #general now.`,
     tone: STATUS_TONE.COMPLETE,
@@ -370,37 +353,29 @@ export function useChannels(workspaceId: string | undefined, shown: boolean): Ch
   }, [act, toast, workspaceId, standing, onRefresh]);
 }
 
-/** The channel the window shows, the thread opened in it, and the doors that move them. */
-export interface ChannelPlaceControl extends ChannelPlace {
+/** The channel the Inbox is narrowed to, and the door that narrows it to another. */
+export interface ChannelPlaceControl {
+  readonly channelId: string | undefined;
   readonly onChoose: (channelId: string) => void;
-  readonly onOpenThread: (itemId: string) => void;
-  readonly onCloseThread: () => void;
 }
 
-/** The channel the window shows and the thread opened in it, the window's own while it runs. */
+/** The channel the Inbox is narrowed to, the window's own while it runs. */
 export function useChannelPlace(): ChannelPlaceControl {
   const standing = useSyncExternalStore(subscribe, placeNow, placeNow);
-  return useMemo(
-    () => ({
-      ...standing,
-      onChoose: chooseChannel,
-      onOpenThread: (itemId) => openChannelThread(itemId),
-      onCloseThread: () => moveTo({ ...place, threadId: undefined }),
-    }),
-    [standing],
-  );
+  const { channelId } = standing;
+  return useMemo(() => ({ channelId, onChoose: chooseChannel }), [channelId]);
 }
 
-/** Whether the Inbox's place shows a channel's stream rather than the Inbox: Channels on, and a channel chosen. */
-export function useChannelStreaming(): boolean {
+/** Whether the Inbox is narrowed to a channel: Channels on, and a channel chosen. */
+export function useInboxNarrowed(): boolean {
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const { channelId } = useSyncExternalStore(subscribe, placeNow, placeNow);
   return channelsOn && channelId !== undefined;
 }
 
 /**
- * Moves the stream to the channel the open thread lives in once its item
- * is read, as for a thread opened by a link, which names its item and
+ * Narrows the Inbox to the channel an item opened into it lives in once
+ * the item is read, as for one opened by a link, which names its item and
  * not its channel; nothing for any other item, or one read from a service
  * that names no channel.
  */
@@ -413,11 +388,11 @@ export function useThreadChannel(
   const misplaced =
     id !== undefined &&
     channelId !== undefined &&
-    standing.threadId === id &&
+    standing.following === id &&
     standing.channelId !== channelId;
   useEffect(() => {
-    if (misplaced) moveTo({ channelId, threadId: id });
-  }, [misplaced, channelId, id]);
+    if (misplaced) moveTo({ channelId, following: undefined });
+  }, [misplaced, channelId]);
 }
 
 /** Every workspace's channels the window holds, by the workspace's id, which it reads nothing to learn. */
@@ -444,24 +419,23 @@ export function useHeldChannel(
   );
 }
 
-/** What the Inbox's place shows with Channels on: the channel its stream shows, open or archived, and the thread opened in it, by its item's id. */
+/** The channel the Inbox is narrowed to with Channels on, open or archived. */
 export interface ShownChannel {
   readonly channel: Pick<Channel, "id" | "name">;
-  readonly threadId: string | undefined;
 }
 
 /**
- * The channel a workspace's stream shows and the thread opened in it, as
- * the window holds its channels and its archived ones, which it reads
- * nothing to learn: an archived channel is named once the stream that
- * shows it has read the archived channels. None with Channels off, before
- * the channels are read, or where the workspace holds none.
+ * The channel a workspace's Inbox is narrowed to, as the window holds its
+ * channels and its archived ones, which it reads nothing to learn: an
+ * archived channel is named once the Inbox that shows it has read the
+ * archived channels. None with Channels off, before the channels are
+ * read, or where the workspace holds none.
  */
 export function useShownChannel(workspaceId: string | undefined): ShownChannel | undefined {
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const { channels } = useChannels(channelsOn ? workspaceId : undefined, false);
   const archived = useSyncExternalStore(subscribe, heldArchivedNow, heldArchivedNow);
-  const { channelId, threadId } = useChannelPlace();
+  const { channelId } = useChannelPlace();
   const shown = channelShown(
     channels,
     channelId,
@@ -471,155 +445,7 @@ export function useShownChannel(workspaceId: string | undefined): ShownChannel |
     shown.kind === CHANNEL_SHOWN.CHANNEL || shown.kind === CHANNEL_SHOWN.ARCHIVED
       ? shown.channel
       : undefined;
-  return useMemo(
-    () => (channel === undefined ? undefined : { channel, threadId }),
-    [channel, threadId],
-  );
-}
-
-/** The stream's view, Mine until first chosen, kept on this Mac. */
-export function useChannelView(): readonly [ChannelView, (view: ChannelView) => void] {
-  const [view, onView] = useKept(KEPT_VIEW, CHANNEL_VIEW.MINE);
-  return [view, onView];
-}
-
-/** One channel's threads as last read, the least recently active first, the doors that read them again and read an older page. */
-export interface ChannelThreadsControl {
-  /** The threads, none until first read. */
-  readonly threads: readonly ChannelThread[] | undefined;
-  /** Why the last read failed, none where it answered. */
-  readonly failure: ChannelCallFailure | undefined;
-  /** Whether an older page stands to be read. */
-  readonly hasOlder: boolean;
-  /** Reads the latest page again, and the older pages read as far back as they reached. */
-  readonly onRefresh: () => void;
-  /** Reads the next older page, where one stands. */
-  readonly onOlder: () => void;
-}
-
-/** One channel's threads as read: the older pages, the latest page, and the thread to read the next older page before. */
-interface ChannelThreadsRead {
-  readonly channelId: string;
-  /** The threads the older pages carried, the least recently active first. */
-  readonly earlier: readonly ChannelThread[];
-  /** The threads the latest page carried, none until it is first read. */
-  readonly latest: readonly ChannelThread[] | undefined;
-  readonly older: string | undefined;
-  readonly failure: ChannelCallFailure | undefined;
-}
-
-/** Two threads in the order a channel draws them, the least recently active first, its id breaking a tie, as the service pages them. */
-function activeOrder(a: ChannelThread, b: ChannelThread): number {
-  return a.updatedAt - b.updatedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-}
-
-/** The older pages and the latest as one stream, each thread once as the latest read it, the least recently active first. */
-function threadsOf(read: ChannelThreadsRead): readonly ChannelThread[] | undefined {
-  if (read.latest === undefined) return undefined;
-  const latest = new Set(read.latest.map((thread) => thread.id));
-  return [...read.earlier.filter((thread) => !latest.has(thread.id)), ...read.latest].toSorted(
-    activeOrder,
-  );
-}
-
-/**
- * A channel's threads, read as it opens, again on `onRefresh` and whenever
- * the follow says the channel moved, and an older page on `onOlder`; a read
- * for a channel left since is let go.
- */
-export function useChannelThreads(channelId: string | undefined): ChannelThreadsControl {
-  const { act } = useAct();
-  const [read, setRead] = useState<ChannelThreadsRead>();
-  // Note that a read landing after another channel was opened is let go, so it never stands over the newer channel's.
-  const asking = useRef(channelId);
-  asking.current = channelId;
-  /** Folds an answer into the read of `channelId`, a failure keeping what was read. */
-  const fold = useCallback(
-    (asked: string, change: (was: ChannelThreadsRead) => ChannelThreadsRead) =>
-      setRead((was) => {
-        if (asking.current !== asked) return was;
-        const standing =
-          was?.channelId === asked
-            ? was
-            : {
-                channelId: asked,
-                earlier: [],
-                latest: undefined,
-                older: undefined,
-                failure: undefined,
-              };
-        return change(standing);
-      }),
-    [],
-  );
-  // The oldest thread the stream's older pages hold, which a refresh reads back past.
-  const held = useRef<ChannelThread | undefined>(undefined);
-  held.current = read !== undefined && read.channelId === channelId ? read.earlier[0] : undefined;
-  const onRefresh = useCallback(() => {
-    if (channelId === undefined) return;
-    const oldest = held.current;
-    /** Whether the older pages read reach back to where the oldest held thread stood. */
-    const reached = (earlier: readonly ChannelThread[]) => {
-      const first = earlier[0];
-      return oldest === undefined || (first !== undefined && activeOrder(first, oldest) <= 0);
-    };
-    const failed = (failure: ChannelCallFailure) => fold(channelId, (was) => ({ ...was, failure }));
-    // Note that the older pages held are read again too, back past where the oldest stood rather than by count, so a thread moved out of one leaves the stream and one posted since drops none off its end.
-    const reread = async () => {
-      const latest = await act(ACT_KIND.CHANNELS_THREADS, { channelId });
-      if ("failure" in latest) return failed(latest.failure);
-      let earlier: readonly ChannelThread[] = [];
-      let older = latest.older;
-      while (older !== undefined && !reached(earlier)) {
-        const page = await act(ACT_KIND.CHANNELS_THREADS, { channelId, before: older });
-        if ("failure" in page) return failed(page.failure);
-        earlier = [...page.threads, ...earlier];
-        older = page.older;
-      }
-      fold(channelId, () => ({
-        channelId,
-        earlier,
-        latest: latest.threads,
-        older,
-        failure: undefined,
-      }));
-    };
-    reread().catch(() => failed(CHANNEL_CALL_FAILURE.UNANSWERED));
-  }, [act, channelId, fold]);
-  const older = read?.channelId === channelId ? read?.older : undefined;
-  const onOlder = useCallback(() => {
-    if (channelId === undefined || older === undefined) return;
-    act(ACT_KIND.CHANNELS_THREADS, { channelId, before: older }).then(
-      (view) =>
-        fold(channelId, (was) =>
-          "failure" in view
-            ? { ...was, failure: view.failure }
-            : was.older !== older
-              ? was
-              : { ...was, earlier: [...view.threads, ...was.earlier], older: view.older },
-        ),
-      () => fold(channelId, (was) => ({ ...was, failure: CHANNEL_CALL_FAILURE.UNANSWERED })),
-    );
-  }, [act, channelId, older, fold]);
-  useEffect(() => onRefresh(), [onRefresh]);
-  useEffect(() => {
-    if (channelId === undefined) return undefined;
-    const listener = (moved: readonly string[]) => {
-      if (moved.includes(channelId)) onRefresh();
-    };
-    moveListeners.add(listener);
-    return () => {
-      moveListeners.delete(listener);
-    };
-  }, [channelId, onRefresh]);
-  const current = read?.channelId === channelId ? read : undefined;
-  return {
-    threads: current === undefined ? undefined : threadsOf(current),
-    failure: current?.failure,
-    hasOlder: older !== undefined,
-    onRefresh,
-    onOlder,
-  };
+  return useMemo(() => (channel === undefined ? undefined : { channel }), [channel]);
 }
 
 /** A workspace's archived channels as last read, the latest archived first, and the door that reads them again. */
@@ -636,7 +462,7 @@ export interface ArchivedChannelsControl {
  * `onRefresh`, and whenever the follow says any channel moved, since an
  * archive or an unarchive moves one. Note that they are held for the
  * window, a failed read keeping what was held, as the open channels are,
- * so a stream showing an archived channel and the window's links and
+ * so an Inbox narrowed to an archived channel and the window's links and
  * history naming it (`useShownChannel`) read the same list.
  */
 export function useArchivedChannels(workspaceId: string | undefined): ArchivedChannelsControl {

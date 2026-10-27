@@ -29,8 +29,8 @@ import type { TasksControl } from "./tasks/use-tasks-tab.js";
  * (`window-title.ts`), and a task's step by the task, with the tabs its
  * column and side panel showed under it, "Fix token refresh · Code". An
  * Inbox item's step names the task the item is of. With Channels on, the
- * Inbox's step is named by the channel its stream shows, "#app", and by the
- * task of the thread open in it, where one is. A Settings page is
+ * Inbox's step is named by the channel it is narrowed to, "#app", and by the
+ * task of its item chosen, where one is. A Settings page is
  * named by its page alone.
  *
  * A step listed later is named again as what it names stands now
@@ -47,9 +47,8 @@ import type { TasksControl } from "./tasks/use-tasks-tab.js";
 /** What a version history's step says under its task's name. */
 const VERSION_HISTORY_WORDS = "Version history";
 
-/** What the Inbox's step is called, and what it is called while Channels shows channels in its place and no channel names it. */
+/** What the Inbox's step is called. */
 const INBOX_WORDS = "Inbox";
-const CHANNELS_WORDS = "Channels";
 
 /** What a Page tab is called where the window does not read its page's title. */
 const PAGE_WORDS = "Page";
@@ -133,12 +132,11 @@ function taskName(tasks: StepNameTasks, taskId: string | undefined): string | un
   return tasks.tasks.find((task) => task.id === taskId)?.name;
 }
 
-/** What the step the window stands on is called, in a room that is `narrow` or not, with a channel's stream in the Inbox's place or not; none while nothing names it, as a task not yet listed. */
+/** What the step the window stands on is called, in a room that is `narrow` or not; none while nothing names it, as a task not yet listed. */
 export function stepTitle(
   tab: PanelTab,
   tasks: StepTitleTasks,
   narrow = false,
-  streaming = false,
 ): StepTitle | undefined {
   if (tab === PANEL_TAB.SETTINGS) return { label: "Settings" };
   if (tasks.inboxView.open) {
@@ -146,7 +144,7 @@ export function stepTitle(
     const single = narrow || tasks.inboxView.single === true;
     const chosen = single && tasks.inboxView.listed ? undefined : tasks.inboxView.chosen;
     const holder = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
-    return { label: streaming ? CHANNELS_WORDS : INBOX_WORDS, detail: taskName(tasks, holder) };
+    return { label: INBOX_WORDS, detail: taskName(tasks, holder) };
   }
   if (tasks.agentView.agentId !== undefined) return { label: "Agent" };
   if (tasks.personView.userId !== undefined) {
@@ -199,7 +197,7 @@ export type NamedStep =
   | {
       readonly kind: typeof NAMED_STEP.INBOX;
       readonly taskId: string | undefined;
-      /** The channel the stream showed, with Channels on. */
+      /** The channel the Inbox was narrowed to, with Channels on. */
       readonly channelId?: string | undefined;
     }
   | { readonly kind: typeof NAMED_STEP.PERSON; readonly userId: string };

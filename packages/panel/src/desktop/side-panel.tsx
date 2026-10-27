@@ -2410,7 +2410,7 @@ export function SidePanel({
   plan?: React.ReactNode;
   /** The task whose plan that is, whose name and status its Plan tab wears; none beside anything but a task's page. */
   task?: PlanStanding | undefined;
-  /** The task's Inbox, which its Inbox tab shows, its board, whose items waiting on the developer the tab counts and its card says, and whether a card holds a draft, which the tab marks; beside the window's Inbox, the channel's thread open beside its stream, with no board; none elsewhere. */
+  /** The task's Inbox, which its Inbox tab shows, its board, whose items waiting on the developer the tab counts and its card says, and whether a card holds a draft, which the tab marks; none elsewhere. */
   inbox?:
     | {
         readonly body: React.ReactNode;

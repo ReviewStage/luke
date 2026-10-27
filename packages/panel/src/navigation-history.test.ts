@@ -1186,7 +1186,7 @@ async function channelsRead(workspaceId: string): Promise<() => ChannelPlaceCont
   return () => seen ?? assert.fail("the channel place is read");
 }
 
-test("with Channels on, a channel chosen and a thread opened in it are each a step, named and linked by the channel, which Back goes back through, closing the thread", async () => {
+test("with Channels on, each channel chosen is a step, named and linked by the channel, the first item chosen in it filling in its step as the Inbox's does, and Back goes back through them", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   const workspace = {
     id: "workspace-acme",
@@ -1235,19 +1235,10 @@ test("with Channels on, a channel chosen and a thread opened in it are each a st
   act(() => openChannelThread(item.itemId, app.id));
   window.stand(onInbox(item));
 
-  assert.deepEqual(window.addresses(), [
-    `/acme/channel/${general.id}`,
-    `/acme/channel/${app.id}`,
-    `/acme/plan/${TASK_ID}/inbox/item-1`,
-  ]);
+  assert.deepEqual(window.addresses(), [`/acme/channel/${general.id}`, `/acme/channel/${app.id}`]);
   assert.deepEqual(
     window.history().steps.back.map((step) => step.title?.label),
-    ["#app", "#general"],
-  );
-  act(() => window.history().onBack());
-  assert.deepEqual(
-    { channelId: place().channelId, threadId: place().threadId },
-    { channelId: app.id, threadId: undefined },
+    ["#general"],
   );
   act(() => window.history().onBack());
   assert.equal(place().channelId, general.id);
@@ -1294,7 +1285,7 @@ test("with Channels on, a channel chosen from the Inbox is a step of its own, wh
   handState({});
 });
 
-test("with Channels on, an archived channel shown, once its stream read the archived channels, is a step named and linked by it", async () => {
+test("with Channels on, an archived channel shown, once the Inbox read the archived channels, is a step named and linked by it", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   const workspace = {
     id: "workspace-acme",
@@ -1319,7 +1310,7 @@ test("with Channels on, an archived channel shown, once its stream read the arch
   });
   listChannelWorkspace(workspace.id);
   await channelsRead(workspace.id);
-  // Note that the stream showing an archived channel reads the archived channels, as the Inbox does.
+  // Note that the Inbox narrowed to an archived channel reads the archived channels.
   const ArchivedReader = () => {
     useArchivedChannels(workspace.id);
     return null;

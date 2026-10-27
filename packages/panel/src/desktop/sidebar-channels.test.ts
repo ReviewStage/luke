@@ -19,11 +19,12 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 /**
- * sidebar-channels.test.ts -- the sidebar's channels: a row posted in since
- * the reader looked stands in the unread weight, and a section's Browse
- * archived channels lists that section's archived channels, each opened
- * again by its Unarchive, or opened to read by a press; and Edit asks for a
- * channel's name and purpose, #general's name locked, sending what changed.
+ * sidebar-channels.test.ts -- the sidebar's channels under the Inbox: a row
+ * posted in since the reader looked stands in the unread weight, and Add
+ * channel's Browse archived channels lists the archived standing channels,
+ * each opened again by its Unarchive, or opened by a press; and Edit asks
+ * for a channel's name and purpose, #general's name locked, sending what
+ * changed.
  *
  * The service is a script at the act boundary; synthetic channels throughout.
  */
@@ -74,7 +75,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The sidebar's sections over `channels`, each channel opened recorded in `opened`. */
+/** The sidebar's channels over `channels`, each channel opened recorded in `opened`. */
 function mount(channels: readonly Channel[], opened: string[]): HTMLElement {
   const unasked = () => Promise.resolve(undefined);
   const control: ChannelsControl = {
@@ -143,15 +144,15 @@ test("a channel posted in since the reader looked stands in the unread weight, o
   assert.deepEqual(unread, ["app"]);
 });
 
-test("Browse archived channels lists the section's archived channels, Unarchive opens one again, and a press opens one to read", async () => {
+test("Browse archived channels lists the archived standing channels, Unarchive opens one again, and a press opens one", async () => {
   const opened: string[] = [];
-  const sidebar = mount([channel("c-general", "general")], opened);
-  const channels =
-    sidebar.querySelector('nav[aria-label="Channels"]') ?? assert.fail("Channels stands");
+  mount([channel("c-general", "general")], opened);
+  act(() => button("Add channel").click());
   act(() =>
     (
-      channels.querySelector<HTMLButtonElement>('button[aria-label="Browse archived channels"]') ??
-      assert.fail("the section offers its archived channels")
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (item) => item.textContent === "Browse archived channels",
+      ) ?? assert.fail("Add channel offers the archived channels")
     ).click(),
   );
   await settle();
@@ -160,7 +161,7 @@ test("Browse archived channels lists the section's archived channels, Unarchive 
   assert.doesNotMatch(
     dialog.textContent ?? "",
     /#launch/u,
-    "a project's channel is the Projects section's",
+    "a project's channel is listed with the archived project channels",
   );
 
   act(() => button("Unarchive").click());

@@ -4,23 +4,28 @@ import {
   ComposeIcon,
   GearIcon,
   IconButton,
+  InboxIcon,
   NAV_CURRENT,
   NavItem,
   SearchIcon,
   SidebarAccountRow,
+  SidebarFilters,
   SidebarFoot,
   SidebarIdentity,
   SidebarPlaces,
   SidebarRule,
+  STATUS_TONE,
   WingFace,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * sidebar-parts.tsx -- the parts every surface drawing the app's sidebar
  * shares: Luke's head, and the same head naming the surface it stands on;
- * the places over their rule; and the foot's account row.
+ * the places over their rule; a place and the rows that narrow it; and the
+ * foot's account row.
  */
 
 function SidebarParts(): React.JSX.Element {
@@ -45,6 +50,30 @@ function SidebarParts(): React.JSX.Element {
             </NavItem>
           </SidebarPlaces>
           <SidebarRule />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="sidebar-filters" title="A place and the rows that narrow it">
+        <div className="catalog-narrow">
+          <SidebarPlaces label="Places">
+            <NavItem
+              icon={<InboxIcon />}
+              count={{ value: 3, noun: "need you", tone: STATUS_TONE.ATTENTION }}
+            >
+              Inbox
+            </NavItem>
+            <SidebarFilters label="Channels">
+              <NavItem icon={<GLYPH.CHANNEL />} current={NAV_CURRENT.PAGE} unread>
+                general
+              </NavItem>
+              <NavItem
+                icon={<GLYPH.CHANNEL />}
+                count={{ value: 1, noun: "needs you", tone: STATUS_TONE.ATTENTION }}
+              >
+                infra
+              </NavItem>
+              <NavItem icon={<GLYPH.ADD />}>Add channel</NavItem>
+            </SidebarFilters>
+          </SidebarPlaces>
         </div>
       </CatalogSection>
       <CatalogSection id="sidebar-foot" title="Foot">

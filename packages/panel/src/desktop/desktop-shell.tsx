@@ -44,7 +44,6 @@ import { SignInGate } from "../sign-in-gate.js";
 import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
-import { useChannelPlace, useChannelStreaming } from "../tasks/use-channels.js";
 import { useAgentLook, useTaskLooks } from "../tasks/use-task-looks.js";
 import {
   AUTOMATIONS_PAGE,
@@ -576,19 +575,18 @@ function usePlaceCommands(
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever task its item is
- * from, which is Channels while a channel's stream stands in its place; the Automations page in the listed workspace; the task on screen in its own workspace, or alone while that is not
+ * from or channel it is narrowed to; the Automations page in the listed workspace; the task on screen in its own workspace, or alone while that is not
  * read; else the listed workspace.
  */
 function titleSubject(
   tab: PanelTab,
   tasks: TasksControl,
   shownTask: Task | undefined,
-  streaming: boolean,
 ): Parameters<typeof useWindowTitle>[0] {
   const { signedIn } = tasks;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
   if (tasks.inboxView.open) {
-    return { signedIn, subject: streaming ? "Channels" : "Inbox", workspace: tasks.workspace };
+    return { signedIn, subject: "Inbox", workspace: tasks.workspace };
   }
   if (tasks.agentView.agentId !== undefined) {
     return { signedIn, subject: "Agent", workspace: tasks.workspace };
@@ -712,10 +710,7 @@ export function DesktopShell({
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
       : undefined;
-  // Note that with a channel chosen the Inbox's place is that channel's stream.
-  const streaming = useChannelStreaming();
-  const channelPlace = useChannelPlace();
-  useWindowTitle(titleSubject(tab, tasks, shownTask, streaming));
+  useWindowTitle(titleSubject(tab, tasks, shownTask));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen,
   // and what its agents did with it, which its row in the list names.
   const looks = useTaskLooks(
@@ -863,11 +858,7 @@ export function DesktopShell({
   const pagePerson = tasks.personView.userId;
   const automationsOpen = tasks.automationsView.open;
   const boardOpen = tasks.boardView.open;
-  // Note that over a channel's stream the Inbox's chosen item stands only while its thread is open, so a bare stream has no panel to toggle, though a panel left open beside it keeps its way shut.
-  const inboxChosen = tasks.inboxView.chosen;
-  const inboxItemShown =
-    inboxChosen !== undefined &&
-    (!streaming || channelPlace.threadId === inboxChosen.itemId || tasks.sidePanel.open);
+  const inboxItemShown = tasks.inboxView.chosen !== undefined;
   // The Admin place is an admin's alone; while the account's access is still read it stands as it does while its chunk loads.
   const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
   // A phone's task is headed by a row of its own, whose ⋯ stands for the panel's toggle (`task-pane-switcher.tsx`).
@@ -889,11 +880,7 @@ export function DesktopShell({
     />
   );
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
-  const barShown = mobileBarShown(
-    room,
-    tasks,
-    streaming ? { threadId: channelPlace.threadId } : undefined,
-  );
+  const barShown = mobileBarShown(room, tasks);
   return (
     <div
       ref={shell}
