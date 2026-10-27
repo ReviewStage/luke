@@ -227,6 +227,10 @@ export const LOCAL_AGENT_REFUSAL = {
   CODEX: "codex",
   /** The model runs on no native harness here, so no runner would launch on the Mac. */
   NO_HARNESS: "no-harness",
+  /** The device is still fetching what its VMs run on, the first time (`DEVICE_SETUP.PREPARING`), so it takes no agent yet. */
+  PREPARING: "preparing",
+  /** The device could not fetch what its VMs run on (`DEVICE_SETUP.FAILED`), so it takes no agent until it tries again. */
+  SETUP_FAILED: "setup-failed",
   /** The device is another member's, and only its owner starts agents on it; the refusal carries the device and its owner (`refusedDeviceSchema`) where the service named them. */
   NOT_OWNER: "not-owner",
 } as const;

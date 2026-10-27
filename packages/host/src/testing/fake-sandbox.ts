@@ -1,5 +1,5 @@
 /**
- * fake-sandbox.ts -- a local agent's VM as a suite stands it in for smolvm (`LocalAgentSandbox`): always ready, every VM made and woken at once, each command in a VM run as the program `VM_EXEC` with the command after it, and what was handed to it written down.
+ * fake-sandbox.ts -- a local agent's VM as a suite stands it in for smolvm (`LocalAgentSandbox`): ready as the suite says, every VM made and woken at once, each command in a VM run as the program `VM_EXEC` with the command after it, and what was handed to it written down.
  */
 
 import { Effect } from "effect";
@@ -22,13 +22,13 @@ export interface FakeSandbox {
   readonly deleted: string[];
 }
 
-/** A sandbox whose VMs always start, ready where `ready` says. */
-export function fakeSandbox(ready = true): FakeSandbox {
+/** A sandbox whose VMs always start, once `ready` has, at once and with nothing to fetch where the suite names none. */
+export function fakeSandbox(ready: LocalAgentSandbox["ready"] = () => Effect.void): FakeSandbox {
   const tokens: string[] = [];
   const deleted: string[] = [];
   const sandbox: LocalAgentSandbox = {
     tools: VM_TOOLS,
-    ready: Effect.succeed(ready),
+    ready,
     started: () => Effect.void,
     woken: () => Effect.succeed(true),
     exec: (command) => ({

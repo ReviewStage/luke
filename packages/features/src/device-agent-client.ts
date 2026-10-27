@@ -14,6 +14,7 @@ import {
   type DeviceIsolation,
   type DeviceLaunchRefusal,
   type DevicePlatform,
+  type DeviceSetup,
   type DeviceSignedIn,
 } from "./device-agent-wire.js";
 import { type HostEnrollRequest, hostGithubTokenAnswerSchema } from "./host-wire.js";
@@ -53,7 +54,7 @@ export interface DeviceAgentClaimedLine {
   readonly secrets?: DeviceAgentLaunchSecrets | undefined;
 }
 
-/** What a Mac registers as: its name, its platform and architecture, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, which harnesses it is signed in to, and the lines beyond the first it takes. */
+/** What a Mac registers as: its name, its platform and architecture, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, which harnesses it is signed in to, the lines beyond the first it takes, and where its setup stands until it is ready. */
 export interface DeviceAgentDevice {
   readonly name: string;
   readonly platform: DevicePlatform;
@@ -64,6 +65,9 @@ export interface DeviceAgentDevice {
   readonly codexExecutable?: string | undefined;
   readonly signedIn: DeviceSignedIn;
   readonly capabilities: readonly DeviceCapability[];
+  /** Where its setup stands while it is not ready to take an agent, and why it failed where it did; none once it is ready. */
+  readonly setup?: DeviceSetup | undefined;
+  readonly setupFailure?: string | undefined;
 }
 
 /** How a host's enroll ended. */
@@ -177,7 +181,7 @@ export class HostedDeviceAgentClient {
     deviceId: string,
     device: DeviceAgentDevice,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    const { codexExecutable, capabilities, isolation, ...rest } = device;
+    const { codexExecutable, capabilities, isolation, setup, setupFailure, ...rest } = device;
     // Note that a Mac with no Codex checked names none, which the service reads as no Codex,
     // and one with no capability names no list, which a service from before the field refuses.
     // Likewise a device running bare names no isolation, so a service from before the field still takes its register.
@@ -187,6 +191,9 @@ export class HostedDeviceAgentClient {
       ...(codexExecutable === undefined ? undefined : { codexExecutable }),
       ...(capabilities.length === 0 ? undefined : { capabilities }),
       ...(isolation === DEVICE_ISOLATION.BARE ? undefined : { isolation }),
+      // Likewise a device ready to take an agent names no setup, so only one a service from before the field would never list is refused.
+      ...(setup === undefined ? undefined : { setup }),
+      ...(setup === undefined || setupFailure === undefined ? undefined : { setupFailure }),
     };
     return askHosted(this.#hosted.deviceAgents.register, input).pipe(
       Effect.as(true),

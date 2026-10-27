@@ -5,6 +5,7 @@ import {
   type DeviceIsolation,
   type DeviceKind,
   type DevicePlatform,
+  type DeviceSetup,
   type DeviceSignedIn,
 } from "@luke/features/device-agent-wire";
 import { sql } from "drizzle-orm";
@@ -82,6 +83,15 @@ export const device = pgTable(
      * every desktop then took none.
      */
     capabilities: text("capabilities").$type<DeviceCapability>().array().notNull().default([]),
+    /**
+     * Where the device stands in setting itself up, as it last registered
+     * (`DEVICE_SETUP`): still fetching what its VMs run on, or failed. Null
+     * for a device ready to take an agent, as every row from before the
+     * column is, and only such a device takes one.
+     */
+    setup: text("setup").$type<DeviceSetup>(),
+    /** The device's own words for why its setup failed, naming no secret; null unless `setup` is failed. */
+    setupFailure: text("setup_failure"),
     /** A host's device secret as its SHA-256 in hex, never the secret; null for a desktop, which calls on its sign-in, and for a removed host. */
     secretHash: text("secret_hash"),
     /** The daemon version a host last called with; null for a desktop. */
