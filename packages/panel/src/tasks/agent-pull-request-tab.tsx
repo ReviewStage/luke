@@ -74,6 +74,7 @@ import {
   List,
   ListRow,
   linesCount,
+  MENU_DETAIL,
   MoreButton,
   moreLabel,
   OneLine,
@@ -363,6 +364,13 @@ const PULL_REQUEST_WORDS = {
   NO_MATCHING: "No matching comments.",
   HIDE_BOTS: "Hide bots",
   HIDE_RESOLVED: "Hide resolved",
+  /** What a phone's one filter chip and its menu are called. */
+  FILTERS: "Conversation filters",
+  /** What a phone's filter chip says while neither filter is on. */
+  SHOWING_ALL: "Showing all",
+  HIDING_RESOLVED: "Hiding resolved",
+  HIDING_BOTS: "Hiding bots",
+  HIDING_BOTH: "Hiding resolved and bots",
   /** What Hide bots says it leaves out, by how many. */
   hiddenBots: (count: number) =>
     `Hides ${count} ${count === 1 ? "comment or review" : "comments and reviews"} by bots`,
@@ -2116,7 +2124,73 @@ function ConversationFilter({
   return note === undefined ? filter : <Tooltip label={note}>{filter}</Tooltip>;
 }
 
-/** Hide resolved and Hide bots, as stage-cli orders them, at the end of the Conversation's heading, each counting what it leaves out once read. */
+/** What a phone's filter chip says is left out: what each filter on hides, by the filter's own word, or that everything shows. */
+function hidingWords({ hideResolved, hideBots }: ConversationFilters): string {
+  if (hideResolved && hideBots) return PULL_REQUEST_WORDS.HIDING_BOTH;
+  if (hideResolved) return PULL_REQUEST_WORDS.HIDING_RESOLVED;
+  if (hideBots) return PULL_REQUEST_WORDS.HIDING_BOTS;
+  return PULL_REQUEST_WORDS.SHOWING_ALL;
+}
+
+/**
+ * The two filters as a phone draws them: one chip saying what is left out,
+ * whose menu holds Hide resolved and Hide bots as settings, each counting
+ * what it leaves out once read, the menu standing while they are changed,
+ * so the Conversation's heading keeps the row rather than two pills.
+ */
+function ConversationFilterMenu({
+  control,
+  hidden,
+}: {
+  control: ConversationFiltersControl;
+  hidden: ConversationHidden | undefined;
+}): React.JSX.Element {
+  const { filters, change } = control;
+  const menu = useMenu(true);
+  const words = hidingWords(filters);
+  const count = (each: number | undefined) => (each === undefined ? undefined : formatCount(each));
+  // Note that each counts beside its label rather than at its end, because a phone's sheet prints no item's hint, a chord being a keyboard's.
+  const items: MenuAction[] = [
+    {
+      label: PULL_REQUEST_WORDS.HIDE_RESOLVED,
+      detail: count(hidden?.resolved),
+      detailPlace: MENU_DETAIL.BESIDE,
+      checked: filters.hideResolved,
+      stays: true,
+      onSelect: () => change({ hideResolved: !filters.hideResolved }),
+    },
+    {
+      label: PULL_REQUEST_WORDS.HIDE_BOTS,
+      detail: count(hidden?.bots),
+      detailPlace: MENU_DETAIL.BESIDE,
+      checked: filters.hideBots,
+      stays: true,
+      onSelect: () => change({ hideBots: !filters.hideBots }),
+    },
+  ];
+  return (
+    <span className="pull-request-filter-menu flex min-w-0">
+      <Chip
+        look={CHIP_LOOK.FILTER}
+        chevron
+        aria-label={`${PULL_REQUEST_WORDS.FILTERS}: ${words}`}
+        {...menu.trigger()}
+      >
+        <ChipName>{words}</ChipName>
+      </Chip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={PULL_REQUEST_WORDS.FILTERS}
+          menu={menu.drawn}
+          groups={[items]}
+          onClose={menu.close}
+        />
+      )}
+    </span>
+  );
+}
+
+/** Hide resolved and Hide bots, as stage-cli orders them, at the end of the Conversation's heading, each counting what it leaves out once read; one chip opening a menu of them in a phone's narrow room. */
 function ConversationFilterChips({
   control,
   hidden,
@@ -2125,6 +2199,7 @@ function ConversationFilterChips({
   hidden: ConversationHidden | undefined;
 }): React.JSX.Element {
   const { filters, change } = control;
+  if (usePhoneRoom()) return <ConversationFilterMenu control={control} hidden={hidden} />;
   return (
     <>
       <ConversationFilter
