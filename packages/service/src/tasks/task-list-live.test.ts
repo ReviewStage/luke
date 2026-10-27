@@ -43,6 +43,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { INBOX_ASK } from "@luke/features/inbox-wire";
 import {
   taskAgentsOfLiveRows,
   taskListLiveRowsSchema,
@@ -59,12 +60,13 @@ import {
   type TurnStatus,
 } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { codingAgentSummary, summaryAccounts } from "../agents/coder-host/status.js";
 import { standingsOf } from "../agents/coder-host/stop.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { BRAIN_REQUEST_FAILURE } from "../core.js";
+import { postInboxThread } from "../inbox/inbox-store.js";
 import { taskListLiveStatements } from "./task-list-live.js";
 
 /**
@@ -182,6 +184,7 @@ const liveRowsOf = (userId: string) =>
       plans: yield* runLive(statements.plans),
       agents: yield* runLive(statements.agents),
       issues: yield* runLive(statements.issues),
+      questions: yield* runLive(statements.questions),
     });
   });
 
@@ -317,15 +320,18 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
 
   it.effect("call only functions Postgres marks immutable, as Realtime requires", () =>
     Effect.gen(function* () {
-      const { plans, agents, issues } = Option.getOrThrow(taskListLiveStatements("user-immutable"));
+      const { plans, agents, issues, questions } = Option.getOrThrow(
+        taskListLiveStatements("user-immutable"),
+      );
       assert.deepEqual(yield* mutableFunctionsOf(plans), []);
       assert.deepEqual(yield* mutableFunctionsOf(agents), []);
       assert.deepEqual(yield* mutableFunctionsOf(issues), []);
+      assert.deepEqual(yield* mutableFunctionsOf(questions), []);
     }),
   );
 
   it.effect(
-    "deliver the rows the held list is built from, every status, pin, archive, and pull request alike, to every member and to no one else",
+    "deliver the rows the held list is built from, every status, pin, archive, pull request, and question alike, to every member and to no one else",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -386,9 +392,31 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           origin: { actor: PLAN_ACTOR.NOTETAKER },
         });
 
+        // Questions on the plan: two waiting on its assignee, one addressed to its owner, and a notice, which waits on no one's answer.
+        const asker = { userId: owner, taskId: plan.id, agentId: done.id };
+        const ask = { type: INBOX_ASK.DO, steps: [] };
+        for (const write of [
+          { key: "branch-protection", title: "Require a review on main", ask },
+          { key: "deploy-key", title: "Add the deploy key", ask },
+          { key: "billing-seat", title: "Approve the seat", ask, addresseeId: owner },
+          { key: "heads-up", title: "Main is protected now" },
+        ]) {
+          Result.getOrThrow(yield* postInboxThread(asker, { ...write, body: "Synthetic words." }));
+        }
+
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
         }
+        const waitingOn = (reader: string) =>
+          Effect.map(
+            liveListOf(reader, NOW),
+            (list) => list.plans.find((each) => each.id === plan.id)?.agents?.waitingOnYou,
+          );
+        assert.deepEqual(
+          [yield* waitingOn(owner), yield* waitingOn(teammate)],
+          [1, 2],
+          "each member counts only the questions waiting on them",
+        );
         // Every plan's agents, as each plan's own list names them, for the desktop's ledger; the live rows come in the order they were started across the plans.
         const byId = (agents: readonly { readonly id: string }[]) =>
           agents.toSorted((a, b) => a.id.localeCompare(b.id));
@@ -413,7 +441,10 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           ],
         );
         const agents = read.plans.find((each) => each.id === plan.id)?.agents;
-        assert.deepEqual([agents?.total, agents?.working, agents?.pullRequestTotal], [7, 2, 1]);
+        assert.deepEqual(
+          [agents?.total, agents?.working, agents?.failed, agents?.pullRequestTotal],
+          [7, 2, 3, 1],
+        );
         assert.equal(agents?.pullRequests[0]?.queued, true, "a queued pull request says so");
         assert.ok(
           (agents?.agents ?? []).every(

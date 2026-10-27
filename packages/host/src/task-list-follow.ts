@@ -42,6 +42,8 @@ import {
  * the follow, which the next sign-in starts again.
  */
 
+/** The parts every service's seal names; a newer one may add more, which the follow takes as they come. */
+type TaskListLivePart = "plans" | "agents" | "issues";
 /** A seal as the follow asks for it: sealed, or with `poll` its rows inline; a failure where the service answered none, `gone` where it never will again. */
 type Sealed = TaskListLiveAnswer | { readonly failure: string; readonly gone?: boolean };
 /** The list as the live rows make it at one instant, and every agent on a plan beside it. */
@@ -96,7 +98,8 @@ function liveLists(
   dependencies: TaskListFollowDependencies,
   first: TaskListLiveAnswer,
 ): Stream.Stream<LiveTaskList, LiveBroken> {
-  const rows = decodedLiveRows(
+  // Note that the parts are named as every service answers them, because a part a newer service adds (the questions) is followed wherever the read names it, and the rows' schema reads it as optional.
+  const rows = decodedLiveRows<TaskListLivePart, TaskListLiveRows>(
     {
       openLive: dependencies.openLive,
       reseal: () => dependencies.live(false),

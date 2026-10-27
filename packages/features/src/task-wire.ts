@@ -606,7 +606,8 @@ export type TaskPullRequests = typeof taskPullRequestsSchema.Type;
 
 /**
  * What a task's coding agents are doing and what they published, in brief:
- * how many agents it has and how many of them are at work, the few the row
+ * how many agents it has, how many of them are at work and how many failed,
+ * how many of its questions wait on the reader, the few agents the row
  * names, and the pull requests they opened, each counted once by its
  * number. A pull request is as the service last read it from GitHub, so
  * it may trail GitHub by as long as nothing has asked.
@@ -615,6 +616,14 @@ const taskAgentsSummarySchema = EffectSchema.Struct({
   total: countedNumber,
   /** The agents starting or running now. */
   working: countedNumber,
+  /** The agents whose run failed, the archived left out. Absent from a service before it. */
+  failed: EffectSchema.optionalKey(countedNumber),
+  /**
+   * The task's questions waiting on the reader: its open Inbox items that
+   * hold an ask and wait on them, as the Inbox counts a question. Counted
+   * for the reader alone, and absent from a service before it.
+   */
+  waitingOnYou: EffectSchema.optionalKey(countedNumber),
   /**
    * Epoch milliseconds the plan's agents last did something settled, every
    * agent's counted and not only those named: one started, handed a

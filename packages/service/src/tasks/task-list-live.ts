@@ -1,4 +1,5 @@
 import {
+  LIVE_COUNT,
   type LiveStatement,
   liveSelection,
   liveStatementOf,
@@ -13,11 +14,13 @@ import {
 import { agentPin, taskIssue, taskPin } from "@luke/database/schemas";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { inboxItem } from "@luke/database/schemas/inbox";
 import { task } from "@luke/database/schemas/task";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
 import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
+import { askingReader } from "../inbox/inbox-store.js";
 import {
   awaitingLineAtIn,
   latestTurnOf,
@@ -26,17 +29,18 @@ import {
 } from "../live/agent-standing.js";
 
 /**
- * task-list-live.ts -- the plan list written for Neon Realtime: the plans the account reaches, every agent of them and with no plan, with what the list reads each agent's status from, and the issues the plans link.
+ * task-list-live.ts -- the plan list written for Neon Realtime: the plans the account reaches, every agent of them and with no plan, with what the list reads each agent's status from, the issues the plans link, and the questions waiting on the account on each plan.
  *
- * Three statements, each the same rows and rule of who may read them as the
+ * Four statements, each the same rows and rule of who may read them as the
  * held read (`tasks-app.ts`'s collection, through `listTasks`,
  * `withTaskAgents`, and `listTasklessAgents`), with every archived plan
  * and agent among them, as the desktop asks for them: the plans with the
  * reader's own pin and the owner's name, and the agents with their newest
  * turn, when the newest line of the developer's awaiting its turn was
  * written and whether that turn's session ended, what each last
- * published, and the names of the members each names; and the issues the
- * plans link, as their tags name them. Every column stands
+ * published, and the names of the members each names; the issues the
+ * plans link, as their tags name them; and how many questions wait on the
+ * account on each plan, as the Inbox counts one. Every column stands
  * under the key `@luke/features/task-list-live` reads it by and every
  * instant as epoch milliseconds. Nothing here reads the clock: an agent's
  * status, which turns on it, is the reader's to read, and so is the order,
@@ -52,6 +56,7 @@ export interface TaskListLiveStatements {
   readonly plans: LiveStatement;
   readonly agents: LiveStatement;
   readonly issues: LiveStatement;
+  readonly questions: LiveStatement;
 }
 
 /**
@@ -126,6 +131,23 @@ function issuesStatement(userId: string) {
 }
 
 /**
+ * How many items of each plan the account reaches hold an ask open that
+ * waits on the account (`askingReader`), the same questions the held read
+ * counts (`questionsWaitingByTask`); a plan where none waits has no row.
+ */
+function questionsStatement(userId: string) {
+  return queryBuilder
+    .select({
+      ...liveSelection({ planId: task.id }),
+      waitingOnYou: LIVE_COUNT.as("waitingOnYou"),
+    })
+    .from(inboxItem)
+    .innerJoin(task, eq(task.id, inboxItem.taskId))
+    .where(and(askingReader(userId), taskReachableBy(userId)))
+    .groupBy(task.id);
+}
+
+/**
  * Every agent of a plan the account reaches, and every agent with no plan
  * in its workspaces, archived ones among them, each with its newest turn by
  * the order turns were queued, as `findLatestTurns` reads it.
@@ -197,5 +219,6 @@ export function taskListLiveStatements(userId: string): Option.Option<TaskListLi
     plans: liveStatementOf(tasksStatement(userId)),
     agents: liveStatementOf(agentsStatement(userId)),
     issues: liveStatementOf(issuesStatement(userId)),
+    questions: liveStatementOf(questionsStatement(userId)),
   });
 }
