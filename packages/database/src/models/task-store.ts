@@ -600,7 +600,7 @@ function devicesOf(rows: readonly TaskSummaryRow[]): TaskStoreEffect<ReadonlyMap
 
 /**
  * Where a line's agents run, as the wire says it: nothing for a sandbox;
- * for a device, its id, its owner named by `names`, and its name, kind, and
+ * for a device, its id, its owner named by `names`, and its name, kind, platform, and
  * last beat, each left out once the device's row is gone.
  */
 function runsOnOf(
@@ -621,7 +621,12 @@ function runsOnOf(
       ...(found === undefined
         ? undefined
         : {
-            device: { name: found.name, kind: found.kind, seenAt: found.lastSeenAt.getTime() },
+            device: {
+              name: found.name,
+              kind: found.kind,
+              platform: found.platform,
+              seenAt: found.lastSeenAt.getTime(),
+            },
           }),
     },
   };

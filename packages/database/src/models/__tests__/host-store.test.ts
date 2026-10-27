@@ -10,9 +10,11 @@ import { DEVICE_LAYOUT, getTestDB } from "../../testing/index.js";
 import { deviceLayout, devicesSeenSince, registerDevice } from "../device-store.js";
 import {
   enrollHost,
+  enrollOwnDevice,
   HOST_ENROLL_REFUSAL,
   type HostEnrollment,
   hostBySecret,
+  hostRemoved,
   hostsOf,
   mintHostInstallToken,
   removeHost,
@@ -25,7 +27,10 @@ import {
  * enrolls none while the boxes it enrolled go on, a removed host's secret
  * resolves nothing, a standing host's id enrolls nothing while a removed
  * host's brings that one host back with a new secret, and no
- * account reads, revokes, removes, or starts on another's host.
+ * account reads, revokes, removes, or starts on another's host. A
+ * member's own registered desktop enrolls in place on its session alone,
+ * and is then read, listed, and removed as a host is; no account enrolls
+ * another's.
  * Synthetic accounts, hashes, and boxes throughout.
  */
 
@@ -174,6 +179,56 @@ it.layer(getTestDB())("the host store", (it) => {
           [enrolled.id],
           "one host, not two",
         );
+      }),
+  );
+
+  it.effect(
+    "a member enrolls its own desktop in place, which is then listed and removed as any machine, and no other account enrolls it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other } = yield* openAccounts;
+        const id = randomUUID();
+        yield* registerDevice(owner, { id, name: "Studio", ...DEVICE_LAYOUT });
+        const otherHash = `secret-${randomUUID()}`;
+        const firstHash = `secret-${randomUUID()}`;
+        const rotatedHash = `secret-${randomUUID()}`;
+
+        const byOther = yield* enrollOwnDevice(other, {
+          id,
+          version: "0.1.0",
+          secretHash: otherHash,
+        });
+        const first = yield* enrollOwnDevice(owner, {
+          id,
+          version: "0.1.0",
+          secretHash: firstHash,
+        });
+        const listed = yield* hostsOf(owner);
+        const rotated = yield* enrollOwnDevice(owner, {
+          id,
+          version: "0.1.0",
+          secretHash: rotatedHash,
+        });
+        const firstAfterRotate = yield* hostBySecret(firstHash);
+        const removed = yield* removeHost(owner, id);
+
+        assert.equal(byOther, false, "another account's session enrolls nothing");
+        assert.ok(Option.isNone(yield* hostBySecret(otherHash)));
+        assert.deepEqual(yield* hostsOf(other), []);
+        assert.deepEqual([first, rotated], [true, true]);
+        assert.deepEqual(
+          listed.map((host) => [host.id, host.name, host.platform]),
+          [[id, "Studio", DEVICE_PLATFORM.DARWIN]],
+          "the desktop is listed under its own id and name",
+        );
+        assert.ok(Option.isNone(firstAfterRotate), "enrolling again refuses the old secret");
+        assert.equal(removed, true);
+        assert.ok(
+          Option.isNone(yield* hostBySecret(rotatedHash)),
+          "a removed Mac's secret is refused",
+        );
+        assert.deepEqual(yield* hostsOf(owner), []);
+        assert.equal(yield* hostRemoved(owner, id), true);
       }),
   );
 });

@@ -11,7 +11,7 @@ import {
   startBrief,
   tasklessAgentSchema,
 } from "./coding-agent-wire.js";
-import { DEVICE_KIND } from "./device-agent-wire.js";
+import { DEVICE_KIND, DEVICE_PLATFORM } from "./device-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { linearIssueIdSchema } from "./linear-wire.js";
 import { modelProviderSchema } from "./models-wire.js";
@@ -461,7 +461,8 @@ export type TaskOrigin = typeof taskOriginSchema.Type;
  * Where a task's agents run, said only of a task that runs them on a
  * device: which one by its id, whose it is, since only that member's agents
  * run on it and a teammate's run in the cloud, and the name it registered
- * with, what kind of device it is, and the epoch milliseconds it last beat,
+ * with, what kind of device it is, its platform, which its glyph follows
+ * and which a service older than it leaves out, and the epoch milliseconds it last beat,
  * which a window does not judge by, since its own clock may differ from the service's: it reads the beats
  * from `hosts.presence` (`deviceStanding`). The device and
  * its owner are absent once the device's row is gone, where a start on the
@@ -475,6 +476,7 @@ const taskRunsOnSchema = EffectSchema.Struct({
     EffectSchema.Struct({
       name: EffectSchema.String,
       kind: EffectSchema.Literals(Object.values(DEVICE_KIND)),
+      platform: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_PLATFORM))),
       seenAt: countedNumber,
     }),
   ),

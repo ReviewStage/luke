@@ -2,6 +2,7 @@ import { Schema as EffectSchema } from "effect";
 import { CODING_AGENT_BOUNDS, contextWindowSchema } from "./coding-agent-wire.js";
 import {
   DEVICE_KIND,
+  DEVICE_PLATFORM,
   DEVICE_SETUP_FAILURE_MAX_CHARS,
   deviceSetupSchema,
 } from "./device-agent-wire.js";
@@ -111,10 +112,11 @@ export type CatalogModel = typeof catalogModelSchema.Type;
  * One of the account's devices a task may run its agents on, as the menus
  * offer it: by its id and name, the model providers an agent on it runs,
  * which a task's Runs on lists it for and the service checks a Start
- * against, what kind of device it is, and the epoch milliseconds it last
+ * against, what kind of device it is and its platform, which its glyph
+ * and words follow, and the epoch milliseconds it last
  * beat, which a window does not judge by, since its own clock may differ from the service's: it reads the beats
  * from `hosts.presence` (`deviceStanding`); only a
- * device there now is taken. The kind and the beat are absent from a service
+ * device there now is taken. The kind, the platform, and the beat are absent from a service
  * older than them, which offered only the devices there now. A device still
  * setting itself up says where that stands (`DEVICE_SETUP`), and why for one
  * that failed, and takes no agent until it is ready; both are absent for a
@@ -125,6 +127,7 @@ export const macOfferSchema = EffectSchema.Struct({
   name: EffectSchema.String,
   providers: EffectSchema.Array(modelProviderSchema),
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_KIND))),
+  platform: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_PLATFORM))),
   seenAt: EffectSchema.optionalKey(countedNumber),
   setup: EffectSchema.optionalKey(deviceSetupSchema),
   setupFailure: EffectSchema.optionalKey(

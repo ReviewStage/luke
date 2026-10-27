@@ -19,10 +19,9 @@ import {
   deviceAgentRequestsWaiting,
 } from "@luke/database/models/device-agent-store";
 import { registerDevice } from "@luke/database/models/device-store";
-import { removeHost } from "@luke/database/models/host-store";
+import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
-import { device } from "@luke/database/schemas/device";
 import { deviceAgentLine } from "@luke/database/schemas/device-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
@@ -30,7 +29,6 @@ import { BRAIN_REQUEST_FAILURE } from "@luke/features/brain";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import {
   DEVICE_AGENT_REQUEST_KIND,
-  DEVICE_KIND,
   DEVICE_LAUNCH_REFUSAL,
   deviceAgentLaunchPayloadSchema,
   deviceAgentLayout,
@@ -158,9 +156,12 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       () =>
         Effect.gen(function* () {
           const { userId, deviceId, agent } = yield* openLocalAgent;
-          const db = yield* Database;
-          // The Mac the agent is pinned to is made a host and removed, as Settings › Hosts removes one.
-          yield* db.update(device).set({ kind: DEVICE_KIND.HOST }).where(eq(device.id, deviceId));
+          // The Mac the agent is pinned to is enrolled and removed, as Settings › Machines removes one.
+          yield* enrollOwnDevice(userId, {
+            id: deviceId,
+            version: "0.1.0",
+            secretHash: `secret-${randomUUID()}`,
+          });
           const machine = yield* deviceMachine;
           const unregistered = yield* Effect.flip(
             machine.layout({ ...agent, deviceId: randomUUID() }),
