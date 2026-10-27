@@ -461,9 +461,12 @@ export function AutomationChipCard({
   );
   const workspace = named ?? words;
   if (workspace === undefined) return fallback;
+  // Note that its maker is named by the members of its own workspace, as a member's chip under the link is.
   return (
-    <AutomationDirectory workspace={workspace} wanted onOpen={OPEN_NOTHING}>
-      <KnownAutomationCard automationId={automationId} reading={reading} fallback={fallback} />
-    </AutomationDirectory>
+    <WorkspaceDirectory workspace={workspace}>
+      <AutomationDirectory workspace={workspace} wanted onOpen={OPEN_NOTHING}>
+        <KnownAutomationCard automationId={automationId} reading={reading} fallback={fallback} />
+      </AutomationDirectory>
+    </WorkspaceDirectory>
   );
 }
