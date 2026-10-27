@@ -31,7 +31,6 @@ import { followChannels } from "./channel-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -40,8 +39,8 @@ import type { RunMode } from "./run-mode.js";
  * Nothing is held here but the follows. Every ask is one call of the service
  * answered whole, every write on a channel answering the workspace's
  * channels as they then stand, so a window draws the service's word rather
- * than its own guess. A workspace a window follows is followed over Realtime
- * (`channel-follow.ts`), and which of its channels moved is told to every
+ * than its own guess. A workspace a window follows is followed over the
+ * service's held poll (`channel-follow.ts`), and which of its channels moved is told to every
  * window as `CHANNELS_CHANGED`, which reads them again itself. Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered and nothing is followed; a sign-out lets every follow go.
@@ -68,8 +67,6 @@ export interface ChannelsDependencies {
   /** The account signed in now, which a follow names from its start; none where nobody is. */
   accountId: () => string | undefined;
   client: ChannelsClient;
-  /** Realtime's client for a follow's subscription; Realtime's own where none is handed in. */
-  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
 }
 
 export interface ChannelsComposer extends Composer {
@@ -177,8 +174,6 @@ function composed(
             userId === undefined
               ? Effect.succeed(LIVE_SIGNED_OUT)
               : asked(client.live(workspaceId, userId, poll, after)),
-          openLive: dependencies.openLive ?? openRealtimeClient,
-          now: kernel.now,
           publish: (heard) => {
             const changed: ChannelsChanged = { workspaceId, heard };
             kernel.emit(GATEWAY_EVENT.CHANNELS_CHANGED, carried(changed));

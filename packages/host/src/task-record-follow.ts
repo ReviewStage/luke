@@ -4,20 +4,19 @@ import {
   taskRecordLiveRowsSchema,
 } from "@luke/features/live-wire";
 import { type Effect, Stream } from "effect";
-import { decodedLiveRows, type LiveBroken, type LiveClient } from "./live-follow.js";
+import { decodedLiveRows, type LiveBroken } from "./live-follow.js";
 
 /**
- * task-record-follow.ts -- where an open task's plan, pages, and agents' code stand, followed by the host over a Neon Realtime subscription, so a part is read again only once its mark moved.
+ * task-record-follow.ts -- where an open task's plan, pages, and agents' code stand, followed by the host over the service's held poll, so a part is read again only once its mark moved.
  *
- * The service seals one statement a part (`task-record-live.ts`), each a
+ * The service answers one statement a part (`task-record-live.ts`), each a
  * mark that moves as its rows do and carries none of their words. The host
- * subscribes to them (`live-follow.ts`) for as long as the task stands open,
- * as it does the board (`board-follow.ts`), and answers each delivery with
- * the parts it moved, which the caller reads again from the service. The
- * calls part the service still seals is read by no one: every call speaks
- * into an agent, whose own transcript says what was said. The sealed
- * statements stay here, beside the account's own bearer; only which
- * parts moved leaves.
+ * follows them (`live-follow.ts`) for as long as the task stands open, as it
+ * does the board (`board-follow.ts`), and answers each delivery with the
+ * parts it moved, which the caller reads again from the service. The calls
+ * part the service still answers is read by no one: every call speaks into
+ * an agent, whose own transcript says what was said. Only which parts moved
+ * leaves.
  */
 
 /** A part of the record the panel reads again once its mark moves. */
@@ -38,17 +37,12 @@ export interface TaskRecordMove {
   readonly planSavedAt: number | undefined;
 }
 
-/** A seal the service did not answer, `gone` where the task is no longer the account's. */
+/** A read the service did not answer, `gone` where the task is no longer the account's. */
 type Unsealed = { readonly failure: string; readonly gone?: boolean };
 
 export interface TaskRecordFollowDependencies {
-  /** The record sealed again, for renewing; a failure where the service sealed none. */
-  readonly seal: () => Effect.Effect<TaskRecordLiveAnswer | Unsealed>;
-  /** The record's rows inline, polled while Realtime fails or is off, held past `after`; failures as `seal`'s. */
+  /** The record's rows inline, held past `after`; a failure where the service answered none. */
   readonly poll: (after: string | undefined) => Effect.Effect<TaskRecordLiveAnswer | Unsealed>;
-  /** Realtime's client at the address the service named, loaded where it must be. */
-  readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
-  readonly now: () => number;
 }
 
 /** A part's rows as one comparable value. */
@@ -78,25 +72,16 @@ function movedParts(
 
 /**
  * The parts of the record each delivery moved, with the plan's last save as
- * it delivered it, from the first seal for as
- * long as the caller's scope stands, a delivery that moved none left out.
- * It fails where the subscription stops for good or a row does not decode,
- * which the caller answers by sealing it again.
+ * it delivered it, from the first answer for as long as the caller's scope
+ * stands, a delivery that moved none left out. It fails where the read is
+ * gone or a row does not decode, which the caller answers by reading it
+ * again.
  */
 export function taskRecordMoves(
   dependencies: TaskRecordFollowDependencies,
   first: TaskRecordLiveAnswer,
 ): Stream.Stream<TaskRecordMove, LiveBroken> {
-  return decodedLiveRows(
-    {
-      openLive: dependencies.openLive,
-      reseal: dependencies.seal,
-      poll: dependencies.poll,
-      now: dependencies.now,
-    },
-    first,
-    taskRecordLiveRowsSchema,
-  ).pipe(
+  return decodedLiveRows({ poll: dependencies.poll }, first, taskRecordLiveRowsSchema).pipe(
     Stream.mapAccum(
       (): TaskRecordLiveRows | undefined => undefined,
       (before: TaskRecordLiveRows | undefined, rows: TaskRecordLiveRows) => {

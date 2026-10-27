@@ -27,15 +27,7 @@ import {
   type RepositoryIssuesAsk,
 } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
-import {
-  LIVE_POLL_URL,
-  LIVE_SIGNED_OUT,
-  type TaskBoardLiveAnswer,
-  type TaskBrowserTabsLiveAnswer,
-  type TaskHistoryLiveAnswer,
-  type TaskPagesLiveAnswer,
-  type TaskRecordLiveAnswer,
-} from "@luke/features/live-wire";
+import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import {
   PAGE_SHOWER,
   type PageLine,
@@ -57,7 +49,6 @@ import {
   TASK_ISSUE_RELATION,
   type TaskIssueLinkView,
 } from "@luke/features/task-issue-wire";
-import type { TaskListLiveAnswer } from "@luke/features/task-list-live";
 import {
   TASK_SECTION_WRITE,
   type TaskSection,
@@ -92,7 +83,6 @@ import {
   tasksViewSchema,
 } from "@luke/features/tasks-view";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
-import type { WorkspacesLiveAnswer } from "@luke/features/workspace-live";
 import {
   type FormerMember,
   WORKSPACE_PHOTO_TYPE,
@@ -115,8 +105,7 @@ import { Deferred, Duration, Effect, Exit, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "./fixture-stage.js";
-import type { LiveClient } from "./live-follow.js";
-import { fakeRealtime as fakeServiceRealtime } from "./testing/fake-realtime.js";
+import { type PolledLive, polledLive } from "./testing/polled-live.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SECTION_ID = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
@@ -152,12 +141,7 @@ interface FakeService extends TasksClient {
   agents: Record<string, TaskAgentsSummary>;
   /** The agents with no plan the list carries beside the plans. */
   tasklessAgents: TasklessAgent[];
-  /** What the service answers when the list is asked for sealed, to follow over Neon Realtime; sealed by default. */
-  liveList: TaskCallResult<
-    TaskListLiveAnswer,
-    typeof TASK_CALL_FAILURE.UNANSWERED | typeof LIVE_SIGNED_OUT.failure
-  >;
-  /** How many times the list was asked for sealed. */
+  /** How many times the list's live read was first asked, its polls apart. */
   liveListReads: number;
   /** Whether a delete is refused, as a service that did not answer refuses it. */
   deleteFails: boolean;
@@ -170,28 +154,22 @@ interface FakeService extends TasksClient {
   readonly reads: string[];
   /** Each task's board, by task id; a task with none answers no board, as a service that did not answer. */
   boards: Record<string, Board>;
-  /** Each task's board sealed for following, by task id; a task with none is not found, as the service answers one the account does not reach. */
-  boardSeals: Record<string, TaskBoardLiveAnswer>;
-  /** Each task's pages and calls sealed for following, by task id; a task with none is not found, as the service answers one the account does not reach. */
-  recordSeals: Record<string, TaskRecordLiveAnswer>;
-  /** Whether each task's record is answered polled, Realtime off, its rows as `tasks` holds them now, in place of `recordSeals`. */
-  recordPolled: boolean;
+  /** Each task's board's live read, by task id; a task with none is not found, as the service answers one the account does not reach. */
+  boardLives: Record<string, PolledLive<"board", typeof NOT_FOUND_LIVE>>;
+  /** Each task's pages' and calls' live read, by task id; a task with none is not found, as the service answers one the account does not reach. */
+  recordLives: Record<string, PolledLive<RecordPart, typeof NOT_FOUND_LIVE>>;
   /** How many opens the service leaves unanswered before it answers again. */
   opensUnanswered: number;
-  /** What the service seals for following each task's pages; none answers unanswered. */
-  pageSeals: Record<string, TaskPagesLiveAnswer>;
-  /** What the service seals for following each task's Browser tabs; none answers unanswered. */
-  browserTabSeals: Record<string, TaskBrowserTabsLiveAnswer>;
-  /** What the service seals for following each task's newest page of history; none answers unanswered. */
-  historySeals: Record<string, TaskHistoryLiveAnswer>;
+  /** Each task's pages' live read; none answers unanswered. */
+  pageLives: Record<string, PolledLive<"pages", typeof NOT_FOUND_LIVE>>;
+  /** Each task's Browser tabs' live read; none answers unanswered. */
+  browserTabLives: Record<string, PolledLive<"tabs", typeof NOT_FOUND_LIVE>>;
+  /** Each task's newest page of history's live read; none answers unanswered. */
+  historyLives: Record<string, PolledLive<"revisions">>;
   /** Every read of a task's pages or transcript, in order, so a test can see which a followed mark moved. */
   readonly recordReads: string[];
   /** The image each task's last save carried, by task id, as the service keeps it beside the board. */
   readonly images: Record<string, string | undefined>;
-  /** The transaction the next board save answers, as one that moved the board's live row; none answers no txid. */
-  boardSaveTxid: string | undefined;
-  /** Where set, a board save is held until it settles, as one still in flight. */
-  boardSaveHeld: Deferred.Deferred<void> | undefined;
   /** Every code shown on each task as the service keeps it, by task id; a task with none answers nothing, as a service that did not answer. */
   codes: Record<string, readonly TaskShownCode[]>;
   /** What the service answers for each file's window, by path; a path with none answers nothing, as a service that did not answer. */
@@ -239,8 +217,6 @@ interface FakeService extends TasksClient {
   sections: TaskSections | undefined;
   /** Every change to the sections the service was asked for, in order. */
   sectionWrites: TaskSectionWrite[];
-  /** The transaction a pin's or a section's write answers, where a test sets one; none as a write that changed no row. */
-  sidebarTxid: string | undefined;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
   /** The Luke GitHub App install address a connection answers. */
@@ -253,14 +229,25 @@ interface FakeService extends TasksClient {
   renamedAgain: string | undefined;
   /** What a rename's answer waits on once the store has moved, so a test can have the follow deliver first. */
   renameAnswered: Effect.Effect<void>;
-  /** Whether Realtime misses the store's changes, telling none of them. */
-  realtimeMisses: boolean;
-  /** The transaction a task's rename answers it committed in, where it answers one. */
-  renameTxid: string | undefined;
-  /** Realtime as the service's deployment holds it: each subscription to the workspaces is told the table as it stands, and again on every change. */
-  realtime: ReturnType<typeof fakeServiceRealtime>;
-  /** Realtime's client as the host opens it at the workspaces' address, each subscription told the workspaces at once, as Realtime's first result. */
-  openLive: (url: string) => LiveClient;
+  /** Whether the workspaces' follow misses the store's changes, the live read answering none of them. */
+  followMisses: boolean;
+  /**
+   * The account's live reads as the service answers them polled
+   * (`testing/polled-live.ts`): the workspaces and the sidebar read from the
+   * service's own state, the workspaces moved on every change to them; a
+   * workspace's people and invitations, and the task list, as a test sets
+   * their rows.
+   */
+  readonly live: {
+    readonly workspaces: PolledLive<"workspaces" | "installations">;
+    readonly sidebar: PolledLive<"sections" | "entries" | "agentEntries" | "pins">;
+    readonly people: PolledLive<"members" | "former">;
+    readonly invitations: PolledLive<"invitations">;
+    readonly list: PolledLive<
+      "plans" | "agents" | "issues",
+      { readonly failure: typeof TASK_CALL_FAILURE.UNANSWERED | typeof LIVE_SIGNED_OUT.failure }
+    >;
+  };
   /** Each workspace's members, by its id. */
   members: Record<string, WorkspaceMember[]>;
   /** Who each workspace's work names but left, as the service answers beside its members. */
@@ -311,45 +298,14 @@ const RELAY: Workspace = {
   memberCount: 1,
 };
 
-/** The address the fake service seals the workspaces at, apart from any other read's. */
-const WORKSPACES_URL = "wss://workspaces.example/v1";
+/** The parts of a task's record's live read. */
+type RecordPart = "plan" | "pages" | "calls" | "code";
 
-/** The workspaces sealed for following, each part named by its capability, as `fakeRealtime` addresses it. */
-const WORKSPACES_SEALED: WorkspacesLiveAnswer = {
-  url: WORKSPACES_URL,
-  queries: {
-    workspaces: { capability: "capability-workspaces", queryFingerprint: "w", expiresAt: 1e15 },
-    installations: {
-      capability: "capability-installations",
-      queryFingerprint: "i",
-      expiresAt: 1e15,
-    },
-  },
-};
+/** A live read the service answers not found, as one the account does not reach. */
+const NOT_FOUND_LIVE = { failure: TASK_CALL_FAILURE.NOT_FOUND } as const;
 
-/** A workspace's people sealed for following, each part named by its capability, as `fakeRealtime` addresses it. */
-const PEOPLE_SEALED = {
-  url: WORKSPACES_URL,
-  queries: {
-    members: { capability: "capability-members", queryFingerprint: "m", expiresAt: 1e15 },
-    former: { capability: "capability-former", queryFingerprint: "f", expiresAt: 1e15 },
-  },
-};
-
-/** The account's sidebar sealed for following, each part named by its capability, as `fakeRealtime` addresses it. */
-const SIDEBAR_SEALED = {
-  url: WORKSPACES_URL,
-  queries: {
-    sections: { capability: "capability-sections", queryFingerprint: "s", expiresAt: 1e15 },
-    entries: { capability: "capability-entries", queryFingerprint: "e", expiresAt: 1e15 },
-    agentEntries: {
-      capability: "capability-agent-entries",
-      queryFingerprint: "a",
-      expiresAt: 1e15,
-    },
-    pins: { capability: "capability-pins", queryFingerprint: "p", expiresAt: 1e15 },
-  },
-};
+/** The origin a workspace's invitations are answered with, which each accept link is built on. */
+const INVITATIONS_ORIGIN = "https://luke.test";
 
 /** The sidebar as its live statements' rows carry it: what the wire leaves out is null. */
 function sidebarLiveRows(sections: TaskSections | undefined, pins: readonly RepositoryPin[]) {
@@ -370,15 +326,6 @@ function sidebarLiveRows(sections: TaskSections | undefined, pins: readonly Repo
     pins,
   };
 }
-
-/** A workspace's invitations sealed for following, with the origin each accept link is built on. */
-const INVITATIONS_SEALED = {
-  url: WORKSPACES_URL,
-  origin: "https://luke.test",
-  queries: {
-    invitations: { capability: "capability-invitations", queryFingerprint: "v", expiresAt: 1e15 },
-  },
-};
 
 /** The workspaces as the live statements' rows carry them, the account's own first one being Ada's. */
 function workspacesLiveRows(workspaces: readonly Workspace[]) {
@@ -429,28 +376,38 @@ const NOT_PERMITTED_WORKSPACE = {
 const EDITED_AT = 7_000;
 
 function fakeService(tasks: Task[]): FakeService {
-  const realtime = fakeServiceRealtime();
   let memberships: Workspace[] = [PERSONAL];
-  /** Each part's rows as the workspaces stand, as Realtime would deliver them. */
-  const rowsOf = (part: string) => {
-    const rows = workspacesLiveRows(memberships);
-    const sidebar = sidebarLiveRows(service.sections, service.pins);
-    if (part === "capability-workspaces") return rows.workspaces;
-    if (part === "capability-installations") return rows.installations;
-    if (part === "capability-sections") return sidebar.sections;
-    if (part === "capability-entries") return sidebar.entries;
-    if (part === "capability-agent-entries") return sidebar.agentEntries;
-    return part === "capability-pins" ? sidebar.pins : undefined;
+  let followMisses = false;
+  const live: FakeService["live"] = {
+    workspaces: polledLive<"workspaces" | "installations">(["workspaces", "installations"], () =>
+      workspacesLiveRows(memberships),
+    ),
+    sidebar: polledLive<"sections" | "entries" | "agentEntries" | "pins">(
+      ["sections", "entries", "agentEntries", "pins"],
+      () => sidebarLiveRows(service.sections, service.pins),
+    ),
+    people: polledLive<"members" | "former">(["members", "former"]),
+    invitations: polledLive<"invitations">(["invitations"]),
+    list: polledLive<
+      "plans" | "agents" | "issues",
+      { readonly failure: typeof TASK_CALL_FAILURE.UNANSWERED | typeof LIVE_SIGNED_OUT.failure }
+    >(["plans", "agents", "issues"]),
   };
-  /** The workspaces told to every subscription that stands, as Realtime tells a change. */
-  let realtimeMisses = false;
-  const pushWorkspaces = () => {
-    if (realtimeMisses) return;
-    if (!realtime.subscribed().includes("capability-workspaces")) return;
-    const rows = workspacesLiveRows(memberships);
-    realtime.deliver("workspaces", rows.workspaces);
-    realtime.deliver("installations", rows.installations);
-  };
+  /** A live read's answer as the service's call answers it: the read, or why it answered none. */
+  const called = <Answer, Failure extends string>(
+    read: Effect.Effect<Answer | { readonly failure: Failure }>,
+  ): Effect.Effect<TaskCallResult<Answer, Failure>> =>
+    Effect.map(read, (answer) =>
+      typeof answer === "object" && answer !== null && "failure" in answer
+        ? { ok: false as const, failure: answer.failure }
+        : { ok: true as const, answer: answer as Answer },
+    );
+  /** A live read first asked, or polled past `after`. */
+  const asked = <Part extends string, Refused extends { readonly failure: string }>(
+    read: PolledLive<Part, Refused>,
+    poll: boolean | undefined,
+    after: string | undefined,
+  ) => (poll === true ? read.poll(after) : Effect.succeed(read.first()));
   const service: FakeService = {
     tasks,
     threads: {},
@@ -494,7 +451,6 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     agents: {},
     tasklessAgents: [],
-    liveList: { ok: true, answer: SEALED_LIST },
     liveListReads: 0,
     deleteFails: false,
     createAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
@@ -502,17 +458,14 @@ function fakeService(tasks: Task[]): FakeService {
     repositoryUnreachable: false,
     reads: [],
     boards: {},
-    boardSeals: {},
-    recordSeals: {},
-    recordPolled: false,
+    boardLives: {},
+    recordLives: {},
     opensUnanswered: 0,
-    pageSeals: {},
-    browserTabSeals: {},
-    historySeals: {},
+    pageLives: {},
+    browserTabLives: {},
+    historyLives: {},
     recordReads: [],
     images: {},
-    boardSaveTxid: undefined,
-    boardSaveHeld: undefined,
     codes: {},
     files: {},
     folders: {},
@@ -583,45 +536,25 @@ function fakeService(tasks: Task[]): FakeService {
     pinsFail: false,
     sections: undefined,
     sectionWrites: [],
-    sidebarTxid: undefined,
     get memberships() {
       return memberships;
     },
     set memberships(next) {
       memberships = next;
-      pushWorkspaces();
+      if (!followMisses) live.workspaces.move();
     },
-    get realtimeMisses() {
-      return realtimeMisses;
+    get followMisses() {
+      return followMisses;
     },
-    set realtimeMisses(next) {
-      realtimeMisses = next;
+    set followMisses(next) {
+      followMisses = next;
     },
-    realtime,
-    openLive: (url) => {
-      const client = realtime.open(url);
-      return {
-        close: client.close,
-        subscribe: (query) => {
-          const subscription = client.subscribe(query);
-          return {
-            ...subscription,
-            onChange: (listener) => {
-              const off = subscription.onChange(listener);
-              const rows = rowsOf(query.capability);
-              if (rows !== undefined) listener({ status: "live", data: rows });
-              return off;
-            },
-          };
-        },
-      };
-    },
+    live,
     installUrl: INSTALL_URL,
     workspacesFail: false,
     workspacesSignedOut: false,
     renamedAgain: undefined,
     renameAnswered: Effect.void,
-    renameTxid: undefined,
     members: {},
     former: {},
     linearIssues: {},
@@ -677,42 +610,42 @@ function fakeService(tasks: Task[]): FakeService {
     workspaces: {
       tokenRepositories: () => Effect.succeed(UNANSWERED_WORKSPACE),
       setTokenRepository: () => Effect.succeed(UNANSWERED_WORKSPACE),
-      // A workspace's invitations are sealed for an owner or an admin alone, as the service seals them.
-      invitationsLive: (workspaceId) =>
-        Effect.sync(() => {
-          service.reads.push(`invitations-live:${workspaceId}`);
-          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
-          return { ok: true, answer: INVITATIONS_SEALED } as const;
+      // A workspace's invitations are read for an owner or an admin alone, as the service reads them; a poll is not counted among the reads.
+      invitationsLive: (workspaceId, _userId, poll, after) =>
+        Effect.suspend((): ReturnType<TasksClient["workspaces"]["invitationsLive"]> => {
+          if (poll !== true) service.reads.push(`invitations-live:${workspaceId}`);
+          if (service.notPermitted) return Effect.succeed(NOT_PERMITTED_WORKSPACE);
+          return Effect.map(asked(live.invitations, poll, after), (answer) => ({
+            ok: true as const,
+            answer: { ...answer, origin: INVITATIONS_ORIGIN },
+          }));
         }),
-      // A workspace's people are sealed for a member alone, as the service seals them.
-      peopleLive: (workspaceId, _userId) =>
-        Effect.sync(() => {
-          service.reads.push(`people-live:${workspaceId}`);
-          if (service.workspacesFail) return UNANSWERED_WORKSPACE;
+      // A workspace's people are read for a member alone, as the service reads them; a poll is not counted among the reads.
+      peopleLive: (workspaceId, _userId, poll, after) =>
+        Effect.suspend((): ReturnType<TasksClient["workspaces"]["peopleLive"]> => {
+          if (poll !== true) service.reads.push(`people-live:${workspaceId}`);
+          if (service.workspacesFail) return Effect.succeed(UNANSWERED_WORKSPACE);
           return service.members[workspaceId] === undefined
-            ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const)
-            : ({ ok: true, answer: PEOPLE_SEALED } as const);
+            ? Effect.succeed({ ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const)
+            : Effect.map(asked(live.people, poll, after), (answer) => ({
+                ok: true as const,
+                answer,
+              }));
         }),
-      // A poll answers each part's rows inline, as the service answers one while Realtime fails it.
-      live: (_userId, poll) =>
-        Effect.sync(() => {
-          service.reads.push(poll === true ? "workspaces-poll" : "workspaces-live");
-          if (service.workspacesFail) return UNANSWERED_WORKSPACE;
-          if (service.workspacesSignedOut)
-            return { ok: false, failure: LIVE_SIGNED_OUT.failure } as const;
-          if (poll !== true) return { ok: true, answer: WORKSPACES_SEALED } as const;
-          const rows = workspacesLiveRows(service.memberships);
-          const { workspaces, installations } = WORKSPACES_SEALED.queries;
-          return {
-            ok: true,
-            answer: {
-              ...WORKSPACES_SEALED,
-              queries: {
-                workspaces: { ...workspaces, rows: rows.workspaces },
-                installations: { ...installations, rows: rows.installations },
-              },
-            },
-          } as const;
+      // The workspaces as the store holds them, each poll held until they move; a poll is not counted among the reads.
+      live: (_userId, poll, after) =>
+        Effect.suspend((): ReturnType<TasksClient["workspaces"]["live"]> => {
+          if (poll !== true) service.reads.push("workspaces-live");
+          if (service.workspacesFail) return Effect.succeed(UNANSWERED_WORKSPACE);
+          if (service.workspacesSignedOut) {
+            return Effect.succeed({ ok: false, failure: LIVE_SIGNED_OUT.failure } as const);
+          }
+          // Note that a poll held until the workspaces moved reads the session again as it answers.
+          return Effect.map(asked(live.workspaces, poll, after), (answer) =>
+            service.workspacesSignedOut
+              ? ({ ok: false, failure: LIVE_SIGNED_OUT.failure } as const)
+              : ({ ok: true, answer } as const),
+          );
         }),
       create: (name) =>
         Effect.sync(() => {
@@ -890,10 +823,14 @@ function fakeService(tasks: Task[]): FakeService {
           return { ok: true, answer: workspaceId } as const;
         }),
     },
-    sidebarLive: (_userId) =>
-      Effect.sync(() => {
-        service.reads.push("sidebar-live");
-        return { ok: true, answer: SIDEBAR_SEALED } as const;
+    // The sidebar as the service holds it; a poll is not counted among the reads.
+    sidebarLive: (_userId, poll, after) =>
+      Effect.suspend(() => {
+        if (poll !== true) service.reads.push("sidebar-live");
+        return Effect.map(asked(live.sidebar, poll, after), (answer) => ({
+          ok: true as const,
+          answer,
+        }));
       }),
     // The service keeps a pin's first instant, newest pinned first, and answers the pins as they then stand.
     pinRepository: (repository, pinned) =>
@@ -904,17 +841,13 @@ function fakeService(tasks: Task[]): FakeService {
         service.pins = pinned
           ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
           : others;
-        const txid = service.sidebarTxid;
-        return txid === undefined ? { pins: service.pins } : { pins: service.pins, txid };
+        return { pins: service.pins };
       }),
     // The service answers its sections as they stand, the test having set them to what the write left.
     writeTaskSection: (write) =>
       Effect.sync(() => {
         service.sectionWrites.push(write);
-        const txid = service.sidebarTxid;
-        return service.sections === undefined || txid === undefined
-          ? service.sections
-          : { ...service.sections, txid };
+        return service.sections;
       }),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
@@ -1013,41 +946,40 @@ function fakeService(tasks: Task[]): FakeService {
         return { unlinked: true as const };
       }),
     readBoard: (taskId) => Effect.sync(() => service.boards[taskId]),
-    boardLive: (taskId) =>
-      Effect.sync(() => {
-        const sealed = service.boardSeals[taskId];
-        return sealed === undefined
-          ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
-          : { ok: true, answer: sealed };
+    boardLive: (taskId, _userId, poll, after) =>
+      Effect.suspend((): ReturnType<TasksClient["boardLive"]> => {
+        const read = service.boardLives[taskId];
+        return read === undefined
+          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND } as const)
+          : called(asked(read, poll, after));
       }),
-    historyLive: (taskId) =>
-      Effect.sync(() => {
-        const sealed = service.historySeals[taskId];
-        return sealed === undefined
-          ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
-          : { ok: true, answer: sealed };
+    historyLive: (taskId, _userId, poll, after) =>
+      Effect.suspend((): ReturnType<TasksClient["historyLive"]> => {
+        const read = service.historyLives[taskId];
+        return read === undefined
+          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
+          : called(asked(read, poll, after));
       }),
-    browserTabsLive: (taskId) =>
-      Effect.sync(() => {
-        const sealed = service.browserTabSeals[taskId];
-        return sealed === undefined
-          ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
-          : { ok: true, answer: sealed };
+    browserTabsLive: (taskId, _userId, poll, after) =>
+      Effect.suspend((): ReturnType<TasksClient["browserTabsLive"]> => {
+        const read = service.browserTabLives[taskId];
+        return read === undefined
+          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
+          : called(asked(read, poll, after));
       }),
-    pagesLive: (place) =>
-      Effect.sync(() => {
-        const sealed = service.pageSeals[pagePlaceId(place)];
-        return sealed === undefined
-          ? { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED }
-          : { ok: true, answer: sealed };
+    pagesLive: (place, _userId, poll, after) =>
+      Effect.suspend((): ReturnType<TasksClient["pagesLive"]> => {
+        const read = service.pageLives[pagePlaceId(place)];
+        return read === undefined
+          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
+          : called(asked(read, poll, after));
       }),
-    recordLive: (taskId) =>
-      Effect.sync(() => {
-        if (service.recordPolled) return { ok: true, answer: polledRecord(service, taskId) };
-        const sealed = service.recordSeals[taskId];
-        return sealed === undefined
-          ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
-          : { ok: true, answer: sealed };
+    recordLive: (taskId, _userId, poll, after) =>
+      Effect.suspend((): ReturnType<TasksClient["recordLive"]> => {
+        const read = service.recordLives[taskId];
+        return read === undefined
+          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND } as const)
+          : called(asked(read, poll, after));
       }),
     readCode: (taskId) =>
       Effect.sync(() => {
@@ -1057,20 +989,17 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     // The service keeps the last scene written, beside whatever drawing it holds.
     saveBoard: (taskId, elements, appliedDrawing, image) =>
-      Effect.andThen(
-        service.boardSaveHeld === undefined ? Effect.void : Deferred.await(service.boardSaveHeld),
-        Effect.sync(() => {
-          service.images[taskId] = image;
-          const board = { ...service.boards[taskId], elements, appliedDrawing };
-          service.boards[taskId] = board;
-          const txid = service.boardSaveTxid;
-          return txid === undefined ? { board } : { board, txid };
-        }),
-      ),
-    listLive: () =>
       Effect.sync(() => {
-        service.liveListReads += 1;
-        return service.liveList;
+        service.images[taskId] = image;
+        const board = { ...service.boards[taskId], elements, appliedDrawing };
+        service.boards[taskId] = board;
+        return { board };
+      }),
+    // Note that a poll is not counted among the list's reads, as each is held until its rows move.
+    listLive: (_userId, poll, after) =>
+      Effect.suspend(() => {
+        if (poll !== true) service.liveListReads += 1;
+        return called(asked(live.list, poll, after));
       }),
     open: (taskId) =>
       Effect.sync((): TaskCallResult<Task, TaskCallFailure> => {
@@ -1126,9 +1055,7 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? renamed : candidate,
         );
-        return service.renameTxid === undefined
-          ? { task: renamed }
-          : { task: renamed, txid: service.renameTxid };
+        return { task: renamed };
       }),
     // The service sets the status, the priority, and the assignee named, naming the assignee by
     // their account, and leaves the rest standing; null assigns the task to no one.
@@ -1176,87 +1103,26 @@ function fakeService(tasks: Task[]): FakeService {
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
-/** Realtime as a script: each subscription by its capability, and a way to deliver rows to one or stop it for good. */
-function fakeRealtime() {
-  const listeners = new Map<
-    string,
-    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
-  >();
-  const closed: string[] = [];
-  const arrived = new Set<string>();
-  const waiting = new Map<string, Array<() => void>>();
-  /** A write's transaction waited on until `arrive` names it, as Realtime's `awaitTxId` settles. */
-  const awaitTxId = (txid: string): Promise<void> => {
-    if (arrived.has(txid)) return Promise.resolve();
-    const { promise, resolve } = Promise.withResolvers<void>();
-    waiting.set(txid, [...(waiting.get(txid) ?? []), resolve]);
-    return promise;
-  };
-  const open = (url: string): LiveClient => ({
-    subscribe: (query) => ({
-      onChange: (listener) => {
-        listeners.set(query.capability, listener);
-        return () => listeners.delete(query.capability);
-      },
-      renew: () => Promise.resolve(),
-      awaitTxId,
-      unsubscribe: () => void listeners.delete(query.capability),
-    }),
-    close: () => void closed.push(url),
-  });
-  /** A part's subscription, once the host's follower has made it. */
-  const subscribed = (capability: string) =>
-    Effect.gen(function* () {
-      for (let turn = 0; turn < 100; turn += 1) {
-        const listener = listeners.get(capability);
-        if (listener !== undefined) return listener;
-        yield* Effect.yieldNow;
-      }
-      return assert.fail(`the host never subscribed to ${capability}`);
-    });
-  return {
-    open,
-    closed,
-    /** The workers' rows and then the mark's delivered, as Realtime's snapshots carry them, once the host subscribed. */
-    deliver: (data: readonly unknown[], workers: readonly unknown[] = []) =>
-      Effect.gen(function* () {
-        (yield* subscribed("capability-workers"))({ status: "live", data: workers });
-        (yield* subscribed("capability-mark"))({ status: "live", data });
-      }),
-    /** The mark's subscription stopped for good. */
-    fail: Effect.map(subscribed("capability-mark"), (listener) =>
-      listener({ status: "error", data: [] }),
-    ),
-    /** Waits for every part of the task list to be subscribed, as the follow forked from a refresh subscribes them. */
-    listSubscribed: Effect.gen(function* () {
-      for (let turn = 0; turn < 100; turn += 1) {
-        if (listeners.has("plans") && listeners.has("agents") && listeners.has("issues")) return;
-        yield* Effect.yieldNow;
-      }
-      assert.fail("every part of the list is subscribed");
-    }),
-    /** One part of the task list's rows delivered, as Realtime's snapshot carries them. */
-    deliverPart: (part: string, data: readonly unknown[]) => {
-      const listener = listeners.get(part);
-      assert.ok(listener, `no subscription to ${part}`);
-      listener({ status: "live", data });
-    },
-    /** A write's transaction reaching the subscriptions, settling every wait on it. */
-    arrive: (txid: string) => {
-      arrived.add(txid);
-      for (const resolve of waiting.get(txid) ?? []) resolve();
-      waiting.delete(txid);
-    },
-    /** The transactions a wait still stands on. */
-    awaitingTxids: () => [...waiting.keys()].toSorted(),
-    /** One part of the task list's subscription stopped for good. */
-    failPart: (part: string) => listeners.get(part)?.({ status: "error", data: [] }),
-    /** Lets what was delivered reach the view, through the fibers that carry it. */
-    settled: Effect.gen(function* () {
-      for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
-    }),
-  };
-}
+/** `settled`, then the host's next poll asked, which waits half a second after the last answered (`live-follow.ts`), then `settled` again. */
+const nextPoll = (settled: Effect.Effect<void>) =>
+  Effect.andThen(settled, Effect.andThen(TestClock.adjust(Duration.millis(500)), settled));
+
+/** The host's own fibers given their turn, as `subject`'s `settled` gives them. */
+const settledTurns = Effect.repeat(Effect.yieldNow, { times: 200 });
+
+/** The followed list answered with the parts given, the rest as they stood, on the poll standing or the next. */
+const listAnswers = (
+  service: FakeService,
+  parts: {
+    readonly plans?: readonly unknown[];
+    readonly agents?: readonly unknown[];
+    readonly issues?: readonly unknown[];
+  },
+) =>
+  Effect.andThen(
+    Effect.sync(() => service.live.list.set(parts)),
+    nextPoll(settledTurns),
+  );
 
 /** The one voice call as the live composer holds it: about a task, about the desk, or none. */
 interface StandingCall {
@@ -1274,8 +1140,6 @@ function subject(
     call?: StandingCall;
     /** A view the window's channel throws on, the first time one is told. */
     breaksOn?: (view: TasksView) => boolean;
-    /** Realtime's client, which the open task's board is followed over. */
-    openLive?: (url: string) => LiveClient;
     /** The account signed in now, Dana's where none is named. */
     accountId?: () => string;
   } = {},
@@ -1295,7 +1159,6 @@ function subject(
     const standing = options.call ?? { about: undefined };
     /** Every followed transcript's page the host told, in order. */
     const pages: WireValue[] = [];
-    const realtime = fakeRealtime();
     const tasks = yield* composeTasks({
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
@@ -1325,9 +1188,6 @@ function subject(
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
-      // Note that the workspaces are always followed over the fake service's own Realtime, whatever a test hands for the board.
-      openLive: (url) =>
-        url === WORKSPACES_URL ? service.openLive(url) : (options.openLive ?? realtime.open)(url),
       accountId: options.accountId ?? (() => "user-dana"),
       endTaskCall: (taskId) =>
         Effect.gen(function* () {
@@ -1356,19 +1216,20 @@ function subject(
         waiters.push({ wanted, seen });
         return Deferred.await(seen);
       });
-    /** The followed list delivered as the service holds it: a row for each of its tasks, and the agents given. */
-    const listed = (agents: readonly unknown[] = []) =>
-      Effect.gen(function* () {
-        yield* realtime.listSubscribed;
-        realtime.deliverPart("plans", service.tasks.map(rowOfTask));
-        realtime.deliverPart("agents", agents);
-        realtime.deliverPart("issues", []);
-        yield* realtime.settled;
-      });
-    /** The host's own fibers given their turn, so what Realtime told is drawn. */
+    /** The host's own fibers given their turn, so what a poll answered is drawn. */
     const settled = Effect.gen(function* () {
       for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
     });
+    /**
+     * The followed list answered as the service holds it: a row for each of
+     * its tasks, and the agents given, on the poll standing or the next, half
+     * a second after the last answered (`live-follow.ts`).
+     */
+    const listed = (agents: readonly unknown[] = []) =>
+      Effect.gen(function* () {
+        service.live.list.set({ plans: service.tasks.map(rowOfTask), agents, issues: [] });
+        yield* nextPoll(settled);
+      });
     /** Opens a task as the window's press does, then lets the read the open left running land. */
     const openTask = (taskId: string) =>
       Effect.tap(call(GATEWAY_METHOD.TASKS_OPEN, { taskId }), () => settled);
@@ -1383,7 +1244,6 @@ function subject(
       last,
       viewWhere,
       viewLands,
-      realtime,
       listed,
       settled,
       openTask,
@@ -1562,104 +1422,23 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
   }),
 );
 
-it.effect(
-  "a rename that answers its transaction is drawn at once and answered once the followed list carries it, holding no other task write meanwhile",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([
-        task(INVITES, "Teammate invitations", "# Invites", 10),
-        task(BILLING, "Billing export", "# Billing", 20),
-      ]);
-      service.renameTxid = "7301";
-      const { call, listed, realtime, settled, last } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* listed();
+it.effect("a quiet start opens nothing and answers its task", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(BILLING, "Billing export", "# Billing", 20)]);
+    const { call, listed, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* listed();
+    service.createAnswer = {
+      ok: true,
+      answer: { task: task(INVITES, "Invitation expiry", "", 10) },
+    };
 
-      const renaming = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" }),
-      );
-      yield* settled;
-      assert.deepEqual(realtime.awaitingTxids(), ["7301"]);
-      assert.equal(renaming.pollUnsafe(), undefined, "the rename waits for its transaction");
-      assert.equal(
-        last()?.tasks.find((each) => each.id === INVITES)?.name,
-        "Invitations",
-        "the answer is drawn before the wait, so a newer row the list carries lands over it",
-      );
-
-      service.renameTxid = undefined;
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: BILLING, name: "Billing" }),
-        { renamed: true },
-        "another write is not held behind the wait",
-      );
-
-      realtime.arrive("7301");
-      assert.deepEqual(yield* Fiber.join(renaming), { renamed: true });
-      assert.deepEqual(realtime.awaitingTxids(), []);
-    }),
-);
-
-it.effect(
-  "a start answers once its task is drawn open, before the followed list carries its transaction",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([task(BILLING, "Billing export", "# Billing", 20)]);
-      const { call, listed, realtime, settled, last } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* listed();
-      const made = task(INVITES, "Invitation expiry", "", 10);
-      service.createAnswer = { ok: true, answer: { task: made, txid: "7303" } };
-
-      const starting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry" }),
-      );
-      yield* settled;
-
-      assert.notEqual(starting.pollUnsafe(), undefined, "the start is answered already");
-      assert.deepEqual(yield* Fiber.join(starting), { planId: INVITES });
-      assert.equal(last()?.activeTaskId, INVITES);
-      assert.deepEqual(realtime.awaitingTxids(), []);
-    }),
-);
-
-it.effect(
-  "a quiet start opens nothing and answers once the followed list carries its transaction",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([task(BILLING, "Billing export", "# Billing", 20)]);
-      const { call, listed, realtime, settled, last } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* listed();
-      const made = task(INVITES, "Invitation expiry", "", 10);
-      service.createAnswer = { ok: true, answer: { task: made, txid: "7304" } };
-
-      const starting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry", quiet: true }),
-      );
-      yield* settled;
-
-      assert.equal(starting.pollUnsafe(), undefined, "the start waits for its transaction");
-      realtime.arrive("7304");
-      assert.deepEqual(yield* Fiber.join(starting), { planId: INVITES });
-      assert.equal(last()?.activeTaskId, undefined, "the task is not opened");
-    }),
-);
-
-it.effect(
-  "a rename's transaction is waited for by nothing while the list is not followed over Realtime",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      service.renameTxid = "7302";
-      const { call, realtime } = yield* subject(service);
-
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" }),
-        { renamed: true },
-      );
-      assert.deepEqual(realtime.awaitingTxids(), []);
-    }),
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry", quiet: true }),
+      { planId: INVITES },
+    );
+    assert.equal(last()?.activeTaskId, undefined, "the task is not opened");
+  }),
 );
 
 it.effect(
@@ -2121,15 +1900,13 @@ it.effect(
         title: "Later",
         createdAt: 7,
       };
-      service.realtime.deliver(
-        "sections",
-        sidebarLiveRows({ sections: [later, launch], entries: [], agentEntries: [] }, []).sections,
-      );
-      service.realtime.deliver("pins", [
+      service.sections = { sections: [later, launch], entries: [], agentEntries: [] };
+      service.pins = [
         { repository: "acme/relay", pinnedAt: 3 },
         { repository: "acme/web", pinnedAt: 9 },
-      ]);
-      yield* settled;
+      ];
+      service.live.sidebar.move();
+      yield* nextPoll(settled);
       assert.deepEqual(
         last()?.taskSections?.sections.map((section) => section.title),
         ["Launch", "Later"],
@@ -2142,114 +1919,22 @@ it.effect(
 );
 
 it.effect(
-  "a pin or a section's write answers once the followed sidebar has its transaction, at once where it names none, and at once before the sidebar is followed",
+  "a pin's write answers the service's word, before the sidebar is followed and after",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, last, settled } = yield* subject(service);
-      const launch: TaskSection = {
-        id: SECTION_ID,
-        workspaceId: PERSONAL.id,
-        title: "Launch",
-        createdAt: 5,
-      };
-      service.sections = { sections: [launch], entries: [], agentEntries: [] };
+      const { call, settled } = yield* subject(service);
+      const pin = (repository: string) =>
+        call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository, pinned: true });
 
-      // Before the first refresh nothing follows the sidebar, so a write's transaction is not waited on.
-      service.sidebarTxid = "40";
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, {
-          repository: "acme/relay",
-          pinned: true,
-        }),
-        { changed: true },
-      );
-      assert.deepEqual(service.realtime.awaitingTxids(), []);
-
+      assert.deepEqual(yield* pin("acme/relay"), { changed: true });
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
-
-      service.sidebarTxid = "41";
-      const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
-      service.sections = { sections: [launch], entries: [placed], agentEntries: [] };
-      const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
-      const placing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place));
-      yield* settled;
-      assert.deepEqual(service.realtime.awaitingTxids(), ["41"]);
-      assert.equal(placing.pollUnsafe(), undefined, "the write waits for its transaction");
-      service.realtime.arrive("41");
-      assert.deepEqual(yield* Fiber.join(placing), { changed: true });
-      assert.deepEqual(last()?.taskSections, {
-        sections: [launch],
-        entries: [placed],
-        agentEntries: [],
-      });
-
-      service.sidebarTxid = "42";
-      const pinning = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/web", pinned: true }),
-      );
-      yield* settled;
-      assert.deepEqual(service.realtime.awaitingTxids(), ["42"]);
-      service.realtime.arrive("42");
-      assert.deepEqual(yield* Fiber.join(pinning), { changed: true });
-
-      // A write that changed no row names no transaction, so there is nothing to wait for.
-      service.sidebarTxid = undefined;
+      assert.deepEqual(yield* pin("acme/web"), { changed: true });
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/web", pinned: true }),
-        { changed: true },
+        service.pins.map((each) => each.repository),
+        ["acme/web", "acme/relay"],
       );
-      assert.deepEqual(service.realtime.awaitingTxids(), []);
-    }),
-);
-
-it.effect(
-  "a task opens while a section's write still waits on its transaction, which is drawn at once and answered once the followed sidebar carries it",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([
-        task(INVITES, "Teammate invitations", "# Invites", 10),
-        task(BILLING, "Billing export", "# Billing", 20),
-      ]);
-      const { call, last, settled } = yield* subject(service);
-      const launch: TaskSection = {
-        id: SECTION_ID,
-        workspaceId: PERSONAL.id,
-        title: "Launch",
-        createdAt: 5,
-      };
-      service.sections = { sections: [launch], entries: [], agentEntries: [] };
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* settled;
-
-      service.sidebarTxid = "51";
-      const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
-      service.sections = { sections: [launch], entries: [placed], agentEntries: [] };
-      const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
-      const placing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place));
-      yield* settled;
-      assert.deepEqual(service.realtime.awaitingTxids(), ["51"]);
-      assert.deepEqual(
-        last()?.taskSections?.entries,
-        [placed],
-        "the answer is drawn before the wait",
-      );
-
-      const opening = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING }));
-      yield* settled;
-      yield* TestClock.adjust(Duration.seconds(1));
-      assert.deepEqual(
-        opening.pollUnsafe(),
-        Exit.succeed({ opened: true }),
-        "the open is not held behind the section's wait",
-      );
-      assert.equal(last()?.activeTaskId, BILLING);
-      assert.equal(placing.pollUnsafe(), undefined, "the write still waits for its transaction");
-
-      service.realtime.arrive("51");
-      assert.deepEqual(yield* Fiber.join(placing), { changed: true });
-      assert.deepEqual(service.realtime.awaitingTxids(), []);
     }),
 );
 
@@ -2410,45 +2095,29 @@ it.effect(
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
       assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
 
+      assert.equal(service.live.workspaces.held(), 1, "their poll is held while nothing moves");
       yield* tasks.reset;
       assert.deepEqual(last()?.workspaces, []);
-      assert.deepEqual(service.realtime.subscribed(), []);
+      assert.equal(service.live.workspaces.held(), 0, "a sign-out lets their poll go");
     }),
 );
 
-it.effect(
-  "a teammate's change reaches the view as Realtime tells it, and while Realtime fails them the workspaces are polled until they are subscribed again",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([]);
-      service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* settled;
+it.effect("a teammate's change reaches the view as the followed workspaces answer it", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    service.memberships = [PERSONAL, ACME];
+    const { call, last, settled } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* settled;
 
-      service.memberships = [PERSONAL, { ...ACME, name: "Acme Labs" }];
-      yield* settled;
-      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
-
-      service.realtime.fail("workspaces");
-      yield* settled;
-      service.memberships = [PERSONAL];
-      yield* TestClock.adjust(Duration.seconds(3));
-      yield* settled;
-      assert.deepEqual(last()?.workspaces, [PERSONAL], "a poll draws what Realtime missed");
-      assert.ok(service.reads.includes("workspaces-poll"));
-
-      yield* TestClock.adjust(Duration.seconds(15));
-      yield* settled;
-      assert.ok(service.realtime.subscribed().includes("capability-workspaces"));
-      service.memberships = [PERSONAL, RELAY];
-      yield* settled;
-      assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
-    }),
+    service.memberships = [PERSONAL, { ...ACME, name: "Acme Labs" }];
+    yield* settled;
+    assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
+  }),
 );
 
 it.effect(
-  "a workspaces reseal refused as signed out stops the follow, rather than sealing the old account again on the backoff",
+  "a workspaces poll refused as signed out stops the follow, rather than reading the old account again on the backoff",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2460,21 +2129,21 @@ it.effect(
 
       const before = service.reads.length;
       service.workspacesSignedOut = true;
-      service.realtime.fail("workspaces");
+      service.live.workspaces.move();
       yield* TestClock.adjust(Duration.minutes(5));
       yield* settled;
 
       assert.deepEqual(
         service.reads.slice(before),
-        ["workspaces-live"],
-        "the reseal refused as signed out is the last ask: the old account is not sealed again on the backoff",
+        [],
+        "the poll refused as signed out is the last ask: the old account is not read again on the backoff",
       );
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME], "what was drawn stays");
     }),
 );
 
 it.effect(
-  "while the service seals nothing the workspaces say reading and the tasks are drawn, and the seal is asked again after a pause until it answers",
+  "while the service answers nothing the workspaces say reading and the tasks are drawn, and the read is asked again after a pause until it answers",
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Draft", 10);
@@ -2595,7 +2264,7 @@ it.effect(
 );
 
 it.effect(
-  "a rename's answer is drawn though the follow moved another workspace while it was out, where Realtime never told the rename itself",
+  "a rename's answer is drawn though the follow moved another workspace while it was out, where the follow never answered the rename itself",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2605,7 +2274,7 @@ it.effect(
       yield* settled;
       const answered = yield* Deferred.make<void>();
       service.renameAnswered = Deferred.await(answered);
-      service.realtimeMisses = true;
+      service.followMisses = true;
 
       const renaming = yield* Effect.forkChild(
         call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
@@ -2613,7 +2282,7 @@ it.effect(
       yield* settled;
       // Only the other workspace's change reaches the follow; the rename's own is lost.
       const missed = workspacesLiveRows([{ ...PERSONAL, name: "Dana's own" }, ACME]);
-      service.realtime.deliver("workspaces", missed.workspaces);
+      service.live.workspaces.set({ workspaces: missed.workspaces });
       yield* settled;
       yield* Deferred.succeed(answered, undefined);
       yield* Fiber.join(renaming);
@@ -2644,7 +2313,7 @@ it.effect(
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
       // A teammate renames it back before the first rename's answer lands.
       service.memberships = [PERSONAL, ACME];
-      yield* settled;
+      yield* nextPoll(settled);
       yield* Deferred.succeed(answered, undefined);
       yield* Fiber.join(renaming);
 
@@ -2653,7 +2322,7 @@ it.effect(
 );
 
 it.effect(
-  "of two renames out at once, the first one's answer landing last is not drawn over the second's, where Realtime tells neither",
+  "of two renames out at once, the first one's answer landing last is not drawn over the second's, where the follow answers neither",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2661,7 +2330,7 @@ it.effect(
       const { call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
-      service.realtimeMisses = true;
+      service.followMisses = true;
       const firstAnswered = yield* Deferred.make<void>();
       service.renameAnswered = Deferred.await(firstAnswered);
 
@@ -2705,7 +2374,7 @@ it.effect(
         photo: PHOTO_URL,
       });
 
-      yield* settled;
+      yield* nextPoll(settled);
       assert.deepEqual(set, { workspace: { ...ACME, photoVersion: PHOTO_URL } });
       assert.deepEqual(drawn, [PERSONAL, { ...ACME, photoVersion: PHOTO_URL }]);
       assert.deepEqual(removed, { workspace: ACME });
@@ -3652,14 +3321,9 @@ it.effect(
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const service = fakeService([invites]);
       service.issueLinks[INVITES] = [];
-      const realtime = fakeRealtime();
-      const { call, last } = yield* subject(service, { openLive: realtime.open });
+      const { call, last } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* realtime.listSubscribed;
-      realtime.deliverPart("plans", [rowOfTask(invites)]);
-      realtime.deliverPart("agents", []);
-      realtime.deliverPart("issues", []);
-      yield* realtime.settled;
+      yield* listAnswers(service, { plans: [rowOfTask(invites)], agents: [], issues: [] });
       const reads = [service.reads.length, service.liveListReads];
       const tagsOf = () => last()?.tasks.find((each) => each.id === INVITES)?.issues;
 
@@ -3745,16 +3409,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const realtime = fakeRealtime();
-      const { call, last, openTask } = yield* subject(fakeService([invites]), {
-        openLive: realtime.open,
-      });
+      const service = fakeService([invites]);
+      const { call, last, openTask } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* realtime.listSubscribed;
-      realtime.deliverPart("plans", [rowOfTask(invites)]);
-      realtime.deliverPart("agents", []);
-      realtime.deliverPart("issues", []);
-      yield* realtime.settled;
+      yield* listAnswers(service, { plans: [rowOfTask(invites)], agents: [], issues: [] });
       yield* openTask(INVITES);
 
       const changed = yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, {
@@ -3812,49 +3470,6 @@ it.effect(
     }),
 );
 
-/** A task's board sealed for following, named by the round it was sealed in. */
-function sealedBoard(round: number): TaskBoardLiveAnswer {
-  return {
-    url: "wss://realtime.example/v1",
-    queries: {
-      board: { capability: `board-${round}`, queryFingerprint: "board", expiresAt: 3_600_000 },
-    },
-  };
-}
-
-/** Realtime as a script: each board subscription standing by the seal it was made with, which a test delivers rows to or stops for good. */
-function fakeBoardRealtime() {
-  const listeners = new Map<
-    string,
-    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
-  >();
-  const client: LiveClient = {
-    subscribe: (query) => ({
-      onChange: (listener) => {
-        listeners.set(query.capability, listener);
-        return () => listeners.delete(query.capability);
-      },
-      renew: () => Promise.resolve(),
-      awaitTxId: () => Promise.resolve(),
-      unsubscribe: () => void listeners.delete(query.capability),
-    }),
-    close: () => {},
-  };
-  const listener = (capability: string) => {
-    const found = listeners.get(capability);
-    assert.ok(found, `no subscription to ${capability}`);
-    return found;
-  };
-  return {
-    client,
-    subscribed: () =>
-      [...listeners.keys()].filter((capability) => !capability.startsWith("capability-")),
-    deliver: (capability: string, data: readonly unknown[]) =>
-      listener(capability)({ status: "live", data }),
-    fail: (capability: string) => listener(capability)({ status: "error", data: undefined }),
-  };
-}
-
 /** Every step the board's follow has to take, taken. */
 const boardSettled = Effect.repeat(
   Effect.andThen(
@@ -3864,8 +3479,11 @@ const boardSettled = Effect.repeat(
   { times: 20 },
 );
 
+/** A task's board's live read as the service answers it polled, its rows none until a test sets them. */
+const boardLive = () => polledLive<"board", typeof NOT_FOUND_LIVE>(["board"]);
+
 it.effect(
-  "the open task's board is read again as its followed mark moves, not for a delivery that left it, and a follow that stops is sealed again",
+  "the open task's board is read again as its followed mark moves, not for an answer that left it, and leaving the task lets the follow go",
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
@@ -3876,169 +3494,92 @@ it.effect(
         drawing: { number, elements: [] },
       });
       service.boards[INVITES] = { elements: [], appliedDrawing: 0 };
-      service.boardSeals[INVITES] = sealedBoard(0);
-      const realtime = fakeBoardRealtime();
-      const { call, tasks, last, viewLands, openTask } = yield* subject(service, {
-        openLive: () => realtime.client,
-      });
+      const board = boardLive();
+      service.boardLives[INVITES] = board;
+      const { call, tasks, last, viewLands, openTask } = yield* subject(service);
       yield* tasks.lifetime;
       yield* openTask(INVITES);
       assert.deepEqual(last()?.board, { elements: [], appliedDrawing: 0 });
       yield* boardSettled;
-      assert.deepEqual(realtime.subscribed(), ["board-0"]);
+      assert.equal(board.held(), 1, "its poll is held while the mark stands");
 
-      // The first delivery reads the board again, since the open read may have missed a drawing.
+      // The first answer with rows reads the board again, since the open read may have missed a drawing.
       service.boards[INVITES] = drawn(1, 0);
       const first = yield* viewLands((view) => view.board?.drawing?.number === 1);
-      realtime.deliver("board-0", [
-        { taskId: INVITES, drawingNumber: 1, appliedDrawing: 0, imaged: false },
-      ]);
+      board.set({
+        board: [{ taskId: INVITES, drawingNumber: 1, appliedDrawing: 0, imaged: false }],
+      });
       yield* first;
 
-      // A delivery that left the mark where it stood reads nothing; one that moved it reads the board.
+      // An answer that left the mark where it stood reads nothing; one that moved it reads the board.
       service.boards[INVITES] = drawn(2, 1);
       const moved = yield* viewLands((view) => view.board?.drawing?.number === 2);
-      realtime.deliver("board-0", [
-        { taskId: INVITES, drawingNumber: 1, appliedDrawing: 0, imaged: false },
-      ]);
-      yield* TestClock.adjust(Duration.millis(1));
+      board.set({
+        board: [{ taskId: INVITES, drawingNumber: 1, appliedDrawing: 0, imaged: false }],
+      });
+      yield* TestClock.adjust(Duration.millis(500));
+      yield* boardSettled;
       assert.equal(last()?.board?.drawing?.number, 1);
-      realtime.deliver("board-0", [
-        { taskId: INVITES, drawingNumber: 2, appliedDrawing: 1, imaged: true },
-      ]);
+      board.set({
+        board: [{ taskId: INVITES, drawingNumber: 2, appliedDrawing: 1, imaged: true }],
+      });
+      yield* TestClock.adjust(Duration.millis(500));
       yield* moved;
 
-      // A follow Realtime stops is polled, and subscribed again as it breaks, which stands until its first rows' bound.
-      service.boardSeals[INVITES] = sealedBoard(1);
-      realtime.fail("board-0");
-      yield* TestClock.adjust(Duration.seconds(5));
-      yield* boardSettled;
-      assert.deepEqual(realtime.subscribed(), ["board-1"]);
-
-      // Leaving the task lets the subscription go.
+      // Leaving the task lets the follow go.
       yield* call(GATEWAY_METHOD.TASKS_CLOSE);
-      assert.deepEqual(realtime.subscribed(), []);
+      yield* boardSettled;
+      assert.equal(board.held(), 0);
     }),
 );
 
-it.effect(
-  "a board save is answered once its transaction reaches the open task's followed board, and at once where nothing is followed",
-  () =>
-    Effect.gen(function* () {
-      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const service = fakeService([invites]);
-      service.boards[INVITES] = { elements: [], appliedDrawing: 0 };
-      service.boardSeals[INVITES] = {
-        url: "wss://realtime.example/v1",
-        queries: {
-          board: {
-            capability: "capability-board",
-            queryFingerprint: "board",
-            expiresAt: 3_600_000,
-          },
-        },
-      };
-      const realtime = fakeServiceRealtime();
-      const { call, tasks, openTask } = yield* subject(service, { openLive: realtime.open });
-      yield* tasks.lifetime;
-      yield* openTask(INVITES);
-      yield* boardSettled;
-      realtime.deliver("board", [
-        { taskId: INVITES, drawingNumber: 0, appliedDrawing: 0, imaged: false },
-      ]);
-      yield* boardSettled;
-      const save = { taskId: INVITES, elements: [], appliedDrawing: 0 };
+it.effect("a board save reaches the service and is answered once it saved", () =>
+  Effect.gen(function* () {
+    const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+    const service = fakeService([invites]);
+    service.boards[INVITES] = { elements: [], appliedDrawing: 0 };
+    service.boardLives[INVITES] = boardLive();
+    const { call, tasks, openTask } = yield* subject(service);
+    yield* tasks.lifetime;
+    yield* openTask(INVITES);
 
-      // A save that moved the live row waits on its transaction before it answers.
-      service.boardSaveTxid = "42";
-      const saving = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
-      yield* boardSettled;
-      assert.deepEqual(realtime.awaitingTxids(), ["42"]);
-      assert.equal(saving.pollUnsafe(), undefined, "not answered before the transaction arrives");
-      realtime.arrive("42");
-      assert.deepEqual(yield* Fiber.join(saving), { saved: true });
-
-      // A save that answers no transaction has nothing to wait for.
-      service.boardSaveTxid = undefined;
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save), { saved: true });
-
-      // A save sent while one follow stood waits on no other: one let go meanwhile answers at once,
-      // while a save queued behind it goes out under the follow standing then, and waits on that one.
-      service.boardSaveTxid = "44";
-      service.boardSaveHeld = yield* Deferred.make<void>();
-      const inFlight = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
-      yield* boardSettled;
-      const queued = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save));
-      yield* boardSettled;
-      realtime.fail("board");
-      yield* TestClock.adjust(Duration.seconds(5));
-      yield* boardSettled;
-      realtime.deliver("board", [
-        { taskId: INVITES, drawingNumber: 0, appliedDrawing: 0, imaged: false },
-      ]);
-      yield* boardSettled;
-      yield* Deferred.succeed(service.boardSaveHeld, undefined);
-      service.boardSaveHeld = undefined;
-      assert.deepEqual(yield* Fiber.join(inFlight), { saved: true });
-      yield* boardSettled;
-      assert.deepEqual(realtime.awaitingTxids(), ["44"]);
-      assert.equal(
-        queued.pollUnsafe(),
-        undefined,
-        "the queued save waits on the follow it went out under",
-      );
-      realtime.arrive("44");
-      assert.deepEqual(yield* Fiber.join(queued), { saved: true });
-
-      // A follow Realtime stopped is polled, which hands out no wait, so a save answers at once.
-      delete service.boardSeals[INVITES];
-      realtime.fail("board");
-      yield* boardSettled;
-      service.boardSaveTxid = "43";
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_BOARD_SAVE, save), { saved: true });
-      assert.deepEqual(realtime.awaitingTxids(), []);
-    }),
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.TASKS_BOARD_SAVE, {
+        taskId: INVITES,
+        elements: [],
+        appliedDrawing: 1,
+      }),
+      { saved: true },
+    );
+    assert.equal(service.boards[INVITES]?.appliedDrawing, 1);
+  }),
 );
 
-/** A task's pages and calls sealed for following, named by the round they were sealed in. */
-function sealedRecord(round: number): TaskRecordLiveAnswer {
-  const query = (part: string) => ({
-    capability: `${part}-${round}`,
-    queryFingerprint: part,
-    expiresAt: 3_600_000,
-  });
-  return {
-    url: "wss://realtime.example/v1",
-    queries: {
-      plan: query("plan"),
-      pages: query("pages"),
-      calls: query("calls"),
-      code: query("code"),
-    },
-  };
+/** A task's record's live read as the service answers it polled, its rows none until a test sets them. */
+const recordLive = () =>
+  polledLive<RecordPart, typeof NOT_FOUND_LIVE>(["plan", "pages", "calls", "code"]);
+
+/** A task's record's live read as the service reads it from `tasks`: the plan marked by its last save, and no pages, calls, or code. */
+function polledRecord(service: FakeService, taskId: string) {
+  return polledLive<RecordPart, typeof NOT_FOUND_LIVE>(["plan", "pages", "calls", "code"], () => ({
+    plan: service.tasks
+      .filter((each) => each.id === taskId)
+      .map((each) => ({ taskId, savedAt: each.updatedAt })),
+    pages: [],
+    calls: [],
+    code: [],
+  }));
 }
 
-/** A task's record as the service answers it polled, Realtime off: each part's rows inline, the plan marked by its last save as `tasks` holds it. */
-function polledRecord(service: FakeService, taskId: string): TaskRecordLiveAnswer {
-  const query = (part: string, rows: readonly unknown[]) => ({
-    capability: part,
-    queryFingerprint: part,
-    expiresAt: 3_600_000,
-    rows,
-  });
-  const plan = service.tasks
-    .filter((each) => each.id === taskId)
-    .map((each) => ({ taskId, savedAt: each.updatedAt }));
-  return {
-    url: LIVE_POLL_URL,
-    queries: {
-      plan: query("plan", plan),
-      pages: query("pages", []),
-      calls: query("calls", []),
-      code: query("code", []),
-    },
-  };
-}
+/** Rows set on a live read, then its next poll asked, half a second after the last answered. */
+const answered = (set: () => void) =>
+  Effect.andThen(
+    Effect.sync(set),
+    Effect.andThen(
+      boardSettled,
+      Effect.andThen(TestClock.adjust(Duration.millis(500)), boardSettled),
+    ),
+  );
 
 /** One call about the task as its row delivers it, ended at `closedAt` or standing. */
 function callRow(lastSegment: number, closedAt: number | null) {
@@ -4059,35 +3600,20 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       service.codes[INVITES] = [];
-      service.recordSeals[INVITES] = sealedRecord(0);
-      const realtime = fakeBoardRealtime();
-      const { call, tasks, openTask } = yield* subject(service, {
-        openLive: () => realtime.client,
-      });
+      const record = recordLive();
+      service.recordLives[INVITES] = record;
+      const { call, tasks, openTask } = yield* subject(service);
       yield* tasks.lifetime;
       yield* openTask(INVITES);
       yield* boardSettled;
-      assert.deepEqual(realtime.subscribed().toSorted(), [
-        "calls-0",
-        "code-0",
-        "pages-0",
-        "plan-0",
-      ]);
+      assert.equal(record.held(), 1, "its poll is held while nothing moves");
       const taken = () => service.recordReads.splice(0).toSorted();
       taken();
       const deliver = (pages: readonly unknown[], calls: readonly unknown[]) =>
-        Effect.andThen(
-          Effect.sync(() => {
-            realtime.deliver("plan-0", []);
-            realtime.deliver("pages-0", pages);
-            realtime.deliver("calls-0", calls);
-            realtime.deliver("code-0", []);
-          }),
-          boardSettled,
-        );
+        answered(() => record.set({ plan: [], pages, calls, code: [] }));
       const page = (version: number) => ({ pageId: "page-1", version });
 
-      // The first delivery reads every part, since the reads the task opened with may have missed it.
+      // The first answer with rows reads every part, since the reads the task opened with may have missed it.
       yield* deliver([page(1)], []);
       assert.deepEqual(taken(), ["code", "pages"]);
 
@@ -4107,9 +3633,10 @@ it.effect(
       yield* boardSettled;
       assert.deepEqual(taken(), []);
 
-      // Leaving the task lets the subscriptions go.
+      // Leaving the task lets the follow go.
       yield* call(GATEWAY_METHOD.TASKS_CLOSE);
-      assert.deepEqual(realtime.subscribed(), []);
+      yield* boardSettled;
+      assert.equal(record.held(), 0);
     }),
 );
 
@@ -4119,24 +3646,14 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       service.codes[INVITES] = [];
-      service.recordSeals[INVITES] = sealedRecord(0);
-      const realtime = fakeBoardRealtime();
-      const { tasks, viewLands, openTask } = yield* subject(service, {
-        openLive: () => realtime.client,
-      });
+      const record = recordLive();
+      service.recordLives[INVITES] = record;
+      const { tasks, viewLands, openTask } = yield* subject(service);
       yield* tasks.lifetime;
       yield* openTask(INVITES);
       yield* boardSettled;
       const deliver = (code: readonly unknown[]) =>
-        Effect.andThen(
-          Effect.sync(() => {
-            realtime.deliver("plan-0", []);
-            realtime.deliver("pages-0", []);
-            realtime.deliver("calls-0", []);
-            realtime.deliver("code-0", code);
-          }),
-          boardSettled,
-        );
+        answered(() => record.set({ plan: [], pages: [], calls: [], code }));
       yield* deliver([]);
       const shown = (callId: string, turnId: string, shownAt: number) => ({
         callId,
@@ -4194,7 +3711,8 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", INVITES_TEXT, 10)]);
       service.codes[INVITES] = [];
-      service.recordPolled = true;
+      const record = polledRecord(service, INVITES);
+      service.recordLives[INVITES] = record;
       const { call, tasks, last, viewLands, openTask } = yield* subject(service);
       yield* tasks.lifetime;
       yield* openTask(INVITES);
@@ -4222,6 +3740,7 @@ it.effect(
       // The first read of it goes unanswered, and is asked again, since the mark it read for stands still.
       service.opensUnanswered = 1;
       const reached = yield* viewLands((view) => view.document.task?.document.body === theirs);
+      record.move();
       yield* TestClock.adjust(Duration.seconds(1));
       yield* boardSettled;
       assert.equal(opens(), opened + 1);
@@ -4240,6 +3759,7 @@ it.effect(
         }),
         { saved: true },
       );
+      record.move();
       yield* TestClock.adjust(Duration.seconds(5));
       yield* boardSettled;
       assert.equal(last()?.document.task?.document.body, mine);
@@ -4248,41 +3768,33 @@ it.effect(
 );
 
 it.effect(
-  "a renewal that finds the open task gone ends the board's follow, rather than asking again",
+  "a poll that finds the open task gone ends the board's follow, rather than asking again",
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const service = fakeService([invites]);
       service.boards[INVITES] = { elements: [], appliedDrawing: 0 };
-      service.boardSeals[INVITES] = sealedBoard(0);
-      const realtime = fakeBoardRealtime();
-      const { tasks, openTask } = yield* subject(service, {
-        openLive: () => realtime.client,
-      });
+      const board = boardLive();
+      service.boardLives[INVITES] = board;
+      const { tasks, openTask } = yield* subject(service);
       yield* tasks.lifetime;
       yield* openTask(INVITES);
       yield* boardSettled;
-      realtime.deliver("board-0", []);
-      assert.deepEqual(realtime.subscribed(), ["board-0"]);
+      yield* answered(() => board.set({ board: [] }));
+      assert.equal(board.held(), 1);
 
-      // Another member deletes the task, so its seal is not found when the follow renews it.
-      delete service.boardSeals[INVITES];
+      // Another member deletes the task, so the poll standing answers it not found.
+      board.refuse(NOT_FOUND_LIVE);
+      yield* boardSettled;
       yield* TestClock.adjust(Duration.hours(1));
-      assert.deepEqual(realtime.subscribed(), []);
+      yield* boardSettled;
+      assert.equal(board.held(), 0);
+      const polls = board.polls();
       yield* TestClock.adjust(Duration.hours(1));
-      assert.deepEqual(realtime.subscribed(), []);
+      yield* boardSettled;
+      assert.equal(board.polls(), polls, "a follow whose task is gone asks no more");
     }),
 );
-
-/** A task's pages sealed for following, named by the round it was sealed in. */
-function sealedPages(round: number): TaskPagesLiveAnswer {
-  return {
-    url: "wss://realtime.example/v1",
-    queries: {
-      pages: { capability: `pages-${round}`, queryFingerprint: "pages", expiresAt: 3_600_000 },
-    },
-  };
-}
 
 const FUNNEL = {
   id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
@@ -4292,12 +3804,11 @@ const FUNNEL = {
 };
 
 it.effect(
-  "a plan's pages followed for the Inbox are told as they move, never in the view, a seal the service did not answer is told as unanswered and sealed again, and let go they stop",
+  "a plan's pages followed for the Inbox are told as they move, never in the view, a read the service did not answer is told as unanswered and read again, and let go they stop",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const realtime = fakeBoardRealtime();
-      const { call, told, pushed } = yield* subject(service, { openLive: () => realtime.client });
+      const { call, told, pushed } = yield* subject(service);
       const changed = (view: WireValue) => [
         GATEWAY_EVENT.TASKS_PAGES_CHANGED,
         { taskId: INVITES, view },
@@ -4307,13 +3818,13 @@ it.effect(
       yield* boardSettled;
       assert.deepEqual(pushed, [changed({ failure: TASK_CALL_FAILURE.UNANSWERED })]);
 
-      service.pageSeals[INVITES] = sealedPages(1);
+      const pages = polledLive<"pages", typeof NOT_FOUND_LIVE>(["pages"]);
+      service.pageLives[INVITES] = pages;
       yield* TestClock.adjust(Duration.seconds(2));
       yield* boardSettled;
-      realtime.deliver("pages-1", [{ ...FUNNEL, shownBy: null }]);
+      yield* answered(() => pages.set({ pages: [{ ...FUNNEL, shownBy: null }] }));
       const shown = { ...FUNNEL, version: 2, at: 2_500, shownBy: { kind: PAGE_SHOWER.LUKE } };
-      realtime.deliver("pages-1", [shown]);
-      yield* boardSettled;
+      yield* answered(() => pages.set({ pages: [shown] }));
       assert.deepEqual(pushed.slice(1), [
         changed({ pages: [FUNNEL] }),
         changed({ pages: [shown] }),
@@ -4326,19 +3837,9 @@ it.effect(
 
       yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
       yield* boardSettled;
-      assert.deepEqual(realtime.subscribed(), []);
+      assert.equal(pages.held(), 0);
     }),
 );
-
-/** A task's Browser tabs sealed for following, named by the round it was sealed in. */
-function sealedBrowserTabs(round: number): TaskBrowserTabsLiveAnswer {
-  return {
-    url: "wss://realtime.example/v1",
-    queries: {
-      tabs: { capability: `tabs-${round}`, queryFingerprint: "tabs", expiresAt: 3_600_000 },
-    },
-  };
-}
 
 /** One kept tab's row, as the live read delivers it, the agent's pointer on it. */
 const SIGN_IN_TAB = {
@@ -4365,8 +3866,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const realtime = fakeBoardRealtime();
-      const { call, told, pushed } = yield* subject(service, { openLive: () => realtime.client });
+      const { call, told, pushed } = yield* subject(service);
       const changed = (view: WireValue) => [
         GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
         { taskId: INVITES, view },
@@ -4392,13 +3892,12 @@ it.effect(
       yield* boardSettled;
       assert.deepEqual(pushed, [changed({ failure: TASK_CALL_FAILURE.UNANSWERED })]);
 
-      service.browserTabSeals[INVITES] = sealedBrowserTabs(1);
+      const tabs = polledLive<"tabs", typeof NOT_FOUND_LIVE>(["tabs"]);
+      service.browserTabLives[INVITES] = tabs;
       yield* TestClock.adjust(Duration.seconds(2));
       yield* boardSettled;
       // Dana takes the tab over until ten seconds in.
-      realtime.deliver("tabs-1", [
-        { ...SIGN_IN_TAB, driverUserId: "user-dana", heldUntil: 10_000 },
-      ]);
+      tabs.set({ tabs: [{ ...SIGN_IN_TAB, driverUserId: "user-dana", heldUntil: 10_000 }] });
       yield* boardSettled;
       assert.deepEqual(pushed.slice(1), [
         changed({ tabs: [{ ...tab, driver: { userId: "user-dana", heldUntil: 10_000 } }] }),
@@ -4412,7 +3911,7 @@ it.effect(
 
       yield* call(GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW, { taskId: INVITES });
       yield* boardSettled;
-      assert.deepEqual(realtime.subscribed(), []);
+      assert.equal(tabs.held(), 0);
     }),
 );
 
@@ -4421,14 +3920,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      service.historySeals[INVITES] = {
-        url: "wss://realtime.example/v1",
-        queries: {
-          revisions: { capability: "history-1", queryFingerprint: "history", expiresAt: 3_600_000 },
-        },
-      };
-      const realtime = fakeBoardRealtime();
-      const { call, told, pushed } = yield* subject(service, { openLive: () => realtime.client });
+      const history = polledLive<"revisions">(["revisions"]);
+      service.historyLives[INVITES] = history;
+      const { call, told, pushed } = yield* subject(service);
       const row = (seq: number, at: number) => ({
         seq,
         actor: PLAN_ACTOR.DEVELOPER,
@@ -4459,9 +3953,8 @@ it.effect(
 
       yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
       yield* boardSettled;
-      realtime.deliver("history-1", [row(1, 1_000)]);
-      realtime.deliver("history-1", [row(2, 2_000), row(1, 1_000)]);
-      yield* boardSettled;
+      yield* answered(() => history.set({ revisions: [row(1, 1_000)] }));
+      yield* answered(() => history.set({ revisions: [row(2, 2_000), row(1, 1_000)] }));
       assert.deepEqual(pushed, [
         [
           GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
@@ -4475,65 +3968,28 @@ it.effect(
       assert.equal(told.length, 0, "a plan's history is never told in the view");
       yield* call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, { taskId: INVITES });
       yield* boardSettled;
-      assert.deepEqual(realtime.subscribed(), []);
+      assert.equal(history.held(), 0);
     }),
 );
 
-it.effect(
-  "a restore is confirmed once its transaction reaches the followed history, and at once where no history is followed",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      service.revisions[1] = {
-        seq: 1,
-        document: { body: "# Invites", assumptions: [] },
-        previous: null,
-      };
-      service.historySeals[INVITES] = {
-        url: "wss://realtime.example/v1",
-        queries: {
-          revisions: {
-            capability: "capability-revisions",
-            queryFingerprint: "history",
-            expiresAt: 3_600_000,
-          },
-        },
-      };
-      const realtime = fakeServiceRealtime();
-      const { call } = yield* subject(service, { openLive: realtime.open });
+it.effect("a restore puts the revision back and is answered once the service restored it", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+    service.revisions[1] = {
+      seq: 1,
+      document: { body: "# Invites", assumptions: [] },
+      previous: null,
+    };
+    const { call } = yield* subject(service);
 
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }), {
-        restored: true,
-      });
-      assert.deepEqual(realtime.awaitingTxids(), [], "no history is followed, so nothing waits");
-
-      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
-      yield* boardSettled;
-      realtime.deliver("revisions", []);
-      yield* boardSettled;
-      const restore = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }),
-      );
-      yield* boardSettled;
-      assert.deepEqual(realtime.awaitingTxids(), ["txid-1"]);
-      assert.equal(restore.pollUnsafe(), undefined, "the restore waits for its transaction");
-      realtime.arrive("txid-1");
-      assert.deepEqual(yield* Fiber.join(restore), { restored: true });
-    }),
+    assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }), {
+      restored: true,
+    });
+  }),
 );
 
-/** The host's clock as the live list is read at: renewals are timed by it, and the list's own instants by the test's clock set to it. */
+/** The instant the live list is read at, which the test's clock is set to. */
 const LIVE_NOW = 1_800_000_000_000;
-
-/** The plan list sealed as the service answers it, each statement named by the part it follows. */
-const SEALED_LIST: TaskListLiveAnswer = {
-  url: "wss://realtime.example/v1",
-  queries: {
-    plans: { capability: "plans", queryFingerprint: "plans", expiresAt: LIVE_NOW + 60_000 },
-    agents: { capability: "agents", queryFingerprint: "agents", expiresAt: LIVE_NOW + 60_000 },
-    issues: { capability: "issues", queryFingerprint: "issues", expiresAt: LIVE_NOW + 60_000 },
-  },
-};
 
 /** One plan as the plans statement delivers its row. */
 function taskRow(id: string, name: string) {
@@ -4613,36 +4069,38 @@ it.effect(
     Effect.gen(function* () {
       yield* TestClock.setTime(LIVE_NOW);
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      service.liveList = { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED };
-      const realtime = fakeRealtime();
-      const { call, last } = yield* subject(service, { openLive: realtime.open });
+      service.live.list.refuse({ failure: TASK_CALL_FAILURE.UNANSWERED });
+      const { call, last, settled } = yield* subject(service);
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* realtime.settled;
+      yield* settled;
       assert.equal(last()?.listStatus, TASKS_READ.FAILED);
-      assert.equal(last()?.live, HOST_LIVE.OFFLINE, "a service that answers no seal is offline");
+      assert.equal(last()?.live, HOST_LIVE.OFFLINE, "a service that answers no read is offline");
 
-      service.liveList = { ok: true, answer: SEALED_LIST };
+      service.live.list.refuse(undefined);
       yield* TestClock.adjust(Duration.seconds(5));
-      yield* realtime.listSubscribed;
-      realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, live")]);
-      realtime.deliverPart("agents", []);
-      realtime.deliverPart("issues", []);
-      yield* realtime.settled;
+      yield* listAnswers(service, {
+        plans: [taskRow(INVITES, "Teammate invitations, live")],
+        agents: [],
+        issues: [],
+      });
       assert.equal(last()?.listStatus, TASKS_READ.READY);
       assert.equal(last()?.live, HOST_LIVE.LIVE);
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
 
-      // The session is another account's now: the subscription stops and the seal is refused for good.
-      service.liveList = { ok: false, failure: LIVE_SIGNED_OUT.failure };
-      realtime.failPart("plans");
-      yield* realtime.settled;
+      // The session is another account's now: the poll standing is refused for good.
+      service.live.list.refuse({ failure: LIVE_SIGNED_OUT.failure });
+      yield* settled;
       yield* TestClock.adjust(Duration.seconds(30));
-      yield* realtime.settled;
-      const reads = service.liveListReads;
+      yield* settled;
+      const asked = [service.liveListReads, service.live.list.polls()];
       yield* TestClock.adjust(Duration.minutes(1));
-      yield* realtime.settled;
-      assert.equal(service.liveListReads, reads, "a follow refused as signed out asks no more");
+      yield* settled;
+      assert.deepEqual(
+        [service.liveListReads, service.live.list.polls()],
+        asked,
+        "a follow refused as signed out asks no more",
+      );
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
     }),
 );
@@ -4653,16 +4111,14 @@ it.effect(
     Effect.gen(function* () {
       yield* TestClock.setTime(LIVE_NOW);
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      service.liveList = { ok: true, answer: SEALED_LIST };
-      const realtime = fakeRealtime();
-      const { call, last } = yield* subject(service, { openLive: realtime.open });
+      const { call, last, settled } = yield* subject(service);
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* realtime.listSubscribed;
-      realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, live")]);
-      realtime.deliverPart("agents", [agentRow(INVITES, 60_000)]);
-      realtime.deliverPart("issues", []);
-      yield* realtime.settled;
+      yield* listAnswers(service, {
+        plans: [taskRow(INVITES, "Teammate invitations, live")],
+        agents: [agentRow(INVITES, 60_000)],
+        issues: [],
+      });
       const drawn = last()?.tasks[0];
       assert.equal(drawn?.name, "Teammate invitations, live");
       assert.deepEqual(
@@ -4677,7 +4133,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* call(GATEWAY_METHOD.TASKS_DELETE, { taskId: BILLING });
       yield* TestClock.adjust(Duration.minutes(5));
-      yield* realtime.settled;
+      yield* settled;
 
       const ended = last()?.tasks[0]?.agents;
       assert.deepEqual(
@@ -4693,43 +4149,41 @@ it.effect(
     Effect.gen(function* () {
       yield* TestClock.setTime(LIVE_NOW);
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      service.liveList = { ok: true, answer: SEALED_LIST };
-      const realtime = fakeRealtime();
-      const { call, last } = yield* subject(service, { openLive: realtime.open });
+      const { call, last, settled } = yield* subject(service);
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* realtime.listSubscribed;
-      realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, live")]);
-      // A settled turn, and a line written after it that no turn has taken yet.
-      realtime.deliverPart("agents", [
-        {
-          ...agentRow(INVITES, 30 * 60_000),
-          turnId: "6a7b8c9d-0e1f-4a2b-9c3d-4e5f6a7b8c9d",
-          turnStatus: TURN_STATUS.SETTLED,
-          cancelRequested: false,
-          queuedAt: LIVE_NOW - 20 * 60_000,
-          startedAt: LIVE_NOW - 20 * 60_000,
-          settledAt: LIVE_NOW - 10 * 60_000,
-          turnSessionEnded: false,
-          awaitingLineAt: LIVE_NOW - 60_000,
-        },
-      ]);
-      realtime.deliverPart("issues", []);
-      yield* realtime.settled;
+      yield* listAnswers(service, {
+        plans: [taskRow(INVITES, "Teammate invitations, live")],
+        // A settled turn, and a line written after it that no turn has taken yet.
+        agents: [
+          {
+            ...agentRow(INVITES, 30 * 60_000),
+            turnId: "6a7b8c9d-0e1f-4a2b-9c3d-4e5f6a7b8c9d",
+            turnStatus: TURN_STATUS.SETTLED,
+            cancelRequested: false,
+            queuedAt: LIVE_NOW - 20 * 60_000,
+            startedAt: LIVE_NOW - 20 * 60_000,
+            settledAt: LIVE_NOW - 10 * 60_000,
+            turnSessionEnded: false,
+            awaitingLineAt: LIVE_NOW - 60_000,
+          },
+        ],
+        issues: [],
+      });
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live", "the list is drawn live");
       assert.deepEqual(
         last()?.tasks[0]?.agents?.agents.map((line) => line.status),
         [CODING_AGENT_STATUS.RUNNING],
       );
       yield* TestClock.adjust(Duration.minutes(3));
-      yield* realtime.settled;
+      yield* settled;
       assert.deepEqual(
         last()?.tasks[0]?.agents?.agents.map((line) => line.status),
         [CODING_AGENT_STATUS.RUNNING],
         "inside the line's grace",
       );
       yield* TestClock.adjust(Duration.minutes(2));
-      yield* realtime.settled;
+      yield* settled;
       assert.deepEqual(
         last()?.tasks[0]?.agents?.agents.map((line) => line.status),
         [CODING_AGENT_STATUS.FAILED],
@@ -4739,107 +4193,72 @@ it.effect(
 );
 
 it.effect(
-  "a list whose subscription stops for good is sealed and subscribed again after a pause, and drawn from the new rows",
+  "a list whose rows stop decoding keeps what it drew and says it is catching up, and is live again once it is read again",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(LIVE_NOW);
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const realtime = fakeRealtime();
-      const { call, last } = yield* subject(service, { openLive: realtime.open });
+      const { call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* realtime.listSubscribed;
-      realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, live")]);
-      realtime.deliverPart("agents", []);
-      realtime.deliverPart("issues", []);
-      yield* realtime.settled;
-      assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
-      assert.deepEqual(last()?.taskAgents, []);
-
-      realtime.failPart("plans");
-      yield* realtime.settled;
-      yield* TestClock.adjust(Duration.seconds(5));
-      yield* realtime.listSubscribed;
-      realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, again")]);
-      realtime.deliverPart("agents", []);
-      realtime.deliverPart("issues", []);
-      yield* realtime.settled;
-      assert.equal(last()?.tasks[0]?.name, "Teammate invitations, again");
-    }),
-);
-
-it.effect(
-  "a list whose rows stop decoding keeps what it drew and says it is catching up, and is live again once rows land",
-  () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(LIVE_NOW);
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const realtime = fakeRealtime();
-      const { call, last } = yield* subject(service, { openLive: realtime.open });
-      const delivered = (name: string) =>
-        Effect.gen(function* () {
-          yield* realtime.listSubscribed;
-          realtime.deliverPart("plans", [taskRow(INVITES, name)]);
-          realtime.deliverPart("agents", []);
-          realtime.deliverPart("issues", []);
-          yield* realtime.settled;
-        });
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* delivered("Teammate invitations, live");
+      yield* listAnswers(service, {
+        plans: [taskRow(INVITES, "Teammate invitations, live")],
+        agents: [],
+        issues: [],
+      });
       assert.equal(last()?.live, HOST_LIVE.LIVE);
 
       // A deploy changed the row's shape, so it no longer decodes and the follow breaks.
-      realtime.deliverPart("plans", [{ id: INVITES, title: "Teammate invitations" }]);
-      yield* realtime.settled;
+      yield* listAnswers(service, { plans: [{ id: INVITES, title: "Teammate invitations" }] });
       assert.equal(last()?.live, HOST_LIVE.CATCHING_UP);
       assert.equal(last()?.listStatus, TASKS_READ.READY, "the list drawn stands");
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
 
+      // The rows decode again by the time the follow starts again, a pause later.
+      service.live.list.set({ plans: [taskRow(INVITES, "Teammate invitations, again")] });
       yield* TestClock.adjust(Duration.seconds(5));
-      yield* delivered("Teammate invitations, again");
+      yield* settled;
       assert.equal(last()?.live, HOST_LIVE.LIVE);
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, again");
     }),
 );
 
 it.effect(
-  "a resync seals a followed list again at once, once for a wake's several events, and asks nothing of a list not followed",
+  "a resync reads a followed list again at once, once for a wake's several events, and asks nothing of a list not followed",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(LIVE_NOW);
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const realtime = fakeRealtime();
-      const { call, last } = yield* subject(service, { openLive: realtime.open });
-      const delivered = Effect.gen(function* () {
-        yield* realtime.listSubscribed;
-        realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, live")]);
-        realtime.deliverPart("agents", []);
-        realtime.deliverPart("issues", []);
-        yield* realtime.settled;
-      });
+      const { call, last, told, settled } = yield* subject(service);
 
       yield* call(GATEWAY_METHOD.TASKS_RESYNC);
-      yield* realtime.settled;
+      yield* settled;
       assert.equal(service.liveListReads, 0, "nothing is followed before the Tasks tab asks");
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* delivered;
+      yield* listAnswers(service, {
+        plans: [taskRow(INVITES, "Teammate invitations, live")],
+        agents: [],
+        issues: [],
+      });
       const before = service.liveListReads;
+      const toldBefore = told.length;
 
       // The Mac woke: a resume and an unlock land together.
       yield* call(GATEWAY_METHOD.TASKS_RESYNC);
       yield* call(GATEWAY_METHOD.TASKS_RESYNC);
-      yield* realtime.settled;
-      assert.equal(service.liveListReads, before + 1, "one wake seals the list once");
-      assert.equal(last()?.live, HOST_LIVE.CATCHING_UP, "behind until the fresh rows land");
-
-      yield* delivered;
+      yield* settled;
+      assert.equal(service.liveListReads, before + 1, "one wake reads the list once");
+      assert.ok(
+        told.slice(toldBefore).some((view) => view.live === HOST_LIVE.CATCHING_UP),
+        "behind until the fresh rows land",
+      );
       assert.equal(last()?.live, HOST_LIVE.LIVE);
 
       yield* TestClock.adjust(Duration.seconds(10));
       const later = service.liveListReads;
       yield* call(GATEWAY_METHOD.TASKS_RESYNC);
-      yield* realtime.settled;
-      assert.equal(service.liveListReads, later + 1, "a later wake seals it again");
+      yield* settled;
+      assert.equal(service.liveListReads, later + 1, "a later wake reads it again");
     }),
 );
 
@@ -4848,16 +4267,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const realtime = fakeRealtime();
-      const { call, last, openTask } = yield* subject(fakeService([invites]), {
-        openLive: realtime.open,
-      });
+      const service = fakeService([invites]);
+      const { call, last, openTask } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* realtime.listSubscribed;
-      realtime.deliverPart("plans", [rowOfTask(invites)]);
-      realtime.deliverPart("agents", []);
-      realtime.deliverPart("issues", []);
-      yield* realtime.settled;
+      yield* listAnswers(service, { plans: [rowOfTask(invites)], agents: [], issues: [] });
       yield* openTask(INVITES);
       const standing = () => {
         const open = last()?.document.task;
@@ -4870,17 +4283,18 @@ it.effect(
         ];
       };
 
-      realtime.deliverPart("plans", [
-        {
-          ...rowOfTask(invites),
-          status: TASK_STATUS.IN_PROGRESS,
-          assigneeId: ADA.userId,
-          assigneeName: ADA.name,
-          repository: "acme/relay",
-          updatedAt: 20,
-        },
-      ]);
-      yield* realtime.settled;
+      yield* listAnswers(service, {
+        plans: [
+          {
+            ...rowOfTask(invites),
+            status: TASK_STATUS.IN_PROGRESS,
+            assigneeId: ADA.userId,
+            assigneeName: ADA.name,
+            repository: "acme/relay",
+            updatedAt: 20,
+          },
+        ],
+      });
       assert.deepEqual(standing(), [
         TASK_STATUS.IN_PROGRESS,
         { userId: ADA.userId, name: ADA.name },
@@ -4890,8 +4304,7 @@ it.effect(
       ]);
 
       // A row that names no assignee is a task assigned to no one.
-      realtime.deliverPart("plans", [{ ...rowOfTask(invites), status: TASK_STATUS.DONE }]);
-      yield* realtime.settled;
+      yield* listAnswers(service, { plans: [{ ...rowOfTask(invites), status: TASK_STATUS.DONE }] });
       assert.deepEqual(standing(), [
         TASK_STATUS.DONE,
         undefined,
@@ -4903,7 +4316,7 @@ it.effect(
 );
 
 it.effect(
-  "a workspace's people are followed over Realtime while a window follows them, each change told in the held read's order, and let go on unfollow or a sign-out",
+  "a workspace's people are followed while a window follows them, each change told in the held read's order, and let go on unfollow or a sign-out",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -4925,11 +4338,10 @@ it.effect(
         role: member.role,
         image: null,
       });
-      service.realtime.deliver("members", [row(GRACE), row(ADA)]);
-      service.realtime.deliver("former", []);
+      service.live.people.set({ members: [row(GRACE), row(ADA)], former: [] });
       yield* settled;
-      service.realtime.deliver("former", [{ userId: "user-lee", name: "Lee Park", image: null }]);
-      yield* settled;
+      service.live.people.set({ former: [{ userId: "user-lee", name: "Lee Park", image: null }] });
+      yield* nextPoll(settled);
 
       assert.deepEqual(people(), [
         { workspaceId: ACME.id, view: { members: [ADA, GRACE] } },
@@ -4938,20 +4350,21 @@ it.effect(
           view: { members: [ADA, GRACE], former: [{ userId: "user-lee", name: "Lee Park" }] },
         },
       ]);
-      assert.ok(!JSON.stringify(people()).includes("capability"), "no sealed statement is told");
 
       yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_UNFOLLOW, { workspaceId: ACME.id });
-      assert.ok(!service.realtime.subscribed().includes("capability-members"));
+      yield* settled;
+      assert.equal(service.live.people.held(), 0, "unfollowed, its poll is let go");
       yield* call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
-      assert.ok(service.realtime.subscribed().includes("capability-members"));
+      assert.equal(service.live.people.held(), 1, "followed again, its poll is held");
       yield* tasks.reset;
-      assert.ok(!service.realtime.subscribed().includes("capability-members"));
+      yield* settled;
+      assert.equal(service.live.people.held(), 0, "a sign-out lets its poll go");
     }),
 );
 
 it.effect(
-  "a people seal that fails for now is asked again without telling the window, so it keeps the people it holds",
+  "a people read that fails for now is asked again without telling the window, so it keeps the people it holds",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -4967,7 +4380,7 @@ it.effect(
       assert.deepEqual(events, [], "no refusal reaches the window");
       assert.ok(
         service.reads.filter((read) => read === `people-live:${ACME.id}`).length > 1,
-        "the seal is asked again",
+        "the read is asked again",
       );
     }),
 );
@@ -5011,11 +4424,9 @@ it.effect(
         role: WORKSPACE_ROLE.MEMBER,
         expiresAt,
       });
-      service.realtime.deliver("invitations", [
-        row("late", 9_000),
-        row("spent", 0),
-        row("soon", 5_000),
-      ]);
+      service.live.invitations.set({
+        invitations: [row("late", 9_000), row("spent", 0), row("soon", 5_000)],
+      });
       yield* settled;
       yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW, { workspaceId: ACME.id });
       service.notPermitted = true;

@@ -3,18 +3,18 @@ import { SqlClient } from "effect/sql";
 import type { SqlError } from "effect/sql/SqlError";
 
 /**
- * live-immutability.ts -- the functions a live statement calls that Postgres does not mark immutable, which Neon Realtime refuses.
+ * live-immutability.ts -- the functions a live statement calls that Postgres does not mark immutable.
  *
- * Realtime refuses a statement that calls any function, operator, or
- * aggregate whose `provolatile` is not `i` ("unsupported query: scalar
- * expression uses a mutable function"), while plain Postgres and PGlite run
- * the same statement without a word. So the statement is made a view, its
+ * A live statement calls no function, operator, or aggregate whose
+ * `provolatile` is not `i`, so the same rows always digest alike and a held
+ * read holds, while plain Postgres and PGlite run such a statement without a
+ * word. So the statement is made a view, its
  * placeholders written as literals, and what the view's rule calls is read
  * from the rule's own tree in `pg_rewrite`: every function, aggregate, and
  * window function it names, and the function behind every operator, each
  * with its volatility, its subqueries included. Note that `pg_depend` would
  * not do, since Postgres records no dependency on a built-in, which every
- * function Realtime could refuse is.
+ * function this reads is.
  *
  * A cast through a type's text form (`CoerceViaIO`, such as
  * `max(at)::text` or `text::timestamptz`) names no function in the tree, so
@@ -26,7 +26,7 @@ import type { SqlError } from "effect/sql/SqlError";
  * constant first and calls nothing.
  */
 
-/** A statement as Realtime takes it: SQL with `$n` placeholders, and their values in order. */
+/** A live statement: SQL with `$n` placeholders, and their values in order. */
 export interface ImmutabilityProbe {
   readonly sql: string;
   readonly params: readonly (string | number | boolean | null)[];
@@ -132,7 +132,7 @@ function inlined(probe: ImmutabilityProbe): string {
 /**
  * Every function, aggregate, and operator's function the statement calls
  * that is not immutable, as `name(arguments) volatility`, sorted; empty
- * where Realtime would take the statement.
+ * where the statement calls only immutable ones.
  */
 export function mutableFunctionsOf(
   probe: ImmutabilityProbe,

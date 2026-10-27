@@ -31,7 +31,7 @@ import { followAutomations } from "./automation-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { confirmWrite, type LiveClient, openRealtimeClient, type TxWait } from "./live-follow.js";
+import { confirmWrite, type TxWait } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -73,8 +73,6 @@ export interface AutomationsDependencies {
   /** The account signed in now, which a follow names from its start; none where nobody is. */
   accountId: () => string | undefined;
   client: AutomationsClient;
-  /** Realtime's client for a follow's subscription; Realtime's own where none is handed in. */
-  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
 }
 
 export interface AutomationsComposer extends Composer {
@@ -142,9 +140,9 @@ function composed(
 
   /**
    * A write confirmed once its transaction arrives on any of the follows
-   * that would show it, as Neon's mutations guide says; a write that
-   * changed nothing, or one no window follows over Realtime, waits for
-   * nothing, and one not confirmed in time is answered all the same.
+   * that would show it; a write that changed nothing, or one no follow
+   * hands a wait for, waits for nothing, and one not confirmed in time is
+   * answered all the same.
    */
   const confirmed = (txid: string | undefined, on: readonly (TxWait | undefined)[]) =>
     Effect.suspend(() => {
@@ -314,8 +312,6 @@ function composed(
               userId === undefined
                 ? Effect.succeed(LIVE_SIGNED_OUT)
                 : asked(client.workspaceRunsLive(workspaceId, userId, poll, after)),
-            openLive: dependencies.openLive ?? openRealtimeClient,
-            now: kernel.now,
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             publish: (followed: AutomationFollowed) => {
               if (

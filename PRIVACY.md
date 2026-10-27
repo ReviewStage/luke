@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 26 October 2026
+Last updated: 27 October 2026
 
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
@@ -1525,11 +1525,6 @@ only when you press Send.
   find out why a session stopped partway, and Vercel deletes it after that.
   A session of Luke's started before then, and the session of a worker
   either one hands work to, keeps its history under Vercel's own retention.
-- Neon, asked directly by Luke on your Mac or in a browser, which sees its
-  network address: while you are signed in, Luke follows what waits on you
-  across your account, for the Inbox, over Neon's Realtime service, with a
-  short-lived query our service seals for your account, and Neon sends back
-  the rows of that inbox as they change.
 - GitHub, asked by your Mac itself and unauthenticated, which sees your Mac's
   network address: to check for updates, carrying nothing about you, when Luke
   opens, every four hours, and when you ask from Luke's menu or Settings,
@@ -1581,8 +1576,8 @@ word for it, such as inline, all using Sentry's default data
 collection, as described under "Crash and performance reports from the Mac
 app", where the page's address, your browser's details, and the addresses of
 the requests it made take the place of the Mac's. Your browser contacts
-PostHog, Sentry, and Neon (see "Who we send it to") directly, so each sees
-your network address.
+PostHog and Sentry (see "Who we send it to") directly, so each sees your
+network address.
 
 A link to something in Luke, pasted into Slack, iMessage, or anywhere else
 that previews links, shows only Luke's own card: the Luke name and logo, the

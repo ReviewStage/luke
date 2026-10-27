@@ -4,56 +4,15 @@ import { LIVE_POLL_URL, type TaskBoardLiveAnswer } from "@luke/features/live-wir
 import { Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { boardMoves } from "./board-follow.js";
-import { LiveBroken, type LiveClient } from "./live-follow.js";
+import { LiveBroken } from "./live-follow.js";
 
 /**
- * A task's board followed over Realtime answers its rows on the first
- * delivery and on each that moved its mark, none for a delivery that left
- * it where it stood, keeps moving through a Realtime outage by polling,
- * and fails on a row that does not decode.
+ * A task's board followed over the service's held poll answers its rows on
+ * the first answer and on each that moved its mark, none for an answer that
+ * left it where it stood, and fails on a row that does not decode.
  */
 
 const TASK = "0b3c8a40-4b8e-4a5e-9f7a-2d1c3b4a5e6f";
-
-const SEALED: TaskBoardLiveAnswer = {
-  url: "wss://realtime.example/v1",
-  queries: { board: { capability: "board-0", queryFingerprint: "board", expiresAt: 3_600_000 } },
-};
-
-/** Realtime as a script: the board's one subscription, which a test delivers rows to. */
-function fakeRealtime() {
-  let listener:
-    | ((snapshot: {
-        readonly status: string;
-        readonly data: readonly unknown[] | undefined;
-      }) => void)
-    | undefined;
-  const client: LiveClient = {
-    subscribe: () => ({
-      onChange: (next) => {
-        listener = next;
-        return () => {
-          listener = undefined;
-        };
-      },
-      renew: () => Promise.resolve(),
-      awaitTxId: () => Promise.resolve(),
-      unsubscribe: () => {
-        listener = undefined;
-      },
-    }),
-    close: () => {},
-  };
-  return {
-    client,
-    deliver: (data: readonly unknown[]) => {
-      assert.ok(listener, "the board is subscribed to");
-      listener({ status: "live", data });
-    },
-    /** Realtime stops the board's subscription, as an outage does. */
-    fail: () => listener?.({ status: "error", data: undefined }),
-  };
-}
 
 /** The board as the service answers it polled, its rows inline. */
 const polled = (rows: readonly unknown[]): TaskBoardLiveAnswer => ({
@@ -79,31 +38,36 @@ const mark = (drawingNumber: number, appliedDrawing: number, imaged: boolean) =>
   imaged,
 });
 
-const follow = (
-  realtime: ReturnType<typeof fakeRealtime>,
-  poll: () => TaskBoardLiveAnswer = () => polled([]),
-) =>
-  boardMoves(
+/** The board followed from `first`, each poll answering the next of `answers`, and the last of them once they run out. */
+const follow = (first: TaskBoardLiveAnswer, answers: TaskBoardLiveAnswer[] = []) => {
+  let last = first;
+  return boardMoves(
     {
-      openLive: () => realtime.client,
-      seal: () => Effect.succeed(SEALED),
-      poll: () => Effect.sync(poll),
-      now: () => 0,
+      poll: () =>
+        Effect.sync(() => {
+          last = answers.shift() ?? last;
+          return last;
+        }),
     },
-    SEALED,
+    first,
   );
+};
 
-it.effect("answers the first delivery and each that moved the mark, and none that did not", () =>
+it.effect("answers the first answer and each that moved the mark, and none that did not", () =>
   Effect.gen(function* () {
-    const realtime = fakeRealtime();
-    const moves = yield* Effect.forkChild(follow(realtime).pipe(Stream.take(3), Stream.runCollect));
-    yield* settled;
-
-    realtime.deliver([]);
-    realtime.deliver([]);
-    realtime.deliver([mark(1, 0, false)]);
-    realtime.deliver([mark(1, 0, false)]);
-    realtime.deliver([mark(1, 1, true)]);
+    const answers = [
+      polled([]),
+      polled([mark(1, 0, false)]),
+      polled([mark(1, 0, false)]),
+      polled([mark(1, 1, true)]),
+    ];
+    const moves = yield* Effect.forkChild(
+      follow(polled([]), answers).pipe(Stream.take(3), Stream.runCollect),
+    );
+    for (let poll = 0; poll < 5; poll += 1) {
+      yield* settled;
+      yield* TestClock.adjust(Duration.millis(500));
+    }
 
     assert.deepEqual(yield* Fiber.join(moves), [
       { board: [] },
@@ -113,47 +77,12 @@ it.effect("answers the first delivery and each that moved the mark, and none tha
   }),
 );
 
-it.effect(
-  "through a Realtime outage the board is polled every few seconds and still moves, and once Realtime delivers again the polling stops",
-  () =>
-    Effect.gen(function* () {
-      const realtime = fakeRealtime();
-      let board = [mark(1, 0, false)];
-      const moves: unknown[] = [];
-      const following = yield* Effect.forkChild(
-        Stream.runForEach(
-          follow(realtime, () => polled(board)),
-          (move) => Effect.sync(() => void moves.push(move)),
-        ),
-      );
-      yield* settled;
-      realtime.deliver(board);
-
-      realtime.fail();
-      yield* settled;
-      board = [mark(2, 1, true)];
-      yield* TestClock.adjust(Duration.seconds(3));
-      yield* settled;
-      assert.deepEqual(moves, [{ board: [mark(1, 0, false)] }, { board: [mark(2, 1, true)] }]);
-
-      // Realtime is subscribed to again as the board breaks, and its first delivery, within the first rows' bound, stops the polling.
-      realtime.deliver([mark(3, 2, true)]);
-      yield* settled;
-      board = [mark(9, 9, true)];
-      yield* TestClock.adjust(Duration.seconds(30));
-      yield* settled;
-      assert.deepEqual(moves.at(-1), { board: [mark(3, 2, true)] }, "no polling once back");
-      yield* Fiber.interrupt(following);
-    }),
-);
-
 it.effect("fails where a row does not decode", () =>
   Effect.gen(function* () {
-    const realtime = fakeRealtime();
-    const moves = yield* Effect.forkChild(follow(realtime).pipe(Stream.runDrain));
+    const moves = yield* Effect.forkChild(
+      follow(polled([{ taskId: TASK, drawingNumber: "one" }])).pipe(Stream.runDrain),
+    );
     yield* settled;
-
-    realtime.deliver([{ taskId: TASK, drawingNumber: "one" }]);
 
     assert.deepEqual(
       yield* Fiber.await(moves),
