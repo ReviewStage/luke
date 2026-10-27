@@ -37,19 +37,23 @@ export function clipsAround(layer: HTMLElement): HTMLElement[] {
   return clips;
 }
 
-/** `room` cut to what each of `clips` shows, along each axis it clips. */
+/**
+ * `room` cut to what each of `clips` shows, along each axis it clips. Note
+ * that a box shows what overflows it inside its padding box, so its border
+ * and a scrollbar standing in its gutter are taken off its outer box.
+ */
 export function cutTo(room: Box, clips: readonly HTMLElement[]): Box {
   let { left, top, right, bottom } = room;
   for (const clip of clips) {
     const box = clip.getBoundingClientRect();
     const { overflowX, overflowY } = getComputedStyle(clip);
     if (overflowX !== UNCLIPPED) {
-      left = Math.max(left, box.left);
-      right = Math.min(right, box.right);
+      left = Math.max(left, box.left + clip.clientLeft);
+      right = Math.min(right, box.left + clip.clientLeft + clip.clientWidth);
     }
     if (overflowY !== UNCLIPPED) {
-      top = Math.max(top, box.top);
-      bottom = Math.min(bottom, box.bottom);
+      top = Math.max(top, box.top + clip.clientTop);
+      bottom = Math.min(bottom, box.top + clip.clientTop + clip.clientHeight);
     }
   }
   return { left, top, right, bottom };

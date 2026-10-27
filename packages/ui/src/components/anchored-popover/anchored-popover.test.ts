@@ -91,6 +91,25 @@ test("a popover hung inside a card that scrolls turns below where the card leave
     if (this.dataset.box === "anchor") return new DOMRect(100, 320, 100, 20);
     return new DOMRect(100, 0, 340, 120);
   });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.dataset.box === "card" ? 400 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.dataset.box === "card" ? 400 : 0;
+  });
+  // Note that jsdom has no layout, so the layer is laid absolutely, as the app's stylesheet lays
+  // it, and the box it is laid in is its button's, as the positioned anchor is.
+  vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.parentElement;
+  });
+  const sheet = document.head.appendChild(document.createElement("style"));
+  sheet.textContent = ".luke-anchored-popover { position: absolute; }";
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -113,6 +132,9 @@ test("a popover hung inside a card that scrolls turns below where the card leave
   );
 
   const layer = container.querySelector<HTMLElement>(".luke-anchored-popover");
+  const laid = layer === null ? undefined : getComputedStyle(layer).position;
+  sheet.remove();
+  assert.equal(laid, "absolute", "the layer is laid as the app lays it");
   // 320 - 300 - 4 - 8 = 8 above inside the card cannot hold 120, and 700 - 340 - 4 - 8 below can.
   assert.equal(layer?.dataset.side, POPOVER_SIDE.BELOW);
 });
