@@ -3,21 +3,16 @@
  *
  * An Inbox wide enough holds its list and the chosen item side by side, as a
  * mail app does. Narrower than {@link INBOX_SPLIT}, it shows one at a time,
- * and the one it shows is the item: the chosen one, the whole Inbox wide,
- * under a way back to the list, which Back's chord and Escape take as well,
- * so an Inbox holding one item is that item rather than a list of one row.
- * The list stands alone only once the way back was taken or Show all
- * pressed, or while nothing is chosen, and a row pressed there opens its
- * item again. In a narrow room, a phone's, the list is the place, so an
- * Inbox there opens on its list, and an item stands alone only once a row
- * is pressed or a link asks for it. An item standing alone always has its
- * way back, even where the list holds nothing but it, since the list holds
- * the view's menu and its search. The line is drawn by the Inbox's own width rather than the
+ * and the one it shows is the list, however many items it holds, the same
+ * in the window's Inbox, a task's own Inbox tab, and a phone's: an item
+ * stands alone, the whole Inbox wide, only once it was opened, by a row's
+ * press, a link, Next, or New thread, and its way back, which Back's chord
+ * and Escape take as well, stands the list again. An item opened while the
+ * Inbox was split stays open once it narrows, as Material's list-detail
+ * layout keeps it; one merely chosen first does not, so a narrowed Inbox
+ * lands on its list. The line is drawn by the Inbox's own width rather than the
  * window's, because the window's Inbox and a task's own Inbox tab stand in
- * columns of their own, beside a sidebar, a side panel, or neither. An Inbox
- * narrowed keeps the item it shows, as Material's list-detail layout does,
- * and one that splits again forgets that the list was asked for, so it
- * narrows onto its item again. Whether the list was asked for is the
+ * columns of their own, beside a sidebar, a side panel, or neither. Whether the list was asked for is the
  * Inbox's own, unless its holder keeps it (`InboxListing`), as the window
  * keeps its Inbox's, so its history can go back to the list; such a holder
  * hears whether the Inbox shows one column too, so its history holds the
@@ -33,7 +28,6 @@ import { TOOLBAR_LOOK } from "@luke/ui";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useColumnSplit } from "../column-split.js";
-import { usePhoneRoom } from "../stage-room.js";
 
 /**
  * The Inbox's two columns, the list as wide as it was last dragged and the
@@ -162,14 +156,13 @@ export interface InboxStream {
   readonly onClose: (() => void) | undefined;
 }
 
-/** Whether the list was asked for, held by the Inbox itself where its holder keeps none: asked from the start in a narrow room, where the list is the place. */
+/** Whether the list was asked for, held by the Inbox itself where its holder keeps none: asked from the start, since one column shows the list until an item is opened. */
 function useListing(kept: InboxListing | undefined): InboxListing {
-  const phone = usePhoneRoom();
-  const [asked, setAsked] = useState(phone);
+  const [asked, setAsked] = useState(true);
   return kept ?? { asked, onAsk: setAsked };
 }
 
-/** Which columns stand: both where split, else the item unless the list was asked for or nothing is chosen. */
+/** Which columns stand: both where split, else the list unless an item was opened since it was asked for. */
 function shownColumns(
   single: boolean,
   chosen: string | undefined,
@@ -217,12 +210,6 @@ export function useInboxColumns(
     },
     [measure],
   );
-  // Note that an Inbox measured split forgets the list was asked for, so narrowing it lands on its
-  // item; one not yet measured keeps it, since the list a holder kept may be what it narrows onto.
-  const split = measured === false;
-  useLayoutEffect(() => {
-    if (split && listAsked) setListAsked(false);
-  }, [split, listAsked, setListAsked]);
   const shown = shownColumns(single, chosen, listAsked);
   const onSingle = kept?.onSingle;
   useLayoutEffect(() => {

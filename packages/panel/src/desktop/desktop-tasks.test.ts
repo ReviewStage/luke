@@ -527,10 +527,12 @@ function showEverything(): void {
   window.localStorage.setItem(TASK_SHOW_KEY, JSON.stringify("all"));
 }
 
-test("a task's Inbox tab too narrow for its list and the item side by side opens on the one item it holds, and its way back goes to the task's whole Inbox", async () => {
+test("a task's Inbox tab too narrow for its list and the item side by side opens on its list though it holds one item, whose row opens it under a way back to the list", async () => {
   const inbox = await narrowTaskInbox([
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
   ]);
+  assert.deepEqual(inbox.standing(), ["list", ""], "it opens on its list of one");
+  act(() => inbox.row("Expire after 7 days?")?.click());
   assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
   act(() => inbox.back()?.click());
   assert.deepEqual(inbox.standing(), ["list", ""], "the way back stands the task's whole Inbox");
@@ -645,7 +647,8 @@ test("one column wide, a task's Inbox on To do pages through only what it lists"
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
     approvalItem("a1b2c3d4-0000-4000-8000-000000000003", "Alert at 80%?", 3_000),
   ]);
-  assert.deepEqual(inbox.standing(), ["", "Alert at 80%?"]);
+  assert.deepEqual(inbox.standing(), ["list", ""]);
+  act(() => inbox.row("Alert at 80%?")?.click());
   assert.equal(inbox.pager(), "1 of 3");
 
   act(() => inbox.back()?.click());
@@ -663,7 +666,6 @@ test("one column wide, a task's Inbox filtered down to one item still offers its
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ]);
-  act(() => inbox.back()?.click());
   await inbox.pressScope("For you");
   act(() => inbox.row("Expire after 7 days?")?.click());
   assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
@@ -802,12 +804,14 @@ test("a task's Inbox whose refresh failed keeps the rows it holds and says Could
   inbox.unmount();
 });
 
-test("a plan's Inbox tab too narrow for its list and the item side by side shows the chosen item under a way back to the list, whose rows open their items again", async () => {
+test("a plan's Inbox tab too narrow for its list and the item side by side shows its list, whose rows open their items under a way back to the list", async () => {
   const inbox = await narrowTaskInbox([
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvalItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ]);
-  assert.deepEqual(inbox.standing(), ["", "Resend on bounce?"], "the newest that needs you");
+  assert.deepEqual(inbox.standing(), ["list", ""]);
+  act(() => inbox.row("Resend on bounce?")?.click());
+  assert.deepEqual(inbox.standing(), ["", "Resend on bounce?"]);
   assert.equal(inbox.back()?.textContent, "Inbox");
   act(() => inbox.back()?.click());
   assert.deepEqual(inbox.standing(), ["list", ""]);

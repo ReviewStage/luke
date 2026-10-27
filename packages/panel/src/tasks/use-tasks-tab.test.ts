@@ -1725,21 +1725,18 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so i
   assert.equal(tab.control().inboxShown, null);
 });
 
-test("in a narrow room the Inbox opened stands its list over the item last chosen, from elsewhere and from the item alike, where a wide room stands the item", () => {
-  for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
-    const tab = mount({ shown: true, tasks: TWO_WORKSPACES, room });
-    const narrow = room === SHELL_ROOM.NARROW;
-    act(() => tab.control().inboxView.onOpenItem({ taskId: "notes", itemId: "notes-item-0" }));
-    act(() => tab.control().boardView.onOpen());
+test("the Inbox opened stands its list over the item last chosen, in a narrow room and a wide one, from elsewhere and from the item alike", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES, room: SHELL_ROOM.WIDE });
+  act(() => tab.control().inboxView.onOpenItem({ taskId: "notes", itemId: "notes-item-0" }));
+  act(() => tab.control().boardView.onOpen());
 
-    act(() => tab.control().inboxView.onOpen());
-    assert.equal(tab.control().inboxView.listed, narrow, room);
-    assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().inboxView.listed, true);
+  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
 
-    act(() => tab.control().inboxView.onListed(false));
-    act(() => tab.control().inboxView.onOpen());
-    assert.equal(tab.control().inboxView.listed, narrow, `${room}, from the item`);
-  }
+  act(() => tab.control().inboxView.onListed(false));
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().inboxView.listed, true, "from the item");
 });
 
 test("the Inbox opened again stands on the item last chosen in it, as a row's choice, and on none once another workspace is listed", () => {

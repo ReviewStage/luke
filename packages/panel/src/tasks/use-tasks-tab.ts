@@ -2282,7 +2282,7 @@ export function useTasksTab(input: {
     });
     const on: StandIn | undefined =
       rest.kind === RESTING_PAGE.INBOX
-        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: input.room === SHELL_ROOM.NARROW }
+        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: true }
         : undefined;
     if (on !== undefined) {
       setRested({
@@ -3385,25 +3385,22 @@ export function useTasksTab(input: {
     inboxView: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
-      // Note that a narrow room opens on the list though it keeps the item last chosen, so a wide room it turns into again stands that item beside the list.
+      // Note that it opens on the list though it keeps the item last chosen, so one column shows the list and two stand that item beside it (`inbox-columns.ts`).
       // With Channels on, it leaves any channel shown, so the place shows the Inbox rather than a stream.
       onOpen: guard(() => {
         setHistoryFor(undefined);
         if (channelsOn) leaveChannel();
-        const listed = input.room === SHELL_ROOM.NARROW;
         const remembered = lastInboxChoice.current;
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX
-            ? listed
-              ? { ...held, listed }
-              : held
+            ? { ...held, listed: true }
             : {
                 kind: STAND_IN.INBOX,
                 chosen: rememberedChoice(remembered, {
                   account: input.account,
                   workspaceId: listedWorkspaceId,
                 }),
-                listed,
+                listed: true,
               },
         );
       }),

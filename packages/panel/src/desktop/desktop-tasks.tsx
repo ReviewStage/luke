@@ -393,10 +393,9 @@ function askedItem(items: readonly InboxItem[], ask: InboxItemAsk): InboxItem | 
  * says so under the Inbox's glyph, and one whose items its scope leaves out
  * says so in its list and offers All, the item chosen still shown
  * beside it. The pane's plan crumb chooses the plan's tab and its agent crumb
- * the agent's. Too narrow for both, it shows the chosen item, and the list
- * once its way back is taken, as the window's Inbox does
- * (`inbox-columns.ts`); holding one item, it opens on that item, and its
- * way back still goes to the list of one. K and J, and the pager where the item stands alone, step
+ * the agent's. Too narrow for both, it shows its list, however many items
+ * it holds, and an item once a row's press or a link opens it, with its way
+ * back to the list, as the window's Inbox does (`inbox-columns.ts`). K and J, and the pager where the item stands alone, step
  * through the list (`inbox-pager.tsx`). Its head's magnifier searches the
  * list as the window's Inbox's does, the item shown keeping its place. A
  * call's row that names a thread, or a link to an item, asks for it, which the tab opens

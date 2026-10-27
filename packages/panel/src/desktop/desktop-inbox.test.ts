@@ -3324,7 +3324,7 @@ test("an Inbox too narrow for the list and the item side by side shows the chose
   assert.deepEqual([columnsShown(page), asked.closed], [["list"], 0], "the Inbox stands");
 });
 
-test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again, it forgets the list was asked for, so narrowed it lands on its item", async () => {
+test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again, it keeps the list asked for, so narrowed it lands on its list", async () => {
   const { page } = mount();
   await settle();
   layOut(page, 900);
@@ -3347,7 +3347,7 @@ test("the Inbox joins only once narrowed past the band, keeping the item it show
   assert.deepEqual(columnsShown(page), ["list", "item"]);
   assert.equal(wayBack(page), undefined);
   layOut(page, 800);
-  assert.deepEqual(columnsShown(page), ["item"]);
+  assert.deepEqual(columnsShown(page), ["list"]);
 });
 
 /** The window's keymap, standing beside the Inbox as the shell stands it; the root it is drawn in, to unmount. */
