@@ -7,6 +7,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
@@ -26,6 +27,7 @@ import {
   RUNNER_ENV,
   RUNNER_EVENT,
   RUNNER_HEARTBEAT,
+  RUNNER_PLACE,
   RUNNER_RELEASE,
   RUNNER_WARM,
   type RunnerConfig,
@@ -742,6 +744,35 @@ it.effect(
       assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
+    }),
+);
+
+/** What a launch hands the CLI that is not a function or a live server, less the place it ran in, which only the command sandbox may follow. */
+function launchedAs(options: Options | undefined) {
+  assert.ok(options);
+  const { sandbox: _sandbox, hooks: _hooks, mcpServers, env, ...rest } = options;
+  const { [RUNNER_ENV.PLACE]: _place, ...environment } = env ?? {};
+  return { ...rest, servers: Object.keys(mcpServers ?? {}), environment };
+}
+
+it.effect(
+  "starts the CLI in a local agent's VM exactly as in a sandbox, with the same permission mode and tools, and only the command sandbox off",
+  () =>
+    Effect.gen(function* () {
+      const optionsIn = (env: Record<string, string>) =>
+        Effect.gen(function* () {
+          const { cli, write, run } = yield* launch(SHORT_TURN, fakeLuke(), env);
+          yield* write(CONFIG);
+          yield* write(FIRST_MESSAGE);
+          yield* Fiber.join(run);
+          return cli.options;
+        });
+      const sandbox = yield* optionsIn(ENV);
+      const host = yield* optionsIn({ ...ENV, [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST });
+
+      assert.deepEqual(launchedAs(host), launchedAs(sandbox));
+      assert.equal(host?.sandbox?.enabled, false);
+      assert.equal(sandbox?.sandbox?.enabled, true);
     }),
 );
 

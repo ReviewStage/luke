@@ -519,7 +519,9 @@ tools read still reach our service as any coding agent's do. It runs on the
 plan or key you saved in Luke, never on the sign-in of Claude Code or Codex on
 your Mac, which the machine cannot reach; a Codex agent asks our service for
 your ChatGPT plan's access token over HTTPS as it needs one, so no token waits
-in our database for your Mac. It reaches GitHub with a short-lived token our
+in our database for your Mac. A Claude Code agent's plan token or key is
+handed into its machine with Claude Code, where a command the agent runs can
+read it, unlike in a Vercel Sandbox. It reaches GitHub with a short-lived token our
 service hands your Mac, as for a host below: the token stays on your Mac,
 outside the machine and every folder it can see, and the agent sees only a
 placeholder. To run them, the app downloads smolvm from its GitHub release
@@ -541,7 +543,8 @@ a file readable only by its own user for as long as the agent runs, and
 deletes it with the agent. The agent sees only a placeholder. Its `git` and
 `gh` send that placeholder, and smolvm, on the box, puts the real token in
 place of it only on HTTPS requests to GitHub. The token is never logged and
-never written to the conversation's record.
+never written to the conversation's record. As on This Mac, a Claude Code agent's plan
+token or key is handed into its machine, where a command it runs can read it.
 
 **A coding agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, a coding agent your Claude plan pays for runs on
