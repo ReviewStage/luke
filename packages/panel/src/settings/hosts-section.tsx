@@ -20,14 +20,11 @@ import {
   CONFIRM_LOSS,
   CodeCard,
   ConfirmDialog,
-  CopyButton,
   DIALOG_SIZE,
   Dialog,
   DialogActions,
   ErrorState,
   GAP,
-  Inline,
-  JUSTIFY,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
@@ -46,7 +43,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Base64Url, Hex } from "effect/encoding";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { copyThroughShell } from "../copy-feedback.js";
+import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
 import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
 import {
   type PresenceBook,
@@ -96,11 +93,7 @@ const COMMANDS = "ph-no-capture contain-inline-size";
 
 const WORDS = {
   TITLE: "Machines",
-  EMPTY:
-    "Run agents on your own Linux servers and Macs. They connect out to Luke, so nothing needs opening on them.",
   ADD: "Add Linux servers",
-  ADD_DESCRIPTION:
-    "One command adds any number of Linux servers, x64 or arm64, for 24 hours. It doesn't install on a Mac.",
   ADDING: "Making a command",
   ADD_FAILED: "Could not make an install command. Try again.",
   READ_FAILED: "Could not read your machines.",
@@ -113,10 +106,8 @@ const WORDS = {
   MAC_UPGRADE: "Update the Luke app on this Mac to upgrade it.",
   INSTALL_TITLE: "Run this as root on each server",
   LOOP_TITLE: "Or on many servers at once",
-  PROMPT_HELP:
-    "Paste the setup prompt into Claude Code or Codex on a computer that can reach your servers.",
-  PROMPT_WHAT: "setup prompt",
-  SHOWN_FOLLOWS: "A server's agents use your sign-ins and Luke's GitHub App.",
+  COPY_PROMPT: "Copy agent prompt",
+  PROMPT_COPIED: "Agent prompt copied",
   REVOKE: "Revoke this command",
 } as const;
 
@@ -245,6 +236,7 @@ function AddHostsDialog({
   onClose: () => void;
 }): React.JSX.Element {
   const revoking = useConfirmDialog({ subject: true, surfaceOpen: true }, onRevoke);
+  const copyPrompt = useCopyToast();
   return (
     <Dialog
       open
@@ -273,15 +265,17 @@ function AddHostsDialog({
             code={hostInstallLoopCommand(shown.installScriptUrl, shown.installToken)}
             copy={copyThroughShell}
           />
-          <Inline gap={GAP.CONTROL} justify={JUSTIFY.BETWEEN} wrap={false}>
-            <Text>{WORDS.PROMPT_HELP}</Text>
-            <CopyButton
-              text={hostSetupPrompt(shown.installScriptUrl, shown.installToken, shown.expiresAt)}
-              what={WORDS.PROMPT_WHAT}
-              copy={copyThroughShell}
-            />
-          </Inline>
-          <Text>{WORDS.SHOWN_FOLLOWS}</Text>
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            onClick={() =>
+              copyPrompt(
+                hostSetupPrompt(shown.installScriptUrl, shown.installToken, shown.expiresAt),
+                WORDS.PROMPT_COPIED,
+              )
+            }
+          >
+            {WORDS.COPY_PROMPT}
+          </Button>
         </Stack>
       </div>
       <ConfirmDialog
@@ -413,7 +407,6 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
         <>
           <SettingsRow
             label={WORDS.ADD}
-            description={WORDS.ADD_DESCRIPTION}
             error={addFailed ? WORDS.ADD_FAILED : undefined}
           >
             {() => (
@@ -427,10 +420,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
               </Button>
             )}
           </SettingsRow>
-          {hosts.length === 0 ? (
-            <SettingsLine>{WORDS.EMPTY}</SettingsLine>
-          ) : (
-            hosts.map((host) => (
+          {hosts.map((host) => (
               <HostRow
                 key={host.id}
                 host={host}
@@ -439,8 +429,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
                 installScriptUrl={installScriptUrl}
                 onRemove={remove}
               />
-            ))
-          )}
+            ))}
           {shown === undefined ? null : (
             <AddHostsDialog
               shown={shown}
