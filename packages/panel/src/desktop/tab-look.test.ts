@@ -171,7 +171,13 @@ async function mount(shown: { body?: string; tab?: SidePanelTab } = {}): Promise
     agents: codingAgentsControl({
       agents: [WORKING, DONE],
       agentIds: [WORKING.id, DONE.id],
-      draft: { id: DRAFT, prompt: "", attachments: [], choice: undefined, disabledServers: [] },
+      draft: {
+        id: DRAFT,
+        on: FUNNEL.id,
+        holdsWords: false,
+        choice: undefined,
+        disabledServers: [],
+      },
       pullRequests: new Map([
         [
           DONE.id,

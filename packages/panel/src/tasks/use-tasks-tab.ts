@@ -3260,12 +3260,14 @@ export function useTasksTab(input: {
 
   // The tab rests on no task, so only an open task steps back,
   // and a panel filling the window over it is the nearer layer.
-  const back = useCallback((): boolean => {
+  // Note that it is handed back steady, because a door not named `on…` is
+  // handed back as given, and a new one each draw draws every reader again.
+  const back = useSteadyDoor((): boolean => {
     if (page !== TASKS_PAGE.DOCUMENT) return false;
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
     else leaveTask();
     return true;
-  }, [leaveTask, page, sidePanel.fullScreen, sidePanel.onToggleFullScreen]);
+  });
 
   // Note that the tab is handed back steady, so a part that holds while its share of the tab does (`memo`) holds for every draw that moved nothing it reads.
   // Note that the start's page gives way to a task the developer opened, or a page standing in a task's place, while it is out.

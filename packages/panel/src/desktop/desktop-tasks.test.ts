@@ -138,8 +138,8 @@ test("a task with no agent tab draws a new agent's draft, its composer offering 
             agentIds: [],
             draft: {
               id: DRAFT_ID,
-              prompt: "",
-              attachments: [],
+              on: TASK.id,
+              holdsWords: false,
               choice: undefined,
               disabledServers: [],
             },

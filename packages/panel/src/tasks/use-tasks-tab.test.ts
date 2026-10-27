@@ -65,6 +65,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { type ActHandle, pressAct } from "../act.js";
+import { type Draft, type KeptDraft, useNewAgentDraft } from "../composer-drafts.js";
 import {
   installWindowHistory,
   useWindowHistory,
@@ -188,6 +189,7 @@ function mount(
     else agentActs.push(kind);
   };
   let control: TasksControl | undefined;
+  let words: KeptDraft | undefined;
   let restand: ((next: Standing) => void) | undefined;
   let standing: Standing = {
     shown: false,
@@ -282,6 +284,8 @@ function mount(
       leaveGuard: useLeaveGuard(),
       room: held.room,
     });
+    // The draft agent's words, read where its tab reads them.
+    words = useNewAgentDraft(control.agents.draft?.on, control.agents.draft?.id);
     return held.history
       ? createElement(WindowHistoryProbe, { tasks: control, room: held.room })
       : null;
@@ -307,6 +311,11 @@ function mount(
       assert.ok(control);
       return control;
     },
+    /** The words and files the draft agent's tab reads. */
+    draftWords: (): Pick<Draft, "text" | "attachments"> => ({
+      text: words?.text ?? "",
+      attachments: words?.attachments ?? [],
+    }),
     /** The window's history, where the tab was mounted with one. */
     history: () => windowHistory ?? assert.fail("the window's history stands"),
     stand: (patch: Partial<Standing>) => {
@@ -3244,8 +3253,9 @@ test("an agent refused as New task's Agent mode started its task opens the task 
   assert.equal(note, undefined, "the task started, so the card says nothing");
   assert.equal(tab.control().newTask.open, false, "the dialog closes");
   assert.ok(draft, "the new task holds a draft agent");
+  const words = tab.draftWords();
   assert.deepEqual(
-    { prompt: draft.prompt, choice: draft.choice },
+    { prompt: words.text, choice: draft.choice },
     { prompt, choice },
     "the draft holds the words and the model",
   );
@@ -3260,7 +3270,7 @@ test("an agent refused as New task's Agent mode started its task opens the task 
 
   // The draft tab's Retry sends what the draft holds.
   await act(async () => {
-    await tab.control().agents.startPrompt(draft.id, draft.prompt, draft.choice, draft.attachments);
+    await tab.control().agents.startPrompt(draft.id, words.text, draft.choice, words.attachments);
   });
   await settle();
   const retries = tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START);
@@ -3371,13 +3381,13 @@ test("closing a draft holding words lets it go at once, and its toast's Undo ope
 
   act(() => _undoButton().click());
   await settle();
-  assert.deepEqual(tab.control().agents.draft, {
-    id: draft.id,
-    prompt,
-    attachments: [notes],
-    choice,
-    disabledServers: [],
-  });
+  assert.deepEqual(
+    { held: tab.control().agents.draft, words: tab.draftWords() },
+    {
+      held: { id: draft.id, on: draft.on, holdsWords: true, choice, disabledServers: [] },
+      words: { text: prompt, attachments: [notes] },
+    },
+  );
   assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "and its tab is shown again");
   assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), [], "nothing is started");
 });
@@ -3408,7 +3418,7 @@ test("a draft closed with words whose place a fork has taken since is laid into 
   act(() => _undoButton().click());
   await settle();
   const draft = tab.control().agents.draft;
-  assert.equal(draft?.prompt, "Keep its tests.\n\nFix login.");
+  assert.equal(tab.draftWords().text, "Keep its tests.\n\nFix login.");
   assert.deepEqual(draft?.fork, fork, "the fork written since is kept");
   assert.deepEqual(tab.control().mainTabs.tab, { draft: draft?.id }, "and its tab is shown");
 });

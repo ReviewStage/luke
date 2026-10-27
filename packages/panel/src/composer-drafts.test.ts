@@ -809,8 +809,8 @@ async function columnOn(
       }),
       draft: {
         id: DRAFT_KEY,
-        prompt: opening,
-        attachments: [],
+        on: INVITES.plan.id,
+        holdsWords: opening !== "",
         choice: undefined,
         disabledServers: [],
       },

@@ -31,7 +31,7 @@ import { AgentTab, StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { agentName } from "../tasks/coding-agent-model.js";
-import { DraftAgentTab } from "../tasks/draft-agent-tab.js";
+import { HeldDraftAgentTab } from "../tasks/draft-agent-tab.js";
 import { agentForkDoors, ForkProvider } from "../tasks/fork-action.js";
 import type { AgentFork } from "../tasks/fork-model.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
@@ -279,9 +279,7 @@ function agentTabs(input: {
           },
         ];
   const draft = agents.draft?.id;
-  const draftHolds =
-    agents.draft !== undefined &&
-    (agents.draft.prompt !== "" || agents.draft.attachments.length > 0);
+  const draftHolds = agents.draft?.holdsWords === true;
   const drafts =
     draft === undefined
       ? []
@@ -618,9 +616,9 @@ export function MainTabContent({
     // The tab stands for a draft the task no longer holds only until the
     // column moves back to the task, a render away.
     return agents.draft?.id === tab.draft ? (
-      <DraftAgentTab
+      <HeldDraftAgentTab
         key={tab.draft}
-        draft={agents.draft}
+        held={agents.draft}
         control={agents}
         cards={cards.call}
         call={call}
