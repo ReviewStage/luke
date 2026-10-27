@@ -280,6 +280,16 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
           ? { issues: [LINEAR_ISSUE] }
           : ({ failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const),
       ),
+    workspaceEnvironmentRead: (params) =>
+      ask(`environment:${params.workspaceId}`, () => ({ entries: [] })),
+    workspaceEnvironmentSave: (params) =>
+      ask(`environment-save:${params.workspaceId}:${params.name}`, () =>
+        script.notPermitted ? refusal() : { entries: [] },
+      ),
+    workspaceEnvironmentRemove: (params) =>
+      ask(`environment-remove:${params.workspaceId}:${params.name}`, () =>
+        script.notPermitted ? refusal() : { entries: [] },
+      ),
     workspaceSentry: (params) =>
       ask(`sentry:${params.workspaceId}`, () =>
         params.workspaceId === ACME.id

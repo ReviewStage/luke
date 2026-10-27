@@ -392,3 +392,11 @@ test("letters typed in order do not find a row: thm no longer finds Theme", () =
   assert.equal(searchSettings(settingsSearchEntries(FULL_INPUT), "thm")?.matched, 0);
   assert.ok(labelsFound("theme").includes("Theme"));
 });
+
+test("Environment variables and secrets find the Workspace page's Environment group for every workspace, a member's too", () => {
+  for (const workspace of [FIRST, TEAM]) {
+    for (const query of ["Environment variables", "secrets"]) {
+      assert.deepEqual(workspaceFound(query, workspace), [SETTINGS_SECTION.ENVIRONMENT]);
+    }
+  }
+});

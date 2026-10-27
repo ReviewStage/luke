@@ -89,7 +89,7 @@ const RESERVED_ENVIRONMENT_PREFIXES: readonly string[] = [
 ];
 
 /** Whether a name is one the workspace may set. */
-function environmentNameAllowed(name: string): boolean {
+export function environmentNameAllowed(name: string): boolean {
   return (
     !RESERVED_ENVIRONMENT_NAMES.has(name) &&
     !RESERVED_ENVIRONMENT_PREFIXES.some((prefix) => name.startsWith(prefix))
@@ -164,8 +164,12 @@ export const workspaceEnvironmentSaveRequestSchema = EffectSchema.Struct({
   ),
 );
 
+export type WorkspaceEnvironmentSaveRequest = typeof workspaceEnvironmentSaveRequestSchema.Type;
+
 /** One variable or secret removed by an owner or admin (POST); removing a name the workspace does not hold moves nothing. */
 export const workspaceEnvironmentRemoveRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   name: EffectSchema.String,
 });
+
+export type WorkspaceEnvironmentRemoveRequest = typeof workspaceEnvironmentRemoveRequestSchema.Type;
