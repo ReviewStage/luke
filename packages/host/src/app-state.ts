@@ -193,6 +193,8 @@ export interface AppInboxWaitingItem {
   agentId: string;
   title: string;
   postedAt: number;
+  /** Whether it holds an ask open rather than being a notice; absent from a service before it, which counts it as asking. */
+  asking?: boolean;
 }
 
 /** One task with inbox items waiting on the developer: the task, and its open items, the latest changed first. */
@@ -205,7 +207,7 @@ export interface AppInboxTask {
 export interface AppInboxTaskHolding {
   taskId: string;
   items: number;
-  /** How many of its items the Inbox's To do lists for the reader: their own, open or unread; absent from a service before it, which the sidebar counts by the open items alone. */
+  /** How many of its items are questions waiting on the reader: open asks that wait on them; absent from a service before it, which the sidebar counts by the open items alone. */
   toDo?: number;
   updatedAt: number;
 }

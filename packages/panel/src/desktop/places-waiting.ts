@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model.js";
+import { holdsAsk, NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model.js";
 import { type SettledWaiting, useSettledToDo, useSettledWaiting } from "../tasks/inbox-settling.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 
@@ -11,12 +11,14 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
  */
 
 /**
- * How many items the Inbox's To do lists: main's count of each standing
- * task's of the listed workspace (`toDo`), the reader's own open or unread,
- * and every open one from an agent with no task that the developer started
- * (`waitsOnReader`), which names no workspace to be counted in; a
- * teammate's is listed in the Inbox, and waits on the teammate. An item the
- * window answered or marked is counted as it now stands from the moment it
+ * How many questions wait on the developer in the Inbox, the number that
+ * reaches zero once each is answered: main's count of each standing task's
+ * of the listed workspace (`toDo`), the open asks that wait on the reader,
+ * and every open ask from an agent with no task that waits on them
+ * (`waitsOnReader`, `holdsAsk`), which names no workspace to be counted in;
+ * a teammate's is listed in the Inbox, and waits on the teammate. A notice
+ * and a settled item never count, read or not, as the Dock's badge counts
+ * them. A question the window answered counts no longer from the moment it
  * was sent (`inbox-settling.ts`). Where main carries no count of the tasks'
  * to do, from a service before it, their open items are counted, as
  * before.
@@ -27,7 +29,7 @@ function waitingItems(
   readerId: string | undefined,
 ): number {
   const tasks = toDo ?? waiting.reduce((sum, task) => sum + task.items.length, 0);
-  return tasks + taskless.filter((each) => waitsOnReader(each, readerId)).length;
+  return tasks + taskless.filter((each) => holdsAsk(each) && waitsOnReader(each, readerId)).length;
 }
 
 /** What a count of what waits on the developer is said with, after its figure: "3 need you". */
@@ -35,7 +37,7 @@ export function needsYouNoun(count: number): string {
   return count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many;
 }
 
-/** How many wait on the developer in the Inbox, what its To do lists; none while signed out. */
+/** How many questions wait on the developer in the Inbox; none while signed out. */
 export function useInboxWaiting(tasks: TasksControl): number {
   const settledWaiting = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   // Note that only the standing tasks are counted, as To do lists them, so an archived task's or one not listed yet counts nowhere.
@@ -44,11 +46,6 @@ export function useInboxWaiting(tasks: TasksControl): number {
     () => inboxTasks.filter((holding) => standingTasks.some((task) => task.id === holding.taskId)),
     [inboxTasks, standingTasks],
   );
-  const toDo = useSettledToDo(
-    standingHoldings,
-    tasks.listed.inbox,
-    settledWaiting.waiting,
-    tasks.inboxTasks,
-  );
+  const toDo = useSettledToDo(standingHoldings, tasks.listed.inbox, settledWaiting.waiting);
   return tasks.signedIn ? waitingItems(settledWaiting, toDo, tasks.me) : 0;
 }

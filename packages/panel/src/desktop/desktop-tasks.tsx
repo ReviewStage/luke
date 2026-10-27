@@ -430,12 +430,8 @@ function TaskInboxTab({
   const groups = [
     { holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] },
   ];
-  const marks = useInboxReadMarks({
-    act,
-    workspaceId: task.workspaceId,
-    // Note that a task's own Inbox offers no Mark all as read.
-    toDo: { groups, holdings: tasks.inboxTasks, readerId: tasks.me },
-  });
+  // Note that a task's own Inbox offers no Mark all as read.
+  const marks = useInboxReadMarks({ act, workspaceId: task.workspaceId });
   const items = groups.flatMap((group) => group.items);
   const counts = inboxCounts(groups, tasks.me);
   // The list's search, as the window's Inbox holds it, which narrows what it lists, never what it counts.

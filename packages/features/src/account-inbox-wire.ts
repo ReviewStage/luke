@@ -90,10 +90,10 @@ export const accountInboxTaskSchema = EffectSchema.Struct({
   planId: wireUuidSchema,
   items: countedNumber,
   /**
-   * How many of the task's items the Inbox's To do lists for the reader:
-   * those that wait on them (`waitsOn`), open or unread for them; none on an archived
-   * task. Absent from a service before it, which the desktop counts as it
-   * did before, by the open items alone.
+   * How many of the task's items are questions waiting on the reader: open,
+   * holding an ask (`asking`), and waiting on them (`waitsOn`); a notice or
+   * a settled item never counts, read or not. Absent from a service before
+   * it, which the desktop counts as it did before, by the open items alone.
    */
   toDo: EffectSchema.optionalKey(countedNumber),
   updatedAt: countedNumber,
