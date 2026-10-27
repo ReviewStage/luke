@@ -33,6 +33,7 @@ import {
   DisclosureBody,
   DisclosureChevron,
   DisclosureSummary,
+  FAILURE_NOTE_TIME,
   FailureNote,
   GAP,
   GLYPH_ARRIVAL,
@@ -1478,7 +1479,9 @@ export function TranscriptTodos({
       />
       <FoldBody className="mt-list-gap mr-0 mb-tight-gap ml-transcript-gutter select-text">
         <TodoItems todos={todos} live={live} />
-        {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
+        {errorText === undefined ? null : (
+          <FailureNote time={FAILURE_NOTE_TIME.PAST}>{errorText}</FailureNote>
+        )}
       </FoldBody>
     </Tool>
   );
@@ -1649,7 +1652,9 @@ export function TranscriptSubagent({
   return (
     <div className="subagent-row @container/subagent-row text-caption-inline">
       {row}
-      {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
+      {errorText === undefined ? null : (
+        <FailureNote time={FAILURE_NOTE_TIME.PAST}>{errorText}</FailureNote>
+      )}
     </div>
   );
 }

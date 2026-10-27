@@ -33,6 +33,7 @@ import {
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FAILURE_NOTE_TIME,
   FailureNote,
   INLINE_REF_LOOK,
   InlineRef,
@@ -1576,8 +1577,8 @@ function AgentEndLine({
   keyProvider: ModelProvider | undefined;
   onOpenApiKeys: (() => void) | undefined;
 }): React.JSX.Element {
-  // Note that a failure's words are the note's to say, so only a stop's are said here.
-  useAnnounce(ANNOUNCE.POLITE, ended.failed ? "" : ended.words);
+  // Note that a failure is said here as a stop is, only as it lands, since its note is history and no alert, so a transcript scrolled back over it says nothing.
+  useAnnounce(ANNOUNCE.POLITE, ended.words);
   // Note that a key refused is mended at its harness's row in Settings, so its line offers that row after the words.
   const remedy =
     endReason === FAILURE_REASON.API_KEY
@@ -1594,7 +1595,7 @@ function AgentEndLine({
   if (ended.failed) {
     return (
       <div className={END_LINE_CLASS} data-ended="" data-failed="">
-        <FailureNote>
+        <FailureNote time={FAILURE_NOTE_TIME.PAST}>
           {ended.words}
           {remedyButton}
         </FailureNote>

@@ -11,6 +11,7 @@ import {
   cn,
   DISCLOSURE_BODY,
   DisclosureBody,
+  FAILURE_NOTE_TIME,
   FailureNote,
   GlyphSlot,
   LineSummary,
@@ -350,7 +351,7 @@ export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
   if (errorText !== undefined) {
     return (
       <div data-tool-output="">
-        <FailureNote>{errorText}</FailureNote>
+        <FailureNote time={FAILURE_NOTE_TIME.PAST}>{errorText}</FailureNote>
       </div>
     );
   }

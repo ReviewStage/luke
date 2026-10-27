@@ -9,6 +9,7 @@ import {
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestWriteAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
@@ -41,7 +42,6 @@ import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
-  type PullRequestWriteAnswer,
   REACTION,
   REVIEW_COMMENT_MODE,
   REVIEW_EVENT,
@@ -51,6 +51,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { timeRuntime } from "@luke/ui";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
@@ -74,6 +75,7 @@ import {
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
+import { OpenSettingsProvider } from "../open-settings.js";
 import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -285,7 +287,9 @@ beforeAll(async () => {
 /** Every change to the pull request the tab asked for, by agent, in order. */
 let changes: (readonly [string, PullRequestActionRequest])[] = [];
 /** How the service answers the next change asked for. */
-let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+let changeAnswer: CodingAgentPullRequestWriteAnswerView = {
+  outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+};
 /** What the service waits on before it answers a change, where a test holds it; none answers at once. */
 let changeHeld: Promise<void> | undefined;
 /** The number of the pull request each change named, none where it was the agent's own. */
@@ -2394,6 +2398,37 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
   );
   assert.ok(pillPress(merged) === undefined, "a merged pull request's pill is no press");
   assert.equal(standing(merged), "Merged");
+});
+
+test("a change refused for a repository out of the workspace's reach says where access is given, and Open Settings opens the workspace's GitHub there", async () => {
+  changeAnswer = { failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
+  const settings: SettingsLink[] = [];
+  const tab = await drawn(
+    createElement(OpenSettingsProvider, {
+      value: (link: SettingsLink) => settings.push(link),
+      children: createElement(Switching, {
+        control: controlAnswering(),
+        first: PULL_REQUEST_VIEW.CONVERSATION,
+      }),
+    }),
+  );
+
+  await pressAction(tab, "Convert to draft");
+
+  const note =
+    tab.querySelector<HTMLElement>(".pull-request-write-note") ??
+    assert.fail("the tab says why the change was not made");
+  assert.match(
+    note.textContent ?? "",
+    /Luke cannot reach this task's repository on GitHub\. Choose which repositories Luke can see\./u,
+  );
+  const open =
+    [...note.querySelectorAll("button")].find((button) => button.textContent === "Open Settings") ??
+    assert.fail("the line offers Settings, where access is given");
+  act(() => open.click());
+  assert.deepEqual(settings, [
+    { page: SETTINGS_VIEW.WORKSPACE, section: SETTINGS_SECTION.GITHUB_REPOSITORIES },
+  ]);
 });
 
 test("a change GitHub refused says so in GitHub's own words until dismissed, and the pull request is read again in case it moved", async () => {

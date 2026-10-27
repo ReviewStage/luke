@@ -19,6 +19,7 @@ import {
   type PullRequestRefusal,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   Badge,
   BUTTON_SIZE,
@@ -57,8 +58,13 @@ import { type ReactNode, useCallback, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useGitHubConnection } from "../github-connect.js";
+import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { useToast, useWithdrawToast } from "../toast.js";
-import { PULL_REQUEST_STATE_LABEL, queuedLabel } from "./coding-agent-model.js";
+import {
+  PULL_REQUEST_STATE_LABEL,
+  queuedLabel,
+  REPOSITORY_UNREACHED_NOTE,
+} from "./coding-agent-model.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
 
@@ -135,6 +141,8 @@ const WRITE_WORDS = {
   REFUSED: "GitHub refused this change.",
   /** Who said the words quoted under a refusal. */
   SOURCE: "GitHub",
+  /** A repository out of the workspace's reach, and where it is given back: the workspace's GitHub in Settings, whose Manage on GitHub chooses the App's repositories. */
+  UNREACHED: `${REPOSITORY_UNREACHED_NOTE} Choose which repositories Luke can see.`,
 } as const;
 
 /** Luke's own words where a change never reached GitHub, by why. */
@@ -143,7 +151,7 @@ function failureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This pull request can no longer be found.";
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
-      return "Luke's GitHub App no longer reaches this repository.";
+      return WRITE_WORDS.UNREACHED;
     default:
       return "GitHub could not be reached. Try again in a moment.";
   }
@@ -164,7 +172,17 @@ export type WriteNote =
       readonly said?: string | undefined;
       /** Why the service refused it, where the control that sent it does more than say its words. */
       readonly reason?: PullRequestRefusal | undefined;
+      /** What mends it beyond trying again, where something does. */
+      readonly remedy?: WriteRemedy | undefined;
     };
+
+/** What mends a change that never reached GitHub, beyond trying again. */
+export const WRITE_REMEDY = {
+  /** The workspace's GitHub in Settings, where the App is given the repository again. */
+  GITHUB_ACCESS: "github-access",
+} as const;
+
+export type WriteRemedy = (typeof WRITE_REMEDY)[keyof typeof WRITE_REMEDY];
 
 /** How a change went, for a press that waits on it, such as a question's answer: made, or not, in the words the line says why, and the note it left. */
 export type WriteOutcome =
@@ -209,7 +227,15 @@ export interface PullRequestWrites {
 export function noteOf(
   answer: CodingAgentPullRequestWriteAnswerView | CodingAgentPullRequestViewedAnswerView,
 ): WriteNote | undefined {
-  if ("failure" in answer) return { kind: WRITE_NOTE.WORDS, words: failureWords(answer.failure) };
+  if ("failure" in answer) {
+    return answer.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
+      ? {
+          kind: WRITE_NOTE.WORDS,
+          words: failureWords(answer.failure),
+          remedy: WRITE_REMEDY.GITHUB_ACCESS,
+        }
+      : { kind: WRITE_NOTE.WORDS, words: failureWords(answer.failure) };
+  }
   switch (answer.outcome) {
     case PULL_REQUEST_WRITE_OUTCOME.DONE:
       return undefined;
@@ -470,8 +496,9 @@ export function PullRequestStateMenu({
  * header unless the control that sent the change draws it in its own place
  * (`className`), as the review panel does. Note that a change that went
  * wrong is a failure note, whose words keep their line breaks, so GitHub's
- * own words stand on a line of their own under ours; only the sign-in,
- * which needs a remedy beyond Dismiss, is an error state.
+ * own words stand on a line of their own under ours; only the sign-in, and
+ * a repository out of reach, which Settings › Workspace's GitHub gives back,
+ * need a remedy beyond Dismiss, and so are error states.
  */
 export function PullRequestWriteNote({
   writes,
@@ -482,6 +509,7 @@ export function PullRequestWriteNote({
   className?: string;
 }): React.JSX.Element | null {
   const { connect } = useGitHubConnection();
+  const openSettings = useOpenSettings();
   const { note, dismiss } = writes;
   if (note === undefined) return null;
   return (
@@ -492,6 +520,20 @@ export function PullRequestWriteNote({
           onDismiss={dismiss}
         >
           {WRITE_WORDS.SIGN_IN}
+        </ErrorState>
+      ) : note.remedy === WRITE_REMEDY.GITHUB_ACCESS ? (
+        <ErrorState
+          remedy={{
+            label: OPEN_SETTINGS_LABEL,
+            onClick: () =>
+              openSettings({
+                page: SETTINGS_VIEW.WORKSPACE,
+                section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+              }),
+          }}
+          onDismiss={dismiss}
+        >
+          {note.words}
         </ErrorState>
       ) : (
         <FailureNote

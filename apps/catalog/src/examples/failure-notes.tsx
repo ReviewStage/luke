@@ -1,11 +1,18 @@
 /**
  * failure-notes.tsx -- a failure's line with Retry after its words, one with
  * no Retry, a tool's error of several lines, long words in a column
- * narrower than the line, and one standing in a list's place beside a note
- * line, at the rows' inset.
+ * narrower than the line, one standing in a list's place beside a note
+ * line, at the rows' inset, and one that is a transcript's history, drawn
+ * the same but no alert.
  */
 
-import { FAILURE_NOTE_LOOK, FailureNote, NOTE_LINE_LOOK, NoteLine } from "@luke/ui";
+import {
+  FAILURE_NOTE_LOOK,
+  FAILURE_NOTE_TIME,
+  FailureNote,
+  NOTE_LINE_LOOK,
+  NoteLine,
+} from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -47,6 +54,11 @@ function FailureNotes(): React.JSX.Element {
             The files could not be shown.
           </FailureNote>
           <NoteLine look={NOTE_LINE_LOOK.LIST}>No files match.</NoteLine>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="failure-note-past" title="History, not announced">
+        <div className="catalog-frame">
+          <FailureNote time={FAILURE_NOTE_TIME.PAST}>Command failed with exit code 1.</FailureNote>
         </div>
       </CatalogSection>
     </>

@@ -12,7 +12,8 @@ import { useAgentComposer } from "./use-agent-composer.js";
 
 /**
  * A box whose editor bundle could not be loaded says so under the card and
- * stays inert, its importer failing as a chunk that could not be loaded does.
+ * stays inert, its importer failing as a chunk that could not be loaded does,
+ * and offers Retry, which reads the bundle again.
  */
 
 const roots: Root[] = [];
@@ -33,19 +34,26 @@ function Box(): ReactNode {
   return createElement(AgentComposer, { ...QUIET_COMPOSER, composer });
 }
 
-test("a box whose editor bundle could not be loaded says so under the card, and its field stays inert", async () => {
+test("a box whose editor bundle could not be loaded says so under the card beside Retry, which reads the bundle again, and its field stays inert", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  let reads = 0;
   const bundles = sideBundles({
-    planEditor: () => Promise.reject(new Error("The chunk could not be loaded.")),
+    planEditor: () => {
+      reads += 1;
+      return Promise.reject(new Error("The chunk could not be loaded."));
+    },
   });
   await act(async () => root.render(onSideBundles(bundles, createElement(Box))));
 
-  assert.equal(
-    container.querySelector(".luke-composer-foot-note")?.textContent,
-    "The message box could not be loaded.",
-  );
+  const note = container.querySelector(".luke-composer-foot-note");
+  assert.equal(note?.textContent, "The message box could not be loaded.Retry");
   assert.equal(container.querySelector(".agent-composer-input")?.getAttribute("aria-busy"), "true");
+  const before = reads;
+
+  await act(async () => note?.querySelector("button")?.click());
+
+  assert.equal(reads, before + 1, "Retry reads the bundle again");
 });

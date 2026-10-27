@@ -342,9 +342,9 @@ test("a failed turn's end line names no price, even from a service that sent the
   assert.match(line.textContent ?? "", /Failed: /);
   assert.doesNotMatch(line.textContent ?? "", /\$/);
   assert.match(
-    line.querySelector('[role="alert"]')?.textContent ?? "",
+    line.querySelector(".luke-failure-note")?.textContent ?? "",
     /^Failed: /,
-    "and says it as an alert",
+    "and says it as a failure",
   );
 
   const chip =
