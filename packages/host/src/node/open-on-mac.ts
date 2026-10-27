@@ -374,25 +374,20 @@ export function openOnMacScript(input: {
 }
 
 /**
- * The script, its values quoted, that makes a local agent's worktree
- * (`@luke/host`'s `compose-local-agents.ts`): a worktree of Luke's own clone
- * of the repository, the clone Open on this Mac shares, made under the same
- * lock with the developer's own Git login, at the head of the branch the
- * agent starts from, or of GitHub's default branch where it names none. The
- * worktree is detached rather than on that branch, so two agents starting
- * from one branch, or the developer's own worktree of it, never hold it
- * twice; the agent makes its own branch there. A worktree already made is
- * left as it stands, since it holds the agent's work. It ends with its
- * failure where a step fails, having said which.
- *
- * An agent in a VM (`own`) gets a repository of its own in place of the
- * worktree, since its VM mounts its folder alone and a worktree's Git
- * folder stands in the shared clone: fetched from the shared clone at the
- * same head, its commits and trees only, then pointed at GitHub, which
- * every blob it lacks is had from as it is needed, through the VM's own
- * credential inside it. Nothing of the shared clone, nor of another agent's
- * work in it, is copied in beyond that head's history, and a repository
- * left half made is taken away, so the next launch makes it again.
+ * The script, its values quoted, that makes a local agent's own repository
+ * (`@luke/host`'s `compose-local-agents.ts`), at the head of the branch the
+ * agent starts from, or of GitHub's default branch where it names none,
+ * read in Luke's own clone of the repository, the clone Open on this Mac
+ * shares, under the same lock. The agent's VM mounts its folder alone, and
+ * a worktree's Git folder would stand in the shared clone, so the agent
+ * gets a repository of its own: fetched from the shared clone at that head,
+ * its commits and trees only, then pointed at GitHub, which every blob it
+ * lacks is had from as it is needed, through the VM's own credential inside
+ * it. Nothing of the shared clone, nor of another agent's work in it, is
+ * copied in beyond that head's history. A repository already made is left
+ * as it stands, since it holds the agent's work, and one left half made is
+ * taken away, so the next launch makes it again. It ends with its failure
+ * where a step fails, having said which.
  */
 export function agentWorktreeScript(input: {
   /** The repository as `owner/name`, cloned from GitHub the first time. */
@@ -403,8 +398,6 @@ export function agentWorktreeScript(input: {
   readonly branch: string | null;
   /** Where the repository is cloned from, by protocol; GitHub's own unless a test names its own. */
   readonly remotes?: { readonly https: string; readonly ssh: string } | undefined;
-  /** Whether the agent gets a repository of its own rather than a worktree of the shared clone: an agent in a VM. */
-  readonly own?: boolean | undefined;
 }): string {
   const remotes = input.remotes ?? {
     https: `https://github.com/${input.repository}.git`,
@@ -433,22 +426,14 @@ export function agentWorktreeScript(input: {
     "  fi",
     '  head="$(git rev-parse --verify --quiet "$fetched^{commit}")" || return 1',
     '  mkdir -p "$(dirname "$worktree")" || return 1',
-    ...(input.own === true
-      ? [
-          '  making="$worktree.making"',
-          '  rm -rf "$making" || return 1',
-          // Note that the repository is made beside its place and moved in whole, so one left half made never stands where the next launch would make it again.
-          '  ( worktree="$making"; made_own ) || { rm -rf "$making"; return 1; }',
-          '  if [ -e "$worktree" ]; then rmdir "$worktree" || { rm -rf "$making"; return 1; }; fi',
-          '  mv "$making" "$worktree"',
-        ]
-      : [
-          // Note that a worktree folder deleted by hand is still registered, which would refuse it being made again.
-          "  git worktree prune --expire now || return 1",
-          '  git worktree add --quiet --detach "$worktree" "$head"',
-        ]),
+    '  making="$worktree.making"',
+    '  rm -rf "$making" || return 1',
+    // Note that the repository is made beside its place and moved in whole, so one left half made never stands where the next launch would make it again.
+    '  ( worktree="$making"; made_own ) || { rm -rf "$making"; return 1; }',
+    '  if [ -e "$worktree" ]; then rmdir "$worktree" || { rm -rf "$making"; return 1; }; fi',
+    '  mv "$making" "$worktree"',
     "}",
-    ...(input.own === true ? OWN_REPOSITORY : []),
+    ...OWN_REPOSITORY,
     '[ -e "$worktree/.git" ] && exit 0',
     "if ! ( opened ); then",
     '  echo "▸ Could not make the agent\'s worktree of ${branch:-the default branch}." >&2',

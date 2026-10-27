@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
-import { CLAUDE_CODE_MAC_PIN, CODEX_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
 import { loopbackConsent } from "@luke/credentials/node";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { DEVICE_ARCH, DEVICE_ISOLATION, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
@@ -38,6 +37,7 @@ import {
 } from "./host-concerns.js";
 import { oauthAccountSourceLayer } from "./oauth-account-source.js";
 import { runModeFor } from "./run-mode.js";
+import { fakeSandbox } from "./testing/fake-sandbox.js";
 import { fixedAccountSource } from "./testing/fixed-account-source.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
@@ -146,16 +146,14 @@ describe("the host's platform concerns", () => {
               launch: ({ env }) => ({ command: "/usr/bin/false", args: [], env }),
               runnerBundle: "/usr/bin/false",
               runnerEnv: {},
-              bundled: {},
-              pins: { node: NODE_MAC_PIN, claude: CLAUDE_CODE_MAC_PIN, codex: CODEX_MAC_PIN },
-              ownSignIns: true,
+              sandbox: fakeSandbox().sandbox,
+              formerlyDirect: true,
               deviceName: "Fixture Mac",
               devicePlatform: DEVICE_PLATFORM.DARWIN,
               deviceArch: DEVICE_ARCH.ARM64,
-              deviceIsolation: DEVICE_ISOLATION.BARE,
+              deviceIsolation: DEVICE_ISOLATION.SANDBOX,
               deviceCapabilities: [],
               worktreeScript: () => "exit 1",
-              githubFromLuke: false,
             }),
           ),
         ),

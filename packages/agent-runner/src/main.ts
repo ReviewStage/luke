@@ -11,7 +11,6 @@
  * 0, or says why not on stderr and exits 1.
  */
 
-import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import {
   NodeChildProcessSpawner,
@@ -26,7 +25,6 @@ import { askCodexToken } from "./codex-token.js";
 import { runsOnHost } from "./launch.js";
 import { processTable } from "./processes.js";
 import { CODEX_TOKEN_COMMAND, RUNNER_END } from "./protocol.js";
-import { MAC_PS, psProcessTable } from "./ps-processes.js";
 import { runAgent } from "./runner.js";
 
 const EXIT = { ENDED: 0, FAILED: 1 } as const;
@@ -45,11 +43,6 @@ const stdinLines = Stream.fromAsyncIterable(stdin, () => undefined).pipe(
 
 const [, script, mode, tokenUrl] = process.argv;
 
-// Note that a Mac's development run starts the bundle under Electron's own binary with
-// ELECTRON_RUN_AS_NODE, which only that start needs: a command of the agent's that
-// launched an Electron app would otherwise run it as Node.
-delete process.env.ELECTRON_RUN_AS_NODE;
-
 const launch = runAgent({
   lines: stdinLines,
   env: process.env,
@@ -65,14 +58,8 @@ const launch = runAgent({
       claudeCodeLive,
       FetchHttpClient.layer,
       // The machine's own processes, read beside the runner's, for a wait's release (runner.ts):
-      // the sandbox's `/proc`, the VM's on a host, keyed on the runner's own user, or `ps` on a Mac, which has none.
-      existsSync("/proc/self/status")
-        ? processTable(
-            "/proc",
-            process.pid,
-            runsOnHost(process.env) ? process.getuid?.() : undefined,
-          )
-        : psProcessTable(MAC_PS, process.pid),
+      // the sandbox's `/proc`, or a local agent's VM's, keyed on the runner's own user.
+      processTable("/proc", process.pid, runsOnHost(process.env) ? process.getuid?.() : undefined),
       // Codex's app-server, spawned as the runner's own child (codex.ts).
       NodeChildProcessSpawner.layer.pipe(
         Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),

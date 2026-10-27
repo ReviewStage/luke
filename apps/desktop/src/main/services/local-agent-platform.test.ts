@@ -1,5 +1,5 @@
 /**
- * local-agent-platform.test.ts -- what This Mac registers as a device: it takes a discard line and names the check that keeps a worktree holding unsaved work, whether it runs its agents directly or, sandboxed, each in a VM started through its launcher on the smolvm it fetched.
+ * local-agent-platform.test.ts -- what This Mac registers as a device: it takes a discard line and names the check that keeps a worktree holding unsaved work, and runs each agent in a VM started through its launcher on the smolvm it fetched.
  */
 
 import assert from "node:assert/strict";
@@ -23,18 +23,16 @@ describe("what This Mac registers", () => {
     Reflect.deleteProperty(process, "resourcesPath");
   });
 
-  it("takes a discard line, and checks the worktree before one removes it, sandboxed or not", () => {
+  it("takes a discard line, and checks the worktree before one removes it", () => {
     const platform = localAgentPlatform({ packaged: true, stateRoot: STATE_ROOT });
 
-    for (const each of [platform, platform.sandboxed]) {
-      assert.deepEqual(each?.deviceCapabilities, [DEVICE_CAPABILITY.DISCARD]);
-      assert.equal(typeof each?.unsavedWorkScript, "function");
-    }
+    assert.deepEqual(platform.deviceCapabilities, [DEVICE_CAPABILITY.DISCARD]);
+    assert.equal(typeof platform.unsavedWorkScript, "function");
   });
 
-  it("sandboxed, starts each runner in its VM through the launcher, on the smolvm fetched under Luke's state, and registers so", () => {
-    const sandboxed = localAgentPlatform({ packaged: true, stateRoot: STATE_ROOT }).sandboxed;
-    const runner = sandboxed?.launch({
+  it("starts each runner in its VM through the launcher, on the smolvm fetched under Luke's state, and registers so", () => {
+    const platform = localAgentPlatform({ packaged: true, stateRoot: STATE_ROOT });
+    const runner = platform.launch({
       agentId: "agent-1",
       folder: "/Users/dev/.luke/agents/agent-1",
       checkout: "/Users/dev/.luke/agents/agent-1/repository",
@@ -43,9 +41,9 @@ describe("what This Mac registers", () => {
       env: {},
     });
 
-    assert.equal(sandboxed?.deviceIsolation, DEVICE_ISOLATION.SANDBOX);
-    assert.equal(runner?.command, "/Applications/Luke.app/luke-agent-launcher");
-    assert.deepEqual(runner?.args.slice(0, 3), [
+    assert.equal(platform.deviceIsolation, DEVICE_ISOLATION.SANDBOX);
+    assert.equal(runner.command, "/Applications/Luke.app/luke-agent-launcher");
+    assert.deepEqual(runner.args.slice(0, 3), [
       `${STATE_ROOT}/agent-tools/smolvm/1.32.3/smolvm`,
       "machine",
       "exec",

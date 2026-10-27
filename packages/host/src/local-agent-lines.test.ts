@@ -12,7 +12,6 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { CLAUDE_CODE_MAC_PIN, CODEX_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
 import { fixedBearer, HOSTED_SERVICE_PATH, HostedDeviceAgentClient } from "@luke/features";
 import {
   DEVICE_AGENT_LINE_KIND,
@@ -29,6 +28,7 @@ import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
+import { fakeSandbox } from "./testing/fake-sandbox.js";
 import { type Script, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const SERVICE = "https://luke.test";
@@ -73,13 +73,10 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("luke-agent-lines-");
     const home = path.join(root, "home");
-    const tools = { node: path.join(root, "node"), claude: path.join(root, "claude") };
     const fileSystem = yield* FileSystem.FileSystem;
     const folder = deviceAgentLayout(home, AGENT_ID).folder;
     yield* fileSystem.makeDirectory(path.join(folder, "repository"), { recursive: true });
     yield* fileSystem.writeFileString(path.join(folder, "repository", "notes.md"), "unpushed\n");
-    yield* fileSystem.writeFileString(tools.node, "");
-    yield* fileSystem.writeFileString(tools.claude, "");
 
     const settled: string[] = [];
     let linesRead = 0;
@@ -106,8 +103,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
       if (program === "/bin/bash" && args[0] === "-l") {
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
       }
-      if (program === "/bin/bash" && args[1] === UNSAVED_WORK_SCRIPT) return unsavedWork;
-      return program === tools.claude ? { exitCode: 1 } : undefined;
+      return program === "/bin/bash" && args[1] === UNSAVED_WORK_SCRIPT ? unsavedWork : undefined;
     });
     const services = Layer.mergeAll(
       spawner.layer,
@@ -116,21 +112,20 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
       fakeHttpClientLayer(fetchLike),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME: home, SHELL: "/bin/bash" })),
       Layer.succeed(Reporter, { report: () => {} }),
+      // Note that the agent's folder stands from before the record of how agents ran, so on This Mac it ran directly and is checked on the Mac.
       Layer.succeed(LocalAgentPlatform, {
         launch: () => ({ command: "/opt/luke/launch", args: [], env: {} }),
+        sandbox: fakeSandbox().sandbox,
+        formerlyDirect: true,
         runnerBundle: "/opt/luke/agent-runner.mjs",
         runnerEnv: {},
-        bundled: tools,
-        pins: { node: NODE_MAC_PIN, claude: CLAUDE_CODE_MAC_PIN, codex: CODEX_MAC_PIN },
-        ownSignIns: true,
-        deviceName: "rack-1",
-        devicePlatform: DEVICE_PLATFORM.LINUX,
-        deviceArch: DEVICE_ARCH.X64,
-        deviceIsolation: DEVICE_ISOLATION.BARE,
+        deviceName: "Studio",
+        devicePlatform: DEVICE_PLATFORM.DARWIN,
+        deviceArch: DEVICE_ARCH.ARM64,
+        deviceIsolation: DEVICE_ISOLATION.SANDBOX,
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
         unsavedWorkScript: unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,
-        githubFromLuke: false,
       }),
     );
     const composer = yield* composeLocalAgents({

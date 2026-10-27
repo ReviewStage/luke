@@ -131,7 +131,6 @@ const follow = (smolvm: string) =>
     const boxArch = yield* arch;
     const platform = linuxPlatform({
       installFolder,
-      node: process.execPath,
       arch: boxArch,
       hostname: os.hostname(),
       stateRoot,

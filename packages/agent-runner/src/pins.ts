@@ -6,11 +6,12 @@
  * `codex-sessions.ts`) point the runner at the paths, the runner bundles
  * the same Agent SDK (this package's `package.json`), and Codex's
  * app-server protocol types are generated from the same Codex
- * (`scripts/generate-codex-protocol.mjs`). A bump moves them together. A local
- * agent's Mac, and a host, fetches its own builds of the same releases, each
- * an `AgentToolPin` checked by size, digest, and signature where it has one
- * before it is kept (`@luke/host`'s `localAgentTool`). Erasable syntax
- * alone, so Node runs the generator over it as it stands.
+ * (`scripts/generate-codex-protocol.mjs`). A bump moves them together. A
+ * local agent runs in a VM booted from that same image (`SANDBOX_IMAGE`);
+ * what a device fetches or carries of its own, smolvm and a host's Node, is
+ * an `AgentToolPin` checked by size and digest before it is kept
+ * (`@luke/host`'s `localAgentTool`). Erasable syntax alone, so Node runs the
+ * generator over it as it stands.
  */
 
 /** The unprivileged user the harness runs as, which the image creates. */
@@ -79,67 +80,12 @@ export interface AgentToolPin {
   /** The executable, under the kept folder. */
   readonly BINARY: string;
   /**
-   * The Developer ID team the binary is signed by, as read off the pinned
-   * release, which macOS's own check must name before it is first run; none
-   * where the release is not signed, and its digest alone decides.
-   */
-  readonly TEAM?: string;
-  /**
    * The SHA-256 of each kept file that runs on the device, by its path under
-   * the kept folder, read off the pinned release, for one no team signs: the
-   * kept build is answered only while each still matches, since anything of
+   * the kept folder, read off the pinned release: the kept build is answered only while each still matches, since anything of
    * the developer's could have written it since its archive was checked.
    */
   readonly FILES?: Readonly<Record<string, string>>;
 }
-
-/** The Node a local agent's runner runs on, on a Mac: the release the runner's bundle targets (`node24`), signed by the Node.js Foundation. */
-export const NODE_MAC_PIN: AgentToolPin = {
-  NAME: "node",
-  VERSION: "24.22.1",
-  ARCHIVE: "https://nodejs.org/dist/v24.22.1/node-v24.22.1-darwin-arm64.tar.gz",
-  SHA256: "89c682593d76cd44233fa53b1563264e7de9cbb189cad169135c5b4fadfbc0a7",
-  BYTES: 53_062_778,
-  ROOT: "node-v24.22.1-darwin-arm64",
-  MEMBERS: ["bin/node"],
-  BINARY: "bin/node",
-  TEAM: "HX7739G8FX",
-};
-
-/**
- * Claude Code on a Mac: the macOS arm64 build of the very Agent SDK the
- * runner pins (`CLAUDE_CODE_PIN.SDK_VERSION`), as npm keeps it, signed by
- * Anthropic.
- */
-export const CLAUDE_CODE_MAC_PIN: AgentToolPin = {
-  NAME: "claude",
-  VERSION: CLAUDE_CODE_PIN.SDK_VERSION,
-  ARCHIVE: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-darwin-arm64/-/claude-agent-sdk-darwin-arm64-${CLAUDE_CODE_PIN.SDK_VERSION}.tgz`,
-  SHA256: "cdca064e1bbe6001c5d8bbefd636205379c79b8d05bf41a3a37fc1fde096a93d",
-  BYTES: 120_586_636,
-  ROOT: "package",
-  MEMBERS: ["claude"],
-  BINARY: "claude",
-  TEAM: "Q6L2SF6YDW",
-};
-
-/**
- * Codex on a Mac: the same release as the sandbox's (`CODEX_PIN.VERSION`),
- * as npm keeps its macOS arm64 package, signed by OpenAI, the members of the
- * build under `ROOT` kept as the archive lays them out, so the binary finds
- * its `codex-path` tools beside it.
- */
-export const CODEX_MAC_PIN: AgentToolPin = {
-  NAME: "codex",
-  VERSION: CODEX_PIN.VERSION,
-  ARCHIVE: `https://registry.npmjs.org/@openai/codex/-/codex-${CODEX_PIN.VERSION}-darwin-arm64.tgz`,
-  SHA256: "1193ff4ce72387a5d6c34820b54a9dc57d007c67a958e8acb4715924facd3c31",
-  BYTES: 137_871_195,
-  ROOT: "package/vendor/aarch64-apple-darwin",
-  MEMBERS: ["bin/codex", "bin/codex-code-mode-host", "codex-path/rg", "codex-package.json"],
-  BINARY: "bin/codex",
-  TEAM: "2DC432GLL2",
-};
 
 /**
  * smolvm on a Mac whose local agents run sandboxed, one VM each: the
@@ -148,7 +94,7 @@ export const CODEX_MAC_PIN: AgentToolPin = {
  * `smolvm` wrapper runs `smolvm-bin` beside it with the `lib/` it links, the
  * `agent-rootfs/` it boots, and the disk templates it copies. Its binary is
  * signed ad hoc with the hypervisor entitlement and no Developer ID team,
- * so its digest decides, and the digests of what of it runs on the Mac, the
+ * so its archive's digest decides, and the digests of what of it runs on the Mac, the
  * wrapper, the binary, and the libraries it loads, as the release's own
  * `checksums.txt` lists them, are checked again before every use. The same
  * release as a host's (`SMOLVM_LINUX_PIN`).
@@ -186,103 +132,41 @@ export const SMOLVM_MAC_PIN: AgentToolPin = {
 /**
  * A tool's builds for a host (`apps/host`), one per architecture it runs on,
  * by Node's `process.arch` names (`@luke/features/device-agent-wire`'s
- * `DEVICE_ARCH`). None is signed, so each digest alone decides.
+ * `DEVICE_ARCH`), each decided by its digest.
  */
 export interface LinuxToolPins {
   readonly x64: AgentToolPin;
   readonly arm64: AgentToolPin;
 }
 
+/** The Node release a host's daemon runs on, the one the runner's bundle targets (`node24`). */
+const NODE_VERSION = "24.22.1";
+
 /**
- * The Node a host's daemon and its runners run on: the Mac's release
- * (`NODE_MAC_PIN`), as nodejs.org keeps its Linux builds, which the host's
- * release carries (`apps/host/scripts/package.ts`) rather than fetches.
+ * The Node a host's daemon runs on, as nodejs.org keeps its Linux builds,
+ * which the host's release carries (`apps/host/scripts/package.ts`) rather
+ * than fetches.
  */
 export const NODE_LINUX_PINS: LinuxToolPins = {
   x64: {
     NAME: "node",
-    VERSION: NODE_MAC_PIN.VERSION,
-    ARCHIVE: `https://nodejs.org/dist/v${NODE_MAC_PIN.VERSION}/node-v${NODE_MAC_PIN.VERSION}-linux-x64.tar.gz`,
+    VERSION: NODE_VERSION,
+    ARCHIVE: `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz`,
     SHA256: "eb6728e77c576a35162c122c45ccadf224d89ff00abc8dae46cc2897c6002d7c",
     BYTES: 58_290_700,
-    ROOT: `node-v${NODE_MAC_PIN.VERSION}-linux-x64`,
+    ROOT: `node-v${NODE_VERSION}-linux-x64`,
     MEMBERS: ["bin/node"],
     BINARY: "bin/node",
   },
   arm64: {
     NAME: "node",
-    VERSION: NODE_MAC_PIN.VERSION,
-    ARCHIVE: `https://nodejs.org/dist/v${NODE_MAC_PIN.VERSION}/node-v${NODE_MAC_PIN.VERSION}-linux-arm64.tar.gz`,
+    VERSION: NODE_VERSION,
+    ARCHIVE: `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-arm64.tar.gz`,
     SHA256: "33c37be234ba8bee041961047b19160f4d7d0f164e8e246f78bdd10feff148b3",
     BYTES: 58_021_129,
-    ROOT: `node-v${NODE_MAC_PIN.VERSION}-linux-arm64`,
+    ROOT: `node-v${NODE_VERSION}-linux-arm64`,
     MEMBERS: ["bin/node"],
     BINARY: "bin/node",
-  },
-};
-
-/** Claude Code on a host: the glibc Linux builds of the very Agent SDK the runner pins, as npm keeps them. */
-export const CLAUDE_CODE_LINUX_PINS: LinuxToolPins = {
-  x64: {
-    NAME: "claude",
-    VERSION: CLAUDE_CODE_PIN.SDK_VERSION,
-    ARCHIVE: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-linux-x64/-/claude-agent-sdk-linux-x64-${CLAUDE_CODE_PIN.SDK_VERSION}.tgz`,
-    SHA256: "214fcde96f46b9b76f4acc9efbd65b843c90ae9a689da224c33f09a77e069395",
-    BYTES: 130_438_422,
-    ROOT: "package",
-    MEMBERS: ["claude"],
-    BINARY: "claude",
-  },
-  arm64: {
-    NAME: "claude",
-    VERSION: CLAUDE_CODE_PIN.SDK_VERSION,
-    ARCHIVE: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-linux-arm64/-/claude-agent-sdk-linux-arm64-${CLAUDE_CODE_PIN.SDK_VERSION}.tgz`,
-    SHA256: "429cfc8eca03f6e26bc5ca698994b7089c5d1fa345899d5beb96cc88173b544c",
-    BYTES: 130_978_746,
-    ROOT: "package",
-    MEMBERS: ["claude"],
-    BINARY: "claude",
-  },
-};
-
-/**
- * Codex on a host: the sandbox's release, as npm keeps its Linux packages,
- * static musl builds, the members under `ROOT` kept as the archive lays them
- * out, so the binary finds its `codex-path` tools and its own bubblewrap
- * beside it.
- */
-export const CODEX_LINUX_PINS: LinuxToolPins = {
-  x64: {
-    NAME: "codex",
-    VERSION: CODEX_PIN.VERSION,
-    ARCHIVE: `https://registry.npmjs.org/@openai/codex/-/codex-${CODEX_PIN.VERSION}-linux-x64.tgz`,
-    SHA256: "30efc97738b975940d78b59a9bea115fa34040b732807d54ec35ae6b7528de94",
-    BYTES: 162_055_867,
-    ROOT: "package/vendor/x86_64-unknown-linux-musl",
-    MEMBERS: [
-      "bin/codex",
-      "bin/codex-code-mode-host",
-      "codex-path/rg",
-      "codex-package.json",
-      "codex-resources/bwrap",
-    ],
-    BINARY: "bin/codex",
-  },
-  arm64: {
-    NAME: "codex",
-    VERSION: CODEX_PIN.VERSION,
-    ARCHIVE: `https://registry.npmjs.org/@openai/codex/-/codex-${CODEX_PIN.VERSION}-linux-arm64.tgz`,
-    SHA256: "dc6e7c4d6de71c23a0f60d05e2577ff7eef615b76f22630d58ad384b84763522",
-    BYTES: 154_715_729,
-    ROOT: "package/vendor/aarch64-unknown-linux-musl",
-    MEMBERS: [
-      "bin/codex",
-      "bin/codex-code-mode-host",
-      "codex-path/rg",
-      "codex-package.json",
-      "codex-resources/bwrap",
-    ],
-    BINARY: "bin/codex",
   },
 };
 

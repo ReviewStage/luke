@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
@@ -304,47 +304,16 @@ it.effect(
 );
 
 it.effect(
-  "on the Mac's own sign-in, app-server runs OpenAI's own provider once account/read finds a login, and every turn's sandbox is workspace-write, approval never, over the agent's folder and its worktree's shared Git directory",
+  "every turn's sandbox is workspace-write, approval never, over the checkout's Git directory and the folders the machine grants",
   () =>
     Effect.gen(function* () {
-      const home = mkdtempSync(join(tmpdir(), "luke-mac-home-"));
-      yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(home, { recursive: true })));
-      // A worktree of Luke's shared clone, as the Mac makes one: its `.git` a file naming the clone's.
-      const clone = join(home, ".luke/clones/acme/app");
-      const ownGit = join(clone, ".git/worktrees/repository");
-      mkdirSync(ownGit, { recursive: true });
-      writeFileSync(join(ownGit, "commondir"), "../..\n");
-      const folder = join(home, ".luke/agents/agent-1");
+      const folder = mkdtempSync(join(tmpdir(), "luke-agent-folder-"));
+      yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(folder, { recursive: true })));
       const checkout = join(folder, "repository");
       mkdirSync(checkout, { recursive: true });
-      writeFileSync(join(checkout, ".git"), `gitdir: ${ownGit}\n`);
-      const signedIn: Exchange = {
-        method: "account/read",
-        reply: [
-          {
-            id: 0,
-            result: {
-              account: { type: "chatgpt", email: null, planType: "plus" },
-              requiresOpenaiAuth: true,
-            },
-          },
-        ],
-      };
-      const script: Script = {
-        exchanges: [
-          exchange(FIRST, 0),
-          exchange(FIRST, 1),
-          signedIn,
-          ...STOPPED.exchanges.slice(2),
-        ],
-      };
       const luke = fakeLuke("sleep 600");
-      const { spawned, write, run } = yield* launch([script], luke, {
-        [RUNNER_ENV.BEARER]: BEARER,
-        PATH: "/usr/bin",
-        HOME: home,
-      });
-      yield* write({ ...CONFIG, cwd: checkout, writableRoots: [folder], ownLogin: true });
+      const { spawned, write, run } = yield* launch([STOPPED], luke);
+      yield* write({ ...CONFIG, cwd: checkout, writableRoots: [folder] });
       yield* write(message("Run sleep 600.", LINE.FIRST));
       yield* luke.seen;
       yield* write({ type: INPUT_LINE.STOP });
@@ -352,19 +321,8 @@ it.effect(
       assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
       const [process] = spawned;
       assert.deepEqual(process?.unexpected, []);
-      assert.deepEqual(process?.received.map((each) => each.method).slice(0, 4), [
-        "initialize",
-        "initialized",
-        "account/read",
-        "thread/start",
-      ]);
       const overrides = (process?.args ?? []).filter((_, index, args) => args[index - 1] === "-c");
-      // No provider of Luke's, so no token command either: OpenAI's built-in one, over any of the developer's, on the login Codex keeps and refreshes itself.
-      assert.deepEqual(
-        overrides.filter((each) => each.startsWith("model_provider")),
-        ['model_provider="openai"'],
-      );
-      const roots = [join(clone, ".git"), folder];
+      const roots = [join(checkout, ".git"), folder];
       assert.equal(received(process, "thread/start")[0]?.sandbox, "workspace-write");
       assert.equal(received(process, "thread/start")[0]?.approvalPolicy, "never");
       const turn = received(process, "turn/start")[0];
@@ -382,24 +340,6 @@ it.effect(
         ),
       );
     }),
-);
-
-it.effect("on the Mac's own sign-in, opens no thread where account/read finds no login", () =>
-  Effect.gen(function* () {
-    const signedOut: Exchange = {
-      method: "account/read",
-      reply: [{ id: 0, result: { account: null, requiresOpenaiAuth: true } }],
-    };
-    const luke = fakeLuke();
-    const { spawned, write, run } = yield* launch(
-      [{ exchanges: [exchange(FIRST, 0), exchange(FIRST, 1), signedOut] }],
-      luke,
-    );
-    yield* write({ ...CONFIG, ownLogin: true });
-
-    assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
-    assert.deepEqual(received(spawned[0], "thread/start"), []);
-  }),
 );
 
 it.effect(
