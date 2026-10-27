@@ -98,7 +98,7 @@ const READ_TESTS: WireRecord = {
 const WORKER_TASK = "Check the CSV writers";
 
 /** A running agent's tab, or its worker's, its first page answered at once and each later one when the test hands it. */
-async function runningTab(first: CodingAgentMessagesAnswerView, worker = false) {
+async function runningTab(first: CodingAgentMessagesAnswerView, worker = false, opened = AGENT) {
   fakeAppBridge({});
   mountAnnouncer();
   let hear: ((page: CodingAgentTranscriptPage) => void) | undefined;
@@ -142,7 +142,7 @@ async function runningTab(first: CodingAgentMessagesAnswerView, worker = false) 
       ),
     );
   await act(async () => {
-    draw(AGENT);
+    draw(opened);
     await settle();
   });
   return {
@@ -208,9 +208,16 @@ test("a turn that fails while the tab is open says its end line once, politely, 
   assert.equal(announcedPolitely(), "Failed");
 });
 
-test("a tab opened on a turn already finished says nothing", async () => {
+test("a tab opened on a turn already finished, or already failed, says nothing", async () => {
   await runningTab(page("The retry paths are safe.", CODING_AGENT_STATUS.COMPLETED, "1:1"));
   assert.equal(announcedPolitely(), "");
+  act(() => root?.unmount());
+
+  await runningTab(page("The retry", CODING_AGENT_STATUS.FAILED, "1:1"), false, {
+    ...AGENT,
+    status: CODING_AGENT_STATUS.FAILED,
+  });
+  assert.equal(announcedPolitely(), "", "a failure the transcript opens on is history");
 });
 
 test("a reader whose focus stands in the transcript hears only who the reply is from", async () => {

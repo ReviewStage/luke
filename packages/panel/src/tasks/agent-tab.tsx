@@ -1621,6 +1621,18 @@ const END_LINE_CLASS = "agent-end-line m-0 text-caption text-muted-foreground";
  * agent), on one row, centred on the line's words, which wraps the press
  * under them only where the column is too narrow for both.
  */
+/**
+ * Says the turn's end, a stop or a failure, as it lands. Note that it is
+ * said here rather than by the end line, because the line mounts with its
+ * words and its failure is history, no alert; this stands once the
+ * transcript's first page is drawn, so the end the transcript opens on is
+ * history too and only an end that lands after it is said.
+ */
+function TurnEndSaid({ ended }: { ended: EndLineParts | undefined }): null {
+  useAnnounce(ANNOUNCE.POLITE, ended?.words ?? "");
+  return null;
+}
+
 function AgentEndRow({
   ended,
   endReason,
@@ -2185,8 +2197,6 @@ function AgentTranscriptView({
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   const undelivered = useUndeliveredLines();
-  // Note that the turn's end, a stop or a failure, is said here rather than by its line, because the line mounts with its words and is history, no alert; this view stands across the turn ending, so it says the end as it lands and a transcript opened on one says nothing.
-  useAnnounce(ANNOUNCE.POLITE, ended?.words ?? "");
   // Whether a replay opens the transcript is all its placing reads; the place itself is handed anew on every draw.
   const replayed = replay !== undefined;
   // Read through once for the messages held, so a draw that brings no page reads none of them again.
@@ -2394,6 +2404,7 @@ function AgentTranscriptView({
                   }
                 />
               ) : null}
+              <TurnEndSaid ended={ended} />
               {ended === undefined && endTrail === undefined ? null : (
                 <div
                   className="agent-end flex flex-col items-start gap-control-gap"
@@ -2433,6 +2444,7 @@ function AgentTranscriptView({
     <ConversationEmptyState wide>
       {
         <>
+          <TurnEndSaid ended={ended} />
           {ended === undefined ? (
             <Text tone={TEXT_TONE.MUTED}>{lead.startingLine}</Text>
           ) : (
