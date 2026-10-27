@@ -17,10 +17,11 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
  * sidebar-held-order.test.ts -- the sidebar's tasks hold the places they
- * were first drawn in while the sidebar is in sight, so an update that
- * would sort a task elsewhere moves nothing under the reader's eye; folded
- * away and back, the list is sorted anew, and a task the reader renamed
- * themselves moves at once. Synthetic throughout.
+ * were first drawn in while the pointer is over the sidebar, so an update
+ * that would sort a task elsewhere moves nothing under the reader's hand;
+ * once the pointer leaves, or the sidebar is folded away and back, the list
+ * is sorted anew, and a task the reader renamed themselves moves at once.
+ * Synthetic throughout.
  */
 
 const WORKSPACE: Workspace = {
@@ -57,7 +58,19 @@ function task(id: string, name: string, updatedAt: number): TaskSummary {
   return { id, workspaceId: WORKSPACE.id, name, createdAt: 1, updatedAt, repository: null };
 }
 
-/** The sidebar over the tasks given, and a way to draw it again over others, in sight or folded away, as an update does. */
+/** The pointer crossing from `from` onto `to`, as React hears a leave and an enter. */
+function pointerCross(from: Element, to: Element): void {
+  act(() => {
+    from.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
+    to.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: from }));
+  });
+}
+
+/**
+ * The sidebar over the tasks given, the pointer resting on it, a way to draw
+ * it again over others, in sight or folded away, as an update does, and a
+ * way to take the pointer off it.
+ */
 function mountSidebar(tasks: readonly TaskSummary[]) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -76,7 +89,10 @@ function mountSidebar(tasks: readonly TaskSummary[]) {
     );
   };
   draw(tasks);
-  return { container, draw };
+  const tasksNav = container.querySelector('nav[aria-label="Tasks"]');
+  assert.ok(tasksNav !== null);
+  pointerCross(document.body, tasksNav);
+  return { container, draw, leave: () => pointerCross(tasksNav, document.body) };
 }
 
 /** The names of the tasks drawn under Tasks, in the order drawn. */
@@ -87,7 +103,7 @@ function names(sidebar: HTMLElement): string[] {
   );
 }
 
-test("a task an update would sort first holds its place while the sidebar is in sight", () => {
+test("a task an update would sort first holds its place while the pointer is over the sidebar", () => {
   const { container, draw } = mountSidebar([
     task("t-1", "Invite expiry", 3),
     task("t-2", "Retry audit", 2),
@@ -97,6 +113,18 @@ test("a task an update would sort first holds its place while the sidebar is in 
   draw([task("t-1", "Invite expiry", 3), task("t-2", "Retry audit", 9)]);
 
   assert.deepEqual(names(container), ["Invite expiry", "Retry audit"]);
+});
+
+test("once the pointer leaves the sidebar, its tasks sort where they stand now", () => {
+  const { container, draw, leave } = mountSidebar([
+    task("t-1", "Invite expiry", 3),
+    task("t-2", "Retry audit", 2),
+  ]);
+  draw([task("t-1", "Invite expiry", 3), task("t-2", "Retry audit", 9)]);
+
+  leave();
+
+  assert.deepEqual(names(container), ["Retry audit", "Invite expiry"]);
 });
 
 test("folded away and back, the sidebar sorts its tasks where they stand now", () => {

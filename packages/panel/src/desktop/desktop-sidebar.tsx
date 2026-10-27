@@ -1242,7 +1242,7 @@ function groupOf(row: TaskRow, grouping: TaskSections["grouping"]): string | nul
 
 /**
  * Where each row stands, as the sections order and group it: the row as it
- * was first drawn while the sidebar is in sight (`use-held-order.ts`), or as
+ * was first drawn while the pointer is over the sidebar (`use-held-order.ts`), or as
  * it is now where it is new to the list, it belongs in another group now, or
  * a press here gave it a name or a status the view has yet to carry. Note
  * that a row held under a group it left would stand under a header that no
@@ -1737,6 +1737,8 @@ function SidebarColumn({
   const onTasks = tab === PANEL_TAB.TASKS;
   // Whether a row of the column is lifted into a drag, while which an empty Pinned stands to take it.
   const [carrying, setCarrying] = useState(false);
+  // Whether the pointer is over the column, while which its tasks hold their places.
+  const [pointing, setPointing] = useState(false);
   const overlay = useFloatingSidebar(sidebar);
   useFirstUsableSpan(tasks);
   const body = useRef<HTMLDivElement>(null);
@@ -2036,8 +2038,12 @@ function SidebarColumn({
     assignedTo,
   };
   const placing = { grouping: orderView.grouping, pending: tasks.pendingTasks };
-  // While the sidebar is in sight each task keeps the place it was first drawn in, so one an update would sort elsewhere stays under the reader's eye.
-  const sections = useHeldOrder(orderView, tasks.shown && overlay.inSight, {
+  // While the pointer is over the sidebar each task keeps the place it was
+  // first drawn in, so one an update would sort elsewhere stays under the
+  // reader's hand. Note that the hold is the pointer's and not the sidebar's
+  // being in sight, because a pinned sidebar is in sight for as long as the
+  // window is open, and its tasks would sort anew only at the next launch.
+  const sections = useHeldOrder(orderView, tasks.shown && overlay.inSight && pointing, {
     sameOrder: sameTaskOrder,
     draw: (places: ReadonlyMap<string, TaskRow>) => {
       const placed = taskPlaces(statusRows, places, placing);
@@ -2137,7 +2143,11 @@ function SidebarColumn({
       data-row-drop-scope=""
       inert={!overlay.inSight}
       onPin={onPressWithin}
-      onPointerLeave={overlay.onPointerLeave}
+      onPointerEnter={() => setPointing(true)}
+      onPointerLeave={(event) => {
+        setPointing(false);
+        overlay.onPointerLeave(event);
+      }}
       onKeyDown={overlay.onKeyDown}
     >
       <div className="desktop-drag-strip" />
