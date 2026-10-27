@@ -72,7 +72,6 @@ import {
 } from "@luke/ui/actor-model";
 import {
   CheckCheckIcon,
-  CheckIcon,
   ClockArrowDownIcon,
   ClockArrowUpIcon,
   GLYPH,
@@ -82,10 +81,8 @@ import {
   ListIcon,
   MailIcon,
   MailOpenIcon,
-  PenLineIcon,
   Rows2Icon,
   SlidersHorizontalIcon,
-  SquareCheckIcon,
   UserIcon,
   UsersIcon,
 } from "@luke/ui/icons";
@@ -135,14 +132,19 @@ import {
 } from "./inbox-columns.js";
 import { NEW_THREAD } from "./inbox-compose.js";
 import { useInboxItemActions } from "./inbox-item-actions.js";
-import { HolderGlyph, InboxItemCard, InboxItemEnd, useInboxStanding } from "./inbox-item-parts.js";
+import {
+  HolderGlyph,
+  InboxItemCard,
+  InboxItemEnd,
+  inboxLineGlyph,
+  useInboxStanding,
+} from "./inbox-item-parts.js";
 import {
   EVERYONES,
   holderKey,
   holderName,
   INBOX_GROUPING,
   INBOX_HOLDER,
-  INBOX_LINE,
   INBOX_SHOW,
   INBOX_SORT,
   INBOX_STATUS_GROUP,
@@ -150,7 +152,6 @@ import {
   type InboxCounts,
   type InboxGrouping,
   type InboxHolder,
-  type InboxLineKind,
   type InboxListed,
   type InboxListView,
   type InboxPersonGroup,
@@ -357,22 +358,6 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
 
-/** The glyph leading an item's second line: its open ask's kind, a tick where an answer settled it, and none before words alone. */
-function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
-  switch (kind) {
-    case INBOX_LINE.DECIDE:
-      return <GLYPH.DECIDE />;
-    case INBOX_LINE.DO:
-      return <SquareCheckIcon aria-hidden="true" />;
-    case INBOX_LINE.ANSWER:
-      return <PenLineIcon aria-hidden="true" />;
-    case INBOX_LINE.SETTLED:
-      return <CheckIcon aria-hidden="true" />;
-    case INBOX_LINE.SAID:
-      return null;
-  }
-}
-
 /**
  * One item as a `ListRow` of up to three lines, as a mail app lists a
  * thread, one thing to a line so nothing is cut short to make room for
@@ -505,7 +490,7 @@ export function InboxItemRow({
                 className="inbox-row-line [&>svg]:me-tight-gap [&>svg]:size-caption-glyph [&>svg]:align-[-0.125em] [&>svg]:text-attention data-[line=settled]:[&>svg]:text-complete"
                 data-line={lineKind}
               >
-                {lineGlyph(lineKind)}
+                {inboxLineGlyph(lineKind)}
                 {preview}
               </span>
             ) : undefined
