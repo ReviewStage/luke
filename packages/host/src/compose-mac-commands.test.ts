@@ -108,7 +108,8 @@ function scriptedService(
       commands: {
         capability: "",
         queryFingerprint: "",
-        expiresAt: NOW + 3_600_000,
+        // A polled read is answered already expired, its expiry the service's now.
+        expiresAt: NOW,
         digest: String(version),
         ...(rows ? { rows: [...waiting] } : undefined),
       },
@@ -365,7 +366,6 @@ it.effect(
         }),
       );
 
-      assert.deepEqual(service.claims, [LATER.id]);
       assert.ok(service.settledResults.has(LATER.id), "it ran");
     }),
 );

@@ -112,11 +112,11 @@ const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 const CLAIM_WINDOW = Duration.seconds(30);
 /**
  * How long a command may wait unclaimed while the follow stands before a
- * beat counts it missed: well past a live delivery and a claim's retries,
- * and with `LISTENING_EVERY` still inside `CLAIM_WINDOW`, so a missed
- * command is claimed in time.
+ * beat counts it missed: well past a live delivery and a granted claim, and
+ * with `LISTENING_EVERY` and a slow read or two still inside `CLAIM_WINDOW`,
+ * so a missed command is claimed in time.
  */
-const MISSED_AFTER = Duration.seconds(10);
+const MISSED_AFTER = Duration.seconds(5);
 
 /** The login shell when the environment names none: macOS's own default. */
 const DEFAULT_SHELL = "/bin/zsh";
@@ -366,16 +366,18 @@ export function composeMacCommands(
 
     /**
      * The unclaimed commands the follow should long since have claimed, read
-     * once and unheld: each waiting past `MISSED_AFTER` by this Mac's clock,
-     * as the follow's renewals are timed, and still inside the claim window.
-     * None where the service answered no rows, or rows that did not decode.
+     * once and unheld: each waiting past `MISSED_AFTER` and still inside the
+     * claim window, both by the service's clock, which queued it and keeps
+     * the window. Note that the read's expiry is that clock's now, because a
+     * polled read is answered already expired. None where the service
+     * answered no rows, or rows that did not decode.
      */
     const missed = (userId: string) =>
       Effect.map(seal(userId, true), (read): readonly MacCommandRead[] => {
         if ("failure" in read) return [];
-        const rows = decodeLiveRows({ commands: read.queries.commands.rows ?? [] });
+        const { rows: carried, expiresAt: now } = read.queries.commands;
+        const rows = decodeLiveRows({ commands: carried ?? [] });
         if (Option.isNone(rows)) return [];
-        const now = kernel.now();
         const late = rows.value.commands.filter((row) => {
           const waited = now - row.queuedAt;
           return (
@@ -390,7 +392,10 @@ export function composeMacCommands(
      * as long as the gate stands and the account signed in is the one the
      * follow is for; it returns once either changes, which ends the follow.
      * Each beat also claims what the follow missed (`missed`) and, finding
-     * any, returns too, so the follow that missed it is sealed again.
+     * any, returns once the beat's pause has passed, so the follow that
+     * missed it is sealed again. Note that the claims are awaited and the
+     * pause kept, because a claim refused or unanswered leaves its row
+     * waiting, and the next follow's first beat would find it again at once.
      */
     const presence = (running: FiberSet.FiberSet, userId: string) =>
       Effect.gen(function* () {
@@ -399,12 +404,12 @@ export function composeMacCommands(
           const late = yield* missed(userId);
           if (late.length > 0) {
             report("the Mac command follow missed a command; it is claimed and followed again");
-            for (const command of late) {
-              yield* FiberSet.run(running, claimed(running, userId, command));
-            }
-            return;
+            yield* Effect.forEach(late, (command) => claimed(running, userId, command), {
+              discard: true,
+            });
           }
           yield* Effect.sleep(LISTENING_EVERY);
+          if (late.length > 0) return;
         }
       });
 
