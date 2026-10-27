@@ -256,12 +256,18 @@ it.effect("a request with no cookie, or a blank one, asks the auth service for n
 it.effect("an auth service that cannot answer is refused as unavailable, never as signed out", () =>
   Effect.gen(function* () {
     const down = () => Effect.tryPromise(() => Promise.reject(new Error("connection terminated")));
+    const throttled = () =>
+      Effect.tryPromise(() => Promise.reject(new APIError("TOO_MANY_REQUESTS")));
     const noSession: SessionEndpoint = () => Effect.succeedNone;
 
-    // A bearer whose userinfo fails, and a cookie whose session read fails: a caller retries a 503, where a 401 signs it out.
+    // A bearer whose userinfo fails or is throttled, and a cookie whose session read fails: a caller retries a 503, where a 401 signs it out.
     for (const [resolveUserId, headers] of [
       [
         (incoming: Request) => requestUserId(incoming, down, noSession),
+        { authorization: ADA_BEARER },
+      ],
+      [
+        (incoming: Request) => requestUserId(incoming, throttled, noSession),
         { authorization: ADA_BEARER },
       ],
       [

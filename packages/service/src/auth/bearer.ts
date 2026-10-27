@@ -8,6 +8,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../core.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import type { RelayCredential } from "../http/relay-upgrade.js";
 import { auth } from "./auth.js";
 import { BearerCallers } from "./bearer-callers.js";
@@ -56,14 +57,19 @@ export function oauthUserInfoFromAuthAnswer(value: UnparsedWireValue): OAuthUser
 
 /**
  * Whether the auth service refused the token itself rather than failing to
- * answer: Better Auth's own refusal, a 4xx `APIError`, or a token whose
- * signature or claims `jose` would not verify, which Better Auth rethrows
- * unchanged. Anything else, a database it could not reach among it, is an
- * outage.
+ * answer: Better Auth's own refusal, a 4xx `APIError` other than its 429,
+ * which asks for a retry, or a token whose signature or claims `jose` would
+ * not verify, which Better Auth rethrows unchanged. Anything else, a
+ * database it could not reach among it, is an outage.
  */
 function refusedToken(failure: Cause.UnknownError): boolean {
   const thrown = failure.cause;
-  if (isAPIError(thrown)) return thrown.statusCode < 500;
+  if (isAPIError(thrown)) {
+    return (
+      thrown.statusCode < HOSTED_HTTP_STATUS.INTERNAL_ERROR &&
+      thrown.statusCode !== HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS
+    );
+  }
   if (!(thrown instanceof Error) || !("code" in thrown) || typeof thrown.code !== "string") {
     return false;
   }
