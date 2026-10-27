@@ -6,6 +6,7 @@ import { backToWords, readFailedWords, readingWords } from "@luke/features/words
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import {
+  BackButton,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -89,6 +90,7 @@ import { useAgentCallDoors } from "./agent-actions.js";
 import { useChannelDialog } from "./channel-dialog.js";
 import { AgentPane } from "./main-tabs.js";
 import { NewTaskButton } from "./new-task-button.js";
+import { PhoneHead } from "./phone-head.js";
 import {
   COLUMN,
   changesTabOf,
@@ -503,7 +505,18 @@ export function DesktopInbox({
     </section>
   ) : (
     <section className={INBOX_VIEW_ITEMS} aria-label="Thread">
-      <Toolbar end={TOOLBAR_INSET.COLUMN} />
+      {/* Note that on a phone the thread stands in the stream's place, so its head is the way back to the stream, as its pane's is. */}
+      {phone && channel !== undefined ? (
+        <PhoneHead
+          place="inbox-item"
+          start={
+            <BackButton label={`#${channel.name}`} place={`#${channel.name}`} onBack={closeThread} />
+          }
+          end={null}
+        />
+      ) : (
+        <Toolbar end={TOOLBAR_INSET.COLUMN} />
+      )}
       {chosenFailed ? (
         <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetryChosen}>
           {THREAD_NOT_READ}

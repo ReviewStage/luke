@@ -9736,6 +9736,35 @@ test("on a phone, Back from a thread opened in a channel's stream goes back to t
   assert.equal(page.querySelector(".channel-list"), null, "the list of channels stands nowhere");
 });
 
+test("on a phone, a thread whose agent's inbox could not be read says so in the stream's place, under the way back to the stream", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  pageAgents = new Map([[AGENT.id, AGENT]]);
+  agentReadFails = true;
+  answerChannels({ threads: () => Promise.resolve(threadsPage([THRESHOLD])) });
+  const { page } = mount([], { channels: true, holding: [], room: SHELL_ROOM.NARROW });
+  await settle();
+  act(() =>
+    page.querySelector<HTMLElement>(`button[aria-label="Open ${THRESHOLD.title}"]`)?.click(),
+  );
+  await settle();
+  const stream = () => page.querySelector<HTMLElement>(".channel-stream");
+  assert.equal(stream()?.hidden, true, "the thread stands in the stream's place");
+  assert.match(page.textContent ?? "", /This thread could not be read\./u);
+
+  act(() =>
+    (
+      [...page.querySelectorAll<HTMLElement>("button")].find(
+        (button) =>
+          button.getAttribute("aria-label") === "#general" || button.textContent === "#general",
+      ) ?? assert.fail("the thread's head offers the way back")
+    ).click(),
+  );
+  await settle();
+  assert.equal(stream()?.hidden, false, "the way back gave the stream its place again");
+});
+
 test("a channel archived or unknown says so in the stream's place, with the way to #general", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
