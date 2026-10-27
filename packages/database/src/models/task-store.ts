@@ -6,7 +6,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { INBOX_ASK_STATUS, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { agentName } from "@luke/features/model-label";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
@@ -54,6 +54,7 @@ import { attachment } from "../schemas/attachment.js";
 import { automation } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
+import { inboxMessage } from "../schemas/inbox-message.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { conversations } from "../schemas/storage.js";
 import { task, taskNumberCounter } from "../schemas/task.js";
@@ -1388,6 +1389,52 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
 });
 
 /**
+ * Every item of the task still open closed by the member who canceled it,
+ * as their own close from the thread would: no reason, and the ask each
+ * held open withdrawn with none, so it reads on its thread as theirs. Note
+ * that no agent is woken for it, because a canceled task's work is not to
+ * go on, and that no close key is written, so no client can take it back.
+ */
+const closeOpenItemsOnCancel = Effect.fnUntraced(function* (
+  userId: string,
+  taskId: string,
+  now: Date,
+) {
+  const closed = yield* Database.use((db) =>
+    db
+      .update(inboxItem)
+      .set({
+        status: INBOX_STATUS.CLOSED,
+        closedBy: userId,
+        closedReason: null,
+        settledAt: now,
+        updatedAt: now,
+        openAskMessageId: null,
+      })
+      .where(and(eq(inboxItem.taskId, taskId), eq(inboxItem.status, INBOX_STATUS.OPEN)))
+      .returning({ id: inboxItem.id }),
+  );
+  if (closed.length === 0) return;
+  // Only the standing keys are merged, as the inbox store's own close writes them, so a key this deployment does not read survives.
+  yield* Database.use((db) =>
+    db
+      .update(inboxMessage)
+      .set({
+        ask: sql`${inboxMessage.ask} || jsonb_build_object('status', ${INBOX_ASK_STATUS.WITHDRAWN}::text)`,
+      })
+      .where(
+        and(
+          inArray(
+            inboxMessage.itemId,
+            closed.map(({ id }) => id),
+          ),
+          sql`${inboxMessage.ask} ->> 'status' = ${INBOX_ASK_STATUS.OPEN}`,
+        ),
+      ),
+  );
+});
+
+/**
  * The task's agents still standing unarchived, each with its conversation
  * locked, the lock every write of its lines and turns takes, in the
  * conversations' order, so two finishes of one task never wait on each other.
@@ -1528,6 +1575,9 @@ export function updateTaskCommitted<E = never, R = never>(
           yield* followingAgentsAndInbox(taskId, row.organizationId, moved, now);
           if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
         }
+        // A task canceled asks nothing more of anyone, so its open threads close with it.
+        if (columns.status === TASK_STATUS.CANCELED)
+          yield* closeOpenItemsOnCancel(userId, taskId, now);
         const changed = yield* taskOf(userId, row);
         return Option.some(txid === undefined ? { task: changed } : { task: changed, txid });
       }),

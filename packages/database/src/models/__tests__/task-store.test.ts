@@ -12,7 +12,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_ACTOR, TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
@@ -986,6 +986,48 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         yield* updateTask(dean, taskId, { status: TASK_STATUS.CANCELED });
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.CANCELED);
+      }),
+  );
+});
+
+it.layer(getTestDB())("a task canceled", (it) => {
+  it.effect(
+    "closes its open items, questions and notices alike, as the canceling member, and no other task's",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId, workspace } = yield* openSharedTask;
+        const other = yield* createTask(dean, { organizationId: workspace });
+        const agent = yield* openTaskAgent(dean, workspace, taskId);
+        const otherAgent = yield* openTaskAgent(dean, workspace, other.id);
+        const question = yield* openInboxItem(dean, workspace, taskId, agent, true);
+        const notice = yield* openInboxItem(dean, workspace, taskId, agent, false);
+        const elsewhere = yield* openInboxItem(dean, workspace, other.id, otherAgent, true);
+
+        yield* updateTask(charles, taskId, { status: TASK_STATUS.CANCELED });
+
+        const db = yield* Database;
+        const items = yield* db
+          .select({
+            id: inboxItem.id,
+            status: inboxItem.status,
+            closedBy: inboxItem.closedBy,
+            openAsk: inboxItem.openAskMessageId,
+          })
+          .from(inboxItem)
+          .where(inArray(inboxItem.id, [question, notice, elsewhere]));
+        const standing = new Map(items.map(({ id, ...rest }) => [id, rest]));
+        assert.deepEqual(standing.get(question), {
+          status: INBOX_STATUS.CLOSED,
+          closedBy: charles,
+          openAsk: null,
+        });
+        assert.equal(standing.get(notice)?.status, INBOX_STATUS.CLOSED);
+        assert.equal(standing.get(elsewhere)?.status, INBOX_STATUS.OPEN);
+        const [asked] = yield* db
+          .select({ ask: inboxMessage.ask })
+          .from(inboxMessage)
+          .where(eq(inboxMessage.itemId, question));
+        assert.equal(asked?.ask?.status, INBOX_ASK_STATUS.WITHDRAWN);
       }),
   );
 });
