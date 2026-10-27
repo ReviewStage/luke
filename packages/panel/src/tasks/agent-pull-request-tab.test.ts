@@ -1646,6 +1646,82 @@ test("Hide bots and Hide resolved each count what they leave out, leave it out w
   assert.deepEqual(drawnEntries(again), ["Charles Pan 1", "Charles Pan 0"]);
 });
 
+test("a phone draws the filters as one chip saying what is hidden, whose menu turns each on and off, counting what it leaves out", async () => {
+  const conversation: CodingAgentOverviewConversation = {
+    reviewers: [],
+    conversation: [
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        by: CHARLES_ON_GITHUB,
+        state: REVIEW_STATE.COMMENTED,
+        html: '<p dir="auto">Two things.</p>',
+        body: "",
+        at: 2_000,
+        url: `${PAGE}#pullrequestreview-2`,
+        threads: [thread({ resolved: true }), thread({ path: "src/other.ts" })],
+      },
+      {
+        kind: CONVERSATION_ENTRY.COMMENT,
+        by: { login: "vercel[bot]", bot: true },
+        html: '<p dir="auto">Deployed.</p>',
+        body: "",
+        at: 3_000,
+        url: `${PAGE}#issuecomment-4`,
+      },
+    ],
+    earlier: 0,
+  };
+  const tab = await drawn(
+    createElement(
+      ShellRoomContext.Provider,
+      { value: SHELL_ROOM.NARROW },
+      createElement(Switching, {
+        control: controlAnswering({
+          conversation: () => Promise.resolve({ pullRequest: conversation }),
+        }),
+        first: PULL_REQUEST_VIEW.CONVERSATION,
+      }),
+    ),
+  );
+  const actions =
+    tab.querySelector<HTMLElement>(
+      'section[aria-label="Conversation"] > .luke-disclosure-frame > .luke-disclosure-actions',
+    ) ?? assert.fail("the Conversation's heading has an end");
+  const chip = () =>
+    actions.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
+    assert.fail("the heading's end is a chip that opens a menu");
+  assert.equal(actions.querySelectorAll("button").length, 1, "one chip, not two pills");
+  assert.equal(chip().textContent, "Showing all");
+
+  act(() => chip().click());
+  await settle();
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menuitemcheckbox"]')].map((item) => item.textContent),
+    ["Hide resolved1", "Hide bots1"],
+    "each filter is a setting counting what it would leave out",
+  );
+  await pressItem("Hide bots");
+  assert.deepEqual(
+    menuItems(),
+    [
+      { label: "Hide resolved", checked: "false" },
+      { label: "Hide bots", checked: "true" },
+    ],
+    "the menu stands while a filter is turned",
+  );
+  assert.equal(chip().textContent, "Hiding bots");
+  assert.deepEqual(drawnEntries(tab), ["Charles Pan 2"]);
+
+  await pressItem("Hide resolved");
+  assert.equal(chip().textContent, "Hiding resolved and bots");
+  assert.deepEqual(drawnEntries(tab), ["Charles Pan 1"]);
+
+  await pressItem("Hide bots");
+  await pressItem("Hide resolved");
+  assert.equal(chip().textContent, "Showing all");
+  assert.deepEqual(drawnEntries(tab), ["Charles Pan 2", "vercel 0"]);
+});
+
 test("where the filters leave nothing of the conversation, it says no comment matches", async () => {
   window.localStorage.setItem(
     "luke.conversation-filters",
