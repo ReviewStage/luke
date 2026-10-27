@@ -94,8 +94,7 @@ const WORDS = {
   UPGRADE_TITLE: "Run this on the server to upgrade it",
   INSTALL_TITLE: "Run this as root on each server",
   LOOP_TITLE: "Or on many servers at once",
-  SHOWN_FOLLOWS:
-    "Each server shows up here as it connects. Its agents use your sign-ins and Luke's GitHub App, as in the cloud.",
+  SHOWN_FOLLOWS: "A server's agents use your sign-ins and Luke's GitHub App.",
   REVOKE: "Revoke this command",
 } as const;
 
@@ -221,9 +220,7 @@ function AddHostsDialog({
     >
       <div className={COMMANDS}>
         <Stack gap={GAP.CONTROL}>
-          <Text>
-            {`It works on as many servers as you like until ${momentText(shown.expiresAt)}, and isn't shown again.`}
-          </Text>
+          <Text>{`It works until ${momentText(shown.expiresAt)}, and isn't shown again.`}</Text>
           <CodeCard
             title={WORDS.INSTALL_TITLE}
             titleIs={CODE_CARD_TITLE.WORDS}

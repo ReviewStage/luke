@@ -39,7 +39,7 @@ const RUNS_ON_WORDS = {
   OFFLINE: "Offline",
   REMOVED: "Removed device",
   NO_MATCH: "No devices match",
-  HINT: "Where this task's agents run. A change applies to agents started from now on.",
+  HINT: "A change applies to agents started from now on.",
 } as const;
 
 /** The id the Cloud row is picked by, which no device's id is. */
