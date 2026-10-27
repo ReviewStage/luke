@@ -465,14 +465,8 @@ body {
   background: var(--luke-color-surface);
 }
 
-/* A picture in a card as large as the window allows: its bar along the
-   top, the picture centred on its own ground under it. */
-.catalog-window {
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-}
-
+/* A picture in a bare dialog's own card: the picture centred on its own
+   ground under its bar. */
 .catalog-window-picture {
   display: grid;
   min-height: 0;
