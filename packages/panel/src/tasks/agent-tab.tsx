@@ -78,6 +78,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { useAct } from "../act.js";
 import { ActorLine, ActorRef, AutomationCard, automationActor } from "../actor-ref.js";
@@ -1622,15 +1623,17 @@ const END_LINE_CLASS = "agent-end-line m-0 text-caption text-muted-foreground";
  * under them only where the column is too narrow for both.
  */
 /**
- * Says the turn's end, a stop or a failure, as it lands. Note that it is
- * said here rather than by the end line, because the line mounts with its
- * words and its failure is history, no alert; this stands once the
- * transcript's first page is drawn, so the end the transcript opens on is
- * history too and only an end that lands after it is said.
+ * Says the turn's end, a stop or a failure, once, as it lands. Note that it
+ * is said by the transcript rather than its end line, because the line
+ * mounts with its words and its failure is history, no alert; and that only
+ * an end this transcript saw the turn running before is said, so the end a
+ * tab opens on, read with its first page or after a skeleton, is history
+ * too, while a turn that fails before writing a word is still heard.
  */
-function TurnEndSaid({ ended }: { ended: EndLineParts | undefined }): null {
-  useAnnounce(ANNOUNCE.POLITE, ended?.words ?? "");
-  return null;
+function useTurnEndSaid(ended: EndLineParts | undefined, working: boolean): void {
+  const [sawRunning, setSawRunning] = useState(false);
+  if (!sawRunning && working && ended === undefined) setSawRunning(true);
+  useAnnounce(ANNOUNCE.POLITE, sawRunning ? (ended?.words ?? "") : "");
 }
 
 function AgentEndRow({
@@ -2197,6 +2200,7 @@ function AgentTranscriptView({
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   const undelivered = useUndeliveredLines();
+  useTurnEndSaid(ended, working);
   // Whether a replay opens the transcript is all its placing reads; the place itself is handed anew on every draw.
   const replayed = replay !== undefined;
   // Read through once for the messages held, so a draw that brings no page reads none of them again.
@@ -2404,7 +2408,6 @@ function AgentTranscriptView({
                   }
                 />
               ) : null}
-              <TurnEndSaid ended={ended} />
               {ended === undefined && endTrail === undefined ? null : (
                 <div
                   className="agent-end flex flex-col items-start gap-control-gap"
@@ -2444,7 +2447,6 @@ function AgentTranscriptView({
     <ConversationEmptyState wide>
       {
         <>
-          <TurnEndSaid ended={ended} />
           {ended === undefined ? (
             <Text tone={TEXT_TONE.MUTED}>{lead.startingLine}</Text>
           ) : (

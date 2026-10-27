@@ -208,6 +208,22 @@ test("a turn that fails while the tab is open says its end line once, politely, 
   assert.equal(announcedPolitely(), "Failed");
 });
 
+test("a turn that fails before writing a word says its end line as it lands", async () => {
+  const blank = (status: CodingAgentStatus, cursor: string): CodingAgentMessagesAnswerView => ({
+    messages: [],
+    cursor,
+    status,
+    title: null,
+    subagents: [],
+  });
+  const tab = await runningTab(blank(CODING_AGENT_STATUS.RUNNING, "1:1"));
+
+  await tab.row({ ...AGENT, status: CODING_AGENT_STATUS.FAILED });
+  await tab.answer(blank(CODING_AGENT_STATUS.FAILED, "1:2"));
+
+  assert.equal(announcedPolitely(), "Failed");
+});
+
 test("a tab opened on a turn already finished, or already failed, says nothing", async () => {
   await runningTab(page("The retry paths are safe.", CODING_AGENT_STATUS.COMPLETED, "1:1"));
   assert.equal(announcedPolitely(), "");
