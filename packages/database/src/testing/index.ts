@@ -5,6 +5,7 @@ export * from "./migrations.js";
 export * from "./query-plans.js";
 export * from "./sql-client.js";
 export * from "./store-rows.js";
+export * from "./sync.js";
 export * from "./task-agents.js";
 export * from "./task-issues.js";
 export * from "./test-postgres.js";

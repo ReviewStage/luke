@@ -1,12 +1,14 @@
 import { PgliteClient } from "@effect/sql-pglite";
 import { PGlite } from "@electric-sql/pglite";
 import * as PgliteDrizzle from "drizzle-orm/effect-pglite";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Duration, Effect, Layer, ManagedRuntime, Redacted, Stream } from "effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
 import { runWebMigrations } from "../core/migrator.js";
 import { Database, type DatabaseServices } from "../core/query.js";
 import { sqlClientOverUrl } from "../core/sql-client.js";
+import { SyncListener, syncListenerOverUrl } from "../sync/listener.js";
+import { SYNC_CHANNEL } from "../sync/notification.js";
 import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-postgres.js";
 
 /**
@@ -19,7 +21,9 @@ import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-
  * closes (`test-postgres.ts`), so a file's unscoped statement reaches no other
  * file's rows on either dialect. The Postgres half is the production layer's
  * own client and database; the PGlite half is `@effect/sql-pglite`'s client
- * and Drizzle's PGlite driver over it.
+ * and Drizzle's PGlite driver over it. Each carries a `SyncListener` on the
+ * same database: on Postgres the production listener, on a connection of
+ * its own beside the pool's one, and on PGlite the client's own listen.
  */
 
 /**
@@ -88,11 +92,20 @@ export async function openMigratedPglite(): Promise<PGlite> {
   return first;
 }
 
+/** A listener on the test's own PGlite, which `@effect/sql-pglite` listens on in process. */
+const syncListenerOverPglite: Layer.Layer<SyncListener, never, PgliteClient.PgliteClient> =
+  Layer.effect(
+    SyncListener,
+    Effect.map(PgliteClient.PgliteClient, (client) => ({
+      listen: Effect.map(client.listen(SYNC_CHANNEL), (payloads) => Stream.fromQueue(payloads)),
+    })),
+  );
+
 function pgliteSqlClientOver(open: () => Promise<PGlite>) {
   return Layer.unwrap(
     Effect.map(
       Effect.acquireRelease(Effect.promise(open), (client) => Effect.promise(() => client.close())),
-      sqlClientOverPglite,
+      (client) => Layer.provideMerge(syncListenerOverPglite, sqlClientOverPglite(client)),
     ),
   );
 }
@@ -118,7 +131,15 @@ function postgresSqlClient(connectionString: string) {
         Effect.promise(() => cloneStoreTestPostgres(connectionString)),
         (clone) => Effect.promise(() => clone.drop()),
       ),
-      (clone) => sqlClientOverUrl(clone.connectionString),
+      (clone) =>
+        Layer.merge(
+          sqlClientOverUrl(clone.connectionString),
+          // Note that the connect timeout is off, for the reason `sqlClientOverUrl` gives.
+          syncListenerOverUrl({
+            url: Redacted.make(clone.connectionString),
+            connectTimeout: Duration.infinity,
+          }),
+        ),
     ),
   );
 }
@@ -130,7 +151,7 @@ const connectionString = process.env[STORE_TEST_DATABASE_ENVIRONMENT.URL];
  * dialect this run was pointed at: a `getTestDB`, answered as the
  * layer a test provides rather than a handle it awaits, since every
  * statement here is an effect that reads its client and database from the
- * fiber.
+ * fiber, with a `SyncListener` on that database.
  */
-export const getTestDB = (): Layer.Layer<DatabaseServices, SqlError> =>
+export const getTestDB = (): Layer.Layer<DatabaseServices | SyncListener, SqlError> =>
   connectionString === undefined ? pgliteSqlClient : postgresSqlClient(connectionString);
