@@ -157,8 +157,9 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* A task item keeps the library's own disabled checkbox as its marker, in
-     the accent every control wears. The box stands in the bullet's gutter,
+  /* A task item's box is its marker: the shared `Checkbox` in a note
+     (`markdown-tasks.tsx`), and the library's own disabled checkbox where
+     words are drawn whole by Streamdown. The box stands in the bullet's gutter,
      out of the line, so the space after it folds away and the words, wrapped
      lines included, start where a bullet's would; the plan's editor stands
      its box in the same place (the panel's `tasks.css`), so opening a
@@ -180,8 +181,8 @@
     accent-color: var(--luke-color-accent);
   }
 
-  /* A box the reader can tick (`markdown-tasks.tsx`, a wordless `Checkbox`)
-     stands in the bullet's gutter, exactly where the box alone stands, at
+  /* A note's box (`markdown-tasks.tsx`, a wordless `Checkbox`, read-only
+     where the reader cannot tick it) stands in the bullet's gutter, exactly where the box alone stands, at
      the words' size; on a coarse pointer its label takes a press a finger's
      width across and as tall, centred on the box (`checkbox.css`). The
      plan's editor gives its own label the same press. */

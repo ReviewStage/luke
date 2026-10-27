@@ -12,9 +12,10 @@ import { MARKDOWN_LOOK, Markdown, type MarkdownProps, markdownStep } from "./mar
  * headings as paragraphs, its pictures as their words, and raw HTML as text;
  * a document draws real headings and no root of its own; a step a place
  * hands in draws with the values it was handed, however many places hand
- * the same step; a note follows a new address rewriter; and a task box a
+ * the same step; a note follows a new address rewriter; a task box a
  * reader may tick is named by its item, asks with its item's place, and
- * flips back when the change is not saved. Synthetic words.
+ * flips back when the change is not saved; and one a reader may not tick is
+ * the same box, read-only. Synthetic words.
  */
 
 declare global {
@@ -127,4 +128,23 @@ test("a task box is named by its item, asks with its item's place in the words, 
     "false",
     "a change not saved flips the box back",
   );
+});
+
+test("a task box a reader cannot tick is the shared box, named by its item, ticked as written, and a press leaves it", async () => {
+  const { container } = drawn({
+    look: MARKDOWN_LOOK.NOTE,
+    words: "- [x] Write the migration\n- [ ] Wire the row",
+  });
+  const boxes = [...container.querySelectorAll<HTMLElement>('[role="checkbox"]')];
+  assert.deepEqual(
+    boxes.map((box) => [box.getAttribute("aria-label"), box.getAttribute("aria-checked")]),
+    [
+      ["Write the migration", "true"],
+      ["Wire the row", "false"],
+    ],
+  );
+  const first = boxes[0];
+  assert.ok(first !== undefined, "each task item draws a box");
+  await act(async () => first.click());
+  assert.equal(first.getAttribute("aria-checked"), "true", "a press changes nothing");
 });

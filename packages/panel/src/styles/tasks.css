@@ -1515,13 +1515,14 @@
   position: static;
 }
 
-/* A task list stands as GitHub draws one: its boxes in the bullets' place. */
-.pull-request-words ul:has(> li > input[type="checkbox"]) {
+/* A task list stands as GitHub draws one: its boxes, the shared read-only
+   `Checkbox` (`@luke/ui/markdown`), in the bullets' place. */
+.pull-request-words ul:has(> li > .luke-markdown-task) {
   padding-left: 0;
   list-style: none;
 }
 
-.pull-request-words li > input[type="checkbox"] {
+.pull-request-words li > .luke-markdown-task {
   margin: 0 var(--luke-item-gap) 0 0;
   vertical-align: middle;
 }

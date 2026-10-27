@@ -40,7 +40,12 @@ import {
 import { landedMark } from "../components/landed/landed.js";
 import { QUOTE_CLASS } from "../quote-face.js";
 import { MARKDOWN_CLASS, markdownClass } from "./markdown-class.js";
-import { type MarkdownTaskToggler, placeTaskItems, taskInput } from "./markdown-tasks.js";
+import {
+  type MarkdownTaskToggler,
+  placeTaskItems,
+  readTaskInput,
+  taskInput,
+} from "./markdown-tasks.js";
 
 export type { MarkdownTaskToggler } from "./markdown-tasks.js";
 
@@ -224,16 +229,13 @@ function WholeWords({
   const toggler = useRef(onTask);
   toggler.current = onTask;
   const toggles = onTask !== undefined;
-  const steps = useMemo(
-    () => (toggles ? [placeTaskItems, ...(rehypePlugins ?? [])] : rehypePlugins),
-    [toggles, rehypePlugins],
-  );
+  // Note that every box is named by its item, so one the reader cannot tick is placed too.
+  const steps = useMemo(() => [placeTaskItems, ...(rehypePlugins ?? [])], [rehypePlugins]);
   const drawn = useMemo<Components>(() => {
     const own = look === MARKDOWN_LOOK.NOTE ? NOTE_COMPONENTS : {};
-    if (!toggles) return { ...own, ...components };
-    const input = taskInput(
-      (at, ticked) => toggler.current?.(at, ticked) ?? Promise.resolve(false),
-    );
+    const input = toggles
+      ? taskInput((at, ticked) => toggler.current?.(at, ticked) ?? Promise.resolve(false))
+      : readTaskInput;
     return { ...own, input, ...components };
   }, [look, toggles, components]);
   // Note that the block is keyed by its rewriter, because its memo compares the words, the components, and the steps, never the rewriter.
@@ -247,7 +249,7 @@ function WholeWords({
       shouldNormalizeHtmlIndentation={false}
       components={drawn}
       remarkPlugins={remarkPlugins ?? NOTE_REMARK_STEPS}
-      {...(steps === undefined ? {} : { rehypePlugins: steps })}
+      rehypePlugins={steps}
       {...(urlTransform === undefined ? {} : { urlTransform })}
     />
   );
@@ -277,14 +279,24 @@ export const Markdown = memo(function Markdown({
     urlTransform,
     normalizeHtmlIndentation,
   } = whole;
+  // Note that a transcript's task boxes are drawn as a note's read-only ones, named by their items
+  // where the place hands steps of its own, since Streamdown keeps its allowed tags only on its own.
+  const transcriptSteps = useMemo(
+    () => (rehypePlugins === undefined ? undefined : [...rehypePlugins, placeTaskItems]),
+    [rehypePlugins],
+  );
+  const transcriptComponents = useMemo<Components>(
+    () => ({ input: readTaskInput, ...components }),
+    [components],
+  );
   if (look === MARKDOWN_LOOK.TRANSCRIPT) {
     return (
       <Streamdown
         mode={streaming ? "streaming" : "static"}
         {...(className === undefined ? {} : { className })}
-        {...(components === undefined ? {} : { components })}
+        components={transcriptComponents}
         {...(remarkPlugins === undefined ? {} : { remarkPlugins })}
-        {...(rehypePlugins === undefined ? {} : { rehypePlugins })}
+        {...(transcriptSteps === undefined ? {} : { rehypePlugins: transcriptSteps })}
         {...(allowedTags === undefined ? {} : { allowedTags })}
         {...(literalTagContent === undefined ? {} : { literalTagContent })}
         {...(urlTransform === undefined ? {} : { urlTransform })}

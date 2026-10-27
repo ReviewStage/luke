@@ -707,7 +707,11 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     "const days = 7;\n\nexport default days;",
     "a highlighted block is the window's own code block in its language, a blank line in it kept",
   );
-  assert.ok(description.querySelector('input[type="checkbox"][disabled]'), "a task list stands");
+  assert.equal(
+    description.querySelector('[role="checkbox"]')?.getAttribute("aria-label"),
+    "Sweep",
+    "a task list stands, each box named by its item",
+  );
   assert.equal(
     description.querySelectorAll(".luke-code-card").length,
     1,
