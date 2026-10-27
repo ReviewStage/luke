@@ -10,7 +10,9 @@ import {
   type PopoverAlign,
   type PopoverBounds,
   type PopoverWidth,
+  roomAround,
 } from "../anchored-popover/anchored-popover.js";
+import { clipsAround } from "../anchored-popover/clip-room.js";
 import {
   type ComboboxGroup,
   ComboboxList,
@@ -177,7 +179,7 @@ const SUBMENU_SIDE = {
 
 type SubmenuSide = (typeof SUBMENU_SIDE)[keyof typeof SUBMENU_SIDE];
 
-/** How a submenu stands against its row: down from the row's top, or up from its foot where the window's bottom would cut it. */
+/** How a submenu stands against its row: down from the row's top, or up from its foot where its room's bottom would cut it. */
 const SUBMENU_STAND = {
   DOWN: "down",
   UP: "up",
@@ -232,7 +234,7 @@ const HEADING = "luke-searchable-menu-heading px-row-inset pt-luke-8 pb-luke-4";
  * row's and its near edge a gap off the menu's own; it turns to the menu's
  * other side where its room ends before it does, is pushed back over the
  * menu (`--luke-submenu-shift`) where neither side holds it, and stands up
- * from the row's foot where the window's bottom would cut it.
+ * from the row's foot where its room's bottom would cut it.
  */
 const SUBMENU =
   "luke-searchable-menu-submenu absolute top-0 left-submenu-reach z-1 w-submenu data-[side=left]:right-submenu-reach data-[side=left]:left-auto data-[stand=up]:top-auto data-[stand=up]:bottom-0";
@@ -628,10 +630,11 @@ export function SearchableMenu(
   // A submenu opens to the right and down from its row, turns to the left
   // where the room ends before it does (the window, or the box its menu
   // keeps to, `data-popover-room`, the side panel or an agent's pane, unless
-  // its owner bounds it by the window alone, as its popover is), and
-  // where neither side holds it, takes the one it runs past less, pushed
-  // back over the menu so it never runs past a column; it stands up where
-  // the window's bottom would cut it. Measured before it is painted, and
+  // its owner bounds it by the window alone, as its popover is, either cut
+  // to each box that clips it, a card that scrolls say), and where neither
+  // side holds it, takes the one it runs past less, pushed back over the
+  // menu so it never runs past a column; it stands up where the room's
+  // bottom would cut it. Measured before it is painted, and
   // again as the pointer moves it to another row, whose submenu may stand taller.
   const openAt = open === undefined ? undefined : at;
   const listedAt = open !== undefined && footAt < 0 ? at : undefined;
@@ -652,14 +655,13 @@ export function SearchableMenu(
     if (openAt === undefined || panel.current === null || branch == null) return;
     const bounds = panel.current.getBoundingClientRect();
     const row = branch.getBoundingClientRect();
-    const page = document.documentElement;
-    const marked = keepsToWindow
-      ? undefined
-      : panel.current.closest("[data-popover-room]")?.getBoundingClientRect();
-    const roomLeft = Math.max(marked?.left ?? 0, 0);
-    const roomRight = Math.min(marked?.right ?? page.clientWidth, page.clientWidth);
-    const pastRight = Math.max(row.right + SUBMENU_GAP + bounds.width - roomRight, 0);
-    const pastLeft = Math.max(roomLeft - (row.left - SUBMENU_GAP - bounds.width), 0);
+    const room = roomAround(
+      panel.current,
+      keepsToWindow ? POPOVER_BOUNDS.WINDOW : POPOVER_BOUNDS.ROOM,
+      clipsAround(panel.current),
+    );
+    const pastRight = Math.max(row.right + SUBMENU_GAP + bounds.width - room.right, 0);
+    const pastLeft = Math.max(room.left - (row.left - SUBMENU_GAP - bounds.width), 0);
     const side =
       pastRight === 0 || (pastLeft > 0 && pastRight <= pastLeft)
         ? SUBMENU_SIDE.RIGHT
@@ -667,7 +669,7 @@ export function SearchableMenu(
     setPlace({
       side,
       shift: side === SUBMENU_SIDE.RIGHT ? pastRight : pastLeft,
-      stand: bounds.bottom > page.clientHeight ? SUBMENU_STAND.UP : SUBMENU_STAND.DOWN,
+      stand: bounds.bottom > room.bottom ? SUBMENU_STAND.UP : SUBMENU_STAND.DOWN,
     });
   }, [openAt, rowBox, keepsToWindow]);
 
