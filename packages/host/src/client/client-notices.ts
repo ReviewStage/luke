@@ -3,7 +3,6 @@
  */
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import type { CodingAgentAccountInboxAnswerView } from "@luke/features/coding-agent-view";
-import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { Effect, FiberSet, Queue, type Scope, Stream } from "effect";
 import {
   AgentNoticeDoors,
@@ -118,19 +117,8 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     followAccountInbox: () => accountInboxOf(host),
     accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
     onInboxChanged: (inbox) => state.update({ inbox }),
-    channelsOn: () =>
-      experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHANNELS),
     report,
   });
-  // Channels turning moves what the badge counts with no answer moving, so it counts again.
-  yield* Effect.forkScoped(
-    Stream.runForEach(
-      Stream.map(state.changes, (document) =>
-        experimentOn(document.settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHANNELS),
-      ).pipe(Stream.changes, Stream.drop(1)),
-      () => Effect.sync(() => notices.recount()),
-    ),
-  );
   // A note that throws is reported rather than left to end the fiber, which would never resume.
   yield* Effect.forkScoped(
     Stream.runForEach(

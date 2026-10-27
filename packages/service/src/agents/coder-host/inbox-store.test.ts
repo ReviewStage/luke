@@ -1419,7 +1419,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
   );
 
   it.effect(
-    "each task the account's read lists counts what is the reader's to do, their own open or unread items, settled task's among them, alike live and held, its held read waking as a settled one is read or written on again, and no one counts another's",
+    "each task the account's read lists counts the questions waiting on the reader, a settled task's among them, never a notice or a settled item read or not, alike live and held, and no one counts another's",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -1447,10 +1447,10 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         const shelved = yield* startTask(owner, { name: "Shelved work" });
         const shelvedAgent = yield* agentOn(owner, shelved.id);
 
-        // The owner's open ask and open notice, both unread, are theirs to do.
+        // The owner's open ask counts; their open notice, unread, asks nothing.
         yield* postedId(agent, "ask");
         yield* post(agent, { ...NOTICE, key: "notice" });
-        // A thread they answered, which its agent writes on again, and one they answered and read, which is done.
+        // A thread they answered, which its agent writes on again, unread, and one they answered and read: neither is a question now.
         const followedItem = yield* postedItem(agent, "followed");
         const followed = followedItem.id;
         for (const item of [followedItem, yield* postedItem(agent, "seen")]) {
@@ -1474,81 +1474,23 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         assert.deepEqual(
           toDoOf(held),
           new Map([
-            [taskId, 3],
+            [taskId, 1],
             [shelved.id, 1],
           ]),
-          "the ask, the notice, and the thread written on again; and the settled task's open item",
+          "the ask alone, not the teammate's beside it; and the settled task's open ask",
         );
         assert.equal(
           toDoOf(yield* accountInboxPast(teammate, INBOX_CURSOR_START)).get(taskId),
           1,
-          "the teammate counts their own ask alone",
+          "the teammate counts their own ask alone, never the owner's",
         );
         assert.deepEqual((yield* accountInboxPast(stranger, INBOX_CURSOR_START)).plans, []);
 
-        // Reading the settled thread wakes the held read, and it is the owner's to do no longer.
+        // Reading the settled thread still wakes the held read, and moves no count.
         yield* markInboxItemRead(owner, followed);
         const read = yield* accountInboxPast(owner, held.cursor);
         assert.notEqual(read.cursor, held.cursor);
-        assert.equal(toDoOf(read).get(taskId), 2);
-        // Its agent writing on it again wakes it once more.
-        yield* TestClock.adjust(Duration.seconds(1));
-        assert.ok(Option.isSome(yield* replyInboxItem(agent, "followed", "And another.")));
-        const written = yield* accountInboxPast(owner, read.cursor);
-        assert.notEqual(written.cursor, read.cursor);
-        assert.equal(toDoOf(written).get(taskId), 3);
-        assert.equal(
-          toDoOf(yield* accountInboxPast(teammate, INBOX_CURSOR_START)).get(taskId),
-          1,
-          "the owner's reads move nothing of the teammate's count",
-        );
-      }),
-  );
-
-  it.effect(
-    "a task's To do counts its unread settled items only among the latest its read carries, as the Inbox can list no older one, alike live and held",
-    () =>
-      Effect.gen(function* () {
-        const { agent, workspaceId } = yield* openAgentIn;
-        const owner = agent.userId;
-        const taskId = agent.taskId ?? "";
-        const bound = INBOX_BOUNDS.MAX_ITEMS_READ;
-        const at = (step: number) => new Date(Date.parse("2026-10-21T12:00:00Z") + step * 1_000);
-        // One more answered item than a task's read carries, none of them read, written as the store keeps them.
-        yield* Database.use((db) =>
-          db.insert(inboxItem).values(
-            Array.from({ length: bound + 1 }, (_, step) => ({
-              userId: owner,
-              taskId,
-              organizationId: workspaceId,
-              agentId: agent.agentId,
-              key: `settled-${step}`,
-              revision: 1,
-              version: INBOX_WIRE_VERSION,
-              title: `Settled ${step}`,
-              needsReply: false,
-              status: INBOX_STATUS.ANSWERED,
-              postedAt: at(step),
-              settledAt: at(step),
-              updatedAt: at(step),
-            })),
-          ),
-        );
-        yield* postedId(agent, "open");
-
-        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START);
-        const live = yield* liveAnswerOf(owner, held.readAt);
-        assert.deepEqual({ ...live, cursor: held.cursor }, held);
-        assert.deepEqual(
-          held.plans.map((plan) => [plan.items, plan.toDo]),
-          [[bound + 2, bound + 1]],
-          "the open item and the settled ones the read carries, the oldest left out",
-        );
-        assert.equal(
-          (yield* taskInboxItems(owner, taskId)).filter((item) => item.unread === true).length,
-          bound + 1,
-          "as many as the task's read holds unread",
-        );
+        assert.equal(toDoOf(read).get(taskId), 1);
       }),
   );
 });
@@ -2187,6 +2129,46 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         });
         assert.equal((yield* channelPostTallies(outsider, workspaceId)).size, 0);
         assert.deepEqual(yield* channelThreads(outsider, app, pages[0]?.older), Option.none());
+      }),
+  );
+
+  it.effect(
+    "a channel's first page carries the thread with the latest activity last, however long ago it was posted",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const app = yield* channelIn(owner, workspaceId, "app");
+        // One more thread than a page carries, each moving when it was posted, but the first, which moved last.
+        const threads = INBOX_BOUNDS.MAX_ITEMS_READ + 1;
+        const at = (step: number) => new Date(Date.parse("2026-10-21T12:00:00Z") + step * 1_000);
+        yield* Database.use((db) =>
+          db.insert(inboxItem).values(
+            Array.from({ length: threads }, (_, step) => ({
+              userId: owner,
+              taskId: agent.taskId,
+              organizationId: workspaceId,
+              agentId: agent.agentId,
+              channelId: app,
+              key: `notice-${step}`,
+              revision: 1,
+              version: INBOX_WIRE_VERSION,
+              title: `Notice ${step}`,
+              needsReply: false,
+              status: INBOX_STATUS.OPEN,
+              postedAt: at(step),
+              updatedAt: at(step === 0 ? threads : step),
+            })),
+          ),
+        );
+
+        const page = Option.getOrThrow(yield* channelThreads(owner, app));
+        const titles = page.threads.map((thread) => thread.title);
+
+        assert.deepEqual(
+          [titles[0], titles.at(-1), titles.includes("Notice 1")],
+          ["Notice 2", "Notice 0", false],
+        );
       }),
   );
 });

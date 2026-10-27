@@ -198,7 +198,7 @@ it.effect(
 );
 
 it.effect(
-  "the task list is sealed as its tasks, its agents, and its tasks' issues for the bearer's own account",
+  "the task list is sealed as its tasks, its agents, its tasks' issues, and the questions waiting on the bearer, for the bearer's own account",
   () =>
     Effect.gen(function* () {
       const dana = yield* ask({
@@ -210,7 +210,12 @@ it.effect(
       assert.equal(dana.status, HOSTED_HTTP_STATUS.OK);
       const answer = Schema.decodeUnknownSync(taskListLiveAnswerSchema)(dana.body);
       assert.equal(answer.url, REALTIME_URL);
-      assert.deepEqual(Object.keys(answer.queries).toSorted(), ["agents", "issues", "plans"]);
+      assert.deepEqual(Object.keys(answer.queries).toSorted(), [
+        "agents",
+        "issues",
+        "plans",
+        "questions",
+      ]);
       for (const sealed of Object.values(answer.queries)) {
         assert.ok(sealed.capability.includes('"user-dana"'), "read for the bearer");
       }

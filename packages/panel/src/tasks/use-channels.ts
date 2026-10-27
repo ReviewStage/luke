@@ -483,7 +483,7 @@ export function useChannelView(): readonly [ChannelView, (view: ChannelView) => 
   return [view, onView];
 }
 
-/** One channel's threads as last read, oldest first, the doors that read them again and read an older page. */
+/** One channel's threads as last read, the least recently active first, the doors that read them again and read an older page. */
 export interface ChannelThreadsControl {
   /** The threads, none until first read. */
   readonly threads: readonly ChannelThread[] | undefined;
@@ -500,7 +500,7 @@ export interface ChannelThreadsControl {
 /** One channel's threads as read: the older pages, the latest page, and the thread to read the next older page before. */
 interface ChannelThreadsRead {
   readonly channelId: string;
-  /** The threads the older pages carried, oldest first. */
+  /** The threads the older pages carried, the least recently active first. */
   readonly earlier: readonly ChannelThread[];
   /** The threads the latest page carried, none until it is first read. */
   readonly latest: readonly ChannelThread[] | undefined;
@@ -508,17 +508,17 @@ interface ChannelThreadsRead {
   readonly failure: ChannelCallFailure | undefined;
 }
 
-/** Two threads in the order a channel posts them, its id breaking a tie, as the service pages them. */
-function postedOrder(a: ChannelThread, b: ChannelThread): number {
-  return a.postedAt - b.postedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+/** Two threads in the order a channel draws them, the least recently active first, its id breaking a tie, as the service pages them. */
+function activeOrder(a: ChannelThread, b: ChannelThread): number {
+  return a.updatedAt - b.updatedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
-/** The older pages and the latest as one stream, each thread once as the latest read it, oldest posted first. */
+/** The older pages and the latest as one stream, each thread once as the latest read it, the least recently active first. */
 function threadsOf(read: ChannelThreadsRead): readonly ChannelThread[] | undefined {
   if (read.latest === undefined) return undefined;
   const latest = new Set(read.latest.map((thread) => thread.id));
   return [...read.earlier.filter((thread) => !latest.has(thread.id)), ...read.latest].toSorted(
-    postedOrder,
+    activeOrder,
   );
 }
 
@@ -561,7 +561,7 @@ export function useChannelThreads(channelId: string | undefined): ChannelThreads
     /** Whether the older pages read reach back to where the oldest held thread stood. */
     const reached = (earlier: readonly ChannelThread[]) => {
       const first = earlier[0];
-      return oldest === undefined || (first !== undefined && postedOrder(first, oldest) <= 0);
+      return oldest === undefined || (first !== undefined && activeOrder(first, oldest) <= 0);
     };
     const failed = (failure: ChannelCallFailure) => fold(channelId, (was) => ({ ...was, failure }));
     // Note that the older pages held are read again too, back past where the oldest stood rather than by count, so a thread moved out of one leaves the stream and one posted since drops none off its end.

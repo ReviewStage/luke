@@ -166,8 +166,9 @@ export const channelThreadSchema = EffectSchema.Struct({
 export type ChannelThread = typeof channelThreadSchema.Type;
 
 /**
- * A page of a channel's threads the reader may read, oldest posted first.
- * The first carries the latest posted of those holding no ask open that
+ * A page of a channel's threads the reader may read, the least recently
+ * active first, a thread's activity being its last change (`updatedAt`).
+ * The first carries the latest active of those holding no ask open that
  * waits on the reader, and every one that holds such an ask however old; an
  * older page the next latest of the former alone, so paging back reads every
  * thread once. `older` is the thread to read the next older page before,

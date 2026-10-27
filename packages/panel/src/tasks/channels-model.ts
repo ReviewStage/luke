@@ -13,9 +13,9 @@ import {
  * A channel is a topic its workspace's threads live in, each thread an Inbox
  * item (`channel-wire.ts`). The sidebar lists the standing channels and then
  * the projects', each counting the open asks that wait on the reader. A
- * channel's stream is its threads oldest first, a divider before each day,
- * and the New line before the first thread someone else posted since the
- * reader last looked. The reader views it three ways, Mine by default: Mine,
+ * channel's stream is its threads by their latest activity, the latest at
+ * its foot, a divider before each day they last moved on, and the New line
+ * before the first thread someone else moved since the reader last looked. The reader views it three ways, Mine by default: Mine,
  * the threads of their own tasks, those asking them, and those they wrote
  * in; Everyone, every thread; and Needs me, the open asks addressed to them
  * alone. A thread needs the reader while its ask stands open and it waits
@@ -165,10 +165,27 @@ export function emptyStreamWords(name: string, view: ChannelView): string {
 }
 
 /**
- * The stream's rows: the threads oldest posted first, a divider before each
- * day, and the New line before the first thread posted since the reader
- * last looked (`lookedAt`) by someone else. A channel never looked at draws
- * no New line, since everything in it would stand under one.
+ * Whether the reader made the thread's latest activity themselves: the
+ * latest message on it is theirs and nothing moved it since, or they
+ * settled it at that instant. Note that a message is written at the
+ * instant it moves its thread, while an agent's close moves the thread
+ * and writes none, so a message older than the thread's last change was
+ * not that change.
+ */
+function movedByReader(thread: ChannelThread, readerId: string): boolean {
+  const latest = thread.thread?.at(-1);
+  if (latest?.member?.userId === readerId && latest.createdAt >= thread.updatedAt) return true;
+  const settler = thread.closedBy ?? thread.answeredBy;
+  return thread.settledAt === thread.updatedAt && settler?.userId === readerId;
+}
+
+/**
+ * The stream's rows: the threads the least recently active first, a thread's
+ * activity being its last change (`updatedAt`), so one an old thread's new
+ * reply moves stands at the foot; a divider before each day they last moved
+ * on; and the New line before the first thread someone else moved since the
+ * reader last looked (`lookedAt`). A channel never looked at draws no New
+ * line, since everything in it would stand under one.
  */
 export function streamRows(
   threads: readonly ChannelThread[],
@@ -179,21 +196,21 @@ export function streamRows(
   },
 ): readonly StreamRow[] {
   const { lookedAt, readerId, now } = seams;
-  const sorted = threads.toSorted((a, b) => a.postedAt - b.postedAt);
+  const sorted = threads.toSorted((a, b) => a.updatedAt - b.updatedAt);
   const firstNew =
     lookedAt === undefined
       ? undefined
       : sorted.find(
           (thread) =>
-            thread.postedAt > lookedAt &&
-            (readerId === undefined || thread.thread?.[0]?.member?.userId !== readerId),
+            thread.updatedAt > lookedAt &&
+            (readerId === undefined || !movedByReader(thread, readerId)),
         );
   const rows: StreamRow[] = [];
   let lastDay: number | undefined;
   for (const thread of sorted) {
-    const day = dayStart(thread.postedAt);
+    const day = dayStart(thread.updatedAt);
     if (day !== lastDay) {
-      rows.push({ kind: STREAM_ROW.DAY, key: String(day), words: dayWords(thread.postedAt, now) });
+      rows.push({ kind: STREAM_ROW.DAY, key: String(day), words: dayWords(thread.updatedAt, now) });
       lastDay = day;
     }
     if (thread === firstNew) rows.push({ kind: STREAM_ROW.NEW });

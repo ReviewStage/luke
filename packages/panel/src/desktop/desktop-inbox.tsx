@@ -2,9 +2,10 @@ import type { ChannelThread } from "@luke/features/channel-wire";
 import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
 import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
-import { backToWords } from "@luke/features/words";
+import { backToWords, readFailedWords, readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  BackButton,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -86,6 +87,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/
 import { useAgentCallDoors } from "./agent-actions.js";
 import { AgentPane } from "./main-tabs.js";
 import { NewTaskButton } from "./new-task-button.js";
+import { PhoneHead } from "./phone-head.js";
 import {
   COLUMN,
   changesTabOf,
@@ -163,6 +165,10 @@ const CHANNELS_VIEW =
 
 /** What the page says where the workspace's channels could not be read, and where none stand. */
 const CHANNELS_NOT_READ = "Could not read this workspace's channels.";
+
+/** What a thread opened from a stream says while its item is read, and once its read failed. */
+const THREAD_READING = readingWords("the thread");
+const THREAD_NOT_READ = readFailedWords("this thread");
 const CHANNELS_NONE = "This workspace has no channels yet.";
 
 /** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
@@ -216,6 +222,8 @@ export function DesktopInbox({
     search,
     searched,
     missing,
+    chosenFailed,
+    onRetryChosen,
     reading,
     choose,
     closeItem,
@@ -249,15 +257,11 @@ export function DesktopInbox({
     channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel : archivedShown;
   // Note that a phone shows one thing at a time across the screen: a channel's stream, or a thread in place of the stream.
   const phone = room === SHELL_ROOM.NARROW;
-  // A thread opened from a stream stands in the side panel as its Inbox tab (`use-tasks-tab.ts`), and on a phone in the stream's place; one that is gone says so there.
-  const threadMissing =
-    streaming &&
-    missing &&
-    channelPlace.threadId !== undefined &&
-    asked?.itemId === channelPlace.threadId;
+  // A thread opened from a stream stands in the side panel as its Inbox tab (`use-tasks-tab.ts`), and on a phone in the stream's place, from its press on.
+  // Note that it is open on the very terms the panel draws its tab on, so the tab is never drawn for a thread not open, nor open with no tab,
+  // and says where the thread stands until its item is read: read, gone, or failed.
   const threadOpen =
-    streaming &&
-    ((chosen !== undefined && channelPlace.threadId === chosen.item.id) || threadMissing);
+    streaming && channelPlace.threadId !== undefined && asked?.itemId === channelPlace.threadId;
   // A thread opened by a link or from another channel moves the stream to its own channel once its item is read.
   useThreadChannel(streaming ? chosen?.item : undefined);
   const threadShown = threadOpen && channel !== undefined;
@@ -468,8 +472,8 @@ export function DesktopInbox({
     tasks.shown && channel !== undefined && !sidePanel.fullScreen,
   );
   const general = generalChannel(channels.channels ?? []);
-  // The thread asked for that is gone, where it would stand: beside the stream, or on a phone in its place.
-  const missingThread = (
+  // The thread asked for whose item is not read, where it would stand: beside the stream, or on a phone in its place; gone, unread, or still being read.
+  const unreadThread = missing ? (
     <section className={INBOX_VIEW_ITEMS} aria-label="Thread not found">
       <Toolbar end={TOOLBAR_INSET.COLUMN} />
       <NotFound
@@ -480,6 +484,30 @@ export function DesktopInbox({
             : { label: backToWords(`#${channel.name}`), onClick: closeThread }
         }
       />
+    </section>
+  ) : (
+    <section className={INBOX_VIEW_ITEMS} aria-label="Thread">
+      {/* Note that on a phone the thread stands in the stream's place, so its head is the way back to the stream, as its pane's is. */}
+      {phone && channel !== undefined ? (
+        <PhoneHead
+          place="inbox-item"
+          start={
+            <BackButton label={`#${channel.name}`} place={`#${channel.name}`} onBack={closeThread} />
+          }
+          end={null}
+        />
+      ) : (
+        <Toolbar end={TOOLBAR_INSET.COLUMN} />
+      )}
+      {chosenFailed ? (
+        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetryChosen}>
+          {THREAD_NOT_READ}
+        </ErrorState>
+      ) : (
+        <NoteLine look={NOTE_LINE_LOOK.CENTRED} status>
+          {THREAD_READING}
+        </NoteLine>
+      )}
     </section>
   );
   const openHere: OpenHere = (href) => {
@@ -621,7 +649,7 @@ export function DesktopInbox({
                       key={channel.id}
                       channel={channel}
                       stream={stream}
-                      chosenId={threadBeside ? chosen?.item.id : undefined}
+                      chosenId={threadBeside ? channelPlace.threadId : undefined}
                       hidden={threadShown && phone}
                       readerId={tasks.me}
                       now={now}
@@ -736,7 +764,7 @@ export function DesktopInbox({
                     onRestore={() => onCompose?.()}
                   />
                 ) : chosen === undefined && streaming ? (
-                  missingThread
+                  unreadThread
                 ) : chosen === undefined ? (
                   <section
                     className={INBOX_VIEW_ITEMS}
@@ -785,7 +813,7 @@ export function DesktopInbox({
                   !threadBeside
                     ? undefined
                     : chosen === undefined
-                      ? missingThread
+                      ? unreadThread
                       : itemPane(chosen, true)
                 }
                 phone={

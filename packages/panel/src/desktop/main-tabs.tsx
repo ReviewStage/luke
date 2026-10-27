@@ -313,7 +313,7 @@ function agentTabs(input: {
  * browser's tab search does.
  */
 export function agentEntries(
-  main: MainTabsControl,
+  main: Pick<MainTabsControl, "tab" | "onChoose">,
   agents: CodingAgentsControl,
   held?: HeldTranscripts,
 ): AddEntry[] {

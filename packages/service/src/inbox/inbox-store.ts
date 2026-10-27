@@ -1073,35 +1073,9 @@ function tasklessWaiting(userId: string) {
   );
 }
 
-/** Another item of the same task, read beside the one a statement reads, under its own name. */
-const NEWER = "newer";
-const newer = alias(inboxItem, NEWER);
-
-const ITEMS_READ = sql.raw(String(INBOX_BOUNDS.MAX_ITEMS_READ));
-
-/**
- * Whether a settled item is among the latest `MAX_ITEMS_READ` settled items
- * of its task, in the order a task's read keeps (`LATEST_FIRST`): those the
- * read carries (`findSettledItems`), so the Inbox can list it. Note that the
- * count of those ahead of it stops at the bound, so a long-lived task costs
- * no more than its read does.
- */
-const WITHIN_SETTLED_READ = sql<boolean>`((select count(*) from (select 1 from ${ITEM_TABLE} as ${sql.identifier(NEWER)} where ${newer.taskId} = ${qualified(inboxItem, inboxItem.taskId)} and ${newer.status} <> ${INBOX_STATUS.OPEN} and (${newer.updatedAt}, ${newer.id}) > (${ITEM_UPDATED_AT}, ${ITEM_ID}) limit ${ITEMS_READ}) as ahead) < ${ITEMS_READ})`;
-
-/**
- * Whether the item is the reader's to do, as the Inbox's To do lists it:
- * waiting on them (`WAITS_ON`), and open, or unread for them and among
- * the settled items its task's read carries (`WITHIN_SETTLED_READ`). Note
- * that a settled item counts while it is unread, such as a thread its agent
- * wrote on again after it was answered.
- */
-function toDoFor(userId: string): SQL<boolean> {
-  return sql<boolean>`(${WAITS_ON} = ${userId} and (${eq(inboxItem.status, INBOX_STATUS.OPEN)} or (${unreadFor(userId)} and ${WITHIN_SETTLED_READ})))`;
-}
-
-/** How many of a group's items are the reader's to do (`toDoFor`), as a number rather than a `bigint`. */
+/** How many of a group's items are questions waiting on the reader (`askingReader`), as a number rather than a `bigint`. */
 function toDoCount(userId: string): SQL<number> {
-  return sql<number>`(count(*) filter (where ${toDoFor(userId)}))::int`;
+  return sql<number>`(count(*) filter (where ${askingReader(userId)}))::int`;
 }
 
 /**
@@ -1273,7 +1247,8 @@ const LATEST_ITEM = max(inboxItem.updatedAt);
 /**
  * Every task of the account's workspaces that holds an item, open or
  * settled, whichever member's agent posted it, with how many of them are
- * the reader's to do (`toDoFor`), the task whose item changed latest first.
+ * questions waiting on the reader (`askingReader`), the task whose item
+ * changed latest first.
  */
 const findTasksWithItems = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String }),
@@ -2509,30 +2484,35 @@ const ChannelThreadRowSchema = Schema.Struct({
  */
 const THREAD_AGENT = sql<unknown>`(select jsonb_build_object('title', coalesce(${agentGivenNameSql({ kind: qualified(codingAgent, codingAgent.kind) })}, ${qualified(codingAgent, codingAgent.title)}), 'model', ${qualified(codingAgent, codingAgent.model)}, 'automationName', ${agentAutomationNameSql({ automationOrigin: qualified(codingAgent, codingAgent.automationOrigin) })}) from ${codingAgent} where ${qualified(codingAgent, codingAgent.id)} = ${qualified(inboxItem, inboxItem.agentId)})`;
 
-/** Whether the item holds an ask open that waits on the reader: what a channel's count counts and its stream always carries. */
-function askingReader(userId: string): SQL<boolean> {
+/** Whether the item holds an ask open that waits on the reader, a question waiting on them: what a channel's count counts and its stream always carries, and what a task's row counts (`questionsWaitingByTask`). */
+export function askingReader(userId: string): SQL<boolean> {
   return sql<boolean>`(${ASKING} and ${WAITS_ON} = ${userId})`;
 }
 
 /** The thread an older page of a channel is read before, under its own name, so its place is read beside the threads compared with it. */
 const cursorItem = alias(inboxItem, "cursor");
 
-/** The condition that the thread was posted before the one named, its id breaking a tie, as a channel's threads are ordered. */
-function postedBefore(itemId: string): SQL {
+/** A channel's threads in the order its stream draws them, the latest active first, its id breaking a tie. */
+const ACTIVE_FIRST = [desc(inboxItem.updatedAt), desc(inboxItem.id)] as const;
+
+/** The condition that the thread last moved before the one named, its id breaking a tie, as a channel's threads are ordered (`ACTIVE_FIRST`). */
+function activeBefore(itemId: string): SQL {
   const cursor = queryBuilder
-    .select({ postedAt: sql`${cursorItem.postedAt}`, id: cursorItem.id })
+    .select({ updatedAt: sql`${cursorItem.updatedAt}`, id: cursorItem.id })
     .from(cursorItem)
     .where(eq(cursorItem.id, itemId));
-  return sql`(${inboxItem.postedAt}, ${inboxItem.id}) < (${cursor})`;
+  return sql`(${inboxItem.updatedAt}, ${inboxItem.id}) < (${cursor})`;
 }
 
 /**
- * A page of the channel's threads the reader may read, latest posted first:
- * the latest posted of those holding no ask open that waits on them, one
+ * A page of the channel's threads the reader may read, latest active first,
+ * a thread's activity being its last change (`updatedAt`): the agent
+ * posting again, a message on its thread, an answer, or a close. It reads
+ * the latest active of those holding no ask open that waits on them, one
  * more than a page carries, so the reader learns whether any older stands;
  * and, on the first page alone, every one that holds such an ask
  * (`askingReader`) however old, each marked. An older page reads only the
- * threads posted before the one it names, and none that asks the reader,
+ * threads last active before the one it names, and none that asks the reader,
  * which the first page carried. Note that the asks are read apart from the
  * bound, because the channel's count counts every one of them and Needs me
  * must show each thread it counts.
@@ -2554,10 +2534,10 @@ const findChannelThreads = SqlSchema.findAll({
           and(
             inChannel,
             not(askingReader(userId)),
-            before === null ? undefined : postedBefore(before),
+            before === null ? undefined : activeBefore(before),
           ),
         )
-        .orderBy(desc(inboxItem.postedAt), desc(inboxItem.id))
+        .orderBy(...ACTIVE_FIRST)
         .limit(INBOX_BOUNDS.MAX_ITEMS_READ + 1);
       const read = inArray(inboxItem.id, latest);
       return db
@@ -2569,7 +2549,7 @@ const findChannelThreads = SqlSchema.findAll({
         })
         .from(inboxItem)
         .where(and(inChannel, before === null ? or(read, askingReader(userId)) : read))
-        .orderBy(desc(inboxItem.postedAt), desc(inboxItem.id));
+        .orderBy(...ACTIVE_FIRST);
     }),
 });
 
@@ -2621,17 +2601,17 @@ export type ChannelThreadItem = InboxItem & {
   readonly agent?: ChannelThreadAgent;
 };
 
-/** A page of a channel's threads, oldest first, and the thread to read the next older page before, where any older stands. */
+/** A page of a channel's threads, the least recently active first, and the thread to read the next older page before, where any older stands. */
 export interface ChannelThreadPage {
   readonly threads: readonly ChannelThreadItem[];
   readonly older?: string;
 }
 
 /**
- * A page of the channel's threads the reader may read, oldest first, as a
- * channel's stream draws them, each as the inbox carries it with the
+ * A page of the channel's threads the reader may read, the least recently
+ * active first, as a channel's stream draws them, each as the inbox carries it with the
  * channel it lives in and its agent as its post names it. The first page, `before` left out, carries the
- * latest posted `MAX_ITEMS_READ` of those holding no ask open that waits on
+ * latest active `MAX_ITEMS_READ` of those holding no ask open that waits on
  * the reader, and every one that holds such an ask however old; an older
  * page, read before the thread the last page's `older` named, carries the
  * next `MAX_ITEMS_READ` of the former alone, so paging back from the first
@@ -2823,6 +2803,33 @@ export function channelWaitingCounts(
   return Effect.map(
     findChannelWaiting({ userId, organizationId }),
     (rows) => new Map(rows.map((row) => [row.channelId, row.waiting])),
+  );
+}
+
+/** How many items of each of the tasks hold an ask open that waits on the reader (`askingReader`), on the tasks they reach, as the Inbox gates its tasks (`findTasksWithItems`). */
+const findTaskWaiting = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({ taskId: Schema.String, waiting: Schema.Number }),
+  execute: ({ userId, taskIds }) =>
+    Database.use((db) =>
+      db
+        .select({ taskId: task.id, waiting: sql<number>`count(*)::int` })
+        .from(inboxItem)
+        .innerJoin(task, eq(task.id, inboxItem.taskId))
+        .where(and(inArray(task.id, [...taskIds]), askingReader(userId), taskReachableBy(userId)))
+        .groupBy(task.id),
+    ),
+});
+
+/** How many questions wait on the reader on each of the tasks, by task; a task where none waits is left out, and every one the account does not reach. */
+export function questionsWaitingByTask(
+  userId: string,
+  taskIds: readonly string[],
+): InboxStoreEffect<ReadonlyMap<string, number>> {
+  if (taskIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findTaskWaiting({ userId, taskIds }),
+    (rows) => new Map(rows.map((row) => [row.taskId, row.waiting])),
   );
 }
 

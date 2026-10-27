@@ -95,6 +95,7 @@ import { DesktopWelcome } from "./desktop-welcome.js";
 import { useTaskInboxShow } from "./folded-groups.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
+import { PlanAgents } from "./plan-agents.js";
 import {
   COLUMN,
   changesTabOf,
@@ -430,12 +431,8 @@ function TaskInboxTab({
   const groups = [
     { holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] },
   ];
-  const marks = useInboxReadMarks({
-    act,
-    workspaceId: task.workspaceId,
-    // Note that a task's own Inbox offers no Mark all as read.
-    toDo: { groups, holdings: tasks.inboxTasks, readerId: tasks.me },
-  });
+  // Note that a task's own Inbox offers no Mark all as read.
+  const marks = useInboxReadMarks({ act, workspaceId: task.workspaceId });
   const items = groups.flatMap((group) => group.items);
   const counts = inboxCounts(groups, tasks.me);
   // The list's search, as the window's Inbox holds it, which narrows what it lists, never what it counts.
@@ -893,6 +890,7 @@ function PlanDocument({
   const openDelegationDoor = useSteadyDoor(openDelegation);
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
   const openAgent = useSteadyDoor((agent: string) => openColumnTab({ agent }));
+  const openAgentTab = useSteadyDoor(openColumnTab);
   const agentLookDoor = useSteadyDoor(agentLook);
   const pullRequestCardDoor = useSteadyDoor(pullRequestCard);
   const openMentionedFileDoor = useSteadyDoor(openMentionedFile);
@@ -975,6 +973,18 @@ function PlanDocument({
         />
       ),
     [opened, linearIssuesIn, githubIssuesIn],
+  );
+  // The task's agents head its plan, a row opening its agent in this column as its tab does.
+  const planAgents = useMemo(
+    () => (
+      <PlanAgents
+        agents={agents}
+        held={views.held}
+        main={{ tab, onChoose: openAgentTab }}
+        onOpenPullRequest={openPullRequestDoor}
+      />
+    ),
+    [agents, views.held, tab, openAgentTab, openPullRequestDoor],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
@@ -1166,6 +1176,7 @@ function PlanDocument({
         sectionLinks={sectionLinks}
         standing={standing}
         underTitle={underTitle}
+        head={planAgents}
         titleActions={room !== SHELL_ROOM.NARROW}
       />
     </Fill>

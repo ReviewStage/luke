@@ -387,7 +387,7 @@ function AnswerCard({
   // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.
   const channels = useExperiment(EXPERIMENT.CHANNELS);
   const nodded = acknowledgedOnOpen(item, readerId, channels) && !control.failed;
-  // Note that under Channels a notice addressed to nobody offers no Got it, since it is only read.
+  // Note that under Channels a notice waiting on a teammate offers no Got it, since it is theirs to settle.
   const nod = asksNod(item, readerId, channels) && emptyBox(draft) && !nodded;
   const held = sending || files.reading;
   // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
