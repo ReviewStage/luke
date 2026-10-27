@@ -3,11 +3,13 @@ import type { TaskPullRequestLine } from "@luke/features/task-wire";
 import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { LinesChanged } from "../tasks/agent-published.js";
 import { pullRequestNumberLabel, pullRequestStateLabel } from "../tasks/coding-agent-model.js";
+import { OpenedNote } from "../tasks/pull-request-card-notes.js";
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
+import { openerOf } from "../tasks/use-link-standing.js";
 import { TASK_MARK_GLYPH } from "./task-card.js";
 
 /**
- * pull-request-card.tsx -- the card a pull request's chip hangs: its mark and title, its key and where it stands, its checks, and its size.
+ * pull-request-card.tsx -- the card a pull request's chip hangs: its mark and title, its key and where it stands, who opened it, its checks, and its size.
  *
  * The pointer resting on a pull request's chip says more about that pull
  * request alone, as Linear's board does, read from what the window already
@@ -31,7 +33,7 @@ function pullRequestKey(pullRequest: TaskPullRequestLine): string {
   return `${repository ?? ""}${pullRequestNumberLabel(pullRequest)}`;
 }
 
-/** One pull request's card: its mark and title, its key and where it stands under them, then its checks and the lines it adds and removes. */
+/** One pull request's card: its mark and title, its key and where it stands under them, then who opened it where GitHub named them, its checks, and the lines it adds and removes. */
 export function PullRequestCard({
   pullRequest,
 }: {
@@ -45,6 +47,7 @@ export function PullRequestCard({
         name={pullRequest.title}
         sub={`${pullRequestKey(pullRequest)} · ${pullRequestStateLabel(pullRequest)}`}
       />
+      <OpenedNote opener={openerOf(pullRequest)} />
       <HoverCardNote>
         {checks === undefined ? null : `${checks} · `}
         <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />

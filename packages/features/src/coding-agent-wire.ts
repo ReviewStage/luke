@@ -1014,9 +1014,26 @@ export const codingAgentPullRequestSchema = EffectSchema.Struct({
   changedFiles: countedNumber,
   /** True where the pull request is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service before it was sent. */
   queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /** The login of who opened it, their avatar where GitHub's avatar host serves it, and whether they are an App's bot; absent where GitHub named no one, and from a row read before they were kept. */
+  author: EffectSchema.optionalKey(EffectSchema.String),
+  authorAvatarUrl: EffectSchema.optionalKey(EffectSchema.String),
+  authorBot: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
+
+/** Who opened a pull request, as each read and line of it carries them. */
+type PullRequestAuthor = Pick<CodingAgentPullRequest, "author" | "authorAvatarUrl" | "authorBot">;
+
+/** Who opened a pull request, each field where the read held it, so a line built from it names them as the read did; nothing where GitHub named no one. */
+export function pullRequestAuthorOf(pullRequest: PullRequestAuthor): PullRequestAuthor {
+  const { author, authorAvatarUrl, authorBot } = pullRequest;
+  return {
+    ...(author === undefined ? undefined : { author }),
+    ...(authorAvatarUrl === undefined ? undefined : { authorAvatarUrl }),
+    ...(authorBot === undefined ? undefined : { authorBot }),
+  };
+}
 
 /**
  * What an agent published (GET): the repository it works in as `owner/name`,

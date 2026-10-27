@@ -12,6 +12,7 @@ import { pullRequestNumberLabel } from "./coding-agent-model.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { OpenedBy, ReviewersLine } from "./pull-request-people.js";
 import type { HeldPeople } from "./use-coding-agents.js";
+import { openerOf } from "./use-link-standing.js";
 
 /**
  * changes-card.tsx -- the card a Pull request tab hangs, and its row in the task's summary, kept apart from the tab itself so the window draws the card without the tab's chunk.
@@ -37,8 +38,10 @@ export function peopleOf(
  * tile and name as every place naming an agent draws it (`ActorRef`),
  * which hang the agent's card and open its tab, and under them how many
  * files it changes and the lines it adds and removes, as GitHub counts
- * them, then, once its Changes tab has read them, who opened it and its
- * reviewers, each face wearing where they stand (`pull-request-people.tsx`).
+ * them, then who opened it, as its Changes tab read them where it has, else
+ * as the agent's last read of the pull request named them, and, once that
+ * tab has read them, its reviewers, each face wearing where they stand
+ * (`pull-request-people.tsx`).
  */
 export function ChangesCard({
   subject,
@@ -60,6 +63,7 @@ export function ChangesCard({
   // The card hanging is the pointer on its tab, so the tab's chunk is read now rather than at the press.
   useEffect(PULL_REQUEST_TAB.prefetch, []);
   const count = pullRequest.changedFiles;
+  const author = people?.author ?? openerOf(pullRequest);
   const reviewers = people?.reviewers ?? [];
   return (
     <HoverCard data-tab-card="">
@@ -80,9 +84,9 @@ export function ChangesCard({
         {count} {count === 1 ? "file" : "files"} changed{" "}
         <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
       </HoverCardNote>
-      {people?.author === undefined ? null : (
+      {author === undefined ? null : (
         <HoverCardNote oneLine>
-          <OpenedBy person={people.author} />
+          <OpenedBy person={author} />
         </HoverCardNote>
       )}
       {reviewers.length === 0 ? null : (
