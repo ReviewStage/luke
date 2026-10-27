@@ -65,6 +65,7 @@ import {
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
+import { LOCAL_AGENT_REFUSAL } from "@luke/features/coding-agent-wire";
 import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
@@ -374,7 +375,6 @@ const startedAgentOn = (
           plan,
           agent: started.agent,
           ...(started.txid === undefined ? undefined : { txid: started.txid }),
-          ...(started.notice === undefined ? undefined : { notice: started.notice }),
         }),
       ),
     ),
@@ -392,7 +392,9 @@ const startedAgentOn = (
           error: refusal.error,
           ...(refusal.resetsAt === undefined ? undefined : { resetsAt: refusal.resetsAt }),
           ...(refusal.provider === undefined ? undefined : { provider: refusal.provider }),
-          ...(refusal.localAgentRefusal === undefined
+          // Note that a reason is left off where a build from before it fails to read the whole answer on an unknown one, losing the task the start made; such a refusal reads as a device that would not take the agent.
+          ...(refusal.localAgentRefusal === undefined ||
+          refusal.localAgentRefusal === LOCAL_AGENT_REFUSAL.NOT_OWNER
             ? undefined
             : { localAgentRefusal: refusal.localAgentRefusal }),
         };

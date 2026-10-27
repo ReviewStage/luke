@@ -1087,8 +1087,7 @@ export class HostedTaskClient {
 function taskStartedOf(started: TaskStartAnswer): TaskStarted {
   const written = started.txid === undefined ? {} : { txid: started.txid };
   if (started.agent !== undefined) {
-    const notice = started.notice === undefined ? {} : { notice: started.notice };
-    return { task: started.plan, agent: { agent: started.agent, ...notice }, ...written };
+    return { task: started.plan, agent: { agent: started.agent }, ...written };
   }
   if (started.agentRefusal !== undefined) {
     return { task: started.plan, agent: startRefusedAs(started.agentRefusal), ...written };

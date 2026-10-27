@@ -80,6 +80,7 @@ import {
   codingAgentStartRequestOnWire,
   type LocalAgentRefusal,
   type OperatorEnsureRequest,
+  type RefusedDevice,
   TRANSCRIPT_PARTS_QUERY,
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
@@ -190,6 +191,7 @@ type Failed = {
   readonly resetsAt?: number;
   readonly provider?: ModelProvider;
   readonly localAgentRefusal?: LocalAgentRefusal;
+  readonly refusedDevice?: RefusedDevice;
 };
 
 /** The refusals a call may answer with, by the service's own word for each. */
@@ -323,9 +325,14 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   }
   if (failure === CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
     const refused = Result.getOrUndefined(readServiceAnswer(localAgentRefusedDataSchema)(payload));
-    return refused?.localAgentRefusal === undefined
-      ? { failure }
-      : { failure, localAgentRefusal: refused.localAgentRefusal };
+    if (refused?.localAgentRefusal === undefined) return { failure };
+    return {
+      failure,
+      localAgentRefusal: refused.localAgentRefusal,
+      ...(refused.refusedDevice === undefined
+        ? undefined
+        : { refusedDevice: refused.refusedDevice }),
+    };
   }
   if (failure !== CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
   const reached = Result.getOrUndefined(readServiceAnswer(repositoryNotReachableSchema)(payload));
@@ -403,12 +410,14 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
   const resetsAt = failed.data?.resetsAt;
   const provider = failed.data?.provider;
   const localAgentRefusal = failed.data?.localAgentRefusal;
+  const refusedDevice = failed.data?.refusedDevice;
   return {
     failure,
     ...(unreached === undefined ? undefined : { unreached }),
     ...(resetsAt === undefined ? undefined : { resetsAt }),
     ...(provider === undefined ? undefined : { provider }),
     ...(localAgentRefusal === undefined ? undefined : { localAgentRefusal }),
+    ...(refusedDevice === undefined ? undefined : { refusedDevice }),
   };
 }
 

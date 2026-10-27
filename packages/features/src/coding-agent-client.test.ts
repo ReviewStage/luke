@@ -178,6 +178,42 @@ it.effect("a Start the task's device refused carries why, as the service named i
 );
 
 it.effect(
+  "a Start on another member's device carries the device and its owner as the service named them, and a reason this build cannot read is still the named refusal, never an unanswered call",
+  () =>
+    Effect.gen(function* () {
+      const refusedWith = (body: JsonValue) =>
+        Effect.provide(
+          client().start(TASK_ID, { idempotencyKey: "press-1" }),
+          fakeCloudApi({
+            [`POST /api/plans/${TASK_ID}/agents`]: {
+              answer: () => body,
+              status: HTTP_STATUS.CONFLICT,
+            },
+          }).layer,
+        );
+
+      const named = yield* refusedWith({
+        error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
+        localAgentRefusal: LOCAL_AGENT_REFUSAL.NOT_OWNER,
+        refusedDevice: { name: "Studio", owner: "Charles" },
+      });
+      assert.deepEqual(named, {
+        failure: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+        localAgentRefusal: LOCAL_AGENT_REFUSAL.NOT_OWNER,
+        refusedDevice: { name: "Studio", owner: "Charles" },
+      });
+
+      // A reason a build from before this one has no word for fails its data's decode, as one from a newer service does here.
+      const unread = yield* refusedWith({
+        error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
+        localAgentRefusal: "a-reason-from-a-newer-service",
+        refusedDevice: { name: "Studio" },
+      });
+      assert.deepEqual(unread, { failure: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED });
+    }),
+);
+
+it.effect(
   "a message refused at its plan's limit carries the reset the service named, and one with none is the bare refusal",
   () =>
     Effect.gen(function* () {

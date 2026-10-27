@@ -805,7 +805,7 @@ export type TaskAgentRefusal = typeof taskAgentRefusalSchema.Type;
 export const taskStartAnswerSchema = EffectSchema.Struct({
   plan: taskSchema,
   agent: EffectSchema.optionalKey(codingAgentSummarySchema),
-  /** Why the agent runs in the cloud on a task that runs on a device, in plain words (`codingAgentAnswerSchema`'s). */
+  /** Retired, and kept optional so every answer decodes (`codingAgentAnswerSchema`'s). */
   notice: EffectSchema.optionalKey(EffectSchema.String),
   agentRefusal: EffectSchema.optionalKey(taskAgentRefusalSchema),
   txid: EffectSchema.optionalKey(taskTxidSchema),

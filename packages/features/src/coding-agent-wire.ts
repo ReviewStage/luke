@@ -227,11 +227,26 @@ export const LOCAL_AGENT_REFUSAL = {
   CODEX: "codex",
   /** The model runs on no native harness here, so no runner would launch on the Mac. */
   NO_HARNESS: "no-harness",
+  /** The device is another member's, and only its owner starts agents on it; the refusal carries the device and its owner (`refusedDeviceSchema`) where the service named them. */
+  NOT_OWNER: "not-owner",
 } as const;
 
 export type LocalAgentRefusal = (typeof LOCAL_AGENT_REFUSAL)[keyof typeof LOCAL_AGENT_REFUSAL];
 
+/**
+ * Note that a build from before `not-owner` cannot read it, and reads the
+ * whole refusal as one that names no reason, so it still says a device would
+ * not take the agent, and never that the service did not answer.
+ */
 export const localAgentRefusalSchema = EffectSchema.Literals(Object.values(LOCAL_AGENT_REFUSAL));
+
+/** The device a refused Start named, by the name it registered with, and its owner's name where the service knew it. */
+export const refusedDeviceSchema = EffectSchema.Struct({
+  name: EffectSchema.String,
+  owner: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type RefusedDevice = typeof refusedDeviceSchema.Type;
 
 export const MAC_PRESENCE = {
   /** How lately a Mac must have beaten to count as there: one beat, and room for the next to arrive. */
@@ -858,10 +873,11 @@ export const codingAgentAnswerSchema = EffectSchema.Struct({
   agent: codingAgentSummarySchema,
   txid: EffectSchema.optionalKey(codingAgentTxidSchema),
   /**
-   * Why a Start runs its agent in the cloud on a task that runs on a device,
-   * in plain words, which the agent's transcript says too: the device is a
-   * teammate's, and only its owner's agents run on it. Absent otherwise, and
-   * from a service older than it.
+   * Retired: a service no longer sends it, since a Start on a teammate's
+   * device is refused (`LOCAL_AGENT_REFUSAL.NOT_OWNER`) and never runs in the
+   * cloud on its own. Kept optional so a build that still reads it decodes
+   * every answer, and so one from before the refusal reads an answer a
+   * service older than this still sends.
    */
   notice: EffectSchema.optionalKey(EffectSchema.String),
 });

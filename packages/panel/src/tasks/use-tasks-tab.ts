@@ -2695,7 +2695,6 @@ export function useTasksTab(input: {
         attachments: handed.attachments,
       });
       mainTabs.onShow(planId, { agent: started.agent.id });
-      if (started.notice !== undefined) agents.onNotice(started.notice);
       return;
     }
     const refused = agentStartFailureNote(

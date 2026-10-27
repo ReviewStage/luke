@@ -12,6 +12,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
+  LOCAL_AGENT_REFUSAL,
   OPERATOR_QUIET_REPLY,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
@@ -735,6 +736,31 @@ test("a Start refused for a missing credential says in one sentence which harnes
         reason: FAILURE_REASON.OTHER,
         text: "Luke's key no longer runs agents. Continue in a new one.",
       },
+    ],
+  );
+});
+
+test("a Start another member's device refused names the device and its owner and offers no way out the reader cannot take, and says the same, unnamed, where the service named neither", () => {
+  const refused = (refusedDevice?: { name: string; owner?: string }) =>
+    startFailureNote(
+      {
+        failure: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+        localAgentRefusal: LOCAL_AGENT_REFUSAL.NOT_OWNER,
+        ...(refusedDevice === undefined ? undefined : { refusedDevice }),
+      },
+      null,
+    ).text;
+
+  assert.deepEqual(
+    [
+      refused({ name: "Charles's MacBook Pro", owner: "Charles" }),
+      refused({ name: "Studio" }),
+      refused(),
+    ],
+    [
+      "This task runs on Charles's MacBook Pro. Only Charles can start agents on it.",
+      "This task runs on Studio. Only its owner can start agents on it.",
+      "This task runs on another member's device. Only its owner can start agents on it.",
     ],
   );
 });
