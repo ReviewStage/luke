@@ -37,6 +37,7 @@ import { useCoarsePointer } from "../coarse-pointer.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { lazyRoute } from "../lazy-route.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
+import { PANEL_PAGE, PANEL_REGION, type PanelPage } from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -108,6 +109,24 @@ const SETTINGS_ROUTE = lazyRoute(() =>
 const AUTOMATIONS_ROUTE = lazyRoute(() =>
   import("./automations-page.js").then((loaded) => loaded.AutomationsPage),
 );
+
+/** The page the main column shows, as its timings name it: the first of the shell's places that stands, as the column draws them. */
+function pageOf(open: {
+  inbox: boolean;
+  agent: boolean;
+  person: boolean;
+  board: boolean;
+  admin: boolean;
+  automations: boolean;
+}): PanelPage {
+  if (open.inbox) return PANEL_PAGE.INBOX;
+  if (open.agent) return PANEL_PAGE.AGENT;
+  if (open.person) return PANEL_PAGE.PERSON;
+  if (open.board) return PANEL_PAGE.TASKS;
+  if (open.admin) return PANEL_PAGE.ADMIN;
+  if (open.automations) return PANEL_PAGE.AUTOMATIONS;
+  return PANEL_PAGE.TASK;
+}
 
 /** The Tasks page, its List and its Board, its own chunk, loaded the first time it is opened. */
 const TASKS_ROUTE = lazyRoute(() => import("./tasks-page.js").then((loaded) => loaded.TasksPage));
@@ -917,7 +936,19 @@ export function DesktopShell({
         room={room}
       />
       {room === SHELL_ROOM.NARROW ? <DrawerScrim open={drawerOver} /> : null}
-      <main className="desktop-main" inert={drawerOver}>
+      <main
+        className="desktop-main"
+        inert={drawerOver}
+        data-span-region={PANEL_REGION.MAIN}
+        data-span-page={pageOf({
+          inbox: inboxOpen,
+          agent: pageAgent !== undefined,
+          person: pagePerson !== undefined,
+          board: boardOpen,
+          admin: adminOpen,
+          automations: automationsOpen,
+        })}
+      >
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>

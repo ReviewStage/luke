@@ -96,6 +96,7 @@ import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { PANEL_REGION } from "../panel-spans.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
@@ -2994,6 +2995,7 @@ function PanelFrame({
         className="side-panel relative flex min-w-0 max-w-side-panel flex-none flex-col border-l border-border bg-well"
         aria-label={label}
         inert={leaving !== PANEL_LEAVING.NONE}
+        data-span-region={PANEL_REGION.SIDE_PANEL}
         data-full-screen={String(panel.fullScreen)}
         data-pane-switch={switched ? "" : undefined}
         data-leaving={leaving === PANEL_LEAVING.NONE ? undefined : leaving}

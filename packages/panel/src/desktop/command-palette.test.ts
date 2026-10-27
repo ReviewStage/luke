@@ -3192,7 +3192,11 @@ test("a key pressed in the search field is timed under ⌘K's own keystroke span
       {
         name: PANEL_SPAN.KEYSTROKE_COMMAND_PALETTE,
         waited: 184,
-        measured: { "keystroke.input_delay_ms": 4, "keystroke.processing_ms": 146 },
+        measured: {
+          "keystroke.input_delay_ms": 4,
+          "keystroke.processing_ms": 146,
+          "panel.region": "dialog",
+        },
       },
     ],
   );
