@@ -721,8 +721,15 @@ export function DesktopShell({
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const channelPlace = useChannelPlace();
   useWindowTitle(titleSubject(tab, tasks, shownTask, channelsOn));
-  // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
-  const looks = useTaskLooks(shownTask, tasks.me);
+  // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen,
+  // and what its agents did with it, which its row in the list names.
+  const looks = useTaskLooks(
+    shownTask,
+    tasks.me,
+    shownTask === undefined
+      ? undefined
+      : tasks.tasks.find((row) => row.id === shownTask.id)?.agents,
+  );
   // An agent with no plan is looked at as its page is on screen, as the plan is.
   const { agentId: pageAgentId } = tasks.agentView;
   useAgentLook(
