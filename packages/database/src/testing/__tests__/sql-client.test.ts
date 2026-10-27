@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, type TestContext, test, vi } from "vitest";
-import { openMigratedPglite } from "../sql-client.js";
+import { MIGRATED_PGLITE_ENVIRONMENT, openMigratedPglite } from "../sql-client.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 /** The first opening migrates, about 4 s on an idle machine, so the test is held to the config's hook bar. */
@@ -87,7 +88,8 @@ for (const method of Object.values(FAILING_METHOD)) {
   test(
     `a first opening whose ${method} fails is closed, and a later opening migrates afresh`,
     async (t) => {
-      // Note that we load a module of the test's own, so no earlier opening has dumped already.
+      // Note that we load a module of the test's own, and hide the run's dump, so no earlier opening has dumped already.
+      vi.stubEnv(MIGRATED_PGLITE_ENVIRONMENT.DUMP, undefined);
       vi.resetModules();
       const fresh = await import("../sql-client.js");
       const failed = failingOnce(method);

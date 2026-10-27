@@ -10,6 +10,8 @@ export default defineConfig({
     name: "database",
     include: ["src/**/*.test.ts"],
     exclude: [...configDefaults.exclude, ...POSTGRES_ONLY],
+    // One migrated PGlite per run, which every file's opening loads.
+    globalSetup: ["src/testing/migrated-pglite-setup.ts"],
     // A store test's `it.layer(getTestDB())` hook opens the file's one PGlite
     // and runs every migration before its first test, about 4 s on an idle
     // machine; vitest's 10 s hook default was missed under the full suite's
