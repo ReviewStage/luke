@@ -461,8 +461,9 @@ export function AttachmentViewer({
   const video = attachmentView(file) === ATTACHMENT_VIEW.VIDEO;
   // A phone walks the files from its ⋯ and the arrow keys, with no room beside the card for the arrows or under it for the strip.
   const walking = !phone && files.length > 1;
-  // A picture or a video takes a card of its own shape, so no ground stands beside it; a phone's fills the screen as its header does.
-  const hug = !phone && (image || video);
+  // A picture or a video takes a card of its own shape, so no ground stands beside it; a phone's fills the screen as its header does,
+  // and a picture opened at its own pixels, a diagram to be moved about in, fills the room it is moved in.
+  const hug = !phone && (video || (image && opening === IMAGE_OPENING.FITTED));
   // The arrows walk the message's files, and a picture's zoom keys zoom it;
   // a key's own default, a copy of the lines selected among them, is left alone.
   const walkKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
