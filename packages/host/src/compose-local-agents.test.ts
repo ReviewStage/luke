@@ -43,6 +43,8 @@ const LINE_ID = "0e9b7c1d-5a2f-4e63-8b40-7c1d2e3f4a5b";
 const USER_ID = "user-fixture";
 const LAYOUT = deviceAgentLayout(HOME, AGENT_ID);
 const SECRET_ENV = { LUKE_RUNNER_TOKEN: "runner-secret" };
+/** The runner's own start in its VM, apart from a command the follower runs there (`VM_EXEC`). */
+const VM_RUNNER = "/opt/luke/vm-runner";
 const IDENTITY = { name: "Ada Lovelace", email: "7001+ada@users.noreply.github.com" };
 
 const LAUNCH: DeviceAgentClaimedLine = {
@@ -93,7 +95,8 @@ const followingDevice = (
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
       if (program === "/bin/bash") return { exitCode: 0 };
       // Note that the runner in the VM ends by itself a second in, so the test's end has no runner to wait out.
-      if (program === VM_EXEC) return { exitCode: 0, after: Duration.seconds(1) };
+      if (program === VM_RUNNER) return { exitCode: 0, after: Duration.seconds(1) };
+      if (program === VM_EXEC) return { exitCode: 0 };
       return undefined;
     });
     const registered: DeviceAgentDevice[] = [];
@@ -152,7 +155,7 @@ const followingDevice = (
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash" })),
       Layer.succeed(Reporter, { report: (line) => reported.push(line) }),
       Layer.succeed(LocalAgentPlatform, {
-        launch: ({ env }) => ({ command: VM_EXEC, args: [], env }),
+        launch: ({ env }) => ({ command: VM_RUNNER, args: [], env }),
         sandbox: vm.sandbox,
         formerlyDirect: options.formerlyDirect ?? true,
         runnerBundle: "/opt/luke/agent-runner.mjs",
@@ -194,7 +197,7 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         const { registered, spawned, asked, tokens } = yield* followingDevice(() => Effect.void);
-        yield* until(() => spawned.some((each) => each.program === VM_EXEC));
+        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
 
         // Note that no login of the device's reaches a VM, so the service pays with the sign-in saved in Luke, or refuses.
         assert.deepEqual(
@@ -215,7 +218,7 @@ it.effect(
         );
         assert.deepEqual(asked, [AGENT_ID]);
         assert.deepEqual(tokens, ["ghs_fixture_1"]);
-        const runner = spawned.find((each) => each.program === VM_EXEC);
+        const runner = spawned.find((each) => each.program === VM_RUNNER);
         assert.equal(runner?.env?.LUKE_RUNNER_TOKEN, SECRET_ENV.LUKE_RUNNER_TOKEN);
         assert.equal(
           Object.keys(runner?.env ?? {}).some(
@@ -224,14 +227,12 @@ it.effect(
           false,
           "the runner reaches GitHub through its VM's bindings alone",
         );
-        // Note that the identity the launch carries is set in the agent's repository, as a cloud checkout sets it, before its runner starts.
-        const identity = spawned.findIndex(
-          (each) => each.program === "/bin/bash" && each.args[1] === CHECKOUT_IDENTITY_SCRIPT,
-        );
-        assert.equal(spawned[identity]?.cwd, LAYOUT.checkoutPath);
+        // Note that the identity the launch carries is set in the agent's repository, in its VM, as a cloud checkout sets it, before its runner starts.
+        const identity = spawned.findIndex((each) => each.args.includes(CHECKOUT_IDENTITY_SCRIPT));
+        assert.equal(spawned[identity]?.program, VM_EXEC, "the identity is set inside the VM");
         assert.equal(spawned[identity]?.env?.LUKE_GIT_NAME, IDENTITY.name);
         assert.equal(spawned[identity]?.env?.LUKE_GIT_EMAIL, IDENTITY.email);
-        assert.ok(identity < spawned.findIndex((each) => each.program === VM_EXEC));
+        assert.ok(identity < spawned.findIndex((each) => each.program === VM_RUNNER));
         yield* TestClock.adjust(Duration.seconds(1));
         yield* until(() => runner?.ended === "exited");
       }),
@@ -254,11 +255,11 @@ it.effect(
           [DEVICE_SETUP.PREPARING],
         );
         assert.equal(
-          spawned.some((each) => each.program === VM_EXEC),
+          spawned.some((each) => each.program === VM_RUNNER),
           false,
         );
         yield* TestClock.adjust(Duration.minutes(3));
-        yield* until(() => spawned.some((each) => each.program === VM_EXEC));
+        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
 
         assert.deepEqual(
           registered.map((each) => each.setup),
@@ -283,7 +284,7 @@ it.effect(
         yield* TestClock.adjust(Duration.seconds(5));
         yield* until(() => registered.length > 0);
         yield* TestClock.adjust(Duration.minutes(3));
-        yield* until(() => spawned.some((each) => each.program === VM_EXEC));
+        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
 
         assert.deepEqual(
           registered.map((each) => each.setup),
@@ -317,7 +318,7 @@ it.effect(
         );
         assert.ok(beats.length >= 4, `beats ${beats.join(",")}`);
         assert.equal(
-          spawned.some((each) => each.program === VM_EXEC),
+          spawned.some((each) => each.program === VM_RUNNER),
           false,
         );
         assert.deepEqual(reported, ["the local agents' smolvm or sandbox image could not be had"]);
@@ -339,7 +340,7 @@ it.effect(
           { id: LINE_ID, exitCode: 1, refusal: DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY },
         ]);
         assert.equal(
-          spawned.some((each) => each.program === VM_EXEC),
+          spawned.some((each) => each.program === VM_RUNNER),
           false,
         );
         assert.deepEqual(reported, [
@@ -358,7 +359,7 @@ it.effect(
           madeBare: true,
           formerlyDirect: false,
         });
-        yield* until(() => spawned.some((each) => each.program === VM_EXEC));
+        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
 
         assert.equal(settled.length, 0);
         yield* TestClock.adjust(Duration.seconds(1));
