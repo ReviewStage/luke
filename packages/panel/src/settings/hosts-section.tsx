@@ -46,7 +46,7 @@ import { Base64Url, Hex } from "effect/encoding";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
-import { type PresenceBook, useDevicePresence } from "../device-presence.js";
+import { type PresenceBook, presenceUnchecked, useDevicePresence } from "../device-presence.js";
 import { useExperiment } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
 
@@ -140,7 +140,7 @@ async function mintedInstallToken(): Promise<{ installToken: string; tokenHash: 
 /** A host's line under its name: online, or when it was last seen. */
 function seenWords(host: Host, book: PresenceBook, now: number): string {
   const beatAt = book.beats.get(host.id);
-  const standing = deviceStanding(host.seenAt, beatAt, now, book.failed);
+  const standing = deviceStanding(host.seenAt, beatAt, now, presenceUnchecked(book, host.id));
   if (standing === DEVICE_STANDING.ONLINE) return WORDS.ONLINE;
   const lastSeen = agoText(Math.max(host.seenAt, beatAt ?? 0), now);
   return standing === DEVICE_STANDING.OFFLINE

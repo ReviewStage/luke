@@ -31,14 +31,21 @@ import { rendererRuntime } from "./renderer-runtime.js";
 /** How often the beats of the devices drawn are read: under the forty-five seconds a beat counts for, less a beat's own fifteen. */
 const PRESENCE_EVERY = Duration.seconds(20);
 
-/** Where the presence reads stand: the beats the last answered, by device, and whether the window cannot yet say, because none has answered or the latest failed. */
+/** Where the presence reads stand: the beats the last round answered, by device, and the devices whose batch of that round failed, which the window cannot say of. */
 export interface PresenceBook {
   readonly beats: ReadonlyMap<string, number>;
-  readonly failed: boolean;
+  readonly unchecked: ReadonlySet<string>;
+  /** False until a round has answered at all. */
+  readonly settled: boolean;
 }
 
-/** Nothing known yet: before a read answers, and for a surface that names no device, so a stale beat reads as unable to check rather than as offline. */
-const NO_BOOK: PresenceBook = { beats: new Map(), failed: true };
+/** Nothing known yet: before a round answers, so a stale beat reads as unable to check rather than as offline. */
+const NO_BOOK: PresenceBook = { beats: new Map(), unchecked: new Set(), settled: false };
+
+/** Whether the window cannot say if `deviceId` is there: no round has answered, the device names none, or its own batch failed. */
+export function presenceUnchecked(book: PresenceBook, deviceId: string | undefined): boolean {
+  return !book.settled || deviceId === undefined || book.unchecked.has(deviceId);
+}
 
 /** How many surfaces draw each device, by its id: the devices the shared read names. */
 type Watched = ReadonlyMap<string, number>;
@@ -56,10 +63,10 @@ function watchedWith(watched: Watched, ids: readonly string[], step: 1 | -1): Wa
   return next;
 }
 
-/** What one round of reads answered: the beats of the devices that answered, and whether any batch did not. */
+/** What one batch answered: the beats of the devices it named, or the devices it named where it failed. */
 export interface PresenceRead {
   readonly devices: DevicePresenceAnswer["devices"];
-  readonly failed: boolean;
+  readonly failedIds: readonly string[];
 }
 
 /** One batch of at most `DEVICE_PRESENCE_MAX_IDS` ids: what the service answered, or a failure where it did not. */
@@ -68,10 +75,10 @@ function batchRead(ids: readonly string[]): Effect.Effect<PresenceRead> {
     Effect.map(
       (answer): PresenceRead =>
         "failure" in answer
-          ? { devices: [], failed: true }
-          : { devices: answer.devices, failed: false },
+          ? { devices: [], failedIds: ids }
+          : { devices: answer.devices, failedIds: [] },
     ),
-    Effect.orElseSucceed((): PresenceRead => ({ devices: [], failed: true })),
+    Effect.orElseSucceed((): PresenceRead => ({ devices: [], failedIds: ids })),
   );
 }
 
@@ -84,16 +91,20 @@ function beatsRead(ids: readonly string[]): Effect.Effect<PresenceRead> {
   return Effect.forEach(batches, batchRead, { concurrency: "unbounded" }).pipe(
     Effect.map((reads) => ({
       devices: reads.flatMap((read) => read.devices),
-      failed: reads.some((read) => read.failed),
+      failedIds: reads.flatMap((read) => read.failedIds),
     })),
   );
 }
 
-/** The book after a round: the beats it answered, over the held ones where a batch failed, and whether any did. */
+/** The book after a round: the beats it answered, the held beats kept only for the devices whose batch failed, and those devices marked unchecked. */
 export function presenceAfter(book: PresenceBook, read: PresenceRead): PresenceBook {
-  const beats = new Map(read.failed ? book.beats : []);
+  const beats = new Map<string, number>();
+  for (const id of read.failedIds) {
+    const held = book.beats.get(id);
+    if (held !== undefined) beats.set(id, held);
+  }
   for (const each of read.devices) beats.set(each.deviceId, each.seenAt);
-  return { beats, failed: read.failed };
+  return { beats, unchecked: new Set(read.failedIds), settled: true };
 }
 
 /** The shared read, run only while a surface subscribes: again whenever the devices drawn change, and every `PRESENCE_EVERY` between. */

@@ -7,7 +7,7 @@ import {
 import { EXPERIMENT } from "@luke/settings";
 import { Badge, STATUS_TONE, useSecond, VisuallyHidden } from "@luke/ui";
 import { LaptopIcon } from "@luke/ui/icons";
-import { useDeviceBeat } from "../device-presence.js";
+import { presenceUnchecked, useDeviceBeat } from "../device-presence.js";
 import { useExperiment } from "../use-app-state.js";
 
 /**
@@ -58,7 +58,7 @@ function MacBadge({ mac }: { mac: NonNullable<CodingAgentSummary["mac"]> }): Rea
     mac.seenAt,
     mac.deviceId === undefined ? undefined : presence.beats.get(mac.deviceId),
     useSecond(),
-    presence.failed,
+    presenceUnchecked(presence, mac.deviceId),
   );
   return (
     <Badge

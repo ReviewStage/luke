@@ -7,7 +7,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { useDevicePresence } from "./device-presence.js";
+import { presenceUnchecked, useDevicePresence } from "./device-presence.js";
 import { fakeActPort } from "./testing/app-bridge.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 
@@ -42,6 +42,38 @@ function Beats(): React.JSX.Element {
   const book = useDevicePresence(IDS);
   return createElement("p", null, String(book.beats.size));
 }
+
+function Checked(): React.JSX.Element {
+  const book = useDevicePresence(IDS);
+  const first = IDS[0];
+  const last = IDS[IDS.length - 1];
+  return createElement(
+    "p",
+    null,
+    `${presenceUnchecked(book, first)}/${presenceUnchecked(book, last)}`,
+  );
+}
+
+test("a batch that fails leaves only its own devices unchecked", async () => {
+  fakeActPort({
+    [ACT_KIND.HOSTS_PRESENCE]: (payload: { ids: readonly string[] }) =>
+      payload.ids.includes(IDS[IDS.length - 1] ?? "")
+        ? Promise.reject(new Error("the service did not answer"))
+        : Promise.resolve({ devices: payload.ids.map((deviceId) => ({ deviceId, seenAt: 1 })) }),
+  });
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(onRegistry(registry, createElement(Checked))));
+  await act(async () => {
+    for (let tick = 0; tick < 20; tick += 1) await new Promise((done) => setTimeout(done, 0));
+  });
+
+  assert.equal(container.textContent, "false/true");
+});
 
 test("more devices than one read takes are all read, in batches, and every beat lands", async () => {
   const sizes: number[] = [];

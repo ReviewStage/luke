@@ -20,7 +20,12 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import { Schema } from "effect";
 import { useMemo } from "react";
-import { type PresenceBook, useDeviceBeat, useDevicePresence } from "../device-presence.js";
+import {
+  type PresenceBook,
+  presenceUnchecked,
+  useDeviceBeat,
+  useDevicePresence,
+} from "../device-presence.js";
 import { ExperimentTag } from "../experiment-marks.js";
 import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
@@ -77,7 +82,12 @@ function DeviceGlyph({ kind }: { kind: DeviceKind | undefined }): React.JSX.Elem
 /** Where a device offered stands at `now`; one a service before beats said nothing of is online, as it listed only those. */
 function offerStanding(device: MacOffer, book: PresenceBook, now: number): DeviceStanding {
   if (device.seenAt === undefined) return DEVICE_STANDING.ONLINE;
-  return deviceStanding(device.seenAt, book.beats.get(device.deviceId), now, book.failed);
+  return deviceStanding(
+    device.seenAt,
+    book.beats.get(device.deviceId),
+    now,
+    presenceUnchecked(book, device.deviceId),
+  );
 }
 
 /** What a menu row says of a device standing as it does: online, or unknown, which is not offered as away, and an offline one muted, unpicked. */
@@ -183,7 +193,7 @@ function standingWords(runsOn: TaskRunsOn | undefined, book: PresenceBook, now: 
     runsOn.device.seenAt,
     runsOn.deviceId === undefined ? undefined : book.beats.get(runsOn.deviceId),
     now,
-    book.failed,
+    presenceUnchecked(book, runsOn.deviceId),
   );
   const words = {
     [DEVICE_STANDING.ONLINE]: RUNS_ON_WORDS.ONLINE,
