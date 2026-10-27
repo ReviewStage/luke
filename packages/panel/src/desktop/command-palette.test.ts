@@ -641,19 +641,6 @@ test("⌘K says a place it opens as Go to the place, and the menus' own words st
   assert.ok(!rows().includes("Inbox"), "the place is never said bare, as a verb would be");
 });
 
-test("with Channels on, ⌘K says the Inbox's place as Go to channels, as the menus name what it shows", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  const places = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(places);
-  act(() => places.render(createElement(OffersPlaces)));
-  await paletteUnderState(tasksControl());
-  chooseFilter("Commands");
-
-  assert.ok(rows().includes("Go to channels"));
-  assert.ok(!rows().includes("Go to inbox"));
-  handState({});
-});
-
 test("the field asks to search Luke under All, and the kind under its filter", () => {
   openPalette();
   assert.equal(field().placeholder, "Search Luke");

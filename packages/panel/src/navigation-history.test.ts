@@ -33,6 +33,7 @@ import { SHELL_ROOM } from "./shell-room.js";
 import {
   type ChannelPlaceControl,
   chooseChannel,
+  leaveChannel,
   listChannelWorkspace,
   openChannelThread,
   useArchivedChannels,
@@ -1209,6 +1210,7 @@ test("with Channels on, a channel chosen and a thread opened in it are each a st
       }),
   });
   listChannelWorkspace(workspace.id);
+  chooseChannel(general.id);
   const place = await channelsRead(workspace.id);
   const item = { itemId: "item-1", taskId: TASK_ID };
   const onInbox = (chosen: typeof item | undefined) => {
@@ -1249,6 +1251,46 @@ test("with Channels on, a channel chosen and a thread opened in it are each a st
   );
   act(() => window.history().onBack());
   assert.equal(place().channelId, general.id);
+  handState({});
+});
+
+test("with Channels on, a channel chosen from the Inbox is a step of its own, which Back leaves for the Inbox", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  const workspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const general = { id: "a1000001-0000-4000-8000-000000000001", name: "general" };
+  fakeActPort({
+    [ACT_KIND.CHANNELS_LIST]: () =>
+      Promise.resolve({
+        channels: [{ ...general, purpose: "", project: false, createdAt: 1, waiting: 0 }],
+      }),
+  });
+  listChannelWorkspace(workspace.id);
+  leaveChannel();
+  const place = await channelsRead(workspace.id);
+  const base = tasksControl();
+  const onInbox = tasksControl({
+    workspace,
+    workspaces: [workspace],
+    inboxView: { ...base.inboxView, open: true, onOpen: leaveChannel, onChoose: () => undefined },
+  });
+  const window = mount(onInbox, memoryHistory(), stepTitleOf);
+  await settle();
+  press();
+  act(() => chooseChannel(general.id));
+
+  assert.deepEqual(
+    window.history().steps.back.map((step) => step.title?.label),
+    ["Inbox"],
+    "the Inbox stands behind the channel",
+  );
+  act(() => window.history().onBack());
+  assert.equal(place().channelId, undefined, "Back shows the Inbox again");
   handState({});
 });
 

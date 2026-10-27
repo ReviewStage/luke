@@ -80,7 +80,12 @@ import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { type ChannelPlaceControl, chooseChannel, useChannelPlace } from "../tasks/use-channels.js";
+import {
+  type ChannelPlaceControl,
+  chooseChannel,
+  leaveChannel,
+  useChannelPlace,
+} from "../tasks/use-channels.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
 import {
@@ -541,6 +546,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
+  leaveChannel();
   document.body.innerHTML = "";
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -640,7 +646,7 @@ function mount(
     readerKnown?: boolean;
     /** Whether the window's toasts stand beside the Inbox, where the test presses one's action. */
     toasts?: boolean;
-    /** Whether the side panel is the chosen thread's, as the tasks tab holds it beside a channel's stream. */
+    /** Whether the page shows #general's stream, chosen as the sidebar's row chooses it, the side panel the chosen thread's, as the tasks tab holds it beside a channel's stream. */
     channels?: boolean;
   } = {},
 ) {
@@ -756,6 +762,7 @@ function mount(
       ? createElement(Page, { sidePanel: panel })
       : createElement(Panelled, { at: room });
   const page = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
+  if (channels) chooseChannel(GENERAL.id);
   act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
 }
@@ -9674,7 +9681,7 @@ test("K and J open the thread above and below the one open, through the threads 
   assert.ok(page.querySelector(".channel-stream"), "the stream stands");
 });
 
-test("on a phone, Back from a thread opened in a channel's stream goes back to the stream, never to the list of channels", async () => {
+test("on a phone, Back from a thread opened in a channel's stream goes back to the stream", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
   window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
@@ -9691,7 +9698,6 @@ test("on a phone, Back from a thread opened in a channel's stream goes back to t
   act(() => runAppCommand(APP_COMMAND.BACK));
   await settle();
   assert.equal(stream()?.hidden, false, "Back gave the stream its place again");
-  assert.equal(page.querySelector(".channel-list"), null, "the list of channels stands nowhere");
 });
 
 test("on a phone, a thread whose agent's inbox could not be read says so in the stream's place, under the way back to the stream", async () => {
@@ -10007,27 +10013,6 @@ test("a thread posted from elsewhere lands in the stream and the sidebar's count
   await settle();
   assert.deepEqual(postTitles(page), [THRESHOLD.title, EXPIRY.title]);
   assert.equal(generalRow(), "general1 needs you");
-});
-
-test("with Channels on, ⌥↓ and ⌥↑ walk the sidebar's channels, wrapping round", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  listedWorkspace = ACME;
-  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
-  const { page } = mount([], { channels: true, withSidebar: true });
-  await settle();
-  const shown = () => page.querySelector(".channel-stream")?.getAttribute("aria-label");
-  assert.equal(shown(), "#general");
-
-  act(() => runAppCommand(APP_COMMAND.NEXT_TASK));
-  await settle();
-  assert.equal(shown(), "#app");
-  act(() => runAppCommand(APP_COMMAND.NEXT_TASK));
-  await settle();
-  assert.equal(shown(), "#general", "down from the last wraps to the first");
-  act(() => runAppCommand(APP_COMMAND.PREVIOUS_TASK));
-  await settle();
-  assert.equal(shown(), "#app", "up from the first wraps to the last");
-  act(() => channelPlaceNow?.onChoose(GENERAL.id));
 });
 
 /** Types `words` into a field as a reader would. */

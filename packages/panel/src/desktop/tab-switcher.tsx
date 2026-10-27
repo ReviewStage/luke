@@ -32,9 +32,9 @@
  * names they go by now and a person's card by the name the workspace's
  * members give them, each falling back to what was kept as it stood, the
  * column's agent wearing its glyph as its tab drew it (`switcher-looks.ts`),
- * at work or failed as everywhere. With Channels on, the Inbox's card names
- * what its place shows, wearing the channel's glyph: the channel, "#general",
- * or "Channels" where a phone stands its list of channels.
+ * at work or failed as everywhere. With Channels on and a channel shown in
+ * the Inbox's place, its card names the channel, wearing the channel's
+ * glyph, "#general"; with none, it is the Inbox's.
  * Its preview is a still of the whole work area, taken once the window
  * settles on the screen and again as ⌃Tab leaves it: main takes a downscaled
  * picture of that part of the window (`window.capture`). A still is a picture
@@ -48,7 +48,7 @@ import { useAtomSet } from "@effect/atom-react";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND, commandForKey, type KeyedCommand } from "@luke/settings/shortcuts";
 import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
@@ -76,15 +76,14 @@ import { MemberDirectory, useMemberDirectory, usePerson } from "../member-direct
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { usePhoneRoom } from "../stage-room.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import { useChannelPlace, useChannels } from "../tasks/use-channels.js";
+import { useChannelPlace, useChannelStreaming, useChannels } from "../tasks/use-channels.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCapability, useExperiment } from "../use-app-state.js";
+import { useCapability } from "../use-app-state.js";
 import { type HeldLook, heldLook, LOOK_STRIP } from "./switcher-looks.js";
 import {
   forgotten,
@@ -136,7 +135,7 @@ const PLACE_LOOK = {
 /** What a task's card is called where the window lists no name for it. */
 const TASK_WORDS = "Task";
 
-/** What a phone's list of channels is called, as its bar names it (`channel-list.tsx`). */
+/** What a channel's stream is called before the window has read the channel it shows. */
 const CHANNELS_WORDS = "Channels";
 
 /** What a person's page is called where the name is not known. */
@@ -272,22 +271,18 @@ function cardLook(
 }
 
 /**
- * What the Inbox's place shows with Channels on, which its card goes back
- * to: a phone's list of channels while it is asked for, as the place stands
- * it (`desktop-inbox.tsx`), and a channel's stream otherwise, or Channels
- * before the window has read its channels; none with Channels off. Note that it
- * reads the channels the window holds rather than reading them again, as
- * the phone's bar does.
+ * What the Inbox's place shows with a channel chosen, which its card goes
+ * back to: the channel's stream, or Channels before the window has read its
+ * channels; none while the place is the Inbox. Note that it reads the
+ * channels the window holds rather than reading them again.
  */
 function useChannelsLook(tasks: TasksControl): KindLook | undefined {
-  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
-  const phone = usePhoneRoom();
-  const { channels } = useChannels(channelsOn ? tasks.workspace?.id : undefined, false);
+  const streaming = useChannelStreaming();
+  const { channels } = useChannels(streaming ? tasks.workspace?.id : undefined, false);
   const { channelId } = useChannelPlace();
-  if (!channelsOn) return undefined;
+  if (!streaming) return undefined;
   const shown = channelShown(channels, channelId);
-  // Note that until a channel names it, as before the channels are read, the place is Channels, never the Inbox it stands in for.
-  return !(phone && tasks.inboxView.listed) && shown.kind === CHANNEL_SHOWN.CHANNEL
+  return shown.kind === CHANNEL_SHOWN.CHANNEL
     ? { icon: <GLYPH.CHANNEL />, label: shown.channel.name }
     : { icon: <GLYPH.CHANNEL />, label: CHANNELS_WORDS };
 }
@@ -472,8 +467,8 @@ export function TabSwitcher({
 
   // The window's stops follow where it stands, each render, and what Back's list calls the stop standing.
   const now = standingOf(tab, tasks);
-  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
-  const title = stepTitle(tab, tasks, false, channelsOn);
+  const streaming = useChannelStreaming();
+  const title = stepTitle(tab, tasks, false, streaming);
   useEffect(() => {
     const before = shown.current;
     shown.current = now;

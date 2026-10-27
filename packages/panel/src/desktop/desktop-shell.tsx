@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Task } from "@luke/features/task-wire";
 import { readingWords } from "@luke/features/words";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -44,19 +44,14 @@ import { SignInGate } from "../sign-in-gate.js";
 import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
-import { useChannelPlace } from "../tasks/use-channels.js";
+import { useChannelPlace, useChannelStreaming } from "../tasks/use-channels.js";
 import { useAgentLook, useTaskLooks } from "../tasks/use-task-looks.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import {
-  useAdminAccess,
-  useAdminAccessPending,
-  useCapability,
-  useExperiment,
-} from "../use-app-state.js";
+import { useAdminAccess, useAdminAccessPending, useCapability } from "../use-app-state.js";
 import { ADMIN_TITLE, adminFrame } from "./admin-frame.js";
 import {
   AutomationListSkeleton,
@@ -581,19 +576,19 @@ function usePlaceCommands(
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever task its item is
- * from, which is Channels while that experiment shows channels in its place; the Automations page in the listed workspace; the task on screen in its own workspace, or alone while that is not
+ * from, which is Channels while a channel's stream stands in its place; the Automations page in the listed workspace; the task on screen in its own workspace, or alone while that is not
  * read; else the listed workspace.
  */
 function titleSubject(
   tab: PanelTab,
   tasks: TasksControl,
   shownTask: Task | undefined,
-  channelsOn: boolean,
+  streaming: boolean,
 ): Parameters<typeof useWindowTitle>[0] {
   const { signedIn } = tasks;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
   if (tasks.inboxView.open) {
-    return { signedIn, subject: channelsOn ? "Channels" : "Inbox", workspace: tasks.workspace };
+    return { signedIn, subject: streaming ? "Channels" : "Inbox", workspace: tasks.workspace };
   }
   if (tasks.agentView.agentId !== undefined) {
     return { signedIn, subject: "Agent", workspace: tasks.workspace };
@@ -717,10 +712,10 @@ export function DesktopShell({
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
       : undefined;
-  // Note that with Channels on the sidebar lists channels and the Inbox's page is a channel's stream.
-  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  // Note that with a channel chosen the Inbox's place is that channel's stream.
+  const streaming = useChannelStreaming();
   const channelPlace = useChannelPlace();
-  useWindowTitle(titleSubject(tab, tasks, shownTask, channelsOn));
+  useWindowTitle(titleSubject(tab, tasks, shownTask, streaming));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen,
   // and what its agents did with it, which its row in the list names.
   const looks = useTaskLooks(
@@ -820,7 +815,6 @@ export function DesktopShell({
         {settingsBar ? (
           <MobileBar
             tasks={tasks}
-            channelsOn={channelsOn}
             sidebar={sidebar}
             onPressMore={keepOverlay}
             leave={() => onTabChange(PANEL_TAB.TASKS)}
@@ -869,11 +863,11 @@ export function DesktopShell({
   const pagePerson = tasks.personView.userId;
   const automationsOpen = tasks.automationsView.open;
   const boardOpen = tasks.boardView.open;
-  // Note that with Channels on the Inbox's chosen item stands only while its thread is open, so a bare stream has no panel to toggle, though a panel left open beside it keeps its way shut.
+  // Note that over a channel's stream the Inbox's chosen item stands only while its thread is open, so a bare stream has no panel to toggle, though a panel left open beside it keeps its way shut.
   const inboxChosen = tasks.inboxView.chosen;
   const inboxItemShown =
     inboxChosen !== undefined &&
-    (!channelsOn || channelPlace.threadId === inboxChosen.itemId || tasks.sidePanel.open);
+    (!streaming || channelPlace.threadId === inboxChosen.itemId || tasks.sidePanel.open);
   // The Admin place is an admin's alone; while the account's access is still read it stands as it does while its chunk loads.
   const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
   // A phone's task is headed by a row of its own, whose ⋯ stands for the panel's toggle (`task-pane-switcher.tsx`).
@@ -898,7 +892,7 @@ export function DesktopShell({
   const barShown = mobileBarShown(
     room,
     tasks,
-    channelsOn ? { threadId: channelPlace.threadId } : undefined,
+    streaming ? { threadId: channelPlace.threadId } : undefined,
   );
   return (
     <div
@@ -999,14 +993,7 @@ export function DesktopShell({
           </ChipCards>
         </MentionedAgents>
       </main>
-      {barShown ? (
-        <MobileBar
-          tasks={tasks}
-          channelsOn={channelsOn}
-          sidebar={sidebar}
-          onPressMore={keepOverlay}
-        />
-      ) : null}
+      {barShown ? <MobileBar tasks={tasks} sidebar={sidebar} onPressMore={keepOverlay} /> : null}
       {/* Folded, the sidebar's card floats in the corner it would have stood over. */}
       <StandingCallCardDock docked={sidebar.collapsed} surface={CALL_CARD_SURFACE.FLOATING} />
       {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;
