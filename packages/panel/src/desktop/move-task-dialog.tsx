@@ -223,7 +223,7 @@ function MoveTaskCard({
  * the task there: a task they own, its own workspace's GitHub
  * not reaching its repository and another of the account's reaching it
  * (`strandedTaskHome`). None for any other task. The task's banner
- * (`stranded-task-banner.tsx`), its sidebar row's mark, and its card read it.
+ * (`stranded-task-banner.tsx`) and its card read it.
  */
 export function strandedHome(
   tasks: Pick<TasksControl, "me" | "workspaces">,

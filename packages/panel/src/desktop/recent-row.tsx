@@ -13,7 +13,6 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
-import { strandedHome } from "./move-task-dialog.js";
 import { useTaskMenuItems } from "./task-actions.js";
 import { TaskRowStatus, taskCardOf } from "./task-card.js";
 
@@ -101,7 +100,7 @@ export function RecentRow({
                   {task.repository ?? "No repository"}
                 </OneLine>
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
-                <TaskRowStatus task={task} waiting={waiting} stranded={strandedHome(tasks, task)} />
+                <TaskRowStatus task={task} waiting={waiting} />
                 <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
               </span>
             )
