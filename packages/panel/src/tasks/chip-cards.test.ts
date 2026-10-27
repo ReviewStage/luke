@@ -125,8 +125,12 @@ const MEMBERS: readonly WorkspaceMember[] = [
 /** Another workspace of the account's, where Sam is a member rather than the owner, and which runs an automation of its own. */
 const BETA: Workspace = { ...ACME, id: "workspace-beta", name: "Beta", slug: "beta" };
 
+/** A member of Beta alone, who made its automation. */
+const PRIYA = "user-priya";
+
 const BETA_MEMBERS: readonly WorkspaceMember[] = [
   { userId: SAM, name: "Sam Okafor", email: "sam@example.com", role: WORKSPACE_ROLE.MEMBER },
+  { userId: PRIYA, name: "Priya Nair", email: "priya@example.com", role: WORKSPACE_ROLE.MEMBER },
 ];
 
 const TASK: TaskSummary = {
@@ -163,6 +167,7 @@ const AUDIT: AutomationSummary = {
   id: "3f0e6f5c-7d1a-4f6e-9a55-000000000002",
   workspaceId: BETA.id,
   name: "Weekly audit",
+  creatorId: PRIYA,
 };
 
 /** The time a channel's card counts back from: Oct 26, 2026, 3 PM, on the machine's own clock. */
@@ -786,6 +791,7 @@ test("an automation's chip hangs its card, who made it and when at its foot, the
 });
 
 test("a member's and an automation's chips under another workspace's link are read as that workspace holds them, not the words' own", async () => {
+  vi.useFakeTimers({ now: CHANNELS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(
     `Ask [Sam](https://tryluke.dev/beta/person/${SAM}) about [the audit](https://tryluke.dev/beta/automation/${AUDIT.id}).`,
   );
@@ -796,6 +802,7 @@ test("a member's and an automation's chips under another workspace's link are re
 
   assert.deepEqual([member.name, member.corner], ["Sam Okafor", "Member"]);
   assert.equal(audit.name, "Weekly audit");
+  assert.deepEqual(audit.detailWords, ["Created by Priya Nair · Oct 25"], "its maker is Beta's");
 });
 
 test("a member's chip under a link naming its workspace by id, as one with no slug is written, is read as that workspace holds them", async () => {

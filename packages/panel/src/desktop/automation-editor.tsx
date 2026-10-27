@@ -541,13 +541,18 @@ function OwnerRow({
   owners: readonly { value: AutomationScope; label: string }[];
   /** Whether the reading account made it, so Only you is drawn as its own; a new one is. */
   mine: boolean;
-  /** Who made it, whom its detail names among those who change it; You where the members do not name them. */
+  /** Who made it, whom its detail names among those who change it: You for the reader's own, its creator while the members do not name them. */
   maker: Actor;
   workspace: Workspace | undefined;
   onOwner: (owner: AutomationScope) => void;
 }): React.JSX.Element {
   const parse = optionValue(owners);
-  const changers = mine || maker.kind === ACTOR_KIND.SOMEONE ? "You" : actorName(maker);
+  // Note that a teammate's maker the members do not name yet is said as its creator, never as the reader.
+  const changers = mine
+    ? "You"
+    : maker.kind === ACTOR_KIND.SOMEONE
+      ? "Its creator"
+      : actorName(maker);
   return (
     <PickerRow
       width={CHIP_WIDTH.MIN_FIELD}
