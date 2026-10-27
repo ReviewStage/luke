@@ -48,10 +48,12 @@ import {
   useMenu,
   VisuallyHidden,
 } from "@luke/ui";
+import { actorName, personActor } from "@luke/ui/actor-model";
 import { ArrowUpIcon, GLYPH, SlidersHorizontalIcon } from "@luke/ui/icons";
 import { askScroll } from "@luke/ui/scroll-asked";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import {
   Conversation,
   ConversationContent,
@@ -59,6 +61,7 @@ import {
   FLOATING_OVER_LOG_CLASS,
 } from "../ai-elements/conversation.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
+import { useMemberDirectory } from "../member-directory.js";
 import { type AgentLine, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import {
   CHANNEL_VIEW,
@@ -101,8 +104,11 @@ import { type InboxImageReads, useInboxImageReads } from "./use-task-inbox.js";
  * options, the Inbox's sliders, whose menu offers Mine, Everyone, and Needs
  * me with what waits on the reader counted; the title names the view where
  * it is not Mine (`channels-model.ts`). Under it, each thread the view shows
- * is a post, oldest first, a divider before each day and the New line
- * before the first posted since the reader last looked: drawn as the
+ * is a post, by its latest activity, the latest at the foot, a divider
+ * before each day the posts last moved on and the New line before the
+ * first someone else moved since the reader last looked; under Everyone a
+ * teammate's post wears their face at its head's end, as the Inbox's
+ * Everyone does (`OwnerFace`). Each is drawn as the
  * Inbox's thread draws a message, through the same parts
  * (`inbox-message.tsx`), the writer's face, name, and time, an agent named
  * with its card as the thread's pane names it (`agentSubject`), then the
@@ -347,6 +353,26 @@ function ReplierFace({ message, by }: { message: InboxMessage; by: ItemAgent }):
       {...(author.shape === undefined ? {} : { shape: author.shape })}
       {...(author.glyph === undefined ? {} : { glyph: author.glyph, tiled: true })}
     />
+  );
+}
+
+/** The face of the teammate who started a thread's agent, as the Inbox's Everyone wears one, and who it is for a reader; none on the reader's own, or before the reader is known. */
+function OwnerFace({
+  startedBy,
+  readerId,
+}: {
+  startedBy: ChannelThread["startedBy"];
+  readerId: string | undefined;
+}): React.JSX.Element | null {
+  const directory = useMemberDirectory();
+  const reader = directory.readerId ?? readerId;
+  if (startedBy === undefined || reader === undefined || startedBy.userId === reader) return null;
+  const owner = personActor(startedBy, directory.members, reader, directory.former);
+  return (
+    <>
+      <ActorMark actor={owner} size={ACTOR_SIZE.MARK} />
+      <VisuallyHidden>{`Started by ${actorName(owner, { sentence: true })}`}</VisuallyHidden>
+    </>
   );
 }
 
@@ -599,6 +625,7 @@ function ThreadPost({
   readerId,
   now,
   shown,
+  owned,
   menuDoors,
   onAskMove,
   onPick,
@@ -610,6 +637,8 @@ function ThreadPost({
   readerId: string | undefined;
   now: number;
   shown: boolean;
+  /** Whether a teammate's thread wears their face, as Everyone shows it. */
+  owned: boolean;
   menuDoors: PostMenuDoors;
   onAskMove: ((thread: ChannelThread) => void) | undefined;
   /** Answers a decision from the post; none where the stream is read-only, which offers its asks nowhere. */
@@ -646,6 +675,7 @@ function ThreadPost({
         now={now}
         trailing={
           <>
+            {owned ? <OwnerFace startedBy={item.startedBy} readerId={readerId} /> : null}
             {unread ? <VisuallyHidden>{UNREAD_WORD}</VisuallyHidden> : null}
             {menu.button}
           </>
@@ -693,7 +723,7 @@ export interface ChannelStreamRead {
   readonly read: ChannelThreadsControl;
   readonly view: ChannelView;
   readonly onView: (view: ChannelView) => void;
-  /** The threads the view shows, oldest first, which the stream posts and K and J step through. */
+  /** The threads the view shows, the least recently active first, which the stream posts and K and J step through. */
   readonly viewed: readonly ChannelThread[];
   readonly needsCount: number;
 }
@@ -946,6 +976,7 @@ export function ChannelStream({
                   readerId={readerId}
                   now={now}
                   shown={shown}
+                  owned={view === CHANNEL_VIEW.EVERYONE}
                   menuDoors={menuDoors}
                   onAskMove={archived === undefined ? move.ask : undefined}
                   onPick={archived === undefined ? pick : undefined}

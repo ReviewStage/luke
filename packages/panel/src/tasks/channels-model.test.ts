@@ -153,12 +153,23 @@ test("Mine lists the reader's own threads and Needs me only the open asks waitin
   );
 });
 
-test("the stream runs oldest first, a divider before each day, the New line before the first thread someone else posted since the reader looked", () => {
+test("the stream runs by latest activity, a divider before each day a thread last moved on, the New line before the first thread someone else moved since the reader looked", () => {
   const yesterday = thread("yesterday", NOON - 24 * HOUR, [said("y", undefined)]);
   const seen = thread("seen", NOON - 3 * HOUR, [said("s", undefined)]);
   const mine = thread("mine-after", NOON - HOUR, [said("o", ME)]);
+  // Posted two days ago, and a teammate replied half an hour ago.
+  const revived = thread("revived", NOON - 48 * HOUR, [said("r", undefined), said("rr", MATE)], {
+    updatedAt: NOON - HOUR / 2,
+  });
   const fresh = thread("fresh", NOON, [said("f", undefined)]);
-  const rows = streamRows([fresh, seen, mine, yesterday], {
+  // The reader replied before they looked, and the agent closed it since, which writes no message.
+  const closed = thread(
+    "closed",
+    NOON - 4 * HOUR,
+    [said("c", undefined), { ...said("cr", ME), createdAt: NOON - 3 * HOUR }],
+    { status: INBOX_STATUS.CLOSED, updatedAt: NOON - 90 * 60 * 1000 },
+  );
+  const rows = streamRows([fresh, revived, closed, seen, mine, yesterday], {
     lookedAt: NOON - 2 * HOUR,
     readerId: ME.userId,
     now: NOON + HOUR,
@@ -172,7 +183,7 @@ test("the stream runs oldest first, a divider before each day, the New line befo
           ? row.words
           : "New",
     ),
-    ["Yesterday", "yesterday", "Today", "seen", "mine-after", "New", "fresh"],
+    ["Yesterday", "yesterday", "Today", "seen", "New", "closed", "mine-after", "revived", "fresh"],
   );
   assert.equal(
     streamRows([fresh], { lookedAt: undefined, readerId: ME.userId, now: NOON }).some(

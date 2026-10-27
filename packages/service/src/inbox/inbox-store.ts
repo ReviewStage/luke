@@ -2492,22 +2492,27 @@ function askingReader(userId: string): SQL<boolean> {
 /** The thread an older page of a channel is read before, under its own name, so its place is read beside the threads compared with it. */
 const cursorItem = alias(inboxItem, "cursor");
 
-/** The condition that the thread was posted before the one named, its id breaking a tie, as a channel's threads are ordered. */
-function postedBefore(itemId: string): SQL {
+/** A channel's threads in the order its stream draws them, the latest active first, its id breaking a tie. */
+const ACTIVE_FIRST = [desc(inboxItem.updatedAt), desc(inboxItem.id)] as const;
+
+/** The condition that the thread last moved before the one named, its id breaking a tie, as a channel's threads are ordered (`ACTIVE_FIRST`). */
+function activeBefore(itemId: string): SQL {
   const cursor = queryBuilder
-    .select({ postedAt: sql`${cursorItem.postedAt}`, id: cursorItem.id })
+    .select({ updatedAt: sql`${cursorItem.updatedAt}`, id: cursorItem.id })
     .from(cursorItem)
     .where(eq(cursorItem.id, itemId));
-  return sql`(${inboxItem.postedAt}, ${inboxItem.id}) < (${cursor})`;
+  return sql`(${inboxItem.updatedAt}, ${inboxItem.id}) < (${cursor})`;
 }
 
 /**
- * A page of the channel's threads the reader may read, latest posted first:
- * the latest posted of those holding no ask open that waits on them, one
+ * A page of the channel's threads the reader may read, latest active first,
+ * a thread's activity being its last change (`updatedAt`): the agent
+ * posting again, a message on its thread, an answer, or a close. It reads
+ * the latest active of those holding no ask open that waits on them, one
  * more than a page carries, so the reader learns whether any older stands;
  * and, on the first page alone, every one that holds such an ask
  * (`askingReader`) however old, each marked. An older page reads only the
- * threads posted before the one it names, and none that asks the reader,
+ * threads last active before the one it names, and none that asks the reader,
  * which the first page carried. Note that the asks are read apart from the
  * bound, because the channel's count counts every one of them and Needs me
  * must show each thread it counts.
@@ -2529,10 +2534,10 @@ const findChannelThreads = SqlSchema.findAll({
           and(
             inChannel,
             not(askingReader(userId)),
-            before === null ? undefined : postedBefore(before),
+            before === null ? undefined : activeBefore(before),
           ),
         )
-        .orderBy(desc(inboxItem.postedAt), desc(inboxItem.id))
+        .orderBy(...ACTIVE_FIRST)
         .limit(INBOX_BOUNDS.MAX_ITEMS_READ + 1);
       const read = inArray(inboxItem.id, latest);
       return db
@@ -2544,7 +2549,7 @@ const findChannelThreads = SqlSchema.findAll({
         })
         .from(inboxItem)
         .where(and(inChannel, before === null ? or(read, askingReader(userId)) : read))
-        .orderBy(desc(inboxItem.postedAt), desc(inboxItem.id));
+        .orderBy(...ACTIVE_FIRST);
     }),
 });
 
@@ -2596,17 +2601,17 @@ export type ChannelThreadItem = InboxItem & {
   readonly agent?: ChannelThreadAgent;
 };
 
-/** A page of a channel's threads, oldest first, and the thread to read the next older page before, where any older stands. */
+/** A page of a channel's threads, the least recently active first, and the thread to read the next older page before, where any older stands. */
 export interface ChannelThreadPage {
   readonly threads: readonly ChannelThreadItem[];
   readonly older?: string;
 }
 
 /**
- * A page of the channel's threads the reader may read, oldest first, as a
- * channel's stream draws them, each as the inbox carries it with the
+ * A page of the channel's threads the reader may read, the least recently
+ * active first, as a channel's stream draws them, each as the inbox carries it with the
  * channel it lives in and its agent as its post names it. The first page, `before` left out, carries the
- * latest posted `MAX_ITEMS_READ` of those holding no ask open that waits on
+ * latest active `MAX_ITEMS_READ` of those holding no ask open that waits on
  * the reader, and every one that holds such an ask however old; an older
  * page, read before the thread the last page's `older` named, carries the
  * next `MAX_ITEMS_READ` of the former alone, so paging back from the first
