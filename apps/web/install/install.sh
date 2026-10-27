@@ -40,7 +40,7 @@ SMOLVM_SHA256_X64="82b50f55b35828efbf02ec84c22274780be109c7f424a24646390abc44506
 SMOLVM_SHA256_ARM64="baea200aea86c405e31afd3a6f278b3bcf6370ea252d35e66b90ba3e849b9721"
 SMOLVM_URL_X64="https://github.com/smol-machines/smolvm/releases/download/v1.32.3/smolvm-1.32.3-linux-x86_64.tar.gz"
 SMOLVM_URL_ARM64="https://github.com/smol-machines/smolvm/releases/download/v1.32.3/smolvm-1.32.3-linux-arm64.tar.gz"
-SANDBOX_IMAGE="ghcr.io/reviewstage/luke-sandbox:35c90fc1c0bee4e5@sha256:168aedd03509fa3bccb00b84059baea6d19ae7032a7f0ad0c46f43b6a8bf21e0"
+SANDBOX_IMAGE="ghcr.io/reviewstage/luke-sandbox:ea78580d96ce7256@sha256:f6ff07bdc663c9173a856a713e4caa02a725eedd3da4aed0029c662e3b0b33a5"
 
 ORIGIN="https://tryluke.dev"
 HOST_USER="luke-host"
