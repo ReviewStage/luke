@@ -1,5 +1,5 @@
 /**
- * column-dock.ts -- how tall the dock at the foot of a column stands, said where what floats over that foot reads it: the folded sidebar's call card, the toasts, and the voice's notice line; and how tall a phone's card may stand under the column's bars.
+ * column-dock.ts -- how tall the dock at the foot of a column stands, said where the folded sidebar's call card, which floats over that foot, reads it; and how tall a phone's card may stand under the column's bars.
  */
 
 import { type RefObject, useLayoutEffect } from "react";
@@ -40,16 +40,7 @@ const TILE_FLOOR = "--luke-control-height";
 /** The tile's own aspect on a card, height over width (`CALL_VIDEO_FIT.CARD`). */
 const TILE_ASPECT = 9 / 16;
 
-/** What docks under the toasts besides a column's parts: a phone's places bar at the screen's foot (`mobile-bar.tsx`). */
-const TOAST_DOCKED = ".mobile-bar";
-
-/** The window's toasts, portalled out of the shell to the document's body (`@luke/ui`'s `ToastStack`). */
-const TOAST_STACK = ".luke-toast-stack";
-
-/** The length the dock under the toasts is written in, beside the work, where they stand in the window's corner rather than across a column. */
-const TOAST_DOCK = "--luke-toast-dock";
-
-/** The token the toasts' corner stands in from the window's by. */
+/** The token the card stands in from the window's corner by. */
 const CORNER_STEP = "--luke-space-16";
 
 /** Writes `length` on `element` as `value`, or takes it away where there is none, touching the style only when it changes. */
@@ -201,7 +192,7 @@ function fitTile(
   if (!(card instanceof HTMLElement) || !(tile instanceof HTMLElement)) return;
   const gap = rootLength(root, CARD_GAP);
   // As far as the card's own rule lifts it over the dock (`call.css`).
-  const lift = Math.max(0, dock + gap - cornerStep(root));
+  const lift = Math.max(0, dock + gap - rootLength(root, CORNER_STEP));
   const height =
     column === null
       ? undefined
@@ -209,43 +200,12 @@ function fitTile(
   writeLength(card, CARD_TILE_HEIGHT, height === undefined ? undefined : `${height}px`);
 }
 
-/** The toasts' step in from the window's corner, read from its token on the document's root, or none where it is unset. */
-function cornerStep(root: HTMLElement): number {
-  const step = Number.parseFloat(getComputedStyle(root).getPropertyValue(CORNER_STEP));
-  return Number.isNaN(step) ? 0 : step;
-}
-
-/**
- * From the window's foot to the top of the highest docked part on screen
- * under the toasts' corner, or nothing where none stands there. A part
- * counts only once one under the corner reaches into where the toasts rest
- * (their height and the corner's step up from the window's foot): a draft
- * reply that flows at a short thread's end, well above the foot, leaves
- * them in their corner, over the empty room below it, and one at a long
- * thread's end lifts them by as much of it as shows.
- */
-function toastDockHeight(shell: Element, docked: string, stack: DOMRect, step: number): number {
-  const foot = shell.getBoundingClientRect().bottom;
-  const resting = foot - step - stack.height;
-  let top = foot;
-  let reached = false;
-  for (const part of shell.querySelectorAll(docked)) {
-    const box = part.getBoundingClientRect();
-    if (!seen(part, box)) continue;
-    if (box.left >= stack.right || box.right <= stack.left) continue;
-    reached ||= box.bottom > resting;
-    top = Math.min(top, box.top);
-  }
-  return reached ? Math.max(0, foot - top) : 0;
-}
-
 /**
  * Keeps two lengths for the folded sidebar's call card: the dock of the
  * column it stands over (`--luke-column-dock`), which it stands just above, and
  * its own height (`--floating-card`), which the transcript under it keeps
- * clear. The dock is written on the document's root, because the toasts,
- * which a phone stands above it too, are portalled out of the shell; the
- * card's height on the shell. The column is the task's, or an agent's page
+ * clear. The dock is written on the document's root, the card's height on
+ * the shell. The column is the task's, or an agent's page
  * standing in its place, or the side panel while it fills the window; of
  * those found, the first on screen, and of its docked
  * parts, those on screen, so a pane or a panel on its way out lifts nothing.
@@ -253,19 +213,10 @@ function toastDockHeight(shell: Element, docked: string, stack: DOMRect, step: n
  * column's bars at the card's full height, the card's video tile is handed
  * the height that does fit (`tileHeight`), so the card never covers a tab.
  *
- * The toasts stand in the window's corner, over whichever column reaches
- * it, so they read a dock of their own too (`--luke-toast-dock`): the
- * docked parts on screen under their corner, whatever column holds them, a
- * phone's places bar among them. Note that nothing else is written for
- * the toasts: they are an overlay, so a page or a log under them keeps its
- * end and its scroll whether one stands or not.
- *
- * One ResizeObserver follows the column, the docked parts, the card, and
- * the toasts; a scroll anywhere under the shell re-reads, since it moves a
- * part that flows with what it scrolls; a MutationObserver re-reads when the column or a part arrives
- * or goes, a task's column once it has loaded, a to-do list appearing over
- * the composer. `key` names what the shell is drawing,
- * so a page or a panel coming and going finds its column afresh. A shell
+ * One ResizeObserver follows the column, its docked parts, and the card;
+ * a MutationObserver re-reads when the column or a part arrives or goes, a
+ * task's column once it has loaded, a to-do list appearing over the
+ * composer. `key` names what the shell is drawing, so a page or a panel coming and going finds its column afresh. A shell
  * with no such column (Settings, a version history) says no dock at all.
  *
  * Note that every change under the shell (a transcript's message landing, a
@@ -288,7 +239,6 @@ export function useColumnDock(
     // Found afresh on every change under the shell, because a task still
     // loading draws its column only once its document lands.
     const columnSelector = panelFull ? ".side-panel" : ".desktop-task-main, .agent-page";
-    const toastDocked = `${DOCKED}, ${TOAST_DOCKED}`;
     let column = shownColumn(host, columnSelector);
     // What the observer follows, so a change that leaves them standing follows nothing anew.
     let followed: readonly Element[] = [];
@@ -304,26 +254,13 @@ export function useColumnDock(
         card === null ? undefined : `${card.getBoundingClientRect().height}px`,
       );
       fitTile(card, narrow ? column : null, dock ?? 0, root);
-      const stack = root.querySelector(TOAST_STACK);
-      const toastDock =
-        stack === null
-          ? undefined
-          : toastDockHeight(host, toastDocked, stack.getBoundingClientRect(), cornerStep(root));
-      writeLength(root, TOAST_DOCK, toastDock === undefined ? undefined : `${toastDock}px`);
     }
     function follow(): void {
       if (host === null) return;
       const card = host.querySelector(FLOATING_CARD);
-      const stack = root.querySelector(TOAST_STACK);
-      // The toasts read docked parts in any column, so each is followed.
-      const elsewhere = [...host.querySelectorAll(toastDocked)].filter(
-        (part) => !column?.contains(part),
-      );
       const standing = [
         ...(column === null ? [] : [column, ...column.querySelectorAll(DOCKED)]),
-        ...elsewhere,
         ...(card === null ? [] : [card]),
-        ...(stack === null ? [] : [stack]),
       ];
       if (sameElements(standing, followed)) return;
       followed = standing;
@@ -348,17 +285,13 @@ export function useColumnDock(
       attributes: true,
       attributeFilter: ["data-gone"],
     });
-    // Note that a scroll moves a part that flows with what it scrolls, an Inbox reply box, under the toasts, and neither observer sees it.
-    host.addEventListener("scroll", measure, { capture: true, passive: true });
     follow();
     write();
     return () => {
       if (frame !== undefined) cancelAnimationFrame(frame);
       sized.disconnect();
       arrived.disconnect();
-      host.removeEventListener("scroll", measure, { capture: true });
       root.style.removeProperty(COLUMN_DOCK);
-      root.style.removeProperty(TOAST_DOCK);
       host.style.removeProperty(FLOATING_CARD_HEIGHT);
       host.querySelector<HTMLElement>(FLOATING_CARD)?.style.removeProperty(CARD_TILE_HEIGHT);
     };
