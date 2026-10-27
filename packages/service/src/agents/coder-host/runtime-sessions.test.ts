@@ -760,9 +760,41 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.equal(
             yield* steerCodingAgent(sessions, writer, teammate, onEve, {
               ...line,
-              clientKey: randomUUID(),
+              clientKey: "key-teammate",
             }),
             STEER_OUTCOME.SENT,
+          );
+          assert.equal(
+            yield* steerCodingAgent(sessions, writer, owner, onEve, {
+              ...line,
+              clientKey: randomUUID(),
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+            }),
+            STEER_OUTCOME.SENT,
+          );
+          // The model reads a teammate's line behind the label naming them by their link, and the starter's as it is.
+          const texts = eve.messages.map((sent) =>
+            Array.isArray(sent.message)
+              ? sent.message.flatMap((part) => (part.type === "text" ? [part.text] : []))
+              : [sent.message],
+          );
+          assert.match(
+            texts[0]?.[0] ?? "",
+            new RegExp(
+              `^\\[sender: \\[@Test User\\]\\(https://tryluke\\.dev/[^/]+/person/${teammate}\\), a teammate\\]$`,
+              "u",
+            ),
+          );
+          assert.deepEqual(texts[0]?.slice(1), ["Also the emails."]);
+          assert.equal(eve.messages[1]?.message, "Also the emails.");
+          // The row keeps the teammate's words as they typed them, its sender in its own column.
+          const [kept] = yield* (yield* Database)
+            .select({ parts: messages.parts })
+            .from(messages)
+            .where(eq(messages.clientId, sentLineId("key-teammate")));
+          assert.deepEqual(
+            kept?.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+            ["Also the emails."],
           );
 
           const payer = Option.getOrThrow(

@@ -49,8 +49,12 @@ function fileWords(part: FileUIPart): string {
   return `[file: ${shown} (${part.mediaType})${said}]`;
 }
 
-/** One stored message as a line: its speaker, its words, the files it carried by name, and the tools it called by name. */
-export function storedMessageLine(message: StoredUIMessage, maximumChars: number): string {
+/** One stored message as a line: its speaker, or the one its caller names, its words, the files it carried by name, and the tools it called by name. */
+export function storedMessageLine(
+  message: StoredUIMessage,
+  maximumChars: number,
+  speaker?: string,
+): string {
   const words = message.parts
     .filter((part) => isTextUIPart(part))
     .map((part) => part.text.trim())
@@ -67,7 +71,7 @@ export function storedMessageLine(message: StoredUIMessage, maximumChars: number
   ]
     .filter((piece) => piece.length > 0)
     .join(" ");
-  return `${speakerOf(message)}: ${body}`;
+  return `${speaker ?? speakerOf(message)}: ${body}`;
 }
 
 /**
