@@ -112,7 +112,12 @@ const output = (command: string, args: readonly string[], env?: Readonly<Record<
   ).pipe(Effect.orElseSucceed(() => ({ printed: "", code: -1 })));
 
 const handTest = Effect.gen(function* () {
-  const { values } = parseArgs({ options: { github: { type: "string" } } });
+  // Note that pnpm 10 hands on the `--` that separates the script's own arguments, which parseArgs would refuse as one of its own.
+  const given = process.argv.slice(2);
+  const { values } = parseArgs({
+    args: given[0] === "--" ? given.slice(1) : given,
+    options: { github: { type: "string" } },
+  });
   const version = yield* output(SMOLVM, ["--version"]);
   if (version.code !== 0) {
     process.stderr.write("smolvm is not on this machine's PATH; install it as its README says.\n");
