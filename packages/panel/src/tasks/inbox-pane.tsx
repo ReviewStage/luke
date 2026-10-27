@@ -765,7 +765,9 @@ function ThreadMessage({
       nameRef={writer.nameRef}
       at={message.createdAt}
       now={now}
-      trailing={<AddressedTo to={message.addressedTo} />}
+      trailing={
+        message.addressedTo === undefined ? undefined : <AddressedTo to={message.addressedTo} />
+      }
     >
       {answers === undefined ? null : answered !== undefined && knownAsk(answered) ? (
         <AnsweredCard ask={answered} title={cardTitle(item.title)} answers={answers} />
