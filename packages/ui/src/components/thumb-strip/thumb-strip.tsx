@@ -37,12 +37,13 @@ export interface ThumbStripItem {
 
 /**
  * A thumb's press: no box of its own, so the thumb draws the box and the ring
- * takes its corners, on a card's opaque ground so a thumb with no picture
+ * takes its corners, a flex box so it is exactly the thumb's height (an inline
+ * thumb would leave a line's descent of ground under it), on a card's opaque ground so a thumb with no picture
  * hides what is behind the strip too; darkened while another is shown and lit under the
  * pointer, the shown one ringed.
  */
 const THUMB =
-  "luke-thumb-strip-thumb flex-none cursor-press rounded-control border-0 bg-popover p-0 brightness-60 transition-[filter] duration-(--luke-duration-hover) ease-motion-exit hover:brightness-100 aria-[current=true]:brightness-100 aria-[current=true]:[&>.luke-page-thumb]:outline-2 aria-[current=true]:[&>.luke-page-thumb]:outline-offset-1 aria-[current=true]:[&>.luke-page-thumb]:outline-foreground aria-[current=true]:[&>.luke-page-thumb]:outline-solid";
+  "luke-thumb-strip-thumb flex flex-none cursor-press rounded-control border-0 bg-popover p-0 brightness-60 transition-[filter] duration-(--luke-duration-hover) ease-motion-exit hover:brightness-100 aria-[current=true]:brightness-100 aria-[current=true]:[&>.luke-page-thumb]:outline-2 aria-[current=true]:[&>.luke-page-thumb]:outline-offset-1 aria-[current=true]:[&>.luke-page-thumb]:outline-foreground aria-[current=true]:[&>.luke-page-thumb]:outline-solid";
 
 /** A strip of the files `items`, the one at `at` shown, `onPick` showing another. */
 export function ThumbStrip({
