@@ -162,7 +162,7 @@ import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
-import { needsYouNoun, useInboxWaiting } from "./places-waiting.js";
+import { needsYouNoun, useInboxWaiting, useTasksWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
@@ -387,6 +387,8 @@ interface RowContext {
   readonly onDeletedAgent: (agentId: string) => () => void;
   /** Whether a task was saved since the developer last looked at it on this Mac. */
   readonly unread: (task: TaskSummary) => boolean;
+  /** How many questions wait on the reader on each task, by its id, as the Inbox counts them (`useTasksWaiting`). */
+  readonly waitingOn: ReadonlyMap<string, number>;
   /** Whether an agent's turn ended while the developer was not looking at it. */
   readonly unseenAgent: (agentId: string) => boolean;
   /** The time each row's last update is counted back from. */
@@ -481,6 +483,7 @@ function TaskRows({
             current={context.marked(row.task.id, undefined)}
             open={context.current(row.task.id)}
             unread={context.unread(row.task)}
+            waiting={context.waitingOn.get(row.task.id) ?? 0}
             now={context.now}
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
@@ -727,6 +730,7 @@ function PinnedRows({
                 current={context.marked(task.id, undefined)}
                 open={context.current(task.id)}
                 unread={context.unread(task)}
+                waiting={context.waitingOn.get(task.id) ?? 0}
                 now={context.now}
                 onOpen={() => context.onOpen(task.id)}
               />
@@ -1780,6 +1784,7 @@ function SidebarColumn({
   const shownChannelId =
     channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel.id : undefined;
   const waiting = useInboxWaiting(tasks);
+  const waitingOn = useTasksWaiting(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1955,6 +1960,7 @@ function SidebarColumn({
       if (tasks.agentView.agentId === agentId) tasks.agentView.onClose();
     },
     unread,
+    waitingOn,
     unseenAgent: (agentId) =>
       tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
     now,
@@ -2200,6 +2206,7 @@ function SidebarColumn({
                         current={context.marked(row.task.id, undefined)}
                         open={current(row.task.id)}
                         unread={unread(row.task)}
+                        waiting={context.waitingOn.get(row.task.id) ?? 0}
                         now={now}
                         faces={context.faces}
                         onOpen={() => context.onOpen(row.task.id)}

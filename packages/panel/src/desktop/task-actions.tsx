@@ -658,6 +658,7 @@ export function SidebarTask({
   current,
   open = current,
   unread,
+  waiting,
   now,
   at = task.updatedAt,
   repository,
@@ -672,6 +673,8 @@ export function SidebarTask({
   open?: boolean;
   /** Whether the task was saved since the developer last looked at it on this Mac. */
   unread: boolean;
+  /** How many of the task's questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
+  waiting: number;
   /** The time the row's last update is counted back from. */
   now: number;
   /** The time the row shows, which the list's order chooses: its last update unless said. */
@@ -746,7 +749,7 @@ export function SidebarTask({
                 )}
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
                 {drafted ? <DraftMark /> : null}
-                <TaskRowStatus task={task} stranded={strandedHome(tasks, task)} />
+                <TaskRowStatus task={task} waiting={waiting} stranded={strandedHome(tasks, task)} />
                 <Time at={at} now={now} hint={false} />
               </span>
             )

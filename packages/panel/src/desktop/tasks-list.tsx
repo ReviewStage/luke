@@ -904,7 +904,11 @@ function TaskListRow({
       )}
       {cell(
         TASK_PROPERTY.AGENTS,
-        <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />,
+        <TaskAgentsMark
+          agents={task.agents}
+          waiting={waiting}
+          size={TASK_AGENTS_MARK_SIZE.MEDIUM}
+        />,
       )}
       {cell(
         TASK_PROPERTY.UPDATED,

@@ -2484,8 +2484,8 @@ const ChannelThreadRowSchema = Schema.Struct({
  */
 const THREAD_AGENT = sql<unknown>`(select jsonb_build_object('title', coalesce(${agentGivenNameSql({ kind: qualified(codingAgent, codingAgent.kind) })}, ${qualified(codingAgent, codingAgent.title)}), 'model', ${qualified(codingAgent, codingAgent.model)}, 'automationName', ${agentAutomationNameSql({ automationOrigin: qualified(codingAgent, codingAgent.automationOrigin) })}) from ${codingAgent} where ${qualified(codingAgent, codingAgent.id)} = ${qualified(inboxItem, inboxItem.agentId)})`;
 
-/** Whether the item holds an ask open that waits on the reader, a question waiting on them: what a channel's count counts and its stream always carries, and what a task's row counts (`questionsWaitingByTask`). */
-export function askingReader(userId: string): SQL<boolean> {
+/** Whether the item holds an ask open that waits on the reader: what a channel's count counts and its stream always carries. */
+function askingReader(userId: string): SQL<boolean> {
   return sql<boolean>`(${ASKING} and ${WAITS_ON} = ${userId})`;
 }
 
@@ -2803,33 +2803,6 @@ export function channelWaitingCounts(
   return Effect.map(
     findChannelWaiting({ userId, organizationId }),
     (rows) => new Map(rows.map((row) => [row.channelId, row.waiting])),
-  );
-}
-
-/** How many items of each of the tasks hold an ask open that waits on the reader (`askingReader`), on the tasks they reach, as the Inbox gates its tasks (`findTasksWithItems`). */
-const findTaskWaiting = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
-  Result: Schema.Struct({ taskId: Schema.String, waiting: Schema.Number }),
-  execute: ({ userId, taskIds }) =>
-    Database.use((db) =>
-      db
-        .select({ taskId: task.id, waiting: sql<number>`count(*)::int` })
-        .from(inboxItem)
-        .innerJoin(task, eq(task.id, inboxItem.taskId))
-        .where(and(inArray(task.id, [...taskIds]), askingReader(userId), taskReachableBy(userId)))
-        .groupBy(task.id),
-    ),
-});
-
-/** How many questions wait on the reader on each of the tasks, by task; a task where none waits is left out, and every one the account does not reach. */
-export function questionsWaitingByTask(
-  userId: string,
-  taskIds: readonly string[],
-): InboxStoreEffect<ReadonlyMap<string, number>> {
-  if (taskIds.length === 0) return Effect.succeed(new Map());
-  return Effect.map(
-    findTaskWaiting({ userId, taskIds }),
-    (rows) => new Map(rows.map((row) => [row.taskId, row.waiting])),
   );
 }
 

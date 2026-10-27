@@ -5,16 +5,19 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 /**
  * places-waiting.ts -- how many wait on the developer in the Inbox, the one
  * reading the places that count them draw from: the sidebar's rows
- * (`desktop-sidebar.tsx`), a phone's places bar (`mobile-bar.tsx`), and
- * each task's badge on the Tasks page's List and Board, so the drawer, the
- * bar, and the page never disagree.
+ * (`desktop-sidebar.tsx`), a phone's places bar (`mobile-bar.tsx`), each
+ * task's badge on the Tasks page's List and Board, and the waiting-on-you
+ * icon every task row wears (`TaskAgentsMark`) in the sidebar, Recent, ⌘K,
+ * and on the Tasks page, so the drawer, the bar, the page, and the rows never
+ * disagree.
  */
 
 const NO_COUNTS: ReadonlyMap<string, number> = new Map();
 
 /**
  * Main's read of what waits with the window's answers laid over it, and how
- * many questions wait on the developer on each task it lists: main's count
+ * many questions wait on the developer on each task it lists, every
+ * workspace's, since ⌘K's rows name another workspace's tasks: main's count
  * of each task's (`toDo`), the open asks that wait on the reader, less those
  * the window answered since (`useSettledToDo`). A notice, a teammate's
  * question, and a settled item never count, read or not, as the Dock's badge
@@ -25,8 +28,8 @@ function useSettledCounts(tasks: TasksControl): {
   settled: SettledWaiting;
   byTask: ReadonlyMap<string, number>;
 } {
-  const settled = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
-  const byTask = useSettledToDo(tasks.listed.inboxTasks, tasks.listed.inbox, settled.waiting);
+  const settled = useSettledWaiting(tasks.inbox, tasks.inboxTaskless);
+  const byTask = useSettledToDo(tasks.inboxTasks, tasks.inbox, settled.waiting);
   return { settled, byTask };
 }
 

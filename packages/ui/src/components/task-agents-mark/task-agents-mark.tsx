@@ -61,12 +61,15 @@ const PULL_REQUEST_INK = {
 /** The icon at the end of a task's row for how its agents stand; nothing where none of them asks, failed, works, or left a pull request. */
 export function TaskAgentsMark({
   agents,
+  waiting,
   size = TASK_AGENTS_MARK_SIZE.SMALL,
 }: {
   agents: TaskAgentsSummary | undefined;
+  /** How many of the task's questions wait on the reader, as the Inbox counts them. */
+  waiting: number;
   size?: TaskAgentsMarkSize;
 }): React.JSX.Element | null {
-  const status = taskAgentsStatus(agents);
+  const status = taskAgentsStatus(agents, waiting);
   const seat = `task-agents-mark inline-flex flex-none items-center justify-center [&>.attention-mark]:size-full [&>.failed-mark]:size-full ${SEAT_CLASS[size]}`;
   switch (status.kind) {
     case TASK_AGENTS_STATUS.NONE:

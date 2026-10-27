@@ -197,6 +197,7 @@ import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, inboxEntries } from "./main-tabs.js";
 import { strandedHome } from "./move-task-dialog.js";
+import { useTasksWaiting } from "./places-waiting.js";
 import {
   ADD_SECTION,
   inboxOffered,
@@ -737,7 +738,8 @@ function taskDetail(task: TaskSummary, listed: readonly TaskSummary[]): string |
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it. A task wears at its end who is on it and its
- * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowStatus`),
+ * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowStatus`, its
+ * questions waiting on the reader by `waitingOn`),
  * leads with its key and says its repository by its name, as the Tasks
  * list's row does, and is found by its key, its assignee's name, and its
  * creator's, a key typed whole listing its task first. An agent opens on its own page, as its
@@ -751,6 +753,7 @@ function taskRows(
   openAgent: (agentId: string) => void,
   showAgent: TasksControl["onShowAgent"],
   originOf: (task: TaskSummary) => Actor | undefined,
+  waitingOn: ReadonlyMap<string, number>,
 ): readonly PaletteRow[] {
   const listedId = tasks.workspace?.id;
   const carded = { ...tasks, onShowAgent: showAgent };
@@ -796,7 +799,11 @@ function taskRows(
       endMark: (
         <>
           {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
-          <TaskRowStatus task={task} stranded={strandedHome(tasks, task)} />
+          <TaskRowStatus
+            task={task}
+            waiting={waitingOn.get(task.id) ?? 0}
+            stranded={strandedHome(tasks, task)}
+          />
         </>
       ),
       people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
@@ -1946,6 +1953,7 @@ export function CommandPalette({
   // The listed workspace's members, read once for it, name a task's assignee by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const originOf = useTaskOrigin();
+  const waitingOn = useTasksWaiting(tasks);
   const { members } = membersRead;
   const reads = useReadMarks();
   const renameOffer = useTaskRenameOffer();
@@ -2048,6 +2056,7 @@ export function CommandPalette({
             (id) => onTasks(() => tasks.agentView.onOpen(id)),
             (taskId, agentId) => onTasks(() => tasks.onShowAgent(taskId, agentId)),
             originOf,
+            waitingOn,
           )
         : [],
     ],
