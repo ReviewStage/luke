@@ -12,7 +12,8 @@ import { Environment, reporterLayer } from "../effect/seams.js";
 import { scriptedSpawner } from "../testing/scripted-spawner.js";
 import { hostDaemon } from "./host-daemon.js";
 import { enrollHostDevice, readHostDevice } from "./host-device.js";
-import { linuxPlatform } from "./linux-platform.js";
+import { DARWIN_HOST, type HostOs, LINUX_HOST } from "./host-os.js";
+import { hostPlatform } from "./host-platform.js";
 
 const SERVICE = "https://luke.test";
 const VERSION = "0.1.0";
@@ -31,6 +32,20 @@ const HTTP = {
   UPGRADE_REQUIRED: 426,
   SERVER_ERROR: 500,
 } as const;
+
+/** A Linux box named fra-01, with no `/dev/kvm`. */
+const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01", nested: () => false };
+
+/** A box's platform on the OS given, as its daemon builds it. */
+const platformOn = (os: HostOs, stateRoot: string) =>
+  hostPlatform({
+    os,
+    installFolder: "/opt/luke-host",
+    arch: DEVICE_ARCH.X64,
+    stateRoot,
+    smolvm: SMOLVM,
+    user: { uid: 990, gid: 990 },
+  });
 
 /** Every request the fake saw at the path given. */
 const at = (requests: readonly RecordedRequest[], method: string, path: string) =>
@@ -53,13 +68,21 @@ const box = Effect.gen(function* () {
 const isRunner = (each: { readonly program: string; readonly args: readonly string[] }) =>
   each.program === SMOLVM && each.args.includes(RUNNER_BUNDLE);
 
-/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH, whose smolvm does as asked and whose runners run, and the reports it makes. */
+/** What smolvm prints for a machine it has not made. */
+const NOT_FOUND = JSON.stringify({ error: { code: "NOT_FOUND", message: "machine not found" } });
+
+/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH, whose smolvm makes each machine the first time it is started and whose runners run, and the reports it makes. */
 const world = (home: string, reports: string[]) => {
+  const made = new Set<string>();
   const spawner = scriptedSpawner((program, args) => {
     if (program === "/bin/bash" && args[0] === "-l")
       return { stdout: "/usr/bin:/bin", exitCode: 0 };
     if (program !== SMOLVM) return undefined;
-    return isRunner({ program, args }) ? {} : { exitCode: 0 };
+    if (isRunner({ program, args })) return {};
+    const [, verb, , machine = ""] = args;
+    if (verb === "create") made.add(machine);
+    if (verb === "start" && !made.has(machine)) return { stderr: NOT_FOUND, exitCode: 1 };
+    return { exitCode: 0 };
   });
   const layer = Layer.mergeAll(
     NodeFileSystem.layer,
@@ -73,7 +96,7 @@ const world = (home: string, reports: string[]) => {
 
 describe("a host's daemon", () => {
   it.effect(
-    "enrolls on its install token under an id it keeps, readable by its user alone, and keeps that enrollment where the box is still enrolled",
+    "enrolls on its install token as its OS, under an id it keeps, readable by its user alone, and keeps that enrollment where the box is still enrolled",
     () =>
       Effect.gen(function* () {
         const { stateRoot } = yield* box;
@@ -89,7 +112,8 @@ describe("a host's daemon", () => {
           serviceOrigin: SERVICE,
           installToken: INSTALL_TOKEN,
           name: "fra-01",
-          arch: DEVICE_ARCH.X64,
+          platform: DARWIN_HOST.platform,
+          arch: DEVICE_ARCH.ARM64,
           version: VERSION,
         }).pipe(Effect.provide(http.layer));
 
@@ -101,7 +125,7 @@ describe("a host's daemon", () => {
         expect(first?.authorization).toBe(`Bearer ${INSTALL_TOKEN}`);
         expect(first?.headers.get(HOST_WIRE.VERSION_HEADER)).toBe(VERSION);
         const firstBody = JSON.parse(first?.body ?? "{}");
-        expect(firstBody).toMatchObject({ name: "fra-01", platform: "linux", arch: "x64" });
+        expect(firstBody).toMatchObject({ name: "fra-01", platform: "darwin", arch: "arm64" });
         expect(JSON.parse(second?.body ?? "{}").deviceId).toBe(firstBody.deviceId);
         expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))).toEqual({
           deviceId: firstBody.deviceId,
@@ -115,9 +139,22 @@ describe("a host's daemon", () => {
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
 
-  it.effect(
-    "registers on its device secret with its version on every call, hands a launch to its launcher with the claim's secrets, and stops its runner and ends once Luke refuses its secret",
-    () =>
+  it.effect.each([
+    {
+      os: { ...LINUX_HOST, deviceName: () => "fra-01", nested: () => true },
+      name: "fra-01",
+      platform: "linux",
+      nested: true,
+    },
+    {
+      os: { ...DARWIN_HOST, deviceName: () => "Studio" },
+      name: "Studio",
+      platform: "darwin",
+      nested: false,
+    },
+  ])(
+    "registers as its OS ($platform) on its device secret with its version on every call, hands a launch to its VM, nested where its OS allows, with the claim's secrets, and stops its runner and ends once Luke refuses its secret",
+    ({ os, name, platform: devicePlatform, nested }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
         const reports: string[] = [];
@@ -164,15 +201,7 @@ describe("a host's daemon", () => {
               return jsonResponse({ done: true });
           }
         });
-        const platform = linuxPlatform({
-          installFolder: "/opt/luke-host",
-          arch: DEVICE_ARCH.X64,
-          hostname: "fra-01",
-          stateRoot,
-          smolvm: SMOLVM,
-          user: { uid: 990, gid: 990 },
-          kvm: false,
-        });
+        const platform = platformOn(os, stateRoot);
 
         const daemon = yield* hostDaemon({
           stateRoot,
@@ -185,8 +214,8 @@ describe("a host's daemon", () => {
         const [register] = at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES);
         expect(JSON.parse(register?.body ?? "{}")).toMatchObject({
           deviceId: DEVICE_ID,
-          name: "fra-01",
-          platform: "linux",
+          name,
+          platform: devicePlatform,
           arch: "x64",
           home: home,
           signedIn: { claudeCode: false, codex: false },
@@ -197,6 +226,10 @@ describe("a host's daemon", () => {
         expect(
           new Set(http.requests.map((request) => request.headers.get(HOST_WIRE.VERSION_HEADER))),
         ).toEqual(new Set([VERSION]));
+        const created = spawner.spawned.find(
+          (each) => each.program === SMOLVM && each.args[1] === "create",
+        );
+        expect(created?.args.includes("--nested")).toBe(nested);
         const launched = spawner.spawned.filter(isRunner);
         expect(launched).toHaveLength(1);
         const [runner] = launched;
@@ -233,15 +266,7 @@ describe("a host's daemon", () => {
             HTTP.UPGRADE_REQUIRED,
           ),
         );
-        const platform = linuxPlatform({
-          installFolder: "/opt/luke-host",
-          arch: DEVICE_ARCH.X64,
-          hostname: "fra-01",
-          stateRoot,
-          smolvm: SMOLVM,
-          user: { uid: 990, gid: 990 },
-          kvm: false,
-        });
+        const platform = platformOn(FRA_01, stateRoot);
         const registers = () =>
           at(http.requests, "POST", HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES).length;
 

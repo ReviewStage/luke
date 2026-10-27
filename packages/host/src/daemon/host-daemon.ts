@@ -8,7 +8,7 @@ import type { HostDevice } from "./host-device.js";
 import { hostServiceStanding } from "./host-standing.js";
 
 /**
- * host-daemon.ts -- a host's daemon: the shared follower (`compose-local-agents.ts`) run on the device the box enrolled as, on its device secret, with the Linux platform, for as long as its scope stands.
+ * host-daemon.ts -- a host's daemon: the shared follower (`compose-local-agents.ts`) run on the device the box enrolled as, on its device secret, with its OS's platform, for as long as its scope stands.
  *
  * The follower is the desktop's own, handed what a box with nobody signed
  * in at it has in place of an account: its device id for the account and
