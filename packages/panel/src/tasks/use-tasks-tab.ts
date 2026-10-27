@@ -2680,14 +2680,17 @@ export function useTasksTab(input: {
   // A task started with an agent opens on the agent's tab, as a landed
   // Start opens it; one whose agent was refused opens on a draft holding
   // the words, the files, and the model under the start's key, with why
-  // under its box, whose Retry is the agent's own Start on the task. Note
-  // that an answer naming neither is read as one the service never gave.
+  // under its box, whose Retry is the agent's own Start on the task. Either
+  // opens on the agent alone, its plan's tab closed on the task, so the side
+  // panel draws nothing beside it and stands as it stood on every other task.
+  // Note that an answer naming neither is read as one the service never gave.
   const openAgent = (
     planId: string,
     handed: NewTaskAgent,
     started: CodingAgentAgentAnswer | undefined,
     device: MacOffer | undefined,
   ) => {
+    sidePanel.onCloseOn(planId, SIDE_PANEL_TAB.PLAN);
     if (started !== undefined && !("failure" in started)) {
       agents.onTaskStarted(planId, started.agent, {
         key: handed.idempotencyKey,

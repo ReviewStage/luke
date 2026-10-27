@@ -1,6 +1,6 @@
 import { noMatchWords, TERM } from "@luke/features/words";
 import { Command } from "cmdk";
-import { type ReactNode, type Ref, useLayoutEffect, useRef, useState } from "react";
+import { memo, type ReactNode, type Ref, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../../cn.js";
 import { SearchIcon } from "../../face/glyphs.js";
 import { searchHit } from "../../search-score.js";
@@ -139,8 +139,13 @@ function matching(groups: readonly CommandGroup[], typed: string): readonly Comm
   }));
 }
 
-/** One row, handed through cmdk's item, hanging its card beside it where it has one. */
-function CommandRow({ item }: { item: CommandItem }): React.JSX.Element {
+/**
+ * One row, handed through cmdk's item, hanging its card beside it where it
+ * has one. Note that it is drawn again only when it is handed another item,
+ * because the dialog draws again for each key typed and each row the arrows
+ * or the pointer light, and cmdk lights a row from its own store.
+ */
+const CommandRow = memo(function CommandRow({ item }: { item: CommandItem }): React.JSX.Element {
   const row = (
     <Command.Item
       asChild
@@ -158,7 +163,7 @@ function CommandRow({ item }: { item: CommandItem }): React.JSX.Element {
       {row}
     </Tooltip>
   );
-}
+});
 
 /** What a command dialog is told: whether it stands, what it lists, and what it says around the list. */
 export interface CommandDialogProps {

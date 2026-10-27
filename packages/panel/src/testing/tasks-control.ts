@@ -287,6 +287,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onChoose: ignore,
       onShow: ignore,
       onClose: ignore,
+      onCloseOn: ignore,
       onMove: ignore,
       onReopen: ignore,
       onPin: ignore,

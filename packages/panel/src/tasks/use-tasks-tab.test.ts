@@ -3066,6 +3066,31 @@ test("a task started, with an agent or without, leaves a hidden side panel hidde
   assert.equal(tab.control().sidePanel.open, false, "the plan does not open beside the agent");
 });
 
+test("New task's agent opens alone, no plan beside it, and the side panel stands open as it was on the task left", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () =>
+        Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
+    },
+  );
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
+
+  await startAgentTask(tab);
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(tab.control().sidePanel.open, false, "the plan does not open beside the agent");
+
+  tab.stand({ tasks: OPEN });
+  await settle();
+  assert.deepEqual(
+    panelOf(tab),
+    { open: true, tab: SIDE_PANEL_TAB.PLAN },
+    "the task left keeps it",
+  );
+});
+
 test("New task's agent stands on its task with the words it started on as its first line before the task's agents or its transcript are read", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(

@@ -1222,21 +1222,30 @@ function askWords(ask: InboxReadAsk | undefined): readonly string[] {
   return fieldWords(ask.fields ?? []);
 }
 
+/** Each item's words as `inboxItemWords` last read them, kept for as long as the item stands. */
+const itemWords = new WeakMap<InboxItem, readonly string[]>();
+
 /**
  * Every line of words an item says, as a search reads it: its title, and
  * each message of its thread and what that asks, picks, or fills in. Note
  * that it names no address, id, or member, because a query typed is about
  * what was said, and an address holds letters enough to match almost
- * anything.
+ * anything. Note too that an item's words are read from its markdown once
+ * and kept with it, because a search asks for every item's words on each
+ * key, and an item that changes arrives as a new one.
  */
 export function inboxItemWords(item: InboxItem): readonly string[] {
+  const kept = itemWords.get(item);
+  if (kept !== undefined) return kept;
   const said = (item.thread ?? []).flatMap((message) => [
     plainWords(message.text),
     ...askWords(message.ask),
     ...(message.answers?.choices ?? []),
     ...valueWords(message.answers?.values),
   ]);
-  return [item.title, ...said].filter((words) => words.length > 0);
+  const words = [item.title, ...said].filter((each) => each.length > 0);
+  itemWords.set(item, words);
+  return words;
 }
 
 /** Whether an item answers a list's search: every word of it somewhere in the item's words (`inboxItemWords`) or its holder's name; any item answers none. */

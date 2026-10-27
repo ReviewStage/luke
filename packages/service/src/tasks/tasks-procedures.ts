@@ -65,7 +65,7 @@ import {
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
-import { LOCAL_AGENT_REFUSAL } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/coding-agent-wire";
 import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
@@ -434,6 +434,27 @@ const runsOnAsked = (userId: string, asked: TaskRunsOnRequest) =>
     (choice) => ({ machine: choice.machine, deviceId: choice.deviceId ?? null }),
   );
 
+/**
+ * Where a task runs is set when it is created and kept: a change that names
+ * the place it already holds is nothing to write, and one that names another
+ * is refused (`RUNS_ON_LOCKED`) before anything is stopped or written. The
+ * field stays on the wire for builds that still send it. Note that the
+ * stored place is compared, not the device's row, so a task whose device
+ * was removed still holds it.
+ */
+const runsOnChange = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  taskId: string,
+  asked: TaskRunsOnRequest | undefined,
+): Effect.fn.Return<void, HostedRefusal, DatabaseServices> {
+  if (asked === undefined) return;
+  const { runsOn } = yield* reachedTask(userId, taskId);
+  const stands =
+    asked.machine === runsOn.machine &&
+    (asked.machine === CODING_AGENT_MACHINE.VERCEL || asked.deviceId === runsOn.deviceId);
+  if (!stands) return yield* Effect.fail(HOSTED_REFUSAL.RUNS_ON_LOCKED);
+});
+
 /** The plans resource, every procedure to a signed-in caller. */
 export function tasksProcedures(seams: TasksProcedureSeams) {
   const writer: Effect.Effect<StoreWriter> = storeWriter({ tools: CODER_TOOL_SET });
@@ -607,9 +628,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         );
         if (!member) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
-      // Where its agents run is checked against the asking member's own devices before anything is stopped.
-      const runsOn =
-        changes.runsOn === undefined ? undefined : yield* runsOnAsked(userId, changes.runsOn);
+      // Where its agents run is set at creation, so a change that names another place is refused before anything is stopped.
+      yield* runsOnChange(userId, taskId, changes.runsOn);
       const archiving = changes.archived === true;
       if (archiving) {
         const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
@@ -645,7 +665,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ...(status === undefined ? undefined : { status }),
           ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
           ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
-          ...(runsOn === undefined ? undefined : { runsOn }),
         },
         organizationId === undefined ? undefined : movedRepositoryReached(organizationId, userId),
       ).pipe(

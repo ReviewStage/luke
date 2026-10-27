@@ -56,10 +56,10 @@ import {
  * opens it on its own is Luke drawing on a task's board or showing its code
  * (`use-panel-arrivals.ts`), each time he does, and an Inbox item the
  * developer has not seen (`onInboxRead`); a subagent's tab opened from an
- * agent's transcript opens it too. A task just started opens with it shown
- * on the plan (`use-tasks-tab.ts`), since the plan is what Luke writes as
- * the developer talks. Not to be confused with "the panel", which in this
- * renderer is Luke's whole surface.
+ * agent's transcript opens it too. A task New task started with an agent
+ * opens on the agent alone, its plan's tab closed there (`use-tasks-tab.ts`),
+ * so the panel stands as it stood on every other task. Not to be confused
+ * with "the panel", which in this renderer is Luke's whole surface.
  *
  * A fixed tab stands in the strip only once the open task has used it: its
  * board holds something, Luke showed code on it, or a comment was left on
@@ -644,6 +644,8 @@ export interface SidePanelControl {
   onShow: (taskId: string, tab: SidePanelTab) => void;
   /** Closes the tab, and only the view: a subagent goes on as it was, and a pin of the tab stands. Closing the one shown chooses the tab viewed before it on the task that still stands, else its neighbour, the one after it where there is one; closing the last the strip draws shuts the panel. */
   onClose: (tab: SidePanelTab) => void;
+  /** Closes a fixed tab on the task given, open or not, as `onClose` closes one on the open task: what a task New task started with an agent asks of its plan's. */
+  onCloseOn: (taskId: string, tab: FixedSidePanelTab) => void;
   /** Moves the tab to the place `to` in the strip, among tabs of every kind, leaving the chosen one chosen. */
   onMove: (tab: SidePanelTab, to: number) => void;
   /**
@@ -2084,6 +2086,10 @@ export function useSidePanel(
       }),
     [update, drawn],
   );
+  const onCloseOn = useCallback(
+    (on: string, tab: FixedSidePanelTab) => update((held) => withChoice(held, on, tab, false)),
+    [update],
+  );
   const onOpenFile = useCallback(
     (ref: CodeRef, commit?: string) =>
       update((held) => withFileAsked(held, ref, commit, drawn, taskId)),
@@ -2270,6 +2276,7 @@ export function useSidePanel(
     onChoose,
     onShow,
     onClose,
+    onCloseOn,
     onMove,
     onReopen,
     onPin,
