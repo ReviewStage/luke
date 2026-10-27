@@ -4,6 +4,7 @@ import { motionHeld } from "../../motion-timing.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import { visibleViewport } from "../../visible-viewport.js";
 import { askedStyleWidth } from "../anchored-popover/anchored-popover.js";
+import { clipsAround, cutTo } from "../anchored-popover/clip-room.js";
 import {
   type Box,
   POPOVER_ALIGN,
@@ -22,8 +23,8 @@ import { type PressAway, usePressAway } from "../anchored-popover/press-away.js"
  * (`anchor`), read anew each time it is measured; the layer stands a small
  * gap off that box, from its leading edge, on the side asked. It turns to
  * the other side where the side asked cannot hold it and the other can, and
- * keeps inside what can be seen of it: the box that clips it, a scroller
- * say, cut to what is seen of the window. It is laid in its owner's box
+ * keeps inside what can be seen of it: what is seen of the window, cut to
+ * each box that clips it, a scroller say (`clip-room.ts`). It is laid in its owner's box
  * rather than over the window, so a scroll carries it with the words it
  * stands by and a field in it is still inside the owner's box when it takes
  * the focus. It is measured as it is drawn, before it is painted, each time
@@ -67,27 +68,6 @@ function samePlace(a: FloatPlace | undefined, b: FloatPlace): boolean {
     a.width === b.width &&
     a.room === b.room
   );
-}
-
-/** The nearest box around `element` that clips what overflows it; none where only the window does. */
-function clipOf(element: HTMLElement): HTMLElement | undefined {
-  for (let at = element.parentElement; at !== null; at = at.parentElement) {
-    const { overflowX, overflowY } = getComputedStyle(at);
-    if (overflowX !== "visible" || overflowY !== "visible") return at;
-  }
-  return undefined;
-}
-
-/** What can be seen of the clipping box, cut to what is seen of the window. */
-function roomOf(clip: HTMLElement | undefined): Box {
-  const seen = visibleViewport();
-  const box = clip?.getBoundingClientRect();
-  return {
-    left: Math.max(box?.left ?? seen.left, seen.left),
-    top: Math.max(box?.top ?? seen.top, seen.top),
-    right: Math.min(box?.right ?? seen.right, seen.right),
-    bottom: Math.min(box?.bottom ?? seen.bottom, seen.bottom),
-  };
 }
 
 /**
@@ -177,7 +157,7 @@ export function RectFloat({
     const frame = element?.offsetParent;
     const box = anchor();
     if (element === null || !(frame instanceof HTMLElement) || box === undefined) return;
-    const next = placeIn(element, frame, box, roomOf(clipOf(element)), side);
+    const next = placeIn(element, frame, box, cutTo(visibleViewport(), clipsAround(element)), side);
     setPlace((was) => (samePlace(was, next) ? was : next));
   };
   // Note that it is measured on every draw while it stands, because what it stands by moves with its owner's state, words selected anew say, and nothing else tells it.
