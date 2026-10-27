@@ -1,9 +1,16 @@
 import { attachDatabasePool } from "@vercel/functions";
-import { Config, ConfigProvider, Effect, Redacted } from "effect";
+import { Config, ConfigProvider, Effect, Option, Redacted } from "effect";
 import { Pool } from "pg";
 
-/** The variable both pools are built from. */
-const DATABASE_ENVIRONMENT = { URL: "DATABASE_URL" } as const;
+/**
+ * The variables the database is reached through: the pooled URL both pools
+ * are built from, and the unpooled one a connection that must keep its own
+ * session, such as Luke Sync's `LISTEN`, is opened on.
+ */
+const DATABASE_ENVIRONMENT = {
+  URL: "DATABASE_URL",
+  UNPOOLED_URL: "DATABASE_URL_UNPOOLED",
+} as const;
 
 /**
  * The `sslmode` values `pg-connection-string` (v2) already treats as
@@ -60,6 +67,26 @@ export const databaseUrl: Config.Config<Redacted.Redacted> = Config.Redacted(
         )
       : Effect.succeed(Redacted.make(named));
   }),
+);
+
+/**
+ * The unpooled connection string as a `Config`, or none where it is missing
+ * or blank, under the same rule `databaseUrl` reads its own by. Note that it
+ * is optional, because only the build's migrator has been handed it, and a
+ * function that cannot see it must still boot: Luke Sync reads it only where
+ * `LUKE_SYNC` is on, and without it waits on the clock (`sync/hub.ts`).
+ */
+export const databaseUnpooledUrl: Config.Config<Option.Option<Redacted.Redacted>> = Config.option(
+  Config.Redacted(DATABASE_ENVIRONMENT.UNPOOLED_URL),
+).pipe(
+  Config.map((url) =>
+    Option.map(
+      Option.flatMap(url, (named) =>
+        Option.fromUndefinedOr(connectionStringOf(Redacted.value(named))),
+      ),
+      Redacted.make,
+    ),
+  ),
 );
 
 /**

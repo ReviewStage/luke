@@ -117,6 +117,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { NO_TOPICS } from "../sync/watch.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListLiveStatements } from "../tasks/task-list-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
@@ -179,6 +180,7 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   const moved = yield* heldUntil(
     polled,
     (read) => liveDigestOf(read.queries) !== after,
+    NO_TOPICS,
     LIVE_POLL_HOLD.LOOK,
     LIVE_POLL_HOLD.HOLD,
   );
