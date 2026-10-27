@@ -11,6 +11,7 @@ import {
 } from "@luke/features/installed-skill-route-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
+import { formatCount } from "@luke/features/number-format";
 import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
 import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
@@ -899,7 +900,7 @@ test("the When-to-use box stops at the description cap and counts toward it", as
   await settle();
   assert.match(
     document.querySelector(".luke-length-counter")?.textContent ?? "",
-    new RegExp(`/${TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS}$`, "u"),
+    new RegExp(`/${formatCount(TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS)}$`, "u"),
   );
 });
 
