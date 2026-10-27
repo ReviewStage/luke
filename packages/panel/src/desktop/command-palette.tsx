@@ -476,6 +476,20 @@ interface PaletteRow {
   onChoose: () => void;
 }
 
+/** What a row's search reads: its name, its short words, its task's key, its keywords, and whether its letters in order find it. */
+type RowWords = Pick<PaletteRow, "label" | "terms" | "taskKey" | "keywords" | "loose">;
+
+/**
+ * A row ranked before it is drawn: what its search reads, and the row, drawn
+ * only once the filter lists it. Note that the tasks and the Inbox's items
+ * rank this way, as the files do, because a source may hold thousands, a row's
+ * marks and card are most of its cost, and a filter lists fifty at most.
+ */
+interface UndrawnRow {
+  readonly subject: SearchSubject;
+  readonly draw: () => PaletteRow;
+}
+
 /** One kind's rows, ranked and cut to what the filter lists, and its source's notice where it stands. */
 interface PaletteSection {
   kind: PaletteKind;
@@ -487,7 +501,7 @@ interface PaletteSection {
  * What a row is searched by: its name, its other short words, its task's
  * key, its keywords, and, for a file or a command, its letters in order.
  */
-function rowSubject(row: PaletteRow): SearchSubject {
+function rowSubject(row: RowWords): SearchSubject {
   return {
     label: row.label,
     lines: row.terms.filter((term) => term !== row.label),
@@ -500,9 +514,19 @@ function rowSubject(row: PaletteRow): SearchSubject {
   };
 }
 
+/** How well what a row is searched by answers the query, by the tier it meets; 0 where it meets none. */
+function subjectScore(subject: SearchSubject, query: string): number {
+  return searchHit(subject, query)?.score ?? 0;
+}
+
 /** How well a row answers the query, by the tier it meets; 0 where it meets none. */
 function rowScore(row: PaletteRow, query: string): number {
-  return searchHit(rowSubject(row), query)?.score ?? 0;
+  return subjectScore(rowSubject(row), query);
+}
+
+/** A row ranked by its `words` and drawn with the rest of it, by `draw`, only once it is listed. */
+function undrawnRow(words: RowWords, draw: () => Omit<PaletteRow, keyof RowWords>): UndrawnRow {
+  return { subject: rowSubject(words), draw: () => ({ ...draw(), ...words }) };
 }
 
 /**
@@ -756,7 +780,7 @@ function taskRows(
   openAgent: (agentId: string) => void,
   showAgent: TasksControl["onShowAgent"],
   originOf: (task: TaskSummary) => Actor | undefined,
-): readonly PaletteRow[] {
+): readonly UndrawnRow[] {
   const listedId = tasks.workspace?.id;
   const carded = { ...tasks, onShowAgent: showAgent };
   // Note that a repository's name is weighed against each repository listed once, not against each task, since many tasks share one.
@@ -782,33 +806,18 @@ function taskRows(
       ? undefined
       : { workspaceName: home.name, number: task.number };
   };
-  const taskOf = (task: TaskSummary): PaletteRow => {
+  const taskOf = (task: TaskSummary): UndrawnRow => {
     const elsewhere = elsewhereOf(task);
     const numbered = keyOf(task);
     const key =
       numbered === undefined ? undefined : taskKey(numbered.workspaceName, numbered.number);
-    const worn = assigneeFace(task, readerOf(task));
     const createdBy = task.createdBy?.name ?? null;
     const assignedTo = task.assignee?.name ?? null;
     // Note that a task Luke or an agent made says them in its detail, so it is found by them.
     const origin = originOf(task);
     const madeBy = origin === undefined ? null : actorName(origin);
-    const detail = taskDetail(task, repositories);
-    return {
-      ...tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }),
-      detail:
-        madeBy === null
-          ? detail
-          : [detail, `by ${madeBy}`].filter((words) => words !== undefined).join(" · "),
-      workspace: elsewhere,
-      card: <PaletteTaskCard tasks={carded} task={task} />,
-      endMark: (
-        <>
-          {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
-          <TaskRowStatus task={task} stranded={strandedHome(tasks, task)} />
-        </>
-      ),
-      people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
+    const words: RowWords = {
+      label: task.name,
       terms: [
         task.name,
         key,
@@ -820,26 +829,54 @@ function taskRows(
         origin === undefined ? null : MADE_BY_WORDS[origin.kind],
       ].filter((term) => term !== null && term !== undefined),
       taskKey: numbered,
-      onChoose: () => open(task.id),
     };
+    return undrawnRow(words, () => {
+      const worn = assigneeFace(task, readerOf(task));
+      const detail = taskDetail(task, repositories);
+      return {
+        icon: tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }).icon,
+        detail:
+          madeBy === null
+            ? detail
+            : [detail, `by ${madeBy}`].filter((each) => each !== undefined).join(" · "),
+        workspace: elsewhere,
+        card: <PaletteTaskCard tasks={carded} task={task} />,
+        endMark: (
+          <>
+            {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
+            <TaskRowStatus task={task} stranded={strandedHome(tasks, task)} />
+          </>
+        ),
+        people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
+        onChoose: () => open(task.id),
+      };
+    });
   };
-  const agentOf = (agent: TasklessAgent, archived: boolean): PaletteRow => {
+  const agentOf = (agent: TasklessAgent, archived: boolean): UndrawnRow => {
     const name = agentName(agent, tasks.agents.models);
-    const words = [agent.repository, archived ? ARCHIVED_WORD : null].filter(
-      (word) => word !== null,
-    );
-    return {
-      ...tabLook({ kind: TAB_KIND.AGENT, name, agent }),
-      detail: words.length === 0 ? undefined : words.join(" · "),
-      endMark: agentEndMark(agent, archived),
-      card: (
-        <AgentCard subject={tasklessRowSubject(agent, tasks.agents)} models={tasks.agents.models} />
-      ),
+    const words: RowWords = {
+      label: name,
       terms: [name, agent.repository, agent.automationName ?? null].filter((term) => term !== null),
-      onChoose: () => openAgent(agent.id),
     };
+    return undrawnRow(words, () => {
+      const said = [agent.repository, archived ? ARCHIVED_WORD : null].filter(
+        (word) => word !== null,
+      );
+      return {
+        icon: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
+        detail: said.length === 0 ? undefined : said.join(" · "),
+        endMark: agentEndMark(agent, archived),
+        card: (
+          <AgentCard
+            subject={tasklessRowSubject(agent, tasks.agents)}
+            models={tasks.agents.models}
+          />
+        ),
+        onChoose: () => openAgent(agent.id),
+      };
+    });
   };
-  const rowOf = (row: TaskRow, archived: boolean): PaletteRow =>
+  const rowOf = (row: TaskRow, archived: boolean): UndrawnRow =>
     row.kind === TASK_ROW.TASK ? taskOf(row.task) : agentOf(row.agent, archived);
   const listed = (task: TaskSummary) => listedId === undefined || task.workspaceId === listedId;
   // The pinned stand first, as the sidebar's; the rest by their last
@@ -1080,16 +1117,21 @@ function snippetOf(
   return undefined;
 }
 
+/** What an Inbox item's search reads: its title and its holder's name, and else everything it says (`inboxItemWords`). */
+function inboxWords({ holder, item }: InboxListed): RowWords {
+  const title = cardTitle(item.title);
+  return { label: title, terms: [title, holderName(holder)], keywords: inboxItemWords(item) };
+}
+
 /**
- * The listed workspace's Inbox items, each by its agent's tile and title,
- * beside its task's or automation's name and, where its thread rather than
- * those found it, the words that did, the marks its Inbox row wears at its
- * end and its card hung beside it (`inbox-item-parts.tsx`). Each is found
- * by its title and its holder's name, and else by everything it says
- * (`inboxItemWords`).
+ * An Inbox item's row, by its agent's tile and title, beside its task's or
+ * automation's name and, where its thread rather than those found it, the
+ * words that did, the marks its Inbox row wears at its end and its card hung
+ * beside it (`inbox-item-parts.tsx`), drawn only once the filter lists it.
  */
-function inboxRows(
-  items: readonly InboxListed[],
+function inboxRow(
+  listed: InboxListed,
+  words: RowWords,
   seams: {
     readonly readerId: string | undefined;
     readonly models: CodingAgentsControl["models"];
@@ -1097,13 +1139,11 @@ function inboxRows(
     readonly now: number;
     readonly open: (listed: InboxListed) => void;
   },
-): readonly PaletteRow[] {
-  return items.map((listed) => {
-    const { holder, item } = listed;
-    const title = cardTitle(item.title);
+): UndrawnRow {
+  const { holder, item } = listed;
+  return undrawnRow(words, () => {
     const name = holderName(holder);
-    const words = inboxItemWords(item);
-    const snippet = snippetOf(words, [item.title, title, name], seams.tokens);
+    const snippet = snippetOf(words.keywords ?? [], [item.title, words.label, name], seams.tokens);
     return {
       icon: (
         <ItemMark
@@ -1114,7 +1154,6 @@ function inboxRows(
           plain
         />
       ),
-      label: title,
       detail: snippet === undefined ? name : `${name} · ${snippet}`,
       endMark: <InboxItemEnd listed={listed} now={seams.now} readerId={seams.readerId} />,
       card: (
@@ -1125,8 +1164,6 @@ function inboxRows(
           readerId={seams.readerId}
         />
       ),
-      terms: [title, name],
-      keywords: words,
       onChoose: () => seams.open(listed),
     };
   });
@@ -2066,6 +2103,12 @@ export function CommandPalette({
   const inboxAsked =
     open && tasks.signedIn && (filter === PALETTE_FILTER.INBOX || tokens.length > 0);
   const inboxSearch = useInboxSearch(tasks, inboxAsked);
+  // Note that each Inbox item's words are read once for the items pushed rather than on every key.
+  const inboxList = useMemo(
+    () =>
+      inboxAsked ? inboxSearch.items.map((listed) => ({ listed, words: inboxWords(listed) })) : [],
+    [inboxAsked, inboxSearch.items],
+  );
   // Note that the channels are those the window holds, read again as the palette opens, as the sidebar reads them as it is shown.
   const channelsOn = filters.includes(PALETTE_FILTER.CHANNELS);
   const channels = useChannels(
@@ -2120,30 +2163,33 @@ export function CommandPalette({
           limit,
         );
 
-  // Each kind's rows in tiers, built only for the filter shown and only
-  // while open: every row a tier matches ranks above the next tier's.
   const byRow = (row: PaletteRow) => rowScore(row, sought);
   const runCommand = (command: AppCommand) => choose(() => runAppCommand(command));
-  const tiersOf = {
-    [PALETTE_FILTER.TASKS]: () => [taskList],
-    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
-    [PALETTE_FILTER.INBOX]: () => [
-      inboxAsked
-        ? inboxRows(inboxSearch.items, {
-            readerId: tasks.me,
-            models: tasks.agents.models,
-            tokens,
-            now,
-            open: (listed) =>
-              onTasks(() =>
-                tasks.inboxView.onOpenItem(
-                  { ...choiceOf(listed), opened: true },
-                  listed.item.channelId,
-                ),
+  // The tasks and the Inbox's items, which may number thousands, ranked by what their search
+  // reads and drawn only once listed.
+  const undrawnOf = {
+    [PALETTE_FILTER.TASKS]: () => taskList,
+    [PALETTE_FILTER.INBOX]: () =>
+      inboxList.map(({ listed, words }) =>
+        inboxRow(listed, words, {
+          readerId: tasks.me,
+          models: tasks.agents.models,
+          tokens,
+          now,
+          open: (chosen) =>
+            onTasks(() =>
+              tasks.inboxView.onOpenItem(
+                { ...choiceOf(chosen), opened: true },
+                chosen.item.channelId,
               ),
-          })
-        : [],
-    ],
+            ),
+        }),
+      ),
+  } as const;
+  // Every other kind's rows in tiers, built only for the filter shown and only
+  // while open: every row a tier matches ranks above the next tier's.
+  const tiersOf = {
+    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
     [PALETTE_FILTER.CHANNELS]: () => [
       channelRows(channels.channels ?? [], tasks.workspace?.id, (channelId) =>
         onTasks(() => tasks.inboxView.onOpenChannel(channelId)),
@@ -2152,7 +2198,6 @@ export function CommandPalette({
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],
-    [PALETTE_FILTER.FILES]: () => [],
     // Note that a command is found by its letters in order too, as a path is, since a command's name is typed by its first letters.
     // Note that the commands are one tier, so a query ranks them all alike, and their order
     // is what an empty field lists and what breaks a tie: the open thing's, then Go to, then the window's.
@@ -2177,19 +2222,29 @@ export function CommandPalette({
       settingsPageRows(settings.capabilities, experiments, openPage),
       settingRows(settings.rows, land),
     ],
-  } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
+  } as const satisfies Record<
+    Exclude<PaletteKind, keyof typeof undrawnOf | typeof PALETTE_FILTER.FILES>,
+    () => readonly (readonly PaletteRow[])[]
+  >;
   // Note that a file found opens through the panel's one door for a file
   // named in place: the tab it has, as it stands, or a new one at the strip's end.
   const openFile = (path: string) =>
     onTasks(() => shownOverHistory(tasks, () => tasks.sidePanel.onOpenFile({ path })));
-  const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
-    kind === PALETTE_FILTER.FILES
-      ? (filesOpen ? matchedPaths : []).map((path) =>
-          fileRow(path, { shown: tasks.shownCode ?? [], repository }, openFile),
-        )
-      : tiersOf[kind]()
-          .flatMap((tier) => ranked(tier, sought, limit, byRow))
-          .slice(0, limit);
+  const rowsFor = (kind: PaletteKind): readonly PaletteRow[] => {
+    if (kind === PALETTE_FILTER.FILES) {
+      return (filesOpen ? matchedPaths : []).map((path) =>
+        fileRow(path, { shown: tasks.shownCode ?? [], repository }, openFile),
+      );
+    }
+    if (kind === PALETTE_FILTER.TASKS || kind === PALETTE_FILTER.INBOX) {
+      return ranked(undrawnOf[kind](), sought, limit, (row) =>
+        subjectScore(row.subject, sought),
+      ).map((row) => row.draw());
+    }
+    return tiersOf[kind]()
+      .flatMap((tier) => ranked(tier, sought, limit, byRow))
+      .slice(0, limit);
+  };
   const kinds = filters.filter((each): each is PaletteKind =>
     filter === PALETTE_FILTER.ALL ? each !== PALETTE_FILTER.ALL : each === filter,
   );
