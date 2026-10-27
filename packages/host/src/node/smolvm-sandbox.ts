@@ -1,5 +1,5 @@
 import { CLAUDE_CODE_PIN, CODEX_PIN } from "@luke/agent-runner/pins";
-import { Duration, Effect, Option, Stream } from "effect";
+import { Duration, Effect, Option, Schema, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { ChildProcess } from "effect/process";
 import {
@@ -158,10 +158,26 @@ function vmFolders(folder: string) {
   };
 }
 
-/** A failure smolvm printed, as its last line, cut short. */
-function failureOf(printed: string): string {
-  const lines = printed.trim().split("\n");
-  return (lines.at(-1) ?? "").slice(0, FAILURE_CHARACTERS);
+/** The code smolvm gives a machine that does not exist, under `--error-format json`. */
+const NOT_FOUND = "NOT_FOUND";
+
+/** A failure as smolvm prints it under `--error-format json`: a stable code, and its words. */
+const decodeFailure = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({ error: Schema.Struct({ code: Schema.String, message: Schema.String }) }),
+  ),
+);
+
+/** A failure smolvm printed: its code where it printed one as JSON, and its words, the last line where it did not, cut short. */
+function failureOf(printed: string): { readonly code: string | undefined; readonly words: string } {
+  const last = printed.trim().split("\n").at(-1) ?? "";
+  return Option.match(decodeFailure(last), {
+    onNone: () => ({ code: undefined, words: last.slice(0, FAILURE_CHARACTERS) }),
+    onSome: ({ error }) => ({
+      code: error.code,
+      words: error.message.slice(0, FAILURE_CHARACTERS),
+    }),
+  });
 }
 
 /** A sandboxed device's VMs through `smolvm`: the launch that starts a runner in its agent's VM, and the VM's lifetime around it. */
@@ -314,14 +330,19 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
             if (!(yield* fileSystem.exists(each))) yield* replaced(each, "");
           }
         }
-        const name = machineOf(agentId);
-        if (yield* succeeded(["machine", "start", "--name", name], START_TIMEOUT)) return;
+        const start = ["machine", "start", "--name", machineOf(agentId), "--error-format", "json"];
+        const first = yield* ran(start, START_TIMEOUT);
+        if (Option.isNone(first)) return yield* unavailable("smolvm did not start the machine");
+        if (first.value.code === 0) return;
+        // Note that only a machine smolvm says does not exist is made; one that exists and will not boot says why, rather than colliding with its own name.
+        const why = failureOf(first.value.printed);
+        if (why.code !== NOT_FOUND) return yield* unavailable(why.words);
         const made = yield* ran(created(agentId, folder, github), START_TIMEOUT);
         if (Option.isNone(made)) return yield* unavailable("smolvm did not make the machine");
-        if (made.value.code !== 0) return yield* unavailable(failureOf(made.value.printed));
-        const up = yield* ran(["machine", "start", "--name", name], START_TIMEOUT);
+        if (made.value.code !== 0) return yield* unavailable(failureOf(made.value.printed).words);
+        const up = yield* ran(start, START_TIMEOUT);
         if (Option.isNone(up)) return yield* unavailable("smolvm did not start the machine");
-        if (up.value.code !== 0) return yield* unavailable(failureOf(up.value.printed));
+        if (up.value.code !== 0) return yield* unavailable(failureOf(up.value.printed).words);
       }).pipe(
         Effect.catchTag("PlatformError", () =>
           Effect.fail(unavailable("the agent's folders could not be made")),

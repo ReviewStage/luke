@@ -7,7 +7,7 @@ import {
   deviceAgentCommandArgsSchema,
   deviceAgentReadArgsSchema,
 } from "@luke/features/device-agent-wire";
-import { Duration, Effect, Fiber, Option, Ref, Schema, Stream } from "effect";
+import { Duration, Effect, Fiber, Option, Ref, Schema, type Scope, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 
@@ -62,7 +62,12 @@ const NO_VM = "Not run: the agent's VM has not been made yet.";
  * where it was made already (`woken`), and the process a command is there.
  */
 export interface LocalAgentVm {
-  readonly woken: Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner>;
+  /** The VM started where it was made already, and held for as long as the scope it is run in stands; whether it stands. */
+  readonly woken: Effect.Effect<
+    boolean,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
+  >;
   readonly exec: (command: {
     readonly cwd: string;
     readonly command: string;
@@ -249,4 +254,4 @@ export const answeredLocalAgentRequest = (
 > =>
   request.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
     ? answeredRead(layout, request.args)
-    : answeredCommand(layout, request.args, env, inVm);
+    : Effect.scoped(answeredCommand(layout, request.args, env, inVm));

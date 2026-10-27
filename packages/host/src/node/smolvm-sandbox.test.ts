@@ -69,11 +69,12 @@ const isSignal = (each: Pick<Spawned, "program" | "args">) =>
 const valuesOf = (args: readonly string[], flag: string) =>
   args.flatMap((each, index) => (each === flag ? [args[index + 1] ?? ""] : []));
 
-/** The clock nudged until the condition holds, as the follower's fibers run up to their next wait. */
+/** The clock nudged until the condition holds, as the follower's fibers, and the file writes they wait on, which wait on no clock, run up to their next wait. */
 const until = (holds: () => boolean) =>
   Effect.gen(function* () {
-    for (let round = 0; round < 400 && !holds(); round += 1) {
+    for (let round = 0; round < 20_000 && !holds(); round += 1) {
       yield* TestClock.adjust(Duration.zero);
+      yield* Effect.yieldNow;
     }
     assert.ok(holds(), "the follower never got there");
   });
@@ -132,7 +133,11 @@ const following = (input: {
       if (program !== SMOLVM) return undefined;
       input.onSmolvm?.(args, spawner.spawned);
       if (isSmolvm("create")({ program, args })) made = true;
-      if (isSmolvm("start")({ program, args })) return { exitCode: made ? 0 : 1 };
+      if (isSmolvm("start")({ program, args })) {
+        return made
+          ? { exitCode: 0 }
+          : { exitCode: 1, stderr: '{"error":{"code":"NOT_FOUND","message":"no such machine"}}\n' };
+      }
       if (isRunner({ program, args })) {
         return input.runnerExits === undefined ? {} : { exitCode: 0, after: input.runnerExits };
       }

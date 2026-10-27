@@ -608,6 +608,54 @@ export function composeLocalAgents(
         const workers = yield* FiberMap.make<string>();
         const mailboxes = new Map<string, Queue.Queue<DeviceAgentClaimedLine>>();
         const runners = new Map<string, Runner>();
+        const vmHolds = new Map<string, number>();
+        const vmLocks = new Map<string, Semaphore.Semaphore>();
+
+        /** The lock over the agent's VM's start and stop, one per agent, so one agent's slow start holds up no other's. */
+        const vmLockOf = (agentId: string) => {
+          const kept = vmLocks.get(agentId);
+          if (kept !== undefined) return kept;
+          const made = Semaphore.makeUnsafe(1);
+          vmLocks.set(agentId, made);
+          return made;
+        };
+
+        /**
+         * The agent's VM started by `start` and held for as long as the scope
+         * it is run in stands, by its runner or by one of its tools' commands
+         * between turns; whether it stands. The last hold let go of stops the
+         * VM, so a command between turns never leaves it running, and never
+         * stops it under a runner. A VM a discard deleted is held by nothing.
+         */
+        const vmHeld = <E, R>(agentId: string, start: Effect.Effect<boolean, E, R>) =>
+          Effect.gen(function* () {
+            const sandbox = platform.sandbox;
+            if (sandbox === undefined) return false;
+            const lock = vmLockOf(agentId);
+            const up = yield* lock.withPermit(
+              Effect.tap(start, (stands) =>
+                Effect.sync(() => {
+                  if (stands) vmHolds.set(agentId, (vmHolds.get(agentId) ?? 0) + 1);
+                }),
+              ),
+            );
+            if (!up) return false;
+            yield* Effect.addFinalizer(() =>
+              lock
+                .withPermit(
+                  Effect.gen(function* () {
+                    const held = vmHolds.get(agentId);
+                    if (held === undefined) return;
+                    if (held > 1) return vmHolds.set(agentId, held - 1);
+                    vmHolds.delete(agentId);
+                    if (!(yield* sandbox.stopped(agentId)))
+                      report("a local agent's VM could not be stopped");
+                  }),
+                )
+                .pipe(Effect.provideContext(services)),
+            );
+            return true;
+          });
         const answering = yield* FiberSet.make();
 
         const settle = (id: string, exitCode?: number) =>
@@ -765,34 +813,28 @@ export function composeLocalAgents(
             }
             const temp = path.join(layout.folder, TEMP_FOLDER);
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
+            const runnerScope = yield* Scope.fork(agentScope);
+            // Note that the runner holds its VM for as long as its scope stands, so the VM is let go of last as the scope closes, once the runner has ended.
             if (sandbox !== undefined) {
               // Note that smolvm's reason names no secret, since its credentials are only ever references to their files.
-              const refused = yield* sandbox
-                .started({ agentId, folder: layout.folder, github: signsIn })
-                .pipe(
-                  Effect.as(Option.none<string>()),
-                  Effect.catchTag("LocalAgentSandboxUnavailable", (unavailable) =>
-                    Effect.succeed(Option.some(unavailable.detail)),
-                  ),
-                );
+              const refused = yield* vmHeld(
+                agentId,
+                Effect.as(
+                  sandbox.started({ agentId, folder: layout.folder, github: signsIn }),
+                  true,
+                ),
+              ).pipe(
+                Scope.provide(runnerScope),
+                Effect.as(Option.none<string>()),
+                Effect.catchTag("LocalAgentSandboxUnavailable", (unavailable) =>
+                  Effect.succeed(Option.some(unavailable.detail)),
+                ),
+              );
               if (Option.isSome(refused)) {
+                yield* Scope.close(runnerScope, Exit.void);
                 report(`a local agent's VM could not be started: ${refused.value}`);
                 return yield* settle(line.id, NOT_STARTED);
               }
-            }
-            const runnerScope = yield* Scope.fork(agentScope);
-            // Note that the VM is stopped last as the runner's scope closes, once its runner has ended, and everything the agent left running in it with it.
-            if (sandbox !== undefined) {
-              yield* Scope.addFinalizer(
-                runnerScope,
-                Effect.provideContext(sandbox.stopped(agentId), services).pipe(
-                  Effect.flatMap((down) =>
-                    down
-                      ? Effect.void
-                      : Effect.sync(() => report("a local agent's VM could not be stopped")),
-                  ),
-                ),
-              );
             }
             const stdin = yield* Queue.unbounded<string>();
             const encoder = new TextEncoder();
@@ -924,8 +966,16 @@ export function composeLocalAgents(
         const discarded = (agentId: string) =>
           Effect.gen(function* () {
             yield* stopped(agentId);
-            // Note that the VM goes before the folder, so nothing in it is still writing there as it is removed.
-            if (platform.sandbox !== undefined) yield* platform.sandbox.deleted(agentId);
+            // Note that the VM goes before the folder, so nothing in it is still writing there as it is removed, and a command's hold outlasting it stops nothing.
+            const sandbox = platform.sandbox;
+            if (sandbox !== undefined) {
+              yield* vmLockOf(agentId).withPermit(
+                Effect.andThen(
+                  Effect.sync(() => vmHolds.delete(agentId)),
+                  sandbox.deleted(agentId),
+                ),
+              );
+            }
             const layout = deviceAgentLayout(folder, agentId);
             const unsaved = yield* unsavedWork(layout);
             if (Option.isSome(unsaved)) {
@@ -1091,7 +1141,7 @@ export function composeLocalAgents(
               sandbox === undefined
                 ? undefined
                 : {
-                    woken: sandbox.woken(claimed.agentId),
+                    woken: vmHeld(claimed.agentId, sandbox.woken(claimed.agentId)),
                     exec: (command: Omit<LocalAgentSandboxCommand, "agentId" | "folder">) =>
                       sandbox.exec({ ...command, agentId: claimed.agentId, folder: layout.folder }),
                   };
