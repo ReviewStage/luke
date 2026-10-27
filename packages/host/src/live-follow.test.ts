@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@luke/features/live-wire";
-import { Clock, Duration, Effect, Exit, Fiber, Stream } from "effect";
+import { Clock, Duration, Effect, Exit, Fiber, Random, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import { confirmWrite, LiveBroken, liveRows, type SealedRead, type TxWait } from "./live-follow.js";
+import { confirmWrite, liveRows, type SealedRead, type TxWait } from "./live-follow.js";
+import { polledLive } from "./testing/polled-live.js";
 
 /**
  * A read followed over the service's held poll hands on its first answer's
  * rows, then polls past where they stood, handing on each answer that moved;
- * a poll that fails is asked again on a backoff and says the rows may be
- * behind; a read refused as signed out ends.
+ * a poll that fails is asked again on a jittered backoff and says the rows
+ * may be behind; a read refused as signed out ends. Once an answer carries
+ * the txids of the writes that woke it, the read hands a wait a write is
+ * confirmed on.
  */
 
 /** Every step the read has to take, taken. */
@@ -28,12 +31,17 @@ function sealed(part: Part): SealedLiveQueryWire {
   return { capability: LIVE_POLL_URL, queryFingerprint: `fingerprint-${part}`, expiresAt: 0 };
 }
 
-/** A read as the service answers it polled: each part's rows inline under a digest of them, or the digest alone where nothing moved. */
-function polledRead(left: readonly unknown[] | undefined, digest: string): SealedRead<Part> {
+/** A read as the service answers it polled: each part's rows inline under a digest of them, or the digest alone where nothing moved, and the txids of the writes that woke it where any did. */
+function polledRead(
+  left: readonly unknown[] | undefined,
+  digest: string,
+  txids?: readonly string[],
+): SealedRead<Part> {
   const part = (name: Part, rows: readonly unknown[] | undefined) => ({
     ...sealed(name),
     digest: `${name}-${digest}`,
     ...(rows === undefined ? undefined : { rows }),
+    ...(txids === undefined ? undefined : { txids }),
   });
   return {
     url: LIVE_POLL_URL,
@@ -78,7 +86,12 @@ it.effect(
     }),
 );
 
-it.effect("a poll that fails is asked again a second later, then longer, up to five seconds", () =>
+/** When each poll was asked, by the test's clock, for a read whose polls answer as `answer` says, moved along in steps for `span`. */
+const askedAt = (
+  answer: (asked: number) => ReturnType<LiveFollowPoll>,
+  span: Duration.Duration,
+  step: Duration.Duration,
+) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
     const asks: number[] = [];
@@ -86,24 +99,61 @@ it.effect("a poll that fails is asked again a second later, then longer, up to f
       liveRows<Part>(
         {
           poll: () =>
-            Effect.sync(() => {
+            Effect.suspend(() => {
               asks.push(clock.currentTimeMillisUnsafe());
-              return { failure: "unavailable" };
+              return answer(asks.length);
             }),
         },
         polledRead([], "1"),
       ).pipe(Stream.runDrain),
     );
-    for (let second = 0; second < 30; second += 1) {
+    for (let at = 0; at < Duration.toMillis(span); at += Duration.toMillis(step)) {
       yield* settled;
-      yield* TestClock.adjust(Duration.seconds(1));
+      yield* TestClock.adjust(step);
     }
-    const start = asks[0] ?? 0;
-    const gaps = asks.slice(1).map((at, index) => at - (asks[index] ?? start));
-    assert.deepEqual(gaps.slice(0, 4), [1_000, 2_000, 4_000, 5_000]);
-    assert.ok(gaps.every((gap) => gap <= 5_000));
     yield* Fiber.interrupt(following);
-  }),
+    return asks;
+  });
+
+type LiveFollowPoll = Parameters<typeof liveRows<Part>>[0]["poll"];
+
+/** The time between each ask and the one before it. */
+const gapsOf = (asks: readonly number[]) =>
+  asks.slice(1).map((at, index) => at - (asks[index] ?? 0));
+
+it.effect(
+  "a poll that fails is asked again after a wait drawn at random up to a second, then up to two, four, and five",
+  () =>
+    Effect.gen(function* () {
+      const asks = yield* askedAt(
+        () => Effect.succeed({ failure: "unavailable" }),
+        Duration.seconds(15),
+        Duration.millis(100),
+      ).pipe(
+        // Every wait drawn at half its bound, so the bounds read back doubled.
+        Effect.provideService(Random.Random, {
+          nextIntUnsafe: () => 0,
+          nextDoubleUnsafe: () => 0.5,
+        }),
+      );
+      assert.deepEqual(gapsOf(asks).slice(0, 5), [500, 1_000, 2_000, 2_500, 2_500]);
+    }),
+);
+
+it.effect(
+  "a poll goes a coalesce window after an answer a write woke, and the floor after any other",
+  () =>
+    Effect.gen(function* () {
+      const asks = yield* askedAt(
+        (asked) =>
+          Effect.succeed(
+            asked === 1 ? polledRead([{ id: "b" }], "2", ["41"]) : polledRead(undefined, "2"),
+          ),
+        Duration.seconds(1),
+        Duration.millis(50),
+      );
+      assert.deepEqual(gapsOf(asks).slice(0, 2), [100, 500]);
+    }),
 );
 
 it.effect(
@@ -164,35 +214,84 @@ it.effect("a read whose session the service refuses as signed out ends, and is a
   }),
 );
 
+/** A read followed over a scripted held poll, and the wait it hands, as it stands. */
+const followedWithWait = Effect.gen(function* () {
+  const live = polledLive<Part>(["left", "right"]);
+  let handed: TxWait | undefined;
+  const following = yield* Effect.forkChild(
+    Stream.runDrain(
+      liveRows<Part>(
+        {
+          poll: live.poll,
+          onTxWait: (wait) => {
+            handed = wait;
+          },
+        },
+        live.first(),
+      ),
+    ),
+  );
+  yield* settled;
+  return { live, following, wait: () => handed };
+});
+
+/** Whether the fiber has ended, and ended well. */
+const succeeded = <A, E>(fiber: Fiber.Fiber<A, E>) => {
+  const exit = fiber.pollUnsafe();
+  return exit !== undefined && Exit.isSuccess(exit);
+};
+
 it.effect(
-  "a write confirms at once where it changed no row, and waits for its transaction where it did",
+  "a write waits for the first answer carrying its txid, once an answer carried any, and a write that changed no row waits for none",
   () =>
     Effect.gen(function* () {
-      const arrived = new Set<string>();
-      const wait: TxWait = (txid) =>
-        Effect.repeat(Effect.sleep(Duration.millis(100)), { until: () => arrived.has(txid) });
-      const unchanged = yield* Effect.forkChild(confirmWrite(wait, undefined));
+      const { live, following, wait } = yield* followedWithWait;
+      live.set({ left: [{ id: "a" }], right: [] });
+      yield* TestClock.adjust(Duration.seconds(1));
       yield* settled;
-      assert.ok(unchanged.pollUnsafe(), "no txid, nothing to wait for");
+      assert.equal(wait(), undefined, "no answer carried a txid, so no wait is handed");
 
-      const committed = yield* Effect.forkChild(confirmWrite(wait, "42"));
+      live.set({ left: [{ id: "b" }] }, ["41"]);
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
+      const unchanged = yield* Effect.forkChild(confirmWrite(wait(), undefined));
+      const committed = yield* Effect.forkChild(confirmWrite(wait(), "42"));
+      yield* settled;
+      assert.ok(succeeded(unchanged), "no txid, nothing to wait for");
       yield* TestClock.adjust(Duration.seconds(1));
       assert.equal(committed.pollUnsafe(), undefined, "still waiting");
-      arrived.add("42");
-      yield* TestClock.adjust(Duration.seconds(1));
-      assert.ok(committed.pollUnsafe(), "confirmed once it arrived");
+
+      live.set({ left: [{ id: "c" }] }, ["42"]);
+      yield* settled;
+      assert.ok(succeeded(committed), "confirmed on the answer carrying it");
+
+      yield* Fiber.interrupt(following);
+      assert.equal(wait(), undefined, "the wait is taken back once the read is let go");
     }),
 );
 
-it.effect("a write whose transaction never arrives is confirmed still once ten seconds pass", () =>
+it.effect("a write whose txid an answer already carried confirms at once", () =>
   Effect.gen(function* () {
-    const wait: TxWait = (_txid, timeout) =>
-      Effect.andThen(Effect.sleep(timeout), Effect.fail(new LiveBroken({ reason: "timed out" })));
-    const committed = yield* Effect.forkChild(confirmWrite(wait, "42"));
+    const { live, wait } = yield* followedWithWait;
+    live.set({ left: [{ id: "a" }], right: [] }, ["42"]);
+    yield* settled;
+
+    const committed = yield* Effect.forkChild(confirmWrite(wait(), "42"));
+    yield* settled;
+    assert.ok(succeeded(committed));
+  }),
+);
+
+it.effect("a write whose txid no answer carries is confirmed still once ten seconds pass", () =>
+  Effect.gen(function* () {
+    const { live, wait } = yield* followedWithWait;
+    live.set({ left: [{ id: "a" }], right: [] }, ["41"]);
+    yield* settled;
+
+    const committed = yield* Effect.forkChild(confirmWrite(wait(), "42"));
     yield* TestClock.adjust(Duration.seconds(9));
     assert.equal(committed.pollUnsafe(), undefined, "still waiting");
     yield* TestClock.adjust(Duration.seconds(1));
-    const exit = committed.pollUnsafe();
-    assert.ok(exit !== undefined && Exit.isSuccess(exit), "confirmed, since it committed");
+    assert.ok(succeeded(committed), "confirmed, since it committed");
   }),
 );

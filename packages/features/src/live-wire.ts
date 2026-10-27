@@ -111,6 +111,13 @@ export const sealedLiveQuerySchema = EffectSchema.Struct({
    * and no rows.
    */
   digest: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The ids of the transactions whose writes woke the held poll this
+   * answers, on every part it answers, since each was read after them: none
+   * where nothing woke it but its clock. A writer confirms a write once the
+   * read that shows it carries the write's txid.
+   */
+  txids: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
 });
 
 export type SealedLiveQueryWire = typeof sealedLiveQuerySchema.Type;

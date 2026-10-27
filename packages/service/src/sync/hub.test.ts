@@ -204,29 +204,35 @@ it.layer(probeDB)("Luke Sync's hub", (it) => {
     ),
   );
 
-  it.effect("a write that commits while the first read runs wakes the look after it", () =>
-    onHub(({ asleep }) =>
-      Effect.gen(function* () {
-        const sync = yield* Sync;
-        const { row, task } = probeRow();
-        // Note that a second watch on the topic shows the hub has handed the write on before the first read ends.
-        const witness = yield* nextOf(yield* sync.watch([task], NEVER_REACHED));
-        const reads = yield* Ref.make(0);
-        const read = Effect.gen(function* () {
-          if ((yield* Ref.getAndUpdate(reads, (count) => count + 1)) > 0) return true;
-          yield* written(row);
-          yield* driven({ fiber: witness, asleep }, STEP);
-          return false;
-        });
+  it.effect(
+    "a write that commits while the first read runs wakes the look after it, which carries its txid",
+    () =>
+      onHub(({ asleep }) =>
+        Effect.gen(function* () {
+          const sync = yield* Sync;
+          const { row, task } = probeRow();
+          // Note that a second watch on the topic shows the hub has handed the write on before the first read ends.
+          const witness = yield* nextOf(yield* sync.watch([task], NEVER_REACHED));
+          const reads = yield* Ref.make(0);
+          let txid: string | undefined;
+          const read = Effect.gen(function* () {
+            if ((yield* Ref.getAndUpdate(reads, (count) => count + 1)) > 0) return true;
+            txid = yield* written(row);
+            yield* driven({ fiber: witness, asleep }, STEP);
+            return false;
+          });
 
-        const held = yield* Effect.forkChild(
-          heldUntil(read, (moved) => moved, [task], NEVER_REACHED, Duration.hours(2)),
-          { startImmediately: true },
-        );
+          const held = yield* Effect.forkChild(
+            heldUntil(read, (moved) => moved, [task], NEVER_REACHED, Duration.hours(2)),
+            { startImmediately: true },
+          );
 
-        assert.deepEqual(yield* driven({ fiber: held, asleep }, STEP), Option.some(true));
-      }),
-    ),
+          assert.deepEqual(
+            yield* driven({ fiber: held, asleep }, STEP),
+            Option.some({ read: true, txids: [txid] }),
+          );
+        }),
+      ),
   );
 
   it.effect("the listener is opened once, however many watch at once", () =>
