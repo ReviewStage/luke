@@ -47,7 +47,7 @@ import { insideCode, linksIn } from "@luke/features/mention-link";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import type { AppInboxTasklessItem } from "@luke/host/app-state";
+import type { AppInboxTasklessItem, AppInboxWaitingItem } from "@luke/host/app-state";
 import { matchesTokens } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-fold.js";
@@ -1457,6 +1457,15 @@ export function waitsOnReader(
 ): boolean {
   const waitsOn = entry.waitsOn ?? entry.startedBy;
   return waitsOn === undefined || readerId === undefined || waitsOn === readerId;
+}
+
+/**
+ * Whether an open item main lists holds an ask open rather than being a
+ * notice: what the Inbox's number and the Dock's badge count. One from a
+ * service before it, which says nothing, counts as asking, as every item did.
+ */
+export function holdsAsk(item: Pick<AppInboxWaitingItem, "asking">): boolean {
+  return item.asking !== false;
 }
 
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */

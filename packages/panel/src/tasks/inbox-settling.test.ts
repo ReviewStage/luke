@@ -22,6 +22,7 @@ import {
   useInboxSettler,
   useInboxSettlingOwner,
   useSettledItems,
+  useSettledToDo,
   useSettledWaiting,
   withReadMark,
 } from "./inbox-settling.js";
@@ -139,6 +140,48 @@ test("a nod drops its notice from main's count the moment it is sent, its thread
   // Main, once seen without the item, is trusted again: an item it lists after is one asked again.
   render(waitingOn(ASKED, OTHER), [answered, OTHER]);
   assert.equal(probe.count, 2, "main's word stands once it caught up");
+});
+
+test("the Inbox's number counts the questions main counts less those the window settled: a nod on a notice moves nothing, since no notice counts, and a close on a question drops it at once", () => {
+  const probe: { toDo: number | undefined; settler: InboxSettler | undefined } = {
+    toDo: undefined,
+    settler: undefined,
+  };
+  const waiting: readonly AppInboxTask[] = [
+    {
+      taskId: "plan-billing",
+      items: [
+        {
+          id: ASKED.id,
+          agentId: ASKED.agentId,
+          title: ASKED.title,
+          postedAt: 1_000,
+          asking: false,
+        },
+        { id: OTHER.id, agentId: OTHER.agentId, title: OTHER.title, postedAt: 1_000, asking: true },
+      ],
+    },
+  ];
+  // Main counts the one question, the notice beside it counting nowhere.
+  const holdings = [{ taskId: "plan-billing", items: 2, toDo: 1, updatedAt: 1_000 }];
+  function Page() {
+    const settled = useSettledWaiting(waiting, []);
+    probe.toDo = useSettledToDo(holdings, waiting, settled.waiting);
+    probe.settler = useInboxSettler();
+    return null;
+  }
+  root = createRoot(document.createElement("div"));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Page))));
+  assert.equal(probe.toDo, 1);
+
+  act(() => {
+    probe.settler?.acknowledge(ASKED);
+  });
+  assert.equal(probe.toDo, 1, "the notice was never counted");
+  act(() => {
+    probe.settler?.close(OTHER);
+  });
+  assert.equal(probe.toDo, 0);
 });
 
 test("a nod the service refused brings its notice back into main's count and the reads", () => {

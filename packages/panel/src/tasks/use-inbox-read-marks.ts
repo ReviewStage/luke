@@ -1,25 +1,17 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
+import type { InboxItem } from "@luke/features/inbox-wire";
 import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { STATUS_TONE } from "@luke/ui";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { ActHandle } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
-import {
-  acknowledgedOnOpen,
-  INBOX_HOLDER,
-  type InboxGroup,
-  type InboxListed,
-  isUnread,
-  readersItem,
-} from "./inbox-model.js";
-import { type InboxReadMark, type InboxToDoMark, useInboxSettler } from "./inbox-settling.js";
+import { acknowledgedOnOpen, type InboxListed, isUnread } from "./inbox-model.js";
+import { type InboxReadMark, useInboxSettler } from "./inbox-settling.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
 
 /**
@@ -64,46 +56,9 @@ export interface InboxReadMarks {
   readonly onMarkAll: (items: readonly InboxItem[]) => void;
 }
 
-/**
- * What a mark is weighed against for the sidebar's To do count: the groups
- * listed, which say each item's task, main's count of each task, and the
- * reader.
- */
-export interface InboxToDoBasis {
-  readonly groups: readonly InboxGroup[];
-  readonly holdings: readonly AppInboxTaskHolding[];
-  readonly readerId: string | undefined;
-}
-
-/**
- * What a mark on the item moves of its task's To do count, as
- * `inbox-settling.ts` lays it over main's: only a settled item of the
- * reader's, on a task main counts, whatever its status, since an open one
- * is to do whether read or not, and nobody else's ever is.
- */
-function toDoMarkOf(basis: InboxToDoBasis | undefined, item: InboxItem): InboxToDoMark | undefined {
-  if (basis === undefined || item.status === INBOX_STATUS.OPEN) return undefined;
-  if (!readersItem(item, basis.readerId)) return undefined;
-  const group = basis.groups.find(({ items }) => items.some(({ id }) => id === item.id));
-  if (group?.holder.kind !== INBOX_HOLDER.TASK) return undefined;
-  const taskId = group.holder.task.id;
-  const holding = basis.holdings.find((each) => each.taskId === taskId);
-  if (holding?.toDo === undefined) return undefined;
-  return {
-    taskId,
-    wasUnread: isUnread(item),
-    counted: { toDo: holding.toDo, updatedAt: holding.updatedAt },
-  };
-}
-
-/** The mark an item takes: what it says, and what it moves of the To do count. */
-function markOf(
-  basis: InboxToDoBasis | undefined,
-  item: InboxItem,
-  unread: boolean,
-): InboxReadMark {
-  const toDo = toDoMarkOf(basis, item);
-  return { unread, updatedAt: item.updatedAt, ...(toDo === undefined ? undefined : { toDo }) };
+/** The mark an item takes: what it says of the item as it now stands. */
+function markOf(item: InboxItem, unread: boolean): InboxReadMark {
+  return { unread, updatedAt: item.updatedAt };
 }
 
 /** What one toast says of read marks given to several items: how many the service took, and how many not. */
@@ -139,12 +94,9 @@ interface Wanted {
 export function useInboxReadMarks({
   act,
   workspaceId,
-  toDo,
 }: {
   act: ActHandle["act"];
   workspaceId: string | undefined;
-  /** What a mark is weighed against for the sidebar's To do count; none where nothing lists the items. */
-  toDo?: InboxToDoBasis | undefined;
 }): InboxReadMarks {
   const settler = useInboxSettler();
   const toast = useToast();
@@ -152,11 +104,6 @@ export function useInboxReadMarks({
     (words: string) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
     [toast],
   );
-  // Note that the basis is read as a mark is made, so the presses stay the same while what is listed moves.
-  const basis = useRef(toDo);
-  useLayoutEffect(() => {
-    basis.current = toDo;
-  });
   // The writes, one after another, and each item's latest mark still to go, which its queued write sends.
   const queue = useRef<Promise<void>>(Promise.resolve());
   const wanted = useRef(new Map<string, Wanted>());
@@ -166,7 +113,7 @@ export function useInboxReadMarks({
   // Note that a mark a later one stood for before it went answers as taken, since the write that sent the later one answers its own press.
   const onMark = useCallback(
     (item: InboxItem, unread: boolean, saying?: MarkSaying): Promise<boolean> => {
-      const made = settler.mark(new Map([[item.id, markOf(basis.current, item, unread)]]));
+      const made = settler.mark(new Map([[item.id, markOf(item, unread)]]));
       wanted.current.set(item.id, { made, unread });
       const sent = queue.current.then(() => {
         const latest = wanted.current.get(item.id);
@@ -196,9 +143,7 @@ export function useInboxReadMarks({
   const onMarkAll = useCallback(
     (items: readonly InboxItem[]) => {
       const marks = new Map(
-        items
-          .filter(isUnread)
-          .map((item) => [item.id, markOf(basis.current, item, false)] as const),
+        items.filter(isUnread).map((item) => [item.id, markOf(item, false)] as const),
       );
       if (marks.size === 0) return;
       const made = settler.mark(marks);

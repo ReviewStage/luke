@@ -2759,7 +2759,7 @@ function toDoRows(page: HTMLElement): number {
   return listed(page).filter((row) => !row.startsWith("# ")).length;
 }
 
-test("the sidebar's Inbox counts what To do lists, as main counts each task's to do: an open ask, an unread notice, and a thread you answered written on again, never a read settled item, or a teammate's ask; reading or answering one drops it at once", async () => {
+test("the sidebar's Inbox counts the questions waiting on you, as main counts each task's, while To do still lists an unread notice and a thread you answered written on again: reading one moves nothing, and answering a question drops it at once", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   const NOTE: InboxItem = {
     ...noticeOf(item("a1b2c3d4-0000-4000-8000-000000000011", "Preview is up", 3_500)),
@@ -2781,27 +2781,22 @@ test("the sidebar's Inbox counts what To do lists, as main counts each task's to
   const followed: InboxItem = { ...RETRY, updatedAt: 2_500, unread: true };
   inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, followed, SEEN]);
   inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }, NOTE, THEIRS]);
-  const holding = (billing: number): readonly AppInboxTaskHolding[] => [
-    { taskId: BILLING.id, items: 3, toDo: billing, updatedAt: 4_500 },
-    { taskId: INVITES.id, items: 3, toDo: 2, updatedAt: 4_000 },
+  // Main counts each task's one open ask, never the notice, the thread written on again, or the teammate's ask.
+  const holding: readonly AppInboxTaskHolding[] = [
+    { taskId: BILLING.id, items: 3, toDo: 1, updatedAt: 4_500 },
+    { taskId: INVITES.id, items: 3, toDo: 1, updatedAt: 4_000 },
   ];
-  const { page } = mount([], { holding: holding(2), withSidebar: true });
+  const { page } = mount([], { holding, withSidebar: true });
   await settle();
-  assert.equal(toDoRows(page), 4);
-  assert.equal(sidebarInboxCount(page), 4, "the sidebar counts what To do lists");
-  assert.deepEqual(readMarks, [`read:${EXPIRY.id}`], "opening an open ask leaves it to do");
+  assert.equal(toDoRows(page), 4, "To do still lists the notice and the thread written on again");
+  assert.equal(sidebarInboxCount(page), 2, "the sidebar counts the two questions alone");
   readMarks = [];
 
-  // Opening the thread written on again reads it, and the count drops before main hears of it.
+  // Opening the thread written on again reads it, and moves nothing of the count.
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
   assert.deepEqual(readMarks, [`read:${followed.id}`]);
-  assert.equal(sidebarInboxCount(page), 3);
-  // Main's word catching up counts it no longer either, and the mark adds nothing to it.
-  inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, { ...followed, unread: false }, SEEN]);
-  act(() => setHolding(holding(1)));
-  await settle();
-  assert.equal(sidebarInboxCount(page), 3);
+  assert.equal(sidebarInboxCount(page), 2);
 
   // Answering the open ask drops it the moment it is sent.
   const { sent } = gatedAnswers();
@@ -2810,44 +2805,7 @@ test("the sidebar's Inbox counts what To do lists, as main counts each task's to
   answerWithNote(page, "Use 90%");
   await settle();
   assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
-  assert.equal(sidebarInboxCount(page), 2);
-});
-
-test("a read mark stops moving the sidebar's Inbox once main hands the window a read after the service took it, even where another window's mark leaves main's count as it stood", async () => {
-  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
-  // Note that the thread written on again changed before the open asks, so opening the Inbox reads none out of To do.
-  const followed: InboxItem = { ...RETRY, updatedAt: 2_500, unread: true };
-  const SEEN: InboxItem = {
-    ...RETRY,
-    id: "a1b2c3d4-0000-4000-8000-000000000012",
-    key: "seen",
-    title: "Which region?",
-    updatedAt: 2_000,
-    unread: false,
-  };
-  inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, followed, SEEN]);
-  inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }]);
-  const holding = (): readonly AppInboxTaskHolding[] => [
-    { taskId: BILLING.id, items: 3, toDo: 2, updatedAt: 3_000 },
-    { taskId: INVITES.id, items: 1, toDo: 1, updatedAt: 4_000 },
-  ];
-  const { page } = mount([], { holding: holding(), withSidebar: true });
-  await settle();
-  assert.equal(sidebarInboxCount(page), 3);
-
-  act(() => rowNamed(page, "How is a failed email retried?").click());
-  await settle();
-  assert.equal(sidebarInboxCount(page), 2, "reading the thread drops it at once");
-
-  // Another window marks the read item unread as main hears of this read, so main counts the billing task's two as before.
-  inboxes.set(BILLING.id, [
-    { ...THRESHOLD, unread: true },
-    { ...followed, unread: false },
-    { ...SEEN, unread: true },
-  ]);
-  act(() => setHolding(holding()));
-  await settle();
-  assert.equal(sidebarInboxCount(page), 3, "main's newer read stands, the mark in it");
+  assert.equal(sidebarInboxCount(page), 1);
 });
 
 test("the sidebar's Inbox counts the open items alone, as before, where main carries no To do count from an older service", async () => {

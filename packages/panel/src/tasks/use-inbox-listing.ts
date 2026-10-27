@@ -177,11 +177,7 @@ export function useInboxListing(tasks: TasksControl) {
     ...tasklessGroups([...waitingTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
   ];
   // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
-  const marks = useInboxReadMarks({
-    act,
-    workspaceId: tasks.workspace?.id,
-    toDo: { groups: standing, holdings, readerId: tasks.me },
-  });
+  const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
   // A New thread stands in the pane over the item chosen as it opened, and gives way as soon as another is chosen.
   const [composing, setComposing] = useState<{ readonly over: ComposeOver } | undefined>(undefined);
   const askedId = asked?.itemId;
