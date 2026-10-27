@@ -38,10 +38,10 @@ export function peopleOf(
  * tile and name as every place naming an agent draws it (`ActorRef`),
  * which hang the agent's card and open its tab, and under them how many
  * files it changes and the lines it adds and removes, as GitHub counts
- * them, then who opened it, as its Changes tab read them once it has, and
- * until then as the agent's last read of the pull request named them, and,
- * once that tab has read them, its reviewers, each face wearing where they
- * stand (`pull-request-people.tsx`).
+ * them, then who opened it, as its Changes tab read them where it has, else
+ * as the agent's last read of the pull request named them, and, once that
+ * tab has read them, its reviewers, each face wearing where they stand
+ * (`pull-request-people.tsx`).
  */
 export function ChangesCard({
   subject,
@@ -63,8 +63,8 @@ export function ChangesCard({
   // The card hanging is the pointer on its tab, so the tab's chunk is read now rather than at the press.
   useEffect(PULL_REQUEST_TAB.prefetch, []);
   const count = pullRequest.changedFiles;
-  // Note that once the tab has read the people, its read alone says who opened it, since GitHub may name no one where the agent's older read named someone.
-  const author = people === undefined ? openerOf(pullRequest) : people.author;
+  // Note that the agent's own read stands in wherever the tab's names no one, as before its read or where its read of the people failed, since GitHub names a deleted account as its ghost rather than no one.
+  const author = people?.author ?? openerOf(pullRequest);
   const reviewers = people?.reviewers ?? [];
   return (
     <HoverCard data-tab-card="">
