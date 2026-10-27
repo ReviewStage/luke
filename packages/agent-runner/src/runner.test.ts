@@ -16,6 +16,7 @@ import { vi } from "vitest";
 import { claudeCodeLive } from "./claude-code.js";
 import { EventsUndelivered } from "./events.js";
 import { RunnerFailed } from "./launch.js";
+import { SHARED_FILES_DIRECTORY } from "./pins.js";
 import { processTable } from "./processes.js";
 import {
   EFFORT,
@@ -737,6 +738,8 @@ it.effect(
       assert.equal(options.sandbox?.failIfUnavailable, true);
       assert.equal(options.sandbox?.enableWeakerNestedSandbox, true);
       assert.deepEqual(options.sandbox?.network?.allowedDomains, CONFIG.allowedDomains);
+      // A command may write the folder Luke reads a shown picture or page from.
+      assert.deepEqual(options.sandbox?.filesystem?.allowWrite, [SHARED_FILES_DIRECTORY]);
       const denied = (options.sandbox?.credentials?.envVars ?? []).map(
         (rule: { name: string; mode: string }) => `${rule.name}:${rule.mode}`,
       );
