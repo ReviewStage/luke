@@ -1,50 +1,85 @@
 import { useAtomValue } from "@effect/atom-react";
+import { useAtomMount } from "@effect/atom-react/Hooks";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import {
+  DEVICE_STANDING,
+  type DeviceStanding,
+  deviceStanding,
+  MAC_PRESENCE,
+} from "@luke/features/coding-agent-wire";
 import { DEVICE_PRESENCE_MAX_IDS, type DevicePresenceAnswer } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { Duration, Effect, Option, Schedule, Stream } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { Duration, Effect, Schedule, Stream } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { useContext, useEffect, useMemo } from "react";
 import { askAct } from "./act.js";
 import { rendererRuntime } from "./renderer-runtime.js";
 
 /**
- * device-presence.ts -- the one source of when each device last beat, which every surface that says whether a device is there reads.
+ * device-presence.ts -- the one source of how long ago each device last beat, which every surface that says whether a device is there reads.
  *
- * A device beats every fifteen seconds, and the lists the window holds (an
- * agent's, a task's, the menu's, Settings' hosts) carry only the beat they
+ * A device beats every `DEVICE_BEAT.EVERY_MS`, and the lists the window holds
+ * (an agent's, a task's, the menu's, Settings' hosts) carry only the beat they
  * were read at, so a surface that judged from them alone read a device
- * offline a while after its last read though it kept beating. A surface
- * that draws a device's standing says which devices it draws here
+ * offline a while after its last read though it kept beating. A surface that
+ * draws a device's standing says which devices it draws here
  * (`useDevicePresence`), and while any does the window reads their beats
- * once, together, every `PRESENCE_EVERY`: beat plus read stays inside the
- * forty-five seconds a device counts as there (`MAC_PRESENCE`), and a device
- * that stopped beating still reads offline within about a minute. Nothing
- * is read while no surface draws one, and no surface keeps a clock of its
- * own. A read that failed is held as failed, which `deviceStanding` turns
- * into "unknown" rather than offline, since a window that could not ask must
- * not say a device is away; the beats an earlier read answered stand until a
- * later one does.
+ * once, together, every `MAC_PRESENCE.POLL_MS`. Nothing is read while no
+ * surface draws one, and no surface keeps a clock of its own.
+ *
+ * The service answers each beat as an age on its own clock, and the window
+ * ages it on its monotonic clock (`performance.now()`) from the moment the
+ * answer landed, so no wall clock is ever compared with another: a window
+ * whose clock is minutes off judges as one whose clock is right. A device is
+ * away only after it has missed `DEVICE_BEAT.MISSED_BEATS` beats. A read that
+ * failed leaves the devices it named "unknown" rather than offline, since a
+ * window that could not ask must not say a device is away, and the beats an
+ * earlier read answered stand, aging, until a later one does. The book of
+ * beats lives apart from the read that fills it, so a change of the devices
+ * drawn restarts the read without the surfaces losing what they knew.
  */
 
-/** How often the beats of the devices drawn are read: under the forty-five seconds a beat counts for, less a beat's own fifteen. */
-const PRESENCE_EVERY = Duration.seconds(20);
+/** How often the beats of the devices drawn are read. */
+const PRESENCE_EVERY = Duration.millis(MAC_PRESENCE.POLL_MS);
 
-/** Where the presence reads stand: the beats the last round answered, by device, and the devices whose batch of that round failed, which the window cannot say of. */
+/** One beat as the service answered it: how old it was then, and the window's monotonic time it landed at. */
+interface HeldBeat {
+  readonly ageMs: number;
+  readonly landedAt: number;
+}
+
+/** Where the presence reads stand: the beats the last rounds answered, by device, the devices whose batch of the last round failed, which the window cannot say of, and whether any round has answered yet. */
 export interface PresenceBook {
-  readonly beats: ReadonlyMap<string, number>;
+  readonly beats: ReadonlyMap<string, HeldBeat>;
   readonly unchecked: ReadonlySet<string>;
-  /** False until a round has answered at all. */
   readonly settled: boolean;
 }
 
-/** Nothing known yet: before a round answers, so a stale beat reads as unable to check rather than as offline. */
+/** Nothing known yet: before the first round answers. */
 const NO_BOOK: PresenceBook = { beats: new Map(), unchecked: new Set(), settled: false };
 
-/** Whether the window cannot say if `deviceId` is there: no round has answered, the device names none, or its own batch failed. */
-export function presenceUnchecked(book: PresenceBook, deviceId: string | undefined): boolean {
-  return !book.settled || deviceId === undefined || book.unchecked.has(deviceId);
+/** The window's monotonic time in milliseconds, which no clock setting moves. */
+function monotonicNow(): number {
+  return performance.now();
+}
+
+/**
+ * Where `deviceId` stands now: checking before the first round answers,
+ * unknown for a surface that names no device, and otherwise by the age of its
+ * last beat as the service said it plus the time since that answer landed.
+ */
+export function presenceStanding(book: PresenceBook, deviceId: string | undefined): DeviceStanding {
+  if (!book.settled) return DEVICE_STANDING.CHECKING;
+  if (deviceId === undefined) return DEVICE_STANDING.UNKNOWN;
+  const beat = book.beats.get(deviceId);
+  const age = beat === undefined ? undefined : beat.ageMs + (monotonicNow() - beat.landedAt);
+  return deviceStanding(age, book.unchecked.has(deviceId));
+}
+
+/** How long ago `deviceId` last beat as the book now knows it, none where no beat is held. */
+export function presenceAgeMs(book: PresenceBook, deviceId: string): number | undefined {
+  const beat = book.beats.get(deviceId);
+  return beat === undefined ? undefined : beat.ageMs + (monotonicNow() - beat.landedAt);
 }
 
 /** How many surfaces draw each device, by its id: the devices the shared read names. */
@@ -96,23 +131,32 @@ function beatsRead(ids: readonly string[]): Effect.Effect<PresenceRead> {
   );
 }
 
-/** The book after a round: the beats it answered, the held beats kept only for the devices whose batch failed, and those devices marked unchecked. */
-export function presenceAfter(book: PresenceBook, read: PresenceRead): PresenceBook {
-  const beats = new Map<string, number>();
+/** The book after a round that landed at `landedAt`: the beats it answered, the held beats kept only for the devices whose batch failed, and those devices marked unchecked. */
+export function presenceAfter(
+  book: PresenceBook,
+  read: PresenceRead,
+  landedAt: number,
+): PresenceBook {
+  const beats = new Map<string, HeldBeat>();
   for (const id of read.failedIds) {
     const held = book.beats.get(id);
     if (held !== undefined) beats.set(id, held);
   }
-  for (const each of read.devices) beats.set(each.deviceId, each.seenAt);
+  for (const each of read.devices) beats.set(each.deviceId, { ageMs: each.ageMs, landedAt });
   return { beats, unchecked: new Set(read.failedIds), settled: true };
 }
 
-/** The shared read, run only while a surface subscribes: again whenever the devices drawn change, and every `PRESENCE_EVERY` between. */
-const presenceAtom = rendererRuntime.atom((get) => {
+/** The latest book, kept apart from the read that fills it so a restart of the read loses nothing. */
+const bookAtom = Atom.keepAlive(Atom.make<PresenceBook>(NO_BOOK));
+
+/** The shared read, run only while a surface mounts it: again whenever the devices drawn change, and every `PRESENCE_EVERY` between, each round written into the book. */
+const pollAtom = rendererRuntime.atom((get) => {
   const ids = [...get(watchedAtom).keys()];
-  if (ids.length === 0) return Stream.make(NO_BOOK);
+  if (ids.length === 0) return Stream.empty;
   return Stream.fromEffectSchedule(beatsRead(ids), Schedule.spaced(PRESENCE_EVERY)).pipe(
-    Stream.scan(() => NO_BOOK, presenceAfter),
+    Stream.tap((read) =>
+      Effect.sync(() => get.set(bookAtom, presenceAfter(get.once(bookAtom), read, monotonicNow()))),
+    ),
   );
 });
 
@@ -121,7 +165,7 @@ const NO_DEVICES: readonly string[] = [];
 /**
  * The shared presence, held while the caller draws the devices `ids` names (a
  * stable array, since a new one is a change of devices): the book of beats,
- * to hand `deviceStanding` with the beat each device's own list read carried.
+ * for `presenceStanding`.
  */
 export function useDevicePresence(ids: readonly string[]): PresenceBook {
   const registry = useContext(RegistryContext);
@@ -130,7 +174,8 @@ export function useDevicePresence(ids: readonly string[]): PresenceBook {
     registry.update(watchedAtom, (watched) => watchedWith(watched, ids, 1));
     return () => registry.update(watchedAtom, (watched) => watchedWith(watched, ids, -1));
   }, [registry, ids]);
-  return Option.getOrElse(AsyncResult.value(useAtomValue(presenceAtom)), () => NO_BOOK);
+  useAtomMount(pollAtom);
+  return useAtomValue(bookAtom);
 }
 
 /** The shared presence for one device, or none where it names none. */

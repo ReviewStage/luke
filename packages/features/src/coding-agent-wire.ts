@@ -248,41 +248,48 @@ export const refusedDeviceSchema = EffectSchema.Struct({
 
 export type RefusedDevice = typeof refusedDeviceSchema.Type;
 
-export const MAC_PRESENCE = {
-  /** How lately a Mac must have beaten to count as there: one beat, and room for the next to arrive. */
-  FRESH_MS: 45_000,
+/**
+ * How a device beats and how long it may be quiet: it beats every
+ * `EVERY_MS`, the window reads the beats of the devices it draws every
+ * `POLL_MS`, and a device counts as away only once it has missed
+ * `MISSED_BEATS` beats in a row. One place, so the device that beats, the
+ * window that reads, and the service that refuses a start on an away device
+ * cannot drift apart: a beat, a read after it, and a beat delayed by its own
+ * retries still leave most of `FRESH_MS` to spare.
+ */
+export const DEVICE_BEAT = {
+  EVERY_MS: 15_000,
+  MISSED_BEATS: 4,
 } as const;
 
-/** Whether a Mac that last beat at `seenAt` is there at `now`, both epoch milliseconds. */
-export function macOnline(seenAt: number, now: number): boolean {
-  return seenAt >= now - MAC_PRESENCE.FRESH_MS;
-}
+export const MAC_PRESENCE = {
+  /** How lately a device must have beaten to count as there: `MISSED_BEATS` beats' time. */
+  FRESH_MS: DEVICE_BEAT.EVERY_MS * DEVICE_BEAT.MISSED_BEATS,
+  /** How often a window reads the beats of the devices it draws: a third more than a beat, well inside `FRESH_MS` with the beat and the read's own latency. */
+  POLL_MS: (DEVICE_BEAT.EVERY_MS * 4) / 3,
+} as const;
 
 export const DEVICE_STANDING = {
   ONLINE: "online",
   OFFLINE: "offline",
   /** The last beat is too old to say it is there and the read that would say otherwise failed, so nothing is known. */
   UNKNOWN: "unknown",
+  /** The first read of the beats is still out. */
+  CHECKING: "checking",
 } as const;
 
 export type DeviceStanding = (typeof DEVICE_STANDING)[keyof typeof DEVICE_STANDING];
 
 /**
- * Where a device stands at `now`: online where it beat within `MAC_PRESENCE.FRESH_MS`, by the
- * later of the beat a read of the list or the agent held (`seenAt`) and the
- * beat the presence read last answered (`beatAt`, none before one answered);
- * offline where it did not and the presence read stands; unknown where it did
- * not and the presence read failed, since a window that cannot read must not
- * say a device is away. All epoch milliseconds.
+ * Where a device stands given how long ago it last beat on the service's own
+ * clock (`ageMs`, none where the service named no beat): online within
+ * `MAC_PRESENCE.FRESH_MS`; otherwise unknown where the read that would say
+ * so failed for it (`unchecked`), since a window that cannot ask must not
+ * say a device is away, and offline where it did not.
  */
-export function deviceStanding(
-  seenAt: number,
-  beatAt: number | undefined,
-  now: number,
-  presenceFailed: boolean,
-): DeviceStanding {
-  if (macOnline(Math.max(seenAt, beatAt ?? 0), now)) return DEVICE_STANDING.ONLINE;
-  return presenceFailed ? DEVICE_STANDING.UNKNOWN : DEVICE_STANDING.OFFLINE;
+export function deviceStanding(ageMs: number | undefined, unchecked: boolean): DeviceStanding {
+  if (ageMs !== undefined && ageMs <= MAC_PRESENCE.FRESH_MS) return DEVICE_STANDING.ONLINE;
+  return unchecked ? DEVICE_STANDING.UNKNOWN : DEVICE_STANDING.OFFLINE;
 }
 
 /**
@@ -782,8 +789,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   /**
    * The Mac a local agent runs on, by its own name, and the epoch
    * milliseconds it last beat, which a reader holds against its own clock
-   * (`macOnline`), so a Mac that goes quiet while the agent stands on screen
-   * reads offline without another read; absent for an agent in a sandbox,
+   * (`deviceStanding`), though a window judges a device by its shared presence
+   * read (`hosts.presence`) rather than by this; absent for an agent in a sandbox,
    * for one whose Mac is gone, from a read that does not name it, and from a
    * service older than it.
    */

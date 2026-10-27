@@ -48,6 +48,9 @@ const BUILDER = "0b8e4c1a-2f6d-4f53-8a2e-9d1c7e5b3a40";
 
 const roots: Root[] = [];
 
+/** The devices the service holds for the card now, which the presence read answers the beats of. */
+let offeredNow: readonly MacOffer[] = [];
+
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -55,7 +58,16 @@ beforeEach(() => {
   installEditorLayout();
   handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
   // The service answers the shared presence read with no beat later than the lists carry.
-  fakeActPort({ [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }) });
+  fakeActPort({
+    [ACT_KIND.HOSTS_PRESENCE]: (payload: { ids: readonly string[] }) =>
+      Promise.resolve({
+        devices: offeredNow.flatMap((device) =>
+          payload.ids.includes(device.deviceId) && device.seenAt !== undefined
+            ? [{ deviceId: device.deviceId, ageMs: Date.now() - device.seenAt }]
+            : [],
+        ),
+      }),
+  });
 });
 
 afterEach(() => {
@@ -93,6 +105,7 @@ function devicesWith(studioSeenAt = Date.now(), builderSeenAt = 0): readonly Mac
 
 /** The card in Acme offering what `offered` holds, each start's Runs on written down. */
 async function mount(offered: { devices: readonly MacOffer[] } = { devices: devicesWith() }) {
+  offeredNow = offered.devices;
   const control = tasksControl();
   const starts: (TaskRunsOnRequest | undefined)[] = [];
   const container = document.body.appendChild(document.createElement("div"));

@@ -108,7 +108,8 @@ export type CatalogModel = typeof catalogModelSchema.Type;
  * offer it: by its id and name, the model providers an agent on it runs,
  * which a task's Runs on lists it for and the service checks a Start
  * against, what kind of device it is, and the epoch milliseconds it last
- * beat, which a reader holds against its own clock (`macOnline`); only a
+ * beat, which a window does not judge by, since its own clock may differ from the service's: it reads the beats
+ * from `hosts.presence` (`deviceStanding`); only a
  * device there now is taken. The kind and the beat are absent from a service
  * older than them, which offered only the devices there now.
  */

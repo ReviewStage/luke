@@ -117,10 +117,12 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
     presence: hosts.presence.effect(function* ({ context, input }) {
       yield* experimentOn(context.userId);
       const named = yield* hostedStoreOrUnavailable(devicesVisibleTo(context.userId, input.ids));
+      const now = yield* Clock.currentTimeMillis;
       return {
         devices: [...named.values()].map((row) => ({
           deviceId: row.id,
-          seenAt: row.lastSeenAt.getTime(),
+          // Note that the age is taken on this clock, which wrote the beat, so a reader's clock never enters it.
+          ageMs: Math.max(0, now - row.lastSeenAt.getTime()),
         })),
       };
     }),

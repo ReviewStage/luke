@@ -73,14 +73,14 @@ async function labelWhile(presence: () => Promise<unknown>): Promise<string> {
 
 test("a device the presence read finds beating reads online though the agent's own read is old", async () => {
   const label = await labelWhile(() =>
-    Promise.resolve({ devices: [{ deviceId: DEVICE, seenAt: Date.now() - 5_000 }] }),
+    Promise.resolve({ devices: [{ deviceId: DEVICE, ageMs: 5_000 }] }),
   );
   assert.equal(label, "Runs on: Charles's MacBook Air");
 });
 
 test("a device the presence read finds silent reads offline", async () => {
   const label = await labelWhile(() =>
-    Promise.resolve({ devices: [{ deviceId: DEVICE, seenAt: READ_SEEN_AT }] }),
+    Promise.resolve({ devices: [{ deviceId: DEVICE, ageMs: 90_000 }] }),
   );
   assert.equal(label, "Runs on: Charles's MacBook Air · Offline");
 });

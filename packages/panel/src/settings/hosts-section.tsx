@@ -1,4 +1,4 @@
-import { DEVICE_STANDING, deviceStanding } from "@luke/features/coding-agent-wire";
+import { DEVICE_STANDING } from "@luke/features/coding-agent-wire";
 import {
   HOST_WIRE,
   type Host,
@@ -46,7 +46,12 @@ import { Base64Url, Hex } from "effect/encoding";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
-import { type PresenceBook, presenceUnchecked, useDevicePresence } from "../device-presence.js";
+import {
+  type PresenceBook,
+  presenceAgeMs,
+  presenceStanding,
+  useDevicePresence,
+} from "../device-presence.js";
 import { useExperiment } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
 
@@ -97,6 +102,7 @@ const WORDS = {
   SIGNED_OUT: "Sign in to see your hosts.",
   ONLINE: "Online",
   UNKNOWN: "Can't check status",
+  CHECKING: "Checking",
   UPGRADE_NEEDED: "Upgrade needed",
   UPGRADE_TITLE: "Run this on the server to upgrade it",
   INSTALL_TITLE: "Run this as root on each server",
@@ -139,13 +145,13 @@ async function mintedInstallToken(): Promise<{ installToken: string; tokenHash: 
 
 /** A host's line under its name: online, or when it was last seen. */
 function seenWords(host: Host, book: PresenceBook, now: number): string {
-  const beatAt = book.beats.get(host.id);
-  const standing = deviceStanding(host.seenAt, beatAt, now, presenceUnchecked(book, host.id));
+  const standing = presenceStanding(book, host.id);
   if (standing === DEVICE_STANDING.ONLINE) return WORDS.ONLINE;
-  const lastSeen = agoText(Math.max(host.seenAt, beatAt ?? 0), now);
-  return standing === DEVICE_STANDING.OFFLINE
-    ? `Offline · last seen ${lastSeen}`
-    : `${WORDS.UNKNOWN} · last seen ${lastSeen}`;
+  if (standing === DEVICE_STANDING.CHECKING) return WORDS.CHECKING;
+  const age = presenceAgeMs(book, host.id);
+  // Note that the age is the service's, so the moment is made from the window's clock and the age alone.
+  const lastSeen = age === undefined ? "" : ` · last seen ${agoText(now - age, now)}`;
+  return `${standing === DEVICE_STANDING.OFFLINE ? "Offline" : WORDS.UNKNOWN}${lastSeen}`;
 }
 
 /** One host's row: its name, whether it is online, Upgrade needed with its command, and Remove behind its ⋯. */
