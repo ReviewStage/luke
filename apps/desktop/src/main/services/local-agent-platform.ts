@@ -105,6 +105,8 @@ export function localAgentPlatform(packaged: boolean): LocalAgentPlatformSeam {
     worktreeScript,
     // Note that only This Mac checks, since its worktree can hold the only copy of the developer's work, which a host's VM never does.
     unsavedWorkScript: agentUnsavedWorkScript,
+    // Note that an agent on This Mac pushes on the developer's own git login, as they would.
+    githubFromLuke: false,
   };
   return packaged
     ? {

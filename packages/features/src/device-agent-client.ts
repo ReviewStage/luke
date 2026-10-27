@@ -1,6 +1,7 @@
+import { HTTP_METHOD } from "@luke/wire";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { CallCredential } from "./account-call.js";
+import { type AccountCallEffects, accountCall, type CallCredential } from "./account-call.js";
 import {
   DEVICE_AGENT_REQUEST_KIND,
   DEVICE_ISOLATION,
@@ -14,7 +15,9 @@ import {
   type DevicePlatform,
   type DeviceSignedIn,
 } from "./device-agent-wire.js";
+import { hostGithubTokenAnswerSchema } from "./host-wire.js";
 import { askHosted, HOSTED_DEADLINE, type HostedClient, hostedClient } from "./hosted-link.js";
+import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 
 /**
  * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, holds a read for its lines and one for its requests, claims each by its id, and settles a line or answers a request.
@@ -25,7 +28,9 @@ import { askHosted, HOSTED_DEADLINE, type HostedClient, hostedClient } from "./h
  * which the caller asks again after a pause; a claim refused is
  * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, its caller withdrew it,
  * or the account's experiment is off) and one unanswered nothing; a
- * register, a beat, a settle, or an answer not taken is false.
+ * register, a beat, a settle, or an answer not taken is false. A host also
+ * asks the runner token route for a GitHub token for one of its agents
+ * (`githubToken`), on the same credential, its device secret.
  */
 
 /** A read's bytes as the answer's wire spells them. */
@@ -62,12 +67,29 @@ export interface HostedDeviceAgentClientOptions {
 
 export class HostedDeviceAgentClient {
   readonly #hosted: HostedClient;
+  readonly #call: AccountCallEffects;
 
   constructor(options: HostedDeviceAgentClientOptions) {
     this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
       credential: options.credential,
     });
+    this.#call = accountCall({ baseUrl: options.serviceBaseUrl, credential: options.credential });
+  }
+
+  /** A GitHub token for the host's own agent's repository; nothing where the service refused it or did not answer. */
+  githubToken(agentId: string): Effect.Effect<string | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask(
+        {
+          method: HTTP_METHOD.POST,
+          path: HOSTED_SERVICE_PATH.RUNNER_TOKEN,
+          body: JSON.stringify({ agentId }),
+        },
+        hostGithubTokenAnswerSchema,
+      ),
+      (answer) => answer?.githubToken,
+    );
   }
 
   /** This Mac registered under its id; whether the service took it. */

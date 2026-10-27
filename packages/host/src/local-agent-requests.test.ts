@@ -15,7 +15,7 @@ const NODE = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 );
 
-/** A home with one agent's worktree holding a file, a secret beside the home, and a symlink in the worktree pointing at it. */
+/** A home with one agent's worktree holding a file, a secret beside the home, the agent's gh sign-in, and a symlink in the worktree pointing at each. */
 const staged = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const root = yield* temporaryDirectoryScoped("luke-local-agent-");
@@ -24,6 +24,9 @@ const staged = Effect.gen(function* () {
   yield* fileSystem.writeFileString(`${layout.checkoutPath}/notes.txt`, "the agent's own");
   yield* fileSystem.writeFileString(`${root}/secret.txt`, "the developer's own");
   yield* fileSystem.symlink(`${root}/secret.txt`, `${layout.checkoutPath}/escape.txt`);
+  yield* fileSystem.makeDirectory(layout.githubConfig, { recursive: true });
+  yield* fileSystem.writeFileString(`${layout.githubConfig}/hosts.yml`, "oauth_token: ghs_fixture");
+  yield* fileSystem.symlink(`${layout.githubConfig}/hosts.yml`, `${layout.checkoutPath}/gh.yml`);
   return { root, layout };
 });
 
@@ -59,6 +62,14 @@ describe("answeredLocalAgentRequest", () => {
     {
       case: "a symlink in the worktree pointing outside",
       path: (root: string) => `${root}/home/.luke/agents/${AGENT}/repository/escape.txt`,
+    },
+    {
+      case: "the agent's own gh sign-in, where a host keeps its GitHub token",
+      path: (root: string) => `${root}/home/.luke/agents/${AGENT}/gh/hosts.yml`,
+    },
+    {
+      case: "a symlink in the worktree pointing at the agent's gh sign-in",
+      path: (root: string) => `${root}/home/.luke/agents/${AGENT}/repository/gh.yml`,
     },
   ])("refuses $case", ({ path }) =>
     Effect.gen(function* () {

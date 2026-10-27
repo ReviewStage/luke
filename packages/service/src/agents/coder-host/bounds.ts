@@ -1,4 +1,5 @@
 import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/coding-agent-status";
+import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 
@@ -94,8 +95,8 @@ export const CODER = {
    * the same (`runner-sessions.ts`).
    */
   SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(7), deleteEvicted: true },
-  /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour. */
-  GITHUB_TOKEN_REFRESH: Duration.minutes(50),
+  /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour, as a host renews its agents' (`@luke/features/host-wire`). */
+  GITHUB_TOKEN_REFRESH,
   /**
    * The longest one pause (`sleep.ts`) may be. The credential at the
    * firewall is renewed only as a step starts, so a step may start on one
