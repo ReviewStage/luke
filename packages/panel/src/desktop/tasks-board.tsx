@@ -241,9 +241,9 @@ const BOARD_CARD_NOTE = "tasks-board-card-note text-caption text-danger";
 const BOARD_CARD_FOOT =
   "tasks-board-card-foot pointer-events-none relative z-1 flex min-w-0 items-end gap-tight-gap";
 
-/** A card's pills, wrapping onto as many lines as they take. */
+/** A card's pills, wrapping onto as many lines as they take, each taking the pointer but its agents' icon, which is no press and lets one through to the card's. */
 const BOARD_CARD_PILLS =
-  "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 *:pointer-events-auto";
+  "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 [&>:not(.task-agents-mark)]:pointer-events-auto";
 
 /**
  * The issues a card's task links, oldest first, a tag each among its pills
