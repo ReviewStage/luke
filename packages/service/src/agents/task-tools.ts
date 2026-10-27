@@ -26,6 +26,7 @@ import {
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { calledId } from "./called-id.js";
+import { agentMadeRunsOn } from "./coder-host/agent-runtime-choice.js";
 import {
   AGENT_CALLER,
   agentToolRejected,
@@ -72,7 +73,10 @@ import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
  * with the developer's brief and a plan to start from where they are given,
  * the issues named linked to it, each read from GitHub or Linear first
  * (`task-issue-tools.ts`), and no agent on it; `start_agent` starts one on
- * it by its id. It is made
+ * it by its id. It runs where the member last ran a task, the device New
+ * task last named or the cloud (`agentMadeRunsOn`), even an assignee's
+ * other than the member, and is refused by name where that device was
+ * removed since, never sent to the cloud instead. It is made
  * under an id drawn from eve's key for the call (`called-id.ts`), so a call
  * run again answers the task it made and makes no second.
  * Every answer is data the model reads, never a credential.
@@ -176,6 +180,10 @@ export const CREATE_TASK_REFUSAL = {
   NOT_MEMBER:
     "Not made: that assignee is no member of the workspace, or names no person; name a member by " +
     `the mention link ${AGENT_TOOL.LIST_TASKS} hands you, or leave it out for no one.`,
+  PICK_REMOVED:
+    "Not made: the device the member last chose to run tasks on has been removed, so there is " +
+    "nowhere they asked this task to run; ask them to start a task from New task, choosing where " +
+    "it runs, and try again.",
 } as const;
 
 const CREATE_TASK_INPUT = Schema.Struct({
@@ -312,6 +320,12 @@ export function runCreateTask(
       if (Result.isFailure(choices)) return agentToolRejected(choices.failure);
       const read = yield* readIssueChoices(userId, workspace.value, issues, choices.success);
       if (Result.isFailure(read)) return agentToolRejected(read.failure);
+      // Where the member last ran a task is where this one runs; a device since removed makes none.
+      const runsOn = yield* agentMadeRunsOn(userId).pipe(
+        Effect.map((asked) => ({ asked })),
+        Effect.catchTag("RunsOnPickRemoved", () => Effect.succeed(undefined)),
+      );
+      if (runsOn === undefined) return agentToolRejected(CREATE_TASK_REFUSAL.PICK_REMOVED);
       const text = planTextOf(plan ?? "");
       // The make and its plan's first revision are one write, so a call run again at once makes one task.
       const made = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -328,6 +342,7 @@ export function runCreateTask(
               ...(status === undefined ? undefined : { status }),
               ...(priority === undefined ? undefined : { priority }),
               ...(assigneeId === undefined ? undefined : { assigneeId }),
+              ...(runsOn.asked === undefined ? undefined : { runsOn: runsOn.asked }),
               origin: originOf(call),
             });
             if (Option.isSome(once)) {

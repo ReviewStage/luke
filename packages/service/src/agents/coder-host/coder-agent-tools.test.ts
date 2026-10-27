@@ -29,6 +29,7 @@ import {
   listProviderKeyRows,
   setProviderKeyFastAccess,
 } from "@luke/database/models/provider-key-store";
+import { keepRunsOnPick } from "@luke/database/models/runs-on-pick";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
 import {
   createTask,
@@ -40,6 +41,7 @@ import {
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { attachment } from "@luke/database/schemas/attachment";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { device } from "@luke/database/schemas/device";
 import { messages } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
@@ -1974,6 +1976,42 @@ test("an agent whose starter has left the workspace makes no task in it", async 
   const refused = await call(CODER_TOOL.CREATE_TASK, { name: "Left behind" });
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refused));
   assert.deepEqual(await tasksNamed(agents.caller.userId, workspaceId, "Left behind"), []);
+});
+
+test("a task an agent makes runs on the device its member last chose, away or not, and one since removed makes none", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.teammates, eve.services);
+  const bob = agents.teammates.userId;
+  const studio = randomUUID();
+  await database.run(
+    Effect.gen(function* () {
+      yield* writeAccountPreferences(bob, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
+      yield* registerDevice(bob, { id: studio, name: "Studio", ...DEVICE_LAYOUT });
+      // The Studio last beat a day ago, so it is away.
+      const db = yield* Database;
+      yield* db
+        .update(device)
+        .set({ lastSeenAt: new Date(Date.now() - 86_400_000) })
+        .where(eq(device.id, studio));
+      yield* keepRunsOnPick(bob, { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: studio });
+    }),
+  );
+
+  const made = await call(CODER_TOOL.CREATE_TASK, { name: "On the Studio" }, "call-studio");
+  assert.ok(isRecord(made.task) && isWireString(made.task.id), JSON.stringify(made));
+  const stored = Option.getOrThrow(await database.run(readTask(bob, made.task.id)));
+  assert.equal(stored.task.runsOn?.deviceId, studio);
+
+  // A device the member no longer has makes no task, rather than one in the cloud.
+  await database.run(
+    keepRunsOnPick(bob, { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: randomUUID() }),
+  );
+  assert.deepEqual(await call(CODER_TOOL.CREATE_TASK, { name: "Nowhere" }, "call-gone"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CREATE_TASK_REFUSAL.PICK_REMOVED,
+  });
+  assert.deepEqual(await tasksNamed(bob, workspaceId, "Nowhere"), []);
 });
 
 test("an agent whose starter has left the workspace reaches no other agent", async () => {
