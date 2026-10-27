@@ -19,9 +19,11 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import type { ActHandle } from "../act.js";
+import { type KeptDraft, useNewAgentDraft } from "../composer-drafts.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import {
+  type AgentDraft,
   ARCHIVE_DRAWN,
   type CodingAgentsControl,
   type DraftCallStart,
@@ -92,6 +94,7 @@ function mount(
   const answers = new Map<AnyKind, Queued[]>();
   let keys = 0;
   let control: CodingAgentsControl | undefined;
+  let words: KeptDraft | undefined;
   let restand: ((next: Standing) => void) | undefined;
   function Probe() {
     const [held, setHeld] = useState(initial);
@@ -120,6 +123,8 @@ function mount(
         return `${keyPrefix}-${keys}`;
       },
     });
+    // The draft's words, read where its tab reads them.
+    words = useNewAgentDraft(control.draft?.on, control.draft?.id);
     return null;
   }
   const container = document.createElement("div");
@@ -141,6 +146,20 @@ function mount(
     control: () => {
       assert.ok(control);
       return control;
+    },
+    /** The open draft with the words and files its tab reads. */
+    draft: (): AgentDraft | undefined => {
+      const held = control?.draft;
+      if (held === undefined) return undefined;
+      return {
+        id: held.id,
+        prompt: words?.text ?? "",
+        attachments: words?.attachments ?? [],
+        choice: held.choice,
+        disabledServers: held.disabledServers,
+        ...(held.fork === undefined ? undefined : { fork: held.fork }),
+        ...(held.refused === undefined ? undefined : { refused: held.refused }),
+      };
     },
     stand: async (next: Partial<Standing>) => {
       act(() => restand?.({ ...initial, ...next }));
@@ -313,7 +332,7 @@ test("a draft asks nothing of the service, one per plan, until its first message
   });
   assert.notEqual(other, draft);
   await tab.stand({ taskId: TASK });
-  assert.deepEqual(tab.control().draft, {
+  assert.deepEqual(tab.draft(), {
     id: draft,
     prompt,
     attachments: [],
@@ -332,7 +351,7 @@ test("a draft asks nothing of the service, one per plan, until its first message
   // The files attached to the words are the draft's too, and go with the prompt.
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
   act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
-  assert.deepEqual(tab.control().draft?.attachments, [notes]);
+  assert.deepEqual(tab.draft()?.attachments, [notes]);
   await act(async () => {
     failed = await tab.control().startPrompt(draft, prompt, undefined, [notes], disabledServers);
   });
@@ -466,7 +485,7 @@ test("a draft's words outlast a relaunch, the plan opening on its draft again un
   const after = mount({ taskId: TASK, repository: "acme/relay" });
   after.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   await after.mount();
-  assert.deepEqual(after.control().draft, {
+  assert.deepEqual(after.draft(), {
     id: draft,
     prompt,
     attachments: [],
@@ -499,7 +518,7 @@ test("two windows' draft agents on one plan each keep their own words under thei
   act(() => second.control().onDraftChange({ prompt: "Ship now" }));
   act(() => first.control().onDraftChange({ prompt: "Wait for review" }));
 
-  assert.equal(first.control().draft?.prompt, "Wait for review");
+  assert.equal(first.draft()?.prompt, "Wait for review");
   assert.equal(first.control().draft?.id, "first-1");
   act(() => first.control().onDiscardDraft("first-1"));
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -509,7 +528,7 @@ test("two windows' draft agents on one plan each keep their own words under thei
   relaunched.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   await relaunched.mount();
   assert.deepEqual(
-    [relaunched.control().draft?.id, relaunched.control().draft?.prompt],
+    [relaunched.control().draft?.id, relaunched.draft()?.prompt],
     ["second-1", "Ship now"],
   );
 });
@@ -526,7 +545,7 @@ test("a draft of files alone waits while another plan is open, but no relaunch b
   act(() => before.control().onDraftAttachments((held) => [...held, notes]));
   await before.stand({ taskId: OTHER_TASK });
   await before.stand({ taskId: TASK });
-  assert.deepEqual(before.control().draft?.attachments, [notes]);
+  assert.deepEqual(before.draft()?.attachments, [notes]);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   const after = mount({ taskId: TASK, repository: "acme/relay" });
@@ -854,14 +873,14 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
     disabledServers: [INTEGRATION_PROVIDER.LINEAR],
     fork,
   };
-  assert.deepEqual(tab.control().draft, forkDraft, "its chips start on the source's");
+  assert.deepEqual(tab.draft(), forkDraft, "its chips start on the source's");
 
   // The fork stays with the draft while another task is open, and through a change of its chips.
   await tab.stand({ taskId: OTHER_TASK });
   assert.equal(tab.control().draft, undefined);
   await tab.stand({ taskId: TASK });
   act(() => tab.control().onDraftChange({ disabledServers: [] }));
-  assert.deepEqual(tab.control().draft, { ...forkDraft, disabledServers: [] });
+  assert.deepEqual(tab.draft(), { ...forkDraft, disabledServers: [] });
 
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
   let failed: Failure | undefined;
@@ -908,7 +927,7 @@ test("a fork's × lets the fork go and leaves an ordinary draft with its words a
   assert.equal(tab.control().draft?.id, draft);
   act(() => tab.control().onDraftChange({ prompt: "Keep going" }));
   act(() => tab.control().onDropFork());
-  assert.deepEqual(tab.control().draft, {
+  assert.deepEqual(tab.draft(), {
     id: draft,
     prompt: "Keep going",
     attachments: [],
@@ -933,7 +952,7 @@ test("a fork's draft with words outlasts a relaunch still a fork, under the same
   const after = mount({ taskId: TASK, repository: "acme/relay" });
   after.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
   await after.mount();
-  assert.deepEqual(after.control().draft, {
+  assert.deepEqual(after.draft(), {
     id: draft,
     prompt: "Try the queue",
     attachments: [],
@@ -943,7 +962,7 @@ test("a fork's draft with words outlasts a relaunch still a fork, under the same
   });
   act(() => after.control().onDropFork());
   act(() => after.control().onDraftChange({ prompt: "Try the queue, then retry" }));
-  assert.deepEqual(after.control().draft, {
+  assert.deepEqual(after.draft(), {
     id: draft,
     prompt: "Try the queue, then retry",
     attachments: [],
@@ -956,7 +975,7 @@ test("a fork's draft with words outlasts a relaunch still a fork, under the same
   again.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
   await again.mount();
   assert.equal(again.control().draft?.fork, undefined, "a fork let go stays let go");
-  assert.equal(again.control().draft?.prompt, "Try the queue, then retry");
+  assert.equal(again.draft()?.prompt, "Try the queue, then retry");
 });
 
 test("a continue opens the task's draft with the closed box's words and files after any it held, its chips on the source's servers, sends nothing, holds through a tab switch and a relaunch, and an empty send continues under the draft's key, asked again under the same one", async () => {
@@ -987,7 +1006,7 @@ test("a continue opens the task's draft with the closed box's words and files af
     draft = before.control().onContinueDraft(AGENT, " Now add the dark variant. ", [notes]);
   });
   const fork = { agentId: AGENT, opening: "" };
-  assert.deepEqual(before.control().draft, {
+  assert.deepEqual(before.draft(), {
     id: draft,
     prompt: "Check the logs first.\n\nNow add the dark variant.",
     attachments: [notes],
@@ -1011,7 +1030,7 @@ test("a continue opens the task's draft with the closed box's words and files af
     { agent: continued },
   );
   await after.mount();
-  const kept = after.control().draft ?? assert.fail("the draft outlasts a relaunch");
+  const kept = after.draft() ?? assert.fail("the draft outlasts a relaunch");
   assert.equal(kept.id, draft, "under the same key");
   assert.deepEqual(kept.fork, fork, "still a continue");
   assert.equal(kept.prompt, "Check the logs first.\n\nNow add the dark variant.");
@@ -1053,7 +1072,7 @@ test("a second Continue of the agent the draft already continues keeps its key a
     second = tab.control().onContinueDraft(AGENT, "", []);
   });
   assert.equal(second, first);
-  assert.equal(tab.control().draft?.prompt, "Carry on.");
+  assert.equal(tab.draft()?.prompt, "Carry on.");
   assert.deepEqual(tab.control().draft?.choice, { model: "openai/gpt-6.1-sol", effort: "low" });
 
   let third = "";
@@ -1062,7 +1081,7 @@ test("a second Continue of the agent the draft already continues keeps its key a
   });
   assert.notEqual(third, first);
   assert.equal(tab.control().draft?.id, third);
-  assert.equal(tab.control().draft?.prompt, "Carry on.\n\nFix lint too.");
+  assert.equal(tab.draft()?.prompt, "Carry on.\n\nFix lint too.");
 });
 
 test("continuing an agent starts on the task from its whole transcript under the agent's own key, a press asked again after no answer carrying the same key, and the new agent's tab opens as a Start's does", async () => {
@@ -1231,7 +1250,7 @@ test("a draft's Call starts an empty draft's agent blank under a key of its own,
   act(() => {
     empty = tab.control().onNewDraft();
   });
-  const blank = tab.control().draft;
+  const blank = tab.draft();
   assert.ok(blank);
   let answer: DraftCallStart | undefined;
   await act(async () => {
@@ -1249,7 +1268,7 @@ test("a draft's Call starts an empty draft's agent blank under a key of its own,
   const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
   act(() => tab.control().onDraftChange({ prompt }));
   act(() => tab.control().onDraftChange({ choice }));
-  const held = tab.control().draft;
+  const held = tab.draft();
   assert.ok(held);
   await act(async () => {
     answer = await tab.control().startCall?.(held);

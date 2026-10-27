@@ -128,8 +128,8 @@ async function mountEveryTab(
       pullRequests,
       draft: {
         id: "draft-1",
-        prompt: "",
-        attachments: [],
+        on: PAGE_ID,
+        holdsWords: false,
         choice: undefined,
         disabledServers: [],
       },

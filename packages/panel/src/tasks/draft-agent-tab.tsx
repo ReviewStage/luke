@@ -13,7 +13,12 @@ import { agentName, modelLabel } from "./coding-agent-model.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
-import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents.js";
+import {
+  type AgentDraft,
+  type CodingAgentsControl,
+  type HeldAgentDraft,
+  useAgentDraft,
+} from "./use-coding-agents.js";
 import { WorkingLine } from "./working-time.js";
 
 /**
@@ -259,4 +264,14 @@ export function DraftAgentTab({
       </AgentTabFoot>
     </AgentTabFrame>
   );
+}
+
+/** The tab of the draft agent the agents hold, its words read here rather than off the agents, so a word typed draws this tab alone. */
+export function HeldDraftAgentTab({
+  held,
+  ...tab
+}: Omit<Parameters<typeof DraftAgentTab>[0], "draft"> & {
+  held: HeldAgentDraft;
+}): React.JSX.Element {
+  return <DraftAgentTab draft={useAgentDraft(held)} {...tab} />;
 }

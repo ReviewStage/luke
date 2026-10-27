@@ -925,6 +925,48 @@ export function useNewAgentDraft(
   });
 }
 
+/** A plan's draft agent as it stands without its words: where they are kept, and whether they hold any words or files. */
+export interface NewAgentStanding {
+  readonly place: NewAgentPlace;
+  readonly holdsWords: boolean;
+}
+
+/**
+ * Each plan's draft agents as they stand, compared by their contents as
+ * `draftedAtom` is. Note that the words are left out, so the window's reader
+ * of its agents draws again only as a draft comes, goes, or moves, or as
+ * its box first holds words or is emptied, never on each word typed.
+ */
+const newAgentsOf = Atom.family((planId: string) =>
+  Atom.withEquality(
+    Atom.make((get): readonly NewAgentStanding[] =>
+      get(draftsAtom)
+        .filter(isNewAgent)
+        .filter((kept) => kept.place.planId === planId)
+        .map((kept) => ({
+          place: kept.place,
+          holdsWords: kept.text !== "" || kept.attachments.length > 0,
+        })),
+    ),
+    Equal.equals,
+  ),
+);
+
+/** No plan's draft agents, for a place with no plan. */
+const NO_NEW_AGENTS = Atom.make<readonly NewAgentStanding[]>([]);
+
+/** The draft agent `useNewAgentDraft` reads, as it stands without its words. */
+export function useNewAgentStanding(
+  taskId: string | undefined,
+  draftId: string | undefined,
+): NewAgentStanding | undefined {
+  return useAtomValue(taskId === undefined ? NO_NEW_AGENTS : newAgentsOf(taskId), (standing) =>
+    draftId === undefined
+      ? standing.at(-1)
+      : standing.find((each) => each.place.draftId === draftId),
+  );
+}
+
 /** Whether a draft is an inbox card's. */
 function isInbox(kept: KeptDraft): kept is KeptDraft<InboxPlace> {
   return kept.place.kind === DRAFT_PLACE.INBOX;

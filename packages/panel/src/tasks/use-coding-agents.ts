@@ -49,10 +49,11 @@ import type { ActHandle } from "../act.js";
 import {
   DRAFT_PLACE,
   type Draft,
-  type KeptDraft,
   type NewAgentPlace,
+  type NewAgentStanding,
   useDraftWriter,
   useNewAgentDraft,
+  useNewAgentStanding,
 } from "../composer-drafts.js";
 import { usePendingNow } from "../pending-clock.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
@@ -230,8 +231,8 @@ export interface CodingAgentsControl {
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
   readDefault: () => Promise<CodingAgentDefaultAnswer>;
-  /** The open task's draft agent; nothing while it has none. */
-  draft: AgentDraft | undefined;
+  /** The open task's draft agent, without its words, which its tab reads (`useAgentDraft`); nothing while it has none. */
+  draft: HeldAgentDraft | undefined;
   /** Opens a draft agent on the open task, or answers the one it has, by its key. */
   onNewDraft: () => string;
   /**
@@ -472,17 +473,29 @@ export type DraftCallStart = { readonly agentId: string } | { readonly failure: 
 /** What a draft agent holds beside its words and files: its key, what its chips chose, the fork it is, and why New task's start of it was refused. */
 type DraftChoices = Pick<AgentDraft, "id" | "choice" | "disabledServers" | "fork" | "refused">;
 
-/** The plan's draft agent: the key and chips held, with the words and files kept for it, or the words kept under their own key where nothing is held, as after a relaunch. */
+/**
+ * A draft agent as the agents hold it: its key and chips, the place its
+ * words are kept under, and whether they hold any words or files. Note that
+ * the words themselves are left out, because the agents are read by the
+ * whole window, and a word typed must draw the box alone.
+ */
+export interface HeldAgentDraft extends Omit<AgentDraft, "prompt" | "attachments"> {
+  readonly on: string;
+  readonly holdsWords: boolean;
+}
+
+/** The plan's draft agent: the key and chips held, with where the words and files are kept for it, or the words kept under their own key where nothing is held, as after a relaunch. */
 function taskDraft(
+  on: string,
   held: DraftChoices | undefined,
-  kept: KeptDraft<NewAgentPlace> | undefined,
-): AgentDraft | undefined {
+  kept: NewAgentStanding | undefined,
+): HeldAgentDraft | undefined {
   const id = held?.id ?? kept?.place.draftId;
   if (id === undefined) return undefined;
   return {
     id,
-    prompt: kept?.text ?? "",
-    attachments: kept?.attachments ?? [],
+    on,
+    holdsWords: kept?.holdsWords ?? false,
     choice: held?.choice,
     disabledServers: held?.disabledServers ?? [],
     // Note that a fork is kept with the words too, so a relaunch keeps the draft a fork.
@@ -524,8 +537,17 @@ interface ClosedDraft {
   readonly words: Pick<Draft, "text" | "attachments">;
 }
 
+/** A held draft with the words and files kept for it. */
+function withWords(held: HeldAgentDraft, kept: Draft | undefined): AgentDraft {
+  return {
+    ...choicesOf(held),
+    prompt: kept?.text ?? "",
+    attachments: kept?.attachments ?? [],
+  };
+}
+
 /** What a draft holds beside its words and files, as the drafts hold it. */
-function choicesOf(draft: AgentDraft): DraftChoices {
+function choicesOf(draft: DraftChoices): DraftChoices {
   const { id, choice, disabledServers, fork, refused } = draft;
   return {
     id,
@@ -536,15 +558,10 @@ function choicesOf(draft: AgentDraft): DraftChoices {
   };
 }
 
-/** Whether a draft holds no words or files. */
-function holdsNoWords(draft: AgentDraft): boolean {
-  return draft.prompt === "" && draft.attachments.length === 0;
-}
-
 /** Whether a draft holds nothing at all: no words or files, no fork, and its chips as they open. */
-function holdsNothing(draft: AgentDraft): boolean {
+function holdsNothing(draft: HeldAgentDraft): boolean {
   return (
-    holdsNoWords(draft) &&
+    !draft.holdsWords &&
     draft.fork === undefined &&
     draft.choice === undefined &&
     draft.disabledServers.length === 0 &&
@@ -554,7 +571,7 @@ function holdsNothing(draft: AgentDraft): boolean {
 
 /** The draft as it would be let go, kept for its Undo, or nothing where it holds no words or files. */
 function closedDraft(on: string, draft: AgentDraft): ClosedDraft | undefined {
-  if (holdsNoWords(draft)) return undefined;
+  if (draft.prompt === "" && draft.attachments.length === 0) return undefined;
   return {
     on,
     choices: choicesOf(draft),
@@ -737,6 +754,12 @@ function pendingAgent<A extends NamedAgent>(
   return standing as A;
 }
 
+/** The draft agent the agents hold, with the words and files kept for it, read here so a word typed draws the draft's own tab alone. */
+export function useAgentDraft(held: HeldAgentDraft): AgentDraft {
+  const kept = useNewAgentDraft(held.on, held.id);
+  return useMemo(() => withWords(held, kept), [held, kept]);
+}
+
 /**
  * The agents a list holds with every name and archive given here that the
  * list does not yet carry laid over them, so each surface draws the press at
@@ -829,9 +852,20 @@ export function useCodingAgents(input: {
   // Each place's draft's key and chip, by the plan's id or the page's agent's; its words and files are kept apart.
   const [drafts, setDrafts] = useState<ReadonlyMap<string, DraftChoices>>(new Map());
   const heldDraft = startsOn === undefined ? undefined : drafts.get(startsOn);
-  const keptDraft = useNewAgentDraft(startsOn, heldDraft?.id);
+  const keptDraft = useNewAgentStanding(startsOn, heldDraft?.id);
   const writer = useDraftWriter();
-  const draft = startsOn === undefined ? undefined : taskDraft(heldDraft, keptDraft);
+  const draft = startsOn === undefined ? undefined : taskDraft(startsOn, heldDraft, keptDraft);
+  // The open draft with its words and files as they stand now, for a press that moves or keeps them.
+  const draftNow = (held: HeldAgentDraft): AgentDraft =>
+    withWords(
+      held,
+      writer.heldAt(
+        (place) =>
+          place.kind === DRAFT_PLACE.NEW_AGENT &&
+          place.planId === held.on &&
+          place.draftId === held.id,
+      ),
+    );
   const [reads, setReads] = useState(0);
   // The agent New task last started, its task, and the line it was started on.
   const [started, setStarted] = useState<
@@ -1219,8 +1253,9 @@ export function useCodingAgents(input: {
     fork: AgentFork | undefined,
     carried: Pick<Draft, "text" | "attachments"> = NOTHING_CARRIED,
   ) => {
-    const text = [draft?.prompt ?? "", carried.text].filter((each) => each !== "").join("\n\n");
-    const attachments = [...(draft?.attachments ?? []), ...carried.attachments];
+    const words = draft === undefined ? undefined : draftNow(draft);
+    const text = [words?.prompt ?? "", carried.text].filter((each) => each !== "").join("\n\n");
+    const attachments = [...(words?.attachments ?? []), ...carried.attachments];
     if (draft !== undefined) {
       const was = draft.id;
       writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === was);
@@ -1351,7 +1386,9 @@ export function useCodingAgents(input: {
   // act that can be taken back is, and its toast's Undo puts it back.
   const onDiscardDraft = (draftId: string) => {
     const closed =
-      startsOn === undefined || draft?.id !== draftId ? undefined : closedDraft(startsOn, draft);
+      startsOn === undefined || draft?.id !== draftId
+        ? undefined
+        : closedDraft(startsOn, draftNow(draft));
     letGo(draftId);
     if (closed === undefined) return;
     undoable.current = closed.choices.id;
@@ -1880,6 +1917,7 @@ export function useCodingAgents(input: {
   const steadyStartPrompt = useSteadyDoor(startPrompt);
   const steadyStartFork = useSteadyDoor(startFork);
   const steadyContinueAgent = useSteadyDoor(continueAgent);
+  const steadyStartCall = useSteadyDoor(startCall);
 
   const readInboxImage = useCallback<InboxImageReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, params),
@@ -1926,7 +1964,7 @@ export function useCodingAgents(input: {
       onPress: pressStart,
       pending: pressedHere,
     },
-    startCall: taskId !== undefined ? startCall : undefined,
+    startCall: taskId !== undefined ? steadyStartCall : undefined,
     onStop,
     onRewind,
     onMessage,
