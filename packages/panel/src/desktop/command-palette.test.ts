@@ -566,6 +566,35 @@ test("a press on a filter chooses it and leaves the caret in the field, no filte
   assert.equal(field().value, "invite");
 });
 
+/** Where the row chosen stands in the list, the one Return opens. */
+function chosenRowAt(): number {
+  return [...document.querySelectorAll('[role="option"]')].findIndex(
+    (row) => row.getAttribute("aria-selected") === "true",
+  );
+}
+
+test("a filter chosen, and ⌘K run again, choose the first row wherever the arrows left the choice", () => {
+  openPalette();
+  chooseFilter("Settings");
+  key({ key: "ArrowDown" });
+  key({ key: "ArrowDown" });
+  assert.equal(chosenRowAt(), 2);
+
+  key(RIGHT);
+  assert.equal(chosenFilter(), "All");
+  assert.equal(chosenRowAt(), 0, "the filter's first row is chosen");
+
+  key({ key: "ArrowDown" });
+  assert.equal(chosenRowAt(), 1);
+  act(() => {
+    assert.ok(
+      runAppCommand(APP_COMMAND.COMMAND_PALETTE),
+      "the menu bar's ⌘K runs over the palette",
+    );
+  });
+  assert.equal(chosenRowAt(), 0, "the first row is chosen again");
+});
+
 test("in a row too narrow for every filter, the filter a key chooses is scrolled into view along the row alone", () => {
   openPalette();
   const bar = document.querySelector<HTMLElement>('[role="radiogroup"][aria-label="Filter"]');
