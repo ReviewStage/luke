@@ -55,28 +55,44 @@ function watchedWith(watched: Watched, ids: readonly string[], step: 1 | -1): Wa
   return next;
 }
 
-/** One read of the devices' beats: what the service answered, or nothing where it did not. */
-function beatsRead(ids: readonly string[]): Effect.Effect<Option.Option<DevicePresenceAnswer>> {
-  return Effect.tryPromise(() =>
-    askAct(ACT_KIND.HOSTS_PRESENCE, { ids: ids.slice(0, DEVICE_PRESENCE_MAX_IDS) }),
-  ).pipe(
-    Effect.map((answer) => ("failure" in answer ? Option.none() : Option.some(answer))),
-    Effect.orElseSucceed(() => Option.none<DevicePresenceAnswer>()),
+/** What one round of reads answered: the beats of the devices that answered, and whether any batch did not. */
+export interface PresenceRead {
+  readonly devices: DevicePresenceAnswer["devices"];
+  readonly failed: boolean;
+}
+
+/** One batch of at most `DEVICE_PRESENCE_MAX_IDS` ids: what the service answered, or a failure where it did not. */
+function batchRead(ids: readonly string[]): Effect.Effect<PresenceRead> {
+  return Effect.tryPromise(() => askAct(ACT_KIND.HOSTS_PRESENCE, { ids })).pipe(
+    Effect.map(
+      (answer): PresenceRead =>
+        "failure" in answer
+          ? { devices: [], failed: true }
+          : { devices: answer.devices, failed: false },
+    ),
+    Effect.orElseSucceed((): PresenceRead => ({ devices: [], failed: true })),
   );
 }
 
-/** The book after a read: its beats where it answered, the held ones where it did not, and whether it failed. */
-export function presenceAfter(
-  book: PresenceBook,
-  read: Option.Option<DevicePresenceAnswer>,
-): PresenceBook {
-  return Option.match(read, {
-    onNone: () => ({ beats: book.beats, failed: true }),
-    onSome: (answer) => ({
-      beats: new Map(answer.devices.map((each) => [each.deviceId, each.seenAt])),
-      failed: false,
-    }),
-  });
+/** One round of reads of every device drawn, in batches the service takes, answered together. */
+function beatsRead(ids: readonly string[]): Effect.Effect<PresenceRead> {
+  const batches: string[][] = [];
+  for (let from = 0; from < ids.length; from += DEVICE_PRESENCE_MAX_IDS) {
+    batches.push(ids.slice(from, from + DEVICE_PRESENCE_MAX_IDS));
+  }
+  return Effect.forEach(batches, batchRead, { concurrency: "unbounded" }).pipe(
+    Effect.map((reads) => ({
+      devices: reads.flatMap((read) => read.devices),
+      failed: reads.some((read) => read.failed),
+    })),
+  );
+}
+
+/** The book after a round: the beats it answered, over the held ones where a batch failed, and whether any did. */
+export function presenceAfter(book: PresenceBook, read: PresenceRead): PresenceBook {
+  const beats = new Map(read.failed ? book.beats : []);
+  for (const each of read.devices) beats.set(each.deviceId, each.seenAt);
+  return { beats, failed: read.failed };
 }
 
 /** The shared read, run only while a surface subscribes: again whenever the devices drawn change, and every `PRESENCE_EVERY` between. */
