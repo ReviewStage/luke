@@ -5,7 +5,6 @@ import type { TaskRunsOn, TaskRunsOnRequest } from "@luke/features/task-wire";
 import { CHIP_WIDTH, type MenuRow, POPOVER_ALIGN, useSecond } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { Schema } from "effect";
-import { useState } from "react";
 import { ExperimentTag } from "../experiment-marks.js";
 import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
@@ -20,9 +19,11 @@ import { keptKey, useKept } from "../use-kept.js";
  * running Luke or a host, each saying whether it is online, held against
  * the window's own clock. An offline device is listed but not picked, since
  * the service refuses a task set to one that has not beat lately. New task's chip
- * starts on the member's last pick, kept in this window, and on Cloud where
- * that device is no longer listed or is offline, which the card then holds
- * until a pick, so a device coming back mid-compose never moves it; it wears the Experimental
+ * starts on the member's last pick, kept in this window, and on Cloud only
+ * where nothing is kept or that device is no longer listed. A kept device
+ * that is offline, as a Mac is while Luke restarts on it and readies its
+ * sandbox, stays picked and says so, so its start is refused by name rather
+ * than sent quietly to the cloud; it wears the Experimental
  * tag; it stands only while the member has a device to pick. The task's
  * control stands with its status and priority, saying the device it runs on
  * and whether it is online, or that the device was removed, and its hint
@@ -84,30 +85,24 @@ function runsOnOf(id: string): TaskRunsOnRequest {
 }
 
 /**
- * New task's pick, starting on the member's last where that device is listed
- * and online, else Cloud, and kept as it changes. Answers the device picked,
- * none for the cloud, and the setter.
+ * New task's pick, starting on the member's last where that device is
+ * listed, online or not, else Cloud, and kept as it changes. Answers the
+ * device picked, none for the cloud, and the setter. Note that an offline
+ * device stays picked rather than falling back to Cloud, because a task's
+ * Runs on is fixed as it starts, and one sent to the cloud while its Mac was
+ * away for a moment could never be moved back.
  */
 export function useNewTaskRunsOn(
   devices: readonly MacOffer[] | undefined,
 ): readonly [MacOffer | undefined, (deviceId: string | undefined) => void] {
   const [kept, keep] = useKept(KEPT.PICK, CLOUD_ROW);
-  // The kept device this card fell back to Cloud from, which it holds until another is kept, here or in
-  // another card, so that device coming back mid-compose never moves it.
-  const [fellBackFrom, setFellBackFrom] = useState<string | undefined>(undefined);
-  const now = useSecond();
   const picked = devices?.find((each) => each.deviceId === kept);
-  const usable = picked !== undefined && offerOnline(picked, now);
-  // Note that a list not yet read judges nothing, so the kept device stands once it arrives online.
-  if (fellBackFrom === undefined && !usable && kept !== CLOUD_ROW && devices !== undefined) {
-    setFellBackFrom(kept);
-  }
-  const held = fellBackFrom !== undefined && fellBackFrom === kept;
-  const choose = (deviceId: string | undefined) => {
-    setFellBackFrom(undefined);
-    keep(deviceId ?? CLOUD_ROW);
-  };
-  return [usable && !held ? picked : undefined, choose];
+  return [picked, (deviceId: string | undefined) => keep(deviceId ?? CLOUD_ROW)];
+}
+
+/** What New task's chip says of the device picked: its name while online, and that it is offline otherwise. */
+function offerStateWords(device: MacOffer, now: number): string {
+  return offerOnline(device, now) ? device.name : `${device.name} · ${RUNS_ON_WORDS.OFFLINE}`;
 }
 
 /** What a start sends of New task's pick: the device it names, or the cloud. */
@@ -135,7 +130,7 @@ export function NewTaskRunsOnChip({
       <Picker
         label={RUNS_ON_WORDS.LABEL}
         value={device?.deviceId ?? CLOUD_ROW}
-        valueLabel={device?.name ?? RUNS_ON_WORDS.CLOUD}
+        valueLabel={device === undefined ? RUNS_ON_WORDS.CLOUD : offerStateWords(device, now)}
         valueIcon={device === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph kind={device.kind} />}
         rows={runsOnRows(devices, now)}
         noMatch={RUNS_ON_WORDS.NO_MATCH}
