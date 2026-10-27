@@ -51,6 +51,8 @@ import {
   readStandingOperator,
   restoreOperatorAgent,
 } from "@luke/database/models/coding-agent-store";
+import { storeWriter } from "@luke/database/models/writer";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { nextScheduledRun } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
@@ -69,13 +71,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
-import {
-  type AgentSessions,
-  describeUnreachable,
-  EVE_SEND_OUTCOME,
-  type EveTypedTurn,
-} from "../brain-host/eve-sessions.js";
+import type { AgentSessions, EveTypedTurn } from "../brain-host/eve-sessions.js";
 import { OPERATOR_HEARTBEAT, OPERATOR_OPENING } from "./instructions.js";
 import {
   acceptedAgentChoice,
@@ -84,6 +80,8 @@ import {
   startCodingAgent,
   startCredentialStands,
 } from "./start.js";
+import { steerCodingAgent } from "./steer.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /** What an ensure asks beyond the member and the workspace: whether the standing operator is archived first, or which archived one comes back in its place, and how its turn is stopped before it is. */
 export interface OperatorEnsure<R> {
@@ -171,11 +169,12 @@ const aimedItsHeartbeat = (
 /**
  * The operator's session opened on its opening turn (`instructions.ts`'s
  * `OPERATOR_OPENING`), in which it reads its member's open work and says
- * what stands. Note that an eve that does not take it is logged and leaves
- * the operator standing, rather than failing the ensure, because a Reset has
- * archived the operator before and a member must never be left with none;
- * an operator never opened opens on its member's first words, as any blank
- * agent does (`steer.ts`).
+ * what stands, sent as a steer is and kept as Luke's, as a failure's wake
+ * is (`operator-wake-sweep.ts`), so the line names who wrote it. Note that
+ * an eve that does not take it is logged and leaves the operator standing,
+ * rather than failing the ensure, because a Reset has archived the operator
+ * before and a member must never be left with none; an operator never
+ * opened opens on its member's first words, as any blank agent does.
  */
 const openedOnItsOpening = (
   eve: Effect.Effect<
@@ -187,24 +186,16 @@ const openedOnItsOpening = (
 ) =>
   Effect.gen(function* () {
     const sessions = yield* eve;
-    const opened = yield* sessions.open({
-      conversationId: operator.conversationId,
-      turn: BRAIN_HOST_TURN.TYPED,
-      message: OPERATOR_OPENING,
-    });
-    if (opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
-      yield* Effect.logWarning(
-        `eve did not take operator ${operator.id}'s opening: ${opened.outcome}`,
-      );
-    }
+    yield* steerCodingAgent(
+      sessions,
+      storeWriter({ tools: CODER_TOOL_SET }),
+      operator.userId,
+      operator,
+      { text: OPERATOR_OPENING, clientKey: randomUUID(), sender: { kind: MESSAGE_SENDER.LUKE } },
+    );
   }).pipe(
-    Effect.catchTag("EveUnreachable", (failure) =>
-      Effect.logWarning(
-        `eve could not be reached to open operator ${operator.id}: ${describeUnreachable(failure)}`,
-      ),
-    ),
     Effect.catch((refusal) =>
-      Effect.logWarning(`eve was not composed to open operator ${operator.id}: ${refusal.error}`),
+      Effect.logWarning(`operator ${operator.id} was not opened: ${refusal.error}`),
     ),
   );
 
