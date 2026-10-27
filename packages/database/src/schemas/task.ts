@@ -155,6 +155,8 @@ export const task = pgTable(
     index("task_organization_created").on(table.organizationId, table.createdAt),
     // The key names one task of its workspace, and a new task takes the next number.
     uniqueIndex("task_organization_number").on(table.organizationId, table.number),
+    // The tasks that run on one device, which a presence read finds to say who may see it and a deleted device clears.
+    index("task_device").on(table.deviceId).where(sql`${table.deviceId} is not null`),
     // A workspace's tasks assigned to one member, and that member leaving letting each of them go.
     index("task_organization_assignee").on(table.organizationId, table.assigneeId),
   ],

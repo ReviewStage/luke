@@ -329,6 +329,8 @@ export const codingAgent = pgTable(
     index("coding_agent_org_taskless_created")
       .on(table.organizationId, table.createdAt)
       .where(sql`${table.taskId} is null`),
+    // The agents pinned to one device, which a presence read finds to say who may see it and a deleted device clears.
+    index("coding_agent_device").on(table.deviceId).where(sql`${table.deviceId} is not null`),
     // An agent's summary names the agents started from it, read by the source's id.
     index("coding_agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
     // Luke's MCP server and the events route find the agent a runner's bearer stands for by the

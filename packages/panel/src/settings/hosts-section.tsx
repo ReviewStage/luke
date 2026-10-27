@@ -283,7 +283,8 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const minute = Math.floor(useMinute() / MINUTE_MS);
   const [hosts, setHosts] = useState<readonly Host[] | undefined>(undefined);
   // Note that the list is read once a minute for the hosts that join or leave, while each host's beat is the window's shared presence, read often enough that a host that keeps beating never reads offline.
-  const hostIds = useMemo(() => (hosts ?? []).map((each) => each.id), [hosts]);
+  const hostsDrawn = on && signedIn ? hosts : undefined;
+  const hostIds = useMemo(() => (hostsDrawn ?? []).map((each) => each.id), [hostsDrawn]);
   const book = useDevicePresence(hostIds);
   const [installScriptUrl, setInstallScriptUrl] = useState<string | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);

@@ -31,13 +31,14 @@ import { rendererRuntime } from "./renderer-runtime.js";
 /** How often the beats of the devices drawn are read: under the forty-five seconds a beat counts for, less a beat's own fifteen. */
 const PRESENCE_EVERY = Duration.seconds(20);
 
-/** Where the presence reads stand: the beats the last answered, by device, and whether the latest one failed. */
+/** Where the presence reads stand: the beats the last answered, by device, and whether the window cannot yet say, because none has answered or the latest failed. */
 export interface PresenceBook {
   readonly beats: ReadonlyMap<string, number>;
   readonly failed: boolean;
 }
 
-const NO_BOOK: PresenceBook = { beats: new Map(), failed: false };
+/** Nothing known yet: before a read answers, and for a surface that names no device, so a stale beat reads as unable to check rather than as offline. */
+const NO_BOOK: PresenceBook = { beats: new Map(), failed: true };
 
 /** How many surfaces draw each device, by its id: the devices the shared read names. */
 type Watched = ReadonlyMap<string, number>;
