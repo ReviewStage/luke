@@ -475,6 +475,34 @@ any answer from our service holds the token again, and we never log it or send
 it to our analytics, crash reports, or screen recordings. Removing it in
 Settings, or deleting your account, deletes it.
 
+**A workspace's environment variables and secrets.** An owner or admin of a
+workspace can keep environment variables and secrets that every coding agent
+of the workspace, and its workers, run their shell commands with. Each value
+is sent once, over HTTPS, to our service, and stored under the workspace
+encrypted the way your own API keys are, so a copy of our database alone
+cannot read it; our operators who hold the server-only secret too could. Beside
+it we keep its name, whether it is a variable or a secret, who saved it last,
+and when. Every member of the workspace is shown a variable's value; a secret
+is shown only by its name, and no part of its value is ever shown again. Our service reads the values afresh as an agent
+starts work. An agent that runs on Luke's own agent is handed them with each
+shell command, which sets them ahead of what it runs. One that runs on Claude
+Code or Codex is handed them in the sealed environment its runner starts
+with, never on a command line, and the runner hands them on to every command
+the agent runs. Neither writes them to the machine's disk. Secrets reach only agents running in our
+cloud sandboxes: an agent running on a member's own Mac or Linux host is
+handed the workspace's variables, sealed in its launch until that machine
+takes it, and never its secrets. A secret's value is replaced with
+`[redacted]` wherever it appears in what a command answers and in everything
+an agent's runner reports back, but a command can still print it changed, so
+a secret can reach the agent's model, its transcript, and the traces of its run,
+which include the agent traces sent to Sentry described under "Error,
+performance, and agent reports from our service". A value is saved under a
+field name Sentry replaces before a request's trace leaves, but the request
+that hands a command to the sandbox carries the values too, and can reach
+Sentry with that request's trace. We never log a
+value or send one to our analytics or screen recordings. Removing one in
+Settings deletes it, and every one goes with its workspace.
+
 **A task's whiteboard.** You and the task's coding agents can both draw on a
 task's whiteboard. Our service stores it with the task, as drawn and readable
 by our own operators: every shape, arrow, line, stroke, and piece of text and

@@ -14,6 +14,12 @@ import {
   shellWithoutCapabilities,
   shellWithoutCapabilitiesOrNetwork,
 } from "../sandbox-capabilities.js";
+import {
+  exportLines,
+  maskSecrets,
+  NO_SHELL_ENVIRONMENT,
+  type ShellEnvironment,
+} from "./workspace-environment.js";
 
 /**
  * shell.ts -- the coding agent's shell: eve's own `bash`, with every command started in the checkout.
@@ -53,6 +59,11 @@ import {
  * own command is read over the same API. Only a loss after the sandbox took
  * the command is lost so: a start it refused, as a sandbox gone indeed
  * refuses one, ran nothing, and fails in eve's own words.
+ *
+ * Where it is handed the session's environment, the workspace's variables
+ * and secrets are exported ahead of the `cd`, read afresh for each command
+ * (`workspace-environment.ts`), and every secret's value is masked out of
+ * the answer before the model reads it.
  */
 
 /** eve's `bash` input as the model is offered it, with the description beside the command. */
@@ -218,8 +229,12 @@ export type ShellNetwork = (typeof SHELL_NETWORK)[keyof typeof SHELL_NETWORK];
 const NO_NETWORK_WORDS =
   " The shell has no network: nothing it runs reaches GitHub or the internet, so a fetch, a push, `gh`, a download, or an install fails; a checkout's history is already there to read.";
 
-/** eve's `bash`, told and run so that every command starts in the directory given, and with no network where asked. */
-export function bashStartingIn(directory: string, network: ShellNetwork = SHELL_NETWORK.OPEN) {
+/** eve's `bash`, told and run so that every command starts in the directory given, with no network where asked, and with the session's environment where one is given. */
+export function bashStartingIn(
+  directory: string,
+  network: ShellNetwork = SHELL_NETWORK.OPEN,
+  environmentOf?: (ctx: ToolContext) => Promise<ShellEnvironment>,
+) {
   const wrapped =
     network === SHELL_NETWORK.NONE ? shellWithoutCapabilitiesOrNetwork : shellWithoutCapabilities;
   return defineTool<typeof SHELL_INPUT.Type, ShellOutput>({
@@ -227,14 +242,22 @@ export function bashStartingIn(directory: string, network: ShellNetwork = SHELL_
     description: `${bash.description} Every command starts in ${directory}, your working folder, in a fresh shell, so a \`cd\` lasts only for the call it is in.${network === SHELL_NETWORK.NONE ? NO_NETWORK_WORDS : ""}`,
     inputSchema: emitJsonSchema(SHELL_INPUT),
     outputSchema: emitJsonSchema(SHELL_OUTPUT),
-    execute: (input, ctx) => {
+    execute: async (input, ctx) => {
+      const environment =
+        environmentOf === undefined ? NO_SHELL_ENVIRONMENT : await environmentOf(ctx);
       const start: CommandStart = { accepted: false };
-      const answer = bash.execute(
-        { command: wrapped(`cd ${quoted(directory)} || exit\n${input.command}`) },
-        watchingStart(ctx, start),
+      const command = wrapped(
+        `${exportLines(environment)}cd ${quoted(directory)} || exit\n${input.command}`,
       );
-      if (Symbol.asyncIterator in answer) return answer;
-      return Promise.resolve(answer).catch((cause: unknown) => lostOrThrown(cause, ctx, start));
+      try {
+        const answered = await bash.execute({ command }, watchingStart(ctx, start));
+        // Note that eve's own bash answers once, so a stream is a change of eve's to meet here rather than pass on unmasked.
+        if (Symbol.asyncIterator in answered) throw new Error("eve's bash answered as a stream.");
+        return maskSecrets(answered, environment);
+      } catch (cause) {
+        // A lost outcome's message is the shell's own words, so it holds no secret to mask.
+        return lostOrThrown(cause, ctx, start);
+      }
     },
   });
 }

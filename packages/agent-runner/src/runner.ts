@@ -85,6 +85,7 @@ import {
   type RunnerEndEvent,
   type RunnerWaiting,
   type RunnerWakeup,
+  WorkspaceEnvironmentSchema,
 } from "./protocol.js";
 import { oneShotDueAt } from "./wakeups.js";
 
@@ -142,6 +143,9 @@ export interface RunnerInput {
 }
 
 const decodeConfig = Schema.decodeUnknownEffect(Schema.fromJsonString(RunnerConfigSchema));
+const decodeWorkspace = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(WorkspaceEnvironmentSchema),
+);
 const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSchema));
 
 /** Where a launch resumes the CLI's session: the session, and the chain entry it is cut after, where a rewind cut it; none for a fresh session. */
@@ -660,7 +664,31 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
       return value === undefined || value === "" ? [] : [Redacted.make(value)];
     },
   );
-  const secrets = [bearer, ...tokens];
+  const shared = input.env[RUNNER_ENV.WORKSPACE];
+  const workspace =
+    shared === undefined
+      ? { variables: {}, secrets: {} }
+      : yield* decodeWorkspace(shared).pipe(
+          Effect.mapError(
+            () =>
+              new RunnerFailed({
+                detail: `${RUNNER_ENV.WORKSPACE} is not a workspace environment`,
+              }),
+          ),
+        );
+  // Note that the runner's own variables are spread last, so no workspace name could stand in for one.
+  const env = {
+    ...workspace.variables,
+    ...workspace.secrets,
+    ...input.env,
+    [RUNNER_ENV.WORKSPACE]: undefined,
+  };
+  const names = [...Object.keys(workspace.variables), ...Object.keys(workspace.secrets)];
+  const secrets = [
+    bearer,
+    ...tokens,
+    ...Object.values(workspace.secrets).map((value) => Redacted.make(value)),
+  ];
 
   // Stdin is read in a loop of its own from the first line on, so nothing
   // the session does can hold up a line Luke wrote.
@@ -679,7 +707,7 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     firstSequence: config.firstSequence,
     secrets,
   });
-  const context = { lines, env: input.env, bearer, sink, self: input.self };
+  const context = { lines, env, workspace: names, bearer, sink, self: input.self };
   const outcome: LaunchOutcome =
     config.harness === RUNNER_HARNESS.CODEX
       ? yield* runCodex({ ...context, config })

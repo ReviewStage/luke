@@ -143,6 +143,24 @@ const MCP_TOOL_TIMEOUT_SECONDS = 600;
 const INTEGRATION_STARTUP_TIMEOUT_SECONDS = 20;
 
 /**
+ * The variables a command the agent runs inherits beside the workspace's:
+ * those Codex's own `inherit = "core"` keeps
+ * (https://github.com/openai/codex/blob/main/codex-rs/core/src/exec_env.rs),
+ * named here because a workspace's names join them in one allowlist.
+ */
+const CODEX_CORE_VARIABLES = [
+  "HOME",
+  "LOGNAME",
+  "PATH",
+  "SHELL",
+  "USER",
+  "USERNAME",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+] as const;
+
+/**
  * Who the runner tells app-server it is. OpenAI asks that the name match the
  * `agent_name_hint` the sign-in sent, which is `Luke`. The version is the
  * package's, which the bundle's build writes in (`--define`); an unbundled
@@ -351,7 +369,11 @@ function sandboxModeOf(sandbox: SandboxPolicy): "danger-full-access" | "workspac
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
  * every MCP call, as P16 found) and given as long as Luke runs a call, the sandbox with network on and its
  * writable roots (`sandboxPolicy`), and commands inheriting the core variables
- * without the bearer or the key. Nothing in argv is secret.
+ * and the workspace's, by name, without the bearer or the key. Note that
+ * Codex's default exclusion of a name holding KEY, SECRET, or TOKEN is off,
+ * since a workspace's `NPM_TOKEN` is meant for its commands, and the
+ * allowlist keeps every other variable of the runner's out. Nothing in argv
+ * is secret.
  *
  * Note that workspace-write keeps `.git` read-only under every writable root
  * (openai/codex#15505), and with `never` nothing escalates, so without its
@@ -360,7 +382,12 @@ function sandboxModeOf(sandbox: SandboxPolicy): "danger-full-access" | "workspac
  * the sandbox on: commands still never see the token, and app-server's own
  * git calls run with hooks and fsmonitor disabled.
  */
-function appServerArgs(config: CodexConfig, auth: CodexAuth, sandbox: SandboxPolicy): string[] {
+function appServerArgs(
+  config: CodexConfig,
+  auth: CodexAuth,
+  sandbox: SandboxPolicy,
+  workspace: readonly string[],
+): string[] {
   const mcp = `mcp_servers.${MCP_SERVER}`;
   // Each integration the agent is handed is a server of its own on the same bearer, its tools approved and bounded as Luke's are.
   const integrations = (config.integrations ?? [])
@@ -397,9 +424,13 @@ function appServerArgs(config: CodexConfig, auth: CodexAuth, sandbox: SandboxPol
           ],
         ] as const)
       : []),
-    ["shell_environment_policy.inherit", toml("core")],
-    ["shell_environment_policy.ignore_default_excludes", "false"],
+    ["shell_environment_policy.inherit", toml("all")],
+    ["shell_environment_policy.ignore_default_excludes", "true"],
     ["shell_environment_policy.exclude", `[${excluded.map(toml).join(", ")}]`],
+    [
+      "shell_environment_policy.include_only",
+      `[${[...CODEX_CORE_VARIABLES, ...workspace].map(toml).join(", ")}]`,
+    ],
   ];
   return [
     "app-server",
@@ -521,7 +552,7 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   const server = yield* spawnAppServer(
     {
       executable: config.executable,
-      args: appServerArgs(config, launch.auth, launch.sandbox),
+      args: appServerArgs(config, launch.auth, launch.sandbox, launch.context.workspace),
       cwd: config.cwd,
       // Note that Claude Code's credentials, were they set, are no business of Codex's.
       env: {

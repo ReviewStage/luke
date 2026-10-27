@@ -8,6 +8,10 @@
 import { type AccountProcedureSeams, accountProcedures } from "../accounts/account-procedures.js";
 import { type ModelsProcedureSeams, modelsProcedures } from "../accounts/models-procedures.js";
 import {
+  type WorkspaceEnvironmentProcedureSeams,
+  workspaceEnvironmentProcedures,
+} from "../accounts/workspace-environment-procedures.js";
+import {
   type WorkspaceGithubProcedureSeams,
   workspaceGithubProcedures,
 } from "../accounts/workspace-github-procedures.js";
@@ -131,6 +135,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   TaskFilesProcedureSeams &
   TaskSectionsProcedureSeams &
   TasksProcedureSeams &
+  WorkspaceEnvironmentProcedureSeams &
   WorkspaceGithubProcedureSeams &
   WorkspaceInvitationsProcedureSeams &
   WorkspaceLinearProcedureSeams &
@@ -169,6 +174,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     repositoryPins: repositoryPinsProcedures(seams),
     taskFiles: taskFilesProcedures(seams),
     taskSections: taskSectionsProcedures(seams),
+    workspaceEnvironment: workspaceEnvironmentProcedures(seams),
     workspaceGithub: workspaceGithubProcedures(seams),
     workspaceInvitations: workspaceInvitationsProcedures(seams),
     workspaceLinear: workspaceLinearProcedures(seams),

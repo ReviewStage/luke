@@ -501,41 +501,56 @@ it.effect("interrupts a turn a wakeup started when Luke stops it", () =>
   }),
 );
 
-it.effect("takes the launch's secrets out of every event it posts", () =>
-  Effect.gen(function* () {
-    const luke = fakeLuke();
-    const leak: Step = {
-      emit: {
+it.effect(
+  "takes the launch's secrets, the workspace's among them, out of every event it posts, one that begins another too",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke();
+      const workspaceSecret = "sk_test_workspace_secret";
+      // Note that the longer secret is listed after the one it begins, which a scrub in list order would cut in two.
+      const longerSecret = `${workspaceSecret}_with_tail`;
+      const leak: Step = {
+        emit: {
+          type: "assistant",
+          message: {
+            content: [
+              {
+                type: "text",
+                text: `${CLAUDE_TOKEN} ${BEARER} ${workspaceSecret} ${longerSecret}`,
+              },
+              { type: "text", text: "a literal \\n stays" },
+            ],
+          },
+          parent_tool_use_id: null,
+        },
+      };
+      const workspace = {
+        variables: {},
+        secrets: { STRIPE_KEY: workspaceSecret, STRIPE_KEY_FULL: longerSecret },
+      };
+      const { write, run } = yield* launch([leak, ...SHORT_TURN], luke, {
+        ...ENV,
+        [RUNNER_ENV.WORKSPACE]: JSON.stringify(workspace),
+      });
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* Fiber.join(run);
+
+      assert.deepEqual(withoutAccepted(luke.applied)[0]?.message, {
         type: "assistant",
         message: {
           content: [
-            { type: "text", text: `${CLAUDE_TOKEN} ${BEARER}` },
+            { type: "text", text: "[redacted] [redacted] [redacted] [redacted]" },
             { type: "text", text: "a literal \\n stays" },
           ],
         },
         parent_tool_use_id: null,
-      },
-    };
-    const { write, run } = yield* launch([leak, ...SHORT_TURN], luke);
-    yield* write(CONFIG);
-    yield* write(FIRST_MESSAGE);
-    yield* Fiber.join(run);
-
-    assert.deepEqual(withoutAccepted(luke.applied)[0]?.message, {
-      type: "assistant",
-      message: {
-        content: [
-          { type: "text", text: "[redacted] [redacted]" },
-          { type: "text", text: "a literal \\n stays" },
-        ],
-      },
-      parent_tool_use_id: null,
-    });
-    const posted = JSON.stringify(luke.applied);
-    for (const secret of [CLAUDE_TOKEN, BEARER]) {
-      assert.ok(!posted.includes(JSON.stringify(secret).slice(1, -1)));
-    }
-  }),
+      });
+      const posted = JSON.stringify(luke.applied);
+      for (const secret of [CLAUDE_TOKEN, BEARER, workspaceSecret, "_with_tail"]) {
+        assert.ok(!posted.includes(JSON.stringify(secret).slice(1, -1)));
+      }
+    }),
 );
 
 it.effect(
@@ -693,11 +708,18 @@ it.effect("ends the launch, closing the CLI, when Luke refuses its bearer", () =
 );
 
 it.effect(
-  "starts the CLI with the plan's options, Luke's MCP server in process with no secret, and both secrets denied to commands",
+  "starts the CLI with the plan's options, the workspace's environment, Luke's MCP server in process with no secret, and both secrets denied to commands",
   () =>
     Effect.gen(function* () {
       const luke = fakeLuke();
-      const { cli, write, run } = yield* launch(SHORT_TURN, luke);
+      const workspace = {
+        variables: { APP_MODE: "development" },
+        secrets: { NPM_TOKEN: "npm-secret" },
+      };
+      const { cli, write, run } = yield* launch(SHORT_TURN, luke, {
+        ...ENV,
+        [RUNNER_ENV.WORKSPACE]: JSON.stringify(workspace),
+      });
       yield* write(CONFIG);
       yield* write(FIRST_MESSAGE);
       yield* Fiber.join(run);
@@ -742,6 +764,9 @@ it.effect(
       assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
+      assert.equal(options.env?.APP_MODE, "development");
+      assert.equal(options.env?.NPM_TOKEN, "npm-secret");
+      assert.equal(options.env?.[RUNNER_ENV.WORKSPACE], undefined);
     }),
 );
 

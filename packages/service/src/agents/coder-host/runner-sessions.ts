@@ -26,9 +26,10 @@
  * `../machine/vercel-machine.ts`, or the starter's Mac in
  * `../machine/device-machine.ts`, which the agent's row picks). A launch mints
  * the runner's bearer and records its digest on the agent's row, and starts
- * the runner with the harness's credential and the bearer in its
- * environment and nowhere else: never in its argv, its config line, a file,
- * or a record. The config line and the first message are its first lines.
+ * the runner with the harness's credential, the bearer, and the agent's
+ * workspace's variables and secrets (`workspace-environment.ts`; its secrets
+ * on a cloud sandbox alone) in its environment and nowhere else: never in
+ * its argv, its config line, a file, or a record. The config line and the first message are its first lines.
  * The machine records the runner and the first event number of its launch
  * beside its place, which is how a later call finds the runner it writes to.
  *
@@ -160,6 +161,7 @@ import {
   readNativeTurnHanded,
   recordNativeTurnHanded,
 } from "./turn-message.js";
+import { runnerWorkspaceEnvironment, workspaceShellEnvironment } from "./workspace-environment.js";
 
 /** What the sessions reach: the store, GitHub, Vercel, the agent's machine, the image, the runner's bundle, and the deployment's key ring. */
 export type RunnerServices =
@@ -474,6 +476,24 @@ export const runnerSessions = <
     const context = yield* Effect.context<RunnerServices>();
     const machine: AgentMachineService = yield* AgentMachine;
     const { userId } = options;
+
+    /**
+     * What a launch starts the runner with: the harness's credential, and the
+     * agent's workspace's variables and secrets (`workspace-environment.ts`),
+     * read afresh beside it, so a value saved since changes the launch's
+     * fingerprint and a warm runner is relaunched to take it up.
+     */
+    const launchWith = (agent: CodingAgent) =>
+      Effect.map(
+        Effect.all(
+          [harness.launch(agent), workspaceShellEnvironment(agent.organizationId, agent.machine)],
+          { concurrency: "unbounded" },
+        ),
+        ([credential, workspace]): HarnessLaunch => ({
+          ...credential,
+          env: { ...credential.env, ...runnerWorkspaceEnvironment(workspace) },
+        }),
+      );
 
     /** The agent whose conversation the message is for. */
     const agentOf = (conversationId: string) =>
@@ -792,7 +812,7 @@ export const runnerSessions = <
           [
             renewCredential(target, agent, running),
             readCodingAgentRouting(userId, agent.id),
-            harness.launch(agent),
+            launchWith(agent),
           ],
           { concurrency: "unbounded" },
         );
@@ -820,7 +840,7 @@ export const runnerSessions = <
     const staleWarm = (agent: CodingAgent, runner: RunnerMark, turnRunning: boolean) =>
       Effect.gen(function* () {
         if (runner.fingerprint === undefined || turnRunning) return false;
-        const credential = yield* harness.launch(agent);
+        const credential = yield* launchWith(agent);
         const now = launchFingerprint(credential, yield* options.integrations(agent));
         return now !== runner.fingerprint;
       });
@@ -943,7 +963,7 @@ export const runnerSessions = <
           // that fails (the image still preparing, a clone refused) leaves the session standing
           // for the next message to try again rather than retired; a delete that fails leaves
           // the expired one beside the fresh one, which `listTagged` lists after it as the older.
-          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent), false);
+          yield* openedPlace(agent, sessionId, layout, sent, yield* launchWith(agent), false);
           yield* machine
             .discard(found.value)
             .pipe(
@@ -1082,7 +1102,7 @@ export const runnerSessions = <
           const after = yield* Effect.serviceOption(AfterResponse);
           return yield* Effect.gen(function* () {
             const agent = yield* agentOf(message.conversationId);
-            const credential = yield* harness.launch(agent);
+            const credential = yield* launchWith(agent);
             const layout = yield* machine.layout(agent);
             const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
             yield* afterResponse(
