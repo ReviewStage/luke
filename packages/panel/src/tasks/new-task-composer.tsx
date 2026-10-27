@@ -71,7 +71,8 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * Cloud or one of their devices, which the task's agents run on
  * (`runs-on.tsx`); an automation's card draws none. Note that while local
  * agents are on the card reads the member's devices as it opens and holds
- * Start, saying so, until that read lands, and says a read that failed with
+ * Start, saying so, until that read lands, a list read before it opened not
+ * counting, and says a read that failed with
  * Retry, because a start sent before the list is read names no device, and
  * the service creates such a task in the cloud for good: Cloud is only ever
  * where a task runs because the chip said Cloud. The repository chip starts on the one the press chose
@@ -345,8 +346,20 @@ export function NewTaskComposer({
   useEffect(() => {
     if (asksDevices) readModels.current();
   }, [asksDevices]);
-  // Start is held until the devices are read, since a start before then would name none.
-  const devicesUnread = asksDevices && newTask.devices === undefined;
+  // Start is held until a read made since the card opened lands, since a start before then would
+  // name none. Note that a list read before the card opened does not count, because it may be one
+  // read before a device was added, and a failed read leaves it standing; each read that lands
+  // hands a new list.
+  const listedAsOpened = useRef(newTask.devices);
+  const [devicesLanded, setDevicesLanded] = useState(false);
+  if (
+    !devicesLanded &&
+    newTask.devices !== undefined &&
+    newTask.devices !== listedAsOpened.current
+  ) {
+    setDevicesLanded(true);
+  }
+  const devicesUnread = asksDevices && !devicesLanded;
   const devicesFailed = devicesUnread && newTask.modelsFailed;
   const devices =
     asksDevices && newTask.devices !== undefined && newTask.devices.length > 0

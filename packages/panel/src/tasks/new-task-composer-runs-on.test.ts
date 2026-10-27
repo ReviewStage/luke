@@ -106,19 +106,20 @@ function devicesWith(studioSeenAt = Date.now(), builderSeenAt = 0): readonly Mac
   ];
 }
 
-/** What the card is offered: the devices as read, none before a read lands, and whether the last read failed; `reread` is what a read lists once the test lets reads land. */
+/** What the card is offered: the devices as read, none before a read lands, and whether the last read failed; a read lists `reread`, else those devices again, unless `holdReads`, until the test lets reads land. */
 interface Offered {
   devices: readonly MacOffer[] | undefined;
   modelsFailed?: boolean;
   reread?: readonly MacOffer[];
+  holdReads?: boolean;
 }
 
-/** The card in Acme offering what `offered` holds, each start's Runs on written down; a read of the models lists `reread` once `letReadsLand` is called. */
+/** The card in Acme offering what `offered` holds, each start's Runs on written down; a read of the models lands as a new list, held until `letReadsLand` where `holdReads`. */
 async function mount(offered: Offered = { devices: devicesWith() }) {
   offeredNow = offered.devices ?? [];
   const control = tasksControl();
   let { devices, modelsFailed = false } = offered;
-  let readsLand = false;
+  let readsLand = offered.holdReads !== true;
   const starts: (TaskRunsOnRequest | undefined)[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -136,8 +137,8 @@ async function mount(offered: Offered = { devices: devicesWith() }) {
             devices,
             modelsFailed,
             readModels: () => {
-              if (!readsLand || offered.reread === undefined) return;
-              devices = offered.reread;
+              if (!readsLand) return;
+              devices = [...(offered.reread ?? offered.devices ?? [])];
               modelsFailed = false;
               draw();
             },
@@ -262,13 +263,19 @@ test("a device picked in another card reaches this one", async () => {
 
 test("nothing starts before the devices are read, and a read that failed says so, with a Retry that reads them again", async () => {
   window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
-  const reading = await mount({ devices: undefined });
+  // A list read before the card opened, here one with no device, is no read of the card's own.
+  const reading = await mount({ devices: [], holdReads: true });
   pressInComposer(reading.container, "Enter", { metaKey: true });
   await settle();
   assert.deepEqual(reading.starts, []);
   assert.match(reading.container.textContent ?? "", /Checking your devices/);
 
-  const failed = await mount({ devices: undefined, modelsFailed: true, reread: devicesWith() });
+  const failed = await mount({
+    devices: [],
+    modelsFailed: true,
+    reread: devicesWith(),
+    holdReads: true,
+  });
   pressInComposer(failed.container, "Enter", { metaKey: true });
   await settle();
   assert.deepEqual(failed.starts, []);
