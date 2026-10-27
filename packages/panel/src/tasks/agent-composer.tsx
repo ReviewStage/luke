@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
@@ -523,7 +523,10 @@ export function AgentComposer({
   });
   const empty = !sendsEmpty && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
-  const bundle = useAtomValue(useSideBundles().planEditor);
+  const { planEditor } = useSideBundles();
+  const bundle = useAtomValue(planEditor);
+  // Note that a bundle that failed is not kept (`bundle-loader.ts`), so Retry imports it again, as a File tab's tree does.
+  const retryBundle = useAtomRefresh(planEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   // Whether the editor stood as the box first drew, which an owner that focuses the field focuses.
   const [mountedFirst] = useState(module !== undefined);
@@ -575,6 +578,8 @@ export function AgentComposer({
             }));
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
   const retries = note !== undefined && note === composer.note;
+  // An editor that could not be loaded is read again by its own Retry, while its note is the one shown.
+  const reloads = unloaded !== undefined && words === unloaded;
   const repositoryRemedy = useRepositoryRemedy();
   const remedy =
     note === undefined
@@ -872,8 +877,9 @@ export function AgentComposer({
                     remedyWords === undefined || remedy === undefined
                       ? undefined
                       : { label: remedyWords, onClick: remedy },
-                  onRetry:
-                    retries && (remedyWords === undefined || retriesBesideRemedy(note))
+                  onRetry: reloads
+                    ? retryBundle
+                    : retries && (remedyWords === undefined || retriesBesideRemedy(note))
                       ? composer.retry
                       : undefined,
                   mends: closed ? closedRemedy : undefined,

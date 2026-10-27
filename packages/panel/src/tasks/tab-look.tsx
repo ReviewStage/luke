@@ -12,7 +12,6 @@ import {
   GlobeIcon,
   InboxIcon,
   LaptopIcon,
-  MessagesSquareIcon,
 } from "lucide-react";
 import { HarnessMark } from "../harness-marks.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
@@ -78,7 +77,7 @@ export type TabSubject =
       readonly tab: FixedSidePanelTab;
       /** The task the panel stands beside, whose name and status its Plan tab wears; none where the place does not know it, and the tab says Plan. */
       readonly plan?: PlanStanding | undefined;
-      /** Whether the Inbox kind holds a channel's thread open beside its stream, which it is named for rather than any task's Inbox. */
+      /** Whether the Inbox kind holds a channel's thread open beside its stream, which it is named for, under the channel's glyph, rather than any task's Inbox. */
       readonly thread?: boolean | undefined;
     }
   | ({ readonly kind: typeof TAB_KIND.PLAN } & PlanStanding)
@@ -228,7 +227,7 @@ export function tabLook(subject: TabSubject): KindLook {
         return { icon: <PlanGlyph status={plan.status} />, label: plan.name };
       }
       if (tab === SIDE_PANEL_TAB.INBOX && subject.thread === true) {
-        return { icon: <MessagesSquareIcon />, label: TAB_WORDS.THREAD };
+        return { icon: <GLYPH.CHANNEL />, label: TAB_WORDS.THREAD };
       }
       const { label, icon: Icon } = SIDE_PANEL_TAB_KIND[tab];
       return { icon: <Icon />, label };

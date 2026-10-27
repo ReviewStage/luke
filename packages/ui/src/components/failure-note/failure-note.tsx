@@ -12,7 +12,10 @@
  * a tool's, and a reader may select them to copy.
  *
  * The line is an alert, so a reader hears the failure land where it
- * happened. Where trying again can mend it, Retry stands after the words
+ * happened. A failure that is history, such as a tool call's error in a
+ * transcript, is no alert (`FAILURE_NOTE_TIME.PAST`): a virtualised
+ * transcript mounts its rows as they scroll into view, and an alert there
+ * would announce an old failure again on every pass. Where trying again can mend it, Retry stands after the words
  * (`RetryButton`), and the line's first row is then a control tall, so the
  * mark, the words' first line, and Retry share one middle. A failure that
  * needs a remedy beyond Retry, or that empties the place it stood in, is an
@@ -50,6 +53,14 @@ export const FAILURE_NOTE_LOOK = {
 
 export type FailureNoteLook = (typeof FAILURE_NOTE_LOOK)[keyof typeof FAILURE_NOTE_LOOK];
 
+/** When a failure note's failure happened: just now, after the reader's own act, which a reader hears land as an alert; or in the past, as a transcript's history, which is read where it stands and never announced. */
+export const FAILURE_NOTE_TIME = {
+  NOW: "now",
+  PAST: "past",
+} as const;
+
+export type FailureNoteTime = (typeof FAILURE_NOTE_TIME)[keyof typeof FAILURE_NOTE_TIME];
+
 /** The line: the mark, the words, and the presses on one row, in the danger tone's ink at a caption's size, inset as a list's note where it stands in a list's place. */
 const LINE =
   "luke-failure-note m-0 flex min-w-0 items-start gap-icon-gap font-ui text-caption text-tone-ink data-[look=list]:px-list-inset data-[look=list]:py-row-inset";
@@ -75,14 +86,17 @@ const PART = {
 /** The presses after the words, Retry then `also`. */
 const ACTS = "luke-failure-note-retry flex flex-none items-center gap-icon-gap";
 
-/** A failure's words, `children`, behind the failed mark in the danger tone, and Retry after them where `onRetry` is given, then `also`, standing as `look` asks. */
+/** A failure's words, `children`, behind the failed mark in the danger tone, and Retry after them where `onRetry` is given, then `also`, standing as `look` asks, an alert unless `time` says it is past. */
 export function FailureNote({
   look = FAILURE_NOTE_LOOK.LINE,
+  time = FAILURE_NOTE_TIME.NOW,
   onRetry,
   also,
   children,
 }: {
   look?: FailureNoteLook;
+  /** Whether the failure just happened, and is announced, or is history, and is not. */
+  time?: FailureNoteTime;
   /** Retry's press; with none, the line says its words alone, and any `also`. */
   onRetry?: (() => void) | undefined;
   /** A second act after Retry, drawn by the caller as a `@luke/ui` control; with neither, the line says its words alone. */
@@ -99,7 +113,7 @@ export function FailureNote({
       data-look={look}
       data-tone={STATUS_TONE.DANGER}
       data-retry={acts ? "" : undefined}
-      role="alert"
+      role={time === FAILURE_NOTE_TIME.NOW ? "alert" : undefined}
     >
       <span className={part.mark} aria-hidden="true">
         <Mark />

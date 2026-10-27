@@ -70,6 +70,7 @@ import {
 } from "../storage-vocabulary.js";
 import { agentAutomationNameSql, agentGivenNameSql } from "./agent-name.js";
 import { InstantColumnSchema } from "./columns.js";
+import { reopenAgentInboxItems, settleAgentInboxItems } from "./inbox-settle.js";
 import {
   awaitingLinesOf,
   awaitingLinesOfReached,
@@ -1032,6 +1033,33 @@ const updateUnmovedArchived = SqlSchema.findAll({
           ),
         )
         .returning({ id: codingAgent.id }),
+    ),
+});
+
+/**
+ * The task the agent works on, locked against its status changing until
+ * the caller commits, as bringing the agent back takes it before the
+ * agent's own row: the order a task's write takes the two in, so an
+ * unarchive and a task moved off Done never wait on each other in a cycle,
+ * while each still sees the other's settle (`inbox-settle.ts`).
+ */
+const lockAgentTask = SqlSchema.void({
+  Request: Schema.String,
+  execute: (agentId) =>
+    Database.use((db) =>
+      db
+        .select({ id: task.id })
+        .from(task)
+        .where(
+          inArray(
+            task.id,
+            db
+              .select({ id: codingAgent.taskId })
+              .from(codingAgent)
+              .where(eq(codingAgent.id, agentId)),
+          ),
+        )
+        .for("share"),
     ),
 });
 
@@ -2592,7 +2620,7 @@ export function renameCodingAgentCommitted(
   );
 }
 
-/** The account's agent archived, stamped now with who archived it, by default the account itself, or brought back, which clears who did; its conversation and what it published are kept either way. Nothing for an agent of a workspace the account is not in. */
+/** The account's agent archived, stamped now with who archived it, by default the account itself, or brought back, which clears who did; its conversation and what it published are kept either way. An archive, this one and every other below, settles the agent's open inbox items in the same transaction, and bringing the agent back opens again those its archive settled (`inbox-settle.ts`). Nothing for an agent of a workspace the account is not in. */
 export function archiveCodingAgent(
   userId: string,
   agentId: string,
@@ -2661,16 +2689,23 @@ export function archiveOperatorAgent(
   organizationId: string,
   agentId: string,
 ): CodingAgentStoreEffect<Option.Option<string>> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(
-      updateLiveOperatorArchived({
-        userId,
-        organizationId,
-        agentId,
-        archivedAt: now,
-        archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        const archived = yield* updateLiveOperatorArchived({
+          userId,
+          organizationId,
+          agentId,
+          archivedAt: now,
+          archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
+        });
+        yield* settleAgentInboxItems(
+          archived.map(({ id }) => id),
+          now,
+        );
+        return Option.fromNullishOr(archived[0]?.id);
       }),
-      ([archived]) => Option.fromNullishOr(archived?.id),
     ),
   );
 }
@@ -2779,6 +2814,14 @@ export function restoreOperatorAgent(
                 archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
               })
             : [];
+          yield* settleAgentInboxItems(
+            retired.map(({ id }) => id),
+            archivedAt,
+          );
+          // Brought back, the operator's items its Reset's archive settled open again, and only those.
+          if (named.value.archivedAt !== null) {
+            yield* reopenAgentInboxItems(agentId, named.value.archivedAt);
+          }
           const restored = yield* unarchiveOperator({ userId, organizationId, agentId });
           // Note that the archive above is taken back where nothing came back, since a member must never be left with no operator.
           if (Option.isNone(restored)) return yield* Effect.fail(new OperatorNotRestored());
@@ -2797,15 +2840,29 @@ export function archiveCodingAgentCommitted(
   archived: boolean,
   archivedBy: StoredArchive = { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
 ): CodingAgentStoreEffect<Option.Option<CodingAgentCommitted>> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(
-      updateAgentArchived({
-        userId,
-        agentId,
-        archivedAt: archived ? now : null,
-        archivedBy: archived ? archivedBy : null,
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        if (!archived) yield* lockAgentTask(agentId);
+        // The archive standing before the write, whose stamp names the items it settled.
+        const standing = archived ? Option.none() : yield* findAgent({ userId, agentId });
+        const written = yield* updateAgentArchived({
+          userId,
+          agentId,
+          archivedAt: archived ? now : null,
+          archivedBy: archived ? archivedBy : null,
+        });
+        if (Option.isNone(written)) return Option.none();
+        // An archive settles the agent's open inbox items, and bringing it back opens again those that archive settled.
+        if (archived) yield* settleAgentInboxItems([agentId], now);
+        const standingArchive = Option.getOrUndefined(standing)?.archivedAt;
+        if (standingArchive !== undefined && standingArchive !== null) {
+          yield* reopenAgentInboxItems(agentId, standingArchive);
+        }
+        const { txid, ...agent } = written.value;
+        return Option.some({ agent, txid });
       }),
-      Option.map(({ txid, ...agent }) => ({ agent, txid })),
     ),
   );
 }
@@ -2881,7 +2938,9 @@ export function archiveIdleCodingAgent(
         if (!(yield* idle(agent.value))) return IDLE_ARCHIVE.WORKING;
         const archivedAt = yield* DateTime.nowAsDate;
         const rows = yield* archiveIfUnarchived({ userId, agentId, archivedAt, archivedBy });
-        return rows.length > 0 ? IDLE_ARCHIVE.ARCHIVED : IDLE_ARCHIVE.ALREADY;
+        if (rows.length === 0) return IDLE_ARCHIVE.ALREADY;
+        yield* settleAgentInboxItems([agentId], archivedAt);
+        return IDLE_ARCHIVE.ARCHIVED;
       }),
     ),
   );
@@ -2916,7 +2975,18 @@ export function unarchiveCodingAgentFrom(
   agentId: string,
   archivedAt: Date,
 ): CodingAgentStoreEffect<boolean> {
-  return Effect.map(unarchiveIfStamped({ userId, agentId, archivedAt }), (rows) => rows.length > 0);
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        yield* lockAgentTask(agentId);
+        const rows = yield* unarchiveIfStamped({ userId, agentId, archivedAt });
+        if (rows.length === 0) return false;
+        // The items that very archive settled open again with it.
+        yield* reopenAgentInboxItems(agentId, archivedAt);
+        return true;
+      }),
+    ),
+  );
 }
 
 /**
@@ -2996,10 +3066,23 @@ export function archiveUnmovedCodingAgent(
   agentId: string,
   seenSeq: number,
 ): CodingAgentStoreEffect<boolean> {
-  return Effect.flatMap(DateTime.nowAsDate, (archivedAt) =>
-    Effect.map(
-      updateUnmovedArchived({ userId, agentId, seenSeq, archivedAt, archivedBy: null }),
-      (rows) => rows.length > 0,
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const archivedAt = yield* DateTime.nowAsDate;
+        const rows = yield* updateUnmovedArchived({
+          userId,
+          agentId,
+          seenSeq,
+          archivedAt,
+          archivedBy: null,
+        });
+        yield* settleAgentInboxItems(
+          rows.map(({ id }) => id),
+          archivedAt,
+        );
+        return rows.length > 0;
+      }),
     ),
   );
 }

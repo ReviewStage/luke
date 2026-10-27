@@ -414,10 +414,12 @@ export function agentStateWords(status: CodingAgentStatus): string | undefined {
 /** Why a Start cannot run, said on the "+" menu's New agent: the task names no repository yet. */
 export const START_NEEDS_REPOSITORY = "Choose a repository";
 
+/** What a call refused for a repository out of the workspace's reach says, wherever it is refused. */
+export const REPOSITORY_UNREACHED_NOTE = "Luke cannot reach this task's repository on GitHub.";
+
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
-  [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke cannot reach this task's repository on GitHub.",
+  [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: REPOSITORY_UNREACHED_NOTE,
   [CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED]: "GitHub didn't answer.",
   [CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:

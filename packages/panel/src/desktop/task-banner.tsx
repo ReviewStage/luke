@@ -1,6 +1,5 @@
-import { BANNER_LOOK, Banner, BUTTON_VARIANT, Button, STATUS_TONE } from "@luke/ui";
+import { AttentionMark, BANNER_LOOK, Banner, BUTTON_VARIANT, Button, STATUS_TONE } from "@luke/ui";
 import type { ReactNode } from "react";
-import { AttentionMark } from "../attention-mark.js";
 
 /**
  * task-banner.tsx -- a notice about the whole task: one slim line under the task's toolbar, over every tab of it, which only mending what it says takes away.

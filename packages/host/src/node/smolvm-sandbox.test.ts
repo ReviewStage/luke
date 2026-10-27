@@ -8,10 +8,17 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
-import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { CLAUDE_CODE_MAC_PIN, CODEX_MAC_PIN, NODE_MAC_PIN } from "@luke/agent-runner/pins";
+import {
+  type AgentToolPin,
+  CLAUDE_CODE_MAC_PIN,
+  CODEX_MAC_PIN,
+  NODE_MAC_PIN,
+} from "@luke/agent-runner/pins";
 import type { DeviceAgentClaimedLine, DeviceAgentDevice } from "@luke/features";
 import {
   DEVICE_AGENT_LINE_KIND,
@@ -43,6 +50,9 @@ const USER = { uid: 990, gid: 991 };
 const SECRET_ENV = { CLAUDE_CODE_OAUTH_TOKEN: "sk-ant-oat01-fixture-not-a-real-token" };
 const FIFTY_MINUTES = Duration.minutes(50);
 
+/** The platform's check of an agent's folder for unsaved work, named so a spawn of it can be told. */
+const UNSAVED_WORK_SCRIPT = "check-for-unsaved-work";
+
 /** A command one of the agent's tools asks the box to run in its worktree. */
 const COMMAND = {
   id: "3c2b1a0f-9e8d-4c7b-a6f5-e4d3c2b1a0f9",
@@ -60,6 +70,9 @@ const isSmolvm = (verb: string) => (each: Pick<Spawned, "program" | "args">) =>
 /** Whether a spawn is the runner, run in its agent's VM. */
 const isRunner = (each: Pick<Spawned, "program" | "args">) =>
   isSmolvm("exec")(each) && each.args.includes(RUNNER_BUNDLE);
+
+/** Whether a spawn runs the platform's check of the agent's folder, wherever it runs. */
+const isUnsavedCheck = (each: Pick<Spawned, "args">) => each.args.includes(UNSAVED_WORK_SCRIPT);
 
 /** Whether a spawn is the signal to the agent's processes, run in its VM on its Node. */
 const isSignal = (each: Pick<Spawned, "program" | "args">) =>
@@ -117,6 +130,8 @@ const following = (input: {
   readonly runnerExits?: Duration.Input;
   /** Called as each smolvm command is spawned, before it runs, with everything spawned so far. */
   readonly onSmolvm?: (args: readonly string[], spawned: readonly Spawned[]) => void;
+  /** Whether the platform checks an agent's folder for unsaved work before a discard, as This Mac's does. */
+  readonly checksUnsavedWork?: boolean;
 }) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("luke-smolvm-sandbox-");
@@ -199,6 +214,7 @@ const following = (input: {
         deviceIsolation: DEVICE_ISOLATION.SANDBOX,
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
+        unsavedWorkScript: input.checksUnsavedWork === true ? () => UNSAVED_WORK_SCRIPT : undefined,
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -364,7 +380,7 @@ it.effect(
 );
 
 it.effect(
-  "a sandboxed agent's stop signals its processes in the VM before its command is ended, the VM stops once the runner has ended, and a discard deletes the VM before the agent's folder",
+  "a sandboxed agent's stop signals its processes in the VM before its command is ended, the VM stops once the runner has ended, and a discard checks the folder for unsaved work inside the VM, then deletes the VM before the agent's folder",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -372,6 +388,7 @@ it.effect(
           signalWhileRunning?: boolean;
           stopAfterRunnerEnded?: boolean;
           folderAtDelete?: boolean;
+          checkedBeforeDelete?: boolean;
         } = {};
         let folder = "";
         const { spawned, layout, credentials } = yield* following({
@@ -395,6 +412,7 @@ it.effect(
           ],
           // Note that the runner ends a second in, inside the grace its signal gives it.
           runnerExits: Duration.seconds(1),
+          checksUnsavedWork: true,
           onSmolvm: (args, sofar) => {
             const runner = sofar.find(isRunner);
             if (isSignal({ program: SMOLVM, args })) {
@@ -408,6 +426,7 @@ it.effect(
             }
             if (isSmolvm("delete")({ program: SMOLVM, args })) {
               seen.folderAtDelete = existsSync(folder);
+              seen.checkedBeforeDelete = sofar.some(isUnsavedCheck);
             }
           },
         });
@@ -430,7 +449,13 @@ it.effect(
           signalWhileRunning: true,
           stopAfterRunnerEnded: true,
           folderAtDelete: true,
+          checkedBeforeDelete: true,
         });
+        // Note that the device's own git never reads a repository the agent could rig: the check ran in the VM alone.
+        assert.deepEqual(
+          spawned.filter(isUnsavedCheck).map((each) => [each.program, ...each.args.slice(0, 4)]),
+          [[SMOLVM, "machine", "exec", "--name", MACHINE]],
+        );
         assert.deepEqual(spawned.find(isSmolvm("delete"))?.args, [
           "machine",
           "delete",
@@ -441,4 +466,76 @@ it.effect(
         assert.equal(existsSync(credentials), false);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a Mac's sandbox is ready only once its pinned smolvm checks out against the pin and the image is pulled, once, through its launcher; a smolvm whose digest is not the pin's never runs",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* temporaryDirectoryScoped("luke-smolvm-pinned-");
+      const stateRoot = `${root}/state`;
+      // Note that the launcher stands in for the Mac's, writing down each command it is handed rather than starting it.
+      const launcher = `${root}/launcher`;
+      const calls = `${root}/calls`;
+      writeFileSync(launcher, `#!/bin/sh\necho "$@" >> '${calls}'\n`);
+      chmodSync(launcher, 0o755);
+      mkdirSync(`${root}/release/smolvm-9.9.9`, { recursive: true });
+      writeFileSync(`${root}/release/smolvm-9.9.9/smolvm`, "#!/bin/sh\n", { mode: 0o755 });
+      execFileSync("tar", ["-czf", `${root}/smolvm.tgz`, "-C", `${root}/release`, "smolvm-9.9.9"]);
+      const archive = readFileSync(`${root}/smolvm.tgz`);
+      const pin: AgentToolPin = {
+        NAME: "smolvm",
+        VERSION: "9.9.9",
+        ARCHIVE: "https://releases.test/smolvm-9.9.9-darwin-arm64.tar.gz",
+        SHA256: createHash("sha256").update(archive).digest("hex"),
+        BYTES: archive.length,
+        ROOT: "smolvm-9.9.9",
+        MEMBERS: ["smolvm"],
+        BINARY: "smolvm",
+      };
+      const vm = smolvmSandbox({
+        smolvm: pin,
+        through: launcher,
+        stateRoot,
+        runnerFolder: RUNNER_FOLDER,
+        user: USER,
+        nested: false,
+      });
+      const tampered = Uint8Array.from(archive);
+      tampered[tampered.length - 1] = (tampered[tampered.length - 1] ?? 0) ^ 0xff;
+
+      const refused = yield* vm.sandbox.ready.pipe(
+        Effect.provide(fakeHttpClientLayer(() => new Response(tampered))),
+      );
+      const ready = yield* vm.sandbox.ready.pipe(
+        Effect.provide(fakeHttpClientLayer(() => new Response(archive))),
+      );
+      const again = yield* vm.sandbox.ready.pipe(
+        Effect.provide(fakeHttpClientLayer(() => new Response("never asked", { status: 500 }))),
+      );
+
+      const smolvm = `${stateRoot}/agent-tools/smolvm/9.9.9/smolvm`;
+      assert.deepEqual([refused, ready, again], [false, true, true]);
+      assert.deepEqual(readFileSync(calls, "utf8").trim().split("\n"), [
+        `${smolvm} machine run --net --image ${IMAGE} -- true`,
+      ]);
+      // Every command of an agent's runs the very smolvm that was checked, through the launcher.
+      const runner = vm.launch({
+        agentId: AGENT_ID,
+        folder: `${root}/agent`,
+        checkout: `${root}/agent/repository`,
+        node: "node",
+        bundle: RUNNER_BUNDLE,
+        env: {},
+      });
+      assert.equal(runner.command, launcher);
+      assert.deepEqual(runner.args.slice(0, 3), [smolvm, "machine", "exec"]);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        NodeChildProcessSpawner.layer.pipe(
+          Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+        ),
+      ),
+    ),
 );

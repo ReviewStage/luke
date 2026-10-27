@@ -1,8 +1,8 @@
 import type { CatalogModel } from "@luke/features/models-wire";
-import { TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
+  AttentionMark,
   AVATAR_SIZE,
   Badge,
   CountParts,
@@ -13,6 +13,7 @@ import {
   HoverCardRow,
   HoverCardRule,
   linesCount,
+  TaskAgentsMark,
   TaskPriorityMark,
   TaskStatusMark as TaskStatusGlyph,
   TIME_LOOK,
@@ -23,11 +24,9 @@ import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { repositoryPageUrl } from "@luke/ui/tasks-model";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
-import { AttentionMark } from "../attention-mark.js";
 import { useCreator, useMemberDirectory, usePerson } from "../member-directory.js";
 import { useActorDoor } from "../person-door.js";
 import { RepositoryPicture } from "../repository-picture.js";
-import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { WorkspaceDirectory } from "../tasks/chip-cards.js";
 import { agentName, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
@@ -47,12 +46,11 @@ import { strandedHome } from "./move-task-dialog.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
 /**
- * task-card.tsx -- a sidebar task's agents at a glance: the one mark at its row's end, and the card its row hangs while the pointer rests on it.
+ * task-card.tsx -- a sidebar task's agents at a glance: the one icon at its row's end, and the card its row hangs while the pointer rests on it.
  *
- * The mark is the working mark while an agent works on the task, drawn and
- * named as an agent's tab draws it (`state-glyph.tsx`), else the pull
- * request's mark (`pull-request-mark.tsx`), else nothing
- * (`task-agents-model.ts`). The card names the task, its repository, and
+ * The icon is how the task's agents stand, most pressing first: a question
+ * waiting on the reader, a failure, an agent at work, or the pull request
+ * they left, in `@luke/ui`'s `TaskAgentsMark` (`task-agents-model.ts`). The card names the task, its repository, and
  * how long ago it was updated at its head, in a workspace others share who
  * created it, then a row for each of its
  * agents, drawn as its tab draws it: its harness's mark wearing where it
@@ -75,14 +73,8 @@ import { WorkspaceRef } from "./workspace-ref.js";
  */
 
 /**
- * The one mark at a task row's end, before its time: the attention mark on
- * a task whose repository belongs to another of the account's workspaces,
- * which its card names (`strandedHome`); else an agent at work, else its
- * pull request, else nothing.
- */
-/**
  * A sidebar row's end: its repository where its group does not say it, its
- * face, its draft's pencil, its one mark, and its time, in the caption's
+ * face, its draft's pencil, its one icon, and its time, in the caption's
  * muted figures, ending on the time's last letter so times of any length
  * line up; each mark at the glyph's size a step before the next, so they
  * step out with the time while the row is hovered. A long repository is cut
@@ -90,17 +82,23 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * the row's card names it whole.
  */
 export const SIDEBAR_ROW_TIME =
-  "sidebar-task-time flex flex-none items-center justify-end min-w-sidebar-row-time text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-12)] [&>.actor-mark]:mr-tight-gap [&_.task-mark-glyph]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-luke-12";
+  "sidebar-task-time flex flex-none items-center justify-end min-w-sidebar-row-time text-right text-caption-inline text-muted-foreground tabular-nums [&_.state-glyph]:mr-tight-gap [&_.state-glyph]:[--state-glyph-size:var(--spacing-luke-12)] [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-luke-12";
 
 /** The repository a sidebar row names before its marks (`SIDEBAR_ROW_TIME`). */
 export const SIDEBAR_ROW_REPOSITORY =
   "sidebar-task-repository mr-item-gap inline-block max-w-sidebar-row-repository overflow-hidden whitespace-nowrap text-muted-foreground";
 
-/** A pull request's mark standing as a task's, at the glyph's size in the row's muted ink, its state's colour where it has one (`pull-request-mark.tsx`). */
+/** A pull request's mark on a card's row, at the glyph's size in the row's muted ink, its state's colour where it has one (`pull-request-mark.tsx`). */
 export const TASK_MARK_GLYPH =
   "task-mark-glyph inline-block size-luke-12 flex-none text-muted-foreground";
 
-export function TaskRowMark({
+/**
+ * The one icon at a task row's end, before its time: the attention mark on
+ * a task whose repository belongs to another of the account's workspaces,
+ * which its card names (`strandedHome`); else how its agents stand
+ * (`TaskAgentsMark`).
+ */
+export function TaskRowStatus({
   task,
   stranded,
 }: {
@@ -108,23 +106,13 @@ export function TaskRowMark({
   /** The workspace the task's repository belongs to, where the reader may move it there. */
   stranded?: Workspace | undefined;
 }): React.JSX.Element | null {
-  if (stranded !== undefined) {
-    return (
-      <span className="task-mark-attention mr-tight-gap [&_.attention-mark]:size-luke-12 [&_.attention-mark_svg]:size-attention-glyph-small">
-        <AttentionMark />
-        <VisuallyHidden>{`(repository belongs to ${stranded.name})`}</VisuallyHidden>
-      </span>
-    );
-  }
-  const mark = taskRowMark(task.agents);
-  switch (mark.kind) {
-    case TASK_ROW_MARK.WORKING:
-      return <StateGlyph state={GLYPH_STATE.WORKING} />;
-    case TASK_ROW_MARK.PULL_REQUEST:
-      return <PullRequestMark pullRequest={mark.pullRequest} className={TASK_MARK_GLYPH} />;
-    case TASK_ROW_MARK.NONE:
-      return null;
-  }
+  if (stranded === undefined) return <TaskAgentsMark agents={task.agents} />;
+  return (
+    <span className="task-mark-attention mr-tight-gap [&_.attention-mark]:size-luke-12 [&_.attention-mark_svg]:size-attention-glyph-small">
+      <AttentionMark />
+      <VisuallyHidden>{`(repository belongs to ${stranded.name})`}</VisuallyHidden>
+    </span>
+  );
 }
 
 /** A repository's line under a card's name, its owner's picture before it, which opens it on GitHub. */
@@ -198,7 +186,7 @@ function CreatorDetail({
 }
 
 /** One agent's row, as its tab draws it (`main-tabs.tsx`): its harness's mark wearing where it stands (`AgentGlyph`), its tab's label, and a failure at its end (`agentEndMark`). */
-export function AgentLine({
+function AgentLine({
   agent,
   models,
   onShow,

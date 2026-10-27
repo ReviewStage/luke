@@ -1,7 +1,12 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
+import { TriangleAlertIcon } from "../../icons/icons.js";
 
 /**
  * row-mark.tsx -- a small mark a row or a tab wears beside its glyph and words to say one thing about it: that its work failed, or that a draft waits in its box.
+ *
+ * A failure wears one shape wherever it is drawn (`FailedMark`): a warning
+ * triangle, so it never reads as the round attention mark of a question
+ * waiting on the reader beside it.
  *
  * A mark stands a size under the glyph it follows, so it reads as a note on
  * the row rather than a second glyph, its own glyph filling it, in the ink
@@ -30,6 +35,15 @@ const KIND_CLASS = {
   [ROW_MARK.DRAFT]: "draft-mark text-muted-foreground",
 } as const satisfies Record<RowMarkKind, string>;
 
+/** What a failed mark is called. */
+const FAILED_WORDS = "Failed";
+
+/** What a mark hands on to whatever hangs from it, a hint's handlers among them. */
+type MarkAnchor = Omit<
+  ComponentPropsWithRef<"span">,
+  "className" | "style" | "children" | "role" | "aria-label"
+>;
+
 /** `glyph` as a mark saying `kind`, named `label`. */
 export function RowMark({
   kind,
@@ -42,10 +56,7 @@ export function RowMark({
   label: string;
   /** The glyph, which fills the mark. */
   glyph: ReactNode;
-} & Omit<
-  ComponentPropsWithRef<"span">,
-  "className" | "style" | "children" | "role" | "aria-label"
->): React.JSX.Element {
+} & MarkAnchor): React.JSX.Element {
   return (
     <span
       {...anchor}
@@ -55,5 +66,17 @@ export function RowMark({
     >
       {glyph}
     </span>
+  );
+}
+
+/** The mark of a piece of work that failed: a warning triangle in the danger colour, named Failed. */
+export function FailedMark(anchor: MarkAnchor): React.JSX.Element {
+  return (
+    <RowMark
+      {...anchor}
+      kind={ROW_MARK.FAILED}
+      label={FAILED_WORDS}
+      glyph={<TriangleAlertIcon aria-hidden="true" />}
+    />
   );
 }

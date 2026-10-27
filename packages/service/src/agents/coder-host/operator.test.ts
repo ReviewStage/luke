@@ -16,6 +16,8 @@ import {
   readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
+import { messages } from "@luke/database/schemas/storage";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
   AUTOMATION_FIRING,
@@ -493,6 +495,12 @@ it.layer(getTestDB())("the member's operator", (it) => {
         assert.equal(firstOpenings.length, 1, "one opening, and none for the repeat ensure");
         assert.equal(firstOpenings[0]?.turn, BRAIN_HOST_TURN.TYPED);
         assert.equal(EVE.openedOver(reset.agent.conversationId).length, 1);
+        const db = yield* Database;
+        const senders = yield* db
+          .select({ sender: messages.sender })
+          .from(messages)
+          .where(eq(messages.conversationId, first.agent.conversationId));
+        assert.deepEqual(senders, [{ sender: MESSAGE_SENDER.LUKE }], "the opening is Luke's");
       }),
   );
 

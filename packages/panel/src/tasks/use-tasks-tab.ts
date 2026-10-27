@@ -1528,9 +1528,12 @@ export function useTasksTab(input: {
   // that nothing reaches the service until the draft is sent or called.
   const openDraftNow = useRef(agents.onNewDraft);
   openDraftNow.current = agents.onNewDraft;
-  // Note that an archive still out wants none, since the agent it took comes back if refused.
+  // Note that an archive still out wants none, since the agent it took comes back if refused, and
+  // neither does New task's start of an agent, since main opens its task before the start answers,
+  // whose agent no list holds yet, and its answer opens the agent's tab, or its draft if refused.
   const draftWanted =
     mainTabs.tab === undefined &&
+    startingTask === undefined &&
     agents.agentIds !== undefined &&
     agents.onUnarchive === undefined &&
     agents.pending.archives.size === 0;

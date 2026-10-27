@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   createCodingAgent,
   recordCodingAgentRunnerToken,
@@ -26,7 +27,9 @@ import {
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
+  DEVICE_ISOLATION,
   DEVICE_PLATFORM,
+  type DeviceIsolation,
 } from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
 import {
@@ -34,6 +37,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Clock, DateTime, Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import { HttpRouter } from "effect/http";
@@ -120,7 +124,7 @@ const standing = Effect.gen(function* () {
     Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
   );
   const web = HttpRouter.toWebHandler(
-    runnerTokenApp().pipe(
+    runnerTokenApp({ resolveUserId: () => Effect.succeedNone }).pipe(
       HttpRouter.provideRequest(Layer.merge(services, GitHubApp.layer(undefined))),
     ),
     {
@@ -402,9 +406,16 @@ const installationOf = (id: number): InstallationFixture => ({
 const INSTALLATIONS = Array.from({ length: 8 }, (_, index) => installationOf(31 + index));
 let installationsTaken = 0;
 
-/** The route's group over the test's store, a GitHub on which the App reaches the repository, and a log the test reads, as a fetch a host or a desktop makes. */
+/** The route's group over the test's store, a GitHub on which the App reaches the repository, and a log the test reads, as a fetch a host or a desktop makes; `desktops` names the member each desktop sign-in's bearer stands for. */
 const hostStanding = Effect.gen(function* () {
   const github = githubReaching(INSTALLATIONS);
+  const desktops = new Map<string, string>();
+  const resolveUserId = (request: Request) =>
+    Effect.succeed(
+      Option.fromNullishOr(
+        desktops.get(request.headers.get("authorization")?.replace(/^Bearer /u, "") ?? ""),
+      ),
+    );
   const logged: string[] = [];
   const services = Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -414,9 +425,10 @@ const hostStanding = Effect.gen(function* () {
     github.layer,
     Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
   );
-  const web = HttpRouter.toWebHandler(runnerTokenApp().pipe(HttpRouter.provideRequest(services)), {
-    disableLogger: true,
-  });
+  const web = HttpRouter.toWebHandler(
+    runnerTokenApp({ resolveUserId }).pipe(HttpRouter.provideRequest(services)),
+    { disableLogger: true },
+  );
   yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
   const ask = (bearer: string, agentId: string) =>
     Effect.promise(async () => {
@@ -436,7 +448,7 @@ const hostStanding = Effect.gen(function* () {
         body: await response.json(),
       };
     });
-  return { ask, logged };
+  return { ask, logged, desktops };
 });
 
 /** A member whose task's workspace reaches the repository through an installation of its own. */
@@ -471,6 +483,20 @@ const enrolledHost = (userId: string) =>
     });
     assert.ok("userId" in enrolled, "the host was not enrolled");
     return { deviceId, secret: secret.secret };
+  });
+
+/** A desktop registered under the member, running its agents as `isolation` says: its device id. */
+const registeredDesktop = (userId: string, isolation: DeviceIsolation) =>
+  Effect.gen(function* () {
+    const deviceId = randomUUID();
+    yield* registerDevice(userId, {
+      id: deviceId,
+      name: "Studio",
+      ...DEVICE_LAYOUT,
+      isolation,
+      signedIn: {},
+    });
+    return deviceId;
   });
 
 /** A Claude Code agent of the member's on the repository, run on the device given. */
@@ -555,6 +581,71 @@ it.layer(getTestDB())("a host's GitHub token", (it) => {
         const desktop = yield* ask("desktop-session-token", own);
         assert.equal(desktop.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
         assert.deepEqual(desktop.body, { error: HOSTED_API_ERROR.INVALID_TOKEN });
+      }),
+  );
+});
+
+it.layer(getTestDB())("a sandboxed desktop's GitHub token", (it) => {
+  it.effect(
+    "hands a desktop running its agents in VMs an installation token for its member's agent on it, on the member's own sign-in",
+    () =>
+      Effect.gen(function* () {
+        const { ask, desktops } = yield* hostStanding;
+        const member = yield* openMember;
+        yield* writeAccountPreferences(member.userId, {
+          experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
+        });
+        desktops.set("desktop-sign-in", member.userId);
+        const desktop = yield* registeredDesktop(member.userId, DEVICE_ISOLATION.SANDBOX);
+        const agentId = yield* agentOnDevice(member, desktop);
+
+        assert.deepEqual(yield* ask("desktop-sign-in", agentId), {
+          status: HOSTED_HTTP_STATUS.OK,
+          cache: "private, no-store",
+          body: { githubToken: GITHUB_FIXTURE_INSTALLATION_TOKEN },
+        });
+      }),
+  );
+
+  it.effect(
+    "refuses an agent on a desktop running its agents directly on the Mac, on a host, or another member's, and a member with Local agents off",
+    () =>
+      Effect.gen(function* () {
+        const { ask, desktops } = yield* hostStanding;
+        const forbidden = {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          cache: null,
+          body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+        };
+        const member = yield* openMember;
+        desktops.set("member-sign-in", member.userId);
+        const sandboxed = yield* registeredDesktop(member.userId, DEVICE_ISOLATION.SANDBOX);
+        const onSandboxed = yield* agentOnDevice(member, sandboxed);
+
+        // With Local agents off, even the member's own sandboxed desktop is refused.
+        assert.deepEqual(yield* ask("member-sign-in", onSandboxed), forbidden);
+        yield* writeAccountPreferences(member.userId, {
+          experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
+        });
+
+        const bare = yield* registeredDesktop(member.userId, DEVICE_ISOLATION.BARE);
+        assert.deepEqual(
+          yield* ask("member-sign-in", yield* agentOnDevice(member, bare)),
+          forbidden,
+        );
+        const host = yield* enrolledHost(member.userId);
+        assert.deepEqual(
+          yield* ask("member-sign-in", yield* agentOnDevice(member, host.deviceId)),
+          forbidden,
+        );
+
+        // Another member's agent on that member's own sandboxed desktop.
+        const other = yield* openMember;
+        const theirs = yield* agentOnDevice(
+          other,
+          yield* registeredDesktop(other.userId, DEVICE_ISOLATION.SANDBOX),
+        );
+        assert.deepEqual(yield* ask("member-sign-in", theirs), forbidden);
       }),
   );
 });

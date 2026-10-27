@@ -76,7 +76,12 @@ import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "./action-m
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
-import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME, TaskRowMark, taskCardOf } from "./task-card.js";
+import {
+  SIDEBAR_ROW_REPOSITORY,
+  SIDEBAR_ROW_TIME,
+  TaskRowStatus,
+  taskCardOf,
+} from "./task-card.js";
 import { taskSubject } from "./task-row-parts.js";
 
 /**
@@ -741,7 +746,7 @@ export function SidebarTask({
                 )}
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
                 {drafted ? <DraftMark /> : null}
-                <TaskRowMark task={task} stranded={strandedHome(tasks, task)} />
+                <TaskRowStatus task={task} stranded={strandedHome(tasks, task)} />
                 <Time at={at} now={now} hint={false} />
               </span>
             )

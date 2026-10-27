@@ -1180,22 +1180,33 @@
   .desktop-shell
   .pull-request-header[data-folded]
   .pull-request-title-row
-  > :not(.pull-request-title) {
+  > :not(.pull-request-title),
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  .pull-request-header[data-folded]
+  .pull-request-title-edit {
   display: none;
 }
 
+/* The folded title holds to one line. Note that its pencil goes with its
+   siblings (above), because it stands past the cut, where the keyboard would
+   land on a control it cannot see; the full header holds it, and the words
+   take back the room it kept, ending at the inset of a title with none. Note
+   too that the cut is a clip, never `hidden`, because a scroll container is
+   scrolled sideways by a focus inside it, words and fade and all. */
 :where(:root)[data-luke-room="narrow"]
   .desktop-shell
   .pull-request-header[data-folded]
   .pull-request-title {
-  overflow: hidden;
+  padding-inline-end: var(--row-inset);
+  overflow: clip;
   white-space: nowrap;
 }
 
 /* The folded title cut short fades out at its end, as a cut label does
    (below). Note that the fade is laid over its content box alone, because
-   the pencil's room after the words would otherwise take the whole fade,
-   and the words would stop at a hard edge before it. */
+   the inset after the words would otherwise take the fade, and the words
+   would stop at a hard edge before it. */
 :where(:root)[data-luke-room="narrow"]
   .desktop-shell
   .pull-request-header[data-folded]

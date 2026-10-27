@@ -341,11 +341,6 @@ test("a failed turn's end line names no price, even from a service that sent the
   const line = tab.endLine() ?? assert.fail("the turn ends on its line");
   assert.match(line.textContent ?? "", /Failed: /);
   assert.doesNotMatch(line.textContent ?? "", /\$/);
-  assert.match(
-    line.querySelector('[role="alert"]')?.textContent ?? "",
-    /^Failed: /,
-    "and says it as an alert",
-  );
 
   const chip =
     tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button") ??

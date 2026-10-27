@@ -21,11 +21,13 @@
  * a fill bar shows an option other than the chosen one by its glyph alone
  * too, its name left to a reader who cannot see it, and one standing in a
  * toolbar beside other controls folds every option at once instead, once
- * their names no longer fit (`fold`).
+ * their names no longer fit (`fold`). An option drawn by its glyph alone
+ * raises its name in the hint over it, for the pointer and the keyboard.
  * A count is words, or parts each in
  * its own tone (`CountPart`), which holds chosen or not; a diff's lines are
  * `linesCount`'s, always green and red. An option may say more in the
- * hint over it (`hint`), such as the whole a count leaves out.
+ * hint over it (`hint`), such as the whole a count leaves out, which it says
+ * in place of its name, folded or not.
  *
  * `look` is how the chosen option stands out. `fill` is the window's own
  * selected state, a sidebar row's and an open tab's: plain words at the
@@ -160,6 +162,16 @@ const THUMB = {
 
 /** The bar's thumb, of its own children. */
 const THUMB_ELEMENT = ":scope > .luke-choice-bar-thumb";
+
+/** An option's name beside its glyph, the one a fold draws nowhere. */
+const FOLDABLE_NAME = ".luke-choice-bar-icon + .luke-choice-bar-label";
+
+/** The custom property `choice-bar.css` sets on a name its own fold draws nowhere, and what it sets. */
+const NAME_FOLD = "--luke-choice-bar-name";
+const NAME_FOLDED = "folded";
+
+/** No option's name folded. */
+const NONE_FOLDED: ReadonlySet<string> = new Set();
 
 /** The option a bar's thumb stands under, of the bar's own options. */
 const CHOSEN = ':scope > [aria-selected="true"], :scope > [aria-checked="true"]';
@@ -438,9 +450,7 @@ function optionsWidth(bar: HTMLElement): number {
 /** The room the folded options' names would take back: each name's own width and the gap it would stand in. */
 function foldedNames(bar: HTMLElement): number {
   let room = 0;
-  for (const label of bar.querySelectorAll<HTMLElement>(
-    ".luke-choice-bar-icon + .luke-choice-bar-label",
-  )) {
+  for (const label of bar.querySelectorAll<HTMLElement>(FOLDABLE_NAME)) {
     const option = label.parentElement;
     const gap = option === null ? 0 : Number.parseFloat(getComputedStyle(option).columnGap) || 0;
     room += label.scrollWidth + gap;
@@ -485,6 +495,48 @@ function useFoldTogether(
     return () => resized.disconnect();
   }, [on, bar, measure, named]);
   return on && folded;
+}
+
+/** `folded` with `value` folded or not, `now`. */
+function foldedAs(folded: ReadonlySet<string>, value: string, now: boolean): ReadonlySet<string> {
+  const next = new Set(folded);
+  if (now) next.add(value);
+  else next.delete(value);
+  return next;
+}
+
+/**
+ * Which options of a fill bar folding by its own width it draws by their
+ * glyphs alone, by value, read as each option resizes, which folding its
+ * name or naming it again does. Note that the name's own style is read,
+ * where the sheet marks it folded (`--luke-choice-bar-name`), because a
+ * container query decides it, which script cannot ask, as a folding button
+ * reads its fold; and that an option is observed rather than its name,
+ * because a name folded from the first frame reports no change of size.
+ */
+function useOwnFold(on: boolean): {
+  readonly optionRef: (option: HTMLElement | null) => (() => void) | undefined;
+  readonly folded: ReadonlySet<string>;
+} {
+  const [folded, setFolded] = useState(NONE_FOLDED);
+  const optionRef = useCallback(
+    (option: HTMLElement | null) => {
+      const value = option?.dataset.value;
+      if (!on || option === null || value === undefined) return undefined;
+      if (!("ResizeObserver" in globalThis)) return undefined;
+      const resized = new ResizeObserver(() => {
+        const name = option.querySelector<HTMLElement>(FOLDABLE_NAME);
+        const now =
+          name !== null &&
+          getComputedStyle(name).getPropertyValue(NAME_FOLD).trim() === NAME_FOLDED;
+        setFolded((was) => (was.has(value) === now ? was : foldedAs(was, value, now)));
+      });
+      resized.observe(option);
+      return () => resized.disconnect();
+    },
+    [on],
+  );
+  return { optionRef, folded };
 }
 
 /**
@@ -540,12 +592,12 @@ function keepFocus(event: ReactMouseEvent<HTMLButtonElement>): void {
 /** One option: the value it chooses, its name, its glyph, what it counts, and whether it can be chosen. */
 export interface ChoiceItem<Value extends string> {
   readonly value: Value;
-  /** The option's name, read aloud where a narrow bar shows its glyph alone. */
+  /** The option's name, read aloud and raised in its hint where a narrow bar shows its glyph alone. */
   readonly label: string;
   readonly icon?: ReactNode;
   /** Words drawn quiet after the name, or parts each in its own tone. */
   readonly count?: string | readonly CountPart[] | undefined;
-  /** What the hint over the option says beyond its name and count (the whole a count leaves out); none raises nothing. */
+  /** What the hint over the option says beyond its name and count (the whole a count leaves out); none raises nothing, or its name while folded. */
   readonly hint?: string | undefined;
   readonly disabled?: boolean | undefined;
 }
@@ -580,7 +632,7 @@ interface ChoiceBarBase<Value extends string> {
   fold?: ChoiceBarFold | undefined;
   /** Whether a segmented bar fills its row on one line, its options sharing it alike, rather than hugging them. */
   stretch?: boolean | undefined;
-  /** The hint hung from each option that says one (`ChoiceItem.hint`): the window's tooltip, unless the caller hangs one of its own. */
+  /** The hint hung from each option that says one (`ChoiceItem.hint`) or that a fold draws by its glyph alone: the window's tooltip, unless the caller hangs one of its own. */
   hint?: ChoiceBarHint | undefined;
   disabled?: boolean | undefined;
 }
@@ -689,6 +741,12 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
       : undefined,
   );
   const folded = useFoldTogether(together, thumb.bar, named);
+  const ownFolds = fold === CHOICE_BAR_FOLD.OWN && look === CHOICE_BAR_LOOK.FILL;
+  const ownFold = useOwnFold(ownFolds);
+  const optionRef = useMemo(
+    () => joinRefs(thumb.optionRef, ownFold.optionRef),
+    [thumb.optionRef, ownFold.optionRef],
+  );
   const role = panels === undefined ? CHOICE_ROLE.RADIO : CHOICE_ROLE.TAB;
   const roving = focus === CHOICE_BAR_FOCUS.ROVING;
   const choose = (chosen: Value) => props.onChange(chosen);
@@ -750,7 +808,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
         const option = (
           <TogglePrimitive<Value>
             key={item.value}
-            ref={thumb.optionRef}
+            ref={optionRef}
             {...optionAttributes(role, chosen, panels?.(item.value))}
             value={item.value}
             data-value={item.value}
@@ -770,10 +828,13 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
             {count === undefined ? null : <span className={COUNT}>{count}</span>}
           </TogglePrimitive>
         );
-        return item.hint === undefined ? (
+        // Note that an option a fold may draw by its glyph alone always stands in its hint, which raises nothing while its name is drawn, so folding never mounts it afresh and takes the keyboard off it.
+        const foldable = item.icon !== undefined && (together || ownFolds);
+        const nameFolded = foldable && (folded || ownFold.folded.has(item.value));
+        return item.hint === undefined && !foldable ? (
           option
         ) : (
-          <Hint key={item.value} label={item.hint}>
+          <Hint key={item.value} label={item.hint ?? (nameFolded ? item.label : undefined)}>
             {option}
           </Hint>
         );

@@ -63,6 +63,8 @@ import {
   SelectionRegion,
   Stack,
   selectionMenu,
+  TASK_AGENTS_MARK_SIZE,
+  TaskAgentsMark,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -142,7 +144,6 @@ import {
   PriorityChip,
   StatusChip,
   statusOf,
-  TaskWorkMarks,
   taskSubject,
   useStandingDoor,
   WaitingBadge,
@@ -170,8 +171,8 @@ import { useRowDrag } from "./use-row-drag.js";
  * status before its name, and after it how many Inbox threads of it wait on
  * the reader, its repository led by its owner's picture, as the sidebar
  * draws one (`repository-picture.tsx`), its assignee's face, or the dashed
- * unassigned mark, its creator's face, what its agents are doing
- * and the pull request they opened, when it last moved, and its ⋯, each
+ * unassigned mark, its creator's face, the one icon of how its agents
+ * stand (`TaskAgentsMark`), when it last moved, and its ⋯, each
  * where the view draws it, so each column lines up down the whole page
  * whatever any one row holds.
  *
@@ -181,9 +182,7 @@ import { useRowDrag } from "./use-row-drag.js";
  * its name its field, which its ⋯, shown while the row is in hand, a right-click, and
  * the menu key open alike (`useRowMenu`). A press anywhere else on the row opens the
  * task. The row hangs no card for the whole task, which would say what its columns
- * already do; its parts hang their own instead (`task-part-cards.tsx`): its assignee's
- * face and its creator's hang theirs, a pull request's mark the pull request, the
- * count after it those it counts, and the working mark the task's agents.
+ * already do; its assignee's face and its creator's hang their own instead.
  *
  * A group's head folds it, kept on this Mac (`KEPT.FOLDS`), its count
  * standing beside its name either way. A row is dragged by its press
@@ -905,7 +904,7 @@ function TaskListRow({
       )}
       {cell(
         TASK_PROPERTY.AGENTS,
-        <TaskWorkMarks task={task} tasks={tasks} most={1} steady onOpen={onOpen} />,
+        <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />,
       )}
       {cell(
         TASK_PROPERTY.UPDATED,

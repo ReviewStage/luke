@@ -3,13 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import {
-  INBOX_APPROVAL_OPTION,
-  INBOX_ASK,
-  INBOX_ASK_STATUS,
-  INBOX_MESSAGE_AUTHOR,
-  INBOX_STATUS,
-} from "@luke/features/inbox-wire";
+import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_ACTOR, TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
@@ -18,14 +12,18 @@ import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { channel } from "../../schemas/channel.js";
-import { codingAgent, type StoredPullRequest } from "../../schemas/coding-agent.js";
+import type { StoredPullRequest } from "../../schemas/coding-agent.js";
 import { inboxItem } from "../../schemas/inbox.js";
-import { inboxMessage } from "../../schemas/inbox-message.js";
-import { conversations } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import { taskPin } from "../../schemas/task-pin.js";
-import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
-import { getTestDB, joinWorkspace, leaveWorkspace, openWorkspace } from "../../testing/index.js";
+import {
+  getTestDB,
+  joinWorkspace,
+  leaveWorkspace,
+  openInboxItem,
+  openTaskAgent,
+  openWorkspace,
+} from "../../testing/index.js";
 import { ensureGeneralChannel } from "../channel-store.js";
 import { archiveCodingAgent, recordCodingAgentPublished } from "../coding-agent-store.js";
 import {
@@ -498,30 +496,6 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
   );
 });
 
-/** One of the task's coding agents, started by `userId`, standing unarchived. */
-const openTaskAgent = (userId: string, organizationId: string, taskId: string) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    const id = randomUUID();
-    const conversationId = randomUUID();
-    yield* db
-      .insert(conversations)
-      .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-    yield* db.insert(codingAgent).values({
-      id,
-      organizationId,
-      userId,
-      taskId,
-      conversationId,
-      model: "anthropic/claude-opus-5.5",
-      effort: "high",
-      repository: "acme/api",
-      repositories: ["acme/api"],
-      idempotencyKey: randomUUID(),
-    });
-    return id;
-  });
-
 /** The task's number, status, and priority as the account opens it, failing the test where it reaches none. */
 const standingOf = (userId: string, taskId: string) =>
   Effect.map(readTask(userId, taskId), (read) => {
@@ -842,58 +816,6 @@ const pullRequestIn = (state: StoredPullRequest["state"]): StoredPullRequest => 
   deletions: 2,
   changedFiles: 1,
 });
-
-/** An inbox item of the task's agent, open and holding its message's ask open, or open as a notice, its message asking nothing, where `asking` is false. */
-const openInboxItem = (
-  userId: string,
-  organizationId: string,
-  taskId: string,
-  agentId: string,
-  asking: boolean,
-) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    const id = randomUUID();
-    const now = new Date(yield* Clock.currentTimeMillis);
-    yield* db.insert(inboxItem).values({
-      id,
-      userId,
-      taskId,
-      organizationId,
-      agentId,
-      key: randomUUID(),
-      revision: 1,
-      version: 5,
-      title: "Which base?",
-      needsReply: asking,
-      status: INBOX_STATUS.OPEN,
-      postedAt: now,
-      updatedAt: now,
-    });
-    const ask = {
-      type: INBOX_ASK.DECIDE,
-      options: [{ label: INBOX_APPROVAL_OPTION.APPROVE }, { label: INBOX_APPROVAL_OPTION.DECLINE }],
-      status: INBOX_ASK_STATUS.OPEN,
-    } as const;
-    const [message] = yield* db
-      .insert(inboxMessage)
-      .values({
-        itemId: id,
-        author: INBOX_MESSAGE_AUTHOR.AGENT,
-        text: "Rebase onto main?",
-        ask: asking ? ask : null,
-        createdAt: now,
-      })
-      .returning({ id: inboxMessage.id });
-    // A notice's message asks nothing, so the item names no open ask.
-    if (asking) {
-      yield* db
-        .update(inboxItem)
-        .set({ openAskMessageId: message?.id ?? assert.fail("the message was not written") })
-        .where(eq(inboxItem.id, id));
-    }
-    return id;
-  });
 
 /** A guard reading every agent idle. */
 const everyoneIdle = () => Effect.succeed(true);

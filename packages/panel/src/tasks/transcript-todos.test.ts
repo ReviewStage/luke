@@ -83,7 +83,10 @@ test("each to-do says its words, in the list's order", () => {
 test("a write that failed says why under its list", () => {
   const surface = transcriptList("The list could not be read.");
   assert.equal(items(surface).length, TODOS.length);
-  assert.equal(surface.querySelector("[role='alert']")?.textContent, "The list could not be read.");
+  assert.ok(
+    surface.textContent?.endsWith("The list could not be read."),
+    surface.textContent ?? "",
+  );
 });
 
 test("only the list the agent is at wears the working mark on its item in progress", () => {

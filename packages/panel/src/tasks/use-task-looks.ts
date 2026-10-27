@@ -4,6 +4,7 @@ import {
   PLAN_ACTOR,
   type PlanSectionEdit,
   type Task,
+  type TaskAgentsSummary,
   type TaskSummary,
 } from "@luke/features/task-wire";
 import { Option, Schema, SchemaTransformation } from "effect";
@@ -31,13 +32,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
  * and holding nothing of the task but that instant; a deleted task's entry
  * is left behind, a few bytes nothing reads again.
  *
- * The sidebar reads the same marks: a task saved after its mark is unread,
- * its name in the heavier weight, until a look moves the mark past the save.
- * The first list this Mac reads with unread tasks marks every task in it
- * not yet looked at where it stands, once, so the tasks from before are not
- * all unread at once, and so does a list with no task marked, another
+ * The sidebar reads the same marks against a task's newest change: its
+ * newest save, or its agents' newest settled activity where that is later
+ * (`newestChangeOf`), so an agent started, handed a message, or ending its
+ * turn, a quiet finish, a failure, or a pull request opened, makes the task
+ * unread, its name in the heavier weight, until a look moves the mark past
+ * it. A pull request merging or closing on GitHub ends no turn and moves no
+ * save, so it alone never does: it only redraws the row's mark. Every mark
+ * a look, a menu, or the seeding sets is that same instant, so the open
+ * task's agents finishing while the developer is on it are seen as its
+ * saves are. The first list this Mac reads with unread tasks marks every
+ * task in it where it stands, once: one not yet looked at, and one read as
+ * it was before agents counted, so neither the tasks from before nor their
+ * agents' old activity are all unread at once, while a task saved since its
+ * look stays unread. So does a list with no task marked, another
  * account's; a task arriving later with no mark, from another Mac, is
- * unread once anything has been saved in it since it started.
+ * unread once anything has changed in it since it started.
  *
  * A plan can also be marked unread by hand, as Mail, Slack, and Linear mark
  * a message: its entry keeps the mark it had and says it is unread all the
@@ -87,8 +97,14 @@ type Looks = typeof storedLooks.Type;
 const decodeStored = Schema.decodeUnknownOption(storedLooks);
 const encodeStored = Schema.encodeSync(storedLooks);
 
-/** Where it is kept that the tasks listed before this Mac read any as unread were marked as read. */
-const SEEDED_KEY = { NOW: "luke.taskLooksSeeded", EARLIER: "luke.planLooksSeeded" } as const;
+/**
+ * Where it is kept that the tasks listed before this Mac read any as unread
+ * were marked as read. Note that the keys kept before agents' activity
+ * counted (`luke.taskLooksSeeded`, `luke.planLooksSeeded`) no longer say so,
+ * because the marks they seeded stand at saves alone, and every task an
+ * agent worked on since would read unread at once.
+ */
+const SEEDED_KEY = "luke.taskLooksSeededWithAgents";
 
 /** The marks as the window holds them, and whether the tasks from before were marked. */
 interface KeptLooks {
@@ -156,10 +172,7 @@ function readLooks(): Looks {
 /** Whether the tasks from before were marked, which a refused read counts as not. */
 function readSeeded(): boolean {
   try {
-    return (
-      window.localStorage.getItem(SEEDED_KEY.NOW) !== null ||
-      window.localStorage.getItem(SEEDED_KEY.EARLIER) !== null
-    );
+    return window.localStorage.getItem(SEEDED_KEY) !== null;
   } catch {
     return false;
   }
@@ -169,7 +182,7 @@ function readSeeded(): boolean {
 function writeLooks(kept: KeptLooks): void {
   try {
     window.localStorage.setItem(STORAGE_KEY.NOW, encodeStored(kept.marks));
-    if (kept.seeded) window.localStorage.setItem(SEEDED_KEY.NOW, "1");
+    if (kept.seeded) window.localStorage.setItem(SEEDED_KEY, "1");
   } catch {
     // The saves before this look count as unseen on the next read.
   }
@@ -242,6 +255,21 @@ function newestSaveOf(task: Task): number {
   );
 }
 
+/** A task as its marks are read: its newest save, and what its agents last did where its row says. */
+type TaskChanges = Pick<TaskSummary, "updatedAt"> & Partial<Pick<TaskSummary, "agents">>;
+
+/**
+ * The instant of the newest change in a task the developer may not have
+ * seen, which every mark of a task is set to and read against: its newest
+ * save, or its agents' newest settled activity where that is later. Note
+ * that the agents' activity is read from turns alone (the service's
+ * `codingAgentActivityAt`), so a pull request merging or closing, which ends
+ * no turn, never moves it.
+ */
+function newestChangeOf(task: TaskChanges): number {
+  return Math.max(task.updatedAt, task.agents?.activityAt ?? task.updatedAt);
+}
+
 /**
  * Whether a section's save is the reader's own, which they need not be shown
  * as changed: a developer's save naming the reader. Note that a developer's
@@ -300,9 +328,15 @@ function revisited(
  * as it renders, before the effect that moves it runs, so the plan opening
  * still lights what changed since the stay before. It is held by the
  * window's shell rather than the task's page, because the task's version
- * history standing in the page's place is still a stay on the task.
+ * history standing in the page's place is still a stay on the task. The
+ * mark is the plan's newest change with the `agents` its row names, so what
+ * its agents finish while it stays open is watched as it lands too.
  */
-export function useTaskLooks(task: Task | undefined, readerId: string | undefined): TaskLooks {
+export function useTaskLooks(
+  task: Task | undefined,
+  readerId: string | undefined,
+  agents?: TaskAgentsSummary,
+): TaskLooks {
   const [visit, setVisit] = useState(() => revisited(undefined, task, readerId));
   const keep = useAtomSet(looksAtom);
   const watch = useAtomSet(watchedAtom);
@@ -312,7 +346,13 @@ export function useTaskLooks(task: Task | undefined, readerId: string | undefine
     setVisit(current);
   }
   const taskId = task?.id;
-  const newest = task === undefined ? undefined : newestSaveOf(task);
+  const newest =
+    task === undefined
+      ? undefined
+      : newestChangeOf({
+          updatedAt: newestSaveOf(task),
+          ...(agents === undefined ? undefined : { agents }),
+        });
   const looked = useRef<string | undefined>(undefined);
 
   useEffect(() => {
@@ -366,12 +406,13 @@ export function useAgentLook(agent: Pick<TasklessAgent, "id" | "activityAt"> | u
 }
 
 /**
- * Whether each of the sidebar's plans is unread: marked so by hand, or saved
- * after its mark, or, with none, after it started, and not the plan the
- * developer is watching, whose saves are seen as they land. The first read
- * list marks every plan in it no look has marked, and so does a read list
- * none of whose plans has a mark, which is an account this Mac has not
- * listed before; nothing but a mark by hand is unread until it has. A `staged` run draws nothing unread and seeds
+ * Whether each of the sidebar's plans is unread: marked so by hand, or
+ * changed after its mark, or, with none, after it started, and not the plan
+ * the developer is watching, whose changes are seen as they land. The first
+ * read list marks every plan in it no look has marked or none has seen
+ * saved since, and so does a read list none of whose plans has a mark,
+ * which is an account this Mac has not listed before; nothing but a mark by
+ * hand is unread until it has. A `staged` run draws nothing unread and seeds
  * nothing, so its frames never wear a developer's marks.
  */
 export function useUnreadTasks(
@@ -386,13 +427,19 @@ export function useUnreadTasks(
 
   // Note that the seeding runs once the list is a read one, because the
   // empty list before the first read would mark nothing and count as done,
-  // and that it leaves a task's look where one was taken, since the saves
-  // after it are ones the developer has not seen.
+  // and that it leaves a task's look where a save came after it, since that
+  // save is one the developer has not seen.
   useEffect(() => {
     if (!seeding) return;
-    const unmarked = tasks.filter((task) => looks.marks[task.id] === undefined);
+    const standing = tasks.filter((task) => {
+      const mark = markOf(looks.marks[task.id]);
+      return mark === undefined || task.updatedAt <= mark;
+    });
     keep({
-      change: raised(Object.fromEntries(unmarked.map((task) => [task.id, task.updatedAt])), false),
+      change: raised(
+        Object.fromEntries(standing.map((task) => [task.id, newestChangeOf(task)])),
+        false,
+      ),
       seeded: true,
     });
   }, [seeding, tasks, looks.marks, keep]);
@@ -405,7 +452,7 @@ export function useUnreadTasks(
       looks.seeded &&
       known &&
       task.id !== watched &&
-      task.updatedAt > (markOf(look) ?? task.createdAt)
+      newestChangeOf(task) > (markOf(look) ?? task.createdAt)
     );
   };
 }
@@ -416,8 +463,8 @@ export interface ReadMarks {
   readonly watched: string | undefined;
   /** Whether the plan is marked unread by hand: the only way the plan being looked at is unread. */
   readonly markedUnread: (taskId: string) => boolean;
-  /** Marks the plan unread until it next opens, or read, as a look at its newest save. */
-  readonly mark: (task: Pick<TaskSummary, "id" | "updatedAt">, unread: boolean) => void;
+  /** Marks the plan unread until it next opens, or read, as a look at its newest change. */
+  readonly mark: (task: Pick<TaskSummary, "id"> & TaskChanges, unread: boolean) => void;
 }
 
 /** The marks by hand, which every menu offering Mark as unread or Mark as read writes through. */
@@ -430,7 +477,7 @@ export function useReadMarks(): ReadMarks {
     markedUnread: (taskId) => markedUnread(looks.marks[taskId]),
     mark: (task, unread) =>
       keep({
-        change: unread ? flagged(task.id) : raised({ [task.id]: task.updatedAt }, true),
+        change: unread ? flagged(task.id) : raised({ [task.id]: newestChangeOf(task) }, true),
         seeded: false,
       }),
   };

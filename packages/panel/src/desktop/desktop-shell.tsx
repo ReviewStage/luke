@@ -712,12 +712,19 @@ export function DesktopShell({
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
       : undefined;
-  // Note that with Channels on the sidebar lists channels and the Inbox's page is a channel's stream.
+  // Note that with a channel chosen the Inbox's place is that channel's stream.
   const streaming = useChannelStreaming();
   const channelPlace = useChannelPlace();
   useWindowTitle(titleSubject(tab, tasks, shownTask, streaming));
-  // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
-  const looks = useTaskLooks(shownTask, tasks.me);
+  // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen,
+  // and what its agents did with it, which its row in the list names.
+  const looks = useTaskLooks(
+    shownTask,
+    tasks.me,
+    shownTask === undefined
+      ? undefined
+      : tasks.tasks.find((row) => row.id === shownTask.id)?.agents,
+  );
   // An agent with no plan is looked at as its page is on screen, as the plan is.
   const { agentId: pageAgentId } = tasks.agentView;
   useAgentLook(
