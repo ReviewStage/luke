@@ -3123,6 +3123,37 @@ test("New task's agent start opens its page at once on the words as its agent's 
   assert.equal(tab.control().agents.opening?.line.text, prompt);
 });
 
+test("New task's agent start opens no draft beside its agent while the task stands open before the start answers", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
+      // The task's agents are still being read.
+      [ACT_KIND.CODING_AGENTS_LIST]: () => new Promise(() => undefined),
+    },
+  );
+  act(() => tab.control().onNewTask());
+  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, {
+      handed: { idempotencyKey: AGENT_KEY, prompt: "Fix it.", attachments: [], choice: undefined },
+    });
+  });
+  // Main opens the task before the start answers, its row listed and its agent not yet.
+  tab.stand({ tasks: { ...AGENT_TASK, tasks: [row(OTHER_TASK_ID, 1)], taskAgents: [] } });
+  await settle();
+  assert.equal(tab.control().agents.draft, undefined, "no draft opens while the start is out");
+
+  await act(async () => {
+    answers[0]?.({ planId: OTHER_TASK_ID, agentStart: { agent: started } });
+    await note;
+  });
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tabs, [{ agent: AGENT_ID }], "the agent's tab alone");
+});
+
 test("New task's agent start refused after its page opened opens the card again on the issues, model, and press it held, saying why, over the version history it was asked from", async () => {
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
