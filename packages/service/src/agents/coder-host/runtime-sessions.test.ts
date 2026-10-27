@@ -24,10 +24,11 @@ import {
   claimRuntimeSession,
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
-import { createTask, updateTask } from "@luke/database/models/task-store";
+import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { device } from "@luke/database/schemas/device";
 import { messages } from "@luke/database/schemas/storage";
+import { task as taskTable } from "@luke/database/schemas/task";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
@@ -1501,9 +1502,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.ok(handed.some((each) => JSON.stringify(each.message).includes(notice)));
 
           // A continue runs where its source runs, though the task now runs in the cloud.
-          yield* updateTask(owner, task.id, {
-            runsOn: { machine: CODING_AGENT_MACHINE.VERCEL, deviceId: null },
-          });
+          // Where a task runs is never changed through the service, so the row is written as an old build once did.
+          const db = yield* Database;
+          yield* db
+            .update(taskTable)
+            .set({ machine: CODING_AGENT_MACHINE.VERCEL, deviceId: null })
+            .where(eq(taskTable.id, task.id));
           const continued = yield* start(owner, {
             taskId: task.id,
             prompt: undefined,
@@ -1526,7 +1530,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
 
           // A device away is refused by name, and no agent is made.
-          yield* updateTask(owner, task.id, { runsOn: onDevice });
+          yield* db.update(taskTable).set(onDevice).where(eq(taskTable.id, task.id));
           yield* TestClock.adjust(Duration.sum(THIS_MAC.FRESH, Duration.seconds(1)));
           const away = startOn(task.id, "anthropic/claude-opus-5.5");
           const refused = yield* start(owner, away);
@@ -1540,7 +1544,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.equal(retried.success.agent.id, owned.success.agent.id);
 
           // A continue from an agent on a host its starter removed is refused by name, not as away, and no agent is made.
-          const db = yield* Database;
           yield* db.update(device).set({ kind: DEVICE_KIND.HOST }).where(eq(device.id, deviceId));
           assert.equal(yield* removeHost(owner, deviceId), true);
           const fromRemoved = {

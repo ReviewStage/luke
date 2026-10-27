@@ -244,8 +244,6 @@ export interface TaskChanges {
   readonly priority?: TaskPriority;
   /** The member the task is assigned to, who must be a member of its workspace, or of the one it moves to; null for no one. */
   readonly assigneeId?: string | null;
-  /** Where its agents run from now on; an agent already started keeps where it runs. */
-  readonly runsOn?: TaskRunsOnWrite;
 }
 
 /** How a task's repository was reached, as a write takes it. */
@@ -836,6 +834,8 @@ const findTaskHeader = SqlSchema.findOneOption({
     name: Schema.String,
     repository: Schema.NullOr(Schema.String),
     status: taskStatusSchema,
+    machine: MachineSchema,
+    deviceId: Schema.NullOr(Schema.String),
   }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
@@ -846,6 +846,8 @@ const findTaskHeader = SqlSchema.findOneOption({
           name: task.name,
           repository: task.repository,
           status: task.status,
+          machine: task.machine,
+          deviceId: task.deviceId,
         })
         .from(task)
         .where(reachableTask(userId, taskId))
@@ -1203,6 +1205,8 @@ export interface TaskHeader {
   readonly repository: string | null;
   /** Where the task stands. */
   readonly status: TaskStatus;
+  /** Where the task's agents run, as its row holds it. */
+  readonly runsOn: TaskRunsOnWrite;
 }
 
 /**
@@ -1223,6 +1227,7 @@ export function readTaskHeader(
       name: row.name,
       repository: row.repository,
       status: row.status,
+      runsOn: { machine: row.machine, deviceId: row.deviceId },
     })),
   );
 }
@@ -1297,9 +1302,6 @@ function columnChangesOf(
       : { status: changes.status, completedAt: completedAtOf(changes.status, now) }),
     ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
     ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
-    ...(changes.runsOn === undefined
-      ? undefined
-      : { machine: changes.runsOn.machine, deviceId: changes.runsOn.deviceId }),
   };
 }
 
