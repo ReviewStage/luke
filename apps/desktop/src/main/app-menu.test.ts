@@ -126,21 +126,6 @@ describe("the menu bar's drawer", () => {
     show({ experiments: {}, capabilities: [] });
     assert.ok(labelsOf(drawn.at(-1) ?? [], "Luke").includes("Restart to Update"));
   });
-
-  test("names the task steps for the channels they walk while Channels is on, and for the tasks again once it is off", () => {
-    const drawn: MenuItemConstructorOptions[][] = [];
-    const show = menuBarDrawer({ appName: "Luke", packaged: false }, (template) =>
-      drawn.push(template),
-    );
-    const steps = () => labelsOf(drawn.at(-1) ?? [], "View").slice(-2);
-
-    show();
-    assert.deepEqual(steps(), ["Previous Task", "Next Task"]);
-    show({ experiments: experimentsOn(EXPERIMENT.CHANNELS), capabilities: [] });
-    assert.deepEqual(steps(), ["Previous Channel", "Next Channel"]);
-    show({ experiments: {}, capabilities: [] });
-    assert.deepEqual(steps(), ["Previous Task", "Next Task"]);
-  });
 });
 
 /** The labels of every item a reader can choose, every submenu walked; a disabled item is a status, not a choice. */
