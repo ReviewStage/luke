@@ -1,6 +1,8 @@
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { TASK_PRIORITY, TASK_STATUS, type TaskAgentsSummary } from "@luke/features/task-wire";
 import {
+  AttentionMark,
+  FailedMark,
   GAP,
   Inline,
   TASK_AGENTS_MARK_SIZE,
@@ -94,6 +96,18 @@ function TaskMarks(): React.JSX.Element {
               <Text variant={TEXT_VARIANT.CAPTION}>{priority}</Text>
             </Inline>
           ))}
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="status-marks" title="A question waiting on you, and a failure">
+        <Inline gap={GAP.SECTION}>
+          <Inline gap={GAP.CONTROL}>
+            <AttentionMark />
+            <Text variant={TEXT_VARIANT.CAPTION}>attention</Text>
+          </Inline>
+          <Inline gap={GAP.CONTROL}>
+            <FailedMark />
+            <Text variant={TEXT_VARIANT.CAPTION}>failed</Text>
+          </Inline>
         </Inline>
       </CatalogSection>
       <CatalogSection id="task-agents-mark" title="How a task's agents stand, in a sidebar row">
