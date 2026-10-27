@@ -1,10 +1,9 @@
 import type { Channel } from "@luke/features/channel-wire";
 import { agoText } from "@luke/features/time-format";
 import {
-  BUTTON_SIZE,
-  BUTTON_VARIANT,
-  Button,
   EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
   NotFoundIcon,
   TOOLBAR_INSET,
   Toolbar,
@@ -19,14 +18,14 @@ import type { InboxChannelHead } from "./inbox-list.js";
  * its list, its reading pane, and its keys are the Inbox's own; only its
  * head is the channel's. An archived channel opened from Browse archived
  * channels heads its list with when it was archived in its purpose's place
- * and Unarchive before New thread, whose refusal stands under the head.
+ * and Unarchive in New thread's, since a thread started there would land
+ * in #general; a refusal stands under the head. Where the workspace's
+ * channels could not be read, the list's place says so with Retry rather
+ * than standing a list narrowed to a channel it cannot name.
  */
 
-/** What an archived channel's head offers. */
-const ARCHIVED_WORDS = {
-  UNARCHIVE: "Unarchive",
-  UNARCHIVING: "Unarchiving",
-} as const;
+/** What the Inbox says in its list's place where the workspace's channels could not be read. */
+const CHANNELS_NOT_READ = "Could not read this workspace's channels.";
 
 /** The channel the Inbox is narrowed to, open or archived, as its head names it. */
 export type HeadedChannel = Pick<Channel, "id" | "name" | "purpose">;
@@ -51,7 +50,7 @@ export function useChannelHead(
     return {
       name: channel.name,
       detail: channel.purpose === "" ? undefined : channel.purpose,
-      action: null,
+      unarchive: undefined,
       refusal,
     };
   }
@@ -66,17 +65,7 @@ export function useChannelHead(
   return {
     name: channel.name,
     detail: `Archived ${agoText(archived.archivedAt, now)}`,
-    action: (
-      <Button
-        size={BUTTON_SIZE.COMPACT}
-        variant={BUTTON_VARIANT.OUTLINE}
-        busy={busy}
-        busyLabel={ARCHIVED_WORDS.UNARCHIVING}
-        onClick={unarchive}
-      >
-        {ARCHIVED_WORDS.UNARCHIVE}
-      </Button>
-    ),
+    unarchive: { busy, onUnarchive: unarchive },
     refusal,
   };
 }
@@ -107,6 +96,21 @@ export function ChannelMissing({
       >
         This channel was archived, or isn't one of this workspace's.
       </EmptyState>
+    </section>
+  );
+}
+
+/** The list's place while a channel is chosen and the workspace's channels could not be read, with Retry. */
+export function ChannelsNotRead({ onRetry }: { onRetry: () => void }): React.JSX.Element {
+  return (
+    <section
+      className="channels-not-read flex min-h-0 min-w-0 flex-col"
+      aria-label="Channels not read"
+    >
+      <Toolbar end={TOOLBAR_INSET.COLUMN} />
+      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetry}>
+        {CHANNELS_NOT_READ}
+      </ErrorState>
     </section>
   );
 }

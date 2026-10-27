@@ -9424,6 +9424,48 @@ test("a channel narrows the Inbox to its own threads, everyone's, under its name
   );
 });
 
+test("a channel left on another scope opens on All of everyone's again", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
+  inboxes = new Map([[BILLING.id, [{ ...THRESHOLD, channelId: GENERAL.id, startedBy: TEAMMATE }]]]);
+  const { page } = mount([], { channels: true });
+  await settle();
+  showScope(page, "For you");
+  await settle();
+  assert.deepEqual(rowTitles(page), [], "For you leaves out the teammate's thread");
+
+  act(() => leaveChannel());
+  await settle();
+  act(() => chooseChannel(GENERAL.id));
+  await settle();
+  assert.equal(headTitle(page), "#general");
+  assert.deepEqual(rowTitles(page), [THRESHOLD.title]);
+});
+
+test("a channel chosen while the workspace's channels could not be read says so with Retry", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  // Note that the window holds each workspace's channels across reads, a failed one keeping them, so this workspace is one no test read before.
+  listedWorkspace = { ...ACME, id: "workspace-channels-unread" };
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> =>
+      request.kind === ACT_KIND.CHANNELS_LIST
+        ? Promise.resolve({
+            status: FAKE_ANSWER.DONE,
+            value: { failure: "unanswered" },
+          } as FakeActAnswer)
+        : previous(request),
+  });
+  const { page } = mount([], { channels: true });
+  await settle();
+  const notRead =
+    page.querySelector<HTMLElement>('section[aria-label="Channels not read"]') ??
+    assert.fail("the failed read is said");
+  assert.match(notRead.textContent ?? "", /Could not read this workspace's channels\./u);
+});
+
 test("a New thread started while a channel is shown is moved into it", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
@@ -9576,6 +9618,11 @@ test("an archived channel narrows the Inbox under its name and when it was archi
   assert.equal(headTitle(page), "#old-app");
   assert.match(headDetail(page) ?? "", /^Archived /u);
   assert.deepEqual(rowTitles(page), [THRESHOLD.title]);
+  assert.equal(
+    page.querySelector('button[aria-label="New thread"]'),
+    null,
+    "no thread is started where it would land in #general",
+  );
   act(() => buttonSaying("Unarchive").click());
   await settle();
   assert.deepEqual(unarchived, [old.id]);

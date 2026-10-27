@@ -26,7 +26,12 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { ChannelMissing, type HeadedChannel, useChannelHead } from "../tasks/channel-head.js";
+import {
+  ChannelMissing,
+  ChannelsNotRead,
+  type HeadedChannel,
+  useChannelHead,
+} from "../tasks/channel-head.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import {
@@ -354,12 +359,14 @@ export function DesktopInbox({
     named.models,
   );
   const startCompose = compose.onStart;
-  const onCompose = tasks.signedIn
-    ? () => {
-        startCompose();
-        columns.onOpen(COMPOSE_COLUMN);
-      }
-    : undefined;
+  // Note that an archived channel offers no New thread, since a thread started there would land in #general.
+  const onCompose =
+    tasks.signedIn && archivedShown === undefined
+      ? () => {
+          startCompose();
+          columns.onOpen(COMPOSE_COLUMN);
+        }
+      : undefined;
   const listedWorkspace = tasks.workspace;
   const { sidePanel } = tasks;
   // A file the item names opens beside the Inbox as the panel's preview; pressed with ⌘, it goes to the item's task, opened there.
@@ -528,7 +535,9 @@ export function DesktopInbox({
               hidden={sidePanel.fullScreen}
             >
               <div className={INBOX_VIEW} ref={columns.ref} data-columns={columns.shown}>
-                {channelState.kind === CHANNEL_SHOWN.MISSING ? (
+                {narrowed && channels.channels === undefined && channels.failed ? (
+                  <ChannelsNotRead onRetry={channels.onRefresh} />
+                ) : channelState.kind === CHANNEL_SHOWN.MISSING ? (
                   <ChannelMissing
                     onGeneral={
                       general === undefined ? undefined : () => channelPlace.onChoose(general.id)

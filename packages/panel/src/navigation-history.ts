@@ -1251,7 +1251,12 @@ export function useWindowHistory(input: {
     const historyStanding = tab === PANEL_TAB.TASKS && historyOpen && spot !== undefined;
     if (tab !== PANEL_TAB.TASKS) input.onTabChange(PANEL_TAB.TASKS);
     if (to.kind === PLACE_KIND.INBOX) {
-      tasks.inboxView.onOpen();
+      // Note that a channel's step holding no item opens the channel afresh, so no item chosen in a later step stands over it.
+      if (to.channelId !== undefined && to.chosen === undefined) {
+        tasks.inboxView.onOpenChannel(to.channelId);
+      } else {
+        tasks.inboxView.onOpen();
+      }
       standChannelPlace(to.channelId);
       if (to.chosen !== undefined) tasks.inboxView.onChoose(to.chosen);
       if (to.listed !== undefined) tasks.inboxView.onListed(to.listed);

@@ -4,6 +4,8 @@ import { readFailedWords, TERM } from "@luke/features/words";
 import {
   AttentionMark,
   BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
   CHIP_LOOK,
   Chip,
   ChipName,
@@ -254,6 +256,12 @@ const ITEM_THING = "Inbox item";
 
 /** What a row's ⋯ offers with Channels on, which asks which channel its thread moves to (`move-thread-dialog.tsx`). */
 const MOVE_TO_CHANNEL = "Move to channel…";
+
+/** What an archived channel's head offers, and says while it is under way. */
+const ARCHIVED_WORDS = {
+  UNARCHIVE: "Unarchive",
+  UNARCHIVING: "Unarchiving",
+} as const;
 
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
@@ -1204,6 +1212,15 @@ function ListHead({
               shown={shown}
               groups={(opener) => [
                 [
+                  ...(channel?.unarchive === undefined
+                    ? []
+                    : [
+                        {
+                          label: ARCHIVED_WORDS.UNARCHIVE,
+                          icon: <GLYPH.ARCHIVE />,
+                          onSelect: channel.unarchive.onUnarchive,
+                        },
+                      ]),
                   ...(head.onCompose === undefined
                     ? []
                     : [{ label: NEW_THREAD, icon: <ComposeIcon />, onSelect: head.onCompose }]),
@@ -1227,13 +1244,25 @@ function ListHead({
           asked={{ ask: asked.ask }}
         />
         {search}
+        <ErrorLine>{channel?.refusal}</ErrorLine>
         {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
       </>
     );
   }
+  const unarchive = channel?.unarchive;
   const options = (
     <>
-      {channel?.action}
+      {unarchive === undefined ? null : (
+        <Button
+          size={BUTTON_SIZE.COMPACT}
+          variant={BUTTON_VARIANT.OUTLINE}
+          busy={unarchive.busy}
+          busyLabel={ARCHIVED_WORDS.UNARCHIVING}
+          onClick={unarchive.onUnarchive}
+        >
+          {ARCHIVED_WORDS.UNARCHIVE}
+        </Button>
+      )}
       {head.onCompose === undefined ? null : (
         <Tooltip label={NEW_THREAD}>
           <IconButton icon={<ComposeIcon />} label={NEW_THREAD} onClick={head.onCompose} />
@@ -1385,8 +1414,8 @@ export interface InboxChannelHead {
   readonly name: string;
   /** Its purpose, or when it was archived; none where it has neither. */
   readonly detail: string | undefined;
-  /** What stands before New thread on its head: an archived channel's Unarchive; none on an open one. */
-  readonly action: React.ReactNode;
+  /** An archived channel's Unarchive, standing in New thread's place, and whether it is under way; none on an open one. */
+  readonly unarchive: { readonly busy: boolean; readonly onUnarchive: () => void } | undefined;
   /** What refused the head's action, under the head; none where nothing did. */
   readonly refusal: string | undefined;
 }

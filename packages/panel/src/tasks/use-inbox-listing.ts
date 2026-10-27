@@ -104,6 +104,8 @@ interface ChannelScope {
 function useScopedChoices(channelId: string | undefined): InboxViewChoices {
   const kept = useInboxViewChoices();
   const [scope, setScope] = useState<ChannelScope | undefined>(undefined);
+  // Note that a scope is forgotten once its channel is left, so the channel opens on All of everyone's again.
+  if (scope !== undefined && scope.channelId !== channelId) setScope(undefined);
   if (channelId === undefined) return kept;
   const standing =
     scope?.channelId === channelId ? scope : { channelId, show: INBOX_SHOW.ALL, whose: EVERYONES };

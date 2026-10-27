@@ -2974,16 +2974,14 @@ export function useTasksTab(input: {
       }
       // A channel's link opens the Inbox narrowed to it; one archived or unknown says so there (`desktop-inbox.tsx`).
       case LINK_PLACE.CHANNEL: {
-        const workspaceId = listLinked(workspace);
+        listLinked(workspace);
         if (!channelsOn) return;
         standChannelPlace(place.channelId);
+        // Note that a channel's link opens it as its row does: on no item, and on its list in a narrow room.
         standInFor({
           kind: STAND_IN.INBOX,
-          chosen: rememberedChoice(lastInboxChoice.current, {
-            account: input.account,
-            workspaceId,
-          }),
-          listed: false,
+          chosen: undefined,
+          listed: input.room === SHELL_ROOM.NARROW,
         });
         return;
       }
