@@ -108,6 +108,8 @@ export interface AgentTranscriptControl {
   messages: readonly CodingAgentMessage[];
   /** Why the agent's newest turn failed, as the last page said; nothing while it did not. */
   failure: CodingAgentFailure | undefined;
+  /** Where a failed agent that ran directly on its Mac left its work, as the last page said; nothing for any other failure. */
+  ranDirectly: { readonly folder: string } | undefined;
   /** What the agent has cost over every turn it settled, its workers' included, as the last page said; nothing before one settled. */
   usage: CodingAgentUsage | undefined;
   /** Who pays for the agent, as the last page said; nothing on a worker's, and for an agent from before payers. */
@@ -149,6 +151,7 @@ interface Held {
   transcript: CodingAgentTranscriptKey;
   messages: readonly CodingAgentMessage[];
   failure: CodingAgentFailure | undefined;
+  ranDirectly: { readonly folder: string } | undefined;
   usage: CodingAgentUsage | undefined;
   payer: CodingAgentPayer | undefined;
   context: CodingAgentContext | undefined;
@@ -178,6 +181,7 @@ function fresh(transcript: CodingAgentTranscriptKey): Held {
     transcript,
     messages: [],
     failure: undefined,
+    ranDirectly: undefined,
     usage: undefined,
     payer: undefined,
     context: undefined,
@@ -259,6 +263,7 @@ function joined(was: Held, page: CodingAgentTranscriptPage): Held {
     // Note that a failure is the failed cursor's, so a page that replaces the cursor lets it go.
     olderFailed: replaces ? false : was.olderFailed,
     failure: page.failureReason,
+    ranDirectly: page.ranDirectly,
     usage: page.usage,
     payer: page.payer,
     context: page.context,
@@ -432,6 +437,7 @@ export function useAgentTranscript(input: {
   return {
     messages: held.messages,
     failure: held.failure,
+    ranDirectly: held.ranDirectly,
     usage: held.usage,
     payer: held.payer,
     context: held.context,

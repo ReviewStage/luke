@@ -2237,6 +2237,14 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   failureReason: EffectSchema.optionalKey(
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
   ),
+  /**
+   * Where a failed agent that ran directly on its Mac, which now runs every
+   * agent in a VM and so refused to start it, left its work: the folder of
+   * its checkout on that Mac. Its `failureReason` is `session_ended`, which
+   * a panel older than this key words; absent for every other failure, and
+   * from a service older than it.
+   */
+  ranDirectly: EffectSchema.optionalKey(EffectSchema.Struct({ folder: EffectSchema.String })),
   usage: EffectSchema.optionalKey(codingAgentUsageSchema),
   /**
    * Who pays for the agent (`CODING_AGENT_PAYER`), as its row recorded it at

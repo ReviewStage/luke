@@ -41,6 +41,11 @@ const MENDED_BY_NEW_AGENT: ReadonlySet<CodingAgentFailure> = new Set([
   CODING_AGENT_FAILURE.SESSION_ENDED,
 ]);
 
+/** Why an agent that ran directly on its Mac failed there, and where its work still is, said whole in place of a failure's words. */
+export function ranDirectlyWords(folder: string): string {
+  return `This agent ran directly on your Mac, which Luke no longer does. Its unpushed work is still in ${folder}. Continue in a new agent to carry on in a sandbox.`;
+}
+
 /**
  * Why a turn failed, said of the key it ran on: the reader's own where no
  * one is named, else the named holder's, whose Settings the reader has no

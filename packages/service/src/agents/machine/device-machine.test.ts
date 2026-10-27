@@ -28,12 +28,14 @@ import {
   DEVICE_AGENT_REQUEST_KIND,
   DEVICE_KIND,
   DEVICE_LAUNCH_REFUSAL,
+  deviceAgentLayout,
 } from "@luke/features/device-agent-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Fiber, Layer, Option, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
+import { ranDirectlyFolderOf } from "../coder-host/status.js";
 import { claimedDeviceAgentLine, settledDeviceAgentLine } from "../device-agent.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 import { LaunchRefused } from "./agent-machine.js";
@@ -244,7 +246,7 @@ it.layer(Layer.merge(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT))
     );
 
     it.effect(
-      "a launch its Mac settled unstarted because the agent ran directly on it settles the turn as a session that ended",
+      "a launch its Mac settled unstarted because the agent ran directly on it settles the turn as a session that ended, naming the folder its work is still in",
       () =>
         Effect.gen(function* () {
           const opened = yield* openLocalAgent;
@@ -271,6 +273,10 @@ it.layer(Layer.merge(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT))
 
           assert.equal(turn?.status, TURN_STATUS.FAILED);
           assert.equal(turn?.failure, BRAIN_REQUEST_FAILURE.SESSION_ENDED);
+          assert.equal(
+            ranDirectlyFolderOf(turn),
+            deviceAgentLayout(DEVICE_LAYOUT.home, agent.id).checkoutPath,
+          );
         }),
     );
   },

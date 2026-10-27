@@ -36,12 +36,14 @@ import {
   DEVICE_LAUNCH_REFUSAL,
   type DeviceAgentLaunchSecrets,
   type DeviceLaunchRefusal,
+  deviceAgentLaunchPayloadSchema,
   deviceAgentLaunchSecretsSchema,
 } from "@luke/features/device-agent-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Clock, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
 import { HostedEnvironment } from "../environment.js";
 import type { StoreFailure } from "../http/store-failure.js";
+import { RAN_DIRECTLY_DETAIL } from "./coder-host/status.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 export const DEVICE_AGENT_SERVICE = {
@@ -153,11 +155,16 @@ export function claimedDeviceAgentLine(userId: string, deviceId: string, id: str
   });
 }
 
-/** Why a launch its device refused to start failed, kept on the turn for the record. */
-const REFUSAL_DETAIL = {
-  [DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY]:
-    "the agent ran directly on its Mac, which now runs every agent in a VM, so it cannot start there again",
-} as const satisfies Record<DeviceLaunchRefusal, string>;
+/** Where an agent's newest launch put its checkout, as its line's payload names it; nothing where it names none this service reads. */
+const decodeLaunchPayload = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
+
+/** Why a launch its device refused to start failed, kept on the turn: the words of the refusal, and the folder the agent's work is still in. */
+function refusalDetail(refusal: DeviceLaunchRefusal, checkoutPath: string | undefined): string {
+  switch (refusal) {
+    case DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY:
+      return `${RAN_DIRECTLY_DETAIL}${checkoutPath ?? ""}`;
+  }
+}
 
 /**
  * One line the account's Mac claimed, settled; whether it was. A launch
@@ -208,7 +215,12 @@ export function settledDeviceAgentLine(
           writer,
           agent.value.conversationId,
           now,
-          REFUSAL_DETAIL[refusal],
+          refusalDetail(
+            refusal,
+            Option.getOrUndefined(
+              Option.map(decodeLaunchPayload(newest.value.payload), (each) => each.checkoutPath),
+            ),
+          ),
           undefined,
           BRAIN_REQUEST_FAILURE.SESSION_ENDED,
         );
