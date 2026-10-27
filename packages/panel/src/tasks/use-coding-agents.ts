@@ -222,7 +222,7 @@ export interface CodingAgentsControl {
   models: readonly CatalogModel[] | undefined;
   /** Whether the last read of the models did not land, so the menu says so with Retry rather than reading for ever. */
   modelsFailed: boolean;
-  /** The member's devices a task's Runs on may name, as the last read of the models offered them; nothing where it offered none, or before the first read. */
+  /** The member's devices a task's Runs on may name, as the last read of the models offered them: none listed where it offered none, and nothing before a read lands, so New task can tell a list not yet read from an empty one. */
   macs: readonly MacOffer[] | undefined;
   /** Reads the models now, for a menu opening or the menu's Retry. */
   readModels: () => void;
@@ -999,7 +999,7 @@ export function useCodingAgents(input: {
         if ("failure" in answer) setModelsFailed(true);
         else {
           setModels(answer.models);
-          setMacs(answer.macs);
+          setMacs(answer.macs ?? []);
           setModelsFailed(false);
         }
       },

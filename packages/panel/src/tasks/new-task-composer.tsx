@@ -69,7 +69,13 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * (`issue-picker-chip.tsx`, ⌘L from the card). While local agents are on
  * and the member has a device, the Runs on chip follows the repository's,
  * Cloud or one of their devices, which the task's agents run on
- * (`runs-on.tsx`); an automation's card draws none. The repository chip starts on the one the press chose
+ * (`runs-on.tsx`); an automation's card draws none. Note that while local
+ * agents are on the card reads the member's devices as it opens and holds
+ * Start, saying so, until that read lands, a list read before it opened not
+ * counting, and says a read that failed with
+ * Retry, because a start sent before the list is read names no device, and
+ * the service creates such a task in the cloud for good: Cloud is only ever
+ * where a task runs because the chip said Cloud. The repository chip starts on the one the press chose
  * (a repository group's +), else the one the newest task in the workspace
  * was about, either only where the workspace's GitHub reaches it.
  *
@@ -175,10 +181,17 @@ const BARE_WORDS: ComposerWords = {
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
-/** Why Start is held without a repository. */
+/** Why Start is held: without a repository, or before the member's devices are read. */
 const COMPOSER_WORDS = {
   NEEDS_REPOSITORY: "Choose a repository",
+  READING_DEVICES: "Checking your devices…",
 } as const;
+
+/** What the card says where the member's devices could not be read, with Retry, rather than starting the task in the cloud. */
+const DEVICES_UNREAD: Failure = {
+  reason: FAILURE_REASON.OTHER,
+  text: "Couldn't read your devices, so Luke can't tell where this task should run.",
+};
 
 /** What one Agent-mode press asked beside its key: the task's name, repository, workspace, issues, and where its agents run, and the agent's words, files, and model. */
 interface AgentAsk {
@@ -325,8 +338,31 @@ export function NewTaskComposer({
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
   // Runs on stands while local agents are on and the member has a device, never for an automation's agent.
   const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
+  const asksDevices = localAgents && !forAutomation;
+  // Note that the devices are read as the card opens rather than when the
+  // model chip first draws, which waits on the default's read, so Start is held for as short as can be.
+  const readModels = useRef(newTask.readModels);
+  readModels.current = newTask.readModels;
+  useEffect(() => {
+    if (asksDevices) readModels.current();
+  }, [asksDevices]);
+  // Start is held until a read made since the card opened lands, since a start before then would
+  // name none. Note that a list read before the card opened does not count, because it may be one
+  // read before a device was added, and a failed read leaves it standing; each read that lands
+  // hands a new list.
+  const listedAsOpened = useRef(newTask.devices);
+  const [devicesLanded, setDevicesLanded] = useState(false);
+  if (
+    !devicesLanded &&
+    newTask.devices !== undefined &&
+    newTask.devices !== listedAsOpened.current
+  ) {
+    setDevicesLanded(true);
+  }
+  const devicesUnread = asksDevices && !devicesLanded;
+  const devicesFailed = devicesUnread && newTask.modelsFailed;
   const devices =
-    localAgents && !forAutomation && newTask.devices !== undefined && newTask.devices.length > 0
+    asksDevices && newTask.devices !== undefined && newTask.devices.length > 0
       ? newTask.devices
       : undefined;
   const [device, chooseDevice] = useNewTaskRunsOn(devices);
@@ -375,7 +411,7 @@ export function NewTaskComposer({
   // words, files, or a GitHub or Linear issue.
   const onIssue = links.length > 0;
   const blocked = repository === null;
-  const canStart = !blocked && (filled || onIssue);
+  const canStart = !blocked && !devicesUnread && (filled || onIssue);
   const linkedIssues = links.map(linkIssueOf);
   const named = linkedIssues[0];
   const issueName = named === undefined ? undefined : taskNameOfIssue(named);
@@ -417,7 +453,7 @@ export function NewTaskComposer({
   };
 
   const begin = (name: string, handing: Pick<NewTaskStart, "handed" | "card"> = {}) => {
-    if (starting) return;
+    if (starting || devicesUnread) return;
     setStarting(true);
     onStarting?.(true);
     setNote(undefined);
@@ -550,10 +586,11 @@ export function NewTaskComposer({
     setAttachments: (next) =>
       draft.update((was) => ({ ...was, attachments: next(was.attachments) })),
     sending: starting,
-    note,
+    // Note that a read of the devices that failed is said over any note before it, and read again by its Retry.
+    note: devicesFailed ? DEVICES_UNREAD : note,
     closed: undefined,
     send: start,
-    retry: start,
+    retry: devicesFailed ? () => readModels.current() : start,
     sent: [],
   };
 
@@ -588,7 +625,7 @@ export function NewTaskComposer({
         wording={startsBare ? BARE_WORDS : PURPOSE_WORDS[purpose]}
         sendsEmpty={onIssue}
         // Note that an automation's agent is held without words, since its brief fences them as the request, files alone saying none.
-        sendable={!blocked && (!forAutomation || said !== "")}
+        sendable={!blocked && !devicesUnread && (!forAutomation || said !== "")}
         model={choice === undefined ? undefined : { choice, note: undefined, choose }}
         models={newTask.models}
         modelsFailed={newTask.modelsFailed}
@@ -612,6 +649,11 @@ export function NewTaskComposer({
       {blocked ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {COMPOSER_WORDS.NEEDS_REPOSITORY}
+        </Text>
+      ) : null}
+      {devicesUnread && !devicesFailed ? (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {COMPOSER_WORDS.READING_DEVICES}
         </Text>
       ) : null}
     </div>
