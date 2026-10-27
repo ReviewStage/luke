@@ -9,11 +9,10 @@ import {
   DEVICE_LAYOUT,
   fakeWorkspaceSeams,
   getTestDB,
-  joinWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
-import { CODING_AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import type { TaskRunsOnRequest } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
@@ -26,13 +25,12 @@ import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 import { tasksProcedures } from "./tasks-procedures.js";
 
 /**
- * Where a task runs its agents, set through the hosted oRPC router as the
- * web route answers it, over a real dialect: a member sets it to one of
- * their own devices there now and the task names it, its owner, and its
- * name; one naming another member's device, or theirs with Local agents
- * off, is refused by name and leaves the task as it stood; and an account
- * outside the workspace reaches no such task. Synthetic accounts and devices
- * throughout.
+ * Where a task runs its agents is set when the task is created and kept,
+ * changed through the hosted oRPC router as the web route answers it, over
+ * a real dialect: a change that names the place the task already holds is
+ * taken as no change, and any other is refused by name and leaves the task
+ * as it stood; an account outside the workspace reaches no such task.
+ * Synthetic accounts and devices throughout.
  */
 
 const ORIGIN = "https://luke.test";
@@ -90,75 +88,65 @@ const deviceOf = (userId: string, name: string) =>
 
 it.layer(getTestDB())("where a task runs its agents", (it) => {
   it.effect(
-    "a member sets it to their own device, and another member's device, theirs with Local agents off, or a task outside their workspace is refused, leaving the task as it stood",
+    "a change naming the place a task holds is no change, any other is refused by name leaving it as it stood, and a task outside their workspace is not found",
     () =>
       Effect.gen(function* () {
         const owner = yield* openTokenMember();
-        const teammate = yield* openTokenMember({ token: "fixture-teammate-token" });
         const stranger = yield* openTokenMember({ token: "fixture-stranger-token" });
         const workspace = yield* openWorkspace(owner);
-        yield* joinWorkspace(workspace, teammate);
         yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
         const studio = yield* deviceOf(owner, "Studio");
-        const laptop = yield* deviceOf(teammate, "Laptop");
-        const task = yield* createTask(owner, { organizationId: workspace, name: "Relay" });
+        const laptop = yield* deviceOf(owner, "Laptop");
+        const onStudio = { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: studio } as const;
+        const task = yield* createTask(owner, {
+          organizationId: workspace,
+          name: "Relay",
+          runsOn: onStudio,
+        });
+        const inCloud = yield* createTask(owner, { organizationId: workspace, name: "Kept" });
         const patch = yield* standing(
           new Map([
             ["Bearer owner", owner],
-            ["Bearer teammate", teammate],
             ["Bearer stranger", stranger],
           ]),
         );
-        const runsOnNow = Effect.map(
-          readTask(owner, task.id),
-          (read) => Option.getOrThrow(read).task.runsOn?.deviceId,
-        );
-        const refusal = (reason: string) => ({
-          status: 409,
-          body: { error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED, localAgentRefusal: reason },
-        });
+        const runsOnNow = (taskId: string) =>
+          Effect.map(
+            readTask(owner, taskId),
+            (read) => Option.getOrThrow(read).task.runsOn?.deviceId,
+          );
+        const locked = { status: 409, body: { error: HOSTED_API_ERROR.RUNS_ON_LOCKED } };
 
-        // Its owner sets it to their own device, which the task then names, with whose it is.
-        const set = yield* patch(task.id, "Bearer owner", {
-          machine: CODING_AGENT_MACHINE.DEVICE,
-          deviceId: studio,
+        // The place it holds, named again, is taken and changes nothing.
+        const same = yield* patch(task.id, "Bearer owner", onStudio);
+        assert.equal(same.status, 200);
+        assert.equal(same.body.plan.runsOn.deviceId, studio);
+        const stays = yield* patch(inCloud.id, "Bearer owner", {
+          machine: CODING_AGENT_MACHINE.VERCEL,
         });
-        assert.equal(set.status, 200);
-        assert.equal(set.body.plan.runsOn.deviceId, studio);
-        assert.equal(set.body.plan.runsOn.device.name, "Studio");
-        assert.equal(set.body.plan.runsOn.owner.userId, owner);
+        assert.equal(stays.status, 200);
+        assert.equal(stays.body.plan.runsOn, undefined);
 
-        // A teammate cannot point it at their own device while Local agents is off for them.
-        const off = yield* patch(task.id, "Bearer teammate", {
+        // Another device, or the cloud, is refused, even a device of the member's own.
+        const another = yield* patch(task.id, "Bearer owner", {
           machine: CODING_AGENT_MACHINE.DEVICE,
           deviceId: laptop,
         });
-        assert.deepEqual(off, refusal(LOCAL_AGENT_REFUSAL.OFF));
-
-        // Nor, with it on, at the owner's device, which is no device of theirs.
-        yield* writeAccountPreferences(teammate, {
-          experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
+        assert.deepEqual(another, locked);
+        const toCloud = yield* patch(task.id, "Bearer owner", {
+          machine: CODING_AGENT_MACHINE.VERCEL,
         });
-        const theirs = yield* patch(task.id, "Bearer teammate", {
-          machine: CODING_AGENT_MACHINE.DEVICE,
-          deviceId: studio,
-        });
-        assert.deepEqual(theirs, refusal(LOCAL_AGENT_REFUSAL.MAC_AWAY));
-        assert.equal(yield* runsOnNow, studio);
+        assert.deepEqual(toCloud, locked);
+        const toDevice = yield* patch(inCloud.id, "Bearer owner", onStudio);
+        assert.deepEqual(toDevice, locked);
+        assert.equal(yield* runsOnNow(task.id), studio);
+        assert.equal(yield* runsOnNow(inCloud.id), undefined);
 
         // An account outside the workspace reaches no such task.
         const byStranger = yield* patch(task.id, "Bearer stranger", {
           machine: CODING_AGENT_MACHINE.VERCEL,
         });
         assert.deepEqual(byStranger, { status: 404, body: { error: HOSTED_API_ERROR.NOT_FOUND } });
-        assert.equal(yield* runsOnNow, studio);
-
-        // A teammate moves it back to the cloud, which any member may.
-        const cloud = yield* patch(task.id, "Bearer teammate", {
-          machine: CODING_AGENT_MACHINE.VERCEL,
-        });
-        assert.equal(cloud.status, 200);
-        assert.equal(cloud.body.plan.runsOn, undefined);
       }),
   );
 });

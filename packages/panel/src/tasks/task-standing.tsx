@@ -36,7 +36,7 @@ import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
 import { useExperiment } from "../use-app-state.js";
-import { TaskRunsOnPicker } from "./runs-on.js";
+import { TaskRunsOnChip } from "./runs-on.js";
 
 /**
  * task-standing.tsx -- a task's key over its name, and the chips under it that say and change where it stands, how much it matters, and where its agents run.
@@ -180,13 +180,11 @@ function TaskAssigneePicker({
   );
 }
 
-/** What the page hands the task's head: its workspace's name, which the key is drawn from, the door a pick is sent through, none where the task takes no change, and the member's devices its Runs on offers, as the models answer last listed them. */
+/** What the page hands the task's head: its workspace's name, which the key is drawn from, the door a pick is sent through, none where the task takes no change, and the member's devices, as the models answer last listed them, which say whether a cloud task shows its Runs on. */
 export interface TaskStandingDoor {
   readonly workspaceName: string;
   readonly onSet?: ((standing: TaskStanding) => void) | undefined;
   readonly devices?: readonly MacOffer[] | undefined;
-  /** Reads the devices again, as Runs on's menu opens. */
-  readonly readDevices?: (() => void) | undefined;
 }
 
 /**
@@ -291,12 +289,10 @@ export function TaskStandingChips({
   task,
   onSet,
   devices,
-  readDevices,
 }: {
   task: Task;
   onSet: ((standing: TaskStanding) => void) | undefined;
   devices?: readonly MacOffer[] | undefined;
-  readDevices?: (() => void) | undefined;
 }): React.JSX.Element | null {
   const { status, priority } = task;
   const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
@@ -329,14 +325,7 @@ export function TaskStandingChips({
           assignee={task.assignee}
           onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
         />
-        {runsOnDrawn ? (
-          <TaskRunsOnPicker
-            runsOn={task.runsOn}
-            devices={devices ?? []}
-            onOpen={readDevices}
-            onPick={onSet === undefined ? undefined : (runsOn) => onSet({ runsOn })}
-          />
-        ) : null}
+        {runsOnDrawn ? <TaskRunsOnChip runsOn={task.runsOn} /> : null}
       </Inline>
     </div>
   );

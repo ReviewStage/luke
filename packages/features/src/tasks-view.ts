@@ -69,7 +69,6 @@ import {
   taskPrioritySchema,
   taskPullRequestsSchema,
   taskRenameRequestSchema,
-  taskRunsOnRequestSchema,
   taskSchema,
   taskSkillsSchema,
   taskStatusSchema,
@@ -406,28 +405,23 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
-/** Whether a change of where a task stands names its status, its priority, its assignee, where its agents run, or any of them. */
+/** Whether a change of where a task stands names its status, its priority, its assignee, or any of them. */
 function namesAStanding(params: {
   status?: unknown;
   priority?: unknown;
   assigneeId?: unknown;
-  runsOn?: unknown;
 }): boolean {
   return (
-    params.status !== undefined ||
-    params.priority !== undefined ||
-    params.assigneeId !== undefined ||
-    params.runsOn !== undefined
+    params.status !== undefined || params.priority !== undefined || params.assigneeId !== undefined
   );
 }
 
-/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), where its agents run, or any of them, as the window asks it. */
+/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), or any of them, as the window asks it. */
 export const tasksSetStandingParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
-  runsOn: EffectSchema.optionalKey(taskRunsOnRequestSchema),
 }).check(EffectSchema.makeFilter(namesAStanding));
 
 export type TasksSetStandingParams = typeof tasksSetStandingParamsSchema.Type;
