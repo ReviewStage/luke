@@ -18,6 +18,7 @@ import {
   taskInboxItems,
   taskInboxStamps,
 } from "../../inbox/inbox-store.js";
+import { NO_TOPICS } from "../../sync/watch.js";
 import { CODER } from "./bounds.js";
 
 /**
@@ -78,7 +79,7 @@ function heldUntilMoved(
   after: string,
   poll: Duration.Duration,
 ): InboxStoreEffect<void> {
-  return heldOpen(stamps, after, poll, CODER.MESSAGES_HOLD);
+  return heldOpen(stamps, after, NO_TOPICS, poll, CODER.MESSAGES_HOLD);
 }
 
 /** The newest run of each of the account's own automations that failed to start in the window, as its owner is told of it. */
