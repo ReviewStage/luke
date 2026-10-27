@@ -1,4 +1,8 @@
-import { CODING_AGENT_MACHINE, macOnline } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_MACHINE,
+  DEVICE_STANDING,
+  type DeviceStanding,
+} from "@luke/features/coding-agent-wire";
 import { DEVICE_KIND, DEVICE_SETUP, type DeviceKind } from "@luke/features/device-agent-wire";
 import type { MacOffer } from "@luke/features/models-wire";
 import type { TaskRunsOn, TaskRunsOnRequest } from "@luke/features/task-wire";
@@ -14,6 +18,7 @@ import {
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { Schema } from "effect";
+import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
 import { ExperimentTag } from "../experiment-marks.js";
 import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
@@ -49,6 +54,8 @@ const RUNS_ON_WORDS = {
   CLOUD: "Cloud",
   ONLINE: "Online",
   OFFLINE: "Offline",
+  UNKNOWN: "Can't check status",
+  CHECKING: "Checking",
   GETTING_READY: "Getting ready…",
   SETUP_FAILED: "Couldn't set up",
   REMOVED: "Removed device",
@@ -70,14 +77,23 @@ function DeviceGlyph({ kind }: { kind: DeviceKind | undefined }): React.JSX.Elem
   return kind === DEVICE_KIND.HOST ? <GLYPH.HOST /> : <GLYPH.DESKTOP />;
 }
 
-/** Whether a device offered is online at `now`; one a service before beats said nothing of is, as it listed only those. */
-function offerOnline(device: MacOffer, now: number): boolean {
-  return device.seenAt === undefined || macOnline(device.seenAt, now);
+/** Where a device offered stands now; one a service before beats said nothing of is online, as it listed only those, and one the presence read does not name, though it is the account's own, is gone. */
+function offerStanding(device: MacOffer, book: PresenceBook): DeviceStanding {
+  if (device.seenAt === undefined) return DEVICE_STANDING.ONLINE;
+  return presenceStanding(book, device.deviceId) ?? DEVICE_STANDING.OFFLINE;
 }
 
-/** Why a device offered takes no agent at `now`: offline, or online but still getting ready or not set up; none for one that takes an agent. */
-function offerUnready(device: MacOffer, now: number): string | undefined {
-  if (!offerOnline(device, now)) return RUNS_ON_WORDS.OFFLINE;
+/** What each standing is called. */
+const STANDING_WORDS = {
+  [DEVICE_STANDING.ONLINE]: RUNS_ON_WORDS.ONLINE,
+  [DEVICE_STANDING.OFFLINE]: RUNS_ON_WORDS.OFFLINE,
+  [DEVICE_STANDING.UNKNOWN]: RUNS_ON_WORDS.UNKNOWN,
+  [DEVICE_STANDING.CHECKING]: RUNS_ON_WORDS.CHECKING,
+} as const;
+
+/** Why a device offered takes no agent now: away, or still getting ready or not set up, whatever its standing; none for one that takes an agent, and none for one whose standing cannot be told yet, which is not called away. */
+function offerUnready(device: MacOffer, book: PresenceBook): string | undefined {
+  if (offerStanding(device, book) === DEVICE_STANDING.OFFLINE) return RUNS_ON_WORDS.OFFLINE;
   switch (device.setup) {
     case DEVICE_SETUP.PREPARING:
       return RUNS_ON_WORDS.GETTING_READY;
@@ -88,19 +104,26 @@ function offerUnready(device: MacOffer, now: number): string | undefined {
   }
 }
 
+/** What a device's row says: why it takes no agent, else that it is online, else that its standing cannot be told yet. */
+function offerDetail(device: MacOffer, book: PresenceBook): Pick<MenuRow, "detail" | "disabled"> {
+  const unready = offerUnready(device, book);
+  if (unready !== undefined) return { disabled: unready };
+  const standing = offerStanding(device, book);
+  return { detail: STANDING_WORDS[standing] };
+}
+
 /** Cloud, then each device by name under its kind's glyph, one that takes an agent saying it is online and any other muted, unpicked, saying why. */
-function runsOnRows(devices: readonly MacOffer[], now: number): readonly MenuRow[] {
+function runsOnRows(devices: readonly MacOffer[], book: PresenceBook): readonly MenuRow[] {
   return [
     { id: CLOUD_ROW, label: RUNS_ON_WORDS.CLOUD, icon: <GLYPH.CLOUD /> },
-    ...devices.map((device): MenuRow => {
-      const unready = offerUnready(device, now);
-      return {
+    ...devices.map(
+      (device): MenuRow => ({
         id: device.deviceId,
         label: device.name,
         icon: <DeviceGlyph kind={device.kind} />,
-        ...(unready === undefined ? { detail: RUNS_ON_WORDS.ONLINE } : { disabled: unready }),
-      };
-    }),
+        ...offerDetail(device, book),
+      }),
+    ),
   ];
 }
 
@@ -120,10 +143,14 @@ export function useNewTaskRunsOn(
   return [picked, (deviceId: string | undefined) => keep(deviceId ?? CLOUD_ROW)];
 }
 
-/** What New task's chip says of the device picked: its name while it takes an agent, and why it does not otherwise. */
-function offerStateWords(device: MacOffer, now: number): string {
-  const unready = offerUnready(device, now);
-  return unready === undefined ? device.name : `${device.name} · ${unready}`;
+/** What New task's chip says of the device picked: its name while it takes an agent, and why it does not, or that its standing cannot be told, otherwise. */
+function offerStateWords(device: MacOffer, book: PresenceBook): string {
+  const unready = offerUnready(device, book);
+  if (unready !== undefined) return `${device.name} · ${unready}`;
+  const standing = offerStanding(device, book);
+  return standing === DEVICE_STANDING.ONLINE
+    ? device.name
+    : `${device.name} · ${STANDING_WORDS[standing]}`;
 }
 
 /** What a start sends of New task's pick: the device it names, or the cloud. */
@@ -145,15 +172,17 @@ export function NewTaskRunsOnChip({
   disabled: boolean;
   onChoose: (deviceId: string | undefined) => void;
 }): React.JSX.Element {
-  const now = useSecond();
+  // Note that the clock only redraws the chip as a beat ages, since the standing is read off the book's own monotonic clock.
+  useSecond();
+  const book = useDevicePresence(true);
   return (
     <span className="new-task-runs-on inline-flex min-w-0 items-center gap-item-gap">
       <Picker
         label={RUNS_ON_WORDS.LABEL}
         value={device?.deviceId ?? CLOUD_ROW}
-        valueLabel={device === undefined ? RUNS_ON_WORDS.CLOUD : offerStateWords(device, now)}
+        valueLabel={device === undefined ? RUNS_ON_WORDS.CLOUD : offerStateWords(device, book)}
         valueIcon={device === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph kind={device.kind} />}
-        rows={runsOnRows(devices, now)}
+        rows={runsOnRows(devices, book)}
         noMatch={RUNS_ON_WORDS.NO_MATCH}
         align={POPOVER_ALIGN.START}
         width={CHIP_WIDTH.AUTO}
@@ -166,11 +195,14 @@ export function NewTaskRunsOnChip({
 }
 
 /** What the task's control says of where it runs now: Cloud, the device and whether it is online, or a device since removed. */
-function standingWords(runsOn: TaskRunsOn | undefined, now: number): string {
+function standingWords(runsOn: TaskRunsOn | undefined, book: PresenceBook): string {
   if (runsOn === undefined) return RUNS_ON_WORDS.CLOUD;
   if (runsOn.device === undefined) return RUNS_ON_WORDS.REMOVED;
-  const online = macOnline(runsOn.device.seenAt, now);
-  return `${runsOn.device.name} · ${online ? RUNS_ON_WORDS.ONLINE : RUNS_ON_WORDS.OFFLINE}`;
+  const standing = presenceStanding(book, runsOn.deviceId);
+  // Note that a device the read does not name is a teammate's, which the window cannot speak for, so its chip is its name alone.
+  return standing === undefined
+    ? runsOn.device.name
+    : `${runsOn.device.name} · ${STANDING_WORDS[standing]}`;
 }
 
 /**
@@ -179,8 +211,10 @@ function standingWords(runsOn: TaskRunsOn | undefined, now: number): string {
  * and takes no press, and its hover says so.
  */
 export function TaskRunsOnChip({ runsOn }: { runsOn: TaskRunsOn | undefined }): React.JSX.Element {
-  const now = useSecond();
-  const words = standingWords(runsOn, now);
+  // Note that the clock only redraws the chip as a beat ages, since the standing is read off the book's own monotonic clock.
+  useSecond();
+  const book = useDevicePresence(runsOn?.device !== undefined);
+  const words = standingWords(runsOn, book);
   return (
     <Tooltip label={RUNS_ON_WORDS.LOCKED_HINT}>
       <Chip

@@ -131,7 +131,7 @@ export const hostUpgradeNeededDataSchema = EffectSchema.Struct({
 /**
  * One of the member's hosts, as Settings lists it: its name, the epoch
  * milliseconds it was last seen, which a reader holds against its own clock
- * as it holds a Mac's (`macOnline`), the daemon version it last called with, none before its
+ * as a Mac's, which a window does not judge by (`deviceStanding`), the daemon version it last called with, none before its
  * first call that carried one, and whether that version is below the
  * service's floor.
  */
@@ -152,6 +152,22 @@ export const hostsAnswerSchema = EffectSchema.Struct({
 });
 
 export type HostsAnswer = typeof hostsAnswerSchema.Type;
+
+/**
+ * How long ago each of the reader's own devices last beat, in milliseconds
+ * on the service's own clock, and nothing else of it. A window ages this on
+ * its own monotonic clock rather than comparing a timestamp with its wall
+ * clock, so a window whose clock is off judges the same as one whose clock is
+ * right. A device that is gone, has not registered, or is a teammate's is
+ * left out: the window cannot speak for it.
+ */
+export const devicePresenceAnswerSchema = EffectSchema.Struct({
+  devices: EffectSchema.Array(
+    EffectSchema.Struct({ deviceId: wireUuidSchema, ageMs: countedNumber }),
+  ),
+});
+
+export type DevicePresenceAnswer = typeof devicePresenceAnswerSchema.Type;
 
 /** A SHA-256 in lowercase hex. */
 const sha256Hex = EffectSchema.String.check(

@@ -4,12 +4,14 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { DEVICE_KIND } from "@luke/features/device-agent-wire";
 import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskStanding } from "@luke/features/task-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -43,6 +45,10 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
+  // The service says the Studio beat just now.
+  fakeActPort({
+    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [{ deviceId: STUDIO, ageMs: 0 }] }),
+  });
 });
 
 afterEach(() => {
@@ -66,7 +72,7 @@ async function runsOnChip(task: Task, sent: TaskStanding[]): Promise<HTMLButtonE
     ),
   );
   await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    for (let tick = 0; tick < 20; tick += 1) await new Promise((done) => setTimeout(done, 0));
   });
   const found = [...host.querySelectorAll("button")].find((button) =>
     button.getAttribute("aria-label")?.startsWith("Runs on"),

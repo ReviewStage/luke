@@ -193,6 +193,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
   /** The account's hosts, as Settings lists them, read from the service now. */
   HOSTS_LIST: "hosts.list",
+  /** How long ago the account's own devices last beat, read from the service now; the ages, or why not. */
+  HOSTS_PRESENCE: "hosts.presence",
   /** One of the account's hosts removed; done, or why not. */
   HOSTS_REMOVE: "hosts.remove",
   /** An install token kept by its SHA-256 alone, the token itself staying in the window that minted it; its id and expiry, or why not. */

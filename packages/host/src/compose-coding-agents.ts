@@ -59,6 +59,7 @@ import {
   codingAgentTranscriptKeySchema,
   codingAgentTranscriptOlderParamsSchema,
   codingAgentWorkspaceListParamsSchema,
+  type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
   type GitHubTokenAnswerView,
@@ -154,6 +155,7 @@ export type CodingAgentClient = Pick<
   | "readDefault"
   | "writeDefault"
   | "hosts"
+  | "devicePresence"
   | "removeHost"
   | "keepHostInstallToken"
   | "revokeHostInstallToken"
@@ -427,6 +429,10 @@ function composed(
       }),
     [GATEWAY_METHOD.HOSTS_LIST]: () =>
       Effect.map(asked(client.hosts()), (answer) => carried<HostsAnswerView>(answer)),
+    [GATEWAY_METHOD.HOSTS_PRESENCE]: () =>
+      Effect.map(asked(client.devicePresence()), (answer) =>
+        carried<DevicePresenceAnswerView>(answer),
+      ),
     [GATEWAY_METHOD.HOSTS_REMOVE]: (params) =>
       Effect.gen(function* () {
         const { id } = yield* readParams(hostIdParamsSchema, params, "a remove names a host");

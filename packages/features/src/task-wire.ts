@@ -462,7 +462,8 @@ export type TaskOrigin = typeof taskOriginSchema.Type;
  * device: which one by its id, whose it is, since only that member's agents
  * run on it and a teammate's run in the cloud, and the name it registered
  * with, what kind of device it is, and the epoch milliseconds it last beat,
- * which a reader holds against its own clock (`macOnline`). The device and
+ * which a window does not judge by, since its own clock may differ from the service's: it reads the beats
+ * from `hosts.presence` (`deviceStanding`). The device and
  * its owner are absent once the device's row is gone, where a start on the
  * task is refused until it is changed.
  */

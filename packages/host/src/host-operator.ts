@@ -147,8 +147,10 @@ import {
   codingAgentReviewOptionsAnswerViewSchema,
   codingAgentTranscriptChangedSchema,
   codingAgentTranscriptOlderAnswerSchema,
+  type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
+  devicePresenceAnswerViewSchema,
   dictationTranscribeAnswerViewSchema,
   type GitHubTokenAnswerView,
   type GitHubTokenSaveParams,
@@ -731,6 +733,7 @@ export interface HostOperator {
   codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
   /** The account's hosts, as Settings lists them; or why there is no list. */
   hostsList(): Effect.Effect<HostsAnswerView>;
+  hostsPresence(): Effect.Effect<DevicePresenceAnswerView>;
   /** One of the account's hosts removed; done, or why not. */
   hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
   /** An install token kept by its SHA-256 alone; its id and expiry, or why not. */
@@ -1901,6 +1904,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.HOSTS_LIST),
         answerOf(hostsAnswerViewSchema, CODING_AGENT_UNANSWERED),
+      ),
+    hostsPresence: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_PRESENCE),
+        answerOf(devicePresenceAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     hostsRemove: (id) =>
       Effect.map(

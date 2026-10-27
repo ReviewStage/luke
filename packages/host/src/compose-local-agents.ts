@@ -3,6 +3,7 @@ import type {
   DeviceAgentDevice,
   HostedDeviceAgentClient,
 } from "@luke/features";
+import { DEVICE_BEAT } from "@luke/features/coding-agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ISOLATION,
@@ -134,8 +135,8 @@ import type { RunMode } from "./run-mode.js";
 
 /** How long the follow rests while the gate is shut, and how often an open gate is read again. */
 const IDLE = Duration.seconds(5);
-/** How often a device following its agents beats: a third of the service's forty-five-second presence window. */
-const BEAT_EVERY = Duration.seconds(15);
+/** How often a device following its agents beats, which the service's and the window's presence reads are derived from (`DEVICE_BEAT`). */
+const BEAT_EVERY = Duration.millis(DEVICE_BEAT.EVERY_MS);
 /** How long a discard waits on the platform's check of the worktree before it keeps the folder. */
 const UNSAVED_CHECK = Duration.seconds(30);
 /** Why a folder is kept where its check could not say what it holds. */

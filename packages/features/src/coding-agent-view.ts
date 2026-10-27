@@ -36,6 +36,7 @@ import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
+  devicePresenceAnswerSchema,
   hostDoneAnswerSchema,
   hostIdRequestSchema,
   hostInstallTokenAnswerSchema,
@@ -188,6 +189,14 @@ export type CodingAgentDefaultAnswer = typeof codingAgentDefaultAnswerViewSchema
 export const hostsAnswerViewSchema = EffectSchema.Union([hostsAnswerSchema, failed]);
 
 export type HostsAnswerView = typeof hostsAnswerViewSchema.Type;
+
+/** How long ago the reader's devices last beat, as the window hears it read, or why not. */
+export const devicePresenceAnswerViewSchema = EffectSchema.Union([
+  devicePresenceAnswerSchema,
+  failed,
+]);
+
+export type DevicePresenceAnswerView = typeof devicePresenceAnswerViewSchema.Type;
 
 /** An install token kept by its hash, as the window hears it: its id, expiry, and the install script's address, or why it was not kept. */
 export const hostInstallTokenAnswerViewSchema = EffectSchema.Union([

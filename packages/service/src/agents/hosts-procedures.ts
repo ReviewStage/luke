@@ -17,6 +17,7 @@
 
 import { runningTurnIds, settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import { accountExperimentOn } from "@luke/database/models/account-store";
+import { devicesSeenSince } from "@luke/database/models/device-store";
 import {
   hostAgentConversations,
   hostsOf,
@@ -111,6 +112,18 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
           upgradeNeeded: row.version === null || !hostVersionMeets(row.version, HOST_VERSION.FLOOR),
         })),
         installScriptUrl: installScriptUrlOf(context.request),
+      };
+    }),
+    presence: hosts.presence.effect(function* ({ context }) {
+      yield* experimentOn(context.userId);
+      const owned = yield* hostedStoreOrUnavailable(devicesSeenSince(context.userId, new Date(0)));
+      const now = yield* Clock.currentTimeMillis;
+      return {
+        devices: owned.map((row) => ({
+          deviceId: row.id,
+          // Note that the age is taken on this clock, which wrote the beat, so a reader's clock never enters it.
+          ageMs: Math.max(0, now - row.lastSeenAt.getTime()),
+        })),
       };
     }),
     remove: hosts.remove.effect(function* ({ context, input }) {
