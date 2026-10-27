@@ -2,7 +2,7 @@
  * failure-note.test.ts -- a failure's line is one alert saying its words and,
  * where it is given a press, Retry, whose press tries again, then a second
  * act of the caller's where one is given; with none it says its words alone;
- * its mark says nothing to a reader.
+ * its mark says nothing to a reader; and one that is history is no alert.
  */
 
 // @vitest-environment jsdom
@@ -10,7 +10,7 @@
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { FailureNote } from "../../index.js";
+import { FAILURE_NOTE_TIME, FailureNote } from "../../index.js";
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -117,4 +117,16 @@ test("a failure's second act stands after Retry in the same alert, and works alo
 
   const alone = mountAlert(createElement(FailureNote, { also: discard, children: WORDS }));
   expect(alone.textContent).toBe(`${WORDS}Discard`);
+});
+
+test("a failure that is history says its words but is no alert", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(createElement(FailureNote, { time: FAILURE_NOTE_TIME.PAST, children: WORDS })),
+  );
+
+  expect(container.textContent).toBe(WORDS);
+  expect(container.querySelector('[role="alert"]')).toBeNull();
 });

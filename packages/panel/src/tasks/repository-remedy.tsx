@@ -44,6 +44,11 @@ const RepositoryRemedyContext = createContext<RepositoryRemedyDoors>(NO_DOORS);
 /** Hands the window's doors to everything under it. */
 export const RepositoryRemedyProvider = RepositoryRemedyContext.Provider;
 
+/** The window's door to Settings › Workspace at its GitHub, for a task's workspace. */
+export function useOpenWorkspaceGitHub(): (taskId: string) => void {
+  return useContext(RepositoryRemedyContext).openWorkspaceGitHub;
+}
+
 /**
  * The press that mends a repository out of reach, by the failure's reason;
  * none for a failure whose remedy is the surface's own or that has none.

@@ -9,6 +9,7 @@ import {
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestWriteAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
@@ -41,7 +42,6 @@ import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
-  type PullRequestWriteAnswer,
   REACTION,
   REVIEW_COMMENT_MODE,
   REVIEW_EVENT,
@@ -90,6 +90,7 @@ import { codingAgentsControl } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
+import { RepositoryRemedyProvider } from "./repository-remedy.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { type ThreadReveal, ThreadRevealProvider } from "./thread-reveal.js";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request.js";
@@ -285,7 +286,9 @@ beforeAll(async () => {
 /** Every change to the pull request the tab asked for, by agent, in order. */
 let changes: (readonly [string, PullRequestActionRequest])[] = [];
 /** How the service answers the next change asked for. */
-let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+let changeAnswer: CodingAgentPullRequestWriteAnswerView = {
+  outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+};
 /** What the service waits on before it answers a change, where a test holds it; none answers at once. */
 let changeHeld: Promise<void> | undefined;
 /** The number of the pull request each change named, none where it was the agent's own. */
@@ -2398,6 +2401,40 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
   );
   assert.ok(pillPress(merged) === undefined, "a merged pull request's pill is no press");
   assert.equal(standing(merged), "Merged");
+});
+
+test("a change refused for a repository out of the workspace's reach says where access is given, and Open Settings opens the GitHub of the agent's task's workspace", async () => {
+  changeAnswer = { failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
+  const opened: string[] = [];
+  const tab = await drawn(
+    createElement(RepositoryRemedyProvider, {
+      value: {
+        openWorkspaceGitHub: (taskId) => opened.push(taskId),
+        openGitHub: () => undefined,
+        chooseRepository: () => undefined,
+        moveTask: () => Promise.resolve(false),
+      },
+      children: createElement(Switching, {
+        control: controlAnswering(),
+        first: PULL_REQUEST_VIEW.CONVERSATION,
+      }),
+    }),
+  );
+
+  await pressAction(tab, "Convert to draft");
+
+  const note =
+    tab.querySelector<HTMLElement>(".pull-request-write-note") ??
+    assert.fail("the tab says why the change was not made");
+  assert.match(
+    note.textContent ?? "",
+    /Luke cannot reach this task's repository on GitHub\. Choose which repositories Luke can see\./u,
+  );
+  const open =
+    [...note.querySelectorAll("button")].find((button) => button.textContent === "Open Settings") ??
+    assert.fail("the line offers Settings, where access is given");
+  act(() => open.click());
+  assert.deepEqual(opened, [AGENT.planId]);
 });
 
 test("a change GitHub refused says so in GitHub's own words until dismissed, and the pull request is read again in case it moved", async () => {
