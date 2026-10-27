@@ -66,7 +66,11 @@ const TEXT_PARTS_PATH = `$[*] ? (@.type == "${UI_PART_TYPE.TEXT}")`;
  * Note that the turn's id is cast to text to meet the journal's client id,
  * so the read is the unique `(conversation_id, client_id)` index's point
  * lookup, and that the cast and every function here are immutable, as a
- * live statement must hold to.
+ * live statement must hold to. Note too that it is a scalar subquery, which
+ * that unique index holds to one row, rather than an `exists`, because
+ * Postgres may plan an `exists` in a select list as a hashed subplan, which
+ * reads every message of every conversation through the JSON functions
+ * once per call instead of the operator's one row.
  */
 export function quietTurnOf(
   kind: SQLWrapper,
@@ -74,7 +78,7 @@ export function quietTurnOf(
   latest: LatestTurn,
 ): SQL<boolean> {
   const journal = queryBuilder
-    .select({ one: sql`1` })
+    .select({ quiet: sql<boolean>`true` })
     .from(messages)
     .where(
       and(
@@ -85,7 +89,7 @@ export function quietTurnOf(
         sql`jsonb_array_length(jsonb_path_query_array(${messages.parts}, ${TEXT_PARTS_PATH}::jsonpath)) = 1`,
       ),
     );
-  return sql<boolean>`(${kind} = ${CODING_AGENT_KIND.OPERATOR} and exists (${journal}))`;
+  return sql<boolean>`(${kind} = ${CODING_AGENT_KIND.OPERATOR} and coalesce(${journal}, false))`;
 }
 
 /** Whether the newest turn failed because its session ended for good, which leaves every line awaiting nothing; null where no turn stands. */
