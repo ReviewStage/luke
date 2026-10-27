@@ -18,7 +18,6 @@ import {
   TaskStatusMark as TaskStatusGlyph,
   TIME_LOOK,
   Time,
-  VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -44,7 +43,6 @@ import { useTaskWork } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { WorkspaceRef } from "./workspace-ref.js";
-import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
 
 /**
  * task-card.tsx -- a sidebar task's agents at a glance: the one icon at its row's end, and the card its row hangs while the pointer rests on it.
@@ -94,29 +92,21 @@ export const TASK_MARK_GLYPH =
   "task-mark-glyph inline-block size-luke-12 flex-none text-muted-foreground";
 
 /**
- * The one icon at a task row's end, before its time: the attention mark on
- * a task whose repository belongs to another of the account's workspaces,
- * which its card names (`strandedHome`); else how its agents stand and
- * whether a question waits on the reader (`TaskAgentsMark`).
+ * The one icon at a task row's end, before its time: how its agents stand
+ * and whether a question waits on the reader (`TaskAgentsMark`). Note that
+ * a task whose repository belongs to another of the account's workspaces
+ * wears no mark of its own here, because its card and its banner name that
+ * workspace, and the row's one icon stays how its agents stand.
  */
 export function TaskRowStatus({
   task,
   waiting,
-  stranded,
 }: {
   task: TaskSummary;
   /** How many of the task's questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
-  /** The workspace the task's repository belongs to, where the reader may move it there. */
-  stranded?: Workspace | undefined;
 }): React.JSX.Element | null {
-  if (stranded === undefined) return <TaskAgentsMark agents={task.agents} waiting={waiting} />;
-  return (
-    <span className="task-mark-stranded mr-tight-gap inline-flex">
-      <WorkspaceTile workspace={stranded} size={TILE_SIZE.INLINE} />
-      <VisuallyHidden>{`(repository belongs to ${stranded.name})`}</VisuallyHidden>
-    </span>
-  );
+  return <TaskAgentsMark agents={task.agents} waiting={waiting} />;
 }
 
 /** A repository's line under a card's name, its owner's picture before it, which opens it on GitHub. */
