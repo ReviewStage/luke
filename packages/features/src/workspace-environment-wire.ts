@@ -88,8 +88,11 @@ const RESERVED_ENVIRONMENT_PREFIXES: readonly string[] = [
   "LD_",
 ];
 
+/** A name a shell takes: capital letters, digits, and underscores, not starting with a digit. */
+export const ENVIRONMENT_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/u;
+
 /** Whether a name is one the workspace may set. */
-function environmentNameAllowed(name: string): boolean {
+export function environmentNameAllowed(name: string): boolean {
   return (
     !RESERVED_ENVIRONMENT_NAMES.has(name) &&
     !RESERVED_ENVIRONMENT_PREFIXES.some((prefix) => name.startsWith(prefix))
@@ -98,7 +101,7 @@ function environmentNameAllowed(name: string): boolean {
 
 const workspaceEnvironmentNameSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(WORKSPACE_ENVIRONMENT_BOUNDS.MAX_NAME_CHARS),
-  EffectSchema.isPattern(/^[A-Z_][A-Z0-9_]*$/u),
+  EffectSchema.isPattern(ENVIRONMENT_NAME_PATTERN),
   EffectSchema.makeFilter(environmentNameAllowed),
 );
 
@@ -164,8 +167,12 @@ export const workspaceEnvironmentSaveRequestSchema = EffectSchema.Struct({
   ),
 );
 
+export type WorkspaceEnvironmentSaveRequest = typeof workspaceEnvironmentSaveRequestSchema.Type;
+
 /** One variable or secret removed by an owner or admin (POST); removing a name the workspace does not hold moves nothing. */
 export const workspaceEnvironmentRemoveRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   name: EffectSchema.String,
 });
+
+export type WorkspaceEnvironmentRemoveRequest = typeof workspaceEnvironmentRemoveRequestSchema.Type;

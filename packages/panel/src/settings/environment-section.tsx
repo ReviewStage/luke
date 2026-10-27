@@ -1,0 +1,480 @@
+import { dayText } from "@luke/features/time-format";
+import { readingWords } from "@luke/features/words";
+import {
+  ENVIRONMENT_NAME_PATTERN,
+  environmentNameAllowed,
+  WORKSPACE_ENVIRONMENT_BOUNDS,
+  WORKSPACE_ENVIRONMENT_KIND,
+  WORKSPACE_ENVIRONMENT_REJECTION,
+  type WorkspaceEnvironmentEntry,
+  type WorkspaceEnvironmentKind,
+} from "@luke/features/workspace-environment-wire";
+import { managesWorkspace } from "@luke/features/workspace-role";
+import type { Workspace } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { SETTINGS_SECTION } from "@luke/settings/settings-views";
+import {
+  BUTTON_VARIANT,
+  Button,
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
+  CONFIRM_LOSS,
+  ConfirmDialog,
+  DIALOG_SIZE,
+  Dialog,
+  ErrorState,
+  FormField,
+  GAP,
+  PencilIcon,
+  PlusIcon,
+  SETTINGS_ROW_STATE,
+  SETTINGS_SKELETON_CONTROL,
+  SettingsFacts,
+  SettingsLine,
+  SettingsRow,
+  type SettingsRowSkeletonShape,
+  SettingsRowStateLine,
+  SettingsRowsSkeleton,
+  SettingsSection,
+  Stack,
+  TEXT_ELEMENT,
+  TEXT_FIELD_AUTO_COMPLETE,
+  TEXT_FIELD_FONT,
+  TEXT_FONT,
+  TEXT_VARIANT,
+  Text,
+  TextArea,
+  TextField,
+  TrashIcon,
+  useConfirmDialog,
+} from "@luke/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useAct } from "../act.js";
+import { MenuRow } from "./menu-row.js";
+
+/**
+ * environment-section.tsx -- Settings › Workspace › Environment: the variables and secrets every coding agent of the workspace runs its commands with.
+ *
+ * One row per name: a variable with its value, a secret by its name alone,
+ * as GitHub shows one. An owner or admin adds one with Add variable, and
+ * edits or removes one behind its row's ⋯; a member reads the list. Adding
+ * and editing open one dialog, as Add skill does; editing a secret starts
+ * from an empty value, since the page never holds one. A name is typed in
+ * capitals as it is entered, and the refusals a member could not guess (a
+ * reserved name, a secret too short to mask) are said under the value before
+ * anything is sent. The section and the dialog are kept out of the screen
+ * recording.
+ */
+
+const PAGE_LINE = {
+  INTRO:
+    "Coding agents in this workspace run every command with these. Secrets are hidden in command output.",
+  SECRET_REACH:
+    "Secrets reach agents in cloud sandboxes only. Agents on This Mac or a Linux host get the variables alone.",
+  MEMBER: "Only an owner or admin can change them.",
+  EMPTY: "No variables or secrets yet.",
+  FAILED: "The workspace's environment could not be read.",
+  SAVE_FAILED: "It could not be saved. Try again.",
+  REMOVE_FAILED: "It could not be removed. Try again.",
+  TOO_MANY: `This workspace already holds ${WORKSPACE_ENVIRONMENT_BOUNDS.MAX_ENTRIES} variables and secrets. Remove one first.`,
+  BAD_NAME: "Use capital letters, digits, and underscores, not starting with a digit.",
+  NO_VALUE: "Enter a value.",
+  SHORT_SECRET: `A secret must be at least ${WORKSPACE_ENVIRONMENT_BOUNDS.MIN_SECRET_CHARS} characters, so it can be hidden in command output.`,
+  UNREADABLE: "Can no longer be read. Save it again.",
+} as const;
+
+/** The rows that stand while the environment is read: each a name over what it is and when it was saved, and its ⋯. */
+const ENTRIES_SKELETON: readonly SettingsRowSkeletonShape[] = Array.from({ length: 2 }, () => ({
+  described: true,
+  controls: [SETTINGS_SKELETON_CONTROL.MORE],
+}));
+
+/** The class PostHog's recorder leaves out of a recording, element and children alike. */
+const NO_CAPTURE = "ph-no-capture";
+
+const KIND_ITEMS = [
+  { value: WORKSPACE_ENVIRONMENT_KIND.VARIABLE, label: "Variable" },
+  { value: WORKSPACE_ENVIRONMENT_KIND.SECRET, label: "Secret" },
+] as const;
+
+/** What a save is, as the dialog hands it up. */
+interface EnvironmentSave {
+  readonly name: string;
+  readonly kind: WorkspaceEnvironmentKind;
+  readonly value: string;
+}
+
+/** Which dialog is open: a new entry's, or the one an entry is edited in. */
+type EnvironmentDialogFor =
+  | { readonly adding: true }
+  | { readonly adding: false; readonly entry: WorkspaceEnvironmentEntry };
+
+/**
+ * Why a typed name or value would be refused, or nothing where the service
+ * would take them. Note that the lengths are held by the fields themselves,
+ * and a NUL, which no one types, is left to the service to refuse.
+ */
+function refusalOf(
+  name: string,
+  kind: WorkspaceEnvironmentKind,
+  value: string,
+): string | undefined {
+  if (!ENVIRONMENT_NAME_PATTERN.test(name)) return PAGE_LINE.BAD_NAME;
+  if (!environmentNameAllowed(name))
+    return `${name} is set by the sandbox, Luke, or the agent's harness. Choose another name.`;
+  if (value === "") return PAGE_LINE.NO_VALUE;
+  const secret = kind === WORKSPACE_ENVIRONMENT_KIND.SECRET;
+  if (secret && value.length < WORKSPACE_ENVIRONMENT_BOUNDS.MIN_SECRET_CHARS) {
+    return PAGE_LINE.SHORT_SECRET;
+  }
+  return undefined;
+}
+
+/** Words set in the code face, inside the line they stand in. */
+function Code({ children }: { children: string }): React.JSX.Element {
+  return (
+    <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
+      {children}
+    </Text>
+  );
+}
+
+/** What one entry's row says under its name: a variable's value or that it is a secret, when it was saved, and whether it can still be read. */
+function EntryFacts({ entry }: { entry: WorkspaceEnvironmentEntry }): React.JSX.Element {
+  return (
+    <SettingsFacts gap={GAP.TIGHT}>
+      {entry.kind === WORKSPACE_ENVIRONMENT_KIND.SECRET ? "Secret · " : null}
+      {entry.value === undefined ? null : (
+        <>
+          <Code>{entry.value}</Code>
+          {" · "}
+        </>
+      )}
+      {`Saved ${dayText(entry.updatedAt)}`}
+      {entry.readable ? null : (
+        <>
+          {" · "}
+          <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION} role="alert">
+            {PAGE_LINE.UNREADABLE}
+          </SettingsRowStateLine>
+        </>
+      )}
+    </SettingsFacts>
+  );
+}
+
+/** The dialog a variable or secret is added or edited in: the name (a new one's alone), its kind, and its value. */
+function EnvironmentDialog({
+  open,
+  onSave,
+  onClose,
+}: {
+  open: EnvironmentDialogFor;
+  /** Saves it, answering why nothing was kept where it was not; the dialog closes once it is kept. */
+  onSave: (save: EnvironmentSave) => Promise<string | undefined>;
+  onClose: () => void;
+}): React.JSX.Element {
+  const editing = open.adding ? undefined : open.entry;
+  const [name, setName] = useState(editing?.name ?? "");
+  const [kind, setKind] = useState<WorkspaceEnvironmentKind>(
+    editing?.kind ?? WORKSPACE_ENVIRONMENT_KIND.VARIABLE,
+  );
+  // A secret's value is never held, so editing one starts from nothing.
+  const [value, setValue] = useState(
+    editing?.kind === WORKSPACE_ENVIRONMENT_KIND.VARIABLE ? (editing.value ?? "") : "",
+  );
+  const [saving, setSaving] = useState(false);
+  const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Where typing starts as the dialog opens: a new entry's name, or an edited one's value. The
+  // dialog places it itself, after it focuses its card, so a field's own autofocus would be lost.
+  const nameField = useRef<HTMLInputElement | null>(null);
+  const valueField = useRef<HTMLTextAreaElement | null>(null);
+
+  const save = () => {
+    const typed = name.trim();
+    const refused = refusalOf(typed, kind, value);
+    setRefusal(refused);
+    if (refused !== undefined || saving) return;
+    setSaving(true);
+    void onSave({ name: typed, kind, value }).then((answered) => {
+      setSaving(false);
+      setRefusal(answered);
+    });
+  };
+
+  return (
+    <Dialog
+      open
+      title={editing === undefined ? "Add variable" : `Edit ${editing.name}`}
+      size={DIALOG_SIZE.WIDE}
+      busy={saving}
+      initialFocus={editing === undefined ? nameField : valueField}
+      // A dismissal while the save is on its way is ignored, so its refusal has a dialog to stand in.
+      onDismiss={() => {
+        if (!saving) onClose();
+      }}
+      actions={
+        <>
+          <Button variant={BUTTON_VARIANT.QUIET} disabled={saving} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant={BUTTON_VARIANT.PRIMARY} busy={saving} busyLabel="Saving" onClick={save}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <div className={NO_CAPTURE}>
+        <Stack gap={GAP.FIELD}>
+          {/* An edited entry's name is the dialog's title, so only a new one is typed. */}
+          {editing === undefined ? (
+            <FormField label="Name">
+              {(field) => (
+                <TextField
+                  ref={nameField}
+                  field={field}
+                  placeholder="NAME"
+                  font={TEXT_FIELD_FONT.MONO}
+                  autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+                  spellCheck={false}
+                  maxLength={WORKSPACE_ENVIRONMENT_BOUNDS.MAX_NAME_CHARS}
+                  disabled={saving}
+                  value={name}
+                  onEnter={save}
+                  onChange={(typed) => {
+                    setName(typed.toUpperCase());
+                    setRefusal(undefined);
+                  }}
+                />
+              )}
+            </FormField>
+          ) : null}
+          <FormField label="Kind">
+            {() => (
+              <ChoiceBar
+                label="Kind"
+                items={KIND_ITEMS}
+                value={kind}
+                look={CHOICE_BAR_LOOK.SEGMENTED}
+                disabled={saving}
+                onChange={(chosen: WorkspaceEnvironmentKind) => {
+                  setKind(chosen);
+                  setRefusal(undefined);
+                }}
+              />
+            )}
+          </FormField>
+          <FormField label="Value" error={refusal}>
+            {(field) => (
+              <TextArea
+                ref={valueField}
+                field={field}
+                placeholder="Value"
+                rows={1}
+                grow
+                maxLength={WORKSPACE_ENVIRONMENT_BOUNDS.MAX_VALUE_CHARS}
+                font={TEXT_FIELD_FONT.MONO}
+                spellCheck={false}
+                busy={saving}
+                value={value}
+                onSubmit={save}
+                onChange={(typed) => {
+                  setValue(typed);
+                  setRefusal(undefined);
+                }}
+              />
+            )}
+          </FormField>
+        </Stack>
+      </div>
+    </Dialog>
+  );
+}
+
+/** One entry's row: its name, what it is, and, for an owner or admin, Edit and Remove behind its ⋯. */
+function EnvironmentRow({
+  entry,
+  manages,
+  locked,
+  onEdit,
+  onRemove,
+}: {
+  entry: WorkspaceEnvironmentEntry;
+  manages: boolean;
+  locked: boolean;
+  onEdit: () => void;
+  onRemove: (name: string) => Promise<ActionResult>;
+}): React.JSX.Element {
+  const removal = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
+    onRemove(entry.name),
+  );
+  const actions = manages
+    ? [
+        {
+          label: "Edit",
+          icon: <PencilIcon />,
+          disabled: removal.busy || locked,
+          onSelect: onEdit,
+        },
+        {
+          label: "Remove",
+          icon: <TrashIcon />,
+          danger: true,
+          disabled: removal.busy || locked,
+          onSelect: removal.ask,
+        },
+      ]
+    : [];
+  return (
+    <>
+      <MenuRow
+        thing={entry.name}
+        actions={actions}
+        row={{
+          label: <Code>{entry.name}</Code>,
+          description: <EntryFacts entry={entry} />,
+        }}
+      />
+      <ConfirmDialog
+        open
+        confirm={removal}
+        question={{
+          title: `Remove ${entry.name}?`,
+          body: "Coding agents in this workspace will no longer have it from their next command.",
+          verb: "Remove",
+          running: "Removing…",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
+        }}
+      />
+    </>
+  );
+}
+
+/** The Environment section of one workspace, read as it opens. */
+export function EnvironmentGroup({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const { act } = useAct();
+  const manages = managesWorkspace(workspace);
+  const [entries, setEntries] = useState<readonly WorkspaceEnvironmentEntry[] | undefined>();
+  const [readFailed, setReadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [changing, setChanging] = useState(false);
+  const [dialog, setDialog] = useState<EnvironmentDialogFor | undefined>(undefined);
+
+  useEffect(() => {
+    let live = true;
+    setEntries(undefined);
+    setReadFailed(false);
+    act(ACT_KIND.WORKSPACE_ENVIRONMENT_READ, { workspaceId: workspace.id }).then(
+      (answer) => {
+        if (live) setEntries(answer.entries);
+      },
+      () => {
+        if (live) setReadFailed(true);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [act, workspace.id, attempt]);
+
+  const save = useCallback(
+    (asked: EnvironmentSave): Promise<string | undefined> => {
+      setChanging(true);
+      return act(ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE, {
+        workspaceId: workspace.id,
+        name: asked.name,
+        kind: asked.kind,
+        secretValue: asked.value,
+      })
+        .then(
+          (answer): string | undefined => {
+            setEntries(answer.entries);
+            if (answer.rejected === WORKSPACE_ENVIRONMENT_REJECTION.TOO_MANY) {
+              return PAGE_LINE.TOO_MANY;
+            }
+            setDialog(undefined);
+            return undefined;
+          },
+          () => PAGE_LINE.SAVE_FAILED,
+        )
+        .finally(() => setChanging(false));
+    },
+    [act, workspace.id],
+  );
+
+  const remove = useCallback(
+    (name: string): Promise<ActionResult> => {
+      setChanging(true);
+      return act(ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE, { workspaceId: workspace.id, name })
+        .then(
+          (answer): ActionResult => {
+            setEntries(answer.entries);
+            return { status: ACTION_RESULT_STATUS.ACCEPTED };
+          },
+          (): ActionResult => ({
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: PAGE_LINE.REMOVE_FAILED,
+          }),
+        )
+        .finally(() => setChanging(false));
+    },
+    [act, workspace.id],
+  );
+
+  return (
+    <div className={NO_CAPTURE}>
+      <SettingsSection title="Environment" anchor={SETTINGS_SECTION.ENVIRONMENT}>
+        {manages ? (
+          <SettingsRow
+            label="Variables and secrets"
+            description={`${PAGE_LINE.INTRO} ${PAGE_LINE.SECRET_REACH}`}
+          >
+            {() => (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                icon={<PlusIcon />}
+                disabled={changing}
+                onClick={() => setDialog({ adding: true })}
+              >
+                Add variable
+              </Button>
+            )}
+          </SettingsRow>
+        ) : (
+          <SettingsLine>{`${PAGE_LINE.INTRO} ${PAGE_LINE.SECRET_REACH} ${PAGE_LINE.MEMBER}`}</SettingsLine>
+        )}
+        {entries !== undefined ? (
+          entries.length === 0 ? (
+            <SettingsLine>{PAGE_LINE.EMPTY}</SettingsLine>
+          ) : (
+            entries.map((entry) => (
+              <EnvironmentRow
+                key={entry.name}
+                entry={entry}
+                manages={manages}
+                locked={changing}
+                onEdit={() => setDialog({ adding: false, entry })}
+                onRemove={remove}
+              />
+            ))
+          )
+        ) : readFailed ? (
+          <SettingsLine>
+            <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+              {PAGE_LINE.FAILED}
+            </ErrorState>
+          </SettingsLine>
+        ) : (
+          <SettingsRowsSkeleton
+            label={readingWords("the workspace's environment")}
+            rows={ENTRIES_SKELETON}
+          />
+        )}
+      </SettingsSection>
+      {dialog === undefined ? null : (
+        <EnvironmentDialog open={dialog} onSave={save} onClose={() => setDialog(undefined)} />
+      )}
+    </div>
+  );
+}

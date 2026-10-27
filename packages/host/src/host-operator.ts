@@ -309,6 +309,9 @@ import {
   type TasksView,
   type TasksWorkspaceAnswer,
   type TasksWorkspaceCreateParams,
+  type TasksWorkspaceEnvironmentAnswer,
+  type TasksWorkspaceEnvironmentRemoveParams,
+  type TasksWorkspaceEnvironmentSaveParams,
   type TasksWorkspaceGitHubConnectAnswer,
   type TasksWorkspaceInvitationAnswer,
   type TasksWorkspaceInvitationCancelParams,
@@ -364,6 +367,7 @@ import {
   tasksStartAnswerSchema,
   tasksTreeAnswerSchema,
   tasksWorkspaceAnswerSchema,
+  tasksWorkspaceEnvironmentAnswerSchema,
   tasksWorkspaceGitHubConnectAnswerSchema,
   tasksWorkspaceInvitationAnswerSchema,
   tasksWorkspaceInvitationsAnswerSchema,
@@ -661,6 +665,18 @@ export interface HostOperator {
   workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** The Linear issues a workspace's connection reaches; or why there are none. */
   workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
+  /** A workspace's environment variables and secrets; or why there are none. */
+  workspaceEnvironmentRead(
+    params: TasksWorkspaceParams,
+  ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
+  /** One environment variable or secret saved, the value carried once; the list as it then stands, or why it is unchanged. */
+  workspaceEnvironmentSave(
+    params: TasksWorkspaceEnvironmentSaveParams,
+  ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
+  /** One environment variable or secret removed; the list as it then stands, or why it is unchanged. */
+  workspaceEnvironmentRemove(
+    params: TasksWorkspaceEnvironmentRemoveParams,
+  ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
   /** Whether the deployment holds Luke's Sentry integration, and a workspace's installations of it; or why there is no answer. */
   workspaceSentry(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSentryAnswer>;
   /** A workspace's Sentry install begun; Sentry's install address to open, or why there is none. */
@@ -1733,6 +1749,31 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           installationId: params.installationId,
         }),
         answerOf(tasksWorkspaceSentryAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceEnvironmentRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_READ, {
+          workspaceId: params.workspaceId,
+        }),
+        answerOf(tasksWorkspaceEnvironmentAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceEnvironmentSave: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_SAVE, {
+          workspaceId: params.workspaceId,
+          name: params.name,
+          kind: params.kind,
+          secretValue: params.secretValue,
+        }),
+        answerOf(tasksWorkspaceEnvironmentAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceEnvironmentRemove: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_REMOVE, {
+          workspaceId: params.workspaceId,
+          name: params.name,
+        }),
+        answerOf(tasksWorkspaceEnvironmentAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceMembers: (params) =>
       Effect.map(

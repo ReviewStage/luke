@@ -103,6 +103,7 @@ import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { useCapability } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
+import { EnvironmentGroup } from "./environment-section.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";
 import { WORKSPACE_CONNECTIONS } from "./pages.js";
@@ -1956,6 +1957,7 @@ function ShownWorkspace({
           <Row key={service} workspace={workspace} />
         ))}
       </SettingsSection>
+      <EnvironmentGroup workspace={workspace} />
       {macTerminalOffered ? <MacRepositoriesGroup workspaceId={workspace.id} /> : null}
       <LeaveGroup
         workspace={workspace}

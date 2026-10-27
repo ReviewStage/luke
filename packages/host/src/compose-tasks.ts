@@ -68,6 +68,7 @@ import {
   type TasksTreeAnswer,
   type TasksView,
   type TasksWorkspaceAnswer,
+  type TasksWorkspaceEnvironmentAnswer,
   type TasksWorkspaceGitHubConnectAnswer,
   type TasksWorkspaceInvitationAnswer,
   type TasksWorkspaceInvitationsAnswer,
@@ -112,6 +113,8 @@ import {
   tasksStartRequestSchema,
   tasksTreeParamsSchema,
   tasksWorkspaceCreateParamsSchema,
+  tasksWorkspaceEnvironmentRemoveParamsSchema,
+  tasksWorkspaceEnvironmentSaveParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
   tasksWorkspaceInviteParamsSchema,
   tasksWorkspaceLeaveParamsSchema,
@@ -361,6 +364,9 @@ export type TasksClient = Pick<
     | "linearConnect"
     | "linearDisconnect"
     | "linearIssues"
+    | "environment"
+    | "saveEnvironment"
+    | "removeEnvironment"
     | "sentryInstallations"
     | "sentryInstall"
     | "sentryDisconnect"
@@ -2713,6 +2719,48 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksWorkspaceAnswer>(
           disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
+        );
+      }),
+    // A workspace's environment is answered to the window that asked and held
+    // nowhere, and a save's value passes through once, on its way to the service.
+    [GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_READ]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "reading a workspace's environment names a workspace",
+        );
+        if (!gate()) return carried<TasksWorkspaceEnvironmentAnswer>(WORKSPACE_UNANSWERED);
+        const listed = yield* served(client.workspaces.environment(read.workspaceId));
+        return carried<TasksWorkspaceEnvironmentAnswer>(
+          listed.ok ? listed.answer : { failure: listed.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_SAVE]: (params) =>
+      Effect.gen(function* () {
+        // Note that a refusal's wording is never carried, because it may quote the value.
+        const read = yield* readParams(
+          tasksWorkspaceEnvironmentSaveParamsSchema,
+          params,
+          "saving an environment value names a workspace, a name, a kind, and a value",
+        );
+        if (!gate()) return carried<TasksWorkspaceEnvironmentAnswer>(WORKSPACE_UNANSWERED);
+        const saved = yield* served(client.workspaces.saveEnvironment(read));
+        return carried<TasksWorkspaceEnvironmentAnswer>(
+          saved.ok ? saved.answer : { failure: saved.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_REMOVE]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksWorkspaceEnvironmentRemoveParamsSchema,
+          params,
+          "removing an environment value names a workspace and a name",
+        );
+        if (!gate()) return carried<TasksWorkspaceEnvironmentAnswer>(WORKSPACE_UNANSWERED);
+        const removed = yield* served(client.workspaces.removeEnvironment(read));
+        return carried<TasksWorkspaceEnvironmentAnswer>(
+          removed.ok ? removed.answer : { failure: removed.failure },
         );
       }),
     // The issues are answered to the window that asked and held nowhere: a

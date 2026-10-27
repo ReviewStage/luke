@@ -10,6 +10,8 @@ import {
   tasksGitHubIssuesParamsSchema,
   tasksLinearIssuesParamsSchema,
   tasksWorkspaceCreateParamsSchema,
+  tasksWorkspaceEnvironmentRemoveParamsSchema,
+  tasksWorkspaceEnvironmentSaveParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
   tasksWorkspaceInviteParamsSchema,
   tasksWorkspaceLeaveParamsSchema,
@@ -27,6 +29,7 @@ import {
   tasksWorkspaceTransferParamsSchema,
   workspacePeopleFollowSchema,
 } from "@luke/features/tasks-view";
+import { workspaceEnvironmentAnswerSchema } from "@luke/features/workspace-environment-wire";
 import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
 import {
   formerMemberSchema,
@@ -104,6 +107,21 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksLinearIssuesParamsSchema))
     .output(EffectSchema.flip(EffectSchema.Array(linearIssueSummarySchema))),
+  [WORKSPACE_ACT_KIND.WORKSPACE_ENVIRONMENT_READ]: actProcedure(
+    "Could not read that workspace's environment on this system.",
+  )
+    .input(exactInput(tasksWorkspaceParamsSchema))
+    .output(EffectSchema.flip(workspaceEnvironmentAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE]: actProcedure(
+    "Could not save that environment value on this system.",
+  )
+    .input(exactInput(tasksWorkspaceEnvironmentSaveParamsSchema))
+    .output(EffectSchema.flip(workspaceEnvironmentAnswerSchema)),
+  [WORKSPACE_ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE]: actProcedure(
+    "Could not remove that environment value on this system.",
+  )
+    .input(exactInput(tasksWorkspaceEnvironmentRemoveParamsSchema))
+    .output(EffectSchema.flip(workspaceEnvironmentAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]: actProcedure(
     "Could not read that workspace's Sentry on this system.",
   )
