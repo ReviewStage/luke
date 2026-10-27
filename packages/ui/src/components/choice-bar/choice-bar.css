@@ -23,13 +23,16 @@
   /* Narrower than its options need, a fill bar shows an option other than
      the chosen one by its glyph alone. Note that it does so only while one
      is chosen, because a clearable bar with none chosen would otherwise
-     name none of its options. */
+     name none of its options; and that it marks the name it folds
+     (`--luke-choice-bar-name`), which `choice-bar.tsx` reads to raise the
+     name in the option's hint, since script cannot ask a container query. */
   /* off-scale: 520px, where a fill bar's options stop fitting */
   @container luke-choice-bar (width < 520px) {
     .luke-choice-bar[data-fold="own"]:has(> :is([aria-selected="true"], [aria-checked="true"]))
       .luke-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])
       .luke-choice-bar-icon
       + .luke-choice-bar-label {
+      --luke-choice-bar-name: folded;
       position: absolute;
       overflow: hidden;
       width: 1px;

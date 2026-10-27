@@ -3,8 +3,9 @@
  * fill and its segmented look at both sizes: tabs over panels with glyphs
  * and toned counts, a diff's lines among them, set in to a reading measure
  * or names alone; a value set by a radio group; a clearable one with none
- * chosen; an option and a whole bar that cannot be chosen; and a row too
- * narrow for its options, which names every option while none is chosen.
+ * chosen; an option and a whole bar that cannot be chosen; a row too
+ * narrow for its options, which names every option while none is chosen;
+ * and one folding every option together, each named in its hint.
  */
 
 import {
@@ -307,6 +308,17 @@ function ChoiceBarExample(): React.JSX.Element {
           />
           <HeldClearableViews />
           <HeldEffort start={EFFORT.HIGH} />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="choice-bar-together" title="Fill, folding every option together">
+        <div className="catalog-narrow">
+          <HeldTabs
+            label="Pull request"
+            items={VIEWS}
+            start={VIEW.CONVERSATION}
+            look={CHOICE_BAR_LOOK.FILL}
+            fold={CHOICE_BAR_FOLD.TOGETHER}
+          />
         </div>
       </CatalogSection>
     </>
