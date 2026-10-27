@@ -10,6 +10,7 @@ import {
   CODING_AGENT_KIND,
   CODING_AGENT_PAYER,
   PULL_REQUEST_STATE,
+  type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -769,7 +770,7 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
 
 it.layer(getTestDB())("the coding-agent store's archive of an agent left as it was read", (it) => {
   it.effect(
-    "an agent whose conversation's lines moved on since it was read stands, and one whose did not is archived, once",
+    "an agent whose conversation's lines moved on since it was read stands, as does one whose pull request opened since, and one whose did not is archived, once",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -788,10 +789,25 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
           .where(eq(conversations.id, conversationId));
 
         const stale = yield* archiveUnmovedCodingAgent(starter, agentId, read.seq);
+        // Its pull request reopened after the read, which moves no line of its conversation.
+        const pullRequest = (state: PullRequestState) =>
+          recordCodingAgentPublished(starter, agentId, {
+            number: 7,
+            title: "Expire teammate invitations",
+            url: "https://github.com/acme/relay/pull/7",
+            state,
+            checks: CHECK_SUMMARY.PASSING,
+            additions: 12,
+            deletions: 3,
+            changedFiles: 2,
+          });
+        yield* pullRequest(PULL_REQUEST_STATE.OPEN);
+        const reopened = yield* archiveUnmovedCodingAgent(starter, agentId, read.seq + 1);
+        yield* pullRequest(PULL_REQUEST_STATE.MERGED);
         const current = yield* archiveUnmovedCodingAgent(starter, agentId, read.seq + 1);
         const again = yield* archiveUnmovedCodingAgent(starter, agentId, read.seq + 1);
 
-        assert.deepEqual([stale, current, again], [false, true, false]);
+        assert.deepEqual([stale, reopened, current, again], [false, false, true, false]);
         assert.ok(Option.getOrThrow(yield* readCodingAgent(starter, agentId)).archivedAt !== null);
       }),
   );
