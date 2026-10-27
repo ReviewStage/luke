@@ -9,8 +9,8 @@
  *
  * Node is fetched as its pin names it (`@luke/agent-runner/pins`'
  * `NODE_LINUX_PINS`), refused unless it arrived at its pinned size and
- * digest, and only its pinned members are kept. Claude Code, Codex, and `gh`
- * are not carried: the daemon fetches each at its pin on the box
+ * digest, and only its pinned members are kept. Claude Code and Codex are
+ * not carried: the daemon fetches each at its pin on the box
  * (`@luke/host/linux-host`). The tarball is written with every entry owned by
  * root and stamped at one time, in name order, so its digest is the
  * contents' alone. It lands in `dist/release/`, named as the release names

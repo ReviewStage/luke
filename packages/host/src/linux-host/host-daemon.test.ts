@@ -176,7 +176,6 @@ describe("a host's daemon", () => {
         const platform = linuxPlatform({
           installFolder: "/opt/luke-host",
           node: tools.node,
-          gh: undefined,
           arch: DEVICE_ARCH.X64,
           hostname: "fra-01",
           stateRoot: tools.stateRoot,
@@ -250,7 +249,6 @@ describe("a host's daemon", () => {
         const platform = linuxPlatform({
           installFolder: "/opt/luke-host",
           node: tools.node,
-          gh: undefined,
           arch: DEVICE_ARCH.X64,
           hostname: "fra-01",
           stateRoot: tools.stateRoot,

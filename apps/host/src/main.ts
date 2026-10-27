@@ -13,10 +13,10 @@
  * that did runs the daemon (`@luke/host/linux-host`) until the service is
  * stopped, which stops every runner it started with it, or until Luke
  * refuses the box's secret, the host removed, when it stops them and exits 0,
- * which the service's `Restart=on-failure` leaves stopped. It fetches the `gh`
- * its agents use as it starts (`hostGh`). Every agent runs in a smolvm VM of
- * its own (`linuxPlatform`), with `/dev/kvm` passed through where the box has
- * it, through the `smolvm` on the service's PATH.
+ * which the service's `Restart=on-failure` leaves stopped. Every agent runs
+ * in a smolvm VM of its own (`linuxPlatform`), on the image's own `gh`, with
+ * `/dev/kvm` passed through where the box has it, through the `smolvm` on
+ * the service's PATH.
  *
  * `enroll` is run once as the box is set up: it reads the install token on stdin,
  * where `--token` gives none, prints the one line the script shows, and
@@ -40,7 +40,6 @@ import {
   enrollHostDevice,
   hostArch,
   hostDaemon,
-  hostGh,
   linuxPlatform,
   readHostDevice,
 } from "@luke/host/linux-host";
@@ -108,14 +107,10 @@ const run = Effect.gen(function* () {
     yield* Effect.sleep(UNENROLLED_REST);
     return false;
   }
-  const boxArch = yield* arch;
-  const gh = yield* hostGh(stateRoot, boxArch);
-  if (Option.isNone(gh)) reportToStderr("Luke host: gh could not be had; agents start without it.");
   const platform = linuxPlatform({
     installFolder,
     node: process.execPath,
-    gh: Option.getOrUndefined(gh),
-    arch: boxArch,
+    arch: yield* arch,
     hostname: os.hostname(),
     stateRoot,
     smolvm: SMOLVM,
