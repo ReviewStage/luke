@@ -96,7 +96,13 @@ import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
-import { standChannelPlace, useChannels, useShownChannel } from "./tasks/use-channels.js";
+import {
+  standChannelPlace,
+  useChannelPlace,
+  useChannelStreaming,
+  useChannels,
+  useShownChannel,
+} from "./tasks/use-channels.js";
 import type { MainTab } from "./tasks/use-main-tabs.js";
 import type { HistorySpot } from "./tasks/use-plan-history.js";
 import type { SidePanelTab } from "./tasks/use-side-panel.js";
@@ -395,10 +401,10 @@ function sameShown(one: Place, other: Place): boolean {
     );
   }
   if (one.kind === PLACE_KIND.INBOX && other.kind === PLACE_KIND.INBOX) {
-    // Note that with Channels on no thread open is a step of its own, so opening one is a visit rather than filling in the step.
-    if (one.channelId !== undefined && other.channelId !== undefined) {
-      return one.channelId === other.channelId && sameInboxChoice(one.chosen, other.chosen);
-    }
+    // Note that the Inbox and each channel's stream are steps of their own, so moving between them is a visit rather than filling in the step.
+    if (one.channelId !== other.channelId) return false;
+    // Note that in a channel's stream no thread open is a step of its own, so opening one is a visit rather than filling in the step.
+    if (one.channelId !== undefined) return sameInboxChoice(one.chosen, other.chosen);
     return one.chosen === undefined || other.chosen === undefined
       ? true
       : sameInboxChoice(one.chosen, other.chosen);
@@ -1062,9 +1068,11 @@ export function useWindowHistory(input: {
   // The item chosen is a step of its own wherever it shows: alone in one column, or beside the list where the Inbox splits.
   const inboxChosen = inboxSingle ? inboxAlone : tasks.inboxView.chosen;
   const inboxListed = inboxSingle ? inboxAlone === undefined : undefined;
-  // With Channels on, the Inbox shows a channel's stream, its item shown only while its thread stands open.
+  // With a channel chosen, the Inbox's place shows its stream, its item shown only while its thread stands open; the channel is the step's from the moment it is chosen, before its name is read.
   const shown = useShownChannel(tasks.workspace?.id);
-  const inboxChannel = inboxOpen ? shown?.channel.id : undefined;
+  const streaming = useChannelStreaming();
+  const { channelId: chosenChannel } = useChannelPlace();
+  const inboxChannel = inboxOpen && streaming ? chosenChannel : undefined;
   const inboxShown =
     shown !== undefined && inboxChosen !== undefined && shown.threadId !== inboxChosen.itemId
       ? undefined
