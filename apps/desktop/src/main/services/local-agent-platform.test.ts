@@ -1,8 +1,10 @@
 /**
- * local-agent-platform.test.ts -- what This Mac registers as a device: it takes a discard line and names the check that keeps a worktree holding unsaved work, and runs each agent in a VM started through its launcher on the smolvm it fetched.
+ * local-agent-platform.test.ts -- what This Mac registers as a device: its name, the Computer Name before a generated host name; it takes a discard line and names the check that keeps a worktree holding unsaved work, and runs each agent in a VM started through its launcher on the smolvm it fetched.
  */
 
 import assert from "node:assert/strict";
+import childProcess from "node:child_process";
+import os from "node:os";
 import { DEVICE_CAPABILITY, DEVICE_ISOLATION } from "@luke/features/device-agent-wire";
 import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import { localAgentPlatform } from "./local-agent-platform";
@@ -21,7 +23,25 @@ describe("what This Mac registers", () => {
   });
   afterEach(() => {
     Reflect.deleteProperty(process, "resourcesPath");
+    vi.restoreAllMocks();
   });
+
+  it.each([
+    { computerName: "Charles's MacBook Pro\n", named: "Charles's MacBook Pro" },
+    { computerName: undefined, named: "Mac-1898" },
+  ])(
+    "is named by the Mac's Computer Name, else its host name ($named)",
+    ({ computerName, named }) => {
+      // Note that the host name is one the network generated, which the member never chose.
+      vi.spyOn(os, "hostname").mockReturnValue("Mac-1898.local");
+      vi.spyOn(childProcess, "execFileSync").mockImplementation(() => {
+        if (computerName === undefined) throw new Error("scutil: ComputerName: not set");
+        return computerName;
+      });
+
+      assert.equal(localAgentPlatform({ packaged: true, stateRoot: STATE_ROOT }).deviceName, named);
+    },
+  );
 
   it("takes a discard line, and checks the worktree before one removes it", () => {
     const platform = localAgentPlatform({ packaged: true, stateRoot: STATE_ROOT });
