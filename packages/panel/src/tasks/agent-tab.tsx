@@ -2996,7 +2996,7 @@ function AgentTabBody({
     write: control.onSwitchServers,
     onOpenSettings: control.onOpenIntegrations,
   });
-  const { published, settled: publishedSettled } = useAgentPullRequest({
+  const { published } = useAgentPullRequest({
     agentId: agent.id,
     status: agent.status,
     shown,
@@ -3004,9 +3004,11 @@ function AgentTabBody({
     read: control.readPullRequest,
     known: control.pullRequests.get(agent.id),
   });
-  // Note that the log first draws once what stands around it has landed too: the pull request's dock over the box, and the dividers of calls its lines were said on, so neither moves a line the reader sees.
+  // Note that the log first draws once the dividers of calls its lines were said on have landed too, so none moves a line the reader sees,
+  // but never waits on the pull request's dock over the box, because its read asks GitHub and would hold every tab's first draw for a second or more.
+  // Note that nothing counts as landed before the first page, which alone says what calls there are to wait on.
   const surroundsLanded =
-    publishedSettled &&
+    messages.length > 0 &&
     (callsSettled || !messages.some((message) => callOfLine(message) !== undefined));
   // An agent New task just started draws the words it was started on as its
   // first line until its transcript reads one back (`unreadOpeningLine`).

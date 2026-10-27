@@ -144,17 +144,19 @@ function layOut(box: HTMLElement): { readonly writes: number[] } {
   const writes: number[] = [];
   Object.defineProperty(box, "clientHeight", { configurable: true, get: () => 600 });
   Object.defineProperty(box, "scrollHeight", { configurable: true, get: () => 1_000_000 });
+  // Note that a write that moves the box is heard as a scroll, as the browser hears one, whoever wrote it.
   Object.defineProperty(box, "scrollTop", {
     configurable: true,
     get: () => top,
     set: (to: number) => {
       writes.push(to);
+      if (to === top) return;
       top = to;
+      box.dispatchEvent(new Event("scroll"));
     },
   });
   box.scrollTo = ((options: ScrollToOptions) => {
     box.scrollTop = options.top ?? top;
-    box.dispatchEvent(new Event("scroll"));
   }) as typeof box.scrollTo;
   return { writes };
 }
@@ -164,7 +166,6 @@ async function scrollTo(box: HTMLElement, top: number): Promise<void> {
   await act(async () => {
     box.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: top - box.scrollTop }));
     box.scrollTop = top;
-    box.dispatchEvent(new Event("scroll"));
     await settled();
   });
 }
@@ -555,7 +556,7 @@ function handed<T>(): {
   };
 }
 
-test("the log first draws once the agent's pull request is read, so its dock never lands under lines already drawn", async () => {
+test("the log draws while the agent's pull request is still read, and its dock lands over the box once the read answers", async () => {
   const { follower } = following(page(messages(0, 6)));
   const published = handed<{
     repository: string | null;
@@ -578,11 +579,8 @@ test("the log first draws once the agent's pull request is read, so its dock nev
       readPullRequest: published.read,
     }),
   );
-  assert.equal(drawnRows(container).length, 0, "no line is drawn while the pull request is read");
-  assert.ok(
-    container.querySelector(".agent-tab > .agent-log-skeleton-wait > [aria-busy]"),
-    "the tab stands as loading",
-  );
+  assert.ok(drawnRows(container).length > 0, "the lines are drawn while the pull request is read");
+  assert.equal(container.querySelector(".agent-published-dock"), null, "with no dock yet");
 
   await published.hand({
     repository: "acme/app",
@@ -598,8 +596,7 @@ test("the log first draws once the agent's pull request is read, so its dock nev
       changedFiles: 1,
     },
   });
-  assert.ok(drawnRows(container).length > 0, "the lines are drawn");
-  assert.ok(container.querySelector(".agent-published-dock"), "with the dock already over the box");
+  assert.ok(container.querySelector(".agent-published-dock"), "the dock lands over the box");
 });
 
 test("the log first draws once the calls its lines were said on are read, so no call's divider lands between rows already drawn", async () => {
