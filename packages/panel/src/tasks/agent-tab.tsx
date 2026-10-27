@@ -1577,8 +1577,6 @@ function AgentEndLine({
   keyProvider: ModelProvider | undefined;
   onOpenApiKeys: (() => void) | undefined;
 }): React.JSX.Element {
-  // Note that a failure is said here as a stop is, only as it lands, since its note is history and no alert, so a transcript scrolled back over it says nothing.
-  useAnnounce(ANNOUNCE.POLITE, ended.words);
   // Note that a key refused is mended at its harness's row in Settings, so its line offers that row after the words.
   const remedy =
     endReason === FAILURE_REASON.API_KEY
@@ -2187,6 +2185,8 @@ function AgentTranscriptView({
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   const undelivered = useUndeliveredLines();
+  // Note that the turn's end, a stop or a failure, is said here rather than by its line, because the line mounts with its words and is history, no alert; this view stands across the turn ending, so it says the end as it lands and a transcript opened on one says nothing.
+  useAnnounce(ANNOUNCE.POLITE, ended?.words ?? "");
   // Whether a replay opens the transcript is all its placing reads; the place itself is handed anew on every draw.
   const replayed = replay !== undefined;
   // Read through once for the messages held, so a draw that brings no page reads none of them again.

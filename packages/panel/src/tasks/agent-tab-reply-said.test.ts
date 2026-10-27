@@ -27,8 +27,8 @@ import type { TranscriptFollower } from "./use-agent-transcript.js";
  * agent-tab-reply-said.test.ts -- an agent's reply is read once it is
  * whole: the transcript is no live region, so the chunks it streams in are
  * not heard, and the page that says the turn completed says the reply
- * once, politely, by who sent it and its first sentence. Synthetic
- * transcript throughout.
+ * once, politely, by who sent it and its first sentence; a turn that fails
+ * says its end line once as it lands. Synthetic transcript throughout.
  */
 
 declare global {
@@ -116,7 +116,7 @@ async function runningTab(first: CodingAgentMessagesAnswerView, worker = false) 
   const settle = async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   };
-  await act(async () => {
+  const draw = (agent: CodingAgentSummary) =>
     root?.render(
       onRegistry(
         registry,
@@ -132,7 +132,7 @@ async function runningTab(first: CodingAgentMessagesAnswerView, worker = false) 
               onHeld: () => undefined,
             })
           : createElement(AgentTab, {
-              agent: AGENT,
+              agent,
               control,
               shown: true,
               onOpenSubagent: () => undefined,
@@ -141,10 +141,19 @@ async function runningTab(first: CodingAgentMessagesAnswerView, worker = false) 
             }),
       ),
     );
+  await act(async () => {
+    draw(AGENT);
     await settle();
   });
   return {
     container,
+    /** The agent's row as the list next reads it, as its status moves. */
+    async row(agent: CodingAgentSummary) {
+      await act(async () => {
+        draw(agent);
+        await settle();
+      });
+    },
     async answer(next: CodingAgentMessagesAnswerView) {
       await act(async () => {
         hear?.(pushedPage(next));
@@ -188,6 +197,15 @@ test("a reply that streams in three chunks is said once, after the last, by who 
     said,
     "the reply is said once",
   );
+});
+
+test("a turn that fails while the tab is open says its end line once, politely, as it lands", async () => {
+  const tab = await runningTab(page("The retry", CODING_AGENT_STATUS.RUNNING, "1:1"));
+
+  await tab.answer(page("The retry", CODING_AGENT_STATUS.FAILED, "1:2"));
+  await tab.row({ ...AGENT, status: CODING_AGENT_STATUS.FAILED });
+
+  assert.equal(announcedPolitely(), "Failed");
 });
 
 test("a tab opened on a turn already finished says nothing", async () => {
