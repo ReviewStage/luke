@@ -142,28 +142,30 @@ test("a nod drops its notice from main's count the moment it is sent, its thread
   assert.equal(probe.count, 2, "main's word stands once it caught up");
 });
 
-test("the Inbox's number counts the questions main counts less those the window settled: a nod on a notice moves nothing, since no notice counts, and a close on a question drops it at once", () => {
-  const probe: { toDo: number | undefined; settler: InboxSettler | undefined } = {
-    toDo: undefined,
+test("each task counts the questions main counts on it less those the window settled: a nod on a notice moves nothing, since no notice counts, a close on a question drops it at once, and a task main gives no count for counts its open items", () => {
+  const probe: { toDo: ReadonlyMap<string, number>; settler: InboxSettler | undefined } = {
+    toDo: new Map(),
     settler: undefined,
   };
+  const listed = ({ id, agentId, title }: InboxItem, asking: boolean) => ({
+    id,
+    agentId,
+    title,
+    postedAt: 1_000,
+    asking,
+  });
   const waiting: readonly AppInboxTask[] = [
+    { taskId: "plan-billing", items: [listed(ASKED, false), listed(OTHER, true)] },
     {
-      taskId: "plan-billing",
-      items: [
-        {
-          id: ASKED.id,
-          agentId: ASKED.agentId,
-          title: ASKED.title,
-          postedAt: 1_000,
-          asking: false,
-        },
-        { id: OTHER.id, agentId: OTHER.agentId, title: OTHER.title, postedAt: 1_000, asking: true },
-      ],
+      taskId: "plan-older",
+      items: [listed({ ...ASKED, id: "a1b2c3d4-0000-4000-8000-000000000003" }, false)],
     },
   ];
-  // Main counts the one question, the notice beside it counting nowhere.
-  const holdings = [{ taskId: "plan-billing", items: 2, toDo: 1, updatedAt: 1_000 }];
+  // Main counts the one question, the notice beside it counting nowhere; a service before the count gives none for the older task.
+  const holdings = [
+    { taskId: "plan-billing", items: 2, toDo: 1, updatedAt: 1_000 },
+    { taskId: "plan-older", items: 1, updatedAt: 1_000 },
+  ];
   function Page() {
     const settled = useSettledWaiting(waiting, []);
     probe.toDo = useSettledToDo(holdings, waiting, settled.waiting);
@@ -172,16 +174,29 @@ test("the Inbox's number counts the questions main counts less those the window 
   }
   root = createRoot(document.createElement("div"));
   act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Page))));
-  assert.equal(probe.toDo, 1);
+  assert.deepEqual(
+    [...probe.toDo],
+    [
+      ["plan-billing", 1],
+      ["plan-older", 1],
+    ],
+  );
 
   act(() => {
     probe.settler?.acknowledge(ASKED);
   });
-  assert.equal(probe.toDo, 1, "the notice was never counted");
+  assert.deepEqual(
+    [...probe.toDo],
+    [
+      ["plan-billing", 1],
+      ["plan-older", 1],
+    ],
+    "the notice was never counted",
+  );
   act(() => {
     probe.settler?.close(OTHER);
   });
-  assert.equal(probe.toDo, 0);
+  assert.deepEqual([...probe.toDo], [["plan-older", 1]]);
 });
 
 test("a nod the service refused brings its notice back into main's count and the reads", () => {
