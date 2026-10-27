@@ -34,6 +34,11 @@ const OPEN_PULL_REQUEST: ReadonlySet<string> = new Set([
   PULL_REQUEST_STATE.DRAFT,
 ]);
 
+/** Whether an automation's run started the agent: one standing names it, and a deleted one's run still keeps its name. */
+function automationRun(agent: TasklessAgent): boolean {
+  return agent.automationId !== null || agent.automationName !== undefined;
+}
+
 /** The agents of the list that stand under Tasks, in the list's order: all but an automation's finished runs that hold nothing of the reader's. */
 export function withoutFinishedRuns(
   agents: readonly TasklessAgent[],
@@ -44,7 +49,7 @@ export function withoutFinishedRuns(
   );
   return agents.filter(
     (agent) =>
-      agent.automationId === null ||
+      !automationRun(agent) ||
       agent.status !== CODING_AGENT_STATUS.COMPLETED ||
       agent.id === held.shown ||
       held.unseen(agent.id) ||

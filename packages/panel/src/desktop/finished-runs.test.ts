@@ -65,6 +65,11 @@ describe("an automation's finished runs under Tasks", () => {
     assert.deepEqual(standing(withPullRequest(PULL_REQUEST_STATE.MERGED), held), []);
   });
 
+  it("leaves a finished run of an automation since deleted, which names it still", () => {
+    const orphaned = { ...RUN, automationId: null, automationName: "Copy sweep" };
+    assert.deepEqual(standing(orphaned, NOTHING_HELD), []);
+  });
+
   it.each<[string, TasklessAgent, RunsHeld]>([
     ["still working", { ...RUN, status: CODING_AGENT_STATUS.RUNNING }, NOTHING_HELD],
     ["started by hand", { ...RUN, automationId: null }, NOTHING_HELD],
