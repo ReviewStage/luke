@@ -76,6 +76,7 @@ import {
   linesCount,
   MoreButton,
   moreLabel,
+  OneLine,
   PAGE_FRAME,
   PaneBar,
   ProviderMark,
@@ -613,9 +614,10 @@ function Section({
       truncate
       className="pull-request-heading mx-0 mt-0 mb-item-gap flex items-baseline gap-item-gap px-row-inset"
     >
-      {title}
+      {/* Note that the title is cut in a line of its own, since a flex row's bare words are never cut, and the count after it stays whole. */}
+      <OneLine className="flex-initial">{title}</OneLine>
       {count === undefined ? null : (
-        <span className="pull-request-count font-luke-regular text-muted-foreground tabular-nums">
+        <span className="pull-request-count flex-none font-luke-regular text-muted-foreground tabular-nums">
           {count}
         </span>
       )}
