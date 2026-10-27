@@ -1,5 +1,5 @@
 /**
- * markdown-tasks.tsx -- a note's task items a reader can tick: each item's checkbox named by its item's words and placed by its marker's offset, drawn as the shared `Checkbox` in the bullet's gutter.
+ * markdown-tasks.tsx -- a note's task items a reader can tick, and any words' a reader cannot: each item's checkbox named by its item's words and placed by its marker's offset, drawn as the shared `Checkbox` in the bullet's gutter.
  */
 
 import { isWireString } from "@luke/wire";
@@ -11,9 +11,9 @@ import { Checkbox } from "../components/checkbox/checkbox.js";
 /** The class the box a reader can tick stands in, in the bullet's gutter (`prose.css`). */
 const TASK_BOX_CLASS = "luke-markdown-task";
 
-/** A task item's checkbox as drawn: the offset its item starts at in the words, and the item's own words, which name it. */
+/** A task item's checkbox as drawn: the offset its item starts at in the words, where they say it, and the item's own words, which name it. */
 interface TaskItem {
-  readonly at: number;
+  readonly at: number | undefined;
   readonly label: string;
 }
 
@@ -40,19 +40,15 @@ function itemWords(node: ElementContent): string {
  * Gives each task item's checkbox the offset its list item starts at in the
  * words, its marker's, which the tree keeps on the item and not on the box,
  * and the item's words as its name. Note that the nearest item is the box's
- * own, so a nested list's box names its own item rather than the one around it.
+ * own, so a nested list's box names its own item rather than the one around it,
+ * and that a box from HTML has no offset, so it is named but never ticked.
  */
 function placeTasks(parent: Root | Element, item: Element | undefined): void {
   for (const child of parent.children) {
     if (child.type !== "element") continue;
     const own = child.tagName === "li" ? child : item;
     const at = own?.position?.start.offset;
-    if (
-      child.tagName === "input" &&
-      child.properties.type === "checkbox" &&
-      own &&
-      at !== undefined
-    ) {
+    if (child.tagName === "input" && child.properties.type === "checkbox" && own) {
       TASK_ITEMS.set(child, { at, label: own.children.map(itemWords).join("").trim() });
     }
     placeTasks(child, own);
@@ -74,7 +70,7 @@ function TaskBox({
   checked,
   toggle,
 }: {
-  item: TaskItem;
+  item: { readonly at: number; readonly label: string };
   checked: boolean;
   toggle: MarkdownTaskToggler;
 }): React.JSX.Element {
@@ -100,16 +96,38 @@ function TaskBox({
   );
 }
 
+/**
+ * How a note draws a task item's checkbox where its reader cannot tick it: the
+ * shared `Checkbox`, read-only, named by its item's words, in the gutter a box
+ * the reader can tick stands in. Note that a read-only box keeps its words' own
+ * ink, where the browser's disabled box fades its tick past reading.
+ */
+export const readTaskInput: NonNullable<Components["input"]> = ({ node, ...props }) => {
+  const item = node === undefined ? undefined : TASK_ITEMS.get(node);
+  if (props.type !== "checkbox") return <input {...props} />;
+  return (
+    <span className={TASK_BOX_CLASS}>
+      <Checkbox
+        label={item?.label ?? "Task"}
+        checked={props.checked === true}
+        readOnly
+        onChange={() => undefined}
+      />
+    </span>
+  );
+};
+
 /** How a note draws a task item's checkbox where its reader can tick it, asking `toggle` at the press. */
 export function taskInput(toggle: MarkdownTaskToggler): NonNullable<Components["input"]> {
   return ({ node, ...props }) => {
     const item = node === undefined ? undefined : TASK_ITEMS.get(node);
-    return item === undefined ? (
+    const at = item?.at;
+    return item === undefined || at === undefined ? (
       <Checkbox label="Task" checked={props.checked === true} disabled onChange={() => undefined} />
     ) : (
       <TaskBox
         key={String(props.checked === true)}
-        item={item}
+        item={{ at, label: item.label }}
         checked={props.checked === true}
         toggle={toggle}
       />
