@@ -354,7 +354,7 @@ workspaces, each in brief (its task, agent, title, and the account that started
 the agent), and for every task holding an item; it counts in its sidebar and on
 its Dock icon only the open questions waiting on you: those an agent addressed
 to you, else those on a task assigned to you, else those of agents you started
-on a task nobody is assigned. Opening the Inbox reads
+on no task or on a task nobody is assigned. Opening the Inbox reads
 each of those tasks' items whole, the ones you settled included, with what
 each offered and the answer you picked; Luke holds them in memory only, never
 on disk. Deleting the task, or your account, deletes
