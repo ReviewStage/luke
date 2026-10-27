@@ -1720,6 +1720,18 @@ export const AGENT_MESSAGE_TOOL = "message_agent";
 /** How a message another coding agent sent opens, in the line that hands it to the agent it was sent to. */
 export const AGENT_MESSAGE_LEAD = "Message";
 
+/**
+ * How the line naming a teammate opens, which closes what a coding agent is
+ * handed of a message a member other than its starter sent it; the model
+ * reads it alone, and the row keeps the words without it.
+ */
+export const TEAMMATE_MESSAGE_LEAD = "Sent by";
+
+/** A teammate's message's closing line, naming who sent it by their mention link. */
+export function teammateMessageLine(mention: string): string {
+  return `${TEAMMATE_MESSAGE_LEAD} ${mention}, a teammate, not the developer.`;
+}
+
 /** A message's closing line telling the agent how to answer the agent that sent it, by that agent's id. */
 export function agentMessageReplyLine(agentId: string): string {
   return `Reply with ${AGENT_MESSAGE_TOOL}({ agentId: "${agentId}", text }).`;

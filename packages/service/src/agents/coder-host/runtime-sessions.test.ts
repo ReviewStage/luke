@@ -763,6 +763,21 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             }),
             STEER_OUTCOME.SENT,
           );
+          assert.equal(
+            yield* steerCodingAgent(sessions, writer, owner, onEve, {
+              ...line,
+              clientKey: randomUUID(),
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+            }),
+            STEER_OUTCOME.SENT,
+          );
+          // The model reads a teammate's words as theirs, by a closing line linking them, and the starter's as they are.
+          const [fromTeammate, fromOwner] = eve.messages.map((sent) => sent.message);
+          assert.ok(typeof fromTeammate === "string");
+          assert.ok(fromTeammate.startsWith("Also the emails.\n\nSent by [@Test User]("));
+          assert.ok(fromTeammate.includes(teammate));
+          assert.ok(fromTeammate.endsWith(", a teammate, not the developer."));
+          assert.equal(fromOwner, "Also the emails.");
 
           const payer = Option.getOrThrow(
             yield* readCodingAgentRouting(owner, onClaudeCode.id),
