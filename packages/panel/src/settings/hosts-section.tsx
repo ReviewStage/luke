@@ -1,4 +1,5 @@
 import { DEVICE_STANDING } from "@luke/features/coding-agent-wire";
+import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
 import {
   HOST_WIRE,
   type Host,
@@ -46,6 +47,7 @@ import { Base64Url, Hex } from "effect/encoding";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
+import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
 import {
   type PresenceBook,
   presenceAgeMs,
@@ -56,15 +58,17 @@ import { useExperiment } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
- * hosts-section.tsx -- Settings › Agents › Hosts: the member's own Linux servers that run their local agents, and Add hosts, which shows the install command once.
+ * hosts-section.tsx -- Settings › Agents › Machines: the member's own machines that run their local agents, Linux servers and Macs alike, and Add Linux servers, which shows the install command once.
  *
- * A host is a server with nobody signed in at it (`@luke/features/host-wire`),
- * which joins its member's devices by running the install command as root.
- * The list names each of the member's hosts, whether it is online, held
- * against the window's own clock as a Mac's label is (`macOnline`), when it
- * was last seen otherwise, and, where its daemon is below the service's
- * floor, Upgrade needed with the command that upgrades it in place. Remove,
- * behind the row's ⋯, refuses that box at once, after asking.
+ * A machine is any device of the member's enrolled with a secret of its own
+ * (`@luke/features/host-wire`): a Linux server that ran the install command
+ * as root, or a Mac its desktop enrolled. The list names each, what it is by
+ * its platform (`DEVICE_PLATFORM_NAME`), whether it is online, held against
+ * the window's own clock as a Mac's label is (`macOnline`), when it was last
+ * seen otherwise, and, where its host program is below the service's floor,
+ * Upgrade needed with how to upgrade it: a server's command, or a Mac's app
+ * updated. Remove, behind the row's ⋯, refuses that machine at once, after
+ * asking. Adding stays Linux-only and says so, since a Mac joins from its app.
  *
  * Add hosts mints an install token here, in the window, and hands the
  * service its SHA-256 alone, so the token never leaves the window that
@@ -91,20 +95,22 @@ const MINUTE_MS = 60_000;
 const COMMANDS = "ph-no-capture contain-inline-size";
 
 const WORDS = {
-  TITLE: "Hosts",
+  TITLE: "Machines",
   EMPTY:
-    "Run agents on your own Linux servers. They connect out to Luke, so nothing needs opening on them.",
-  ADD: "Add hosts",
-  ADD_DESCRIPTION: "One command adds any number of Linux servers, x64 or arm64, for 24 hours.",
+    "Run agents on your own Linux servers and Macs. They connect out to Luke, so nothing needs opening on them.",
+  ADD: "Add Linux servers",
+  ADD_DESCRIPTION:
+    "One command adds any number of Linux servers, x64 or arm64, for 24 hours. It doesn't install on a Mac.",
   ADDING: "Making a command",
   ADD_FAILED: "Could not make an install command. Try again.",
-  READ_FAILED: "Could not read your hosts.",
-  SIGNED_OUT: "Sign in to see your hosts.",
+  READ_FAILED: "Could not read your machines.",
+  SIGNED_OUT: "Sign in to see your machines.",
   ONLINE: "Online",
   UNKNOWN: "Can't check status",
   CHECKING: "Checking",
   UPGRADE_NEEDED: "Upgrade needed",
   UPGRADE_TITLE: "Run this on the server to upgrade it",
+  MAC_UPGRADE: "Update the Luke app on this Mac to upgrade it.",
   INSTALL_TITLE: "Run this as root on each server",
   LOOP_TITLE: "Or on many servers at once",
   PROMPT_HELP:
@@ -114,7 +120,7 @@ const WORDS = {
   REVOKE: "Revoke this command",
 } as const;
 
-/** The rows that stand while the hosts are read: Add hosts, and a host with its ⋯. */
+/** The rows that stand while the machines are read: Add Linux servers, and a machine with its ⋯. */
 const HOSTS_SKELETON: readonly SettingsRowSkeletonShape[] = [
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] },
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.MORE] },
@@ -155,7 +161,15 @@ function seenWords(host: Host, book: PresenceBook, now: number): string {
   return `${standing === DEVICE_STANDING.OFFLINE ? "Offline" : WORDS.UNKNOWN}${lastSeen}`;
 }
 
-/** One host's row: its name, whether it is online, Upgrade needed with its command, and Remove behind its ⋯. */
+/** What Remove says goes, by the machine's platform: a server is cleaned on the box itself, and a Mac joins again only from its app. */
+const REMOVE_BODY = {
+  [DEVICE_PLATFORM.LINUX]:
+    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To clean the server itself, run sudo luke-host uninstall on it.",
+  [DEVICE_PLATFORM.DARWIN]:
+    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To use it again, turn local agents on in the Luke app on it.",
+} as const satisfies Record<DevicePlatform, string>;
+
+/** One machine's row: its name, what it is and whether it is online, Upgrade needed with how to upgrade it, and Remove behind its ⋯. */
 function HostRow({
   host,
   book,
@@ -170,10 +184,13 @@ function HostRow({
   onRemove: (id: string) => Promise<ActionResult>;
 }): React.JSX.Element {
   const removing = useConfirmDialog({ subject: true, surfaceOpen: true }, () => onRemove(host.id));
+  // Note that a service older than platforms listed only Linux servers.
+  const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
+  const seen = `${DEVICE_PLATFORM_NAME[platform]} · ${seenWords(host, book, now)}`;
   return (
     <>
       <MenuRow
-        thing="Host"
+        thing="Machine"
         actions={[
           {
             label: "Remove",
@@ -189,17 +206,17 @@ function HostRow({
             <Badge tone={STATUS_TONE.ATTENTION}>{WORDS.UPGRADE_NEEDED}</Badge>
           ) : undefined,
           description:
-            host.upgradeNeeded && host.version !== null
-              ? `${seenWords(host, book, now)} · runs ${host.version}`
-              : seenWords(host, book, now),
-          below: host.upgradeNeeded ? (
+            host.upgradeNeeded && host.version !== null ? `${seen} · runs ${host.version}` : seen,
+          below: !host.upgradeNeeded ? undefined : platform === DEVICE_PLATFORM.DARWIN ? (
+            <Text>{WORDS.MAC_UPGRADE}</Text>
+          ) : (
             <CodeCard
               title={WORDS.UPGRADE_TITLE}
               titleIs={CODE_CARD_TITLE.WORDS}
               code={hostUpgradeCommand(installScriptUrl)}
               copy={copyThroughShell}
             />
-          ) : undefined,
+          ),
         }}
       />
       <ConfirmDialog
@@ -207,7 +224,7 @@ function HostRow({
         confirm={removing}
         question={{
           title: `Remove ${host.name}?`,
-          body: "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To clean the server itself, run sudo luke-host uninstall on it.",
+          body: REMOVE_BODY[platform],
           verb: "Remove",
           running: "Removing",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -217,7 +234,7 @@ function HostRow({
   );
 }
 
-/** The dialog Add hosts opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
+/** The dialog Add Linux servers opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
 function AddHostsDialog({
   shown,
   onRevoke,
@@ -282,7 +299,7 @@ function AddHostsDialog({
   );
 }
 
-/** The Hosts group: Add hosts and the member's hosts, read when the page opens, or why they cannot be drawn. */
+/** The Machines group: Add Linux servers and the member's machines, read when the page opens, or why they cannot be drawn. */
 export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element | null {
   const on = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const { act } = useAct();
@@ -443,7 +460,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           </ErrorState>
         </SettingsLine>
       ) : (
-        <SettingsRowsSkeleton label={readingWords("your hosts")} rows={HOSTS_SKELETON} />
+        <SettingsRowsSkeleton label={readingWords("your machines")} rows={HOSTS_SKELETON} />
       )}
     </SettingsSection>
   );

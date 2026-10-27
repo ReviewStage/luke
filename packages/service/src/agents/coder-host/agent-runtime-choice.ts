@@ -386,6 +386,7 @@ export const macOffers = /* @__PURE__ */ Effect.fnUntraced(function* (
     name: device.name,
     providers: MAC_PROVIDERS.filter((provider) => macRunsProvider(device, provider, paid)),
     kind: device.kind,
+    platform: device.platform,
     seenAt: device.lastSeenAt.getTime(),
     ...(device.setup === null ? undefined : { setup: device.setup }),
     ...(device.setupFailure === null ? undefined : { setupFailure: device.setupFailure }),

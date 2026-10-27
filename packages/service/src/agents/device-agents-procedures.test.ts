@@ -40,6 +40,7 @@ const PATH = {
   LINES: "/api/device-agents/lines",
   LINE_CLAIM: "/api/device-agents/lines/claim",
   ENROLL: "/api/device-agents/enroll",
+  ENROLL_OWN: "/api/device-agents/devices/enroll",
   HOSTS: "/api/hosts",
   HOST_REMOVE: "/api/hosts/remove",
 } as const;
@@ -398,6 +399,45 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
           [[OLD_VERSION, true]],
           "one host, which says the version it last called with",
         );
+      }),
+  );
+
+  it.effect(
+    "a desktop enrolls its own Mac on its sign-in, which then calls on its secret, is listed as a Mac, and is removed as any machine; no other account enrolls it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account(true);
+        const other = yield* account(true);
+        const deviceId = randomUUID();
+        yield* statusOf(request(owner, PATH.DEVICES, { body: registered(deviceId) }));
+        const enrollOwn = (bearer: string) =>
+          answerOf(
+            request(bearer, PATH.ENROLL_OWN, { version: HOST_VERSION.FLOOR, body: { deviceId } }),
+          );
+
+        const byOther = yield* enrollOwn(other);
+        const enrolled = yield* enrollOwn(owner);
+        const secret: string = enrolled.body.deviceSecret;
+        const beat = yield* statusOf(hostBeat(secret, deviceId));
+        const listed = yield* answerOf(request(owner, PATH.HOSTS));
+        const removed = yield* statusOf(
+          request(owner, PATH.HOST_REMOVE, { body: { id: deviceId } }),
+        );
+        const beatAfterRemove = yield* statusOf(hostBeat(secret, deviceId));
+
+        assert.equal(byOther.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.equal(enrolled.status, HOSTED_HTTP_STATUS.OK);
+        assert.ok(secret.startsWith(HOST_WIRE.DEVICE_SECRET_PREFIX));
+        assert.equal(beat, HOSTED_HTTP_STATUS.OK, "the Mac calls on its new secret");
+        assert.deepEqual(
+          listed.body.hosts.map((each: { readonly id: string; readonly platform: string }) => [
+            each.id,
+            each.platform,
+          ]),
+          [[deviceId, DEVICE_PLATFORM.DARWIN]],
+        );
+        assert.equal(removed, HOSTED_HTTP_STATUS.OK);
+        assert.equal(beatAfterRemove, HOSTED_HTTP_STATUS.UNAUTHORIZED, "Remove refuses its secret");
       }),
   );
 });

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
+import { DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import type { Host } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -81,9 +82,9 @@ test("Add hosts shows the token in its command and sends the service only the to
   await settle();
 
   const add = [...document.querySelectorAll("button")].find(
-    (each) => each.textContent === "Add hosts",
+    (each) => each.textContent === "Add Linux servers",
   );
-  assert.ok(add !== undefined, "Add hosts is drawn");
+  assert.ok(add !== undefined, "Add Linux servers is drawn");
   await act(async () => add.click());
   await settle();
 
@@ -99,40 +100,55 @@ test("Add hosts shows the token in its command and sends the service only the to
   assert.ok(copied[0]?.includes(`--token ${token}`), "the prompt carries the install command");
 });
 
-it.effect("a server that enrolls while Settings stays open is listed within a minute", () =>
-  Effect.gen(function* () {
-    handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
-    const hosts: Host[] = [];
-    fakeActPort({
-      [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-      [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
-    });
-    const registry = AtomRegistry.make({
-      initialValues: [
-        [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, yield* Clock.Clock))],
-      ],
-    });
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-    roots.push(root);
-    act(() => root.render(onRegistry(registry, createElement(HostsSection, { signedIn: true }))));
-    yield* Effect.promise(settle);
-    assert.ok(!document.body.textContent?.includes("fra-03"), "no server has joined yet");
+it.effect(
+  "a server or a Mac that enrolls while Settings stays open is listed within a minute",
+  () =>
+    Effect.gen(function* () {
+      handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
+      const hosts: Host[] = [];
+      fakeActPort({
+        [ACT_KIND.HOSTS_LIST]: () =>
+          Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
+        [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
+      });
+      const registry = AtomRegistry.make({
+        initialValues: [
+          [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, yield* Clock.Clock))],
+        ],
+      });
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      roots.push(root);
+      act(() => root.render(onRegistry(registry, createElement(HostsSection, { signedIn: true }))));
+      yield* Effect.promise(settle);
+      assert.ok(!document.body.textContent?.includes("fra-03"), "no server has joined yet");
 
-    hosts.push({
-      id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
-      name: "fra-03",
-      seenAt: Date.now(),
-      version: "0.1.0",
-      upgradeNeeded: false,
-    });
-    yield* TestClock.adjust("1 minute");
-    yield* Effect.promise(settle);
-    assert.ok(document.body.textContent?.includes("fra-03"), "the server that joined is listed");
-    // Note that the section lets go of the shared presence on the registry as it unmounts, so it unmounts before the registry goes.
-    act(() => root.unmount());
-    roots.splice(roots.indexOf(root), 1);
-    registry.dispose();
-  }),
+      hosts.push({
+        id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
+        name: "fra-03",
+        seenAt: Date.now(),
+        version: "0.1.0",
+        upgradeNeeded: false,
+      });
+      hosts.push({
+        id: "7a1c9e3b-2f4d-4c6a-8b0e-5d7f9a1c3e52",
+        name: "Studio",
+        platform: DEVICE_PLATFORM.DARWIN,
+        seenAt: Date.now(),
+        version: "0.1.0",
+        upgradeNeeded: false,
+      });
+      yield* TestClock.adjust("1 minute");
+      yield* Effect.promise(settle);
+      assert.ok(document.body.textContent?.includes("fra-03"), "the server that joined is listed");
+      assert.ok(
+        document.body.textContent?.includes("Mac · Offline"),
+        "a Mac its desktop enrolled is listed as a Mac",
+      );
+      // Note that the section lets go of the shared presence on the registry as it unmounts, so it unmounts before the registry goes.
+      act(() => root.unmount());
+      roots.splice(roots.indexOf(root), 1);
+      registry.dispose();
+    }),
 );

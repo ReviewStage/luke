@@ -33,12 +33,13 @@ type DeviceEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 const DeviceKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
-/** One device as Start reads it: its id, the account it is, its name and kind, when it last beat, which harnesses it is signed in to, the Codex it checked, where it has one, and where its setup stands, none once it is ready. */
+/** One device as Start reads it: its id, the account it is, its name, kind, and platform, when it last beat, which harnesses it is signed in to, the Codex it checked, where it has one, and where its setup stands, none once it is ready. */
 const DeviceSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   name: Schema.String,
   kind: Schema.Literals(Object.values(DEVICE_KIND)),
+  platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
   lastSeenAt: Schema.Date,
   signedIn: deviceSignedInSchema,
   codexExecutable: Schema.NullOr(Schema.String),
@@ -179,6 +180,7 @@ const findSeen = SqlSchema.findAll({
           userId: device.userId,
           name: device.name,
           kind: device.kind,
+          platform: device.platform,
           lastSeenAt: device.lastSeenAt,
           signedIn: device.signedIn,
           codexExecutable: device.codexExecutable,
@@ -210,6 +212,7 @@ const findNamed = SqlSchema.findAll({
           userId: device.userId,
           name: device.name,
           kind: device.kind,
+          platform: device.platform,
           lastSeenAt: device.lastSeenAt,
           signedIn: device.signedIn,
           codexExecutable: device.codexExecutable,

@@ -466,9 +466,10 @@ const openMember = Effect.gen(function* () {
   return { userId, taskId: task.id };
 });
 
-/** A host enrolled under the member: its device id and its secret. */
+/** A host enrolled under the member with Local agents on, and registered running its agents in VMs, as a host does once it starts: its device id and its secret. */
 const enrolledHost = (userId: string) =>
   Effect.gen(function* () {
+    yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
     const install = mintHostSecret(HOST_WIRE.INSTALL_TOKEN_PREFIX);
     yield* mintHostInstallToken(userId, install.hash);
     const secret = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
@@ -482,6 +483,13 @@ const enrolledHost = (userId: string) =>
       secretHash: secret.hash,
     });
     assert.ok("userId" in enrolled, "the host was not enrolled");
+    yield* registerDevice(userId, {
+      id: deviceId,
+      name: "rack-1",
+      ...DEVICE_LAYOUT,
+      platform: DEVICE_PLATFORM.LINUX,
+      isolation: DEVICE_ISOLATION.SANDBOX,
+    });
     return { deviceId, secret: secret.secret };
   });
 
@@ -608,7 +616,7 @@ it.layer(getTestDB())("a sandboxed desktop's GitHub token", (it) => {
   );
 
   it.effect(
-    "refuses an agent on a desktop running its agents directly on the Mac, on a host, or another member's, and a member with Local agents off",
+    "refuses an agent on a desktop running its agents directly on the Mac, or another member's, and a member with Local agents off",
     () =>
       Effect.gen(function* () {
         const { ask, desktops } = yield* hostStanding;
@@ -631,11 +639,6 @@ it.layer(getTestDB())("a sandboxed desktop's GitHub token", (it) => {
         const bare = yield* registeredDesktop(member.userId, DEVICE_ISOLATION.BARE);
         assert.deepEqual(
           yield* ask("member-sign-in", yield* agentOnDevice(member, bare)),
-          forbidden,
-        );
-        const host = yield* enrolledHost(member.userId);
-        assert.deepEqual(
-          yield* ask("member-sign-in", yield* agentOnDevice(member, host.deviceId)),
           forbidden,
         );
 

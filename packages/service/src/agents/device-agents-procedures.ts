@@ -10,7 +10,12 @@
  * which it trades for a host and the secret it calls on from then on
  * (`@luke/features/host-wire`), answered this once; it refuses an unknown,
  * revoked, or expired token as an invalid token, and the id of one of the
- * token's member's standing hosts as still enrolled. A host's every call,
+ * token's member's standing hosts as still enrolled. The own enroll's
+ * bearer is the desktop's sign-in alone (`bearerOnlyMiddleware`, never a
+ * browser's cookie, since it mints a credential), and it converts a device
+ * the member's account registered in place under its id, answering its new
+ * secret this once, or not found for an id the account holds no device of,
+ * another account's among them. A host's every call,
  * the enroll's included, is refused as needing an upgrade where its daemon
  * is below the floor (`auth/device-secret.ts`). Each answers not found,
  * before it touches a row, where the account has the `local-agents`
@@ -31,18 +36,25 @@ import {
   claimDeviceAgentRequest,
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
-import { enrollHost, HOST_ENROLL_REFUSAL } from "@luke/database/models/host-store";
+import { enrollHost, enrollOwnDevice, HOST_ENROLL_REFUSAL } from "@luke/database/models/host-store";
 import { DEVICE_CAPABILITY } from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect, Option } from "effect";
-import { hostSecretHash, mintHostSecret } from "../auth/device-secret.js";
+import {
+  admittedHostVersion,
+  hostSecretHash,
+  mintHostSecret,
+  presentedHostVersion,
+} from "../auth/device-secret.js";
 import {
   HOSTED_REFUSAL,
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import {
+  actsForDevice,
+  bearerOnlyMiddleware,
   type DeviceCaller,
   deviceMiddleware,
   hosted,
@@ -63,11 +75,17 @@ export interface DeviceAgentsProcedureSeams {
 
 const DONE = { done: true } as const;
 
-/** The device named, where the caller may act for it: a host for itself alone, a desktop for any device of its account; not found otherwise. */
+/** The device named, where the caller may act for it (`actsForDevice`); not found otherwise. */
 const ownDevice = (caller: DeviceCaller, deviceId: string) =>
-  caller.hostDeviceId === undefined || caller.hostDeviceId === deviceId
-    ? Effect.void
-    : Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  actsForDevice(caller, deviceId) ? Effect.void : Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+
+/** Not found where the account has the `local-agents` experiment off. */
+const experimentOn = (userId: string) =>
+  Effect.gen(function* () {
+    if (!(yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS)))) {
+      return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    }
+  });
 
 /** The caller's own device under its account's experiment, or not found. */
 const followed = (caller: DeviceCaller, deviceId: string) =>
@@ -88,6 +106,7 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
   const deviceAgents = hosted.deviceAgents.use(deviceMiddleware(seams.resolveUserId));
   // Note that each caller middleware is used on the resource rather than its procedure, so it refuses before the input is read, as every procedure's does.
   const enrolling = hosted.deviceAgents.use(installTokenMiddleware);
+  const signedIn = hosted.deviceAgents.use(bearerOnlyMiddleware(seams.resolveUserId));
   return {
     enroll: enrolling.enroll.effect(function* ({ context, input }) {
       const { deviceId, ...box } = input;
@@ -109,14 +128,21 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       }
       return { deviceId, deviceSecret: minted.secret };
     }),
+    enrollOwn: signedIn.enrollOwn.effect(function* ({ context, input }) {
+      const { userId } = context;
+      yield* experimentOn(userId);
+      const version = yield* admittedHostVersion(presentedHostVersion(context.request));
+      const minted = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
+      const enrolled = yield* hostedStoreOrUnavailable(
+        enrollOwnDevice(userId, { id: input.deviceId, version, secretHash: minted.hash }),
+      );
+      if (!enrolled) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { deviceId: input.deviceId, deviceSecret: minted.secret };
+    }),
     register: deviceAgents.register.effect(function* ({ context, input }) {
       yield* ownDevice(context, input.deviceId);
       const { userId } = context;
-      if (
-        !(yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS)))
-      ) {
-        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      }
+      yield* experimentOn(userId);
       const { deviceId, capabilities, ...device } = input;
       const known = Object.values(DEVICE_CAPABILITY).filter((capability) =>
         capabilities?.includes(capability),
