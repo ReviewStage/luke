@@ -11,7 +11,7 @@
  * `NODE_LINUX_PINS`), refused unless it arrived at its pinned size and
  * digest, and only its pinned members are kept. Claude Code and Codex are
  * not carried: the daemon fetches each at its pin on the box
- * (`@luke/host/linux-host`). The tarball is written with every entry owned by
+ * (`@luke/host/daemon`). The tarball is written with every entry owned by
  * root and stamped at one time, in name order, so its digest is the
  * contents' alone. It lands in `dist/release/`, named as the release names
  * it (`@luke/features/host-release`), with a `.sha256` beside it in
