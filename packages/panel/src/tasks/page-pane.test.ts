@@ -93,7 +93,11 @@ const versionUrl = (version: number) => pageFrameUrl({ taskId: TASK, pageId: FUN
 beforeEach(() => {
   fakeAppPlatform({ pageFrameUrl });
   // View settings opens its syntax theme on the window's appearance, here the dark one.
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("dark") }));
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("dark"),
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
 });
 
 test("a page is drawn at its newest version in a frame that runs its own scripts alone, left out of the recording", () => {

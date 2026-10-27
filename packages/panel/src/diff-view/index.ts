@@ -1,5 +1,6 @@
 import { MOTION_DELAY_MS } from "@luke/brand";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
+import { onDrawnThemeChange } from "@luke/ui/appearance";
 import { LANDED, LANDED_ANIMATION, LANDED_ATTRIBUTE, land } from "@luke/ui/landed";
 import {
   CodeView,
@@ -446,16 +447,18 @@ const LIST_CSS = `
 }
 `;
 
-let sheets: { look: CSSStyleSheet; fill: CSSStyleSheet } | undefined;
+let sheets: { look: CSSStyleSheet; fill: CSSStyleSheet; whole: CSSStyleSheet } | undefined;
 
-/** The look's sheets, made once and adopted by every diff's shadow root: the look with the card every file of a list wears, and the look with the fill one diff alone wears. */
-function lookSheets(): { look: CSSStyleSheet; fill: CSSStyleSheet } {
+/** The look's sheets, made once and adopted by every diff's shadow root: the look with the card every file of a list wears, the look with the fill one diff alone wears, and a whole file's look, edge to edge with no card. */
+function lookSheets(): { look: CSSStyleSheet; fill: CSSStyleSheet; whole: CSSStyleSheet } {
   if (sheets !== undefined) return sheets;
   const look = new CSSStyleSheet();
   look.replaceSync(`${LOOK_CSS}${LIST_CSS}${FLASH_CSS}`);
   const fill = new CSSStyleSheet();
   fill.replaceSync(`${LOOK_CSS}${FILL_CSS}`);
-  sheets = { look, fill };
+  const whole = new CSSStyleSheet();
+  whole.replaceSync(`${LOOK_CSS}${FLASH_CSS}`);
+  sheets = { look, fill, whole };
   return sheets;
 }
 
@@ -1235,7 +1238,8 @@ function wholeFileOptions(
  * Draws a whole file, as a File tab, a page's source, or a text file opened
  * over the window shows one, through Pierre's own \`CodeView\` holding the one
  * file: only the lines near the view drawn at all, however long the file,
- * in a shadow root the find reads and the look's sheet dresses, and
+ * in a shadow root the find reads and the look's sheet dresses, edge to
+ * edge on the theme's ground with no card, as a list's file wears, and
  * coloured in the kept pool's workers, plain until the colours land. The
  * lines lit are Pierre's own lit lines, as a review thread's are; a press of
  * the numbers picks lines in their place until the view lights others.
@@ -1250,6 +1254,13 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
   let picked: FileLineRange | undefined;
   // The file's element, the one the selection is read in, once Pierre has drawn it.
   let drawnElement: HTMLElement | undefined;
+  // Note that the box the file scrolls in takes the theme's ground, because Pierre grounds only the file's own lines, and a file shorter than its tab would otherwise stand as a block on the tab's ground. It is read again as the appearance turns, which Pierre follows in its styles alone, drawing nothing anew.
+  const ground = () => {
+    if (drawnElement !== undefined) {
+      host.style.backgroundColor = getComputedStyle(drawnElement).backgroundColor;
+    }
+  };
+  releases.push(onDrawnThemeChange(ground));
   const dress = (element: HTMLElement, phase: PostRenderPhase) => {
     if (phase === "unmount") {
       if (drawnElement === element) drawnElement = undefined;
@@ -1260,8 +1271,9 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
     if (!dressed.has(element) && element.shadowRoot !== null) {
       dressed.add(element);
       element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
-      releases.push(adoptShadowStyles(element.shadowRoot, lookSheets().look));
+      releases.push(adoptShadowStyles(element.shadowRoot, lookSheets().whole));
     }
+    ground();
     latest.onDrawn?.();
   };
   const pick = (range: SelectedLineRange | null) => {
@@ -1343,6 +1355,7 @@ function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
       view.cleanUp();
       for (const release of releases) release();
       host.replaceChildren();
+      host.style.removeProperty("background-color");
     },
   };
 }

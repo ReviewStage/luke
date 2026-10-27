@@ -29,7 +29,11 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   // View settings opens its syntax theme on the window's appearance, here the dark one.
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("dark") }));
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("dark"),
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
   installScrollIntoView();
   fakeAppBridge({});
   handSettings();

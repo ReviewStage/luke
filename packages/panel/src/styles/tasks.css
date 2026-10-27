@@ -526,17 +526,18 @@
   }
 }
 
-/* A cloud Browser tab's quiet line over its page (cloud-browser-pane.tsx)
-   keeps to a readable measure. */
 /* The sheet rounds its corners without clipping what it holds (shell.css), so
-   a page's white would stand to a square corner at the rounded sheet's. The
-   room clips its own bottom corners to the sheet's radius, which a narrow
-   room, full bleed, does not have. */
-:where(:root):not([data-luke-room="narrow"]) .page-view-frame-room {
+   a page's white, or a file's ground in a theme of its own, would stand to a
+   square corner at the rounded sheet's. A page's room, its frame or its
+   source, and a file view's body clip their own bottom corners to the
+   sheet's radius, which a narrow room, full bleed, does not have. */
+:where(:root):not([data-luke-room="narrow"]) :is(.page-view-room, .file-view-body) {
   overflow: clip;
   border-radius: 0 0 var(--sheet-radius, 0) var(--sheet-radius, 0);
 }
 
+/* A cloud Browser tab's quiet line over its page (cloud-browser-pane.tsx)
+   keeps to a readable measure. */
 .cloud-browser-body > .cloud-browser-notice > .luke-text {
   max-width: 32em;
   text-align: center;

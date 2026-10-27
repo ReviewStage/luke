@@ -212,7 +212,7 @@ function PageFrame({ title, src }: { title: string; src: string }): React.JSX.El
   const found = useFrameFind(frame);
   useFrameFocus(frame);
   return (
-    <div className="relative flex min-h-0 flex-1">
+    <div className="page-view-room relative flex min-h-0 flex-1">
       <iframe
         ref={frame}
         className="block min-h-0 w-full flex-1 border-0"
@@ -335,7 +335,7 @@ function PageSource({
   return (
     <Fill
       as={FILL_ELEMENT.SECTION}
-      className="file-tab bg-card-code"
+      className="page-view-room file-tab bg-card-code"
       aria-label={`${title} source`}
     >
       <WholeFile

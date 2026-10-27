@@ -1,7 +1,7 @@
 /* settings-section.css -- what a settings group's utilities
    (`settings-section.tsx`) cannot say: the hairline between each row of its
-   card and the next, the rows a setting reveals ruled as the card's own, and
-   the placeholders' own boxes. The heading, the card's edge, corner, and
+   card and the next, the rows a setting reveals ruled as the card's own, the
+   rule between two groups of bare rows, and the placeholders' own boxes. The heading, the card's edge, corner, and
    ground, and a line in the rows' place are utilities; the rows' own padding
    is theirs (`settings-row.tsx`), and the room between sections the page's. */
 
@@ -22,6 +22,15 @@
 
   .luke-settings-section-card .luke-reveal:empty {
     display: none;
+  }
+
+  /* A section whose rows stand bare in a surface that frames them (a
+     popover's) is set apart from the section before it by a rule, as the
+     card's edge sets a card's apart. Note that this stays here rather than
+     in a utility, because it falls on the section's sibling. */
+  .luke-settings-section[data-frame="rows"] + .luke-settings-section[data-frame="rows"] {
+    padding-top: var(--luke-list-inset);
+    border-top: 1px solid var(--luke-color-border);
   }
 
   /* Note that the placeholders' boxes are drawn here rather than in

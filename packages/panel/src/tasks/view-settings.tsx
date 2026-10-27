@@ -25,6 +25,7 @@ import {
   POPOVER_ALIGN,
   PopoverPanel,
   SETTINGS_ROW_DENSITY,
+  SETTINGS_SECTION_FRAME,
   SettingsRow,
   SettingsSection,
   Shortcut,
@@ -399,9 +400,10 @@ function GroupRows({
 
 /**
  * The rows a View settings scope sets, in the groups the schema names and
- * Settings › Appearance draws as well: a diff's every group, or only those a
- * File tab's lines follow, so no row sets what the tab does not draw. Each is
- * changed for every diff as it is set. The Text group shows one appearance's
+ * Settings › Appearance draws as well, each bare under its heading in the
+ * popover or the sheet that frames them, with no card within it: a diff's
+ * every group, or only those a File tab's lines follow, so no row sets what
+ * the tab does not draw. Each is changed for every diff as it is set. The Text group shows one appearance's
  * syntax theme at a time, the window's own as it opens, and the other a
  * press away.
  */
@@ -413,7 +415,7 @@ function ViewSettingsRows({ scope }: { scope: ViewSettingsScope }): React.JSX.El
   return (
     <>
       {groups.map(({ section, title }) => (
-        <SettingsSection key={section} title={title}>
+        <SettingsSection key={section} title={title} frame={SETTINGS_SECTION_FRAME.ROWS}>
           <GroupRows section={section} scope={scope} />
         </SettingsSection>
       ))}

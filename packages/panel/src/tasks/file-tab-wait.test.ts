@@ -35,7 +35,11 @@ const TEXT = "const seats = 3;\nconst invited = 0;\nexport { seats };\n";
 let root: Root | undefined;
 
 beforeEach(() => {
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("dark") }));
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("dark"),
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
   // jsdom paints no highlights and lays nothing out, as the find and Pierre's scroll would ask.
   vi.stubGlobal("CSS", { highlights: new Map() });
   vi.stubGlobal("Highlight", Set);
