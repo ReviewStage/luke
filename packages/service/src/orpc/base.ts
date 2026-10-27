@@ -41,6 +41,7 @@ import { HostedEnvironment } from "../environment.js";
 import {
   HOSTED_REFUSAL,
   hostedCarriesBearer,
+  resolvedAccount,
   type SessionUserIdResolver,
   type UserIdResolver,
 } from "../http/http-effect.js";
@@ -73,7 +74,7 @@ export const hosted = implement(hostedContract).$context<HostedContext>();
 /** The caller by its bearer, or with no `Authorization` at all, the browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`). */
 export function accountMiddleware(resolveUserId: UserIdResolver) {
   return middlewareGen<HostedContext, HostedCaller>(function* ({ context, next }) {
-    const account = yield* resolveUserId(context.request);
+    const account = yield* resolvedAccount(resolveUserId, context.request);
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     return yield* next({ context: { userId: account.value } });
   });
@@ -84,7 +85,7 @@ export function bearerOnlyMiddleware(resolveUserId: UserIdResolver) {
   return middlewareGen<HostedContext, HostedCaller>(function* ({ context, next }) {
     if (!hostedCarriesBearer(context.request))
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    const account = yield* resolveUserId(context.request);
+    const account = yield* resolvedAccount(resolveUserId, context.request);
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     return yield* next({ context: { userId: account.value } });
   });
@@ -111,7 +112,7 @@ export function deviceMiddleware(resolveUserId: UserIdResolver) {
         context: { userId: host.value.userId, hostDeviceId: host.value.deviceId },
       });
     }
-    const account = yield* resolveUserId(context.request);
+    const account = yield* resolvedAccount(resolveUserId, context.request);
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     return yield* next({ context: { userId: account.value, hostDeviceId: undefined } });
   });

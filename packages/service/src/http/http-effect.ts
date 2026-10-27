@@ -90,13 +90,16 @@ export type HostedRefusal = {
 /**
  * Resolves the signed-in account behind what a request carries, or none.
  * Nothing distinguishes a missing header from an expired or revoked token on
- * purpose: every failure is one 401, and the desktop's refresh machinery is
- * what answers it. `Input` is the request itself, or the `Authorization`
- * value alone where it arrived somewhere other than on its own request.
+ * purpose: every one is none, one 401, and the desktop's refresh machinery is
+ * what answers it. A failure is the auth service's, not a refused token, so a
+ * route answers it as unavailable (`resolvedAccount`), which a caller retries,
+ * rather than as signed out. `Input` is the request itself, or the
+ * `Authorization` value alone where it arrived somewhere other than on its
+ * own request.
  */
 export type UserIdResolver<Input = Request> = (
   input: Input,
-) => Effect.Effect<Option.Option<string>>;
+) => Effect.Effect<Option.Option<string>, Cause.UnknownError>;
 
 /** A Better Auth session's account, or none; a failure is the auth service's, not a signed-out caller. */
 export type SessionUserIdResolver = (
@@ -283,12 +286,27 @@ export function hostedStoreOrUnavailable<A, R>(
   );
 }
 
+/**
+ * The account a resolver answered, or none; an auth service that could not
+ * answer is logged and refused as unavailable, an outage the caller may
+ * retry, never as a signed-out caller.
+ */
+export function resolvedAccount<Input>(
+  resolveUserId: UserIdResolver<Input>,
+  input: Input,
+): Effect.Effect<Option.Option<string>, HostedRefusal> {
+  return resolveUserId(input).pipe(
+    Effect.tapError((failure) => Effect.logWarning("the auth service resolved no caller", failure)),
+    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+  );
+}
+
 /** The bearer's account, or the invalid-token refusal. */
 export const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: { readonly resolveUserId: UserIdResolver },
   request: Request,
 ): Effect.fn.Return<string, HostedRefusal> {
-  const account = yield* seams.resolveUserId(request);
+  const account = yield* resolvedAccount(seams.resolveUserId, request);
   if (Option.isNone(account))
     return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.INVALID_TOKEN);
   return account.value;
