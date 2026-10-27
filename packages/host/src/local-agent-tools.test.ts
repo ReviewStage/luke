@@ -83,4 +83,34 @@ describe("localAgentTool", () => {
         assert.deepStrictEqual(yield* fileSystem.readDirectory(root), []);
       }).pipe(Effect.scoped, Effect.provide(NODE)),
   );
+
+  it.effect(
+    "fetches again a build whose pinned file changed on disk since it was kept, for a release no team signs",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const root = yield* temporaryDirectoryScoped("luke-tools-");
+        const { archive, pin } = yield* release;
+        const pinned = {
+          ...pin,
+          FILES: {
+            "bin/tool": createHash("sha256").update("#!/bin/sh\necho tool\n").digest("hex"),
+          },
+        };
+        let fetches = 0;
+        const fetching = fakeHttpClientLayer(() => {
+          fetches += 1;
+          return new Response(archive);
+        });
+        const kept = `${root}/agent-tools/tool/1.0/bin/tool`;
+
+        yield* localAgentTool(root, pinned, undefined).pipe(Effect.provide(fetching));
+        yield* fileSystem.writeFileString(kept, "#!/bin/sh\necho swapped\n");
+        const again = yield* localAgentTool(root, pinned, undefined).pipe(Effect.provide(fetching));
+
+        assert.deepStrictEqual(again, Option.some(kept));
+        assert.strictEqual(fetches, 2);
+        assert.strictEqual(yield* fileSystem.readFileString(kept), "#!/bin/sh\necho tool\n");
+      }).pipe(Effect.scoped, Effect.provide(NODE)),
+  );
 });

@@ -307,10 +307,17 @@ const VM_TOOLS = { node: "node", claude: "/usr/local/bin/claude", codex: "/usr/l
  * The follower on This Mac, signed in to Claude Code by itself, whose
  * platform runs agents directly and has a sandboxed alternative, with its
  * sandbox setting as `setting` holds it and its sandbox ready as `ready`
- * says; one launch line is handed once the setting is on. With what it
- * registered, spawned, asked, handed the sandbox, and reported.
+ * says; one launch line is handed once the setting is on, and, after it, a
+ * discard line once it is off where `discardWhenOff` asks. `madeBare` says
+ * the agent's checkout already stands, as a direct launch left it. With
+ * what it registered, spawned, asked, handed the sandbox, settled, deleted,
+ * and reported.
  */
-const followingMac = (setting: { on: boolean }, ready: boolean) =>
+const followingMac = (
+  setting: { on: boolean },
+  ready: boolean,
+  options: { readonly madeBare?: boolean; readonly discardWhenOff?: boolean } = {},
+) =>
   Effect.gen(function* () {
     const spawner = scriptedSpawner((program, args) => {
       if (program === "/bin/bash" && args[0] === "-l")
@@ -326,20 +333,42 @@ const followingMac = (setting: { on: boolean }, ready: boolean) =>
     const asked: string[] = [];
     const handedSandbox: string[] = [];
     const reported: string[] = [];
+    const settled: { id: string; exitCode: number | undefined }[] = [];
+    const deleted: string[] = [];
     let launched = false;
+    let discardHanded = false;
+    const DISCARD: DeviceAgentClaimedLine = {
+      line: {
+        ...LAUNCH.line,
+        id: "discard-1",
+        seq: 2,
+        kind: DEVICE_AGENT_LINE_KIND.DISCARD,
+        payload: {},
+      },
+    };
     const client = {
       register: (_deviceId: string, device: DeviceAgentDevice) =>
         Effect.sync(() => registered.push(device)).pipe(Effect.as(true)),
       beat: () => Effect.succeed(true),
-      lines: () =>
-        setting.on && !launched
-          ? Effect.sync(() => {
-              launched = true;
-              return [LAUNCH.line];
-            })
-          : Effect.never,
-      claimLine: () => Effect.succeed(LAUNCH),
-      settleLine: () => Effect.succeed(true),
+      lines: () => {
+        if (setting.on && !launched) {
+          return Effect.sync(() => {
+            launched = true;
+            return [LAUNCH.line];
+          });
+        }
+        if (!setting.on && launched && options.discardWhenOff === true && !discardHanded) {
+          return Effect.sync(() => {
+            discardHanded = true;
+            return [DISCARD.line];
+          });
+        }
+        return Effect.never;
+      },
+      claimLine: (_deviceId: string, id: string) =>
+        Effect.succeed(id === DISCARD.line.id ? DISCARD : LAUNCH),
+      settleLine: (_deviceId: string, id: string, exitCode?: number) =>
+        Effect.sync(() => settled.push({ id, exitCode })).pipe(Effect.as(true)),
       requests: () => Effect.never,
       claimRequest: () => Effect.succeed(COMMAND),
       answerRequest: () => Effect.succeed(true),
@@ -357,7 +386,7 @@ const followingMac = (setting: { on: boolean }, ready: boolean) =>
       exec: (command) => ({ command: VM_LAUNCHER, args: [command.command], env: command.env }),
       signalled: () => Effect.void,
       stopped: () => Effect.succeed(true),
-      deleted: () => Effect.void,
+      deleted: (agentId) => Effect.sync(() => deleted.push(agentId)),
       githubToken: (_agentId, token) => Effect.sync(() => handedSandbox.push(token)),
       deviceGit: () => ({}),
     };
@@ -380,10 +409,16 @@ const followingMac = (setting: { on: boolean }, ready: boolean) =>
       spawner.layer,
       NodePath.layer,
       FileSystem.layerNoop({
-        exists: (path) => Effect.succeed(path === TOOLS.node || path === TOOLS.claude),
+        exists: (path) =>
+          Effect.succeed(
+            path === TOOLS.node ||
+              path === TOOLS.claude ||
+              (options.madeBare === true && path === LAYOUT.checkoutPath),
+          ),
         makeDirectory: () => Effect.void,
         writeFileString: () => Effect.void,
         rename: () => Effect.void,
+        remove: () => Effect.void,
       }),
       fakeHttpClientLayer(() => Promise.reject(new Error("this test fetches no tool"))),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash" })),
@@ -414,7 +449,15 @@ const followingMac = (setting: { on: boolean }, ready: boolean) =>
       client,
     }).pipe(Effect.provide(services));
     yield* composer.lifetime;
-    return { registered, spawned: spawner.spawned, asked, handedSandbox, reported };
+    return {
+      registered,
+      spawned: spawner.spawned,
+      asked,
+      handedSandbox,
+      settled,
+      deleted,
+      reported,
+    };
   });
 
 it.effect(
@@ -476,6 +519,48 @@ it.effect(
 
         assert.deepEqual(registered, []);
         assert.deepEqual(reported, ["the local agents' smolvm or sandbox image could not be had"]);
+      }),
+    ),
+);
+
+it.effect(
+  "an agent that ran directly on This Mac is not started in a VM once its sandbox setting is on, and says why",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { spawned, settled, reported } = yield* followingMac({ on: true }, true, {
+          madeBare: true,
+        });
+        yield* until(() => settled.some((each) => each.id === LINE_ID));
+
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 1 }]);
+        assert.equal(
+          spawned.some((each) => each.program === VM_LAUNCHER || each.program === LAUNCHER),
+          false,
+        );
+        assert.deepEqual(reported, [
+          "a local agent that ran directly on this device was not started in a VM; turn its sandbox setting off to run it",
+        ]);
+      }),
+    ),
+);
+
+it.effect(
+  "an agent that ran in a VM, discarded once This Mac runs its agents directly again, has its VM deleted",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const setting = { on: true };
+        const { spawned, settled, deleted } = yield* followingMac(setting, true, {
+          discardWhenOff: true,
+        });
+        yield* until(() => spawned.some((each) => each.program === VM_LAUNCHER));
+        yield* TestClock.adjust(Duration.seconds(1));
+        setting.on = false;
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* until(() => settled.some((each) => each.id === "discard-1"));
+
+        assert.deepEqual(deleted, [AGENT_ID]);
       }),
     ),
 );

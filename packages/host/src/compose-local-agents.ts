@@ -1,10 +1,12 @@
 import type { DeviceAgentClaimedLine, HostedDeviceAgentClient } from "@luke/features";
 import {
   DEVICE_AGENT_LINE_KIND,
+  DEVICE_ISOLATION,
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLayout,
   type DeviceAgentLine,
   type DeviceAgentRequest,
+  type DeviceIsolation,
   type DeviceSignedIn,
   deviceAgentFilesPayloadSchema,
   deviceAgentLaunchPayloadSchema,
@@ -126,11 +128,13 @@ import type { RunMode } from "./run-mode.js";
  * platform's sandboxed alternative, a VM per agent as on a host, on the
  * sign-ins saved in Luke and a GitHub token from Luke. The platform is read
  * as the gate opens and on every beat; a change ends the follow, and the
- * next one has what the other way runs on and registers the device so. An
- * agent whose worktree a direct launch made never starts in a VM, whose
- * mounts leave out the shared clone its Git folder is in, and a discard
- * deletes the VM of an agent that ran in one whichever way the Mac runs
- * agents now.
+ * next one has what the other way runs on and registers the device so. Each
+ * agent runs only the way it first ran, which the host keeps beside its
+ * launches: one made directly keeps its Git folder in the shared clone no VM
+ * mounts, and one made in a VM keeps its harness's sessions in the VM's own
+ * home, so a launch the other way is settled unstarted and says why. A
+ * discard deletes the VM of an agent that ran in one whichever way the Mac
+ * runs agents now.
  *
  * Every launch this Mac claimed is kept in the host's state by its line's
  * id, no secret beside it, until its runner's exit settles it. A launch
@@ -240,10 +244,19 @@ function endedInVm(
 /** The variables of the developer's own a runner and a command are started with, read from the app's environment; nothing else of Luke's is handed on. */
 const HANDED_ON = [VARIABLE.HOME, VARIABLE.SHELL, VARIABLE.USER, VARIABLE.LOGNAME, VARIABLE.LANG];
 
-/** What the host keeps of local agents between runs: the device id each account registered under, and the launches whose runners this Mac started and no exit has settled yet. */
+/**
+ * What the host keeps of local agents between runs: the device id each
+ * account registered under, the launches whose runners this Mac started and
+ * no exit has settled yet, and, on a device that runs agents either way, how
+ * each agent has run here, in a VM or directly, absent from a state file
+ * from before it.
+ */
 const LocalAgentStateSchema = Schema.Struct({
   devices: Schema.Record(Schema.String, Schema.String),
   launches: Schema.Array(Schema.Struct({ userId: Schema.String, id: Schema.String })),
+  modes: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.Literals(Object.values(DEVICE_ISOLATION))),
+  ),
 });
 
 type LocalAgentState = typeof LocalAgentStateSchema.Type;
@@ -401,6 +414,32 @@ export function composeLocalAgents(
 
     const keepLaunch = (userId: string, id: string) =>
       updateState((current) => ({ ...current, launches: [...current.launches, { userId, id }] }));
+
+    /**
+     * How the agent has run on this device: as kept, or, for one launched
+     * before the record on a device that runs agents either way, directly,
+     * where its checkout stands, since every such agent did. None for an agent
+     * never launched here, and on a device with one way of running them.
+     */
+    const ranAs = (agentId: string, checkoutPath: string) =>
+      Effect.gen(function* () {
+        if (given.sandboxed === undefined) return Option.none<DeviceIsolation>();
+        const kept = (yield* Ref.get(state)).modes?.[agentId];
+        if (kept !== undefined) return Option.some(kept);
+        const stands = yield* Effect.orElseSucceed(fileSystem.exists(checkoutPath), () => false);
+        return stands ? Option.some<DeviceIsolation>(DEVICE_ISOLATION.BARE) : Option.none();
+      });
+
+    const keepMode = (agentId: string, mode: DeviceIsolation) =>
+      updateState((current) => ({ ...current, modes: { ...current.modes, [agentId]: mode } }));
+
+    const forgetMode = (agentId: string) =>
+      updateState((current) => ({
+        ...current,
+        modes: Object.fromEntries(
+          Object.entries(current.modes ?? {}).filter(([kept]) => kept !== agentId),
+        ),
+      }));
 
     const forgetLaunch = (id: string) =>
       updateState((current) => ({
@@ -712,13 +751,6 @@ export function composeLocalAgents(
         const settle = (id: string, exitCode?: number) =>
           asked(client.settleLine(deviceId, id, exitCode));
 
-        /** Whether the agent's checkout is a worktree of Luke's shared clone, its `.git` a file naming the clone's Git folder, as a launch directly on the device makes it. */
-        const sharedCloneWorktree = (layout: DeviceAgentLayout) =>
-          Effect.map(
-            Effect.option(fileSystem.stat(path.join(layout.checkoutPath, ".git"))),
-            Option.exists((info) => info.type === "File"),
-          );
-
         /** The agent's worktree made where it has none, on the agent's GitHub sign-in where the host gave it one: a folder for an agent with no repository, and Luke's shared clone's worktree otherwise. */
         const madeWorktree = (
           layout: DeviceAgentLayout,
@@ -852,12 +884,18 @@ export function composeLocalAgents(
                 ? githubEnvironment(configFolder, gh)
                 : sandbox.deviceGit(agentId);
             const github = sandbox === undefined ? deviceGithub : undefined;
-            // Note that a worktree made while the agent ran directly on this Mac keeps its Git folder in Luke's shared clone, which no VM mounts, so it never starts in one.
-            if (sandbox !== undefined && (yield* sharedCloneWorktree(layout))) {
+            // Note that an agent runs only the way it first ran here: one made directly on the Mac keeps its Git folder in the shared clone no VM mounts, and one made in a VM keeps its harness's sessions in the VM's own home.
+            const ran = yield* ranAs(agentId, layout.checkoutPath);
+            if (Option.isSome(ran) && ran.value !== platform.deviceIsolation) {
               report(
-                "a local agent made to run directly on this device was not started in a VM, since its worktree's Git folder is in Luke's shared clone",
+                ran.value === DEVICE_ISOLATION.SANDBOX
+                  ? "a local agent that ran in a VM was not started directly on this device; turn its sandbox setting back on to run it"
+                  : "a local agent that ran directly on this device was not started in a VM; turn its sandbox setting off to run it",
               );
               return yield* settle(line.id, NOT_STARTED);
+            }
+            if (given.sandboxed !== undefined && Option.isNone(ran)) {
+              yield* keepMode(agentId, platform.deviceIsolation);
             }
             const signedIn = signsIn && (yield* signedInToGithub(agentId, configFolder, gh));
             const made = yield* madeWorktree(
@@ -1045,21 +1083,18 @@ export function composeLocalAgents(
           });
 
         /**
-         * The VM a discard lets go of: the platform's, or, on a device that
-         * runs its agents directly now, its sandboxed alternative's for an
-         * agent whose checkout is a repository of its own, which only a
-         * sandboxed launch makes; none for an agent that never ran in one.
+         * The VM a discard lets go of: on a device with one way of running
+         * agents, its platform's; on one that runs them either way, its
+         * sandboxed alternative's for an agent that ran in one, whichever way
+         * it runs them now, and none for one that ran directly, whose folder
+         * the device's own check reads, as it always has.
          */
-        const vmOf = (layout: DeviceAgentLayout) =>
+        const vmOf = (agentId: string, checkoutPath: string) =>
           Effect.gen(function* () {
-            if (platform.sandbox !== undefined) return platform.sandbox;
-            const alternative = given.sandboxed?.sandbox;
-            if (alternative === undefined) return undefined;
-            const git = yield* Effect.option(
-              fileSystem.stat(path.join(layout.checkoutPath, ".git")),
-            );
-            return Option.exists(git, (info) => info.type === "Directory")
-              ? alternative
+            if (given.sandboxed === undefined) return platform.sandbox;
+            const ran = yield* ranAs(agentId, checkoutPath);
+            return Option.exists(ran, (mode) => mode === DEVICE_ISOLATION.SANDBOX)
+              ? given.sandboxed.sandbox
               : undefined;
           });
 
@@ -1078,7 +1113,7 @@ export function composeLocalAgents(
           Effect.gen(function* () {
             yield* stopped(agentId);
             const layout = deviceAgentLayout(folder, agentId);
-            const vm = yield* vmOf(layout);
+            const vm = yield* vmOf(agentId, layout.checkoutPath);
             const unsaved = yield* unsavedWork(agentId, layout, vm);
             // Note that the VM goes before the folder, so nothing in it is still writing there as it is removed, and a command's hold outlasting it stops nothing.
             if (vm !== undefined) {
@@ -1095,6 +1130,8 @@ export function composeLocalAgents(
               );
             }
             yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
+            // Note that a folder kept keeps its record too, so the agent, launched again, runs the way it ran.
+            if ((yield* Ref.get(state)).modes?.[agentId] !== undefined) yield* forgetMode(agentId);
           }).pipe(
             Effect.catch(() =>
               Effect.sync(() => report("a local agent's folder could not be removed")),
