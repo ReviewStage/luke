@@ -214,12 +214,25 @@ export const DIALOG_VEIL = { [VEIL_ATTRIBUTE]: "" } as const;
 
 /**
  * The card a bare dialog's owner draws (`DIALOG_SIZE.WINDOW`), in the dialog
- * card's own edge, corner, ground, and shadow, filling the room its owner
- * leaves it and clipping what it holds edge to edge, as a picture's card does.
+ * card's own edge, corner, ground, and shadow, clipping what it holds edge to
+ * edge, as a picture's card does. It fills the room its owner leaves it, or
+ * hugs what it holds (`hug`), as a picture shown at its own shape is, no
+ * narrower than a picture's card so its head's buttons still fit, and no
+ * larger than that room.
  */
-export function DialogCard({ children }: { children: ReactNode }): React.JSX.Element {
+export function DialogCard({
+  hug = false,
+  children,
+}: {
+  /** Whether it hugs what it holds rather than filling its room. */
+  hug?: boolean | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
   return (
-    <div className="luke-dialog-card flex min-h-0 min-w-0 flex-auto flex-col self-stretch overflow-hidden rounded-dialog border border-border-strong bg-popover text-popover-foreground shadow-dialog">
+    <div
+      className={`luke-dialog-card flex min-h-0 min-w-0 flex-col overflow-hidden rounded-dialog border border-border-strong bg-popover text-popover-foreground shadow-dialog ${hug ? "max-h-full max-w-full min-w-dialog-media-min" : "size-full"}`}
+      data-hug={hug}
+    >
       {children}
     </div>
   );

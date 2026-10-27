@@ -2211,21 +2211,35 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* A picture or a video fits the room under the viewer's header edge to
-   edge at its own shape, the room a container one track its own size, and
-   grows past its own pixels to fill it at most twice over (`@luke/ui`'s
-   ZoomImage and VideoPlayer say their pixels once they are read). */
-.attachment-viewer-body:has(> :is(.luke-zoom-image, .luke-video-player)) {
+   edge at its own shape, and grows past its own pixels to fill it at most
+   twice over (`@luke/ui`'s ZoomImage and VideoPlayer say their pixels once
+   they are read; until then it waits at a screenshot's shape). The room is
+   the card's own (`DialogCard` hugging it), less the card's edge and its
+   header, so the card takes the picture's shape; or, where the card fills
+   its room, as on a phone, the body under the header, one track its own size. */
+.attachment-viewer[data-hug="true"] {
+  --attachment-viewer-edge-x: 2px;
+  --attachment-viewer-edge-y: calc(var(--luke-control-height) + 2 * var(--luke-space-4) + 3px);
+}
+
+.attachment-viewer-room {
+  container-type: size;
+}
+
+.attachment-viewer[data-hug="false"]
+  .attachment-viewer-body:has(> :is(.luke-zoom-image, .luke-video-player)) {
   container-type: size;
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
 }
 
 .attachment-viewer-body > .luke-zoom-image {
   width: min(
-    100cqw,
-    100cqh *
-    var(--luke-zoom-natural-width) /
-    var(--luke-zoom-natural-height),
-    var(--luke-zoom-natural-width) *
+    100cqw -
+    var(--attachment-viewer-edge-x, 0px),
+    (100cqh - var(--attachment-viewer-edge-y, 0px)) *
+    var(--luke-zoom-natural-width, 16) /
+    var(--luke-zoom-natural-height, 10),
+    var(--luke-zoom-natural-width, 1600) *
     2px
   );
   max-height: 100%;
@@ -2233,11 +2247,12 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .attachment-viewer-body > .luke-video-player {
   width: min(
-    100cqw,
-    100cqh *
-    var(--luke-video-natural-width) /
-    var(--luke-video-natural-height),
-    var(--luke-video-natural-width) *
+    100cqw -
+    var(--attachment-viewer-edge-x, 0px),
+    (100cqh - var(--attachment-viewer-edge-y, 0px)) *
+    var(--luke-video-natural-width, 16) /
+    var(--luke-video-natural-height, 10),
+    var(--luke-video-natural-width, 1600) *
     2px
   );
 }

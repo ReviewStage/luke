@@ -461,6 +461,8 @@ export function AttachmentViewer({
   const video = attachmentView(file) === ATTACHMENT_VIEW.VIDEO;
   // A phone walks the files from its ⋯ and the arrow keys, with no room beside the card for the arrows or under it for the strip.
   const walking = !phone && files.length > 1;
+  // A picture or a video takes a card of its own shape, so no ground stands beside it; a phone's fills the screen as its header does.
+  const hug = !phone && (image || video);
   // The arrows walk the message's files, and a picture's zoom keys zoom it;
   // a key's own default, a copy of the lines selected among them, is left alone.
   const walkKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -494,6 +496,7 @@ export function AttachmentViewer({
         className="attachment-viewer ph-no-capture flex size-full min-h-0 flex-col gap-luke-16"
         data-view={attachmentView(file)}
         data-opening={opening}
+        data-hug={hug}
         {...DIALOG_VEIL}
       >
         {/* The arrows stand on the dimmed window either side of the card, centred down it; a press on the room round them closes the viewer as one on the dimmed window does. */}
@@ -509,119 +512,125 @@ export function AttachmentViewer({
               icon={<ArrowLeftIcon aria-hidden="true" />}
             />
           ) : null}
-          <DialogCard>
-            {phone ? (
-              <PhoneHead
-                place="attachment-viewer"
-                start={
+          <div
+            className="attachment-viewer-room grid min-h-0 min-w-0 flex-auto self-stretch place-items-center"
+            {...DIALOG_VEIL}
+          >
+            <DialogCard hug={hug}>
+              {phone ? (
+                <PhoneHead
+                  place="attachment-viewer"
+                  start={
+                    <HeaderButton
+                      label={VIEWER_LABEL.CLOSE}
+                      chord={VIEWER_CHORD.CLOSE}
+                      onClick={close}
+                      icon={<CloseIcon />}
+                    />
+                  }
+                  title={
+                    <span className="flex min-w-0 flex-col items-center">
+                      <Text
+                        as={TEXT_ELEMENT.H2}
+                        variant={TEXT_VARIANT.TOOLBAR_TITLE}
+                        id={titleId}
+                        className={`luke-toolbar-title max-w-full ${TITLE_CLASS}`}
+                      >
+                        <OneLine>{file.name}</OneLine>
+                      </Text>
+                      <span className="flex min-w-0 max-w-full">
+                        <span className={`m-0 ${SIZE_CLASS}`}>{sizeLabel(base64)}</span>
+                        {note === undefined || note === null ? null : (
+                          <span className={`my-0 mr-0 ml-luke-8 ${NOTE_CLASS}`}>{note}</span>
+                        )}
+                      </span>
+                    </span>
+                  }
+                  end={
+                    <PlaceMore
+                      thing={VIEWER_THING}
+                      shown
+                      groups={() =>
+                        viewerGroups({
+                          file,
+                          at,
+                          count: files.length,
+                          walk,
+                          text,
+                          image,
+                          video,
+                          zoom,
+                          action,
+                          copyText,
+                          copyImage,
+                        })
+                      }
+                    />
+                  }
+                />
+              ) : (
+                <header className="flex flex-none items-center gap-tight-gap border-b border-border py-luke-4 pr-item-gap pl-list-inset">
+                  <FileTypeIcon
+                    name={file.name}
+                    className="mr-tight-gap size-control-icon flex-none"
+                  />
+                  <Text
+                    as={TEXT_ELEMENT.H2}
+                    variant={TEXT_VARIANT.SECTION}
+                    id={titleId}
+                    className={TITLE_CLASS}
+                  >
+                    <OneLine>{file.name}</OneLine>
+                  </Text>
+                  {/* What the place opening the viewer says of the file shown stands after its size in the same quiet ink, the size giving it the room the size kept before the header's buttons (tasks.css), and it is cut before it reaches them. */}
+                  <span className={`my-0 mr-auto ml-tight-gap ${SIZE_CLASS}`}>
+                    {sizeLabel(base64)}
+                  </span>
+                  {note === undefined || note === null ? null : (
+                    <span className={`my-0 mr-auto ml-block-gap ${NOTE_CLASS}`}>{note}</span>
+                  )}
+                  {text === undefined ? null : <CopyTextButton text={text} />}
+                  {image ? (
+                    <>
+                      <CopyImageButton url={file.url} />
+                      <HeaderButton
+                        label={VIEWER_LABEL.ZOOM_OUT}
+                        chord={ZOOM_CHORD.OUT}
+                        onClick={() => zoom.step(-1)}
+                        icon={<ZoomOutIcon aria-hidden="true" />}
+                      />
+                      <HeaderButton
+                        label={VIEWER_LABEL.ZOOM_IN}
+                        chord={ZOOM_CHORD.IN}
+                        onClick={() => zoom.step(1)}
+                        icon={<ZoomInIcon aria-hidden="true" />}
+                      />
+                    </>
+                  ) : null}
+                  {action === undefined || !(image || video) ? null : action.address ===
+                    undefined ? (
+                    <Button icon={action.icon} onClick={() => action.onPress(file)}>
+                      {action.label}
+                    </Button>
+                  ) : (
+                    <ViewerLink action={action} address={action.address(file)} />
+                  )}
+                  <HeaderButton
+                    label={VIEWER_LABEL.DOWNLOAD}
+                    onClick={() => download(file)}
+                    icon={<DownloadIcon aria-hidden="true" />}
+                  />
                   <HeaderButton
                     label={VIEWER_LABEL.CLOSE}
                     chord={VIEWER_CHORD.CLOSE}
                     onClick={close}
                     icon={<CloseIcon />}
                   />
-                }
-                title={
-                  <span className="flex min-w-0 flex-col items-center">
-                    <Text
-                      as={TEXT_ELEMENT.H2}
-                      variant={TEXT_VARIANT.TOOLBAR_TITLE}
-                      id={titleId}
-                      className={`luke-toolbar-title max-w-full ${TITLE_CLASS}`}
-                    >
-                      <OneLine>{file.name}</OneLine>
-                    </Text>
-                    <span className="flex min-w-0 max-w-full">
-                      <span className={`m-0 ${SIZE_CLASS}`}>{sizeLabel(base64)}</span>
-                      {note === undefined || note === null ? null : (
-                        <span className={`my-0 mr-0 ml-luke-8 ${NOTE_CLASS}`}>{note}</span>
-                      )}
-                    </span>
-                  </span>
-                }
-                end={
-                  <PlaceMore
-                    thing={VIEWER_THING}
-                    shown
-                    groups={() =>
-                      viewerGroups({
-                        file,
-                        at,
-                        count: files.length,
-                        walk,
-                        text,
-                        image,
-                        video,
-                        zoom,
-                        action,
-                        copyText,
-                        copyImage,
-                      })
-                    }
-                  />
-                }
-              />
-            ) : (
-              <header className="flex flex-none items-center gap-tight-gap border-b border-border py-luke-4 pr-item-gap pl-list-inset">
-                <FileTypeIcon
-                  name={file.name}
-                  className="mr-tight-gap size-control-icon flex-none"
-                />
-                <Text
-                  as={TEXT_ELEMENT.H2}
-                  variant={TEXT_VARIANT.SECTION}
-                  id={titleId}
-                  className={TITLE_CLASS}
-                >
-                  <OneLine>{file.name}</OneLine>
-                </Text>
-                {/* What the place opening the viewer says of the file shown stands after its size in the same quiet ink, the size giving it the room the size kept before the header's buttons (tasks.css), and it is cut before it reaches them. */}
-                <span className={`my-0 mr-auto ml-tight-gap ${SIZE_CLASS}`}>
-                  {sizeLabel(base64)}
-                </span>
-                {note === undefined || note === null ? null : (
-                  <span className={`my-0 mr-auto ml-block-gap ${NOTE_CLASS}`}>{note}</span>
-                )}
-                {text === undefined ? null : <CopyTextButton text={text} />}
-                {image ? (
-                  <>
-                    <CopyImageButton url={file.url} />
-                    <HeaderButton
-                      label={VIEWER_LABEL.ZOOM_OUT}
-                      chord={ZOOM_CHORD.OUT}
-                      onClick={() => zoom.step(-1)}
-                      icon={<ZoomOutIcon aria-hidden="true" />}
-                    />
-                    <HeaderButton
-                      label={VIEWER_LABEL.ZOOM_IN}
-                      chord={ZOOM_CHORD.IN}
-                      onClick={() => zoom.step(1)}
-                      icon={<ZoomInIcon aria-hidden="true" />}
-                    />
-                  </>
-                ) : null}
-                {action === undefined || !(image || video) ? null : action.address === undefined ? (
-                  <Button icon={action.icon} onClick={() => action.onPress(file)}>
-                    {action.label}
-                  </Button>
-                ) : (
-                  <ViewerLink action={action} address={action.address(file)} />
-                )}
-                <HeaderButton
-                  label={VIEWER_LABEL.DOWNLOAD}
-                  onClick={() => download(file)}
-                  icon={<DownloadIcon aria-hidden="true" />}
-                />
-                <HeaderButton
-                  label={VIEWER_LABEL.CLOSE}
-                  chord={VIEWER_CHORD.CLOSE}
-                  onClick={close}
-                  icon={<CloseIcon />}
-                />
-              </header>
-            )}
-            <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
-          </DialogCard>
+                </header>
+              )}
+              <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
+            </DialogCard>
+          </div>
           {walking ? (
             <WalkButton
               label={VIEWER_LABEL.NEXT}
