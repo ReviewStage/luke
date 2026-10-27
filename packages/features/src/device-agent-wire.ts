@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { checkoutIdentitySchema } from "./checkout-identity.js";
 import { wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -244,7 +245,8 @@ const macPath = EffectSchema.String.check(
 /**
  * A launch line's payload: where its worktree goes and what it checks out,
  * the repository as `owner/name` and the branch it starts from, none for an
- * agent with no repository or on the default branch. Its environment and
+ * agent with no repository or on the default branch, and who its commits
+ * are by. Its environment and
  * its first lines are its secrets, handed over by the claim alone.
  */
 export const deviceAgentLaunchPayloadSchema = EffectSchema.Struct({
@@ -257,6 +259,13 @@ export const deviceAgentLaunchPayloadSchema = EffectSchema.Struct({
   fingerprint: EffectSchema.optionalKey(EffectSchema.String),
   /** Whether the launch runs on the Mac's own sign-in, which the service's token route reads back; absent for one on the account's credential. */
   ownLogin: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
+   * Who the agent's commits are by, as the service settled it for a cloud
+   * checkout too, which the device sets in the agent's repository before the
+   * runner starts (`checkout-identity.ts`); absent for an agent with no
+   * repository, and from a service before the field, whose launch sets none.
+   */
+  identity: EffectSchema.optionalKey(checkoutIdentitySchema),
 });
 
 export type DeviceAgentLaunchPayload = typeof deviceAgentLaunchPayloadSchema.Type;

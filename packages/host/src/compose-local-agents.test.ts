@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { DeviceAgentClaimedLine, DeviceAgentDevice } from "@luke/features";
+import { CHECKOUT_IDENTITY_SCRIPT } from "@luke/features/checkout-identity";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
@@ -42,6 +43,7 @@ const LINE_ID = "0e9b7c1d-5a2f-4e63-8b40-7c1d2e3f4a5b";
 const USER_ID = "user-fixture";
 const LAYOUT = deviceAgentLayout(HOME, AGENT_ID);
 const SECRET_ENV = { LUKE_RUNNER_TOKEN: "runner-secret" };
+const IDENTITY = { name: "Ada Lovelace", email: "7001+ada@users.noreply.github.com" };
 
 const LAUNCH: DeviceAgentClaimedLine = {
   line: {
@@ -54,6 +56,7 @@ const LAUNCH: DeviceAgentClaimedLine = {
       repository: "acme/relay",
       startBranch: null,
       firstSequence: 0,
+      identity: IDENTITY,
     },
   },
   secrets: { env: SECRET_ENV, stdin: "{}\n" },
@@ -186,7 +189,7 @@ const followingDevice = (
   });
 
 it.effect(
-  "a device registers as sandboxed, signed in to nothing, and launches its agent in a VM with a GitHub token from Luke",
+  "a device registers as sandboxed, signed in to nothing, and launches its agent in a VM with a GitHub token from Luke, its commit identity set in its repository first",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -221,6 +224,14 @@ it.effect(
           false,
           "the runner reaches GitHub through its VM's bindings alone",
         );
+        // Note that the identity the launch carries is set in the agent's repository, as a cloud checkout sets it, before its runner starts.
+        const identity = spawned.findIndex(
+          (each) => each.program === "/bin/bash" && each.args[1] === CHECKOUT_IDENTITY_SCRIPT,
+        );
+        assert.equal(spawned[identity]?.cwd, LAYOUT.checkoutPath);
+        assert.equal(spawned[identity]?.env?.LUKE_GIT_NAME, IDENTITY.name);
+        assert.equal(spawned[identity]?.env?.LUKE_GIT_EMAIL, IDENTITY.email);
+        assert.ok(identity < spawned.findIndex((each) => each.program === VM_EXEC));
         yield* TestClock.adjust(Duration.seconds(1));
         yield* until(() => runner?.ended === "exited");
       }),

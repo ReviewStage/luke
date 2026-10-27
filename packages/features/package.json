@@ -34,6 +34,7 @@
     "./task-list-live": "./src/task-list-live.js",
     "./video-avatar": "./src/video-avatar.js",
     "./board-text": "./src/board-text.js",
+    "./checkout-identity": "./src/checkout-identity.js",
     "./image-signature": "./src/image-signature.js",
     "./installed-skill-client": "./src/installed-skill-client.js",
     "./installed-skill-route-wire": "./src/installed-skill-route-wire.js",
