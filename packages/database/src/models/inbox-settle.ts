@@ -17,19 +17,35 @@
  * the act's own stamp (the agent's `archived_at`, the task's
  * `completed_at`), the instant it wrote both the act and the settle, each
  * holding open again the ask it withdrew, and nothing a settle before or
- * since closed. A task Luke reopens on its own, as a turn starting on it
- * does (`beginTaskWork`), opens nothing; only the agent's own post under
- * the item's key does.
+ * since closed. An item the other act still settles, its agent still
+ * archived or its task still Done or Canceled, stays settled and is handed
+ * to that act instead, its reason and stamp, so undoing that act in turn
+ * opens it. A task Luke reopens on its own, as a turn starting on it does
+ * (`beginTaskWork`), opens nothing; only the agent's own post under the
+ * item's key does.
  */
 
 import { INBOX_ASK_STATUS, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import {
+  type AnyColumn,
+  and,
+  desc,
+  eq,
+  getTableName,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+} from "drizzle-orm";
+import type { AnyPgTable } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
+import { task } from "../schemas/task.js";
 
 type SettleEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
@@ -144,26 +160,94 @@ export function settleAgentInboxItems(
   return settle(SETTLE_BY.AGENTS, agentIds, INBOX_SETTLED_REASON.AGENT_ARCHIVED, now);
 }
 
+/** A column named by its table, for a subquery correlated with the item an update writes. */
+function qualified(table: AnyPgTable, column: AnyColumn) {
+  return sql`${sql.identifier(getTableName(table))}.${sql.identifier(column.name)}`;
+}
+
+const ITEM_AGENT = qualified(inboxItem, inboxItem.agentId);
+const ITEM_TASK = qualified(inboxItem, inboxItem.taskId);
+const AGENT_ID = qualified(codingAgent, codingAgent.id);
+const AGENT_ARCHIVED_AT = qualified(codingAgent, codingAgent.archivedAt);
+const TASK_ID = qualified(task, task.id);
+const TASK_STATUS_COLUMN = qualified(task, task.status);
+const TASK_COMPLETED_AT = qualified(task, task.completedAt);
+
+/** Whether the item's agent stands archived: the other act that settles an item a task's settle closed. */
+const AGENT_STILL_ARCHIVED = sql`exists (select 1 from ${codingAgent} where ${AGENT_ID} = ${ITEM_AGENT} and ${AGENT_ARCHIVED_AT} is not null)`;
+
+/** Whether the item's task stands Done or Canceled: the other act that settles an item an archive closed. */
+const TASK_STILL_SETTLED = sql`exists (select 1 from ${task} where ${TASK_ID} = ${ITEM_TASK} and ${TASK_STATUS_COLUMN} in (${TASK_STATUS.DONE}, ${TASK_STATUS.CANCELED}) and ${TASK_COMPLETED_AT} is not null)`;
+
+/** The condition that the item is one the settle named closed: of the task or the agents, for its reason, at its stamp. */
+function settledBy({ by, ids, reason, now }: typeof SettleRequestSchema.Type) {
+  return and(
+    by === SETTLE_BY.TASK ? inArray(inboxItem.taskId, ids) : inArray(inboxItem.agentId, ids),
+    eq(inboxItem.status, INBOX_STATUS.CLOSED),
+    isNull(inboxItem.closedBy),
+    eq(inboxItem.closedReason, reason),
+    eq(inboxItem.settledAt, now),
+  );
+}
+
+/**
+ * The items one settle closed that the other act still settles handed to
+ * it, closed for its reason at its stamp: a task's to the archive of their
+ * agent, an archive's to their task's Done or Canceled. Their ids and the
+ * reason they now stand closed for.
+ */
+const handOverSettledItems = SqlSchema.findAll({
+  Request: SettleRequestSchema,
+  Result: Schema.Struct({ id: Schema.String, reason: Schema.String }),
+  execute: (request) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set(
+          request.by === SETTLE_BY.TASK
+            ? {
+                closedReason: INBOX_SETTLED_REASON.AGENT_ARCHIVED,
+                settledAt: sql`(select ${AGENT_ARCHIVED_AT} from ${codingAgent} where ${AGENT_ID} = ${ITEM_AGENT})`,
+              }
+            : {
+                closedReason: sql`(select case ${TASK_STATUS_COLUMN} when ${TASK_STATUS.DONE} then ${INBOX_SETTLED_REASON.TASK_DONE}::text else ${INBOX_SETTLED_REASON.TASK_CANCELED}::text end from ${task} where ${TASK_ID} = ${ITEM_TASK})`,
+                settledAt: sql`(select ${TASK_COMPLETED_AT} from ${task} where ${TASK_ID} = ${ITEM_TASK})`,
+              },
+        )
+        .where(
+          and(
+            settledBy(request),
+            request.by === SETTLE_BY.TASK ? AGENT_STILL_ARCHIVED : TASK_STILL_SETTLED,
+          ),
+        )
+        .returning({ id: inboxItem.id, reason: sql<string>`${inboxItem.closedReason}` }),
+    ),
+});
+
+/** The withdrawn ask of the message named made to say the reason its item was handed to. */
+const rewordWithdrawnAsk = SqlSchema.void({
+  Request: Schema.Struct({ messageId: Schema.String, reason: Schema.String }),
+  execute: ({ messageId, reason }) =>
+    Database.use((db) =>
+      db
+        .update(inboxMessage)
+        .set({
+          ask: sql`${inboxMessage.ask} || jsonb_build_object('withdrawnReason', ${reason}::text)`,
+        })
+        .where(eq(inboxMessage.id, messageId)),
+    ),
+});
+
 /** The items of the task or the agents one settle closed, by its reason and its stamp, opened again with nothing settled on them; their ids. */
 const reopenSettledItems = SqlSchema.findAll({
   Request: SettleRequestSchema,
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ by, ids, reason, now }) =>
+  execute: (request) =>
     Database.use((db) =>
       db
         .update(inboxItem)
         .set({ status: INBOX_STATUS.OPEN, closedReason: null, settledAt: null })
-        .where(
-          and(
-            by === SETTLE_BY.TASK
-              ? inArray(inboxItem.taskId, ids)
-              : inArray(inboxItem.agentId, ids),
-            eq(inboxItem.status, INBOX_STATUS.CLOSED),
-            isNull(inboxItem.closedBy),
-            eq(inboxItem.closedReason, reason),
-            eq(inboxItem.settledAt, now),
-          ),
-        )
+        .where(settledBy(request))
         .returning({ id: inboxItem.id }),
     ),
 });
@@ -218,7 +302,9 @@ const reopenAsk = SqlSchema.void({
  * Note that an item's open ask is always its latest asking message, since a
  * post replaces every ask before it, so the settle withdrew that one where
  * it withdrew any; one already replaced or answered, as a notice's latest
- * ask is, is left as it stands. Answers how many opened.
+ * ask is, is left as it stands. An item the other act still settles is
+ * handed to it first, its withdrawn ask saying that act's reason, and opens
+ * nothing. Answers how many opened.
  */
 function reopen(
   by: (typeof SETTLE_BY)[keyof typeof SETTLE_BY],
@@ -228,7 +314,21 @@ function reopen(
 ): SettleEffect<number> {
   if (ids.length === 0) return Effect.succeed(0);
   return Effect.gen(function* () {
-    const reopened = yield* reopenSettledItems({ by, ids, reason, now: settledAt });
+    const request = { by, ids, reason, now: settledAt };
+    const handed = yield* handOverSettledItems(request);
+    if (handed.length > 0) {
+      const latest = yield* findLatestAsks({ itemIds: handed.map(({ id }) => id) });
+      const handedTo = new Map(handed.map((item) => [item.id, item.reason]));
+      yield* Effect.forEach(
+        latest.filter(
+          (ask) => ask.status === INBOX_ASK_STATUS.WITHDRAWN && ask.withdrawnReason === reason,
+        ),
+        (ask) =>
+          rewordWithdrawnAsk({ messageId: ask.id, reason: handedTo.get(ask.itemId) ?? reason }),
+        { discard: true },
+      );
+    }
+    const reopened = yield* reopenSettledItems(request);
     if (reopened.length === 0) return 0;
     const latest = yield* findLatestAsks({ itemIds: reopened.map(({ id }) => id) });
     const withdrawn = latest.filter(

@@ -267,3 +267,34 @@ it.layer(getTestDB())("an inbox item settling with its agent", (it) => {
       }),
   );
 });
+
+it.layer(getTestDB())("an inbox item settled by both its task and its agent", (it) => {
+  it.effect(
+    "stays settled while the other act stands, handed to it, and opens once both are undone, in either order",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const workspace = yield* openWorkspace(dean);
+
+        // Done, then the agent archived: moving the task back leaves the item to the archive.
+        const doneFirst = yield* openTaskWithItems(dean, workspace);
+        yield* updateTask(dean, doneFirst.taskId, { status: TASK_STATUS.DONE });
+        yield* archiveCodingAgent(dean, doneFirst.agentId, true);
+        yield* updateTask(dean, doneFirst.taskId, { status: TASK_STATUS.IN_PROGRESS });
+        yield* assertSettled(doneFirst.items, "Its agent was archived.");
+        yield* archiveCodingAgent(dean, doneFirst.agentId, false);
+        yield* assertOpen(doneFirst.items);
+
+        // The agent archived, then done: bringing the agent back leaves the item to the task.
+        yield* TestClock.adjust("1 minute");
+        const archivedFirst = yield* openTaskWithItems(dean, workspace);
+        yield* archiveCodingAgent(dean, archivedFirst.agentId, true);
+        yield* TestClock.adjust("1 minute");
+        yield* updateTask(dean, archivedFirst.taskId, { status: TASK_STATUS.DONE });
+        yield* archiveCodingAgent(dean, archivedFirst.agentId, false);
+        yield* assertSettled(archivedFirst.items, "Its task is done.");
+        yield* updateTask(dean, archivedFirst.taskId, { status: TASK_STATUS.IN_PROGRESS });
+        yield* assertOpen(archivedFirst.items);
+      }),
+  );
+});
