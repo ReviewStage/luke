@@ -7,11 +7,13 @@ import { useExperiment } from "../use-app-state.js";
 /**
  * local-agent-mac.tsx -- the label a local agent's box wears naming the Mac it runs on, and saying so while that Mac is away.
  *
- * A local agent runs on its starter's Mac rather than in a sandbox, so its
- * box says which one ("On Charles's MacBook Pro"), from the name the Mac
- * registered. While that Mac has not beaten lately, asleep or with Luke
- * closed, held against the window's own clock from when it last beat, the
- * label says it is offline instead, in the attention tone, since
+ * A local agent runs on one of its starter's devices rather than in the
+ * cloud, so its box says which one by name alone ("Charles's MacBook Pro"),
+ * from the name the device registered, beside the laptop glyph that already
+ * says it is a place. While that device has not beaten lately, asleep or with
+ * Luke closed, held against the window's own clock from when it last beat,
+ * the label adds that it is offline ("Charles's MacBook Pro · Offline"), as
+ * the Runs on chips do, in the attention tone, since
  * the agent's messages wait for it to come back. Nothing is drawn for an
  * agent in a sandbox, for one whose Mac the service no longer names, or while
  * the local agents experiment is off.
@@ -19,7 +21,7 @@ import { useExperiment } from "../use-app-state.js";
 
 /** The label's words, by whether the Mac is there. */
 function macWords(name: string, online: boolean): string {
-  return online ? `On ${name}` : `${name} is offline`;
+  return online ? name : `${name} · Offline`;
 }
 
 export function LocalAgentMac({
