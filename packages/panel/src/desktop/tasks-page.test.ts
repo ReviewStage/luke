@@ -13,7 +13,7 @@ import {
 } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTask } from "@luke/host/app-state";
+import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { applySectionWrite, NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
@@ -30,6 +30,7 @@ import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
+import { useInboxWaiting } from "./places-waiting.js";
 import { TasksPage } from "./tasks-page.js";
 
 /**
@@ -141,19 +142,45 @@ const TASKS = [
   task(35, "Migrate auth SDK", TASK_STATUS.DONE, TASK_PRIORITY.HIGH),
 ];
 
-/** Two threads of the invitations' task, and one of Safari's, waiting on Dean. */
+/**
+ * Main's read of the open items: two questions on the invitations' task;
+ * on Safari's a notice and a question of Charles's agent, which wait on no
+ * one but him; and one question on billing's.
+ */
 const WAITING: readonly AppInboxTask[] = [
   {
     taskId: "t-44",
     items: [
-      { id: "i-1", agentId: "a-1", title: "Invite links: 7 days or 14?", postedAt: 3 },
-      { id: "i-2", agentId: "a-1", title: "Add the Postmark token", postedAt: 2 },
+      {
+        id: "i-1",
+        agentId: "a-1",
+        title: "Invite links: 7 days or 14?",
+        postedAt: 3,
+        asking: true,
+      },
+      { id: "i-2", agentId: "a-1", title: "Add the Postmark token", postedAt: 2, asking: true },
     ],
   },
   {
     taskId: "t-42",
-    items: [{ id: "i-3", agentId: "a-2", title: "Which browsers?", postedAt: 1 }],
+    items: [
+      { id: "i-3", agentId: "a-2", title: "Safari fixed", postedAt: 1, asking: false },
+      { id: "i-4", agentId: "a-3", title: "Which browsers?", postedAt: 1, asking: true },
+    ],
   },
+  {
+    taskId: "t-40",
+    items: [
+      { id: "i-5", agentId: "a-4", title: "Refund the difference?", postedAt: 1, asking: true },
+    ],
+  },
+];
+
+/** What main counts on each of those tasks as Dean's to do. */
+const HOLDINGS: readonly AppInboxTaskHolding[] = [
+  { taskId: "t-44", items: 2, toDo: 2, updatedAt: 3 },
+  { taskId: "t-42", items: 2, toDo: 0, updatedAt: 1 },
+  { taskId: "t-40", items: 1, toDo: 1, updatedAt: 1 },
 ];
 
 /** The Tasks page over Acme's tasks, or `tasks`, read by Dean, once the members have answered. */
@@ -171,6 +198,7 @@ async function mountPage(
     const control = tasksControl({
       tasks: tasks.map((each) => ({ ...each, workspaceId: workspace.id })),
       inbox: WAITING,
+      inboxTasks: HOLDINGS,
       workspace,
       workspaces: [ACME, BETA],
       me: DEAN,
@@ -265,12 +293,43 @@ test("a refresh that failed after the tasks were read keeps the rows drawn under
   assert.match(first.querySelector('[role="alert"]')?.textContent ?? "", /could not be read/u);
 });
 
-test("a row says how many of its task's Inbox threads wait on the reader", async () => {
+test("a row and a card count the questions waiting on the reader, as the sidebar does, a notice and a teammate's question counting nowhere", async () => {
   const page = await mountPage();
+  const sidebar = { count: -1 };
+  function Sidebar() {
+    sidebar.count = useInboxWaiting(
+      tasksControl({ tasks: [...TASKS], inbox: WAITING, inboxTasks: HOLDINGS, me: DEAN }),
+    );
+    return null;
+  }
+  const sidebarRoot = createRoot(document.createElement("div"));
+  roots.push(sidebarRoot);
+  act(() => sidebarRoot.render(onRegistry(AtomRegistry.make(), createElement(Sidebar))));
+  // Note that the badge's words are read as a text of their own, since a row's key runs into them.
+  const says = (holder: Element | undefined) => {
+    const texts = document.createTreeWalker(
+      holder ?? document.createElement("i"),
+      NodeFilter.SHOW_TEXT,
+    );
+    for (let text = texts.nextNode(); text !== null; text = texts.nextNode()) {
+      const count = /^(\d+) needs? you$/u.exec(text.textContent ?? "")?.[1];
+      if (count !== undefined) return Number(count);
+    }
+    return 0;
+  };
+  const listSays = (key: string) => says(rowOf(page, key));
 
-  assert.match(rowOf(page, "ACME-44").textContent ?? "", /2 need you/);
-  assert.match(rowOf(page, "ACME-42").textContent ?? "", /1 needs you/);
-  assert.doesNotMatch(rowOf(page, "ACME-40").textContent ?? "", /needs? you/);
+  assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(listSays), [2, 0, 1]);
+  assert.equal(sidebar.count, 3);
+
+  act(() => buttonNamed(page, "Columns").click());
+  const cardSays = (key: string) =>
+    says(
+      [...page.querySelectorAll("[data-task-column] li")].find(
+        (card) => card.querySelector("[data-task-key]")?.textContent === key,
+      ),
+    );
+  assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(cardSays), [2, 0, 1]);
 });
 
 test("a press on a row opens its task", async () => {

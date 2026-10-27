@@ -281,7 +281,7 @@ export function StatusChip({
   );
 }
 
-/** How many of a task's Inbox threads wait on the reader, as a badge; nothing at none. */
+/** How many of a task's questions wait on the reader, as a badge; nothing at none. */
 export function WaitingBadge({ count }: { count: number }): React.JSX.Element | null {
   if (count === 0) return null;
   return <Badge tone={STATUS_TONE.ATTENTION}>{needsYouWords(count)}</Badge>;

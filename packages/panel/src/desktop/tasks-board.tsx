@@ -97,7 +97,6 @@ import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { newTaskAction } from "../tasks/inbox-list.js";
-import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import { TaskIssueTagChip } from "../tasks/task-issue-links.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -118,6 +117,7 @@ import {
   NewTaskInButton,
   quickAddInto,
 } from "./new-task-button.js";
+import { useTasksWaiting } from "./places-waiting.js";
 import { type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { groupCount } from "./sidebar-fold.js";
 import { useTaskMenuItems } from "./task-actions.js";
@@ -321,7 +321,7 @@ function TaskBoardCard({
   workspaceName: string;
   /** What the card draws beside its name. */
   properties: readonly TaskProperty[];
-  /** How many of its Inbox threads wait on the reader. */
+  /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
   now: number;
   onOpen: () => void;
@@ -583,7 +583,7 @@ function TaskBoardColumnView({
   panelId: string;
   properties: readonly TaskProperty[];
   people: ColumnPeople;
-  /** How many of a task's Inbox threads wait on the reader, by its id. */
+  /** How many of a task's questions wait on the reader, by its id (`useTasksWaiting`). */
   waitingOn: ReadonlyMap<string, number>;
   now: number;
   onOpen: (task: TaskSummary) => void;
@@ -713,8 +713,7 @@ export function TasksBoard({
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
   const now = useMinute();
-  const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
-  const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
+  const waitingOn = useTasksWaiting(tasks);
   const ids = useId();
   const board = useRef<HTMLDivElement>(null);
   const crossing = useRovingColumns<HTMLDivElement>();

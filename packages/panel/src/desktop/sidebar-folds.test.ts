@@ -191,6 +191,7 @@ test("the Inbox row counts what waits on a plan and what waits from an agent wit
   const page = mountSidebar(
     tasksControl({
       me: "user-dean",
+      tasks: [task("7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", "Webhook retries", "acme/relay")],
       inbox: [
         {
           taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",

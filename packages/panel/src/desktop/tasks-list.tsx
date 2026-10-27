@@ -118,7 +118,6 @@ import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { newTaskAction } from "../tasks/inbox-list.js";
-import { useSettledWaiting } from "../tasks/inbox-settling.js";
 import {
   NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
@@ -134,6 +133,7 @@ import { keptKey, useKept } from "../use-kept.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
 import { groupNewTaskWords, NewTaskInButton, quickAddInto } from "./new-task-button.js";
+import { useTasksWaiting } from "./places-waiting.js";
 import { type DraftParts, type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
@@ -744,7 +744,7 @@ function TaskListRow({
   workspaceName: string;
   /** The task's repository as the row says it: its name alone, unless another repository the List draws shares it. */
   repositoryName: string;
-  /** How many of its Inbox threads wait on the reader. */
+  /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
   now: number;
   properties: readonly TaskProperty[];
@@ -1222,8 +1222,7 @@ export function TasksList({
   const directory = useMemberDirectory();
   const now = useMinute();
   const folds = useListFolds();
-  const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
-  const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
+  const waitingOn = useTasksWaiting(tasks);
   const narrow = room === SHELL_ROOM.NARROW;
   const [listElement, setListElement] = useState<HTMLDivElement | null>(null);
   const properties = useFittedProperties(listElement, display.properties, narrow);

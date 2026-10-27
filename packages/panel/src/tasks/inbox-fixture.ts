@@ -383,6 +383,14 @@ const INBOXES: ReadonlyMap<string, readonly InboxItem[]> = new Map([
   [TASK.ROUNDING, ROUNDING_ITEMS],
 ]);
 
+/** Whether the item is a question waiting on the account: open, its thread holding an ask still open, as the service counts one (`askingReader`); a notice is not. */
+function asking(item: InboxItem): boolean {
+  return (
+    item.status === INBOX_STATUS.OPEN &&
+    (item.thread ?? []).some((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)
+  );
+}
+
 /** When an inbox last changed: its newest item's change. */
 function newest(items: readonly InboxItem[]): number {
   return Math.max(...items.map((each) => each.updatedAt));
@@ -393,7 +401,7 @@ const HOLDINGS: readonly AppInboxTaskHolding[] = [...INBOXES]
   .map(([taskId, items]) => ({
     taskId,
     items: items.length,
-    toDo: items.filter((each) => each.status === INBOX_STATUS.OPEN || each.unread === true).length,
+    toDo: items.filter(asking).length,
     updatedAt: newest(items),
   }))
   .toSorted((a, b) => b.updatedAt - a.updatedAt);
@@ -406,7 +414,10 @@ const WAITING: readonly AppInboxTask[] = HOLDINGS.flatMap(({ taskId }) => {
     : [
         {
           taskId,
-          items: open.map(({ id, agentId, title, postedAt }) => ({ id, agentId, title, postedAt })),
+          items: open.map((each) => {
+            const { id, agentId, title, postedAt } = each;
+            return { id, agentId, title, postedAt, asking: asking(each) };
+          }),
         },
       ];
 });

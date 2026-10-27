@@ -557,34 +557,37 @@ export function useSettledWaiting(
 }
 
 /**
- * How many questions wait on the reader across the tasks given, as main
+ * How many questions wait on the reader on each task, by task, as main
  * counts each task's, with the window's own answers laid over it until main
  * hears of them: a question the window answered that main still lists open
  * counts no longer, `waiting` being main's open items and `settled` those
  * still listed once the window's answers are laid (`useSettledWaiting`), of
- * which only those holding an ask (`holdsAsk`) were counted. None where
- * main's word carries no count, from a service before it.
+ * which only those holding an ask (`holdsAsk`) were counted. Where main's
+ * word carries no count for a task, from a service before it, its open
+ * items still listed are counted, as before. A task where none waits is
+ * left out.
  */
 export function useSettledToDo(
   holdings: readonly AppInboxTaskHolding[],
   waiting: readonly AppInboxTask[],
   settled: readonly AppInboxTask[],
-): number | undefined {
+): ReadonlyMap<string, number> {
   return useMemo(() => {
+    const listed = new Map(waiting.map((task) => [task.taskId, task.items]));
+    const left = new Map(settled.map((task) => [task.taskId, task.items]));
+    const asksIn = (byTask: typeof listed, taskId: string) =>
+      byTask.get(taskId)?.filter(holdsAsk).length ?? 0;
     const counted = new Map<string, number>();
-    for (const holding of holdings) {
-      if (holding.toDo === undefined) return undefined;
-      counted.set(holding.taskId, holding.toDo);
+    for (const { taskId, toDo } of holdings) {
+      if (toDo === undefined) continue;
+      const answered = asksIn(listed, taskId) - asksIn(left, taskId);
+      counted.set(taskId, Math.max(0, toDo - answered));
     }
-    // Note that a task main lists open items on and no count for is one its count cannot stand for yet.
-    if (waiting.some((task) => !counted.has(task.taskId))) return undefined;
-    const asksIn = (tasks: readonly AppInboxTask[]) =>
-      tasks.reduce(
-        (sum, task) => sum + (counted.has(task.taskId) ? task.items.filter(holdsAsk).length : 0),
-        0,
-      );
-    const total = [...counted.values()].reduce((sum, toDo) => sum + toDo, 0);
-    return Math.max(0, total - (asksIn(waiting) - asksIn(settled)));
+    // Note that a task main lists open items on and no count for is counted by its items, as a service before the count was.
+    for (const [taskId, items] of left) {
+      if (!counted.has(taskId)) counted.set(taskId, items.length);
+    }
+    return new Map([...counted].filter(([, count]) => count > 0));
   }, [holdings, waiting, settled]);
 }
 
