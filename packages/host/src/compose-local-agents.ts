@@ -159,8 +159,6 @@ const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 const KILL_GRACE = Duration.seconds(3);
 /** The file in the host's state the device ids and the launches running are kept in. */
 const STATE_FILE = "local-agents.json";
-/** The folder under the agent's own that is its temp folder, which its runner and its commands write to. */
-const TEMP_FOLDER = "tmp";
 /** The exit code a launch is settled with where its worktree could not be made or its runner started. */
 const NOT_STARTED = 1;
 /** How soon a GitHub token the service did not hand is asked for again, well inside the hour the last one lasts. */
@@ -711,7 +709,7 @@ export function composeLocalAgents(
               withRepository ? sandbox.deviceGit(agentId) : undefined,
             );
             if (!made) return yield* settle(line.id, NOT_STARTED);
-            const temp = path.join(layout.folder, TEMP_FOLDER);
+            const temp = layout.temp;
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
             const runnerScope = yield* Scope.fork(agentScope);
             // Note that the runner holds its VM for as long as its scope stands, so the VM is let go of last as the scope closes, once the runner has ended.
@@ -1059,7 +1057,7 @@ export function composeLocalAgents(
             );
             if (claimed === undefined || !("agentId" in claimed)) return;
             const layout = deviceAgentLayout(folder, claimed.agentId);
-            const env = { ...shellVariables, TMPDIR: path.join(layout.folder, TEMP_FOLDER) };
+            const env = { ...shellVariables, TMPDIR: layout.temp };
             // Note that an agent's command runs in its VM, never on the device, since its worktree is the agent's to rig.
             const sandbox = platform.sandbox;
             const inVm = {

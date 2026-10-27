@@ -210,6 +210,8 @@ export const DEVICE_AGENT_FOLDER = {
   INSTALLED_SKILLS: "installed-skills",
   /** The agent's own `gh` sign-in on a host (`GH_CONFIG_DIR`), which no read of the agent's tools answers from. */
   GITHUB_CONFIG: "gh",
+  /** The agent's temp folder (`TMPDIR`), made `0700`, which its runner and its commands write to, and where it saves what Luke reads back. */
+  TEMP: "tmp",
 } as const;
 
 /** Where a local agent's things stand on a Mac, every path absolute. */
@@ -219,6 +221,7 @@ export interface DeviceAgentLayout {
   readonly attachments: string;
   readonly installedSkills: string;
   readonly githubConfig: string;
+  readonly temp: string;
 }
 
 /** The agent's folder and what stands in it, under the Mac's home folder given. */
@@ -233,6 +236,7 @@ export function deviceAgentLayout(home: string, agentId: string): DeviceAgentLay
     attachments: [folder, DEVICE_AGENT_FOLDER.ATTACHMENTS].join("/"),
     installedSkills: [folder, DEVICE_AGENT_FOLDER.INSTALLED_SKILLS].join("/"),
     githubConfig: [folder, DEVICE_AGENT_FOLDER.GITHUB_CONFIG].join("/"),
+    temp: [folder, DEVICE_AGENT_FOLDER.TEMP].join("/"),
   };
 }
 

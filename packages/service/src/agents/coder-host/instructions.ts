@@ -344,12 +344,18 @@ function writeUpPlace(brief: CodingAgentBrief, onTask: boolean): string {
   return `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` and post it in a thread for the developer`;
 }
 
-/** How a page is shown, said alike to an agent on a task, whose page stands on the task, and to one on none, whose page stands on itself. */
-const PAGES_WORDS = `
+/**
+ * How a page is shown, said alike to an agent on a task, whose page stands on
+ * the task, and to one on none, whose page stands on itself, under the folder
+ * its machine reads back from (`MachineLayout`'s `sharedFiles`).
+ */
+function pagesWords(sharedFiles: string): string {
+  return `
 
 ## Pages
 
-When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, under \`${SHARED_FILES_DIRECTORY}/\` (\`mkdir -p ${SHARED_FILES_DIRECTORY}\` where it is missing), its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` by passing its \`path\`: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.`;
+When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, under \`${sharedFiles}/\` (\`mkdir -p ${sharedFiles}\` where it is missing), its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` by passing its \`path\`: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.`;
+}
 
 /**
  * What only an agent on a task is told of: a link that names the task, the
@@ -365,7 +371,7 @@ const TASK_PLACE_WORDS = {
     olderLinks: ", `luke://folder/<path>/`, and `luke://plan/<id>#<heading>`",
     startAgent:
       " Start it on your own task, which is where a piece of this task's work belongs; start one on another task, or on a new task of its own, only for work unrelated to your task, or where the developer asked for that",
-    pages: `${PAGES_WORDS}
+    board: `
 
 To sketch a design, a flow, or how parts connect, draw it on the task's whiteboard with \`${CODER_TOOL.DRAW_ON_BOARD}\`, sending the whole diagram each time, and check it with \`${CODER_TOOL.LOOK_AT_BOARD}\` while the developer has the board open.`,
     status: `
@@ -382,7 +388,7 @@ Members and agents leave comment threads on the plan's text, each beside the wor
   taskless: {
     link: "",
     olderLinks: " and `luke://folder/<path>/`",
-    pages: PAGES_WORDS,
+    board: "",
     comments: "",
     status: "",
     startAgent: ` You work on no task, so name the task to start it on by its id, or make one for it first with \`${CODER_TOOL.CREATE_TASK}\`, related work among it`,
@@ -554,6 +560,8 @@ export interface CoderMachine {
   readonly checkoutPath: string;
   /** Where the machine keeps the skills the member installed into Luke. */
   readonly installedSkills: string;
+  /** Where the agent saves a file Luke reads back (`MachineLayout`'s `sharedFiles`). */
+  readonly sharedFiles: string;
 }
 
 /** A sandbox of the agent's own, its checkout and installed skills where every sandbox keeps them. */
@@ -562,6 +570,7 @@ const SANDBOX_MACHINE: CoderMachine = {
   sandboxed: false,
   checkoutPath: CODER.CHECKOUT_PATH,
   installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
+  sharedFiles: SHARED_FILES_DIRECTORY,
 };
 
 /**
@@ -933,7 +942,7 @@ Where another coding agent started you, as your first message says, threads to t
 
 One thread per thing you need; \`${INBOX_TOOLS.POST.name}\`'s own words say how to write its posts and the asks they end with. Decide small things yourself.
 
-Keep your threads current rather than repeating them: ask again under a key only when what you need from it has changed, never to remind, and withdraw an ask with \`${INBOX_TOOLS.WITHDRAW.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open ask in a message, at the end of a turn or anywhere else: the developer sees it in its thread. Read your threads with \`${INBOX_TOOLS.READ.name}\` rather than ask again when you are unsure what stands. An answer you wait for reaches you as a message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. Replying never answers: the developer may just reply, and any member may write on a thread at any point, or start a new one with you under a key of its own, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key. Where such a message, or an answer carrying their words, asks something of you, a question or a request, reply on that thread with \`${INBOX_TOOLS.POST.name}\` under its key, asking nothing unless what you need from them changed: answer a question once you can, and once a request is done, say in a line or two what you did, or why you did not, since a request you act on without a word leaves them asking again. A message that only tells you something, agrees, or thanks you needs no reply, nor does an answer given with its buttons alone. Never post on a thread to say how the work is going, such as that you started on it, that it is under way, that its checks are running, or that its pull request is almost merged: a thread hears from you again only to answer what was asked on it, when something on it is ready for their eyes, or when you need something new of them. They read your reply on the thread they wrote on, not in your transcript, so never answer them in your message alone: your message may say in a line that you replied on the thread, and nothing they should read stands only there.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on a thread.${place.pages}${place.comments}
+Keep your threads current rather than repeating them: ask again under a key only when what you need from it has changed, never to remind, and withdraw an ask with \`${INBOX_TOOLS.WITHDRAW.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open ask in a message, at the end of a turn or anywhere else: the developer sees it in its thread. Read your threads with \`${INBOX_TOOLS.READ.name}\` rather than ask again when you are unsure what stands. An answer you wait for reaches you as a message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. Replying never answers: the developer may just reply, and any member may write on a thread at any point, or start a new one with you under a key of its own, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key. Where such a message, or an answer carrying their words, asks something of you, a question or a request, reply on that thread with \`${INBOX_TOOLS.POST.name}\` under its key, asking nothing unless what you need from them changed: answer a question once you can, and once a request is done, say in a line or two what you did, or why you did not, since a request you act on without a word leaves them asking again. A message that only tells you something, agrees, or thanks you needs no reply, nor does an answer given with its buttons alone. Never post on a thread to say how the work is going, such as that you started on it, that it is under way, that its checks are running, or that its pull request is almost merged: a thread hears from you again only to answer what was asked on it, when something on it is ready for their eyes, or when you need something new of them. They read your reply on the thread they wrote on, not in your transcript, so never answer them in your message alone: your message may say in a line that you replied on the thread, and nothing they should read stands only there.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on a thread.${pagesWords(machine.sharedFiles)}${place.board}${place.comments}
 
 ## Handing work to a worker
 
@@ -966,12 +975,13 @@ export interface AgentInstructionsContext {
   readonly workspace: string;
   readonly memoryOn: boolean;
   readonly harness: CoderHarness;
-  /** Where the agent's machine keeps its checkout and its installed skills, and how a local agent's device runs it; where every sandbox keeps them, where unsaid. */
+  /** Where the agent's machine keeps its checkout, its installed skills, and the files Luke reads back, and how a local agent's device runs it; where every sandbox keeps them, where unsaid. */
   readonly place?:
     | {
         readonly checkoutPath: string;
         readonly installedSkills: string;
         readonly isolation: DeviceIsolation | undefined;
+        readonly sharedFiles: string;
       }
     | undefined;
 }
@@ -1011,6 +1021,7 @@ export function agentCoderInstructions(
         context.place?.isolation === DEVICE_ISOLATION.SANDBOX,
       checkoutPath: context.place?.checkoutPath ?? SANDBOX_MACHINE.checkoutPath,
       installedSkills: context.place?.installedSkills ?? SANDBOX_MACHINE.installedSkills,
+      sharedFiles: context.place?.sharedFiles ?? SANDBOX_MACHINE.sharedFiles,
     },
   );
 }

@@ -83,6 +83,8 @@ export interface MachineLayout {
   readonly installedSkills: string;
   readonly skillsUpload: string;
   readonly attachments: string;
+  /** Where the agent saves a file Luke reads back, a screenshot it shows or a page it posts: a folder Luke's reads reach on that machine. */
+  readonly sharedFiles: string;
   readonly claudeExecutable: string | undefined;
   /** None on a Mac that checked no Codex yet, which runs no Codex agent, as on a sandbox, which runs the image's. */
   readonly codexExecutable: string | undefined;

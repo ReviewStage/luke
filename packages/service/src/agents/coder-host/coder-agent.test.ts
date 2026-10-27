@@ -345,6 +345,7 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
     sandboxed: false,
     checkoutPath: "/Users/dev/.luke/agents/a1/repository",
     installedSkills: "/Users/dev/.luke/agents/a1/installed-skills",
+    sharedFiles: "/Users/dev/.luke/agents/a1/tmp",
   };
   const SANDBOX_OF = [
     [CODER_HARNESS.CLAUDE_CODE, "Claude Code's own sandbox", "Codex's own sandbox"],
@@ -389,12 +390,13 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
   assert.ok(codex.includes(`\`${MAC.installedSkills}/`));
 });
 
-test("a local agent in a VM on its device is told its tools and logins there are out of reach", () => {
+test("a local agent in a VM on its device is told its tools and logins there are out of reach, and to save pages where its device reads them", () => {
   const VM = {
     local: true,
     sandboxed: true,
     checkoutPath: "/home/luke-host/.luke/agents/a1/repository",
     installedSkills: "/home/luke-host/.luke/agents/a1/installed-skills",
+    sharedFiles: "/home/luke-host/.luke/agents/a1/tmp",
   };
   for (const repository of ["Acme/Relay", null]) {
     const words = coderInstructions(
@@ -417,6 +419,9 @@ test("a local agent in a VM on its device is told its tools and logins there are
     assert.ok(!words.includes("the developer's own git credentials"), label);
     assert.ok(!words.includes("## Your browser"), label);
     if (repository !== null) assert.ok(words.includes(`\`${VM.checkoutPath}\``), label);
+    // The device reads back only inside the agent's folder, never the VM's own `/tmp`.
+    assert.ok(words.includes(`under \`${VM.sharedFiles}/\``), label);
+    assert.ok(!words.includes("/tmp/luke"), label);
   }
 });
 

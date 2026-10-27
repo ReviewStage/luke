@@ -152,6 +152,7 @@ const SANDBOX_LAYOUT: MachineLayout = {
   installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
   skillsUpload: NATIVE_SKILLS_PATH.UPLOAD,
   attachments: ATTACHMENT_DIRECTORY,
+  sharedFiles: SHARED_FILES_DIRECTORY,
   claudeExecutable: undefined,
   codexExecutable: undefined,
   writableRoots: [],

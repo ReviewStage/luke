@@ -216,6 +216,8 @@ function deviceMachineOver(
         // Note that the Mac writes the skills where they are installed, since no root installs them after.
         skillsUpload: folders.installedSkills,
         attachments: folders.attachments,
+        // Note that the Mac answers reads inside the agent's folder alone, so what Luke reads back is saved in its temp folder, never `/tmp`, which its VM keeps to itself.
+        sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,
         writableRoots: [folders.folder],
