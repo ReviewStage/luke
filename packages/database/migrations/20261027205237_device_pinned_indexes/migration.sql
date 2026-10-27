@@ -1,2 +1,0 @@
-CREATE INDEX "coding_agent_device" ON "coding_agent" ("device_id") WHERE "device_id" is not null;--> statement-breakpoint
-CREATE INDEX "task_device" ON "task" ("device_id") WHERE "device_id" is not null;

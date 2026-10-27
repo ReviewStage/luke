@@ -91,3 +91,8 @@ test("a presence read that fails says the status cannot be checked, never offlin
   );
   assert.equal(label, "Runs on: Charles's MacBook Air · Can't check status");
 });
+
+test("a device the account does not own, which the read does not name, shows its name alone", async () => {
+  const label = await labelWhile(() => Promise.resolve({ devices: [] }));
+  assert.equal(label, "Runs on: Charles's MacBook Air");
+});

@@ -23,14 +23,11 @@ import {
   deviceSetupSchema,
   deviceSignedInSchema,
 } from "@luke/features/device-agent-wire";
-import { and, desc, eq, exists, gte, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import { DateTime, Effect, type Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { device } from "../schemas/device.js";
-import { task } from "../schemas/task.js";
-import { agentReachableBy, taskReachableBy } from "./workspace-store.js";
 
 type DeviceEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
@@ -224,46 +221,6 @@ const findNamed = SqlSchema.findAll({
     ),
 });
 
-const findVisible = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, ids: Schema.Array(Schema.String) }),
-  Result: DeviceSchema,
-  execute: ({ userId, ids }) =>
-    Database.use((db) =>
-      db
-        .select({
-          id: device.id,
-          userId: device.userId,
-          name: device.name,
-          kind: device.kind,
-          lastSeenAt: device.lastSeenAt,
-          signedIn: device.signedIn,
-          codexExecutable: device.codexExecutable,
-        })
-        .from(device)
-        .where(
-          and(
-            inArray(device.id, [...ids]),
-            or(
-              eq(device.userId, userId),
-              // Note that a teammate's device is seen as its agent or its task is, so a member sees no more of it than the label already says.
-              exists(
-                queryBuilder
-                  .select({ one: codingAgent.id })
-                  .from(codingAgent)
-                  .where(and(eq(codingAgent.deviceId, device.id), agentReachableBy(userId))),
-              ),
-              exists(
-                queryBuilder
-                  .select({ one: task.id })
-                  .from(task)
-                  .where(and(eq(task.deviceId, device.id), taskReachableBy(userId))),
-              ),
-            ),
-          ),
-        ),
-    ),
-});
-
 const findLayout = SqlSchema.findOneOption({
   Request: DeviceKeySchema,
   Result: DeviceStandingSchema,
@@ -344,25 +301,6 @@ export function beatDevice(
 /** The account's Macs that beat at or after the instant given, the latest first. */
 export function devicesSeenSince(userId: string, since: Date): DeviceEffect<readonly Device[]> {
   return findSeen({ userId, since });
-}
-
-/**
- * The devices of `ids` the account may see: its own, and one a teammate's
- * agent or task names where the account is a member of that agent's or
- * task's workspace and reaches it (`agentReachableBy`, `taskReachableBy`), as
- * the label on the agent's tab says which device it runs on. Any other id
- * reads as no device, so this answers the account nothing of an id it merely
- * knows.
- */
-export function devicesVisibleTo(
-  userId: string,
-  ids: readonly string[],
-): DeviceEffect<ReadonlyMap<string, Device>> {
-  if (ids.length === 0) return Effect.succeed(new Map());
-  return Effect.map(
-    findVisible({ userId, ids: [...new Set(ids)] }),
-    (devices) => new Map(devices.map((each) => [each.id, each])),
-  );
 }
 
 /**

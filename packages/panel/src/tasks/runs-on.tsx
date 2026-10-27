@@ -18,13 +18,7 @@ import {
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { Schema } from "effect";
-import { useMemo } from "react";
-import {
-  type PresenceBook,
-  presenceStanding,
-  useDeviceBeat,
-  useDevicePresence,
-} from "../device-presence.js";
+import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
 import { ExperimentTag } from "../experiment-marks.js";
 import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
@@ -83,10 +77,10 @@ function DeviceGlyph({ kind }: { kind: DeviceKind | undefined }): React.JSX.Elem
   return kind === DEVICE_KIND.HOST ? <GLYPH.HOST /> : <GLYPH.DESKTOP />;
 }
 
-/** Where a device offered stands now; one a service before beats said nothing of is online, as it listed only those. */
+/** Where a device offered stands now; one a service before beats said nothing of is online, as it listed only those, and one the presence read does not name, though it is the account's own, is gone. */
 function offerStanding(device: MacOffer, book: PresenceBook): DeviceStanding {
   if (device.seenAt === undefined) return DEVICE_STANDING.ONLINE;
-  return presenceStanding(book, device.deviceId);
+  return presenceStanding(book, device.deviceId) ?? DEVICE_STANDING.OFFLINE;
 }
 
 /** What each standing is called. */
@@ -97,11 +91,9 @@ const STANDING_WORDS = {
   [DEVICE_STANDING.CHECKING]: RUNS_ON_WORDS.CHECKING,
 } as const;
 
-/** Why a device offered takes no agent now: away, or online but still getting ready or not set up; none for one that takes an agent, and none for one whose standing cannot be told yet, which is not called away. */
+/** Why a device offered takes no agent now: away, or still getting ready or not set up, whatever its standing; none for one that takes an agent, and none for one whose standing cannot be told yet, which is not called away. */
 function offerUnready(device: MacOffer, book: PresenceBook): string | undefined {
-  const standing = offerStanding(device, book);
-  if (standing === DEVICE_STANDING.OFFLINE) return RUNS_ON_WORDS.OFFLINE;
-  if (standing !== DEVICE_STANDING.ONLINE) return undefined;
+  if (offerStanding(device, book) === DEVICE_STANDING.OFFLINE) return RUNS_ON_WORDS.OFFLINE;
   switch (device.setup) {
     case DEVICE_SETUP.PREPARING:
       return RUNS_ON_WORDS.GETTING_READY;
@@ -182,8 +174,7 @@ export function NewTaskRunsOnChip({
 }): React.JSX.Element {
   // Note that the clock only redraws the chip as a beat ages, since the standing is read off the book's own monotonic clock.
   useSecond();
-  const ids = useMemo(() => devices.map((each) => each.deviceId), [devices]);
-  const book = useDevicePresence(ids);
+  const book = useDevicePresence(true);
   return (
     <span className="new-task-runs-on inline-flex min-w-0 items-center gap-item-gap">
       <Picker
@@ -207,7 +198,11 @@ export function NewTaskRunsOnChip({
 function standingWords(runsOn: TaskRunsOn | undefined, book: PresenceBook): string {
   if (runsOn === undefined) return RUNS_ON_WORDS.CLOUD;
   if (runsOn.device === undefined) return RUNS_ON_WORDS.REMOVED;
-  return `${runsOn.device.name} · ${STANDING_WORDS[presenceStanding(book, runsOn.deviceId)]}`;
+  const standing = presenceStanding(book, runsOn.deviceId);
+  // Note that a device the read does not name is a teammate's, which the window cannot speak for, so its chip is its name alone.
+  return standing === undefined
+    ? runsOn.device.name
+    : `${runsOn.device.name} · ${STANDING_WORDS[standing]}`;
 }
 
 /**
@@ -218,7 +213,7 @@ function standingWords(runsOn: TaskRunsOn | undefined, book: PresenceBook): stri
 export function TaskRunsOnChip({ runsOn }: { runsOn: TaskRunsOn | undefined }): React.JSX.Element {
   // Note that the clock only redraws the chip as a beat ages, since the standing is read off the book's own monotonic clock.
   useSecond();
-  const book = useDeviceBeat(runsOn?.deviceId);
+  const book = useDevicePresence(runsOn?.device !== undefined);
   const words = standingWords(runsOn, book);
   return (
     <Tooltip label={RUNS_ON_WORDS.LOCKED_HINT}>

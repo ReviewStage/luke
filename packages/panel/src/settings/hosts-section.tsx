@@ -43,7 +43,7 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Base64Url, Hex } from "effect/encoding";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import {
@@ -145,7 +145,8 @@ async function mintedInstallToken(): Promise<{ installToken: string; tokenHash: 
 
 /** A host's line under its name: online, or when it was last seen. */
 function seenWords(host: Host, book: PresenceBook, now: number): string {
-  const standing = presenceStanding(book, host.id);
+  // Note that a host the read does not name, though it is the account's own, is gone.
+  const standing = presenceStanding(book, host.id) ?? DEVICE_STANDING.OFFLINE;
   if (standing === DEVICE_STANDING.ONLINE) return WORDS.ONLINE;
   if (standing === DEVICE_STANDING.CHECKING) return WORDS.CHECKING;
   const age = presenceAgeMs(book, host.id);
@@ -289,9 +290,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const minute = Math.floor(useMinute() / MINUTE_MS);
   const [hosts, setHosts] = useState<readonly Host[] | undefined>(undefined);
   // Note that the list is read once a minute for the hosts that join or leave, while each host's beat is the window's shared presence, read often enough that a host that keeps beating never reads offline.
-  const hostsDrawn = on && signedIn ? hosts : undefined;
-  const hostIds = useMemo(() => (hostsDrawn ?? []).map((each) => each.id), [hostsDrawn]);
-  const book = useDevicePresence(hostIds);
+  const book = useDevicePresence(on && signedIn);
   const [installScriptUrl, setInstallScriptUrl] = useState<string | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);

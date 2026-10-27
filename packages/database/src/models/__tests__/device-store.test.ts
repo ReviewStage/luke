@@ -2,25 +2,16 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { DEVICE_ISOLATION } from "@luke/features/device-agent-wire";
-import { eq } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
-import {
-  DEVICE_LAYOUT,
-  getTestDB,
-  joinWorkspace,
-  openTaskAgent,
-  openWorkspace,
-} from "../../testing/index.js";
+import { DEVICE_LAYOUT, getTestDB } from "../../testing/index.js";
 import {
   beatDevice,
   deviceLayout,
   devicesNamed,
   devicesSeenSince,
-  devicesVisibleTo,
   registerDevice,
 } from "../device-store.js";
 
@@ -135,38 +126,6 @@ it.layer(getTestDB())("the device store", (it) => {
           "Laptop",
           "Studio",
         ]);
-      }),
-  );
-
-  it.effect(
-    "a presence read answers an account its own devices and a teammate's device its shared agent names, and nothing for an id it merely knows",
-    () =>
-      Effect.gen(function* () {
-        const db = yield* Database;
-        const { owner, other } = yield* openAccounts;
-        const stranger = `user-${randomUUID()}`;
-        yield* db
-          .insert(user)
-          .values({ id: stranger, name: "Stranger", email: `${stranger}@luke.test` });
-        const [mine, theirs, hidden] = [randomUUID(), randomUUID(), randomUUID()];
-        yield* registerDevice(owner, { id: mine, name: "Mine", ...DEVICE_LAYOUT });
-        yield* registerDevice(other, { id: theirs, name: "Theirs", ...DEVICE_LAYOUT });
-        yield* registerDevice(other, { id: hidden, name: "Hidden", ...DEVICE_LAYOUT });
-        // The other account's agent in a workspace the owner is in runs on `theirs`.
-        const shared = yield* openWorkspace(other);
-        yield* joinWorkspace(shared, owner);
-        const agent = yield* openTaskAgent(other, shared, null);
-        yield* db.update(codingAgent).set({ deviceId: theirs }).where(eq(codingAgent.id, agent));
-
-        const ids = [mine, theirs, hidden, randomUUID()];
-        const seenByOwner = yield* devicesVisibleTo(owner, ids);
-        const seenByStranger = yield* devicesVisibleTo(stranger, ids);
-
-        assert.deepEqual([...seenByOwner.values()].map((each) => each.name).sort(), [
-          "Mine",
-          "Theirs",
-        ]);
-        assert.deepEqual([...seenByStranger.keys()], [], "outside the workspace, nothing is seen");
       }),
   );
 });

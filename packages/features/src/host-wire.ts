@@ -153,22 +153,13 @@ export const hostsAnswerSchema = EffectSchema.Struct({
 
 export type HostsAnswer = typeof hostsAnswerSchema.Type;
 
-/** The most devices one presence read names, which the labels on one screen never reach. */
-export const DEVICE_PRESENCE_MAX_IDS = 64;
-
-/** The devices whose last beats are read (POST): the ids of those a window draws. */
-export const devicePresenceRequestSchema = EffectSchema.Struct({
-  ids: EffectSchema.Array(wireUuidSchema).check(EffectSchema.isMaxLength(DEVICE_PRESENCE_MAX_IDS)),
-});
-
 /**
- * How long ago each device named last beat, in milliseconds on the service's
- * own clock, and nothing else of it. A window ages this on its own monotonic
- * clock rather than comparing a timestamp with its wall clock, so a window
- * whose clock is off judges the same as one whose clock is right. A device
- * that is gone, or has not registered, is left out, and so is one the reader
- * may not see: its own, and one a teammate's agent or task names in a
- * workspace the reader is in.
+ * How long ago each of the reader's own devices last beat, in milliseconds
+ * on the service's own clock, and nothing else of it. A window ages this on
+ * its own monotonic clock rather than comparing a timestamp with its wall
+ * clock, so a window whose clock is off judges the same as one whose clock is
+ * right. A device that is gone, has not registered, or is a teammate's is
+ * left out: the window cannot speak for it.
  */
 export const devicePresenceAnswerSchema = EffectSchema.Struct({
   devices: EffectSchema.Array(

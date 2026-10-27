@@ -6,7 +6,7 @@ import {
 import { EXPERIMENT } from "@luke/settings";
 import { Badge, STATUS_TONE, useSecond, VisuallyHidden } from "@luke/ui";
 import { LaptopIcon } from "@luke/ui/icons";
-import { presenceStanding, useDeviceBeat } from "../device-presence.js";
+import { presenceStanding, useDevicePresence } from "../device-presence.js";
 import { useExperiment } from "../use-app-state.js";
 
 /**
@@ -19,12 +19,12 @@ import { useExperiment } from "../use-app-state.js";
  * device has not beaten lately, asleep or with Luke closed, judged from how
  * long ago the service says it last beat, the label adds that it is offline ("Charles's MacBook Pro · Offline"), as
  * the Runs on chips do, in the attention tone, since
- * the agent's messages wait for it to come back. The beat it holds the clock
- * against is the later of the one the agent's read carried and the one the
- * window's shared presence read last answered (`device-presence.ts`), so a
- * device that keeps beating never reads offline for want of a read; where
- * that read fails and the beat held is old, the label says it cannot check
- * rather than that the device is away. Nothing is drawn for an
+ * the agent's messages wait for it to come back. The beat comes from the
+ * window's shared presence read (`device-presence.ts`), so a device that keeps
+ * beating never reads offline for want of a read; where that read fails and
+ * the beat held is old, the label says it cannot check rather than that the
+ * device is away. A device the read does not name is a teammate's, which the
+ * window cannot speak for, so its label is its name alone. Nothing is drawn for an
  * agent in a sandbox, for one whose Mac the service no longer names, or while
  * the local agents experiment is off.
  */
@@ -33,8 +33,9 @@ import { useExperiment } from "../use-app-state.js";
 const RUNS_ON = "Runs on: ";
 
 /** The label's words, by where the device stands. */
-function macWords(name: string, standing: DeviceStanding): string {
-  if (standing === DEVICE_STANDING.ONLINE || standing === DEVICE_STANDING.CHECKING) return name;
+function macWords(name: string, standing: DeviceStanding | undefined): string {
+  if (standing === undefined || standing === DEVICE_STANDING.ONLINE) return name;
+  if (standing === DEVICE_STANDING.CHECKING) return name;
   return standing === DEVICE_STANDING.OFFLINE
     ? `${name} · Offline`
     : `${name} · Can't check status`;
@@ -52,11 +53,14 @@ export function LocalAgentMac({
 
 /** The label itself, held against the window's clock, so a Mac that goes quiet reads offline without another read. */
 function MacBadge({ mac }: { mac: NonNullable<CodingAgentSummary["mac"]> }): React.JSX.Element {
-  const presence = useDeviceBeat(mac.deviceId);
+  const presence = useDevicePresence(true);
   // Note that the clock only redraws the label as a beat ages, since the standing is read off the book's own monotonic clock.
   useSecond();
   const standing = presenceStanding(presence, mac.deviceId);
-  const quiet = standing === DEVICE_STANDING.ONLINE || standing === DEVICE_STANDING.CHECKING;
+  const quiet =
+    standing === undefined ||
+    standing === DEVICE_STANDING.ONLINE ||
+    standing === DEVICE_STANDING.CHECKING;
   return (
     <Badge
       tone={quiet ? STATUS_TONE.NEUTRAL : STATUS_TONE.ATTENTION}

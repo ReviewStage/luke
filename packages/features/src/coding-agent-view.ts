@@ -37,7 +37,6 @@ import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   devicePresenceAnswerSchema,
-  devicePresenceRequestSchema,
   hostDoneAnswerSchema,
   hostIdRequestSchema,
   hostInstallTokenAnswerSchema,
@@ -191,7 +190,7 @@ export const hostsAnswerViewSchema = EffectSchema.Union([hostsAnswerSchema, fail
 
 export type HostsAnswerView = typeof hostsAnswerViewSchema.Type;
 
-/** When the devices a window names last beat, as the window hears them read, or why not. */
+/** How long ago the reader's devices last beat, as the window hears it read, or why not. */
 export const devicePresenceAnswerViewSchema = EffectSchema.Union([
   devicePresenceAnswerSchema,
   failed,
@@ -217,11 +216,6 @@ export const hostInstallTokenParamsSchema = hostInstallTokenRequestSchema;
 
 /** What removing a host or revoking an install token names: its id. */
 export const hostIdParamsSchema = hostIdRequestSchema;
-
-/** The devices a window asks the beats of, as its act names them. */
-export const devicePresenceParamsSchema = devicePresenceRequestSchema;
-
-export type DevicePresenceParams = typeof devicePresenceParamsSchema.Type;
 
 /** The account's own provider keys, as the window hears them read, saved, or removed: the keys as they stand, or why there are none. */
 export const providerKeysAnswerViewSchema = EffectSchema.Union([providerKeysAnswerSchema, failed]);

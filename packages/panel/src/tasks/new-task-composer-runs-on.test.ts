@@ -60,12 +60,12 @@ beforeEach(() => {
   handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
   // The service answers the shared presence read with no beat later than the lists carry.
   fakeActPort({
-    [ACT_KIND.HOSTS_PRESENCE]: (payload: { ids: readonly string[] }) =>
+    [ACT_KIND.HOSTS_PRESENCE]: () =>
       Promise.resolve({
         devices: offeredNow.flatMap((device) =>
-          payload.ids.includes(device.deviceId) && device.seenAt !== undefined
-            ? [{ deviceId: device.deviceId, ageMs: Date.now() - device.seenAt }]
-            : [],
+          device.seenAt === undefined
+            ? []
+            : [{ deviceId: device.deviceId, ageMs: Date.now() - device.seenAt }],
         ),
       }),
   });

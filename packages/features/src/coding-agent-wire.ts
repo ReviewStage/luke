@@ -287,13 +287,13 @@ export type DeviceStanding = (typeof DEVICE_STANDING)[keyof typeof DEVICE_STANDI
 /**
  * Where a device stands given how long ago it last beat on the service's own
  * clock (`ageMs`, none where the service named no beat): online within
- * `MAC_PRESENCE.FRESH_MS`; otherwise unknown where the read that would say
- * so failed for it (`unchecked`), since a window that cannot ask must not
- * say a device is away, and offline where it did not.
+ * `MAC_PRESENCE.FRESH_MS`; otherwise unknown where the latest read failed
+ * (`readFailed`), since a window that cannot ask must not say a device is
+ * away, and offline where it did not.
  */
-export function deviceStanding(ageMs: number | undefined, unchecked: boolean): DeviceStanding {
+export function deviceStanding(ageMs: number | undefined, readFailed: boolean): DeviceStanding {
   if (ageMs !== undefined && ageMs <= MAC_PRESENCE.FRESH_MS) return DEVICE_STANDING.ONLINE;
-  return unchecked ? DEVICE_STANDING.UNKNOWN : DEVICE_STANDING.OFFLINE;
+  return readFailed ? DEVICE_STANDING.UNKNOWN : DEVICE_STANDING.OFFLINE;
 }
 
 /**

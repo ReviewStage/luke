@@ -55,7 +55,6 @@ import {
   codingAgentTranscriptOlderParamsSchema,
   codingAgentWorkspaceListParamsSchema,
   devicePresenceAnswerViewSchema,
-  devicePresenceParamsSchema,
   hostDoneAnswerViewSchema,
   hostIdParamsSchema,
   hostInstallTokenAnswerViewSchema,
@@ -102,7 +101,7 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.HOSTS_PRESENCE]: actProcedure(
     "Could not read your devices' beats on this system.",
   )
-    .input(exactInput(devicePresenceParamsSchema))
+    .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(devicePresenceAnswerViewSchema)),
   [AGENT_ACT_KIND.HOSTS_REMOVE]: actProcedure("Could not remove the host on this system.")
     .input(exactInput(hostIdParamsSchema))

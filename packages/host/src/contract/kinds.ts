@@ -130,7 +130,7 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
   /**
    * The account's hosts as Settings › Agents › Hosts reads and changes
-   * them: listed, the beats of the devices a window draws read, one removed, an install token kept by its hash alone (the
+   * them: listed, the beats of the account's devices read, one removed, an install token kept by its hash alone (the
    * window that minted the token keeps it and shows it once), and one revoked.
    */
   HOSTS_LIST: "hosts.list",
