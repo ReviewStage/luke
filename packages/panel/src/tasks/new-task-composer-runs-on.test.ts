@@ -139,6 +139,7 @@ async function mount(offered: Offered = { devices: devicesWith() }) {
             readModels: () => {
               if (!readsLand) return;
               devices = [...(offered.reread ?? offered.devices ?? [])];
+              offeredNow = devices;
               modelsFailed = false;
               draw();
             },
