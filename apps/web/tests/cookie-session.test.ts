@@ -13,6 +13,7 @@ import {
   hostedJsonResponse,
   hostedNotFoundRoute,
   hostedRefusing,
+  resolvedAccount,
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
 import { ANY_METHOD } from "@luke/service/route";
@@ -116,7 +117,7 @@ function accountRoute(resolveUserId: UserIdResolver) {
           Effect.gen(function* () {
             const incoming = yield* HttpServerRequest.HttpServerRequest;
             const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-            const account = yield* resolveUserId(request);
+            const account = yield* resolvedAccount(resolveUserId, request);
             if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
             return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { userId: account.value });
           }),
@@ -271,10 +272,10 @@ it.effect(
             headers,
           }),
         );
-      // The procedure's own caller check, which finds no session the deployment holds behind the cookie.
-      const unauthenticated = {
-        status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
-        body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+      // The procedure's own caller check, which reaches for an account store this suite never dials, so it answers unavailable rather than the guard's refusal.
+      const callerChecked = {
+        status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+        body: { error: HOSTED_API_ERROR.UNAVAILABLE },
       };
       const refused = {
         status: HOSTED_HTTP_STATUS.FORBIDDEN,
@@ -283,15 +284,15 @@ it.effect(
 
       assert.deepEqual(
         yield* deleteAccount({ cookie: UNHELD_COOKIE, origin: OWN_ORIGIN }),
-        unauthenticated,
+        callerChecked,
       );
       assert.deepEqual(
         yield* deleteAccount({ cookie: UNHELD_COOKIE, "sec-fetch-site": "same-origin" }),
-        unauthenticated,
+        callerChecked,
       );
       assert.deepEqual(
         yield* deleteAccount({ authorization: "Bearer not-a-token" }),
-        unauthenticated,
+        callerChecked,
       );
       assert.deepEqual(yield* deleteAccount({ cookie: UNHELD_COOKIE }), refused);
       assert.deepEqual(
