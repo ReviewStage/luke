@@ -15,8 +15,14 @@
  * refuses the box's secret, the host removed, when it stops them and exits 0,
  * which the service's `Restart=on-failure` leaves stopped. Every agent runs
  * in a smolvm VM of its own (`linuxPlatform`), on the image's own `gh`, with
- * `/dev/kvm` passed through where the box has it, through the `smolvm` on
- * the service's PATH.
+ * `/dev/kvm` passed through where the box has it, through the `smolvm` the
+ * install script put at a fixed path and named in
+ * the service's environment (`SMOLVM_ENV`), never the one `PATH` happens to
+ * hold. Before it follows anything it asks that `smolvm` for its `--version`
+ * (`hostSmolvmRefusal`) and, where it is not the pinned release, says so and
+ * exits `RUN_EXIT.SMOLVM_REFUSED`, which the service's
+ * `RestartPreventExitStatus` leaves stopped, since a restart would only
+ * repeat the refusal.
  *
  * `enroll` is run once as the box is set up: it reads the install token on stdin,
  * where `--token` gives none, prints the one line the script shows, and
@@ -40,6 +46,7 @@ import {
   enrollHostDevice,
   hostArch,
   hostDaemon,
+  hostSmolvmRefusal,
   linuxPlatform,
   readHostDevice,
 } from "@luke/host/linux-host";
@@ -50,8 +57,8 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 /** The daemon's version, which the release's build writes in; a development run is below every floor. */
 const VERSION = process.env.LUKE_HOST_VERSION ?? "0.0.0";
 
-/** The `smolvm` every agent's VM runs under, as the service's PATH finds it. */
-const SMOLVM = "smolvm";
+/** The variable the install script's service names the `smolvm` every agent's VM runs under in, by its whole path. */
+const SMOLVM_ENV = "LUKE_HOST_SMOLVM";
 
 /** The device a box hands each agent's VM so it can boot VMs of its own, where the box has it. */
 const KVM = "/dev/kvm";
@@ -70,6 +77,9 @@ const ENROLL_EXIT = {
   UPGRADE_NEEDED: 3,
   USAGE: 64,
 } as const;
+
+/** The exit codes of `run` that end the service for good: the sysexits `EX_CONFIG`, which the install script's unit names in `RestartPreventExitStatus`. */
+const RUN_EXIT = { SMOLVM_REFUSED: 78 } as const;
 
 const COMMAND = { RUN: "run", ENROLL: "enroll", VERSION: "version" } as const;
 
@@ -97,36 +107,60 @@ const arch = Effect.suspend(() => {
     : Effect.succeed(read);
 });
 
-/** `luke-host run`: the daemon on the box's record, or a rest until there is one; it ends once Luke refuses the box's secret. */
-const run = Effect.gen(function* () {
-  const device = yield* readHostDevice(stateRoot);
-  if (Option.isNone(device)) {
+/** The line `run` refuses to start with where the box's `smolvm` is not the pinned release or its path was not named; none where it is fine. */
+const smolvmRefusal = (smolvm: string) =>
+  smolvm.length === 0
+    ? Effect.succeed(
+        Option.some(
+          `Luke host: ${SMOLVM_ENV} names no smolvm, so it will not start. Run the install command again (Settings › Agents › Hosts) to set this box's service up.`,
+        ),
+      )
+    : hostSmolvmRefusal(smolvm);
+
+/** The daemon on the box's record, or a rest until there is one, its agents' VMs run by the `smolvm` given; it ends once Luke refuses the box's secret. */
+const follow = (smolvm: string) =>
+  Effect.gen(function* () {
+    const device = yield* readHostDevice(stateRoot);
+    if (Option.isNone(device)) {
+      reportToStderr(
+        "Luke host: this box is not enrolled. Run the install command from Settings › Agents › Hosts, with its --token.",
+      );
+      yield* Effect.sleep(UNENROLLED_REST);
+      return false;
+    }
+    const boxArch = yield* arch;
+    const platform = linuxPlatform({
+      installFolder,
+      node: process.execPath,
+      arch: boxArch,
+      hostname: os.hostname(),
+      stateRoot,
+      smolvm,
+      // Note that every command in an agent's VM runs as luke-host, which owns the agent's folder it mounts.
+      user: { uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0 },
+      kvm: existsSync(KVM),
+    });
     reportToStderr(
-      "Luke host: this box is not enrolled. Run the install command from Settings › Agents › Hosts, with its --token.",
+      `Luke host ${VERSION}: following ${device.value.serviceOrigin} as ${os.hostname()}.`,
     );
-    yield* Effect.sleep(UNENROLLED_REST);
-    return false;
+    yield* hostDaemon({ stateRoot, device: device.value, version: VERSION, platform });
+    reportToStderr(
+      "Luke host: every agent it ran is stopped. It exits until this box is enrolled again.",
+    );
+    return true;
+  }).pipe(Effect.repeat({ until: (removed) => removed }));
+
+/** `luke-host run`: the daemon, once the box's `smolvm` is the pinned release; the exit code it ends with otherwise. */
+const run = Effect.gen(function* () {
+  const smolvm = process.env[SMOLVM_ENV] ?? "";
+  const refusal = yield* smolvmRefusal(smolvm);
+  if (Option.isSome(refusal)) {
+    reportToStderr(refusal.value);
+    return RUN_EXIT.SMOLVM_REFUSED;
   }
-  const platform = linuxPlatform({
-    installFolder,
-    node: process.execPath,
-    arch: yield* arch,
-    hostname: os.hostname(),
-    stateRoot,
-    smolvm: SMOLVM,
-    // Note that every command in an agent's VM runs as luke-host, which owns the agent's folder it mounts.
-    user: { uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0 },
-    kvm: existsSync(KVM),
-  });
-  reportToStderr(
-    `Luke host ${VERSION}: following ${device.value.serviceOrigin} as ${os.hostname()}.`,
-  );
-  yield* hostDaemon({ stateRoot, device: device.value, version: VERSION, platform });
-  reportToStderr(
-    "Luke host: every agent it ran is stopped. It exits until this box is enrolled again.",
-  );
-  return true;
-}).pipe(Effect.repeat({ until: (removed) => removed }));
+  yield* follow(smolvm);
+  return 0;
+});
 
 /** `luke-host enroll`: the install token traded for the box's secret, and the one line the install script shows. */
 const enroll = (token: string, name: string, origin: string) =>
@@ -171,7 +205,7 @@ function main(argv: readonly string[]): Effect.Effect<number, unknown, HostServi
   if (command === COMMAND.VERSION) {
     return Effect.sync(() => process.stdout.write(`${VERSION}\n`)).pipe(Effect.as(0));
   }
-  if (command === COMMAND.RUN) return Effect.as(run, 0);
+  if (command === COMMAND.RUN) return run;
   if (command === COMMAND.ENROLL) {
     const { values } = parseArgs({
       args: [...rest],
