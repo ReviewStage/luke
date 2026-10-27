@@ -108,9 +108,13 @@ test("a device the account does not own, which the read does not name, shows its
   assert.equal(label, "Runs on: Charles's MacBook Air");
 });
 
-test("an agent in the cloud says Cloud, and nothing is said while the experiment is off", async () => {
-  const noRead = () => Promise.reject(refusedOnPort("No read is asked."));
+/** A presence read that is never asked for, since an agent in the cloud has no device to read. */
+const noRead = () => Promise.reject(refusedOnPort("No read is asked."));
 
+test("an agent in the cloud says Cloud", async () => {
   assert.equal(await placeOf({}, noRead), "Runs on: Cloud");
+});
+
+test("nothing is said of where an agent runs while the Local agents experiment is off", async () => {
   assert.equal(await placeOf({}, noRead, []), "");
 });
