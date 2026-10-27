@@ -9694,6 +9694,35 @@ test("on a phone, Back from a thread opened in a channel's stream goes back to t
   assert.equal(page.querySelector(".channel-list"), null, "the list of channels stands nowhere");
 });
 
+test("on a phone, a thread whose agent's inbox could not be read says so in the stream's place, under the way back to the stream", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  pageAgents = new Map([[AGENT.id, AGENT]]);
+  agentReadFails = true;
+  answerChannels({ threads: () => Promise.resolve(threadsPage([THRESHOLD])) });
+  const { page } = mount([], { channels: true, holding: [], room: SHELL_ROOM.NARROW });
+  await settle();
+  act(() =>
+    page.querySelector<HTMLElement>(`button[aria-label="Open ${THRESHOLD.title}"]`)?.click(),
+  );
+  await settle();
+  const stream = () => page.querySelector<HTMLElement>(".channel-stream");
+  assert.equal(stream()?.hidden, true, "the thread stands in the stream's place");
+  assert.match(page.textContent ?? "", /This thread could not be read\./u);
+
+  act(() =>
+    (
+      [...page.querySelectorAll<HTMLElement>("button")].find(
+        (button) =>
+          button.getAttribute("aria-label") === "#general" || button.textContent === "#general",
+      ) ?? assert.fail("the thread's head offers the way back")
+    ).click(),
+  );
+  await settle();
+  assert.equal(stream()?.hidden, false, "the way back gave the stream its place again");
+});
+
 test("a channel archived or unknown says so in the stream's place, with the way to #general", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   listedWorkspace = ACME;
@@ -9864,6 +9893,35 @@ test("a thread opened in a channel's stream that is gone says so beside the stre
   );
   await settle();
   assert.equal(channelPlaceNow?.threadId, undefined, "the way back closed the thread");
+});
+
+test("a thread pressed in a channel's stream whose agent's inbox could not be read says so beside the stream, and Retry reads it there", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  listedWorkspace = ACME;
+  window.localStorage.setItem("luke.channelView", JSON.stringify("everyone"));
+  // Note that no holding names the billing task, so its thread is opened by its agent, whose own read fails.
+  pageAgents = new Map([[AGENT.id, AGENT]]);
+  agentInboxes = new Map([[AGENT.id, [THRESHOLD]]]);
+  agentReadFails = true;
+  answerChannels({ threads: () => Promise.resolve(threadsPage([THRESHOLD])) });
+  const { page } = mount([], { channels: true, holding: [] });
+  await settle();
+  act(() =>
+    page.querySelector<HTMLElement>(`button[aria-label="Open ${THRESHOLD.title}"]`)?.click(),
+  );
+  await settle();
+  const beside = () => page.querySelector("aside.side-panel")?.textContent ?? "";
+  assert.equal(threadPanelNow?.tab, SIDE_PANEL_TAB.INBOX, "the thread's tab is chosen");
+  assert.match(beside(), /This thread could not be read\./u);
+
+  agentReadFails = false;
+  act(() =>
+    [...page.querySelectorAll<HTMLElement>("aside.side-panel button")]
+      .find((button) => button.textContent === "Retry")
+      ?.click(),
+  );
+  await settle();
+  assert.match(beside(), /Alert at 80%\?/u, "the thread is read again and drawn");
 });
 
 test("a stream stands placeholders while its first read is on its way, and reads its older threads as the reader nears its top", async () => {

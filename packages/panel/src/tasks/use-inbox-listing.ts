@@ -257,6 +257,19 @@ export function useInboxListing(tasks: TasksControl) {
     !chosenWaits &&
     holderRead &&
     (chosenAgentId !== undefined || !listUnread);
+  // An item opened whose holder's own read failed says so, with a way to read it again, rather than waiting on it for good,
+  // since nothing reads a failed holder again by itself.
+  const chosenFailed =
+    asked?.opened === true &&
+    chosen === undefined &&
+    !missing &&
+    (live.failed || (agents.listFailed && agents.heldIds === undefined));
+  const { onRetry: retryLive } = live;
+  const { onRetryList: retryAgents } = agents;
+  const onRetryChosen = useCallback(() => {
+    retryLive();
+    retryAgents();
+  }, [retryLive, retryAgents]);
   // Note that an item a link or a notification asked for is never given way to, found or not, and that only an Inbox standing has an item to stand in.
   const standIn =
     view.open &&
@@ -307,6 +320,8 @@ export function useInboxListing(tasks: TasksControl) {
     compose,
     searched,
     missing,
+    chosenFailed,
+    onRetryChosen,
     reading,
     failed,
     choose,
