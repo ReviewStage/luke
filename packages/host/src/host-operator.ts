@@ -1942,22 +1942,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(codingAgentListAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
+    // Note that the Start goes on whole, as the act port decoded it against the same schema the
+    // Gateway's method reads, because a field copied by name is one a later field is left out of,
+    // as an empty draft's `blank` was, which handed its agent the plan.
     codingAgentStart: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_START, {
-          ...(params.taskId === undefined ? undefined : { taskId: params.taskId }),
-          idempotencyKey: params.idempotencyKey,
-          ...("model" in params ? { model: params.model } : undefined),
-          ...("effort" in params ? { effort: params.effort } : undefined),
-          ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
-          ...("prompt" in params ? { prompt: params.prompt } : undefined),
-          ...("attachments" in params ? { attachments: params.attachments } : undefined),
-          ...("disabledServers" in params
-            ? { disabledServers: params.disabledServers }
-            : undefined),
-          ...("from" in params ? { from: params.from } : undefined),
-          ...("note" in params ? { note: params.note } : undefined),
-        }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_START, params),
         answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentMessages: (params) =>
