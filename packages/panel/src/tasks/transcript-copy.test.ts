@@ -13,6 +13,7 @@ import { test } from "vitest";
 import { REPLAY_PAGE } from "./replay-card-model.js";
 import {
   agentTranscript,
+  drawnMessageWords,
   LATEST_ACTIVITY,
   latestActivity,
   TRANSCRIPT_COPY,
@@ -157,6 +158,20 @@ test("another agent's message in its whole shape is copied as its words alone, w
       "Rebase before you push.",
     ].join("\n\n") + "\n",
   );
+});
+
+test("a find reads a teammate's line as its bubble draws it, without the line naming them to the agent", () => {
+  const line: CodingAgentMessage = {
+    id: "m-1",
+    role: MESSAGE_ROLE.USER,
+    parts: [
+      {
+        type: "text",
+        text: "Also the emails.\n\nSent by [@Dean](https://tryluke.dev/acme/person/user-1), a teammate, not the developer.",
+      },
+    ],
+  };
+  assert.equal(drawnMessageWords(line), "Also the emails.");
 });
 
 test("a thread's answer is copied without its item's key, as the tab draws it", () => {

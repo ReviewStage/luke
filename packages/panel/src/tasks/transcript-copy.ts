@@ -8,6 +8,7 @@ import {
   CODING_AGENT_CURSOR_START,
   type CodingAgentBrief,
   type CodingAgentMessage,
+  teammateMessageWords,
 } from "@luke/features/coding-agent-wire";
 import { inboxLineWords } from "@luke/features/inbox-wire";
 import {
@@ -20,7 +21,7 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
-import { MESSAGE_ROLE } from "@luke/wire";
+import { isRecord, MESSAGE_ROLE } from "@luke/wire";
 import { blockSays, TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import {
   AGENT_PART,
@@ -262,7 +263,18 @@ function drawnWords(block: CopiedBlock): readonly string[] {
  * answer as drawn.
  */
 export function drawnMessageWords(message: CodingAgentMessage): string {
-  return drawnRowsWords(agentRows(message, false));
+  return drawnRowsWords(agentRows(shownMessage(message), false));
+}
+
+/** A message as its bubble draws it: a member's text without the line naming a teammate to the agent, which is the model's alone; any other message as it is. */
+function shownMessage(message: CodingAgentMessage): CodingAgentMessage {
+  if (message.role !== MESSAGE_ROLE.USER) return message;
+  const parts = message.parts.map((part) =>
+    isRecord(part) && part.type === "text" && typeof part.text === "string"
+      ? { ...part, text: teammateMessageWords(part.text) }
+      : part,
+  );
+  return { ...message, parts };
 }
 
 /** The words a turn's rows draw, as `drawnMessageWords` reads a whole turn's: a piece of a long turn's (`turn-pieces.ts`). */
