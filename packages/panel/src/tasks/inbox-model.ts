@@ -435,14 +435,15 @@ export function awaitsNod(item: InboxItem): boolean {
 
 /**
  * Whether the item offers the reader Got it: a notice waiting on a nod
- * (`awaitsNod`), and, while Channels is on, one its agent addressed to the
- * reader (`addressed`, `waitsOn`), since a notice addressed to nobody is
- * only read and one addressed to a teammate is theirs to settle.
+ * (`awaitsNod`), and, while Channels is on, one that waits on the reader
+ * (`inboxWaitsOn`: the member its agent addressed it to, else its task's
+ * assignee, else its agent's starter), since one waiting on a teammate is
+ * theirs to settle.
  */
 export function asksNod(item: InboxItem, readerId: string | undefined, channels: boolean): boolean {
   if (!awaitsNod(item)) return false;
   if (!channels) return true;
-  return item.addressed === true && readerId !== undefined && item.waitsOn?.userId === readerId;
+  return readerId !== undefined && inboxWaitsOn(item)?.userId === readerId;
 }
 
 /** The most characters an option may spell and still stand as one of two small buttons. */
@@ -1475,7 +1476,7 @@ function needsReader(item: InboxItem, readerId: string | undefined): boolean {
 
 /**
  * Whether opening the item acknowledges it, as Got it did: a notice that
- * offers Got it (`asksNod`), so under Channels one addressed to the reader,
+ * offers Got it (`asksNod`), so under Channels one waiting on the reader,
  * the reader's own (`needsReader`) by an id already
  * known, since an acknowledgement settles it for every member, and one
  * whose agent does not wait to hear back (`needsReply`), since a notice

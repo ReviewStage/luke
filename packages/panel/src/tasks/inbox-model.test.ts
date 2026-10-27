@@ -1474,7 +1474,7 @@ test("an item of an agent with no task waits on the member it is addressed to, e
   );
 });
 
-test("under Channels a notice offers Got it, and is nodded to on open, only where its agent addressed it to the reader; one addressed to nobody is only read", () => {
+test("under Channels a notice offers Got it, and is nodded to on open, where it waits on the reader, addressed to them or to nobody; one waiting on a teammate is theirs to nod to", () => {
   const notice = item({
     id: "a1b2c3d4-0000-4000-8000-000000000011",
     needsReply: false,
@@ -1486,20 +1486,16 @@ test("under Channels a notice offers Got it, and is nodded to on open, only wher
       },
     ],
   });
-  const addressed = { ...notice, addressed: true };
 
   assert.deepEqual(
     [asksNod(notice, READER, true), acknowledgedOnOpen(notice, READER, true)],
-    [false, false],
-  );
-  assert.deepEqual(
-    [asksNod(addressed, READER, true), acknowledgedOnOpen(addressed, READER, true)],
     [true, true],
+    "a notice addressed to nobody that waits on the reader settles as they open it",
   );
   assert.deepEqual(
     [
-      asksNod({ ...addressed, waitsOn: CHARLES }, READER, true),
-      acknowledgedOnOpen({ ...addressed, waitsOn: CHARLES }, READER, true),
+      asksNod({ ...notice, addressed: true, waitsOn: CHARLES }, READER, true),
+      acknowledgedOnOpen({ ...notice, addressed: true, waitsOn: CHARLES }, READER, true),
     ],
     [false, false],
     "a notice addressed to a teammate is theirs to nod to",
