@@ -4,6 +4,7 @@ import {
   type Host,
   hostInstallCommand,
   hostInstallLoopCommand,
+  hostSetupPrompt,
   hostUpgradeCommand,
 } from "@luke/features/host-wire";
 import { agoText, momentText } from "@luke/features/time-format";
@@ -18,11 +19,14 @@ import {
   CONFIRM_LOSS,
   CodeCard,
   ConfirmDialog,
+  CopyButton,
   DIALOG_SIZE,
   Dialog,
   DialogActions,
   ErrorState,
   GAP,
+  Inline,
+  JUSTIFY,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
@@ -59,10 +63,11 @@ import { MenuRow } from "./menu-row.js";
  * Add hosts mints an install token here, in the window, and hands the
  * service its SHA-256 alone, so the token never leaves the window that
  * shows it: it stands in this section's state while the dialog is open,
- * inside the install command and its loop for many servers, and is gone
- * once the dialog closes. Revoke this command stops new servers enrolling
- * with it, and none it already enrolled. The section stands nowhere while
- * the local agents experiment is off, which hosts sit behind as This Mac does.
+ * inside the install command, its loop for many servers, and the setup prompt
+ * a coding agent follows to install them, and is gone once the dialog closes.
+ * Revoke this command stops new servers enrolling with it, and none it
+ * already enrolled. The section stands nowhere while the local agents
+ * experiment is off, which hosts sit behind as This Mac does.
  */
 
 /** The bytes of randomness behind an install token, as many as a device secret's. */
@@ -94,6 +99,9 @@ const WORDS = {
   UPGRADE_TITLE: "Run this on the server to upgrade it",
   INSTALL_TITLE: "Run this as root on each server",
   LOOP_TITLE: "Or on many servers at once",
+  PROMPT_HELP:
+    "Paste the setup prompt into Claude Code or Codex on a computer that can reach your servers.",
+  PROMPT_WHAT: "setup prompt",
   SHOWN_FOLLOWS: "A server's agents use your sign-ins and Luke's GitHub App.",
   REVOKE: "Revoke this command",
 } as const;
@@ -233,6 +241,14 @@ function AddHostsDialog({
             code={hostInstallLoopCommand(shown.installScriptUrl, shown.installToken)}
             copy={copyThroughShell}
           />
+          <Inline gap={GAP.CONTROL} justify={JUSTIFY.BETWEEN} wrap={false}>
+            <Text>{WORDS.PROMPT_HELP}</Text>
+            <CopyButton
+              text={hostSetupPrompt(shown.installScriptUrl, shown.installToken, shown.expiresAt)}
+              what={WORDS.PROMPT_WHAT}
+              copy={copyThroughShell}
+            />
+          </Inline>
           <Text>{WORDS.SHOWN_FOLLOWS}</Text>
         </Stack>
       </div>
