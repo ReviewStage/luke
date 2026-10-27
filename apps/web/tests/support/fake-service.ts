@@ -8,7 +8,7 @@
  * The session is the browser's cookie in a real tab: here it is whatever the
  * test last set, read on every `get-session`, so "the cookie changed" is
  * one call; a test that holds the session read answers it when it lets go. The task list is followed as
- * the tab follows it with Realtime off: polled, the listed task's row inline.
+ * the tab follows it: polled, the listed task's row inline.
  */
 
 import type { LinkOpen } from "@luke/features/link-open";
@@ -173,7 +173,7 @@ export function fakeService(options: FakeServiceOptions): FakeService {
     }
     if (pathname === "/api/live/tasks" && method === "GET") {
       if (!signedIn) return json({ error: "unauthorized" }, 401);
-      // Realtime is off, so the list is answered polled, its rows inline; a poll past where they stand answers them unchanged.
+      // The list is answered polled, its rows inline; a poll past where they stand answers them unchanged.
       const unchanged = new URL(url).searchParams.get(LIVE_POLL.AFTER) === LIVE_DIGEST;
       return json(polledTaskList(unchanged));
     }

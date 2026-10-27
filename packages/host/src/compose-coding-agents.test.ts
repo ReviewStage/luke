@@ -27,11 +27,8 @@ import {
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
-  type AccountInboxLiveAnswer,
-  type AgentTranscriptLiveAnswer,
   FAILED_RUN_WINDOW_MILLIS,
   LIVE_SIGNED_OUT,
-  type ScopeInboxLiveAnswer,
   type TranscriptNowAnswer,
 } from "@luke/features/live-wire";
 import type { MemorySummary } from "@luke/features/memory-wire";
@@ -60,10 +57,10 @@ import {
 } from "@luke/gateway";
 import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Deferred, Effect, Fiber } from "effect";
+import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
-import { fakeRealtime } from "./testing/fake-realtime.js";
+import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { HELD_TRANSCRIPTS } from "./transcript-held.js";
 
 /** One revision of the template as the service lists it. */
@@ -247,10 +244,16 @@ const SAID = {
 /** The service as a script, writing down every ask in the order it was made. */
 function fakeService() {
   const asked: string[] = [];
-  let scope: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined;
+  let scope: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined;
   let cursor = CODING_AGENT_CURSOR_START;
-  let transcript: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined;
-  let accountLive: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined;
+  let transcript: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined;
+  let accountLive: typeof LIVE_ANSWERED | typeof LIVE_SIGNED_OUT | undefined;
+  // Each live read's rows, polled; every followed scope's inbox reads the one script.
+  const live = {
+    transcript: polledLive(TRANSCRIPT_PARTS),
+    scope: polledLive(SCOPE_PARTS),
+    account: polledLive(ACCOUNT_PARTS),
+  };
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[] = [];
   let pageGate: Effect.Effect<void> = Effect.void;
@@ -263,6 +266,14 @@ function fakeService() {
   let committedIn: { readonly txid?: string } = {};
   /** The transaction the service says wrote a sent message's row; none says none was written. */
   let sentTxid: string | undefined;
+  /** A plan's or an agent's inbox as its live read answers it: polled from the one script, or the refusal standing. */
+  const scopeLive = (poll: boolean | undefined, after: string | undefined) =>
+    Effect.suspend((): ReturnType<CodingAgentClient["taskInboxLive"]> => {
+      if (scope === undefined)
+        return Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      if (typeof scope === "object") return Effect.succeed(scope);
+      return poll === true ? live.scope.poll(after) : Effect.succeed(live.scope.first());
+    });
   const client: CodingAgentClient = {
     models: () =>
       Effect.sync(() => {
@@ -280,6 +291,7 @@ function fakeService() {
         return { choice };
       }),
     hosts: () => Effect.succeed({ failure: "unanswered" }),
+    devicePresence: () => Effect.succeed({ failure: "unanswered" }),
     removeHost: () => Effect.succeed({ failure: "unanswered" }),
     keepHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
     revokeHostInstallToken: () => Effect.succeed({ failure: "unanswered" }),
@@ -327,7 +339,7 @@ function fakeService() {
             : `worker-newest:${agentId}:${callId}`) + (cut === true ? ":cut" : ""),
         );
         // Note that the service answers an agent the account does not reach not found on every read alike.
-        if (transcript !== undefined && "failure" in transcript) return transcript;
+        if (typeof transcript === "object") return transcript;
         return newestPage ?? { ...SAID, cursor: "1:0" };
       }),
     messagesBefore: (agentId, before, callId, cut) =>
@@ -339,12 +351,19 @@ function fakeService() {
         );
         return { messages: SAID.messages, before: "3" };
       }),
-    agentTranscriptLive: (agentId, _userId, callId, poll) =>
-      Effect.sync(() => {
-        asked.push(
-          `${poll === true ? "transcript-poll" : "transcript-live"}:${agentId}${callId === undefined ? "" : `:${callId}`}`,
-        );
-        return transcript ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+    // Note that a poll is counted apart from the first ask (`live.transcript.polls`), as each is held until the rows move.
+    agentTranscriptLive: (agentId, _userId, callId, poll, after) =>
+      Effect.suspend((): ReturnType<CodingAgentClient["agentTranscriptLive"]> => {
+        if (poll !== true) {
+          asked.push(`transcript-live:${agentId}${callId === undefined ? "" : `:${callId}`}`);
+        }
+        if (transcript === undefined) {
+          return Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        }
+        if (typeof transcript === "object") return Effect.succeed(transcript);
+        return poll === true
+          ? live.transcript.poll(after)
+          : Effect.succeed(live.transcript.first());
       }),
     message: (agentId, request) =>
       Effect.sync(() => {
@@ -560,16 +579,14 @@ function fakeService() {
         asked.push(`transcribe:${clip.audio}:${clip.keywords.join(",")}`);
         return { text: "Run the tests" };
       }),
-    taskInboxLive: (taskId) =>
-      Effect.sync(() => {
-        asked.push(`plan-inbox-live:${taskId}`);
-        return scope ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
-      }),
-    agentInboxLive: (agentId) =>
-      Effect.sync(() => {
-        asked.push(`agent-inbox-live:${agentId}`);
-        return scope ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
-      }),
+    taskInboxLive: (taskId, _userId, poll, after) => {
+      if (poll !== true) asked.push(`plan-inbox-live:${taskId}`);
+      return scopeLive(poll, after);
+    },
+    agentInboxLive: (agentId, _userId, poll, after) => {
+      if (poll !== true) asked.push(`agent-inbox-live:${agentId}`);
+      return scopeLive(poll, after);
+    },
     inboxAttachment: (itemId, attachmentId) =>
       Effect.sync(() => {
         asked.push(`attachment:${itemId}:${attachmentId}`);
@@ -658,18 +675,23 @@ function fakeService() {
         asked.push(`answer:${itemId}:${request.revision}:${request.reply}:${request.clientKey}`);
         return { item: { ...ITEM, revision: 3, status: INBOX_STATUS.ANSWERED }, taken: true };
       }),
-    accountInboxLive: (userId, poll) =>
-      Effect.sync(() => {
-        asked.push(`account-inbox-live:${userId}${poll ? ":poll" : ""}`);
-        return accountLive ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+    accountInboxLive: (userId, poll, after) =>
+      Effect.suspend((): ReturnType<CodingAgentClient["accountInboxLive"]> => {
+        if (poll !== true) asked.push(`account-inbox-live:${userId}`);
+        if (accountLive === undefined) {
+          return Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        }
+        if (typeof accountLive === "object") return Effect.succeed(accountLive);
+        return poll === true ? live.account.poll(after) : Effect.succeed(live.account.first());
       }),
   };
   return {
     client,
     asked,
-    /** What the service seals for following a transcript, or that the account reaches no such agent; none answers unanswered. */
+    live,
+    /** Whether the service answers a transcript's live read, or that the account reaches no such agent; none answers unanswered. */
     sealTranscript: (
-      next: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined,
+      next: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined,
     ) => {
       transcript = next;
     },
@@ -689,16 +711,16 @@ function fakeService() {
     sendTxid: (txid: string | undefined) => {
       sentTxid = txid;
     },
-    /** What the service seals for following a plan's or an agent's inbox, or that the account reaches none; none answers unanswered. */
-    sealScope: (next: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined) => {
+    /** Whether the service answers a plan's or an agent's inbox's live read, or that the account reaches none; none answers unanswered. */
+    sealScope: (next: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined) => {
       scope = next;
     },
     /** The transaction the service says each inbox write committed in from now on; none says it changed nothing. */
     commitIn: (txid: string | undefined) => {
       committedIn = txid === undefined ? {} : { txid };
     },
-    /** What the service seals for following the account inbox, or that the session signed out; none answers unanswered. */
-    sealAccount: (next: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined) => {
+    /** Whether the service answers the account inbox's live read, or that the session signed out; none answers unanswered. */
+    sealAccount: (next: typeof LIVE_ANSWERED | typeof LIVE_SIGNED_OUT | undefined) => {
       accountLive = next;
     },
     /** The transaction a Start answers it committed in; none answers none. */
@@ -715,13 +737,33 @@ function fakeService() {
 /** Now, as the host reads it in these tests. */
 const NOW = 1_800_000_100_000;
 
-/** A sealed statement as the service answers one, named by the part it follows. */
-function sealed(part: string, expiresAt = NOW + 60_000) {
-  return { capability: `capability-${part}`, queryFingerprint: `fingerprint-${part}`, expiresAt };
-}
+/** A transcript's live read as the test scripts it. */
+type TranscriptLive = PolledLive<(typeof TRANSCRIPT_PARTS)[number]>;
 
-/** Every step a subscription has to take, taken: it runs on a fiber of its own. */
+/** That the service answers a live read, its rows polled from the test's script (`polledLive`). */
+const LIVE_ANSWERED = "answered";
+
+/** The parts of a transcript's live read, of a plan's or an agent's inbox's, and of the account inbox's. */
+const TRANSCRIPT_PARTS = [
+  "messages",
+  "turns",
+  "conversation",
+  "agent",
+  "workers",
+  "window",
+  "windowParts",
+] as const;
+const SCOPE_PARTS = ["items", "messages", "files"] as const;
+const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
+
+/** Every step a follow has to take, taken: it runs on a fiber of its own. */
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
+
+/** Every step taken, then the host's next poll asked, which waits half a second after the last answered (`live-follow.ts`). */
+const nextPoll = Effect.andThen(
+  settled,
+  Effect.andThen(TestClock.adjust(Duration.millis(500)), settled),
+);
 
 function subject(
   options: {
@@ -734,7 +776,6 @@ function subject(
 ) {
   return Effect.gen(function* () {
     const service = fakeService();
-    const realtime = fakeRealtime();
     // Each event with how many reads the service had been asked as it was told.
     const events: { kind: GatewayEventKind; payload: WireValue; asked: number }[] = [];
     const composer = yield* composeCodingAgents({
@@ -746,7 +787,6 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       accountId: options.accountId ?? (() => "user-dana"),
       client: service.client,
-      openLive: realtime.open,
       ...(options.typeIntoCall === undefined ? undefined : { typeIntoCall: options.typeIntoCall }),
       ...(options.listed === undefined ? undefined : { listed: options.listed }),
     }).pipe(Effect.provide(noNetwork));
@@ -780,7 +820,7 @@ function subject(
       sealScope: service.sealScope,
       sealAccount: service.sealAccount,
       commitIn: service.commitIn,
-      realtime,
+      live: service.live,
       /** Every answer of the followed account inbox the host told, in order. */
       accountInboxes: () =>
         events.flatMap((event) =>
@@ -853,7 +893,7 @@ it.effect("a delete waits for the task list to carry its transaction before it a
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
     const { call, asked, sealTranscript } = yield* subject();
-    sealTranscript(SEALED_TRANSCRIPT);
+    sealTranscript(LIVE_ANSWERED);
 
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_MODELS), { models: MODELS });
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_READ), {
@@ -1285,29 +1325,17 @@ it.effect(
     }),
 );
 
-const SEALED_TRANSCRIPT: AgentTranscriptLiveAnswer = {
-  url: "wss://realtime.example/v1",
-  queries: {
-    messages: sealed("messages"),
-    turns: sealed("turns"),
-    conversation: sealed("conversation"),
-    agent: sealed("agent"),
-    workers: sealed("workers"),
-    window: sealed("window"),
-    windowParts: sealed("windowParts"),
-  },
-};
-
 /** The transcript's statements as they stand: `seq` its newest message, `turns` how many it has opened. */
-function transcriptRows(realtime: ReturnType<typeof fakeRealtime>, seq: number, turns = 1) {
-  realtime.deliver("turns", [
-    { status: "running", rows: turns, stopped: 0, changedAt: NOW - 1_000 },
-  ]);
-  realtime.deliver("conversation", [{ id: "conversation-1", title: null, revision: seq }]);
-  realtime.deliver("agent", [{ id: AGENT_ID, title: "Invites" }]);
-  realtime.deliver("workers", []);
-  realtime.deliver("window", []);
-  realtime.deliver("windowParts", []);
+function transcriptRows(live: { readonly transcript: TranscriptLive }, seq: number, turns = 1) {
+  live.transcript.set({
+    messages: [],
+    turns: [{ status: "running", rows: turns, stopped: 0, changedAt: NOW - 1_000 }],
+    conversation: [{ id: "conversation-1", title: null, revision: seq }],
+    agent: [{ id: AGENT_ID, title: "Invites" }],
+    workers: [],
+    window: [],
+    windowParts: [],
+  });
 }
 
 /** One message of the window as its rows deliver it: a line of the agent's at `seq`, saying `text` in one part. */
@@ -1396,7 +1424,7 @@ function caughtUpOf(told: WireValue | undefined): unknown {
 }
 
 it.effect(
-  "a followed transcript opens on its newest page, read once beside the seal, then follows on from its cursor once the subscription stands, missing nothing written between; a short page is caught up, and the next is read only as the statements move or at the edge the service names; letting it go ends the telling",
+  "a followed transcript opens on its newest page, read once beside the live read, then follows on from its cursor once the live read's first rows land, missing nothing written between; a short page is caught up, and the next is read only as the statements move or at the edge the service names; letting it go ends the telling",
   () =>
     Effect.gen(function* () {
       const {
@@ -1406,12 +1434,12 @@ it.effect(
         sealTranscript,
         pageNow: script,
         pageNewest,
-        realtime,
+        live,
       } = yield* subject();
-      sealTranscript(SEALED_TRANSCRIPT);
+      sealTranscript(LIVE_ANSWERED);
       const newest = newestPage("1:0", "Reading the invites.", "40");
       pageNewest(newest);
-      // A message written after the newest page was read, before the subscription stood.
+      // A message written after the newest page was read, before the live read's first rows landed.
       const between = {
         ...pageNow("2:0", { holds: true, text: "Writing the expiry." }),
         wakeIn: 3_000,
@@ -1427,8 +1455,8 @@ it.effect(
         `transcript-live:${AGENT_ID}`,
       ]);
 
-      // The subscription's first rows read on from the newest page's cursor, never from the start.
-      transcriptRows(realtime, 2);
+      // The live read's first rows read on from the newest page's cursor, never from the start.
+      transcriptRows(live, 2);
       yield* settled;
       assert.deepEqual(pages()[1], { transcript: FOLLOWED, page: windowPage(between) });
       assert.equal(caughtUpOf(pages()[1]), true);
@@ -1447,18 +1475,15 @@ it.effect(
       const moved = pageNow("3:0", { holds: false, text: "Testing the expiry." });
       script(moved);
       // A turn opening is what reads the page again; its messages come as rows (see the window's own test).
-      transcriptRows(realtime, 3, 2);
+      transcriptRows(live, 3, 2);
       yield* settled;
       assert.deepEqual(pages().at(-1), { transcript: FOLLOWED, page: windowPage(moved) });
       assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 1);
       assert.ok(!asked.includes(`messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`));
-      assert.ok(!JSON.stringify(pages()).includes("capability"));
-      // The count of messages released desktops wake on is not followed: the window's rows carry them.
-      assert.ok(!realtime.subscribed().includes("capability-messages"));
 
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
       const toldBefore = pages().length;
-      transcriptRows(realtime, 4, 3);
+      transcriptRows(live, 4, 3);
       yield* settled;
       assert.equal(pages().length, toldBefore);
     }),
@@ -1475,15 +1500,15 @@ it.effect(
         sealTranscript,
         pageNow: script,
         pageNewest,
-        realtime,
+        live,
       } = yield* subject();
-      sealTranscript(SEALED_TRANSCRIPT);
+      sealTranscript(LIVE_ANSWERED);
       pageNewest(newestPage("1:0", "Reading the invites."));
       const caught = pageNow("1:0", { holds: true });
       script(caught);
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
-      transcriptRows(realtime, 1);
+      transcriptRows(live, 1);
       yield* settled;
       const reads = () => asked.filter((ask) => ask.startsWith("messages-")).length;
       const readBefore = reads();
@@ -1491,15 +1516,14 @@ it.effect(
 
       const first = windowRow(2, "Writing the expiry.");
       const second = windowRow(3, "Testing the expiry.");
-      realtime.deliver("window", [first.row, second.row]);
       // The second message's part has not landed yet, so only the first is drawn.
-      realtime.deliver("windowParts", [first.part]);
-      yield* settled;
-      realtime.deliver("windowParts", [first.part, second.part]);
-      yield* settled;
-      // Rows delivered again alike tell nothing more.
-      realtime.deliver("window", [first.row, second.row]);
-      yield* settled;
+      live.transcript.set({ window: [first.row, second.row], windowParts: [first.part] });
+      yield* nextPoll;
+      live.transcript.set({ windowParts: [first.part, second.part] });
+      yield* nextPoll;
+      // Rows answered again alike tell nothing more.
+      live.transcript.set({ window: [first.row, second.row] });
+      yield* nextPoll;
 
       const said = (seq: number, text: string) => ({
         id: `m-${seq}`,
@@ -1519,8 +1543,8 @@ it.effect(
       assert.equal(reads(), readBefore);
 
       // A turn moving reads the page past the messages the rows told.
-      transcriptRows(realtime, 3, 2);
-      yield* settled;
+      transcriptRows(live, 3, 2);
+      yield* nextPoll;
       assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:3:0`);
     }),
 );
@@ -1541,15 +1565,15 @@ function toldBesideRead(pageCursor: string, pageText: string) {
       pageNow: script,
       holdPages,
       pageNewest,
-      realtime,
+      live,
     } = yield* subject();
-    sealTranscript(SEALED_TRANSCRIPT);
+    sealTranscript(LIVE_ANSWERED);
     pageNewest(newestPage("1:0", "Reading the invites."));
     const caught = pageNow("1:0", { holds: true });
     script(caught);
     yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
     yield* settled;
-    transcriptRows(realtime, 1);
+    transcriptRows(live, 1);
     yield* settled;
     const toldBefore = pages().length;
 
@@ -1561,19 +1585,18 @@ function toldBesideRead(pageCursor: string, pageText: string) {
     };
     script(read);
     // A turn opening reads the page, which the service is slow to answer.
-    transcriptRows(realtime, 2, 2);
-    yield* settled;
+    transcriptRows(live, 2, 2);
+    yield* nextPoll;
     const drawn = windowRow(2, "Writing the expiry.");
-    realtime.deliver("window", [drawn.row]);
-    realtime.deliver("windowParts", [drawn.part]);
-    yield* settled;
+    live.transcript.set({ window: [drawn.row], windowParts: [drawn.part] });
+    yield* nextPoll;
     const beside = pages().slice(toldBefore);
 
     yield* Deferred.succeed(answer, undefined);
     yield* settled;
-    // The rows deliver again as they stood, which tells nothing older than the page.
-    realtime.deliver("windowParts", [drawn.part]);
-    yield* settled;
+    // The rows answer again as they stood, which tells nothing older than the page.
+    live.transcript.set({ windowParts: [drawn.part] });
+    yield* nextPoll;
     return { beside, after: pages().slice(toldBefore + beside.length), caught, read };
   });
 }
@@ -1625,19 +1648,18 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, asked, pages, sealTranscript, pageNow: script, pageNewest, realtime } = harness;
-      sealTranscript(SEALED_TRANSCRIPT);
+      const { call, asked, pages, sealTranscript, pageNow: script, pageNewest, live } = harness;
+      sealTranscript(LIVE_ANSWERED);
       const newest = newestPage("1:0", "Reading the invites.");
       pageNewest(newest);
       script(pageNow("1:0", { holds: true }));
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
-      transcriptRows(realtime, 1);
+      transcriptRows(live, 1);
       yield* settled;
       const drawn = windowRow(2, "Writing the expiry.");
-      realtime.deliver("window", [drawn.row]);
-      realtime.deliver("windowParts", [drawn.part]);
-      yield* settled;
+      live.transcript.set({ window: [drawn.row], windowParts: [drawn.part] });
+      yield* nextPoll;
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
 
       const toldBefore = pages().length;
@@ -1659,8 +1681,8 @@ it.effect(
   "a full page is followed by the next at once, and the short one after it is caught up",
   () =>
     Effect.gen(function* () {
-      const { call, asked, pages, sealTranscript, pageNow: script, realtime } = yield* subject();
-      sealTranscript(SEALED_TRANSCRIPT);
+      const { call, asked, pages, sealTranscript, pageNow: script, live } = yield* subject();
+      sealTranscript(LIVE_ANSWERED);
       const full: TranscriptNowAnswer = {
         ...pageNow("2:0", { holds: false }),
         messages: Array.from({ length: CODING_AGENT_BOUNDS.MESSAGES_PAGE }, (_, index) => ({
@@ -1673,7 +1695,7 @@ it.effect(
       script(full, rest);
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
-      transcriptRows(realtime, 2);
+      transcriptRows(live, 2);
       yield* settled;
       const told = pages().map(caughtUpOf);
       assert.deepEqual(told.slice(0, 3), [false, false, true]);
@@ -1685,7 +1707,7 @@ it.effect(
 );
 
 it.effect(
-  "a seal the service does not answer leaves the newest page told, is asked again a bounded number of times, then says the transcript could not be read; following again seals anew",
+  "a live read the service does not answer leaves the newest page told, is asked again a bounded number of times, then says the transcript could not be read; following again reads anew",
   () =>
     Effect.gen(function* () {
       const { call, asked, pages, sealTranscript } = yield* subject();
@@ -1701,7 +1723,7 @@ it.effect(
       yield* TestClock.adjust("1 minute");
       yield* settled;
       const seals = asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length;
-      assert.ok(seals > 1 && seals < 60, `sealed ${seals} times`);
+      assert.ok(seals > 1 && seals < 60, `read ${seals} times`);
       assert.deepEqual(pages().at(-1), {
         transcript: FOLLOWED,
         page: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
@@ -1710,7 +1732,7 @@ it.effect(
       yield* settled;
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals);
 
-      sealTranscript(SEALED_TRANSCRIPT);
+      sealTranscript(LIVE_ANSWERED);
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals + 1);
@@ -1724,7 +1746,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { call, asked, pages, sealTranscript, pageNewest } = yield* subject();
-      sealTranscript(SEALED_TRANSCRIPT);
+      sealTranscript(LIVE_ANSWERED);
       pageNewest({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
@@ -1755,22 +1777,22 @@ it.effect(
         sealTranscript,
         pageNow: script,
         pageNewest,
-        realtime,
+        live,
       } = yield* subject();
-      sealTranscript(SEALED_TRANSCRIPT);
+      sealTranscript(LIVE_ANSWERED);
       pageNewest(newestPage("2:0", "Writing the expiry."));
       script(pageNow("2:0", { holds: true }));
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
-      transcriptRows(realtime, 2);
+      transcriptRows(live, 2);
       yield* settled;
 
       // The agent is taken back to before its second line: every page says so from now on.
       const rewound = { ...newestPage("3:1", "Reading the invites."), rewound: 1 };
       pageNewest(rewound);
       script({ ...pageNow("3:1", { holds: true }), rewound: 1 });
-      transcriptRows(realtime, 3, 2);
-      yield* settled;
+      transcriptRows(live, 3, 2);
+      yield* nextPoll;
 
       const newestTold = pages().filter(
         (told) => isRecord(told) && isRecord(told.page) && told.page.newest === true,
@@ -1830,13 +1852,14 @@ it.effect(
       assert.deepEqual(signedOut.asked, []);
 
       const followed = yield* subject();
-      followed.sealTranscript(SEALED_TRANSCRIPT);
+      followed.sealTranscript(LIVE_ANSWERED);
       followed.pageNow(pageNow("1:0", { holds: true }));
       yield* followed.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
+      assert.equal(followed.live.transcript.held(), 1, "its poll is held while nothing moves");
       yield* followed.reset;
       yield* settled;
-      assert.deepEqual(followed.realtime.closed, [SEALED_TRANSCRIPT.url]);
+      assert.equal(followed.live.transcript.held(), 0, "a sign-out lets its poll go");
       assert.equal(followed.pages().length, 1);
     }),
 );
@@ -1849,12 +1872,12 @@ function followedOnce(
   return Effect.gen(function* () {
     const newest = newestPage("1:0", "Reading the invites.", "40");
     const past = pageNow("2:0", { holds: false, text: "Writing the expiry." });
-    harness.sealTranscript(SEALED_TRANSCRIPT);
+    harness.sealTranscript(LIVE_ANSWERED);
     harness.pageNewest(newest);
     harness.pageNow(past);
     yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, transcript);
     yield* settled;
-    transcriptRows(harness.realtime, 2);
+    transcriptRows(harness.live, 2);
     yield* settled;
     yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, transcript);
     const { holds: _holds, ...read } = past;
@@ -1875,13 +1898,13 @@ it.effect(
     Effect.gen(function* () {
       const harness = yield* subject();
       const window = yield* followedOnce(harness);
-      const { asked, pages, askedAsTold, realtime } = harness;
+      const { asked, pages, askedAsTold, live } = harness;
 
       // Written while no window followed it.
       const away = pageNow("3:0", { holds: false, text: "Written while away." });
       harness.pageNow(away);
       yield* TestClock.adjust("5 seconds");
-      transcriptRows(realtime, 3);
+      transcriptRows(live, 3);
       yield* settled;
 
       const toldBefore = pages().length;
@@ -1903,7 +1926,7 @@ it.effect(
     Effect.gen(function* () {
       const harness = yield* subject();
       const window = yield* followedOnce(harness);
-      const { pages, realtime } = harness;
+      const { pages, live } = harness;
       // The service answers a message older than the cursor again once its revision passed it.
       const rewrite = {
         ...pageNow("2:1", { holds: false }),
@@ -1916,7 +1939,7 @@ it.effect(
         ],
       };
       harness.pageNow(rewrite);
-      transcriptRows(realtime, 2);
+      transcriptRows(live, 2);
       yield* settled;
 
       const toldBefore = pages().length;
@@ -2168,11 +2191,6 @@ it.effect(
     }),
 );
 
-const SEALED_SCOPE: ScopeInboxLiveAnswer = {
-  url: "wss://realtime.example/v1",
-  queries: { items: sealed("items"), messages: sealed("messages"), files: sealed("files") },
-};
-
 /** That item as a reader who has read it reads it live. */
 const LIVE_ITEM: InboxItem = { ...ITEM, unread: false };
 
@@ -2198,29 +2216,27 @@ const toldTimes = (told: () => readonly unknown[], times: number) =>
 const AGENT_SCOPE = { kind: "agent", id: AGENT_ID } as const;
 
 it.effect(
-  "a followed plan's inbox is told from its Realtime subscription once its rows land, again each time they move and never when a delivery moved nothing; letting it go ends the telling",
+  "a followed plan's inbox is told from its live read once its rows land, again each time they move and never when an answer moved nothing; letting it go ends the telling",
   () =>
     Effect.gen(function* () {
-      const { call, asked, sealScope, realtime, told } = yield* subject();
-      sealScope(SEALED_SCOPE);
+      const { call, asked, sealScope, live, told } = yield* subject();
+      sealScope(LIVE_ANSWERED);
       assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE), {});
       yield* settled;
-      assert.deepEqual(realtime.opened, [SEALED_SCOPE.url]);
       assert.deepEqual(told(), []);
 
-      realtime.deliver("messages", []);
-      realtime.deliver("files", []);
-      realtime.deliver("items", [ITEM_ROW]);
+      live.scope.set({ messages: [], files: [], items: [ITEM_ROW] });
       yield* toldTimes(told, 1);
-      realtime.deliver("items", [ITEM_ROW]);
-      yield* settled;
+      live.scope.set({ items: [ITEM_ROW] });
+      yield* nextPoll;
       const closed = {
         ...ITEM_ROW,
         revision: 3,
         status: INBOX_STATUS.CLOSED,
         closedReason: "Done",
       };
-      realtime.deliver("items", [closed]);
+      live.scope.set({ items: [closed] });
+      yield* nextPoll;
       yield* toldTimes(told, 2);
       assert.deepEqual(told(), [
         { scope: PLAN_SCOPE, inbox: { items: [LIVE_ITEM] } },
@@ -2234,12 +2250,11 @@ it.effect(
         },
       ]);
       assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
-      assert.ok(!JSON.stringify(told()).includes("capability"));
 
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
       yield* settled;
-      realtime.deliver("items", [ITEM_ROW]);
-      yield* settled;
+      live.scope.set({ items: [ITEM_ROW] });
+      yield* nextPoll;
       assert.equal(told().length, 2);
     }),
 );
@@ -2248,13 +2263,11 @@ it.effect(
   "a message landing after its item's row is told as soon as it lands, its item's thread whole",
   () =>
     Effect.gen(function* () {
-      const { call, sealScope, realtime, told } = yield* subject();
-      sealScope(SEALED_SCOPE);
+      const { call, sealScope, live, told } = yield* subject();
+      sealScope(LIVE_ANSWERED);
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
-      realtime.deliver("messages", []);
-      realtime.deliver("files", []);
-      realtime.deliver("items", [ITEM_ROW]);
+      live.scope.set({ messages: [], files: [], items: [ITEM_ROW] });
       yield* toldTimes(told, 1);
       const message = {
         id: "6f1d2a10-7b0f-4e3b-9a55-5e3b2c1d4c7a",
@@ -2267,7 +2280,8 @@ it.effect(
         answers: null,
         createdAt: ITEM.updatedAt,
       };
-      realtime.deliver("messages", [message]);
+      live.scope.set({ messages: [message] });
+      yield* nextPoll;
       yield* toldTimes(told, 2);
       assert.equal(told().length, 2);
       assert.ok(JSON.stringify(told()[1]).includes("Also the staging branch?"));
@@ -2275,7 +2289,7 @@ it.effect(
 );
 
 it.effect(
-  "an agent's inbox the account does not reach is told not found, one the service seals nothing for is told unanswered, and behind a closed gate every follow is told unanswered",
+  "an agent's inbox the account does not reach is told not found, one the service answers nothing for is told unanswered, and behind a closed gate every follow is told unanswered",
   () =>
     Effect.gen(function* () {
       const refused = yield* subject();
@@ -2292,7 +2306,6 @@ it.effect(
       assert.deepEqual(unsealed.told(), [
         { scope: AGENT_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
       ]);
-      assert.deepEqual(unsealed.realtime.opened, []);
 
       const signedOut = yield* subject({ signedIn: false });
       yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
@@ -2306,29 +2319,17 @@ it.effect(
 
 it.effect("a sign-out lets every followed inbox go", () =>
   Effect.gen(function* () {
-    const { call, sealScope, realtime, told, reset } = yield* subject();
-    sealScope(SEALED_SCOPE);
+    const { call, sealScope, live, told, reset } = yield* subject();
+    sealScope(LIVE_ANSWERED);
     yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
     yield* settled;
+    assert.equal(live.scope.held(), 1, "its poll is held while nothing moves");
     yield* reset;
     yield* settled;
-    assert.deepEqual(realtime.closed, [SEALED_SCOPE.url]);
+    assert.equal(live.scope.held(), 0, "a sign-out lets its poll go");
     assert.deepEqual(told(), []);
   }),
 );
-
-const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
-
-const SEALED_ACCOUNT: AccountInboxLiveAnswer = {
-  url: "wss://realtime.example/v1",
-  queries: {
-    items: sealed("items"),
-    planless: sealed("planless"),
-    plans: sealed("plans"),
-    automations: sealed("automations"),
-    failedRuns: sealed("failedRuns"),
-  },
-};
 
 /** A run of the account's own automation that failed a second short of a week before now. */
 const FAILED_RUN = {
@@ -2342,26 +2343,29 @@ const FAILED_RUN = {
 
 /** Every part of the account's read delivered, the item and run given and nothing else. */
 function deliverAccount(
-  realtime: ReturnType<typeof fakeRealtime>,
+  live: { readonly account: PolledLive<(typeof ACCOUNT_PARTS)[number]> },
   rows: { readonly items?: readonly unknown[]; readonly failedRuns?: readonly unknown[] },
 ) {
-  for (const part of ACCOUNT_PARTS) {
-    realtime.deliver(part, part === "items" || part === "failedRuns" ? (rows[part] ?? []) : []);
-  }
+  live.account.set({
+    items: rows.items ?? [],
+    planless: [],
+    plans: [],
+    automations: [],
+    failedRuns: rows.failedRuns ?? [],
+  });
 }
 
 it.effect(
-  "what waits across the account is told from its Realtime subscription each time it moves, whole and never a sealed statement, and a failed run ageing out of the week tells it again",
+  "what waits across the account is told from its live read each time it moves, whole, and a failed run ageing out of the week tells it again",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(NOW);
-      const { call, asked, sealAccount, realtime, accountInboxes } = yield* subject();
-      sealAccount(SEALED_ACCOUNT);
+      const { call, asked, sealAccount, live, accountInboxes } = yield* subject();
+      sealAccount(LIVE_ANSWERED);
 
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
-      assert.deepEqual(realtime.opened, [SEALED_ACCOUNT.url]);
-      deliverAccount(realtime, { items: [WAITING], failedRuns: [FAILED_RUN] });
+      deliverAccount(live, { items: [WAITING], failedRuns: [FAILED_RUN] });
       yield* settled;
       const [answered] = accountInboxes();
       assert.ok(isRecord(answered) && typeof answered.cursor === "string");
@@ -2377,13 +2381,11 @@ it.effect(
           readAt: NOW,
         },
       );
-      assert.ok(!JSON.stringify(answered).includes("capability"));
-
-      deliverAccount(realtime, {
+      deliverAccount(live, {
         items: [{ ...WAITING, revision: 3, updatedAt: NOW }],
         failedRuns: [FAILED_RUN],
       });
-      yield* settled;
+      yield* nextPoll;
       const moved = accountInboxes().at(-1);
       assert.ok(isRecord(moved) && typeof moved.cursor === "string");
       assert.notEqual(moved.cursor, answered.cursor);
@@ -2401,18 +2403,18 @@ it.effect(
       // Let go, nothing more is told.
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW);
       const told = accountInboxes().length;
-      deliverAccount(realtime, { items: [] });
-      yield* settled;
+      deliverAccount(live, { items: [] });
+      yield* nextPoll;
       assert.equal(accountInboxes().length, told);
     }),
 );
 
 it.effect(
-  "the account inbox is told unanswered with nobody signed in, and a session the service signs out is sealed again after a rest, telling nothing meanwhile",
+  "the account inbox is told unanswered with nobody signed in, and a session the service signs out is read again after a rest, telling nothing meanwhile",
   () =>
     Effect.gen(function* () {
       const nobody = yield* subject({ accountId: () => undefined });
-      nobody.sealAccount(SEALED_ACCOUNT);
+      nobody.sealAccount(LIVE_ANSWERED);
       yield* nobody.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
       assert.deepEqual(nobody.accountInboxes(), [
@@ -2420,7 +2422,7 @@ it.effect(
       ]);
       assert.deepEqual(nobody.asked, []);
 
-      const { call, asked, sealAccount, realtime, accountInboxes } = yield* subject();
+      const { call, asked, sealAccount, accountInboxes } = yield* subject();
       sealAccount(LIVE_SIGNED_OUT);
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
@@ -2429,93 +2431,7 @@ it.effect(
       yield* settled;
       assert.deepEqual(asked, ["account-inbox-live:user-dana", "account-inbox-live:user-dana"]);
       assert.deepEqual(accountInboxes(), []);
-      assert.deepEqual(realtime.opened, []);
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW);
-    }),
-);
-
-it.effect(
-  "a mark is answered once a followed inbox has its transaction, and at once where no inbox is followed over Realtime or the write changed nothing",
-  () =>
-    Effect.gen(function* () {
-      const { call, sealScope, realtime, told, commitIn } = yield* subject();
-      const markRead = { itemId: ITEM.id, unread: false };
-      commitIn("41");
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, markRead),
-        { id: ITEM.id, unread: false, txid: "41" },
-        "with no inbox followed, nothing is waited on",
-      );
-
-      sealScope(SEALED_SCOPE);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
-      yield* settled;
-      realtime.deliver("messages", []);
-      realtime.deliver("files", []);
-      realtime.deliver("items", [ITEM_ROW]);
-      yield* toldTimes(told, 1);
-
-      commitIn("42");
-      const marking = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, markRead),
-      );
-      yield* settled;
-      assert.deepEqual(realtime.awaitingTxids(), ["42"]);
-      assert.equal(marking.pollUnsafe(), undefined, "not answered before the inbox has it");
-      realtime.arrive("42");
-      assert.deepEqual(yield* Fiber.join(marking), { id: ITEM.id, unread: false, txid: "42" });
-
-      commitIn(undefined);
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL, { workspaceId: WORKSPACE_ID }),
-        { marked: 2 },
-        "a write that changed nothing answers at once",
-      );
-      assert.deepEqual(realtime.awaitingTxids(), []);
-    }),
-);
-
-it.effect(
-  "a sent message answers before its row's transaction reaches the transcript a window follows, so the next send is not held behind it",
-  () =>
-    Effect.gen(function* () {
-      const { call, sealTranscript, pageNow: script, sendTxid, realtime, asked } = yield* subject();
-      sealTranscript(SEALED_TRANSCRIPT);
-      script(pageNow("1:0", { holds: true }));
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
-      yield* settled;
-      transcriptRows(realtime, 1);
-      yield* settled;
-      sendTxid("742");
-
-      const first = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
-          agentId: AGENT_ID,
-          text: "Use seven days.",
-          clientKey: "send-1",
-        }),
-      );
-      yield* settled;
-      assert.notEqual(first.pollUnsafe(), undefined, "answered with its row still on its way");
-      assert.deepEqual(yield* Fiber.join(first), { agent: AGENT });
-
-      sendTxid("743");
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
-          agentId: AGENT_ID,
-          text: "And email them.",
-          clientKey: "send-2",
-        }),
-        { agent: AGENT },
-      );
-      assert.deepEqual(realtime.awaitingTxids(), []);
-      assert.deepEqual(
-        asked.filter((each) => each.startsWith("message:")),
-        [
-          `message:${AGENT_ID}:send-1:Use seven days.`,
-          `message:${AGENT_ID}:send-2:And email them.`,
-        ],
-      );
     }),
 );
 

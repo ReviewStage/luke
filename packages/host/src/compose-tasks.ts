@@ -169,8 +169,6 @@ import {
   confirmWrite,
   LIVE_GONE,
   type LiveBroken,
-  type LiveClient,
-  openRealtimeClient,
   type SealedRead,
   type TxWait,
 } from "./live-follow.js";
@@ -390,8 +388,6 @@ export interface TasksDependencies {
   client: TasksClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
-  /** Realtime's client at an address, which the open task's board, its record, and the task list are followed over; Realtime's own outside a test. */
-  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /**
    * Ends the call standing about `taskId`, or whatever it is about
    * where none is named, and waits for it to end. A call about another task
@@ -619,8 +615,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             )
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodeHistory(rows), revisionsOfLiveRows),
-      openLive: dependencies.openLive ?? openRealtimeClient,
-      now: kernel.now,
       publish: (page) =>
         kernel.emit(
           GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
@@ -697,8 +691,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 )
               : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
           decode: decodeBrowserTabs,
-          openLive: dependencies.openLive ?? openRealtimeClient,
-          now: kernel.now,
           publish: (rows) => {
             Queue.offerUnsafe(delivered, rows);
           },
@@ -730,8 +722,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             )
           : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
       decode: (rows) => Option.map(decodePages(rows), pagesOfLiveRows),
-      openLive: dependencies.openLive ?? openRealtimeClient,
-      now: kernel.now,
       publish: (pages) =>
         kernel.emit(
           GATEWAY_EVENT.TASKS_PAGES_CHANGED,
@@ -806,8 +796,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 ? sealed.answer
                 : { failure: sealed.failure, gone: sealed.failure === LIVE_SIGNED_OUT.failure },
             ),
-      openLive: dependencies.openLive ?? openRealtimeClient,
-      now: kernel.now,
       publish: ({ list, taskAgents, taskPullRequests }) => {
         write({
           tasks: list.plans,
@@ -860,15 +848,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       const sealed = yield* seal(false);
       if ("failure" in sealed) return yield* Effect.fail(sealed.failure);
       const moves = workspacesMoves(
-        {
-          seal: () => seal(false),
-          poll: (after) => seal(true, after),
-          openLive: dependencies.openLive ?? openRealtimeClient,
-          now: kernel.now,
-        },
+        { poll: (after) => seal(true, after), now: kernel.now },
         sealed,
       );
-      // A follow gone mid-way was refused as signed out by a renewal or a poll, which no seal mends either.
+      // A follow gone mid-way was refused as signed out by a poll, which no read mends either.
       const gone = yield* Stream.runForEach(moves, (workspaces) =>
         Effect.sync(() => {
           const drawn = new Map(view.workspaces.map((each) => [each.id, JSON.stringify(each)]));
@@ -951,15 +934,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         return yield* Effect.fail(first.failure);
       }
-      const changes = moves(
-        {
-          seal: () => sealed(false),
-          poll: (after) => sealed(true, after),
-          openLive: dependencies.openLive ?? openRealtimeClient,
-          now: kernel.now,
-        },
-        first,
-      );
+      const changes = moves({ poll: (after) => sealed(true, after), now: kernel.now }, first);
       yield* Stream.runForEach(changes, told).pipe(Effect.ignore);
       return yield* Effect.fail(WORKSPACE_CALL_FAILURE.UNANSWERED);
     });
@@ -1069,9 +1044,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       if ("failure" in sealed) return yield* Effect.fail(sealed.failure);
       const moves = sidebarMoves(
         {
-          seal: () => seal(false),
           poll: (after) => seal(true, after),
-          openLive: dependencies.openLive ?? openRealtimeClient,
           now: kernel.now,
           onTxWait: (wait) => {
             sidebarTxWait = wait;
@@ -1405,16 +1378,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         HttpClient.HttpClient
       >;
       readonly moves: (
-        sealing: {
-          readonly seal: () => Effect.Effect<Answer | Unsealed>;
+        following: {
           readonly poll: (after: string | undefined) => Effect.Effect<Answer | Unsealed>;
-          readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
-          readonly now: () => number;
         },
         first: Answer,
       ) => Stream.Stream<Moved, LiveBroken>;
       readonly moved: (moved: Moved) => void;
-      /** Hears the follow's wait on a write's transaction while it stands over Realtime (`liveRows`). */
+      /** Hears the follow's wait on a write's transaction where it has one (`liveRows`). */
       readonly onTxWait?: (wait: TxWait | undefined) => void;
     },
   ) {
@@ -1444,10 +1414,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       let delivered = false;
       const moves = read.moves(
         {
-          seal: () => sealedFor(false),
           poll: (after) => sealedFor(true, after),
-          openLive: dependencies.openLive ?? openRealtimeClient,
-          now: kernel.now,
           ...(read.onTxWait === undefined ? undefined : { onTxWait: read.onTxWait }),
         },
         sealed,

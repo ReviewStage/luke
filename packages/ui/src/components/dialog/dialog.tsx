@@ -1,5 +1,6 @@
 import type { DialogRoot } from "@base-ui/react/dialog";
 import {
+  type ReactNode,
   type Ref,
   useCallback,
   useEffect,
@@ -75,10 +76,11 @@ import { useHeldFocus } from "./held-focus.js";
  * by the next one; a reader is told so through the window's `Announcer`, since a card that stays is otherwise a press gone nowhere. The card is the
  * profile's dialog card, its inset and its corners, at a question's
  * measure, wider for a note being written, fitted edge to edge to a file
- * shown, or as large as the window allows, a small margin from the window's
+ * shown, or, bare, the dimmed window's own room, a small margin from its
  * edges and its top clear of the traffic lights where the window draws them
- * (`--luke-dialog-window-top`, which the window sets); what it holds lays
- * itself out inside. A dialog that takes files dropped on the dimmed window rings its
+ * (`--luke-dialog-window-top`, which the window sets), where its owner
+ * draws its own card (`DialogCard`) and what stands beside it on the dimmed
+ * window; what it holds lays itself out inside. A dialog that takes files dropped on the dimmed window rings its
  * card while a drag it would take is over it.
  *
  * A dialog that asks something draws its parts in the card's own slots: its
@@ -106,9 +108,9 @@ export type DialogRole = (typeof DIALOG_ROLE)[keyof typeof DIALOG_ROLE];
 /**
  * How wide the card stands: a question's measure, wider for a note being
  * written, wider still for a composer card with chips at its foot, fitted
- * to a file shown edge to edge, or as large as the window allows, a file
- * shown edge to edge in a card a small margin from the window's edges, its
- * top clear of what the window draws over it; or a sheet standing on the
+ * to a file shown edge to edge, or bare over the dimmed window's own room,
+ * its top clear of what the window draws over it, its owner drawing its
+ * card (`DialogCard`) and what stands round it there; or a sheet standing on the
  * window's foot, which draws its own ground, edge, and entrance.
  */
 export const DIALOG_SIZE = {
@@ -173,7 +175,7 @@ const CARD_LOOK = [
   "data-[size=composer]:w-dialog-composer data-[size=composer]:gap-3",
   "room-narrow:data-[size=composer]:-ml-dialog-reach room-narrow:data-[size=composer]:-mr-dialog-reach room-narrow:data-[size=composer]:w-dialog-composer-reach room-narrow:data-[size=composer]:pt-card-inset-snug room-narrow:data-[size=composer]:pr-card-inset-snug room-narrow:data-[size=composer]:pb-card-inset-snug room-narrow:data-[size=composer]:pl-card-inset-snug",
   "data-[size=media]:w-auto data-[size=media]:min-w-dialog-media-min data-[size=media]:max-w-dialog-media-max data-[size=media]:gap-0 data-[size=media]:overflow-hidden data-[size=media]:p-0",
-  "data-[size=window]:w-auto data-[size=window]:max-h-none data-[size=window]:max-w-none data-[size=window]:place-self-stretch data-[size=window]:gap-0 data-[size=window]:overflow-hidden data-[size=window]:p-0 data-[size=window]:mx-luke-12 data-[size=window]:mb-luke-12 data-[size=window]:mt-dialog-window-top @min-[1024px]/luke-dialog-room:data-[size=window]:mx-luke-16 @min-[1024px]/luke-dialog-room:data-[size=window]:mb-luke-16",
+  "data-[size=window]:w-auto data-[size=window]:max-h-none data-[size=window]:max-w-none data-[size=window]:place-self-stretch data-[size=window]:min-h-0 data-[size=window]:min-w-0 data-[size=window]:gap-0 data-[size=window]:rounded-none data-[size=window]:border-0 data-[size=window]:bg-transparent data-[size=window]:p-0 data-[size=window]:shadow-none data-[size=window]:mx-luke-16 data-[size=window]:mb-luke-16 data-[size=window]:mt-dialog-window-top @min-[1024px]/luke-dialog-room:data-[size=window]:mx-luke-48 @min-[1024px]/luke-dialog-room:data-[size=window]:mb-luke-24",
   "data-[size=sheet]:w-dialog-wide data-[size=sheet]:gap-0 data-[size=sheet]:rounded-none data-[size=sheet]:border-0 data-[size=sheet]:bg-transparent data-[size=sheet]:p-0 data-[size=sheet]:shadow-none data-[size=sheet]:animate-none data-[size=sheet]:data-ending-style:animate-leave",
   "data-[expanding=true]:animate-none",
   "data-[dropping=true]:shadow-dialog-drop",
@@ -187,7 +189,7 @@ const CARD_LOOK = [
  * own gap) so what it holds keeps the spacing it had as the card's children.
  * Note that it clips what it holds, so it draws a control's ring inside the
  * control, as a `Card` does, rather than clipped at the edge; that a
- * picture's card (`media`, `window`) is fitted edge to edge and draws its own head and
+ * picture's card (`media`) and a bare one (`window`) draw their own head and
  * scroller, so its middle lays nothing out; and that a composer's card
  * does not scroll its middle, because its chips hang lists (the repository's,
  * the `@` menu) past the card's inner edges, which a scroller would clip and
@@ -198,19 +200,45 @@ const CARD_LOOK = [
 const MIDDLE =
   "flex min-h-0 flex-1 flex-col gap-[inherit] overflow-x-hidden overflow-y-auto overscroll-contain [--luke-focus-ring-offset:var(--luke-focus-ring-inset)] data-[size=media]:contents data-[size=window]:contents data-[size=sheet]:contents data-[size=composer]:overflow-visible";
 
-/** What marks a card's own veil, the room around a file shown in a card the window's size. */
+/** What marks the part of a bare dialog that stands for the dimmed window. */
 const VEIL_ATTRIBUTE = "data-dialog-veil";
 
 /**
- * What an owner spreads on the part of its card that stands for the dimmed
- * window, the room around a file shown in a card the window's size
- * (`DIALOG_SIZE.WINDOW`), which covers most of the dimmed window: a press
- * that goes down and comes up on it puts the card away as one on the dimmed
- * window does, and one that lands on what it holds does not.
+ * What an owner spreads on the part of a bare dialog (`DIALOG_SIZE.WINDOW`)
+ * that stands for the dimmed window, the room round its card and what stands
+ * beside it, or the room round a file shown in the card: a press that goes
+ * down and comes up on it puts the dialog away as one on the dimmed window
+ * does, and one that lands on what it holds does not.
  */
 export const DIALOG_VEIL = { [VEIL_ATTRIBUTE]: "" } as const;
 
-/** The dimmed window under a card the window's size, which keeps its own margins (`CARD_LOOK`). */
+/**
+ * The card a bare dialog's owner draws (`DIALOG_SIZE.WINDOW`), in the dialog
+ * card's own edge, corner, ground, and shadow, clipping what it holds edge to
+ * edge, as a picture's card does. It fills the room its owner leaves it, or
+ * hugs what it holds (`hug`), as a picture shown at its own shape is, no
+ * narrower than a picture's card so its head's buttons still fit, and no
+ * larger than that room.
+ */
+export function DialogCard({
+  hug = false,
+  children,
+}: {
+  /** Whether it hugs what it holds rather than filling its room. */
+  hug?: boolean | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <div
+      className={`luke-dialog-card flex min-h-0 min-w-0 flex-col overflow-hidden rounded-dialog border border-border-strong bg-popover text-popover-foreground shadow-dialog ${hug ? "max-h-full max-w-full min-w-dialog-media-min" : "size-full"}`}
+      data-hug={hug}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** The dimmed window under a bare dialog, which keeps its own margins (`CARD_LOOK`). */
 const WINDOW_ROOM = "luke-dialog-backdrop p-0";
 
 /** The dimmed window under a sheet, which stands on its foot, centred across it, with no margin. */

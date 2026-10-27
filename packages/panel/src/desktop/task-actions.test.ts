@@ -517,47 +517,43 @@ test("a sidebar task's press says its status after its name, as a List row's doe
   assert.equal(said(OTHER), "Billing export");
 });
 
-test("a sidebar plan whose repository belongs to another of the account's workspaces wears the attention mark before its time, its card naming that workspace, until it is moved there", () => {
+test("a sidebar plan whose repository belongs to another of the account's workspaces wears how its agents stand, as any row does, its card naming that workspace", () => {
   const { asked } = openTab();
   const tasks = tasksControl({ me: DEAN.userId, workspaces: [PERSONAL, STAGE] });
-  const container = mount(sidebarTask(tasks, STRANDED, asked));
-  const mark = () => container.querySelector(".sidebar-task-time .attention-mark");
-  const card = mount(taskCardOf(tasks, STRANDED, STRANDED.updatedAt));
+  const working: TaskSummary = {
+    ...STRANDED,
+    agents: { total: 1, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
+  };
+  const container = mount(sidebarTask(tasks, working, asked));
+  const card = mount(taskCardOf(tasks, working, working.updatedAt));
 
-  assert.notEqual(mark(), null, "the row wears the attention mark");
-  assert.match(heard(container), /\(repository belongs to Stage\)/u);
+  assert.ok(
+    container.querySelector('.sidebar-task-time [role="img"][aria-label="Working"]') !== null,
+    "the row wears its agents' icon",
+  );
   assert.deepEqual(
     [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(heard),
     ["acme-corp/relay", "Repository belongs to Stage"],
   );
-
-  act(() => roots[0]?.render(sidebarTask(tasks, { ...STRANDED, workspaceId: STAGE.id }, asked)));
-  assert.equal(mark(), null, "moved to Stage, the row wears it no longer");
 });
 
-test("no sidebar plan wears the attention mark where its own workspace reaches its repository, no other workspace does, or a teammate owns it", () => {
-  const { asked } = openTab();
-  const reaching = { ...PERSONAL, github: { login: "acme-corp", active: true } };
+test("no sidebar plan's card says its repository belongs elsewhere where its own workspace reaches its repository, no other workspace does, or a teammate owns it", () => {
   const cases: [TaskSummary, readonly Workspace[]][] = [
-    [STRANDED, [reaching, STAGE]],
+    [STRANDED, [{ ...PERSONAL, github: { login: "acme-corp", active: true } }, STAGE]],
     [STRANDED, [PERSONAL]],
     [{ ...STRANDED, ownerId: CHARLES.userId }, [PERSONAL, STAGE]],
   ];
-  const marked = cases.map(([task, workspaces]) => {
+  const named = cases.map(([task, workspaces]) => {
     const tasks = tasksControl({ me: DEAN.userId, workspaces: [...workspaces] });
-    const row = mount(sidebarTask(tasks, task, asked));
     const card = mount(taskCardOf(tasks, task, task.updatedAt));
-    const found = [
-      row.querySelector(".attention-mark") !== null,
-      card.querySelector(".attention-mark") !== null,
-    ];
+    const found = /Repository belongs to/u.test(heard(card));
     unmountAll();
     return found;
   });
 
   assert.deepEqual(
-    marked,
-    cases.map(() => [false, false]),
+    named,
+    cases.map(() => false),
   );
 });
 

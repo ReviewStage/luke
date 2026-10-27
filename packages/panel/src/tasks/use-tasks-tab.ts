@@ -304,8 +304,8 @@ interface InboxViewControl {
   /**
    * Opens the Inbox narrowed to a channel with Channels on, from wherever
    * the window stands: the sidebar's row, the command palette. It chooses
-   * no item, so the channel's first stands chosen, and a phone opens on its
-   * list, as the Inbox's own row opens it.
+   * no item, so the channel's first stands chosen, and one column opens on
+   * its list, as the Inbox's own row opens it.
    */
   readonly onOpenChannel: (channelId: string) => void;
   /**
@@ -817,7 +817,7 @@ export interface TasksControl {
     ) => Promise<Failure | undefined>;
     /** The models the composer's chip offers, as last read; nothing before the first read lands. */
     models: readonly CatalogModel[] | undefined;
-    /** The member's devices Runs on offers, as the same read last listed them; nothing before it lands, or while local agents are off. */
+    /** The member's devices Runs on offers, as the same read last listed them: none listed where it offered none, and nothing before a read lands. */
     devices: readonly MacOffer[] | undefined;
     /** Whether the last read of the models did not land. */
     modelsFailed: boolean;
@@ -2273,7 +2273,7 @@ export function useTasksTab(input: {
     });
     const on: StandIn | undefined =
       rest.kind === RESTING_PAGE.INBOX
-        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: input.room === SHELL_ROOM.NARROW }
+        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: true }
         : undefined;
     if (on !== undefined) {
       setRested({
@@ -3374,25 +3374,22 @@ export function useTasksTab(input: {
     inboxView: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
-      // Note that a narrow room opens on the list though it keeps the item last chosen, so a wide room it turns into again stands that item beside the list.
+      // Note that it opens on the list though it keeps the item last chosen, so one column shows the list and two stand that item beside it (`inbox-columns.ts`).
       // With Channels on, it leaves any channel shown, so the Inbox lists every channel's items.
       onOpen: guard(() => {
         setHistoryFor(undefined);
         if (channelsOn) leaveChannel();
-        const listed = input.room === SHELL_ROOM.NARROW;
         const remembered = lastInboxChoice.current;
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX
-            ? listed
-              ? { ...held, listed }
-              : held
+            ? { ...held, listed: true }
             : {
                 kind: STAND_IN.INBOX,
                 chosen: rememberedChoice(remembered, {
                   account: input.account,
                   workspaceId: listedWorkspaceId,
                 }),
-                listed,
+                listed: true,
               },
         );
       }),
@@ -3413,11 +3410,7 @@ export function useTasksTab(input: {
       onOpenChannel: guard((channelId: string) => {
         setHistoryFor(undefined);
         chooseChannel(channelId);
-        setStandIn({
-          kind: STAND_IN.INBOX,
-          chosen: undefined,
-          listed: input.room === SHELL_ROOM.NARROW,
-        });
+        setStandIn({ kind: STAND_IN.INBOX, chosen: undefined, listed: true });
       }),
       listed: inboxView?.listed ?? false,
       onListed: (listed) =>

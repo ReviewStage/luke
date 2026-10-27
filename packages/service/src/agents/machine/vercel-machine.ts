@@ -45,7 +45,7 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { AGENT_USER, RUNNER_DIRECTORY } from "@luke/agent-runner/pins";
+import { AGENT_USER, RUNNER_DIRECTORY, SHARED_FILES_DIRECTORY } from "@luke/agent-runner/pins";
 import {
   type CodingAgent,
   hasRepository,
@@ -152,6 +152,7 @@ const SANDBOX_LAYOUT: MachineLayout = {
   installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
   skillsUpload: NATIVE_SKILLS_PATH.UPLOAD,
   attachments: ATTACHMENT_DIRECTORY,
+  sharedFiles: SHARED_FILES_DIRECTORY,
   claudeExecutable: undefined,
   codexExecutable: undefined,
   writableRoots: [],
@@ -181,7 +182,9 @@ const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const
  * root writes and checked against the digest Luke computed, the member's
  * installed skills, where the sandbox's opening uploaded them, moved where
  * only root writes and every user reads (`native-skills.ts`), the checkout
- * marked safe for git and shared with `agent`'s group, then the runner in
+ * marked safe for git and shared with `agent`'s group, the folder an agent
+ * saves what Luke reads back in made `agent`'s and readable by the default
+ * user Luke reads as (`SHARED_FILES_DIRECTORY`), then the runner in
  * place of the shell as `agent`, every capability dropped. `$1` is the
  * digest; the secrets are in the environment the API hands the command, and
  * `exec` hands them on to the runner alone.
@@ -196,6 +199,7 @@ const LAUNCH_SCRIPT = [
   `if [ -d ${CODER.CHECKOUT_PATH}/.git ]; then git -C ${CODER.CHECKOUT_PATH} config core.sharedRepository group; fi`,
   `chmod -R g+rwX ${CODER.CHECKOUT_PATH}`,
   `find ${CODER.CHECKOUT_PATH} -type d -exec chmod g+s {} +`,
+  `install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0755 ${SHARED_FILES_DIRECTORY}`,
   `exec ${WITHOUT_CAPABILITIES.COMMAND} --reuid=${AGENT_USER} --regid=${AGENT_USER} --init-groups ${WITHOUT_CAPABILITIES.ARGS.join(" ")} env HOME=/home/${AGENT_USER} USER=${AGENT_USER} LOGNAME=${AGENT_USER} node ${RUNNER_PATH.INSTALLED}`,
 ].join("\n");
 

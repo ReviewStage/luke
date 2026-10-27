@@ -1,3 +1,4 @@
+import { isAPIError } from "better-auth/api";
 import type { Cause } from "effect";
 import { Effect, Option } from "effect";
 import {
@@ -7,6 +8,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../core.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import type { RelayCredential } from "../http/relay-upgrade.js";
 import { auth } from "./auth.js";
 import { BearerCallers } from "./bearer-callers.js";
@@ -15,6 +17,9 @@ import { CREDENTIAL_HEADER, sessionCredential } from "./session-credential.js";
 
 /** The address a relay page's headers are read against as a request: only the headers are read. */
 const RELAY_PAGE_BASE = "http://localhost/";
+
+/** What every `jose` error's code begins with, and the one of them that is a key set not reached rather than a token refused. */
+const JOSE_CODE = { PREFIX: "ERR_J", KEY_SET_TIMEOUT: "ERR_JWKS_TIMEOUT" } as const;
 
 /** The subject a signed-in OAuth userinfo answer names. */
 export interface OAuthUserInfo {
@@ -50,11 +55,32 @@ export function oauthUserInfoFromAuthAnswer(value: UnparsedWireValue): OAuthUser
   return sub ? { sub } : undefined;
 }
 
+/**
+ * Whether the auth service refused the token itself rather than failing to
+ * answer: Better Auth's own refusal, a 4xx `APIError` other than its 429,
+ * which asks for a retry, or a token whose signature or claims `jose` would
+ * not verify, which Better Auth rethrows unchanged. Anything else, a
+ * database it could not reach among it, is an outage.
+ */
+function refusedToken(failure: Cause.UnknownError): boolean {
+  const thrown = failure.cause;
+  if (isAPIError(thrown)) {
+    return (
+      thrown.statusCode < HOSTED_HTTP_STATUS.INTERNAL_ERROR &&
+      thrown.statusCode !== HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS
+    );
+  }
+  if (!(thrown instanceof Error) || !("code" in thrown) || typeof thrown.code !== "string") {
+    return false;
+  }
+  return thrown.code.startsWith(JOSE_CODE.PREFIX) && thrown.code !== JOSE_CODE.KEY_SET_TIMEOUT;
+}
+
 /** Resolves the signed-in user behind a request's bearer token, on `UserIdResolver`'s terms. */
 export function hostedUserId(
   request: Request,
   userInfo: UserInfoEndpoint,
-): Effect.Effect<Option.Option<string>> {
+): Effect.Effect<Option.Option<string>, Cause.UnknownError> {
   return userIdForAuthorization(request.headers.get(CREDENTIAL_HEADER.AUTHORIZATION), userInfo);
 }
 
@@ -62,16 +88,19 @@ export function hostedUserId(
  * The same resolution for an `Authorization` value that arrived somewhere
  * other than on its own request: the voice service forwards the header the
  * desktop opened its socket with, and it is read as if it had been sent here.
+ * A token the auth service refused resolves nobody; an auth service that
+ * could not answer fails, so the caller is told to retry rather than to sign
+ * in again.
  */
 export function userIdForAuthorization(
   value: string | null | undefined,
   userInfo: UserInfoEndpoint,
-): Effect.Effect<Option.Option<string>> {
+): Effect.Effect<Option.Option<string>, Cause.UnknownError> {
   const authorization = value?.trim();
   if (!authorization) return Effect.succeedNone;
   return userInfo({ headers: new Headers({ authorization }) }).pipe(
     Effect.map((identity) => Option.fromUndefinedOr(identity?.sub || undefined)),
-    Effect.orElseSucceed(Option.none<string>),
+    Effect.catchIf(refusedToken, () => Effect.succeedNone),
   );
 }
 
@@ -87,17 +116,17 @@ export function userIdForAuthorization(
  * session answered for it. The session is read from the cookie alone
  * (`session-credential.ts`, the rule every session read follows), so
  * nothing else the request carries names an account on that path, and a
- * failure of the auth service resolves nobody, as a bearer's does.
+ * failure of the auth service fails, as a bearer's does.
  */
 export function requestUserId(
   request: Request,
   userInfo: UserInfoEndpoint,
   session: SessionEndpoint,
-): Effect.Effect<Option.Option<string>> {
+): Effect.Effect<Option.Option<string>, Cause.UnknownError> {
   if (request.headers.has(CREDENTIAL_HEADER.AUTHORIZATION)) return hostedUserId(request, userInfo);
   const cookie = sessionCredential(request.headers);
   if (cookie === undefined) return Effect.succeedNone;
-  return session({ headers: cookie }).pipe(Effect.orElseSucceed(Option.none<string>));
+  return session({ headers: cookie });
 }
 
 /**
@@ -110,7 +139,7 @@ export function relayUserId(
   credential: RelayCredential,
   userInfo: UserInfoEndpoint,
   session: SessionEndpoint,
-): Effect.Effect<Option.Option<string>> {
+): Effect.Effect<Option.Option<string>, Cause.UnknownError> {
   if ("bearer" in credential) return userIdForAuthorization(credential.bearer, userInfo);
   const page = new Request(RELAY_PAGE_BASE, { headers: credential.page });
   return requestUserId(page, userInfo, session);
@@ -144,7 +173,9 @@ export const hostedUserInfo: UserInfoEndpoint = (input) =>
  * to the deployment's own pages before any route reads it
  * (`http/origin-guard.ts`).
  */
-export function resolveHostedUserId(request: Request): Effect.Effect<Option.Option<string>> {
+export function resolveHostedUserId(
+  request: Request,
+): Effect.Effect<Option.Option<string>, Cause.UnknownError> {
   return requestUserId(request, hostedUserInfo, resolveBrowserSessionUserId);
 }
 
@@ -154,13 +185,15 @@ export function resolveHostedUserId(request: Request): Effect.Effect<Option.Opti
  * session must never stand in: the Mac's held read claims every command its
  * account's agents queued for itself (`agents/mac-commands-procedures.ts`).
  */
-export function resolveHostedBearerUserId(request: Request): Effect.Effect<Option.Option<string>> {
+export function resolveHostedBearerUserId(
+  request: Request,
+): Effect.Effect<Option.Option<string>, Cause.UnknownError> {
   return hostedUserId(request, hostedUserInfo);
 }
 
 /** The account a relay's upgrade names against the same store: the terminal relay's and the Browser tab's live view's alike. */
 export function resolveRelayUserId(
   credential: RelayCredential,
-): Effect.Effect<Option.Option<string>> {
+): Effect.Effect<Option.Option<string>, Cause.UnknownError> {
   return relayUserId(credential, hostedUserInfo, resolveBrowserSessionUserId);
 }

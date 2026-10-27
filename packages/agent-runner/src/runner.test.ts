@@ -16,6 +16,7 @@ import { vi } from "vitest";
 import { claudeCodeLive } from "./claude-code.js";
 import { EventsUndelivered } from "./events.js";
 import { RunnerFailed } from "./launch.js";
+import { SHARED_FILES_DIRECTORY } from "./pins.js";
 import { processTable } from "./processes.js";
 import {
   EFFORT,
@@ -737,6 +738,8 @@ it.effect(
       assert.equal(options.sandbox?.failIfUnavailable, true);
       assert.equal(options.sandbox?.enableWeakerNestedSandbox, true);
       assert.deepEqual(options.sandbox?.network?.allowedDomains, CONFIG.allowedDomains);
+      // A command may write the folder Luke reads a shown picture or page from.
+      assert.deepEqual(options.sandbox?.filesystem?.allowWrite, [SHARED_FILES_DIRECTORY]);
       const denied = (options.sandbox?.credentials?.envVars ?? []).map(
         (rule: { name: string; mode: string }) => `${rule.name}:${rule.mode}`,
       );
@@ -744,6 +747,8 @@ it.effect(
       assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
+      // A command's Playwright looks for its browsers in its own package: the image's where it installed them, a repository's where the agent may install them.
+      assert.equal(options.env?.PLAYWRIGHT_BROWSERS_PATH, "0");
     }),
 );
 

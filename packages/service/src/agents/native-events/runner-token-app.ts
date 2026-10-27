@@ -89,6 +89,7 @@ import {
   hostedStoreOrUnavailable,
   parseJsonBytes,
   readBodyBytesEffect,
+  resolvedAccount,
   type UserIdResolver,
 } from "../../http/http-effect.js";
 import { makeRateBrake, type RateBrake } from "../../http/rate-brake.js";
@@ -286,7 +287,7 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   if (Option.isNone(admitted)) {
     const host = yield* hostCallerOf(request);
     if (Option.isSome(host)) return yield* hostGithubToken(host.value, brake);
-    const desktop = yield* seams.resolveUserId(request);
+    const desktop = yield* resolvedAccount(seams.resolveUserId, request);
     if (Option.isSome(desktop)) return yield* desktopGithubToken(desktop.value, brake);
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   }

@@ -125,6 +125,7 @@ import { TASK_MARKS_EXAMPLE } from "./examples/task-marks";
 import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
+import { THUMB_STRIPS_EXAMPLE } from "./examples/thumb-strips";
 import { TIMES_EXAMPLE } from "./examples/times";
 import { TOASTS_EXAMPLE } from "./examples/toasts";
 import { TOOLBARS_EXAMPLE } from "./examples/toolbars";
@@ -244,6 +245,7 @@ export const EXAMPLES: readonly Example[] = [
   PAGINATION_EXAMPLE,
   PAGE_HEADER_EXAMPLE,
   PAGE_THUMBS_EXAMPLE,
+  THUMB_STRIPS_EXAMPLE,
   PAGE_TOOLBAR_EXAMPLE,
   PANE_BARS_EXAMPLE,
   PICTURE_SETS_EXAMPLE,

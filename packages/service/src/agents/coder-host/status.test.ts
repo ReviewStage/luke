@@ -201,5 +201,9 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
       ]),
     ).mac;
 
-  expect(seen(now - 44_000)).toEqual({ name: "Charles's MacBook Pro", seenAt: now - 44_000 });
+  expect(seen(now - 44_000)).toEqual({
+    name: "Charles's MacBook Pro",
+    seenAt: now - 44_000,
+    deviceId: DEVICE,
+  });
 });

@@ -818,9 +818,6 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
-      '@neon/realtime':
-        specifier: 0.1.1
-        version: 0.1.1(ws@8.21.3)
       '@orpc/contract':
         specifier: 'catalog:'
         version: 2.0.0-beta.44
@@ -1122,12 +1119,6 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
-      '@neon/realtime':
-        specifier: 0.1.1
-        version: 0.1.1(ws@8.21.3)
-      '@neon/realtime-drizzle':
-        specifier: 0.1.0
-        version: 0.1.0(@neon/realtime@0.1.1)(drizzle-orm@1.0.0-rc.4)
       '@orpc/contract':
         specifier: 'catalog:'
         version: 2.0.0-beta.44
@@ -2797,25 +2788,6 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
-
-  '@neon/realtime-drizzle@0.1.0':
-    resolution: {integrity: sha512-JZ4g5Zg2klNxF7QPxUKU77d8i+IEtX3fQ83oDoG61/DUi8jPZrTuZGhQyZuspaYTb+tPMYhITBpaRd1qAr0Xtg==}
-    engines: {node: '>=20.19.0'}
-    peerDependencies:
-      '@neon/realtime': ^0.1.0
-      drizzle-orm: '>=0.45.2 <0.46.0'
-    peerDependenciesMeta:
-      drizzle-orm:
-        optional: true
-
-  '@neon/realtime@0.1.1':
-    resolution: {integrity: sha512-YbTaKcq7Vmaw05oEu/1HNbxrtLeHaofnPHptd6QPGZj2M1uZJRJKKrjb+ShH0GpR5fpBlp8S4iZcTW3IsnIoqg==}
-    engines: {node: '>=20.19.0'}
-    peerDependencies:
-      ws: ^8.21.2
-    peerDependenciesMeta:
-      ws:
-        optional: true
 
   '@next/env@16.3.1':
     resolution: {integrity: sha512-35G3xwkQUb2oETSDjFXGrVugknoayLFBh7vSE+yAcl9IP2zT9wyGwq7297AYHR11kJld807t5f8AJBs6WBzXsQ==}
@@ -7682,10 +7654,6 @@ packages:
     resolution: {integrity: sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==}
     engines: {node: '>=4'}
 
-  postgres-array@3.0.4:
-    resolution: {integrity: sha512-nAUSGfSDGOaOAEGwqsRY27GPOea7CNipJPOA7lPbdEpx5Kg3qzdP0AaWC5MlhTWV9s4hFX39nomVZ+C4tnGOJQ==}
-    engines: {node: '>=12'}
-
   postgres-bytea@1.0.1:
     resolution: {integrity: sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==}
     engines: {node: '>=0.10.0'}
@@ -9922,18 +9890,6 @@ snapshots:
       '@emnapi/runtime': 1.11.2
       '@tybys/wasm-util': 0.10.3
     optional: true
-
-  '@neon/realtime-drizzle@0.1.0(@neon/realtime@0.1.1)(drizzle-orm@1.0.0-rc.4)':
-    dependencies:
-      '@neon/realtime': 0.1.1(ws@8.21.3)
-    optionalDependencies:
-      drizzle-orm: 1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4)(@effect/sql-pglite@4.0.4)(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4)
-
-  '@neon/realtime@0.1.1(ws@8.21.3)':
-    dependencies:
-      postgres-array: 3.0.4
-    optionalDependencies:
-      ws: 8.21.3
 
   '@next/env@16.3.1':
     optional: true
@@ -14740,8 +14696,6 @@ snapshots:
       source-map-js: 1.2.1
 
   postgres-array@2.0.0: {}
-
-  postgres-array@3.0.4: {}
 
   postgres-bytea@1.0.1: {}
 

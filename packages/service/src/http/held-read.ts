@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { type Duration, Effect, type Option, Schedule } from "effect";
+import type { SyncTopic } from "@luke/database/sync/notification";
+import { type Duration, Effect, type Option } from "effect";
+import { Sync } from "../sync/watch.js";
 
 /**
  * held-read.ts -- a read the desktop holds open while nothing it reads changed since its cursor: the cursor, and the hold.
@@ -7,11 +9,13 @@ import { type Duration, Effect, type Option, Schedule } from "effect";
  * The cursor is a digest of where every row a read covers stands, so any
  * change to any of them moves it, and a reader that holds it hears the next
  * change once. A read whose cursor is still the rows' is held, looked at
- * again every poll, each look reading where the rows stand and none of
- * their words, and let go at the hold's end, when it answers the rows
- * unchanged and the reader asks again. The Inbox and a plan's comments are
- * read this way, so a window hears a teammate's or an agent's change the
- * moment it lands without asking on a clock of its own.
+ * again each time a watch on the rows' topics wakes (`sync/watch.ts`), each
+ * look reading where the rows stand and none of their words, and let go at
+ * the hold's end, when it answers the rows unchanged and the reader asks
+ * again. A watch on no topics, or one Luke Sync cannot wake, wakes every
+ * poll. The Inbox and a plan's comments are read this way, so a window
+ * hears a teammate's or an agent's change the moment it lands without
+ * asking on a clock of its own.
  */
 
 /** How many characters of the digest a cursor carries: far more than any two readings of one plan's rows could share by chance. */
@@ -53,19 +57,30 @@ export function cursorOf(stamps: readonly CursorStamp[]): string {
 }
 
 /**
- * Reads again every `poll` until a read is one `moved` says moved, which it
- * answers, or the hold ends, answering none.
+ * Reads until a read is one `moved` says moved, which it answers, or the
+ * hold ends, answering none, waiting between reads on a watch of the
+ * topics, which wakes every `poll` where nothing else does. Note that the
+ * watch is opened before the first read, so a write that commits while that
+ * read runs still wakes the look after it.
  */
 export function heldUntil<A, E, R>(
   read: Effect.Effect<A, E, R>,
   moved: (read: A) => boolean,
+  topics: readonly SyncTopic[],
   poll: Duration.Duration,
   hold: Duration.Duration,
 ): Effect.Effect<Option.Option<A>, E, R> {
-  return read.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(poll), until: moved }),
-    Effect.timeoutOption(hold),
-  );
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const watch = yield* (yield* Sync).watch(topics, poll);
+      let standing = yield* read;
+      while (!moved(standing)) {
+        yield* watch.next;
+        standing = yield* read;
+      }
+      return standing;
+    }),
+  ).pipe(Effect.timeoutOption(hold));
 }
 
 /**
@@ -76,8 +91,11 @@ export function heldUntil<A, E, R>(
 export function heldUntilMoved<E, R>(
   stamps: Effect.Effect<readonly CursorStamp[], E, R>,
   after: string,
+  topics: readonly SyncTopic[],
   poll: Duration.Duration,
   hold: Duration.Duration,
 ): Effect.Effect<void, E, R> {
-  return Effect.asVoid(heldUntil(stamps, (standing) => cursorOf(standing) !== after, poll, hold));
+  return Effect.asVoid(
+    heldUntil(stamps, (standing) => cursorOf(standing) !== after, topics, poll, hold),
+  );
 }

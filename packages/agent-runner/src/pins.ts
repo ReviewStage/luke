@@ -17,6 +17,38 @@
 /** The unprivileged user the harness runs as, which the image creates. */
 export const AGENT_USER = "agent";
 
+/**
+ * Where an agent saves a file Luke reads back, a screenshot it shows or a
+ * page it posts: a folder each launch makes `agent`'s and world-readable,
+ * which Claude Code's command sandbox may write, since Luke reads a file as
+ * the sandbox's default user and the CLI's own temp folder
+ * (`/tmp/claude-<uid>`) is private to `agent`.
+ */
+export const SHARED_FILES_DIRECTORY = "/tmp/luke";
+
+/**
+ * Playwright as the image installs it, where every user of every machine
+ * reaches it: the package and its `playwright` command under `/usr/local`,
+ * on every PATH and in `NODE_PATH`'s usual root, and its browsers inside its
+ * own playwright-core, Playwright's hermetic install, rather than in the
+ * cache of the user who built the image, whose home neither the cloud's
+ * `agent` nor a device's own uid in its VM reads. Each Playwright looks in
+ * its own package for its browsers only where `PLAYWRIGHT_BROWSERS_PATH` is
+ * `0`, so the runner hands both harnesses' commands that (`SANDBOX_TOOL_ENV`),
+ * which also has a repository's own Playwright install its browsers in its
+ * own `node_modules`, which the agent writes, rather than in a shared folder
+ * it may not. `BROWSERS` is where npm's global install puts them, which the
+ * image checks and Luke's own browser reads.
+ */
+export const PLAYWRIGHT_PIN = {
+  VERSION: "1.64.1",
+  PREFIX: "/usr/local",
+  BROWSERS: "/usr/local/lib/node_modules/playwright/node_modules/playwright-core/.local-browsers",
+} as const;
+
+/** What every command a harness runs is handed of the image's tools, in the cloud and in a device's VM alike: each Playwright's browsers in its own package (`PLAYWRIGHT_PIN`). */
+export const SANDBOX_TOOL_ENV = { PLAYWRIGHT_BROWSERS_PATH: "0" } as const;
+
 /** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. */
 export const RUNNER_DIRECTORY = "/opt/luke/agent-runner";
 
@@ -194,4 +226,4 @@ export const SMOLVM_LINUX_PIN = {
 
 /** Luke's sandbox image, as CI publishes it from the cloud's own setup script, pinned by digest: what every host agent's VM boots, and what the install script fetches ahead of the first. */
 export const SANDBOX_IMAGE =
-  "ghcr.io/reviewstage/luke-sandbox:35c90fc1c0bee4e5@sha256:168aedd03509fa3bccb00b84059baea6d19ae7032a7f0ad0c46f43b6a8bf21e0";
+  "ghcr.io/reviewstage/luke-sandbox:ea78580d96ce7256@sha256:f6ff07bdc663c9173a856a713e4caa02a725eedd3da4aed0029c662e3b0b33a5";

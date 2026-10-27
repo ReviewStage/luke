@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { test } from "vitest";
-import { applyMessagesPage, type CodingAgentMessage, macOnline } from "./coding-agent-wire.js";
+import {
+  applyMessagesPage,
+  type CodingAgentMessage,
+  DEVICE_STANDING,
+  deviceStanding,
+} from "./coding-agent-wire.js";
 
 function message(id: string, text: string): CodingAgentMessage {
   return { id, role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text }] };
@@ -36,8 +41,19 @@ test("a page saying again what is held keeps the messages held, so only one that
   assert.deepEqual(amended[1]?.parts, [{ type: "text", text: "second, amended" }]);
 });
 
-test("a Mac reads as there while it beat within the last 45 seconds, and offline past that", () => {
-  const now = 100_000;
-
-  assert.deepEqual([macOnline(now - 44_000, now), macOnline(now - 46_000, now)], [true, false]);
+test("a device reads as there until it has missed four beats, and as unknown, never offline, where the read failed", () => {
+  assert.deepEqual(
+    [
+      deviceStanding(50_000, false),
+      deviceStanding(61_000, false),
+      deviceStanding(61_000, true),
+      deviceStanding(undefined, false),
+    ],
+    [
+      DEVICE_STANDING.ONLINE,
+      DEVICE_STANDING.OFFLINE,
+      DEVICE_STANDING.UNKNOWN,
+      DEVICE_STANDING.OFFLINE,
+    ],
+  );
 });

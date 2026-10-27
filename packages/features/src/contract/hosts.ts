@@ -12,6 +12,7 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
+  devicePresenceAnswerSchema,
   hostDoneAnswerSchema,
   hostIdRequestSchema,
   hostInstallTokenAnswerSchema,
@@ -28,6 +29,9 @@ export const hostsContract = {
   list: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.HOSTS }))
     .output(EffectSchema.flip(hostsAnswerSchema)),
+  presence: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.DEVICE_PRESENCE }))
+    .output(EffectSchema.flip(devicePresenceAnswerSchema)),
   remove: hostedProcedure
     .meta(bodyCap(BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.HOST_REMOVE }))

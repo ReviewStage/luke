@@ -41,6 +41,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import { formatCount } from "@luke/features/number-format";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import {
@@ -117,6 +118,7 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { viewerPlace } from "../testing/viewer-place.js";
 import { ToastHost } from "../toast.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -1496,7 +1498,10 @@ test("a paste past an item's reply cap is cut to the room left and its note line
   await settle();
   assert.equal(composerEditor(pane).textContent?.length, cap);
   assert.equal(note(), pasteCutWords(cap));
-  assert.equal(pane.querySelector(".luke-length-counter")?.textContent, `${cap}/${cap}`);
+  assert.equal(
+    pane.querySelector(".luke-length-counter")?.textContent,
+    `${formatCount(cap)}/${formatCount(cap)}`,
+  );
 
   const editor = composerEditor(pane).editor ?? assert.fail("the editor is running");
   act(() => {
@@ -2168,10 +2173,7 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   const viewer = () => {
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
-    return [
-      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
-      card.querySelector(".attachment-viewer-place")?.textContent,
-    ];
+    return [card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt, viewerPlace(card)];
   };
   const key = (name: string) =>
     act(() =>
@@ -2288,7 +2290,7 @@ test("a recording an agent's words draw plays where it stands, left out of the r
     assert.equal(player.getAttribute("src"), "blob:video-2");
     assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
     assert.deepEqual(created, [INBOX_FILE_TYPE.WEBM, INBOX_FILE_TYPE.WEBM]);
-    assert.equal(card?.querySelector(".attachment-viewer-place")?.textContent, "2 of 2");
+    assert.equal(viewerPlace(card ?? document), "2 of 2");
     act(() =>
       card?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }),
@@ -2380,10 +2382,7 @@ test("a thread draws a comment's files over its words: an agent's pictures stand
   const viewer = () => {
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
-    return [
-      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
-      card.querySelector(".attachment-viewer-place")?.textContent,
-    ];
+    return [card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt, viewerPlace(card)];
   };
   const key = (name: string) =>
     act(() =>
@@ -3228,7 +3227,7 @@ test("an Inbox too narrow for the list and the item side by side shows the chose
   assert.deepEqual([columnsShown(page), asked.closed], [["list"], 0], "the Inbox stands");
 });
 
-test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again, it forgets the list was asked for, so narrowed it lands on its item", async () => {
+test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again, it keeps the list asked for, so narrowed it lands on its list", async () => {
   const { page } = mount();
   await settle();
   layOut(page, 900);
@@ -3251,7 +3250,7 @@ test("the Inbox joins only once narrowed past the band, keeping the item it show
   assert.deepEqual(columnsShown(page), ["list", "item"]);
   assert.equal(wayBack(page), undefined);
   layOut(page, 800);
-  assert.deepEqual(columnsShown(page), ["item"]);
+  assert.deepEqual(columnsShown(page), ["list"]);
 });
 
 /** The window's keymap, standing beside the Inbox as the shell stands it; the root it is drawn in, to unmount. */

@@ -53,6 +53,8 @@ import {
   listAccountProviderKeyRows,
   type ProviderKeyRow,
 } from "@luke/database/models/provider-key-store";
+import { readRunsOnPick } from "@luke/database/models/runs-on-pick";
+import type { TaskRunsOnWrite } from "@luke/database/models/task-store";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import {
   CODING_AGENT_MACHINE,
@@ -87,6 +89,9 @@ export class AgentCredentialMissing extends Data.TaggedError("AgentCredentialMis
 export class LocalAgentRefused extends Data.TaggedError("LocalAgentRefused")<{
   readonly reason: LocalAgentRefusal;
 }> {}
+
+/** A task an agent makes for the member, where the device the member last ran a task on has been removed since, so it has nowhere it was asked to run. */
+export class RunsOnPickRemoved extends Data.TaggedError("RunsOnPickRemoved") {}
 
 export const THIS_MAC = {
   /** How lately a Mac must have beaten for Start to offer it: one beat, and room for the next to arrive. */
@@ -471,6 +476,37 @@ export const taskRunsOnChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });
   }
   return { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: offer.deviceId };
+});
+
+/**
+ * Where a task an agent makes for the member runs (`create_task`): where
+ * the member last ran a task, as New task kept it (`runs-on-pick.ts`), the
+ * cloud where they never chose or last chose the cloud. A device kept is
+ * taken only while it is still the member's and listed, and refused
+ * (`RunsOnPickRemoved`) where it was removed since, rather than run in the
+ * cloud. Note that, unlike a Start's choice, a device that is away is taken,
+ * because making the task starts nothing, and a Start on it while it is
+ * still away is refused by name (`agentMachineChoice`); and that with the
+ * experiment off, or no device left at all, none is offered, so the cloud is
+ * the only place there is, New task draws no Runs on to pick it with, and a
+ * pick kept from before stands unread.
+ */
+export const agentMadeRunsOn = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+): Effect.fn.Return<
+  TaskRunsOnWrite | undefined,
+  StoreFailure | RunsOnPickRemoved,
+  DatabaseServices
+> {
+  const pick = yield* readRunsOnPick(userId);
+  if (Option.isNone(pick) || pick.value.machine === CODING_AGENT_MACHINE.VERCEL) return undefined;
+  const kept = pick.value.deviceId;
+  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return undefined;
+  const offers = yield* macOffers(userId);
+  if (offers.length === 0) return undefined;
+  const offered = offers.find((each) => each.deviceId === kept);
+  if (offered === undefined) return yield* new RunsOnPickRemoved();
+  return { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: offered.deviceId };
 });
 
 /**

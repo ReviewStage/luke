@@ -57,6 +57,7 @@ const STOOD_IN = [
   "sed",
   "tee",
   "visudo",
+  "ls",
 ] as const;
 
 /**
@@ -132,11 +133,15 @@ function indexOfCall(calls: readonly string[], start: string): number {
   return index;
 }
 
-test("the image gets Claude Code, Codex, bubblewrap and the agent user, keeps the default user's sudo, and checks the capability drop last", async (t) => {
+test("the image gets Playwright where every user reaches it, Claude Code, Codex, bubblewrap and the agent user, keeps the default user's sudo, and checks the capability drop last", async (t) => {
   const { exitCode, stderr, calls } = await prepare(t, { setprivExit: 0 });
   assert.equal(exitCode, 0, stderr);
 
   const installs = [
+    // Playwright and its browsers as root's, the browsers in its own package, where every user reaches them, never the default user's home.
+    "sudo -n env HOME=/root npm install --global --prefix /usr/local --no-audit --no-fund playwright@1.64.1",
+    "sudo -n env HOME=/root PLAYWRIGHT_BROWSERS_PATH=0 /usr/local/bin/playwright install --with-deps chromium",
+    "sudo -n chmod -R a+rX /usr/local/lib/node_modules/playwright/node_modules/playwright-core/.local-browsers",
     "sudo -n dnf install -y bubblewrap socat",
     "sudo -n env HOME=/root npm install --prefix /opt/luke/claude-agent-sdk --no-audit --no-fund --save-exact @anthropic-ai/claude-agent-sdk@0.3.304",
     "sudo -n ln -sfn /opt/luke/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude /usr/local/bin/claude",

@@ -73,7 +73,7 @@ import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
-import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
+import { useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
 import {
@@ -749,7 +749,7 @@ export function SidebarTask({
                 )}
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
                 {drafted ? <DraftMark /> : null}
-                <TaskRowStatus task={task} waiting={waiting} stranded={strandedHome(tasks, task)} />
+                <TaskRowStatus task={task} waiting={waiting} />
                 <Time at={at} now={now} hint={false} />
               </span>
             )

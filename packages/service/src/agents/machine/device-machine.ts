@@ -48,7 +48,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { hasRepository, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import {
   type DeviceAgentPin,
   deviceAgentLineStanding,
@@ -82,6 +82,7 @@ import {
   type Context,
   Duration,
   Effect,
+  Exit,
   Option,
   Redacted,
   Result,
@@ -89,6 +90,7 @@ import {
   Schema,
 } from "effect";
 import { HostedEnvironment } from "../../environment.js";
+import { agentCommitIdentity, type CheckoutServices } from "../coder-host/checkout.js";
 import {
   COMMAND_GONE,
   type CommandExit,
@@ -126,8 +128,9 @@ export const MAC_MACHINE = {
 
 /**
  * The machine over the Mac, and whether a session is a local agent's, which
- * the router asks first (`agent-machines.ts`). Its open and its launch reach
- * none of the services a sandbox's do, only the store it was made over.
+ * the router asks first (`agent-machines.ts`). Its open reaches none of the
+ * services a sandbox's does, only the store it was made over; its launch
+ * reads GitHub too, for who the agent's commits are by.
  */
 export interface DeviceMachineService extends AgentMachineService {
   readonly owns: (session: string) => Effect.Effect<boolean, SandboxUnavailable>;
@@ -141,7 +144,7 @@ export interface DeviceMachineService extends AgentMachineService {
   ) => Effect.Effect<
     { readonly handle: RunnerHandle; readonly ready: A },
     E | EL | SandboxUnavailable | { readonly _tag: string },
-    R | RL
+    R | RL | CheckoutServices
   >;
 }
 
@@ -213,6 +216,8 @@ function deviceMachineOver(
         // Note that the Mac writes the skills where they are installed, since no root installs them after.
         skillsUpload: folders.installedSkills,
         attachments: folders.attachments,
+        // Note that the Mac answers reads inside the agent's folder alone, so what Luke reads back is saved in its temp folder, never `/tmp`, which its VM keeps to itself.
+        sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,
         writableRoots: [folders.folder],
@@ -404,18 +409,30 @@ function deviceMachineOver(
       ),
 
     // The secrets and the first lines are sealed together, bound to the agent, before the line is
-    // queued; a launch whose line was not queued undoes what its caller recorded of it.
+    // queued; a launch whose line was not queued undoes what its caller recorded of it. Who the
+    // agent's commits are by is read beside the caller's steps, as a sandbox's deepen reads it
+    // (`agentCommitIdentity`), and kept as it ended, so a read that failed fails the launch where
+    // its caller's record is undone; the Mac sets it in the agent's repository on every launch,
+    // so an agent whose repository was made before the field gets it too.
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
         const pin = yield* pinOfPlace(place);
-        const [ready, agent, ring] = yield* Effect.all(
-          [launch.ready, stored(readCodingAgent(pin.userId, pin.agentId)), keyRing],
+        const read = Effect.gen(function* () {
+          const agent = yield* stored(readCodingAgent(pin.userId, pin.agentId));
+          if (Option.isNone(agent) || !hasRepository(agent.value))
+            return { agent, identity: Exit.succeed(undefined) };
+          const target = { userId: pin.userId, conversationId: agent.value.conversationId };
+          return { agent, identity: yield* Effect.exit(agentCommitIdentity(target, agent.value)) };
+        });
+        const [ready, { agent, identity }, ring] = yield* Effect.all(
+          [launch.ready, read, keyRing],
           { concurrency: "unbounded" },
         );
         if (Option.isNone(agent)) return yield* new LaunchRefused({ reason: "no agent" });
         const id = randomUUID();
         const handle: RunnerHandle = { ...place, command: id };
         yield* Effect.gen(function* () {
+          const commitsBy = yield* identity;
           const layout = yield* layoutOf(pin.userId, pin.agentId, pin.deviceId);
           const { lines, mark } = yield* launch.firstLines(ready, handle);
           const sealedSecrets = sealMacLaunchSecrets(
@@ -430,6 +447,7 @@ function deviceMachineOver(
             firstSequence: mark.firstSequence,
             ...(mark.fingerprint === undefined ? {} : { fingerprint: mark.fingerprint }),
             ...(mark.ownLogin === true ? { ownLogin: true } : {}),
+            ...(commitsBy === undefined ? {} : { identity: commitsBy }),
           };
           yield* queued(pin, {
             id,

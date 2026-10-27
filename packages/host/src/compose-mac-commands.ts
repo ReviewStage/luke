@@ -35,12 +35,7 @@ import type { Composer } from "./composer.js";
 import { Environment, Reporter } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
-import {
-  decodedLiveRows,
-  LIVE_RESTART,
-  type LiveClient,
-  openRealtimeClient,
-} from "./live-follow.js";
+import { decodedLiveRows, LIVE_RESTART } from "./live-follow.js";
 import {
   MAC_COMMAND_DECISION,
   type MacCommandAsk,
@@ -59,8 +54,8 @@ import type { RunMode } from "./run-mode.js";
  * asking; Never is the brake, under which nothing is read. While the gate
  * stands, the commands no Mac has
  * claimed, of the kinds this Mac runs, are followed through the live layer
- * (`live-follow.ts`: over Neon Realtime where the deployment turns it on,
- * otherwise a poll the service holds until the rows move), and each one
+ * (`live-follow.ts`: a poll the service holds until the rows move), and
+ * each one
  * heard of is claimed by its id; the service grants a claim once, so when
  * two Macs of one account follow, only the one it granted runs it. Each
  * claimed command runs on a fiber of its own in the concern's scope, by its
@@ -86,9 +81,9 @@ import type { RunMode } from "./run-mode.js";
  * process that no row change can carry. Since the service counts the Mac
  * listening on the beat alone, each beat also reads the unclaimed commands
  * once, unheld, and a command left waiting past `MISSED_AFTER` is one the
- * follow missed, as a Realtime socket that went quiet without an error
- * misses every command: the beat claims it and ends the follow, which is
- * sealed again, so a stalled follow costs a command seconds rather than
+ * follow missed, as a poll that stalled without an error misses every
+ * command: the beat claims it and ends the follow, which is read again, so
+ * a stalled follow costs a command seconds rather than
  * every call until the app restarts. Each beat reads the gate first, so
  * the setting switched off, a sign-out, or a run that sends nothing ends the
  * follow and the beats, the agents' calls are told no Mac listens, and every
@@ -144,8 +139,6 @@ export interface MacCommandsDependencies {
   /** Writes the setting to Always allow, answering whether the write landed: the prompt's Always allow, which also runs the command asked. */
   allowAlways: Effect.Effect<boolean>;
   client: MacCommandClient;
-  /** Realtime's client at an address, where the deployment follows over Realtime; Realtime's own outside a test. */
-  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
 }
 
 export type MacCommandsComposer = Composer;
@@ -214,7 +207,6 @@ export function composeMacCommands(
     const services = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>();
     const http = yield* HttpClient.HttpClient;
     const { kernel, account, mode, allowAlways, client } = dependencies;
-    const openLive = dependencies.openLive ?? openRealtimeClient;
     /** The asks waiting on the developer, by the command's id, the earliest asked first, each with the account it was claimed for. */
     const asks = new Map<
       string,
@@ -360,7 +352,7 @@ export function composeMacCommands(
         yield* FiberSet.run(running, decided(answer, userId));
       }).pipe(Effect.uninterruptible);
 
-    /** The unclaimed commands of this Mac's kinds, sealed or with `poll` inline, for the account `userId` names. */
+    /** The unclaimed commands of this Mac's kinds, their rows inline, held past `after` where it names one, for the account `userId` names. */
     const seal = (userId: string, poll: boolean, after?: string) =>
       asked(client.live(RUNS, userId, poll, after));
 
@@ -418,7 +410,7 @@ export function composeMacCommands(
 
     /**
      * The unclaimed commands followed (`live-follow.ts`, which polls the
-     * service, held, where Realtime is off or fails) until the gate shuts or
+     * service, held) until the gate shuts or
      * the session signs out, each new one claimed by its id, the earliest
      * queued first (`claimed`). A command is claimed once per follow, and
      * forgotten once it leaves the rows, so the ids this keeps are only those
@@ -437,12 +429,7 @@ export function composeMacCommands(
             }
           });
         const rows = decodedLiveRows(
-          {
-            openLive,
-            reseal: () => seal(userId, false),
-            poll: (after) => seal(userId, true, after),
-            now: kernel.now,
-          },
+          { poll: (after) => seal(userId, true, after) },
           first,
           macCommandsLiveRowsSchema,
         );

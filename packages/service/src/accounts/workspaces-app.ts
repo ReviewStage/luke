@@ -13,6 +13,7 @@ import {
   hostedNotFoundRoute,
   hostedRefusing,
   hostedStoreOrUnavailable,
+  resolvedAccount,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
@@ -46,7 +47,7 @@ export interface WorkspacesAppSeams {
 const accountOf = Effect.fn("web/workspacesAccount")(function* (seams: WorkspacesAppSeams) {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const account = yield* seams.resolveUserId(request);
+  const account = yield* resolvedAccount(seams.resolveUserId, request);
   if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   return account.value;
 });

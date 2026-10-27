@@ -20,9 +20,9 @@ import {
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
 } from "./integrations/integration-connect.js";
-import { liveSealingFromEnvironment } from "./live/realtime.js";
 import { sentryLogger } from "./observability/sentry.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
+import { syncFromEnvironment } from "./sync/hub.js";
 import { sentryAppFromEnvironment } from "./triggers/sentry/sentry-app-config.js";
 
 /**
@@ -65,11 +65,6 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * the agents that read its tokens alike; `WorkspaceLinearConnect` is the one
  * place the workspace Linear connector's UID is.
  *
- * `LiveSealing` is the one place Neon Realtime's switch, address and secret
- * are read, so a live read is sealed under the same secret on every route
- * (`live/realtime.ts`); without `LUKE_REALTIME=on` and both of Neon's
- * variables it stands as none, and every live read is answered polled.
- *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
  * once an hour for every route that offers or checks a model.
@@ -83,6 +78,12 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * keeps its holds in the database over `webSqlClient`, the very layer below,
  * which a build of this layer builds once however many name it, so the gate
  * holds no pool of its own.
+ *
+ * `Sync` is here for the same reason: Luke Sync's hub holds one `LISTEN`
+ * per instance, shared by every held read and wait on it (`sync/hub.ts`).
+ * Without `LUKE_SYNC=on` it stands as the clock, opening nothing, and every
+ * wait polls as it always has. Its heartbeat notifies through the same pool
+ * as `webSqlClient` below.
  *
  * `BearerCallers` keeps the caller each bearer resolved to for a minute
  * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
@@ -104,7 +105,7 @@ export const webServices = Layer.mergeAll(
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
   webLogger,
-  liveSealingFromEnvironment,
+  syncFromEnvironment.pipe(Layer.provide(webSqlClient)),
   bearerCallersLayer,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
   pullRequestLinksLayer,

@@ -5,6 +5,7 @@ import {
   DIALOG_ROLE,
   DIALOG_SIZE,
   Dialog,
+  DialogCard,
   FormField,
   IconButton,
   ImageIcon,
@@ -210,12 +211,12 @@ function PictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
   );
 }
 
-/** A picture opened in a card as large as the window allows, below its top bar, under a bar naming it. */
+/** A picture opened bare over the dimmed window, below its top bar, in a card of its own under a bar naming it. */
 function WindowPictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
   const titleId = useId();
   return (
     <Dialog open={open} size={DIALOG_SIZE.WINDOW} labelledBy={titleId} onDismiss={onClose}>
-      <div className="catalog-window">
+      <DialogCard>
         <div className="catalog-media-bar">
           <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.H2} id={titleId}>
             luke-face.svg
@@ -225,7 +226,7 @@ function WindowPictureDialog({ open, onClose }: DialogBody): React.JSX.Element {
         <div className="catalog-window-picture">
           <WingFace />
         </div>
-      </div>
+      </DialogCard>
     </Dialog>
   );
 }

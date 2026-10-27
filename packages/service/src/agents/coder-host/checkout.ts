@@ -5,6 +5,7 @@ import {
   type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import type { CheckoutIdentity } from "@luke/features/checkout-identity";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Data, Effect, Option, type Redacted } from "effect";
@@ -23,7 +24,6 @@ import {
 import type { StoreFailure } from "../../http/store-failure.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import {
-  type CheckoutIdentity,
   checkoutDeepened,
   checkoutShallow,
   cloneRepository,
@@ -85,7 +85,9 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * to, read on it, with the same trailer, and its pull request is opened on
  * that token alone. The
  * identity is set here, as the checkout opens, and never by the model,
- * whose instructions say so.
+ * whose instructions say so; a device's checkout is the Mac's to make, so
+ * its launch line carries the same identity, read the same way
+ * (`agentCommitIdentity`), for the Mac to set by the same step.
  *
  * The agent publishes through `git` and `gh` of its own, so what it
  * published is read off the checkout rather than guessed: the branch
@@ -307,6 +309,16 @@ const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(func
   return { name: bot.login, email: noreplyAddress(bot) };
 });
 
+/** Who the checkout's commits are by, on a token just minted for the repository: the agent's author settled, then the account it names (`commitIdentity`). */
+const identityOn = (
+  target: ConversationTarget,
+  agent: WithRepository<CodingAgent>,
+  credential: RepositoryCredential,
+) =>
+  Effect.flatMap(agentAuthor(target, agent), (author) =>
+    commitIdentity(target, agent, author, credential),
+  );
+
 /** A refusal of the repository's shell, as the checkout's own. */
 function refusedWith(failure: { readonly reason: string }): CheckoutRefused {
   return new CheckoutRefused({ reason: failure.reason });
@@ -497,12 +509,24 @@ export const agentDeepenPlan = /* @__PURE__ */ Effect.fn("web/agentDeepenPlan")(
   agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<AgentDeepenPlan, CheckoutRefused | StoreFailure, CheckoutServices> {
   const minted = yield* agentRepositoryToken(target, agent);
-  const author = yield* agentAuthor(target, agent);
-  const identity = yield* commitIdentity(target, agent, author, minted);
+  const identity = yield* identityOn(target, agent, minted);
   return {
     credential: { token: minted.token, fullName: minted.fullName, access: minted.access },
     identity,
   };
+});
+
+/**
+ * Who the agent's commits are by, read as a cloud checkout's deepen reads it
+ * (`agentDeepenPlan`), for a checkout this service sets no identity in
+ * itself: a device's, which its launch line carries it to
+ * (`machine/device-machine.ts`).
+ */
+export const agentCommitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(function* (
+  target: ConversationTarget,
+  agent: WithRepository<CodingAgent>,
+): Effect.fn.Return<CheckoutIdentity, CheckoutRefused | StoreFailure, CheckoutServices> {
+  return yield* identityOn(target, agent, yield* agentRepositoryToken(target, agent));
 });
 
 /**

@@ -252,14 +252,48 @@ export const refusedDeviceSchema = EffectSchema.Struct({
 
 export type RefusedDevice = typeof refusedDeviceSchema.Type;
 
-export const MAC_PRESENCE = {
-  /** How lately a Mac must have beaten to count as there: one beat, and room for the next to arrive. */
-  FRESH_MS: 45_000,
+/**
+ * How a device beats and how long it may be quiet: it beats every
+ * `EVERY_MS`, the window reads the beats of the devices it draws every
+ * `POLL_MS`, and a device counts as away only once it has missed
+ * `MISSED_BEATS` beats in a row. One place, so the device that beats, the
+ * window that reads, and the service that refuses a start on an away device
+ * cannot drift apart: a beat, a read after it, and a beat delayed by its own
+ * retries still leave most of `FRESH_MS` to spare.
+ */
+export const DEVICE_BEAT = {
+  EVERY_MS: 15_000,
+  MISSED_BEATS: 4,
 } as const;
 
-/** Whether a Mac that last beat at `seenAt` is there at `now`, both epoch milliseconds. */
-export function macOnline(seenAt: number, now: number): boolean {
-  return seenAt >= now - MAC_PRESENCE.FRESH_MS;
+export const MAC_PRESENCE = {
+  /** How lately a device must have beaten to count as there: `MISSED_BEATS` beats' time. */
+  FRESH_MS: DEVICE_BEAT.EVERY_MS * DEVICE_BEAT.MISSED_BEATS,
+  /** How often a window reads the beats of the devices it draws: a third more than a beat, well inside `FRESH_MS` with the beat and the read's own latency. */
+  POLL_MS: (DEVICE_BEAT.EVERY_MS * 4) / 3,
+} as const;
+
+export const DEVICE_STANDING = {
+  ONLINE: "online",
+  OFFLINE: "offline",
+  /** The last beat is too old to say it is there and the read that would say otherwise failed, so nothing is known. */
+  UNKNOWN: "unknown",
+  /** The first read of the beats is still out. */
+  CHECKING: "checking",
+} as const;
+
+export type DeviceStanding = (typeof DEVICE_STANDING)[keyof typeof DEVICE_STANDING];
+
+/**
+ * Where a device stands given how long ago it last beat on the service's own
+ * clock (`ageMs`, none where the service named no beat): online within
+ * `MAC_PRESENCE.FRESH_MS`; otherwise unknown where the latest read failed
+ * (`readFailed`), since a window that cannot ask must not say a device is
+ * away, and offline where it did not.
+ */
+export function deviceStanding(ageMs: number | undefined, readFailed: boolean): DeviceStanding {
+  if (ageMs !== undefined && ageMs <= MAC_PRESENCE.FRESH_MS) return DEVICE_STANDING.ONLINE;
+  return readFailed ? DEVICE_STANDING.UNKNOWN : DEVICE_STANDING.OFFLINE;
 }
 
 /**
@@ -759,13 +793,18 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   /**
    * The Mac a local agent runs on, by its own name, and the epoch
    * milliseconds it last beat, which a reader holds against its own clock
-   * (`macOnline`), so a Mac that goes quiet while the agent stands on screen
-   * reads offline without another read; absent for an agent in a sandbox,
+   * (`deviceStanding`), though a window judges a device by its shared presence
+   * read (`hosts.presence`) rather than by this; absent for an agent in a sandbox,
    * for one whose Mac is gone, from a read that does not name it, and from a
    * service older than it.
    */
   mac: EffectSchema.optionalKey(
-    EffectSchema.Struct({ name: EffectSchema.String, seenAt: countedNumber }),
+    EffectSchema.Struct({
+      name: EffectSchema.String,
+      seenAt: countedNumber,
+      /** Which device it is, so a window keeps `seenAt` true by reading that device's beats; absent from a service older than it. */
+      deviceId: EffectSchema.optionalKey(wireUuidSchema),
+    }),
   ),
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
@@ -1014,9 +1053,26 @@ export const codingAgentPullRequestSchema = EffectSchema.Struct({
   changedFiles: countedNumber,
   /** True where the pull request is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service before it was sent. */
   queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /** The login of who opened it, their avatar where GitHub's avatar host serves it, and whether they are an App's bot; absent where GitHub named no one, and from a row read before they were kept. */
+  author: EffectSchema.optionalKey(EffectSchema.String),
+  authorAvatarUrl: EffectSchema.optionalKey(EffectSchema.String),
+  authorBot: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
+
+/** Who opened a pull request, as each read and line of it carries them. */
+type PullRequestAuthor = Pick<CodingAgentPullRequest, "author" | "authorAvatarUrl" | "authorBot">;
+
+/** Who opened a pull request, each field where the read held it, so a line built from it names them as the read did; nothing where GitHub named no one. */
+export function pullRequestAuthorOf(pullRequest: PullRequestAuthor): PullRequestAuthor {
+  const { author, authorAvatarUrl, authorBot } = pullRequest;
+  return {
+    ...(author === undefined ? undefined : { author }),
+    ...(authorAvatarUrl === undefined ? undefined : { authorAvatarUrl }),
+    ...(authorBot === undefined ? undefined : { authorBot }),
+  };
+}
 
 /**
  * What an agent published (GET): the repository it works in as `owner/name`,

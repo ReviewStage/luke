@@ -162,8 +162,7 @@ let refusalsSaidTo: EarlyReports<WebSentry>["say"] | undefined;
  * once per directive and origin, from one listener per document however
  * often the SDK starts, listening from the moment the tab starts rather than
  * once the SDK's chunk lands. A refusal says nothing in the page, so a
- * connection the policy forgot (the account inbox's Realtime socket was
- * one) would otherwise fail in silence. A refusal of an extension's address,
+ * connection the policy forgot would otherwise fail in silence. A refusal of an extension's address,
  * or of what an extension's own script did, is the extension's and is
  * dropped. A kind is counted as said only once it was sent or kept to be
  * sent, so one dropped while the early reports were full is said when it

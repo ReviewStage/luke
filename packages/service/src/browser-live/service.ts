@@ -20,7 +20,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
 import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result, type Scope } from "effect";
+import { type Cause, Effect, Option, Result, type Scope } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import {
   RELAY_UPGRADE_STATUS,
@@ -71,8 +71,10 @@ export function browserLiveServer(): RelayServer {
 
 /** Who may watch a tab: the account an upgrade's credential resolves to, and the tab it reaches. */
 export interface BrowserLiveAdmission {
-  /** The account a credential answers for, or none. */
-  readonly resolveUserId: (credential: RelayCredential) => Effect.Effect<Option.Option<string>>;
+  /** The account a credential answers for, or none; a failure is the auth service's, refused as unavailable. */
+  readonly resolveUserId: (
+    credential: RelayCredential,
+  ) => Effect.Effect<Option.Option<string>, Cause.UnknownError>;
   readonly readTab: BrowserLiveDependencies["readTab"];
 }
 
@@ -85,7 +87,9 @@ export function admitBrowserLiveAccount(
   | { readonly ask: BrowserLiveAsk; readonly reached: ReachedBrowserTab }
 > {
   return Effect.gen(function* () {
-    const account = yield* admission.resolveUserId(decision.credential);
+    const resolved = yield* Effect.result(admission.resolveUserId(decision.credential));
+    if (Result.isFailure(resolved)) return { status: RELAY_UPGRADE_STATUS.SERVICE_UNAVAILABLE };
+    const account = resolved.success;
     if (Option.isNone(account)) return { status: RELAY_UPGRADE_STATUS.UNAUTHORIZED };
     const ask = { ...decision.ask, userId: account.value };
     const found = yield* Effect.result(admission.readTab(ask.userId, ask.taskId, ask.tabId));

@@ -279,65 +279,6 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
   }
 });
 
-/**
- * Neon Realtime's socket for production's branch and for a Preview's, as
- * Neon names them: `<branch>-neonrealtimesocket` in the project's cell.
- *
- * The app's policy admits them as `wss://*.compute.c-10.us-east-1.aws.neon.tech`:
- * every branch's socket in the project's cell, `c-10`, which Neon keeps every
- * branch of a project in. Note that this names the cell, because each
- * Preview's branch has a host of its own that only its deployment's
- * `NEON_REALTIME_URL` knows, which a static `vercel.json` cannot. Were Neon
- * ever to move the project to another cell, the web app's inbox would stop
- * following (the tab reports the refused socket to Sentry): the source then
- * moves to the new cell, or widens back to `wss://*.us-east-1.aws.neon.tech`,
- * in one line of each app route's policy.
- */
-const REALTIME_SOCKETS = [
-  "wss://br-lucky-block-au052vsp-neonrealtimesocket.compute.c-10.us-east-1.aws.neon.tech/",
-  "wss://br-steep-boat-au63hal6-neonrealtimesocket.compute.c-10.us-east-1.aws.neon.tech/",
-] as const;
-
-/**
- * Neon addresses that are not the project's Realtime sockets, which any Neon
- * account may own: a compute endpoint's SQL over HTTP and its serverless
- * driver's socket, in the project's own cell and outside any cell, and another
- * cell's Realtime socket.
- */
-const OTHER_NEON_ADDRESSES = [
-  "https://ep-cool-darkness-a1b2c3d4.c-10.us-east-1.aws.neon.tech/sql",
-  "wss://ep-cool-darkness-a1b2c3d4-pooler.c-10.us-east-1.aws.neon.tech/v2",
-  "https://ep-cool-darkness-a1b2c3d4.us-east-1.aws.neon.tech/sql",
-  "wss://br-quiet-sun-a1b2c3d4-neonrealtimesocket.compute.c-2.us-east-1.aws.neon.tech/",
-] as const;
-
-/**
- * The schemes a source's scheme admits, as CSP3's scheme-part match reads
- * them: its own, and the secure one or the page's own a socket stands for,
- * so a `wss:` source admits an `https:` address on its hosts too.
- */
-const SCHEMES_ADMITTED: ReadonlyMap<string, readonly string[]> = new Map([
-  ["http", ["http", "https"]],
-  ["ws", ["ws", "wss", "http", "https"]],
-  ["wss", ["wss", "https"]],
-]);
-
-/**
- * Whether a policy's host source admits an address, as a browser matches one
- * (CSP3's host-source): the scheme as `SCHEMES_ADMITTED` widens it, then the
- * host, where a leading `*.` stands for one label or more. A keyword such as
- * `'self'` admits nothing here.
- */
-function hostSourceAllows(source: string, address: string): boolean {
-  const matched = /^([a-z][a-z0-9+.-]*):\/\/(\*\.)?([^/:]+)/u.exec(source);
-  if (!matched) return false;
-  const [, scheme = "", wildcard, host = ""] = matched;
-  const url = new URL(address);
-  const schemes = SCHEMES_ADMITTED.get(scheme) ?? [scheme];
-  if (!schemes.includes(url.protocol.slice(0, -1))) return false;
-  return wildcard ? url.hostname.endsWith(`.${host}`) : url.hostname === host;
-}
-
 test("every path the web app is served at sends its own Content Security Policy and no other, refuses to be framed, keeps the connect tabs it opens, and is never sniffed", () => {
   const app = WEB_ROUTES.filter((route) => route.dest === "/app.html");
   assert.ok(app.length > 0);
@@ -366,30 +307,17 @@ test("every path the web app is served at sends its own Content Security Policy 
     assert.deepEqual(directives.get("manifest-src"), ["'self'"], path);
     assert.ok(directives.get("img-src")?.includes("'self'"), path);
     // The tab reaches the processor for session replay, its configuration's host among it,
-    // and Sentry's ingest in the organization's region, and no script from either.
-    const connect = directives.get("connect-src") ?? [];
-    for (const host of [
-      "https://us.i.posthog.com",
-      "https://us-assets.i.posthog.com",
-      "https://*.ingest.us.sentry.io",
-    ]) {
-      assert.ok(connect.includes(host), `${path} connects to ${host}`);
-    }
-    // The account inbox is followed over Neon Realtime's socket, one per branch
-    // of the deployment's database, production's and each Preview's, and no other
-    // address of Neon's, whose compute endpoints anyone may own and post to.
-    for (const socket of REALTIME_SOCKETS) {
-      assert.ok(
-        connect.some((source) => hostSourceAllows(source, socket)),
-        `${path} connects to ${socket}`,
-      );
-    }
-    for (const elsewhere of [...OTHER_NEON_ADDRESSES, "wss://elsewhere.example/"]) {
-      assert.ok(
-        !connect.some((source) => hostSourceAllows(source, elsewhere)),
-        `${path} connects to no ${elsewhere}`,
-      );
-    }
+    // and Sentry's ingest in the organization's region, and no other address.
+    assert.deepEqual(
+      directives.get("connect-src"),
+      [
+        "'self'",
+        "https://us.i.posthog.com",
+        "https://us-assets.i.posthog.com",
+        "https://*.ingest.us.sentry.io",
+      ],
+      path,
+    );
     assert.equal(headers.get("x-frame-options"), "DENY", path);
     assert.equal(headers.get("x-content-type-options"), "nosniff", path);
     assert.equal(headers.get("referrer-policy"), "strict-origin-when-cross-origin", path);

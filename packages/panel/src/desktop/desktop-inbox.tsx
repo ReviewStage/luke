@@ -130,9 +130,9 @@ import { taskCardOf } from "./task-card.js";
  * says so and offers the scope that holds something, while the pane goes on showing the item
  * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
  * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item
- * side by side, it shows one at a time (`inbox-columns.ts`): the chosen
- * item, whose way back, Back's chord, or Escape gives the list, and a press
- * on a row there the item again. K and J, and the pager where the
+ * side by side, it shows one at a time (`inbox-columns.ts`): the list,
+ * and the item once a row's press or a link opens it, whose way back, Back's
+ * chord, or Escape gives the list again. K and J, and the pager where the
  * item stands alone, step through the list (`inbox-pager.tsx`). Everything in it that names a
  * person, an answer and an agent's starter, reads them against the listed
  * workspace's members (`member-directory.tsx`). The chosen item's box
@@ -300,7 +300,6 @@ export function DesktopInbox({
     compose.on
       ? COMPOSE_COLUMN
       : (chosen?.item.id ?? (missing || chosenFailed ? asked?.itemId : undefined)),
-    true,
     { asked: listed, onAsk: onListed, onSingle },
   );
   // A row's press and Next's open their item alike, the keyboard following it.

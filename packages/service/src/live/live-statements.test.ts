@@ -10,7 +10,7 @@ import { taskSectionsLiveStatements } from "@luke/database/models/task-section-s
 import { workspacesLiveStatements } from "@luke/database/models/workspace-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
-import { ConfigProvider, Effect, Layer, Option } from "effect";
+import { Effect, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
@@ -23,25 +23,17 @@ import {
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
-import { LiveSealing, liveSealingFromEnvironment, REALTIME_ENVIRONMENT } from "./realtime.js";
 
 /**
- * Every statement the live endpoints seal calls only functions Postgres
- * marks immutable, since Neon Realtime refuses any other ("scalar expression
- * uses a mutable function") where Postgres runs it without a word.
+ * Every statement the live endpoints answer calls only functions Postgres
+ * marks immutable, so the same rows always read alike: a statement that read
+ * the clock or the session would digest anew on every look, and a held read
+ * would answer at once rather than hold.
  */
 
 const USER_ID = "user-live-statements";
 
-/** A deployment's Realtime over a synthetic secret in the shape its SDK reads, so no credential is written down. */
-const SEALING_ENVIRONMENT = {
-  DATABASE_URL: "postgresql://luke:synthetic@db.example/neondb?sslmode=require",
-  [REALTIME_ENVIRONMENT.SWITCH]: "on",
-  [REALTIME_ENVIRONMENT.URL]: "wss://realtime.example/v1",
-  [REALTIME_ENVIRONMENT.SECRET]: `nrt_live_1${Buffer.alloc(32).toString("base64url")}`,
-};
-
-/** Every live statement the endpoints seal, by the part it answers. */
+/** Every live statement the endpoints answer, by the part it answers. */
 function liveStatements() {
   const parent = randomUUID();
   const transcript = Option.getOrThrow(
@@ -107,7 +99,7 @@ function liveStatements() {
 
 it.layer(getTestDB())("the live statements", (it) => {
   it.effect(
-    "every statement a live endpoint seals calls only immutable functions, as Realtime requires",
+    "every statement a live endpoint answers calls only immutable functions, so its rows digest alike on every look",
     () =>
       Effect.gen(function* () {
         const mutable = yield* Effect.forEach(
@@ -117,38 +109,6 @@ it.layer(getTestDB())("the live statements", (it) => {
         );
         assert.deepEqual(
           mutable.filter(([, called]) => called.length > 0),
-          [],
-        );
-      }),
-  );
-
-  it.effect(
-    "every statement a live endpoint seals is a Drizzle select Realtime's Drizzle adapter seals, each key the name Postgres answers it under",
-    () =>
-      Effect.gen(function* () {
-        const sealing = yield* Effect.gen(function* () {
-          return yield* LiveSealing;
-        }).pipe(
-          Effect.provide(
-            liveSealingFromEnvironment.pipe(
-              Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(SEALING_ENVIRONMENT))),
-            ),
-          ),
-        );
-        assert.ok(Option.isSome(sealing));
-        const { seal } = sealing.value;
-        const refused = yield* Effect.forEach(
-          Object.entries(liveStatements()),
-          ([part, statement]): Effect.Effect<string | undefined> =>
-            statement.query === undefined
-              ? Effect.succeed(`${part}: no Drizzle select`)
-              : Effect.match(seal(statement), {
-                  onFailure: () => `${part}: refused`,
-                  onSuccess: () => undefined,
-                }),
-        );
-        assert.deepEqual(
-          refused.filter((entry) => entry !== undefined),
           [],
         );
       }),

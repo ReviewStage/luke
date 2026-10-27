@@ -6,6 +6,7 @@ import { DEVICE_KIND, DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import { type MacOffer, MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskRunsOnRequest } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
@@ -28,7 +29,9 @@ import { NewTaskComposer } from "./new-task-composer.js";
  * the device picked, by its id, and the offline one cannot be picked, nor
  * one online but getting ready or not set up, which says so; a last pick
  * that is offline or getting ready as the card opens stays picked and says
- * so, never Cloud; and a card takes a device picked in another card. Note
+ * so, never Cloud; a card takes a device picked in another card; and nothing
+ * starts before the devices are read, a read that failed saying so with a
+ * Retry that reads them again. Note
  * that it stands in a file of its own, because a window reads its document
  * once, and the gate reads the experiment off that document. Synthetic
  * throughout.
@@ -48,13 +51,26 @@ const BUILDER = "0b8e4c1a-2f6d-4f53-8a2e-9d1c7e5b3a40";
 
 const roots: Root[] = [];
 
+/** The devices the service holds for the card now, which the presence read answers the beats of. */
+let offeredNow: readonly MacOffer[] = [];
+
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
-  fakeActPort({});
+  // The service answers the shared presence read with no beat later than the lists carry.
+  fakeActPort({
+    [ACT_KIND.HOSTS_PRESENCE]: () =>
+      Promise.resolve({
+        devices: offeredNow.flatMap((device) =>
+          device.seenAt === undefined
+            ? []
+            : [{ deviceId: device.deviceId, ageMs: Date.now() - device.seenAt }],
+        ),
+      }),
+  });
 });
 
 afterEach(() => {
@@ -90,9 +106,20 @@ function devicesWith(studioSeenAt = Date.now(), builderSeenAt = 0): readonly Mac
   ];
 }
 
-/** The card in Acme offering what `offered` holds, each start's Runs on written down. */
-async function mount(offered: { devices: readonly MacOffer[] } = { devices: devicesWith() }) {
+/** What the card is offered: the devices as read, none before a read lands, and whether the last read failed; a read lists `reread`, else those devices again, unless `holdReads`, until the test lets reads land. */
+interface Offered {
+  devices: readonly MacOffer[] | undefined;
+  modelsFailed?: boolean;
+  reread?: readonly MacOffer[];
+  holdReads?: boolean;
+}
+
+/** The card in Acme offering what `offered` holds, each start's Runs on written down; a read of the models lands as a new list, held until `letReadsLand` where `holdReads`. */
+async function mount(offered: Offered = { devices: devicesWith() }) {
+  offeredNow = offered.devices ?? [];
   const control = tasksControl();
+  let { devices, modelsFailed = false } = offered;
+  let readsLand = offered.holdReads !== true;
   const starts: (TaskRunsOnRequest | undefined)[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -107,7 +134,15 @@ async function mount(offered: { devices: readonly MacOffer[] } = { devices: devi
             ...control.newTask,
             workspaces: [ACME],
             workspaceId: ACME.id,
-            devices: offered.devices,
+            devices,
+            modelsFailed,
+            readModels: () => {
+              if (!readsLand) return;
+              devices = [...(offered.reread ?? offered.devices ?? [])];
+              offeredNow = devices;
+              modelsFailed = false;
+              draw();
+            },
             start: (_name, _repository, _workspaceId, from) => {
               starts.push(from?.runsOn);
               return Promise.resolve(undefined);
@@ -121,7 +156,10 @@ async function mount(offered: { devices: readonly MacOffer[] } = { devices: devi
     );
   act(draw);
   await settle();
-  return { container, starts };
+  const letReadsLand = () => {
+    readsLand = true;
+  };
+  return { container, starts, letReadsLand };
 }
 
 /** The menu's row naming `name`. */
@@ -222,4 +260,36 @@ test("a device picked in another card reaches this one", async () => {
   await settle();
 
   assert.deepEqual(welcome.starts, [{ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: BUILDER }]);
+});
+
+test("nothing starts before the devices are read, and a read that failed says so, with a Retry that reads them again", async () => {
+  window.localStorage.setItem("luke.newTaskRunsOn", STUDIO);
+  // A list read before the card opened, here one with no device, is no read of the card's own.
+  const reading = await mount({ devices: [], holdReads: true });
+  pressInComposer(reading.container, "Enter", { metaKey: true });
+  await settle();
+  assert.deepEqual(reading.starts, []);
+  assert.match(reading.container.textContent ?? "", /Checking your devices/);
+
+  const failed = await mount({
+    devices: [],
+    modelsFailed: true,
+    reread: devicesWith(),
+    holdReads: true,
+  });
+  pressInComposer(failed.container, "Enter", { metaKey: true });
+  await settle();
+  assert.deepEqual(failed.starts, []);
+  assert.match(failed.container.textContent ?? "", /Couldn't read your devices/);
+  const retry =
+    [...failed.container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Retry",
+    ) ?? assert.fail("the card offers Retry");
+  failed.letReadsLand();
+  act(() => retry.click());
+  await settle();
+  pressInComposer(failed.container, "Enter", { metaKey: true });
+  await settle();
+
+  assert.deepEqual(failed.starts, [{ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
 });

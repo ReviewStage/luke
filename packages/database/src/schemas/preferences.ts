@@ -1,8 +1,8 @@
 import type { ChaptersModelId } from "@luke/features/chapters-model-choice";
-import type { ContextWindow } from "@luke/features/coding-agent-wire";
+import type { CodingAgentMachine, ContextWindow } from "@luke/features/coding-agent-wire";
 import type { LinkOpen } from "@luke/features/link-open";
 import type { ExperimentChoices } from "@luke/settings";
-import { jsonb, pgTable, text } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -58,6 +58,17 @@ export const accountPreference = pgTable("account_preference", {
    * choice, and a key no build lists any more is left inert.
    */
   experiments: jsonb("experiments").$type<ExperimentChoices>(),
+  /**
+   * Where the account last chose to run a task, as New task's or a quick
+   * add's Runs on sent it (`runs-on-pick.ts`): the cloud, or one of its
+   * devices by id, which a task an agent makes for the account starts on;
+   * null on both until a start names one, which reads as the cloud. The
+   * device is kept by id alone, with no reference to its row, so a device
+   * since removed is still told apart from no pick at all. Written alone,
+   * it moves no `updated_at`.
+   */
+  runsOnMachine: text("runs_on_machine").$type<CodingAgentMachine>(),
+  runsOnDeviceId: uuid("runs_on_device_id"),
   createdAt: createdAt(),
   /**
    * When the preferences part was last written; null on a row only a
