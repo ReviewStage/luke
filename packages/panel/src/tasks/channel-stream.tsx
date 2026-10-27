@@ -728,11 +728,11 @@ export interface ChannelStreamRead {
   readonly needsCount: number;
 }
 
-/** Reads one channel's stream for its holder, which draws it (`ChannelStream`) and pages it (`useChannelPager`) from the one read; `ownTask` says which threads stand on a task of the reader's. */
+/** Reads one channel's stream for its holder, which draws it (`ChannelStream`) and pages it (`useChannelPager`) from the one read; `ownThread` says which threads are the reader's own. */
 export function useChannelStream(
   channelId: string | undefined,
   readerId: string | undefined,
-  ownTask: (thread: ChannelThread) => boolean,
+  ownThread: (thread: ChannelThread) => boolean,
 ): ChannelStreamRead {
   const [view, onView] = useChannelView();
   const read = useChannelThreads(channelId);
@@ -751,7 +751,7 @@ export function useChannelStream(
     read,
     view,
     onView,
-    viewed: viewedThreads(threads, view, readerId, ownTask),
+    viewed: viewedThreads(threads, view, readerId, ownThread),
     needsCount: needsReaderCount(threads, readerId),
   };
 }
