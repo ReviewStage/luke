@@ -818,7 +818,7 @@ export interface TasksControl {
     ) => Promise<Failure | undefined>;
     /** The models the composer's chip offers, as last read; nothing before the first read lands. */
     models: readonly CatalogModel[] | undefined;
-    /** The member's devices Runs on offers, as the same read last listed them; nothing before it lands, or while local agents are off. */
+    /** The member's devices Runs on offers, as the same read last listed them: none listed where it offered none, and nothing before a read lands. */
     devices: readonly MacOffer[] | undefined;
     /** Whether the last read of the models did not land. */
     modelsFailed: boolean;
