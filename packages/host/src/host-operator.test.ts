@@ -175,7 +175,7 @@ it.effect("a task filed for later carries its status, priority, and assignee to 
 );
 
 it.effect(
-  "a Start from an agent that names no task travels to the host with no task key, and one on a task with its task",
+  "a Start from an agent that names no task travels to the host with no task key, one on a task with its task, and an empty draft's Call with its blank and call",
   () =>
     Effect.gen(function* () {
       const { client, requests } = recordingClient();
@@ -184,6 +184,12 @@ it.effect(
 
       yield* operator.codingAgentStart({ idempotencyKey: "press-1", from });
       yield* operator.codingAgentStart({ taskId: "task-1", idempotencyKey: "press-2", from });
+      yield* operator.codingAgentStart({
+        taskId: "task-1",
+        idempotencyKey: "press-3",
+        blank: true,
+        call: true,
+      });
 
       assert.deepEqual(
         requests.map((request) => [request.method, request.params]),
@@ -192,6 +198,10 @@ it.effect(
           [
             GATEWAY_METHOD.CODING_AGENTS_START,
             { taskId: "task-1", idempotencyKey: "press-2", from },
+          ],
+          [
+            GATEWAY_METHOD.CODING_AGENTS_START,
+            { taskId: "task-1", idempotencyKey: "press-3", blank: true, call: true },
           ],
         ],
       );
