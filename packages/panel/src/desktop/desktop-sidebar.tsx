@@ -156,6 +156,7 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
 import { welcomed } from "./desktop-welcome.js";
 import { useFailedRunsMark } from "./failed-runs.js";
+import { withoutFinishedRuns } from "./finished-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
@@ -1870,8 +1871,6 @@ function SidebarColumn({
     standing: withoutLuke(tasks.listedAgents.standing, operator),
     archived: tasks.listedAgents.archived,
   };
-  // Note that an archived task or agent, which the list no longer shows, counts for nothing here.
-  const unlisted = listedRows.tasks.length === 0 && listedAgents.standing.length === 0;
   const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);
   const pinnedAgents = listedAgents.standing.filter((agent) => agent.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, pinnedAgents, tasks);
@@ -1997,9 +1996,24 @@ function SidebarColumn({
   const unpinnedTasks = listedRows.tasks.filter(
     (task) => task.pinnedAt === undefined && !sectioned.taskIds.has(task.id),
   );
-  const unpinnedAgents = listedAgents.standing.filter(
-    (agent) => agent.pinnedAt === undefined && !sectioned.agentIds.has(agent.id),
+  // An automation's finished runs leave Tasks once they hold nothing of the reader's (`finished-runs.ts`).
+  const unpinnedAgents = withoutFinishedRuns(
+    listedAgents.standing.filter(
+      (agent) => agent.pinnedAt === undefined && !sectioned.agentIds.has(agent.id),
+    ),
+    {
+      unseen: context.unseenAgent,
+      inbox: tasks.inboxTaskless,
+      me: tasks.me,
+      shown: agentShown,
+    },
   );
+  // Note that an archived task or agent, and a finished run, which the list does not show, count for nothing here.
+  const unlisted =
+    listedRows.tasks.length === 0 &&
+    pinnedAgents.length === 0 &&
+    sectioned.agentIds.size === 0 &&
+    unpinnedAgents.length === 0;
   const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsAssignedTo(taskRowsCreatedBy(unpinned, createdBy), assignedTo);
   // The status filter thins the tasks listed.
