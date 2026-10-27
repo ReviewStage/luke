@@ -8,8 +8,6 @@ import {
 } from "@luke/features/attachment-model";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import {
-  BUTTON_SHAPE,
-  BUTTON_VARIANT,
   Button,
   ButtonLink,
   CloseIcon,
@@ -35,6 +33,8 @@ import {
   ZoomImage,
 } from "@luke/ui";
 import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CopyIcon,
@@ -218,7 +218,12 @@ function HeaderButton({
   );
 }
 
-/** Previous or Next, standing on the dimmed window either side of the card, round in an outline on the theme's own ground. */
+/**
+ * Previous or Next, standing on the dimmed window either side of the card,
+ * drawn as the transcript's way back to its newest line is
+ * (`ConversationScrollButton`): the shared icon button on a ground of its
+ * own, its edge and shadow floating it over what is under it.
+ */
 function WalkButton({
   label,
   chord,
@@ -231,15 +236,11 @@ function WalkButton({
   icon: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <Tooltip label={label} chord={chord}>
-      <IconButton
-        icon={icon}
-        label={label}
-        variant={BUTTON_VARIANT.OUTLINE}
-        shape={BUTTON_SHAPE.ROUND}
-        onClick={onClick}
-      />
-    </Tooltip>
+    <span className="attachment-viewer-walk flex flex-none rounded-control bg-button-ground shadow-floating-edge [--luke-button-ground:var(--luke-color-well)]">
+      <Tooltip label={label} chord={chord}>
+        <IconButton icon={icon} label={label} onClick={onClick} />
+      </Tooltip>
+    </span>
   );
 }
 
@@ -505,7 +506,7 @@ export function AttachmentViewer({
               label={VIEWER_LABEL.PREVIOUS}
               chord={VIEWER_CHORD.PREVIOUS}
               onClick={() => walk(-1)}
-              icon={<ChevronLeftIcon aria-hidden="true" />}
+              icon={<ArrowLeftIcon aria-hidden="true" />}
             />
           ) : null}
           <DialogCard>
@@ -626,7 +627,7 @@ export function AttachmentViewer({
               label={VIEWER_LABEL.NEXT}
               chord={VIEWER_CHORD.NEXT}
               onClick={() => walk(1)}
-              icon={<ChevronRightIcon aria-hidden="true" />}
+              icon={<ArrowRightIcon aria-hidden="true" />}
             />
           ) : null}
         </div>
