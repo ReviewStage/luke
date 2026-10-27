@@ -133,8 +133,8 @@ export const inboxItem = pgTable(
     uniqueIndex("inbox_item_agent_key").on(table.agentId, table.key),
     // A task's inbox is read the latest changed first.
     index("inbox_item_task_updated").on(table.taskId, table.updatedAt),
-    // A channel's threads are read in the order they were posted.
-    index("inbox_item_channel_posted").on(table.channelId, table.postedAt),
+    // A channel's threads are read the latest changed first.
+    index("inbox_item_channel_updated").on(table.channelId, table.updatedAt),
     // A workspace's items of agents with no task are read the latest changed first.
     index("inbox_item_org_updated").on(table.organizationId, table.updatedAt),
     // The open items of agents with no task, which every account's read of what waits names

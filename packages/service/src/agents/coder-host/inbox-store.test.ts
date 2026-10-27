@@ -2189,4 +2189,44 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         assert.deepEqual(yield* channelThreads(outsider, app, pages[0]?.older), Option.none());
       }),
   );
+
+  it.effect(
+    "a channel's first page carries the thread with the latest activity last, however long ago it was posted",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const app = yield* channelIn(owner, workspaceId, "app");
+        // One more thread than a page carries, each moving when it was posted, but the first, which moved last.
+        const threads = INBOX_BOUNDS.MAX_ITEMS_READ + 1;
+        const at = (step: number) => new Date(Date.parse("2026-10-21T12:00:00Z") + step * 1_000);
+        yield* Database.use((db) =>
+          db.insert(inboxItem).values(
+            Array.from({ length: threads }, (_, step) => ({
+              userId: owner,
+              taskId: agent.taskId,
+              organizationId: workspaceId,
+              agentId: agent.agentId,
+              channelId: app,
+              key: `notice-${step}`,
+              revision: 1,
+              version: INBOX_WIRE_VERSION,
+              title: `Notice ${step}`,
+              needsReply: false,
+              status: INBOX_STATUS.OPEN,
+              postedAt: at(step),
+              updatedAt: at(step === 0 ? threads : step),
+            })),
+          ),
+        );
+
+        const page = Option.getOrThrow(yield* channelThreads(owner, app));
+        const titles = page.threads.map((thread) => thread.title);
+
+        assert.deepEqual(
+          [titles[0], titles.at(-1), titles.includes("Notice 1")],
+          ["Notice 2", "Notice 0", false],
+        );
+      }),
+  );
 });

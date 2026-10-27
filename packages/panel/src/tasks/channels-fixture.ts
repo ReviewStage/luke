@@ -735,7 +735,15 @@ THREADS.push(
     seed(TASK.POLISH),
     CHANNEL.APP,
     "Shipped: the sidebar no longer jumps when a section folds",
-    [agentSaid(120, 3 * DAY, "#4842 merged. Folding a section keeps the rows under it in place.")],
+    // Note that its agent posts again today, so the thread rises to the stream's foot though it was posted three days ago.
+    [
+      agentSaid(120, 3 * DAY, "#4842 merged. Folding a section keeps the rows under it in place."),
+      agentSaid(
+        131,
+        10 * MINUTE,
+        "It jumps again when Projects folds with an archived channel under it. Reopened on Sidebar polish.",
+      ),
+    ],
     {
       startedBy: CHARLES,
       waitsOn: CHARLES,
@@ -933,7 +941,7 @@ function channelsRead(): readonly Channel[] {
   });
 }
 
-/** A channel's threads, oldest posted first, as the service reads them. */
+/** A channel's threads, the least recently active first, as the service reads them. */
 function threadsOf(channelId: string): readonly ChannelThread[] {
   return THREADS.filter((each) => each.channelId === channelId)
     .map((each) => ({
@@ -941,7 +949,7 @@ function threadsOf(channelId: string): readonly ChannelThread[] {
       channelId,
       agent: { title: agentTitleOf(each), model: MODEL },
     }))
-    .toSorted((a, b) => a.postedAt - b.postedAt);
+    .toSorted((a, b) => a.updatedAt - b.updatedAt);
 }
 
 /** Every task holding threads, as main's read of the account names it. */
