@@ -22,7 +22,13 @@ import type { TasksControl } from "./tasks/use-tasks-tab.js";
 import { fakeActPortAnswering } from "./testing/app-bridge.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
-import { frameHeld, keyPressed, pressed, reportEventTiming } from "./testing/event-timing.js";
+import {
+  frameHeld,
+  keyPressed,
+  pressed,
+  pressedAndClicked,
+  reportEventTiming,
+} from "./testing/event-timing.js";
 import { tasksControl } from "./testing/tasks-control.js";
 
 /**
@@ -223,7 +229,7 @@ test("a key pressed in a timed box is timed to the paint after it, saying how lo
   ]);
 });
 
-test("a press anywhere slow enough to feel is timed to the paint after it, saying the part of the window and the page it came on, the workspace's size, and how its wait split; a quick one is not", () => {
+test("a press anywhere slow enough to feel is timed to the paint after it, saying the part of the window and the page it came on, the workspace's size, and how its wait split, its slowest event timed once; a quick one is not", () => {
   document.body.innerHTML =
     '<main data-span-region="main" data-span-page="inbox"><aside data-span-region="side_panel"><p></p></aside></main>';
   const inside = document.querySelector("p");
@@ -240,6 +246,11 @@ test("a press anywhere slow enough to feel is timed to the paint after it, sayin
     duration: 180,
   });
   pressed(inside, { startTime: 2_000, processingStart: 2_005, processingEnd: 2_040, duration: 60 });
+  pressedAndClicked(
+    inside,
+    { startTime: 3_000, processingStart: 3_004, processingEnd: 3_010, duration: 120 },
+    { startTime: 3_000, processingStart: 3_050, processingEnd: 3_200, duration: 260 },
+  );
 
   assert.deepEqual(recorded(), [
     {
@@ -252,6 +263,20 @@ test("a press anywhere slow enough to feel is timed to the paint after it, sayin
         "interaction.input_delay_ms": 30,
         "interaction.processing_ms": 80,
         "interaction.presentation_ms": 70,
+        "panel.region": "side_panel",
+        "panel.page": "inbox",
+      },
+    },
+    {
+      name: PANEL_SPAN.INTERACTION_SLOW,
+      startedAt: performance.timeOrigin + 3_000,
+      waited: 260,
+      measured: {
+        "window.task_count": 42,
+        "interaction.kind": "press",
+        "interaction.input_delay_ms": 50,
+        "interaction.processing_ms": 150,
+        "interaction.presentation_ms": 60,
         "panel.region": "side_panel",
         "panel.page": "inbox",
       },

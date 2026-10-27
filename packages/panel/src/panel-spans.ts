@@ -64,7 +64,7 @@ export const PANEL_SPAN_ATTRIBUTE = {
   CACHE_HIT: "transcript.cache_hit",
   /** The size of the plan the task opened on, in characters. */
   PLAN_CHARS: "task.plan_chars",
-  /** How many tasks, of every workspace, the sidebar's first list read answered. */
+  /** How many tasks, of every workspace, the sidebar's first list read answered, and on every later span, the sidebar's latest list: all of them, since the window holds and walks every workspace's tasks, not only those of the one shown. */
   TASK_COUNT: "window.task_count",
   /** How long a keystroke waited before its handlers ran, in milliseconds. */
   INPUT_DELAY: "keystroke.input_delay_ms",
@@ -72,7 +72,12 @@ export const PANEL_SPAN_ATTRIBUTE = {
   PROCESSING: "keystroke.processing_ms",
   /** Where in the window an event came, a `PANEL_REGION`. */
   REGION: "panel.region",
-  /** The page the window's main column showed, a `PANEL_PAGE`; none where it shows none of them, as Settings. */
+  /**
+   * The page the window's main column showed as the span ended, a
+   * `PANEL_PAGE`; none where it shows none of them, as Settings. Note that a
+   * press that navigates says the page it opened, whose drawing is what it
+   * waited on, and `REGION` says where it was pressed.
+   */
   PAGE: "panel.page",
   /** Whether a slow interaction was a press or a key, an `INTERACTION_KIND`. */
   INTERACTION_KIND: "interaction.kind",
@@ -283,17 +288,26 @@ function recordSlowInteraction(entry: PerformanceEventTiming): void {
 /**
  * Records what the browser timed of each event: a key pressed in a timed box
  * under its box's span, and any other interaction slow enough to feel as a
- * slow one, once for each interaction, though its press, release, and click
- * are each reported.
+ * slow one, once for each interaction. Note that a press's down, up, and
+ * click are each reported, each with handlers of its own, so the slowest of
+ * them is the one timed, never merely the first.
  */
 function recordEvents(list: PerformanceObserverEntryList): void {
+  const slowest = new Map<number, PerformanceEventTiming>();
   for (const entry of list.getEntries()) {
     if (!isEventTiming(entry) || entry.interactionId === 0) continue;
     const box = entry.name === "keydown" ? timedBoxOf(entry.target) : undefined;
-    if (box === undefined && entry.duration < SLOW_INTERACTION_MS) continue;
-    if (timedAlready(entry.interactionId)) continue;
-    if (box === undefined) recordSlowInteraction(entry);
-    else recordKeystroke(entry, box);
+    if (box !== undefined) {
+      if (!timedAlready(entry.interactionId)) recordKeystroke(entry, box);
+      continue;
+    }
+    const held = slowest.get(entry.interactionId);
+    if (held === undefined || entry.duration > held.duration)
+      slowest.set(entry.interactionId, entry);
+  }
+  for (const [id, entry] of slowest) {
+    if (entry.duration < SLOW_INTERACTION_MS || timedAlready(id)) continue;
+    recordSlowInteraction(entry);
   }
 }
 

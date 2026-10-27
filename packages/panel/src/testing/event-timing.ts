@@ -61,22 +61,36 @@ export function pressed(target: Node, wait: KeystrokeWait): void {
   reportEvent("pointerdown", target, wait);
 }
 
+/** Reports a press on `target` and the click after it as one interaction, each event's wait as given, to every observer observing. */
+export function pressedAndClicked(target: Node, press: KeystrokeWait, click: KeystrokeWait): void {
+  reportEvents(target, [
+    ["pointerdown", press],
+    ["click", click],
+  ]);
+}
+
 /** Reports the event `name` on `target` as an interaction of its own, its wait as `wait` says, to every observer observing. */
 function reportEvent(name: string, target: Node, wait: KeystrokeWait): void {
+  reportEvents(target, [[name, wait]]);
+}
+
+/** Reports `events` on `target` as one interaction of their own, each with its wait, to every observer observing. */
+function reportEvents(target: Node, events: readonly (readonly [string, KeystrokeWait])[]): void {
   interactions += 1;
-  const timing: PerformanceEventTiming = {
+  const id = interactions;
+  const timings: PerformanceEventTiming[] = events.map(([name, wait]) => ({
     name,
     entryType: "event",
     cancelable: true,
-    interactionId: interactions,
+    interactionId: id,
     target,
     ...wait,
     toJSON: () => ({ ...wait }),
-  };
+  }));
   const list: PerformanceObserverEntryList = {
-    getEntries: () => [timing],
-    getEntriesByName: (name) => (name === timing.name ? [timing] : []),
-    getEntriesByType: (type) => (type === timing.entryType ? [timing] : []),
+    getEntries: () => timings,
+    getEntriesByName: (name) => timings.filter((timing) => timing.name === name),
+    getEntriesByType: (type) => timings.filter((timing) => timing.entryType === type),
   };
   for (const callback of heard) callback(list, new ReportedObserver(() => undefined));
 }
