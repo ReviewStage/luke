@@ -28,6 +28,7 @@ import {
   localAgentRefusalSchema,
   operatorEnsureAnswerSchema,
   operatorEnsureRequestSchema,
+  refusedDeviceSchema,
 } from "./coding-agent-wire.js";
 import { CONVERSATION_MEDIA_TYPE } from "./conversation-picture-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
@@ -160,13 +161,14 @@ const failureSchema = EffectSchema.Literals(Object.values(CODING_AGENT_CALL_FAIL
 /** A failed call, as every answer below spells one. */
 const failed = EffectSchema.Struct({ failure: failureSchema });
 
-/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, the provider whose credential is missing where it is that, and why the task's device would not take the agent where it is that. */
+/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, the provider whose credential is missing where it is that, and why the task's device would not take the agent, with the device and its owner where it is another member's, where it is that. */
 const failedReaching = EffectSchema.Struct({
   failure: failureSchema,
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
   provider: EffectSchema.optionalKey(modelProviderSchema),
   localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
+  refusedDevice: EffectSchema.optionalKey(refusedDeviceSchema),
 });
 
 /** The models the service offers, as the window hears them: the list and the Mac a Start may run on where it offers one (`modelsAnswerSchema`), or why there is none. */

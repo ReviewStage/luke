@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { INBOX_REPLY, type InboxAnswers } from "@luke/features/inbox-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
@@ -21,6 +22,11 @@ import { recordingReporter } from "./testing/recording-reporter.js";
 
 const SETTINGS: AppSettings = appSettingsWire(settingsView());
 const REPORTER = "panel-1";
+/** A task's agents run on the member's Studio. */
+const ON_STUDIO = {
+  machine: CODING_AGENT_MACHINE.DEVICE,
+  deviceId: "6f0c1d0e-6b1a-4d43-9a49-2b7b6f1f0a11",
+} as const;
 
 interface RecordedCall {
   readonly method: GatewayMethod;
@@ -72,7 +78,7 @@ it.effect("a setting's value travels as the method's value field", () =>
 );
 
 it.effect(
-  "a plan's start carries the workspace it was started in, its brief, a start without planning says so, and one naming an agent carries it, to the host; a start naming none carries no such field",
+  "a plan's start carries the workspace it was started in, its brief, a start without planning says so, and one naming an agent or a device to run on carries it, to the host; a start naming none carries no such field",
   () =>
     Effect.gen(function* () {
       const { client, requests } = recordingClient();
@@ -88,6 +94,7 @@ it.effect(
       yield* operator.tasksStart({ name: "Typo", planning: false });
       yield* operator.tasksStart({ repository: "acme/ledger", agent });
       yield* operator.tasksStart({ brief: "Let any member invite a teammate." });
+      yield* operator.tasksStart({ repository: "acme/ledger", runsOn: ON_STUDIO });
 
       assert.deepEqual(
         requests.map((request) => [request.method, request.params]),
@@ -100,6 +107,7 @@ it.effect(
           [GATEWAY_METHOD.TASKS_START, { name: "Typo", planning: false }],
           [GATEWAY_METHOD.TASKS_START, { repository: "acme/ledger", agent }],
           [GATEWAY_METHOD.TASKS_START, { brief: "Let any member invite a teammate." }],
+          [GATEWAY_METHOD.TASKS_START, { repository: "acme/ledger", runsOn: ON_STUDIO }],
         ],
       );
     }),
@@ -167,7 +175,7 @@ it.effect("a task filed for later carries its status, priority, and assignee to 
 );
 
 it.effect(
-  "a Start from an agent that names no task travels to the host with no task key, and one on a task with its task",
+  "a Start from an agent that names no task travels to the host with no task key, one on a task with its task, and an empty draft's Call with its blank and call",
   () =>
     Effect.gen(function* () {
       const { client, requests } = recordingClient();
@@ -176,6 +184,12 @@ it.effect(
 
       yield* operator.codingAgentStart({ idempotencyKey: "press-1", from });
       yield* operator.codingAgentStart({ taskId: "task-1", idempotencyKey: "press-2", from });
+      yield* operator.codingAgentStart({
+        taskId: "task-1",
+        idempotencyKey: "press-3",
+        blank: true,
+        call: true,
+      });
 
       assert.deepEqual(
         requests.map((request) => [request.method, request.params]),
@@ -184,6 +198,10 @@ it.effect(
           [
             GATEWAY_METHOD.CODING_AGENTS_START,
             { taskId: "task-1", idempotencyKey: "press-2", from },
+          ],
+          [
+            GATEWAY_METHOD.CODING_AGENTS_START,
+            { taskId: "task-1", idempotencyKey: "press-3", blank: true, call: true },
           ],
         ],
       );

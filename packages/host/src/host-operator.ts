@@ -1859,22 +1859,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_EDIT, { taskId: params.taskId, edit: params.edit }),
         answerOf(tasksEditAnswerSchema, TASK_UNANSWERED),
       ),
+    // Note that the request goes on whole, as the act port decoded it against the same schema the
+    // Gateway's method reads, because a field copied by name is one a later field is left out of,
+    // as Runs on was, which sent every task to the cloud.
     tasksStart: (request) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_START, {
-          ...("name" in request ? { name: request.name } : undefined),
-          ...("repository" in request ? { repository: request.repository } : undefined),
-          ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
-          ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
-          ...("issues" in request ? { issues: request.issues } : undefined),
-          ...("planning" in request ? { planning: request.planning } : undefined),
-          ...("agent" in request ? { agent: request.agent } : undefined),
-          ...("brief" in request ? { brief: request.brief } : undefined),
-          ...("status" in request ? { status: request.status } : undefined),
-          ...("priority" in request ? { priority: request.priority } : undefined),
-          ...("assigneeId" in request ? { assigneeId: request.assigneeId } : undefined),
-          ...("quiet" in request ? { quiet: request.quiet } : undefined),
-        }),
+        client.call(GATEWAY_METHOD.TASKS_START, request),
         answerOf(tasksStartAnswerSchema, TASK_UNANSWERED),
       ),
     tasksBoardSave: (params) =>
@@ -1942,22 +1932,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(codingAgentListAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
+    // Note that the Start goes on whole, as the act port decoded it against the same schema the
+    // Gateway's method reads, because a field copied by name is one a later field is left out of,
+    // as an empty draft's `blank` was, which handed its agent the plan.
     codingAgentStart: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_START, {
-          ...(params.taskId === undefined ? undefined : { taskId: params.taskId }),
-          idempotencyKey: params.idempotencyKey,
-          ...("model" in params ? { model: params.model } : undefined),
-          ...("effort" in params ? { effort: params.effort } : undefined),
-          ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
-          ...("prompt" in params ? { prompt: params.prompt } : undefined),
-          ...("attachments" in params ? { attachments: params.attachments } : undefined),
-          ...("disabledServers" in params
-            ? { disabledServers: params.disabledServers }
-            : undefined),
-          ...("from" in params ? { from: params.from } : undefined),
-          ...("note" in params ? { note: params.note } : undefined),
-        }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_START, params),
         answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentMessages: (params) =>

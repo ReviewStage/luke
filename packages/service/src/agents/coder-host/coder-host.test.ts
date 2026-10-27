@@ -62,6 +62,7 @@ import {
   windowMessagesOf,
 } from "@luke/features/transcript-window";
 import { EXPERIMENT } from "@luke/settings";
+import { sentLineId } from "@luke/wire/host-ids";
 import { noNetwork } from "@luke/wire/testing";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -1126,6 +1127,27 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             },
             Effect.succeed(true),
           );
+          // A teammate's line the finished turn took, which the seed names as theirs, never the developer's.
+          const teammate = yield* openGithubUser();
+          yield* writer.writeAwaitingLine(
+            target,
+            {
+              text: "Use seven days.",
+              clientKey: "from-teammate",
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: teammate },
+            },
+            Effect.succeed(true),
+          );
+          const db = yield* Database;
+          const [turn] = yield* db
+            .select({ id: turns.id })
+            .from(turns)
+            .where(eq(turns.conversationId, target.conversationId));
+          assert.ok(turn !== undefined);
+          yield* db
+            .update(messages)
+            .set({ turnId: turn.id, finishedAt: new Date(0) })
+            .where(eq(messages.clientId, sentLineId("from-teammate")));
 
           const fresh = mintSession();
           const starting = yield* host.admitStarting(auth, fresh);
@@ -1142,6 +1164,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           assert.match(seed, /Invite a teammate by email/u);
           assert.match(seed, /The guide is read; the plan fits the code\./u);
           assert.ok(!seed.includes("settings page"), seed);
+          assert.match(seed, /^Teammate Test User: Use seven days\.$/mu);
         }),
     );
 

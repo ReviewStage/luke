@@ -1,4 +1,4 @@
-import type { LocalAgentRefusal } from "@luke/features/coding-agent-wire";
+import type { LocalAgentRefusal, RefusedDevice } from "@luke/features/coding-agent-wire";
 import type { InstalledSkillFilesRefusal } from "@luke/features/installed-skill-route-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
@@ -83,6 +83,7 @@ export type HostedRefusal = {
   readonly skillName?: string;
   readonly skillRefusal?: InstalledSkillFilesRefusal;
   readonly localAgentRefusal?: LocalAgentRefusal;
+  readonly refusedDevice?: RefusedDevice;
   readonly minimumVersion?: string;
 };
 
@@ -183,9 +184,16 @@ export function planLimitReached(resetsAt: number | undefined): HostedRefusal {
     : { ...HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED, resetsAt };
 }
 
-/** A Start on This Mac refused, named so the words can say why. */
-export function localAgentRefused(localAgentRefusal: LocalAgentRefusal): HostedRefusal {
-  return { ...HOSTED_REFUSAL.LOCAL_AGENT_REFUSED, localAgentRefusal };
+/** A Start on This Mac refused, named so the words can say why, and, where the device is another member's, which device and whose. */
+export function localAgentRefused(
+  localAgentRefusal: LocalAgentRefusal,
+  refusedDevice?: RefusedDevice,
+): HostedRefusal {
+  return {
+    ...HOSTED_REFUSAL.LOCAL_AGENT_REFUSED,
+    localAgentRefusal,
+    ...(refusedDevice === undefined ? undefined : { refusedDevice }),
+  };
 }
 
 /** A host's daemon below the floor given, named so the daemon can say which version to upgrade to. */

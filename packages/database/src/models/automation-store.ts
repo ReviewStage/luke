@@ -51,6 +51,7 @@ import { inboxItem } from "../schemas/inbox.js";
 import { conversations } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { agentGivenNameSql } from "./agent-name.js";
+import { noOpenPullRequest } from "./coding-agent-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 import { AGENT_WORKSPACE, isWorkspaceMember, reachableTask } from "./workspace-store.js";
@@ -849,6 +850,8 @@ const findArchivableAgents = SqlSchema.findAll({
                   ),
                 ),
             ),
+            // Note that an agent whose pull request is open or a draft still stands (`noOpenPullRequest`).
+            noOpenPullRequest,
           ),
         )
         .orderBy(asc(automationRun.firedAt))

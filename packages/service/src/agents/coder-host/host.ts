@@ -4,6 +4,7 @@ import { askRecord } from "@luke/database/models/asks";
 import {
   type CodingAgent,
   hasRepository,
+  lineSendersOf,
   readCodingAgentContext,
   readCodingAgentOfConversation,
   readDelegation,
@@ -15,7 +16,8 @@ import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { listRecentMessages, type StoredMessageRecord } from "@luke/database/models/message-reads";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import type { StoreWriter } from "@luke/database/models/writer";
+import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { causeKind } from "@luke/runtime/effect";
@@ -504,6 +506,36 @@ function messageOf(record: StoredMessageRecord) {
   return record.message;
 }
 
+/** What the seed names a teammate's line by, so a fresh session never reads it as the developer's. */
+const TEAMMATE_SPEAKER = "Teammate";
+
+/** What the seed names a teammate by whose account is gone. */
+const FORMER_MEMBER_SPEAKER = "A former member";
+
+/**
+ * The speaker of each line a member other than the conversation's owner
+ * sent, by their name as their account holds it now, read off the rows'
+ * senders (`lineSendersOf`); every other row keeps its own.
+ */
+const teammateSpeakers = (target: ConversationTarget, records: readonly StoredMessageRecord[]) =>
+  Effect.map(
+    lineSendersOf(
+      target,
+      records.flatMap((record) => (record.message.role === MESSAGE_ROLE.USER ? [record.id] : [])),
+    ),
+    (senders) =>
+      new Map(
+        records.flatMap((record) => {
+          const sent = senders.get(record.id);
+          if (sent?.kind !== MESSAGE_SENDER.MEMBER || sent.member?.userId === target.userId) {
+            return [];
+          }
+          const name = sent.member?.name ?? FORMER_MEMBER_SPEAKER;
+          return [[record.message, `${TEAMMATE_SPEAKER} ${name}`] as const];
+        }),
+      ),
+  );
+
 /** The host over the deployment's seams. */
 export function coderHost(seams: CoderHostSeams): CoderHost {
   const research = new ResearchBudget();
@@ -800,10 +832,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           CODER_TOOL_SET,
           BRAIN_HOST.SEED_MESSAGES,
         );
-        const said = rotationSeedText(
-          read.ok ? read.value.filter((record) => !awaitsTurn(record)).map(messageOf) : [],
-          seams.now(),
-        );
+        const records = read.ok ? read.value.filter((record) => !awaitsTurn(record)) : [];
+        const speakers = yield* teammateSpeakers(admitted.target, records);
+        const said = rotationSeedText(records.map(messageOf), seams.now(), speakers);
         // An operator's rotated session is seeded with the workspace's memory after what was said.
         // Note that Luke keeps no compaction summary of a coding agent's history, so none leads it.
         if (said === undefined) return undefined;

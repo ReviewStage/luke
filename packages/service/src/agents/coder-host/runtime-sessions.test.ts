@@ -760,9 +760,41 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.equal(
             yield* steerCodingAgent(sessions, writer, teammate, onEve, {
               ...line,
-              clientKey: randomUUID(),
+              clientKey: "key-teammate",
             }),
             STEER_OUTCOME.SENT,
+          );
+          assert.equal(
+            yield* steerCodingAgent(sessions, writer, owner, onEve, {
+              ...line,
+              clientKey: randomUUID(),
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+            }),
+            STEER_OUTCOME.SENT,
+          );
+          // The model reads a teammate's line behind the label naming them by their link, and the starter's as it is.
+          const texts = eve.messages.map((sent) =>
+            Array.isArray(sent.message)
+              ? sent.message.flatMap((part) => (part.type === "text" ? [part.text] : []))
+              : [sent.message],
+          );
+          assert.match(
+            texts[0]?.[0] ?? "",
+            new RegExp(
+              `^\\[sender: \\[@Test User\\]\\(https://tryluke\\.dev/[^/]+/person/${teammate}\\), a teammate\\]$`,
+              "u",
+            ),
+          );
+          assert.deepEqual(texts[0]?.slice(1), ["Also the emails."]);
+          assert.equal(eve.messages[1]?.message, "Also the emails.");
+          // The row keeps the teammate's words as they typed them, its sender in its own column.
+          const [kept] = yield* (yield* Database)
+            .select({ parts: messages.parts })
+            .from(messages)
+            .where(eq(messages.clientId, sentLineId("key-teammate")));
+          assert.deepEqual(
+            kept?.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+            ["Also the emails."],
           );
 
           const payer = Option.getOrThrow(
@@ -1431,7 +1463,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start runs where the agent it is started from runs, else where its task runs, else in the cloud; a teammate's agent on a task that runs on another member's device runs in the cloud and says why, in its answer and its first message; a device away is refused, never sent to the cloud",
+      "a Start runs where the agent it is started from runs, else where its task runs, else in the cloud; a teammate's Start on a task that runs on another member's device is refused by name with the device and its owner, and a continue from the owner's agent there is refused, never sent to the cloud; a device away is refused likewise",
       () =>
         Effect.gen(function* () {
           const { owner, workspaceId } = yield* openStarter(true);
@@ -1455,7 +1487,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             repository: `${RELAY.owner}/${RELAY.name}`,
             runsOn: onDevice,
           });
-          const { eve, claudeCode, codex, native } = runtimes();
+          const { eve, native } = runtimes();
           const layers = Layer.mergeAll(
             githubReaching(INSTALLATIONS).layer,
             CATALOG,
@@ -1484,22 +1516,16 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             yield* whereRuns(owned.success, owner),
             Option.some([CODING_AGENT_MACHINE.DEVICE, deviceId]),
           );
-          assert.equal(owned.success.notice, undefined);
-
-          // A teammate's agent on it runs in the cloud, and its answer and first message say why.
-          const theirs = yield* start(teammate, startOn(task.id, "anthropic/claude-opus-5.5"));
-          assert.ok(Result.isSuccess(theirs));
-          assert.deepEqual(
-            yield* whereRuns(theirs.success, teammate),
-            Option.some([CODING_AGENT_MACHINE.VERCEL, null]),
-          );
-          const notice = theirs.success.notice ?? "";
-          assert.match(
-            notice,
-            /^Runs in the cloud: this task runs on Studio, which only .+'s agents use\.$/,
-          );
-          const handed = [...eve.messages, ...claudeCode.messages, ...codex.messages];
-          assert.ok(handed.some((each) => JSON.stringify(each.message).includes(notice)));
+          // A teammate's Start on it is refused by name, the device and its owner beside, and no agent is made.
+          const NOT_THEIRS = localAgentRefused(LOCAL_AGENT_REFUSAL.NOT_OWNER, {
+            name: "Studio",
+            owner: "Test User",
+          });
+          const theirAsk = startOn(task.id, "anthropic/claude-opus-5.5");
+          const theirs = yield* start(teammate, theirAsk);
+          assert.ok(Result.isFailure(theirs));
+          assert.deepEqual(theirs.failure, NOT_THEIRS);
+          assert.ok(Option.isNone(yield* readCodingAgentByKey(teammate, theirAsk.idempotencyKey)));
 
           // A continue runs where its source runs, though the task now runs in the cloud.
           // Where a task runs is never changed through the service, so the row is written as an old build once did.
@@ -1519,6 +1545,21 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(
             yield* whereRuns(continued.success, owner),
             Option.some([CODING_AGENT_MACHINE.DEVICE, deviceId]),
+          );
+
+          // A teammate's continue from the owner's agent on the device is refused by name too, as an agent on its starter's own Mac is theirs alone to start from, so it never reaches the cloud.
+          const theirContinue = {
+            taskId: task.id,
+            prompt: undefined,
+            idempotencyKey: randomUUID(),
+            choice: undefined,
+            from: { agentId: owned.success.agent.id },
+          };
+          const theirContinued = yield* start(teammate, theirContinue);
+          assert.ok(Result.isFailure(theirContinued));
+          assert.deepEqual(theirContinued.failure, HOSTED_REFUSAL.NOT_PERMITTED);
+          assert.ok(
+            Option.isNone(yield* readCodingAgentByKey(teammate, theirContinue.idempotencyKey)),
           );
 
           // A Start with no task runs in the cloud.

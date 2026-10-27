@@ -16,6 +16,7 @@ import {
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
 import { readTaskPlan } from "@luke/database/models/task-store";
+import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
   type AwaitingLineMetadata,
   type ConversationTarget,
@@ -25,7 +26,7 @@ import {
 } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
-import { withoutMemberLinks } from "@luke/features/mention-link";
+import { MENTION_KIND, withoutMemberLinks } from "@luke/features/mention-link";
 import { causeKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
@@ -45,7 +46,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import { controlsAgent, writesToAgent } from "../agent-reach.js";
-import { eveContent, keptHandedImages } from "../attached-files.js";
+import { eveContent, keptHandedImages, senderLabel } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
   type AgentSessions,
@@ -56,6 +57,7 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
+import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
 import { codingAgentStatusOf } from "./status.js";
@@ -92,6 +94,10 @@ import { codingAgentStatusOf } from "./status.js";
  * alone, for an agent on its starter's own GitHub token), while the line
  * lands in the agent's conversation under the member who started it,
  * naming what sent it: the member, Luke from a call, or an automation's run.
+ * A teammate's words, a member's other than the starter, are handed to eve
+ * behind a label naming them by their mention link (`attached-files.ts`'s
+ * `senderLabel`), which the row leaves out, since its sender is its own
+ * column, so the model never reads a teammate's words as the developer's.
  * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
@@ -183,6 +189,34 @@ const unreached = (failure: EveUnreachable) =>
     ),
     { outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
   );
+
+/** What a teammate's mention link names them by where their account is gone. */
+const FORMER_MEMBER = "A former member";
+
+/**
+ * The label naming the teammate who sent the line, by their mention link
+ * under the agent's workspace; nothing for the starter's own words or any
+ * other sender's, whose line already says who sent it.
+ */
+const teammateLabel = (agent: CodingAgent, sender: LineSender) => {
+  if (sender.kind !== MESSAGE_SENDER.MEMBER || sender.userId === agent.userId) {
+    return Effect.succeed(undefined);
+  }
+  const { userId } = sender;
+  return Effect.map(
+    Effect.all([readAccountNames([userId]), workspaceStepOf(agent.userId, agent.organizationId)], {
+      concurrency: "unbounded",
+    }),
+    ([names, step]) =>
+      senderLabel(
+        writtenMention(
+          { kind: MENTION_KIND.PERSON, userId },
+          names.get(userId) ?? FORMER_MEMBER,
+          step,
+        ),
+      ),
+  );
+};
 
 /** The record claimed for the session just opened, forward only as its start would; a claim that fails is logged, and the session's own start claims it in time. */
 const claimedFor = (target: ConversationTarget, sessionId: string) =>
@@ -305,6 +339,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
       sessionId: Effect.result(hostedStoreOrUnavailable(recordedRuntimeSession(target))),
       // Read before eve is asked, so an ended session settles the turn it was running and never one begun since.
       running: Effect.result(runningTurnOf(agent)),
+      label: Effect.result(hostedStoreOrUnavailable(teammateLabel(agent, line.sender))),
     },
     { concurrency: "unbounded" },
   );
@@ -382,6 +417,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   const reads = yield* Effect.fromResult(reached.reads);
   const mentioned = reviewers ? undefined : mentionedContext(pointed, task, reads);
   const running = yield* Effect.fromResult(read.running);
+  const label = yield* Effect.fromResult(read.label);
   // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the
   // row names it; a repeat under the key was answered above, and the same bytes again keep nothing twice.
   const attachments = yield* hostedStoreOrUnavailable(
@@ -394,7 +430,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   const message = {
     conversationId: agent.conversationId,
     turn: BRAIN_HOST_TURN.TYPED,
-    message: eveContent(line.text, attachments, mentioned),
+    message: eveContent(line.text, attachments, mentioned, label),
     // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
     lineId: sentLineId(line.clientKey),
   };
