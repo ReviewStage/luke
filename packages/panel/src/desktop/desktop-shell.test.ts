@@ -37,6 +37,7 @@ import { CallCardContext, type CallCardInput, callControls } from "../call/call-
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -516,11 +517,15 @@ test("the window is called by what stands in it: the plan on screen in its own w
   assert.equal(document.title, "Automations — Acme");
   act(() => root?.unmount());
 
-  // With Channels on the Inbox's place shows channels, and the window is called for them.
+  // With Channels on the Inbox's place is the Inbox until a channel is chosen, and the window is called for its stream then.
   await handBridge(experimentsOn(EXPERIMENT.CHANNELS));
   mount(true, false, { workspaces: [ACME], workspace: ACME });
   await settle();
+  assert.equal(document.title, "Inbox — Acme");
+  act(() => chooseChannel("c1000001-6d9f-4ab7-92df-000000000001"));
+  await settle();
   assert.equal(document.title, "Channels — Acme");
+  act(() => leaveChannel());
 });
 
 test("a plan opened with its Inbox tab shown rather than its plan is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
@@ -710,6 +715,28 @@ test("the sidebar offers no Issues row, with every experiment on, since Luke kee
   assert.equal(placeRow(page, "Issues"), undefined);
 });
 
+test("with Channels on, the sidebar keeps the Inbox's row among the places and the Tasks section, the channels under them, and the Inbox's row marks the Inbox until a channel is chosen", async () => {
+  await handBridge(experimentsOn(EXPERIMENT.CHANNELS));
+  const page = mount(true, false, { workspaces: [ACME], workspace: ACME });
+  await settle();
+  const sidebar = page.querySelector("aside.desktop-sidebar") ?? assert.fail("the sidebar stands");
+  const groups = [...sidebar.querySelectorAll("nav[aria-label]")].map((nav) =>
+    nav.getAttribute("aria-label"),
+  );
+  assert.ok(groups.includes("Tasks"), `the Tasks section stands: ${groups.join(", ")}`);
+  assert.ok(
+    groups.indexOf("Tasks") < groups.indexOf("Channels"),
+    `the channels stand under the tasks: ${groups.join(", ")}`,
+  );
+  const inbox = () => placeRow(page, "Inbox") ?? assert.fail("the Inbox's row stands");
+  assert.equal(inbox().getAttribute("aria-current"), "page");
+
+  act(() => chooseChannel("c1000001-6d9f-4ab7-92df-000000000001"));
+  await settle();
+  assert.equal(inbox().getAttribute("aria-current"), null, "a channel's stream is no Inbox");
+  act(() => leaveChannel());
+});
+
 /** The shell in a narrow room, a phone's, over `overrides`, the sidebar patched as given. */
 async function mountNarrow(
   overrides: Partial<TasksControl>,
@@ -745,23 +772,28 @@ function barItem(page: HTMLElement, name: string): HTMLButtonElement {
   return item;
 }
 
-test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox", async () => {
-  const asked: string[] = [];
-  const page = await mountNarrow({
-    boardView: { ...tasksControl().boardView, open: true },
-    inboxView: {
-      ...tasksControl().inboxView,
-      onOpen: () => asked.push("open"),
-    },
-  });
-  assert.deepEqual(
-    barItems(page).map((item) => item.textContent),
-    ["Inbox", "Tasks", "More"],
-  );
-  assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
-  assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
-  act(() => barItem(page, "Inbox").click());
-  assert.deepEqual(asked, ["open"]);
+test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox, with Channels on as off", async () => {
+  for (const experiments of [{}, experimentsOn(EXPERIMENT.CHANNELS)]) {
+    handState(experiments);
+    const asked: string[] = [];
+    const page = await mountNarrow({
+      boardView: { ...tasksControl().boardView, open: true },
+      inboxView: {
+        ...tasksControl().inboxView,
+        onOpen: () => asked.push("open"),
+      },
+    });
+    assert.deepEqual(
+      barItems(page).map((item) => item.textContent),
+      ["Inbox", "Tasks", "More"],
+    );
+    assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
+    assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
+    act(() => barItem(page, "Inbox").click());
+    assert.deepEqual(asked, ["open"]);
+    act(() => root?.unmount());
+    page.remove();
+  }
 });
 
 test("on a phone the bar's More opens the sidebar's drawer, which holds every other place", async () => {
@@ -1242,12 +1274,15 @@ test("the side panel's toggle stands for the Inbox's chosen item, and not over a
   };
   const panelOpen = { ...chosen, sidePanel: { ...control.sidePanel, open: true } };
   const toggled: Record<string, boolean> = {};
-  for (const [shown, experiments, patch] of [
-    ["the Inbox", {}, chosen],
-    ["a channel", experimentsOn(EXPERIMENT.CHANNELS), chosen],
-    ["a channel with a panel open", experimentsOn(EXPERIMENT.CHANNELS), panelOpen],
+  for (const [shown, experiments, patch, stream] of [
+    ["the Inbox", {}, chosen, false],
+    ["the Inbox with Channels on", experimentsOn(EXPERIMENT.CHANNELS), chosen, false],
+    ["a channel", experimentsOn(EXPERIMENT.CHANNELS), chosen, true],
+    ["a channel with a panel open", experimentsOn(EXPERIMENT.CHANNELS), panelOpen, true],
   ] as const) {
     await handBridge(experiments);
+    if (stream) chooseChannel("c1000001-6d9f-4ab7-92df-000000000001");
+    else leaveChannel();
     const container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -1266,8 +1301,10 @@ test("the side panel's toggle stands for the Inbox's chosen item, and not over a
     act(() => root?.unmount());
     container.remove();
   }
+  leaveChannel();
   assert.deepEqual(toggled, {
     "the Inbox": true,
+    "the Inbox with Channels on": true,
     "a channel": false,
     "a channel with a panel open": true,
   });

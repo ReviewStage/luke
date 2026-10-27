@@ -4,7 +4,6 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { backToWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -28,7 +27,6 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { ChannelList } from "../tasks/channel-list.js";
 import {
   ChannelMissing,
   ChannelReading,
@@ -71,6 +69,7 @@ import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-mode
 import {
   useArchivedChannels,
   useChannelPlace,
+  useChannelStreaming,
   useChannels,
   useThreadChannel,
 } from "../tasks/use-channels.js";
@@ -84,9 +83,7 @@ import {
   type SidePanelControl,
 } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useExperiment } from "../use-app-state.js";
 import { useAgentCallDoors } from "./agent-actions.js";
-import { useChannelDialog } from "./channel-dialog.js";
 import { AgentPane } from "./main-tabs.js";
 import { NewTaskButton } from "./new-task-button.js";
 import {
@@ -149,13 +146,13 @@ import { taskCardOf } from "./task-card.js";
  * their `SKILL.md` in the panel beside it, as a file the item names opens,
  * or on GitHub where the item has no plan whose panel could open it.
  *
- * With Channels on, a channel's stream stands in the list's place
- * (`channel-stream.tsx`): K and J step through its threads rather than the
+ * With Channels on and a channel chosen from the sidebar, the channel's
+ * stream stands in the list's place (`channel-stream.tsx`), and with none
+ * chosen the page is the Inbox as it is with Channels off: K and J step through its threads rather than the
  * list's items, Back's chord and Escape close the thread open from it, a
  * thread that is gone says so where it would stand, beside the stream or,
  * on a phone, in its place, and a channel archived or never the
- * workspace's says so in the stream's place, with the way to #general. A
- * phone's list of channels makes one from its "+", as the sidebar does.
+ * workspace's says so in the stream's place, with the way to #general.
  *
  * Its items are read and listed by `use-inbox-listing.ts`.
  */
@@ -228,8 +225,8 @@ export function DesktopInbox({
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
   const now = useMinute();
-  // Note that with Channels on the page is a channel's stream, its thread in the side panel once one is opened, rather than the Inbox's list.
-  const streaming = useExperiment(EXPERIMENT.CHANNELS);
+  // Note that with a channel chosen the page is its stream, its thread in the side panel once one is opened, rather than the Inbox's list.
+  const streaming = useChannelStreaming();
   const channelPlace = useChannelPlace();
   const channels = useChannels(streaming ? tasks.workspace?.id : undefined, tasks.shown);
   // A channel chosen that is open no more is looked for among the archived ones, read only then, and shown to read where it is one.
@@ -250,10 +247,8 @@ export function DesktopInbox({
     channelState.kind === CHANNEL_SHOWN.ARCHIVED ? channelState.channel : undefined;
   const channel: StreamChannel | undefined =
     channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel : archivedShown;
-  // Note that a phone shows one thing at a time across the screen: the list of channels its bar opens, a channel's stream, or a thread in place of the stream.
+  // Note that a phone shows one thing at a time across the screen: a channel's stream, or a thread in place of the stream.
   const phone = room === SHELL_ROOM.NARROW;
-  // A phone's list of channels stands while the list is asked for, as the bar's Channels asks, so the window's Back returns to it from a stream.
-  const channelsListed = streaming && phone && view.listed;
   // A thread opened from a stream stands in the side panel as its Inbox tab (`use-tasks-tab.ts`), and on a phone in the stream's place; one that is gone says so there.
   const threadMissing =
     streaming &&
@@ -265,7 +260,7 @@ export function DesktopInbox({
     ((chosen !== undefined && channelPlace.threadId === chosen.item.id) || threadMissing);
   // A thread opened by a link or from another channel moves the stream to its own channel once its item is read.
   useThreadChannel(streaming ? chosen?.item : undefined);
-  const threadShown = threadOpen && channel !== undefined && !channelsListed;
+  const threadShown = threadOpen && channel !== undefined;
   const threadBeside = threadOpen && !phone;
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
   // Note that the window keeps whether the list was asked for, so its history can go back to it.
@@ -464,27 +459,14 @@ export function DesktopInbox({
     codeOf: (holder) =>
       paneDoors(tasks, holder, { act, now, panelFor, besideAgents: named.agentIds }).code,
   };
-  // A channel pressed on a phone's list opens on its stream, never on a thread left open in it.
-  const openChannel = (channelId: string) => {
-    channelPlace.onChoose(channelId);
-    channelPlace.onCloseThread();
-    onListed(false);
-  };
   // The stream is read here, so K and J page the threads it posts, and the thread's bar counts them.
   const stream = useChannelStream(channel?.id, tasks.me, ownTask);
   const streamPager = useChannelPager(
     stream.viewed,
     threadOpen ? channelPlace.threadId : undefined,
     openThread,
-    tasks.shown && channel !== undefined && !channelsListed && !sidePanel.fullScreen,
+    tasks.shown && channel !== undefined && !sidePanel.fullScreen,
   );
-  // A phone's list of channels makes one from its "+", and edits one from its row's menu, as the sidebar does, opening one once made.
-  const making = useChannelDialog({
-    workspaceId: tasks.workspace?.id,
-    channels,
-    shown: tasks.shown && channelsListed,
-    onMade: openChannel,
-  });
   const general = generalChannel(channels.channels ?? []);
   // The thread asked for that is gone, where it would stand: beside the stream, or on a phone in its place.
   const missingThread = (
@@ -626,16 +608,7 @@ export function DesktopInbox({
                 data-columns={streaming ? undefined : columns.shown}
               >
                 {streaming ? (
-                  channelsListed ? (
-                    <ChannelList
-                      workspaceId={tasks.workspace?.id}
-                      channels={channels}
-                      shown={tasks.shown}
-                      onOpen={openChannel}
-                      onNew={() => making.askNew(false)}
-                      onEdit={making.askEdit}
-                    />
-                  ) : archivedReading ? (
+                  archivedReading ? (
                     <ChannelReading />
                   ) : channelState.kind === CHANNEL_SHOWN.MISSING ? (
                     <ChannelMissing
@@ -822,7 +795,6 @@ export function DesktopInbox({
                 }
               />
             ) : null}
-            {making.dialog}
           </div>
         </AutomationDirectory>
       </MemberDirectory>

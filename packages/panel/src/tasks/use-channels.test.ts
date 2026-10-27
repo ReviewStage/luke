@@ -11,19 +11,19 @@ import { fakeActPort } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import {
   type ChannelPlaceControl,
+  chooseChannel,
   listChannelWorkspace,
   openChannelThread,
-  standChannelPlace,
   useChannelPlace,
   useChannels,
   useThreadChannel,
 } from "./use-channels.js";
 
 /**
- * use-channels.test.ts -- the channel the window shows: the one last shown
- * in the listed workspace, shown again once its channels are read where it
- * still stands among them, another workspace listed showing its own, and a
- * thread opened by its item alone moved to its own channel once read.
+ * use-channels.test.ts -- the channel the window shows: none at launch,
+ * the Inbox standing in its place, none of the last workspace's once
+ * another is listed, and a thread opened by its item alone moved to its own
+ * channel once read.
  *
  * Note that the place is the window's, held by the module across this
  * file's tests, so they run in order, each from where the last left it.
@@ -48,10 +48,6 @@ function channelNamed(name: string, id: string): Channel {
 const ACME_GENERAL = channelNamed("general", "a1000001-6d9f-4ab7-92df-000000000001");
 const ACME_APP = channelNamed("app", "a1000001-6d9f-4ab7-92df-000000000002");
 const LABS_GENERAL = channelNamed("general", "b1000001-6d9f-4ab7-92df-000000000001");
-const LABS_DESIGN = channelNamed("design", "b1000001-6d9f-4ab7-92df-000000000002");
-const OPS = "workspace-ops";
-const OPS_GENERAL = channelNamed("general", "d1000001-6d9f-4ab7-92df-000000000001");
-const OPS_DESIGN = channelNamed("design", "d1000001-6d9f-4ab7-92df-000000000002");
 
 const roots: Root[] = [];
 
@@ -86,28 +82,22 @@ async function placeAfterRead(
 fakeActPort({
   [ACT_KIND.CHANNELS_LIST]: ({ workspaceId }) =>
     Promise.resolve({
-      channels:
-        workspaceId === ACME
-          ? [ACME_GENERAL, ACME_APP]
-          : workspaceId === OPS
-            ? [OPS_GENERAL, OPS_DESIGN]
-            : [LABS_GENERAL],
+      channels: workspaceId === ACME ? [ACME_GENERAL, ACME_APP] : [LABS_GENERAL],
     }),
 });
 
-test("the channel last shown in the listed workspace is shown again once its channels are read", async () => {
-  window.localStorage.setItem(
-    "luke.shownChannel",
-    JSON.stringify({ [ACME]: ACME_APP.id, [LABS]: LABS_DESIGN.id }),
-  );
+test("at launch the place shows no channel once the workspace's channels are read, so the Inbox stands in it, and a thread opened by its item alone names none there", async () => {
   listChannelWorkspace(ACME);
+  act(() => openChannelThread("c1000001-6d9f-4ab7-92df-000000000008"));
 
   const place = await placeAfterRead(ACME);
 
-  assert.equal(place().channelId, ACME_APP.id);
+  assert.equal(place().channelId, undefined);
+  assert.equal(place().threadId, undefined);
 });
 
-test("another workspace listed shows none of the last one's channels, nor its own last shown where it was archived since, so #general stands in", async () => {
+test("another workspace listed shows none of the last one's channels, the Inbox standing in", async () => {
+  act(() => chooseChannel(ACME_APP.id));
   listChannelWorkspace(LABS);
 
   const place = await placeAfterRead(LABS);
@@ -118,6 +108,7 @@ test("another workspace listed shows none of the last one's channels, nor its ow
 
 test("a thread opened by its item alone stands in the channel shown until its item is read, then in its own channel", async () => {
   listChannelWorkspace(ACME);
+  act(() => chooseChannel(ACME_GENERAL.id));
   const itemId = "c1000001-6d9f-4ab7-92df-000000000009";
   act(() => openChannelThread(itemId));
 
@@ -125,18 +116,4 @@ test("a thread opened by its item alone stands in the channel shown until its it
 
   assert.equal(place().channelId, ACME_APP.id);
   assert.equal(place().threadId, itemId);
-});
-
-test("a channel a link stands before its workspace's channels are read is kept as the workspace's last once they are, over the one kept before", async () => {
-  window.localStorage.setItem("luke.shownChannel", JSON.stringify({ [OPS]: OPS_GENERAL.id }));
-  listChannelWorkspace(OPS);
-  act(() => standChannelPlace(OPS_DESIGN.id, undefined));
-
-  const place = await placeAfterRead(OPS);
-
-  assert.equal(place().channelId, OPS_DESIGN.id);
-  assert.equal(
-    JSON.parse(window.localStorage.getItem("luke.shownChannel") ?? "{}")[OPS],
-    OPS_DESIGN.id,
-  );
 });

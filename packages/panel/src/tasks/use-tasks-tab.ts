@@ -182,6 +182,7 @@ import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import {
   chooseChannel,
+  leaveChannel,
   listChannelWorkspace,
   openChannelThread,
   standChannelPlace,
@@ -3380,8 +3381,10 @@ export function useTasksTab(input: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
       // Note that a narrow room opens on the list though it keeps the item last chosen, so a wide room it turns into again stands that item beside the list.
+      // With Channels on, it leaves any channel shown, so the place shows the Inbox rather than a stream.
       onOpen: guard(() => {
         setHistoryFor(undefined);
+        if (channelsOn) leaveChannel();
         const listed = input.room === SHELL_ROOM.NARROW;
         const remembered = lastInboxChoice.current;
         setStandIn((held) =>

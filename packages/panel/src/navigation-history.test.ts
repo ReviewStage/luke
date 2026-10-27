@@ -1209,6 +1209,7 @@ test("with Channels on, a channel chosen and a thread opened in it are each a st
       }),
   });
   listChannelWorkspace(workspace.id);
+  chooseChannel(general.id);
   const place = await channelsRead(workspace.id);
   const item = { itemId: "item-1", taskId: TASK_ID };
   const onInbox = (chosen: typeof item | undefined) => {

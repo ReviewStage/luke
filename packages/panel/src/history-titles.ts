@@ -133,12 +133,12 @@ function taskName(tasks: StepNameTasks, taskId: string | undefined): string | un
   return tasks.tasks.find((task) => task.id === taskId)?.name;
 }
 
-/** What the step the window stands on is called, in a room that is `narrow` or not, with Channels on or not; none while nothing names it, as a task not yet listed. */
+/** What the step the window stands on is called, in a room that is `narrow` or not, with a channel's stream in the Inbox's place or not; none while nothing names it, as a task not yet listed. */
 export function stepTitle(
   tab: PanelTab,
   tasks: StepTitleTasks,
   narrow = false,
-  channelsOn = false,
+  streaming = false,
 ): StepTitle | undefined {
   if (tab === PANEL_TAB.SETTINGS) return { label: "Settings" };
   if (tasks.inboxView.open) {
@@ -146,7 +146,7 @@ export function stepTitle(
     const single = narrow || tasks.inboxView.single === true;
     const chosen = single && tasks.inboxView.listed ? undefined : tasks.inboxView.chosen;
     const holder = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
-    return { label: channelsOn ? CHANNELS_WORDS : INBOX_WORDS, detail: taskName(tasks, holder) };
+    return { label: streaming ? CHANNELS_WORDS : INBOX_WORDS, detail: taskName(tasks, holder) };
   }
   if (tasks.agentView.agentId !== undefined) return { label: "Agent" };
   if (tasks.personView.userId !== undefined) {

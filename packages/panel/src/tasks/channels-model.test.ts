@@ -13,7 +13,6 @@ import {
   CHANNEL_VIEW,
   channelShown,
   channelSlug,
-  channelStep,
   channelUnread,
   repliesLine,
   STREAM_ROW,
@@ -212,17 +211,14 @@ function channelOf(id: string, name: string, project = false): Channel {
   return { id, name, purpose: "A purpose", project, createdAt: NOON, waiting: 0 };
 }
 
-test("the stream opens on the channel chosen while it stands, on #general where none is chosen, and says a channel chosen that stands no more is gone", () => {
+test("the stream opens on the channel chosen while it stands, on none where none is chosen, and says a channel chosen that stands no more is gone", () => {
   const app = channelOf("c-app", "app");
   const general = channelOf("c-general", "general");
   assert.deepEqual(channelShown([app, general], "c-app"), {
     kind: CHANNEL_SHOWN.CHANNEL,
     channel: app,
   });
-  assert.deepEqual(channelShown([app, general], undefined), {
-    kind: CHANNEL_SHOWN.CHANNEL,
-    channel: general,
-  });
+  assert.deepEqual(channelShown([app, general], undefined), { kind: CHANNEL_SHOWN.NONE });
   assert.deepEqual(channelShown([app, general], "c-archived"), { kind: CHANNEL_SHOWN.MISSING });
   assert.deepEqual(channelShown(undefined, "c-app"), { kind: CHANNEL_SHOWN.NONE });
 });
@@ -235,22 +231,6 @@ test("a channel chosen among the archived ones is shown to read, and one neither
     channel: old,
   });
   assert.deepEqual(channelShown([general], "c-unknown", [old]), { kind: CHANNEL_SHOWN.MISSING });
-});
-
-test("the channels are walked in the sidebar's order, the standing then the projects', wrapping round", () => {
-  // Note that the service's order mixes a project's channel among the standing ones.
-  const channels = [
-    channelOf("c-app", "app"),
-    channelOf("c-launch", "launch", true),
-    channelOf("c-general", "general"),
-  ];
-  const walk = (from: string | undefined, by: 1 | -1) => channelStep(channels, from, by)?.name;
-  assert.equal(walk("c-app", 1), "general");
-  assert.equal(walk("c-general", 1), "launch");
-  assert.equal(walk("c-launch", 1), "app", "down from the last wraps to the first");
-  assert.equal(walk("c-app", -1), "launch", "up from the first wraps to the last");
-  assert.equal(walk(undefined, 1), "app", "down from no channel shown is the first");
-  assert.equal(walk(undefined, -1), "launch", "up from no channel shown is the last");
 });
 
 test("a channel reads unread once something is posted after the reader's look, or where they never looked at one holding a thread", () => {

@@ -12,12 +12,7 @@ import {
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
-import {
-  APP_SETTING_SCHEMA,
-  EXPERIMENT,
-  type Experiment,
-  type HostCapability,
-} from "@luke/settings";
+import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
 import { agentKeyLink, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties } from "@luke/ui";
@@ -70,6 +65,7 @@ import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
+import { useChannelStreaming } from "./tasks/use-channels.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
@@ -82,7 +78,6 @@ import {
   useAdminAccess,
   useAdminAccessPending,
   useAppSlice,
-  useExperiment,
   useExperimentChoices,
   VOICE_AVAILABLE,
 } from "./use-app-state.js";
@@ -397,7 +392,7 @@ function AppWindow(): React.JSX.Element {
   linkWorkspace.current = settingsWorkspace.link;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
   const experiments = useExperimentChoices();
-  const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
+  const streaming = useChannelStreaming();
   const shownView = shownSettingsView(
     settingsPlace.view,
     run?.capabilities ?? NO_CAPABILITIES,
@@ -486,7 +481,7 @@ function AppWindow(): React.JSX.Element {
   const history = useWindowHistory({
     known: run !== undefined && !accountGated,
     link: copyLink.standing,
-    title: stepTitle(tab, tasks, room === SHELL_ROOM.NARROW, channelsOn),
+    title: stepTitle(tab, tasks, room === SHELL_ROOM.NARROW, streaming),
     tab,
     onTabChange: changeTab,
     settingsView: shownView,

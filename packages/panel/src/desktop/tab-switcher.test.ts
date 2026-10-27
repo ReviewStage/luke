@@ -16,12 +16,12 @@ import { holdExits } from "@luke/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test, vi } from "vitest";
+import { afterEach, beforeAll, onTestFinished, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { useChannels } from "../tasks/use-channels.js";
+import { chooseChannel, leaveChannel, useChannels } from "../tasks/use-channels.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -408,8 +408,11 @@ function ChannelsRead({ workspaceId }: { workspaceId: string }): null {
   return null;
 }
 
-/** The cards' names with Channels on and the workspace's channels read, held over a task with the Inbox's place the stop behind, in `room`, the place standing a phone's list of channels where `listed`. */
-async function channelCardNames(room: ShellRoom, listed: boolean): Promise<string[]> {
+/** The general channel the workspace's channels hold. */
+const GENERAL_ID = "a1000001-6d9f-4ab7-92df-000000000002";
+
+/** The cards' names with Channels on and the workspace's channels read, held over a task with the Inbox's place the stop behind, the channel `chosen` shown in it, or none. */
+async function channelCardNames(chosen: string | undefined): Promise<string[]> {
   const base = stateWith({}, {});
   handState(experimentsOn(EXPERIMENT.CHANNELS), {
     run: { ...base.run, capabilities: DESKTOP_CAPABILITIES },
@@ -419,7 +422,7 @@ async function channelCardNames(room: ShellRoom, listed: boolean): Promise<strin
       Promise.resolve({
         channels: [
           channelNamed("app", "a1000001-6d9f-4ab7-92df-000000000001"),
-          channelNamed("general", "a1000001-6d9f-4ab7-92df-000000000002"),
+          channelNamed("general", GENERAL_ID),
         ],
       }),
   });
@@ -437,9 +440,12 @@ async function channelCardNames(room: ShellRoom, listed: boolean): Promise<strin
     );
     for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
   });
+  if (chosen === undefined) leaveChannel();
+  else chooseChannel(chosen);
+  onTestFinished(leaveChannel);
   const told = asked();
-  const window = await mounted(room);
-  const inboxView = { ...tasksControl().inboxView, listed };
+  const window = await mounted();
+  const { inboxView } = tasksControl();
   await window.draw(
     onTask(SIDE_PANEL_TAB.PLAN, told, { workspace, inboxView: { ...inboxView, open: true } }),
   );
@@ -451,17 +457,17 @@ async function channelCardNames(room: ShellRoom, listed: boolean): Promise<strin
 }
 
 test("with Channels on, the Inbox's card names the channel its place shows by its bare name beside its glyph", async () => {
-  const names = await channelCardNames(SHELL_ROOM.WIDE, false);
-  assert.ok(
-    names.includes("general"),
-    `the card names general, the channel shown where none was chosen: ${names.join(" | ")}`,
-  );
+  const names = await channelCardNames(GENERAL_ID);
+  assert.ok(names.includes("general"), `the card names general: ${names.join(" | ")}`);
   assert.ok(!names.some((name) => /Inbox/u.test(name)));
 });
 
-test("with Channels on, a phone standing its list of channels names the Inbox's card for the list, not a channel", async () => {
-  const names = await channelCardNames(SHELL_ROOM.NARROW, true);
-  assert.ok(names.includes("Channels"));
+test("with Channels on and no channel chosen, the Inbox's card is the Inbox's", async () => {
+  const names = await channelCardNames(undefined);
+  assert.ok(
+    names.some((name) => /Inbox/u.test(name)),
+    `a card names the Inbox: ${names.join(" | ")}`,
+  );
   assert.ok(!names.some((name) => name.includes("general")));
 });
 

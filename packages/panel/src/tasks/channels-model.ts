@@ -268,7 +268,7 @@ export const CHANNEL_SHOWN = {
   ARCHIVED: "archived",
   /** The channel chosen is neither open nor among the archived channels given. */
   MISSING: "missing",
-  /** The channels are not read yet, or the workspace has none. */
+  /** No channel is chosen, the Inbox standing in the place, or the channels are not read yet. */
   NONE: "none",
 } as const;
 
@@ -283,43 +283,20 @@ export type ChannelShown =
  * where it is still open, or where it is among the `archived` channels
  * given, that one to read; a missing channel's state where it is neither,
  * so a link to an unknown channel says so rather than showing another; and
- * #general, else the first, while nothing is chosen.
+ * none while nothing is chosen, where the place shows the Inbox.
  */
 export function channelShown(
   channels: readonly Channel[] | undefined,
   chosenId: string | undefined,
   archived: readonly ArchivedChannel[] = [],
 ): ChannelShown {
-  if (channels === undefined) return { kind: CHANNEL_SHOWN.NONE };
+  if (channels === undefined || chosenId === undefined) return { kind: CHANNEL_SHOWN.NONE };
   const chosen = channels.find((channel) => channel.id === chosenId);
-  if (chosenId !== undefined && chosen === undefined) {
-    const gone = archived.find((channel) => channel.id === chosenId);
-    return gone === undefined
-      ? { kind: CHANNEL_SHOWN.MISSING }
-      : { kind: CHANNEL_SHOWN.ARCHIVED, channel: gone };
-  }
-  const channel = chosen ?? generalChannel(channels) ?? channels[0];
-  return channel === undefined
-    ? { kind: CHANNEL_SHOWN.NONE }
-    : { kind: CHANNEL_SHOWN.CHANNEL, channel };
-}
-
-/**
- * The channel `by` steps from the one shown, through the sidebar's order,
- * the standing channels then the projects', wrapping round at either end;
- * from none shown, down is the first and up the last.
- */
-export function channelStep(
-  channels: readonly Channel[],
-  shownId: string | undefined,
-  by: 1 | -1,
-): Channel | undefined {
-  const { standing, projects } = channelSections(channels);
-  const ordered = [...standing, ...projects];
-  if (ordered.length === 0) return undefined;
-  const at = ordered.findIndex((channel) => channel.id === shownId);
-  const from = at === -1 ? (by === 1 ? -1 : 0) : at;
-  return ordered[(from + by + ordered.length) % ordered.length];
+  if (chosen !== undefined) return { kind: CHANNEL_SHOWN.CHANNEL, channel: chosen };
+  const gone = archived.find((channel) => channel.id === chosenId);
+  return gone === undefined
+    ? { kind: CHANNEL_SHOWN.MISSING }
+    : { kind: CHANNEL_SHOWN.ARCHIVED, channel: gone };
 }
 
 /** "↑ N older asks need you", as the jump over the stream says it. */
@@ -333,9 +310,4 @@ export function channelSlug(typed: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/gu, "-")
     .replace(/^-+|-+$/gu, "");
-}
-
-/** How many open asks wait on the reader across every channel, as a phone's bar counts them. */
-export function channelsWaiting(channels: readonly Channel[]): number {
-  return channels.reduce((total, channel) => total + channel.waiting, 0);
 }

@@ -370,7 +370,7 @@ export interface AppShortcut {
   experiment?: Experiment;
   /**
    * What the command is called while an experiment that changes what it
-   * reaches is on, as Previous task walks the channels while Channels is:
+   * reaches is on, as Next inbox item steps through a channel's threads while Channels is:
    * the menu bar, the Keyboard shortcuts page, and the settings search say
    * this instead (`shortcutLabel`).
    */
@@ -427,16 +427,13 @@ export const APP_SHORTCUTS = {
     label: "Permanently delete task",
     chord: { key: SHORTCUT_KEY.BACKSPACE },
   },
-  // Note that with Channels on the sidebar lists channels in the tasks' place, and these walk them.
   [APP_COMMAND.PREVIOUS_TASK]: {
     label: "Previous task",
     chord: { key: SHORTCUT_KEY.UP, option: true },
-    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Previous channel" },
   },
   [APP_COMMAND.NEXT_TASK]: {
     label: "Next task",
     chord: { key: SHORTCUT_KEY.DOWN, option: true },
-    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Next channel" },
   },
   [APP_COMMAND.TOGGLE_SIDEBAR]: { label: "Toggle sidebar", chord: { key: SHORTCUT_KEY.B } },
   [APP_COMMAND.TOGGLE_SIDE_PANEL]: {
@@ -555,14 +552,10 @@ export const APP_SHORTCUTS = {
     label: "Exit version history",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
-  // Note that with Channels on the Inbox's place shows a channel's stream, its thread opening beside it, and these name what they reach there.
-  [APP_COMMAND.INBOX]: {
-    label: "Inbox",
-    chord: { key: SHORTCUT_KEY.I, shift: true },
-    renamed: { experiment: EXPERIMENT.CHANNELS, label: "Channels" },
-  },
+  [APP_COMMAND.INBOX]: { label: "Inbox", chord: { key: SHORTCUT_KEY.I, shift: true } },
   // Note that the Tasks page takes ⇧⌘B, for the Board it once was alone, because ⇧⌘T reopens a closed tab.
   [APP_COMMAND.TASKS]: { label: "Tasks", chord: { key: SHORTCUT_KEY.B, shift: true } },
+  // Note that with Channels on the Inbox's place may show a channel's stream, its thread opening beside it, and these name what they reach there.
   [APP_COMMAND.INBOX_LIST]: {
     label: "Back to inbox list",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },

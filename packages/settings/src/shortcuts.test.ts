@@ -127,9 +127,8 @@ test("no Chapters key is a Files changed key, whose list hears a press first and
   }
 });
 
-test("with Channels on, the Inbox's commands are named for the channels and threads they reach, and with it off for the Inbox", () => {
+test("with Channels on, the Inbox's commands are named for the threads a channel's stream reaches, and with it off for the Inbox", () => {
   const inbox = [
-    APP_COMMAND.INBOX,
     APP_COMMAND.INBOX_LIST,
     APP_COMMAND.PREVIOUS_INBOX_ITEM,
     APP_COMMAND.NEXT_INBOX_ITEM,
@@ -139,14 +138,12 @@ test("with Channels on, the Inbox's commands are named for the channels and thre
     inbox.map((command) => shortcutLabel(command, { [EXPERIMENT.CHANNELS]: on }));
 
   assert.deepEqual(named(true), [
-    "Channels",
     "Close thread",
     "Previous thread",
     "Next thread",
     "Mark thread as read or unread",
   ]);
   assert.deepEqual(named(false), [
-    "Inbox",
     "Back to inbox list",
     "Previous inbox item",
     "Next inbox item",

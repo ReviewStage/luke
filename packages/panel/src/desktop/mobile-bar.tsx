@@ -1,11 +1,9 @@
 import { BarItem, EllipsisIcon, MENU_KEEPS_CLEAR } from "@luke/ui";
-import { GLYPH } from "@luke/ui/icons";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon, ListTodoIcon } from "lucide-react";
 import { adminSection } from "../admin/routing.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { channelsWaiting } from "../tasks/channels-model.js";
-import { useChannels } from "../tasks/use-channels.js";
+import { useChannelStreaming } from "../tasks/use-channels.js";
 import { automationsTab, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { needsYouNoun, useInboxWaiting } from "./places-waiting.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -32,20 +30,19 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
  * (`places-waiting.ts`), so the two never disagree, and said in the
  * sidebar's words.
  *
- * With Channels on (STAG-547), the bar is Channels, Tasks, and More:
- * Channels stands in the Inbox's place, opens the list of channels
- * (`channel-list.tsx`), and counts every open ask in them that waits on the
- * developer, the sum of the counts that list's rows show. It stands over
- * that list and over a channel's stream, and a thread opened from the
- * stream keeps the whole screen, as an item does.
+ * With Channels on (STAG-547) the bar is the same: the channels are
+ * listed in the drawer, as the sidebar lists them, and a channel chosen
+ * there shows its stream in the Inbox's place, which the bar stands over
+ * with no place marked, while a thread opened from the stream keeps the
+ * whole screen, as an item does.
  */
 
-/** Channels in the Inbox's place, where the account has it on: the thread opened over a channel's stream, by its item's id. */
+/** A channel's stream in the Inbox's place: the thread opened over it, by its item's id. */
 export interface BarChannels {
   readonly threadId: string | undefined;
 }
 
-/** Whether the bar stands: a narrow room, signed in, on one of the places' lists; `channels` is none while Channels is off. */
+/** Whether the bar stands: a narrow room, signed in, on one of the places' lists; `channels` is none while no channel's stream stands in the Inbox's place. */
 export function mobileBarShown(
   room: ShellRoom,
   tasks: TasksControl,
@@ -71,14 +68,11 @@ export function mobileBarShown(
 /** The bar; see the module's head. */
 export function MobileBar({
   tasks,
-  channelsOn,
   sidebar,
   onPressMore,
   leave,
 }: {
   tasks: TasksControl;
-  /** Whether Channels stands in the Inbox's place. */
-  channelsOn: boolean;
   /** The drawer the bar's More opens, whose float while open leaves every other item inert, as the work it covers is. */
   sidebar: SidebarCollapse;
   /** Marks the press on More as the drawer's own, so the press that opens it does not also put it away. */
@@ -88,6 +82,8 @@ export function MobileBar({
 }): React.JSX.Element {
   const { inboxView, boardView } = tasks;
   const among = leave === undefined;
+  // Note that a channel's stream stands in the Inbox's place, though it is reached from the drawer, so the Inbox is not the place it marks.
+  const streaming = useChannelStreaming();
   const inInbox = among && inboxView.open;
   const inTasks = among && !inInbox && boardView.open;
   const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
@@ -97,36 +93,21 @@ export function MobileBar({
     leave?.();
     open();
   };
-  // Note that the bar reads nothing itself: the sidebar, held behind the drawer, reads the channels as the window comes into view, and the bar draws what it holds.
-  const channels = useChannels(channelsOn ? tasks.workspace?.id : undefined, false);
-  const channelsCount = channelsWaiting(channels.channels ?? []);
   return (
     <nav
       className="mobile-bar flex border-t border-border bg-ground px-luke-4 py-luke-2"
       aria-label="Places"
       {...MENU_KEEPS_CLEAR}
     >
-      {channelsOn ? (
-        <BarItem
-          icon={<GLYPH.CHANNEL />}
-          current={inInbox}
-          count={{ value: channelsCount, noun: needsYouNoun(channelsCount) }}
-          inert={drawerOpen}
-          onPress={go(inboxView.onOpen)}
-        >
-          Channels
-        </BarItem>
-      ) : (
-        <BarItem
-          icon={<InboxIcon />}
-          current={inInbox}
-          count={{ value: waiting, noun: needsYouNoun(waiting) }}
-          inert={drawerOpen}
-          onPress={go(inboxView.onOpen)}
-        >
-          Inbox
-        </BarItem>
-      )}
+      <BarItem
+        icon={<InboxIcon />}
+        current={inInbox && !streaming}
+        count={{ value: waiting, noun: needsYouNoun(waiting) }}
+        inert={drawerOpen}
+        onPress={go(inboxView.onOpen)}
+      >
+        Inbox
+      </BarItem>
       <BarItem
         icon={<ListTodoIcon />}
         current={inTasks}
