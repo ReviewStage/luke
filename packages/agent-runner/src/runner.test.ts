@@ -128,6 +128,7 @@ function launch(
   env: Record<string, string> = ENV,
   proc: string = UNREAD_PROC,
   chain: readonly string[] = [],
+  uid?: number,
 ) {
   return Effect.gen(function* () {
     const cli = yield* fakeClaudeCode(steps, chain);
@@ -141,7 +142,7 @@ function launch(
           cli.layer,
           luke.layer,
           fakeAppServer([]).layer,
-          processTable(proc, RUNNER_PID),
+          processTable(proc, RUNNER_PID, uid),
         ),
       ),
       Effect.forkScoped,
@@ -1058,6 +1059,33 @@ it.effect.each([
       yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS + 10 * RUNNER_RELEASE.RECHECK_MS);
       assert.equal(run.pollUnsafe(), undefined);
       rmSync(join(proc, String(process.pid)), { recursive: true });
+      yield* TestClock.adjust(RUNNER_RELEASE.RECHECK_MS);
+      assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
+    }),
+);
+
+it.effect(
+  "in a VM, holds a wait while a process of the runner's own user runs, never for the machine's own, and releases it once that process ends",
+  () =>
+    Effect.gen(function* () {
+      const agent = 1000;
+      // Note that nothing in a VM empties a bounding set: the machine's own run as root, and everything of the agent's as the device's user.
+      const proc = yield* fakeProc([
+        { pid: 1, parent: 0, emptied: false },
+        { pid: 2, parent: 1, emptied: false, argv: ["sleep", "3600"] },
+        { pid: RUNNER_PID, parent: 1, emptied: false, uid: agent },
+        { pid: RUNNER_PID + 1, parent: RUNNER_PID, emptied: false, uid: agent },
+        { ...DEV_SERVER, emptied: false, uid: agent },
+      ]);
+      const luke = fakeLuke([], WAKEUP.prompt);
+      const { write, run } = yield* launch(WAKEUP_WAIT, luke, ENV, proc, [], agent);
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* luke.seen;
+
+      yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS + 10 * RUNNER_RELEASE.RECHECK_MS);
+      assert.equal(run.pollUnsafe(), undefined);
+      rmSync(join(proc, String(DEV_SERVER.pid)), { recursive: true });
       yield* TestClock.adjust(RUNNER_RELEASE.RECHECK_MS);
       assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
     }),

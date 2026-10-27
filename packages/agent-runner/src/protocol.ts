@@ -59,9 +59,9 @@ export const RUNNER_ENV = {
 export const RUNNER_PLACE = {
   /**
    * A Linux box its member added as a host, with nobody signed in at it,
-   * where each launch runs in a systemd unit of its own and no harness runs
-   * a sandbox of its own: the box is the boundary, and bubblewrap and
-   * Landlock would keep a command from `/dev/kvm`.
+   * where each launch runs in a VM of its own, as the device's user, and no
+   * harness runs a sandbox of its own: the VM is the boundary, and
+   * bubblewrap and Landlock would keep a command from `/dev/kvm`.
    */
   HOST: "host",
 } as const;

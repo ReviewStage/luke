@@ -7,40 +7,28 @@ import {
   DEVICE_PLATFORM,
   type DeviceArch,
 } from "@luke/features/device-agent-wire";
-import type {
-  LocalAgentCommand,
-  LocalAgentPlatformSeam,
-  LocalAgentRunner,
-} from "../effect/seams.js";
+import type { LocalAgentPlatformSeam } from "../effect/seams.js";
 import { agentWorktreeScript, cloneFolder, worktreesRoot } from "../node/open-on-mac.js";
+import { smolvmSandbox } from "../node/smolvm-sandbox.js";
 
 /**
- * linux-platform.ts -- what a host's local agent runners are started with (`LocalAgentPlatform`): on the daemon's own Node with the runner bundle the host's release carries, the Linux pins of Claude Code and Codex, and the launcher the daemon hands it.
+ * linux-platform.ts -- what a host's local agent runners are started with (`LocalAgentPlatform`): each in a smolvm VM of its own, booted from Luke's sandbox image, running the runner bundle the host's release carries on the image's own Node, Claude Code and Codex.
  *
- * A host is sandbox-only: every runner starts in a VM of its own, through
- * the launcher the daemon is built with (`LinuxPlatformOptions.launch`), the
- * one door that takes the agent (`LocalAgentPlatformSeam.launch`). Until
- * that launcher lands, the daemon hands `refusingLaunch`, so a launch is
- * settled as not started and nothing runs on the box itself. Its harnesses
- * run no sandbox of their own (`RUNNER_PLACE.HOST`), since the VM is the
- * boundary, and a host's own harness logins never run its agents
- * (`ownSignIns: false`); its agents' `gh` is signed in from Luke
- * (`githubFromLuke`).
+ * A host is sandbox-only: every runner starts in its agent's VM
+ * (`@luke/host/node`'s `smolvmSandbox`), with the agent's folder mounted at
+ * the path it has on the box and the release's `lib/` read-only beside it,
+ * and nothing of an agent's runs on the box itself, a tool's command
+ * included. Each agent gets a repository of its own in its folder
+ * (`agentWorktreeScript`'s `own`), since a worktree's Git folder would stand
+ * in the shared clone, outside its VM. Its harnesses run no sandbox of their
+ * own (`RUNNER_PLACE.HOST`), since the VM is the boundary, and a host's own
+ * harness logins never run its agents (`ownSignIns: false`); its agents'
+ * GitHub token comes from Luke (`githubFromLuke`) and stays on the box,
+ * outside every VM, which holds only a placeholder.
  */
 
-/** The runner's bundle, under the folder the host's release is installed in. */
-const RUNNER_BUNDLE = "lib/agent-runner.mjs";
-
-/** What `refusingLaunch` runs: a program that exits at once with a failure, so the follower settles the launch as not started. */
-const REFUSED = "/bin/false";
-
-/**
- * The launcher a host has before its sandbox launcher: it runs nothing of
- * the agent's, so every launch is settled as not started.
- */
-export function refusingLaunch(runner: LocalAgentRunner): LocalAgentCommand {
-  return { command: REFUSED, args: [], env: runner.env };
-}
+/** The folder of the runner's bundle, under the folder the host's release is installed in, and the bundle in it. */
+const RUNNER = { FOLDER: "lib", BUNDLE: "agent-runner.mjs" } as const;
 
 /** Node's `process.arch` as a device architecture a host runs on, or none for one no release is built for. */
 export function hostArch(arch: string): DeviceArch | undefined {
@@ -57,15 +45,30 @@ export interface LinuxPlatformOptions {
   readonly arch: DeviceArch;
   /** The box's own name, which the device registers under. */
   readonly hostname: string;
-  /** How every runner starts: the sandbox launcher, or `refusingLaunch` until there is one. */
-  readonly launch: (runner: LocalAgentRunner) => LocalAgentCommand;
+  /** The daemon's state, under which each agent's GitHub token is kept, outside every VM. */
+  readonly stateRoot: string;
+  /** The `smolvm` the box runs its agents' VMs with. */
+  readonly smolvm: string;
+  /** The `luke-host` user, which every command in a VM runs as, so it writes the agent's folder as its owner. */
+  readonly user: { readonly uid: number; readonly gid: number };
+  /** Whether the box has `/dev/kvm`, which each VM is then handed so an agent can boot VMs of its own. */
+  readonly kvm: boolean;
 }
 
 /** A host's local agent platform, for the release installed in the folder given. */
 export function linuxPlatform(options: LinuxPlatformOptions): LocalAgentPlatformSeam {
+  const runnerFolder = `${options.installFolder}/${RUNNER.FOLDER}`;
+  const vm = smolvmSandbox({
+    smolvm: options.smolvm,
+    stateRoot: options.stateRoot,
+    runnerFolder,
+    user: options.user,
+    nested: options.kvm,
+  });
   return {
-    launch: options.launch,
-    runnerBundle: `${options.installFolder}/${RUNNER_BUNDLE}`,
+    launch: vm.launch,
+    sandbox: vm.sandbox,
+    runnerBundle: `${runnerFolder}/${RUNNER.BUNDLE}`,
     runnerEnv: { [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST },
     bundled: { node: options.node, gh: options.gh },
     pins: {
@@ -74,7 +77,7 @@ export function linuxPlatform(options: LinuxPlatformOptions): LocalAgentPlatform
       codex: CODEX_LINUX_PINS[options.arch],
     },
     ownSignIns: false,
-    // Note that a host has no git login of the developer's, so each agent's gh is signed in from Luke.
+    // Note that a host has no git login of the developer's, so each agent's GitHub token comes from Luke, kept outside its VM.
     githubFromLuke: true,
     deviceName: options.hostname,
     devicePlatform: DEVICE_PLATFORM.LINUX,
@@ -88,6 +91,7 @@ export function linuxPlatform(options: LinuxPlatformOptions): LocalAgentPlatform
         clone: cloneFolder(worktreesRoot(home), repository),
         worktree,
         branch,
+        own: true,
       }),
   };
 }

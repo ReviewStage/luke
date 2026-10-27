@@ -14,7 +14,9 @@
  * stopped, which stops every runner it started with it, or until Luke
  * refuses the box's secret, the host removed, when it stops them and exits 0,
  * which the service's `Restart=on-failure` leaves stopped. It fetches the `gh`
- * its agents use as it starts (`hostGh`).
+ * its agents use as it starts (`hostGh`). Every agent runs in a smolvm VM of
+ * its own (`linuxPlatform`), with `/dev/kvm` passed through where the box has
+ * it, through the `smolvm` on the service's PATH.
  *
  * `enroll` is run once as the box is set up: it reads the install token on stdin,
  * where `--token` gives none, prints the one line the script shows, and
@@ -22,7 +24,7 @@
  * the secret.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -41,7 +43,6 @@ import {
   hostGh,
   linuxPlatform,
   readHostDevice,
-  refusingLaunch,
 } from "@luke/host/linux-host";
 import { reportToStderr } from "@luke/host/node";
 import { ConfigProvider, Duration, Effect, Exit, Layer, Option } from "effect";
@@ -49,6 +50,12 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 /** The daemon's version, which the release's build writes in; a development run is below every floor. */
 const VERSION = process.env.LUKE_HOST_VERSION ?? "0.0.0";
+
+/** The `smolvm` every agent's VM runs under, as the service's PATH finds it. */
+const SMOLVM = "smolvm";
+
+/** The device a box hands each agent's VM so it can boot VMs of its own, where the box has it. */
+const KVM = "/dev/kvm";
 
 /** The service a box enrolls with where its install script names none. */
 const DEFAULT_SERVICE_ORIGIN = "https://tryluke.dev";
@@ -110,8 +117,11 @@ const run = Effect.gen(function* () {
     gh: Option.getOrUndefined(gh),
     arch: boxArch,
     hostname: os.hostname(),
-    // Note that a host runs its agents in a sandbox alone, and until its launcher lands every launch is refused.
-    launch: refusingLaunch,
+    stateRoot,
+    smolvm: SMOLVM,
+    // Note that every command in an agent's VM runs as luke-host, which owns the agent's folder it mounts.
+    user: { uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0 },
+    kvm: existsSync(KVM),
   });
   reportToStderr(
     `Luke host ${VERSION}: following ${device.value.serviceOrigin} as ${os.hostname()}.`,

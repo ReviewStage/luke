@@ -4,4 +4,4 @@
 export { hostDaemon } from "./host-daemon.js";
 export { enrollHostDevice, readHostDevice } from "./host-device.js";
 export { hostGh } from "./host-tools.js";
-export { hostArch, linuxPlatform, refusingLaunch } from "./linux-platform.js";
+export { hostArch, linuxPlatform } from "./linux-platform.js";
