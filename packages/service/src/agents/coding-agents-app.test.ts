@@ -6522,7 +6522,13 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           ].sort(),
         );
 
+        // Done, the plan settles its open item; one its agent asks on it after waits like any other.
         yield* updateTask(owner, second.id, { status: TASK_STATUS.DONE });
+        assert.deepEqual(
+          (yield* waiting()).items.map((item) => item.title),
+          [QUESTION.title],
+        );
+        yield* onSecond({ ...QUESTION, key: "export-format", title: "CSV or JSON?" });
         assert.deepEqual(
           (yield* waiting()).items.map((item) => item.title).sort(),
           [QUESTION.title, "CSV or JSON?"].sort(),
@@ -6536,12 +6542,10 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
-    "an older build's archive of a plan settles it and puts nothing away: its open item still waits and takes an answer, and its archived=include on the account's inbox is taken and changes nothing",
+    "an older build's archive of a plan settles it and puts nothing away: an item asked on it after still waits and takes an answer, and its archived=include on the account's inbox is taken and changes nothing",
     () =>
       Effect.gen(function* () {
         const { owner, task, ask, post, message, waiting } = yield* openInbox();
-        const posted = yield* post(QUESTION);
-        assert.ok(Result.isSuccess(posted));
         const archivedToo = () =>
           Effect.map(
             ask(request(ACCOUNT_INBOX, owner, { archived: ACCOUNT_INBOX_ARCHIVED.INCLUDE })),
@@ -6549,6 +6553,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           );
 
         yield* updateTask(owner, task.id, { status: TASK_STATUS.DONE });
+        const posted = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(posted));
         const standing = yield* waiting();
         assert.deepEqual(
           standing.items.map((item) => [item.id, item.revision]),
