@@ -2,40 +2,63 @@ import { PULL_REQUEST_STATE } from "./coding-agent-wire.js";
 import type { TaskAgentsSummary, TaskPullRequestLine } from "./task-wire.js";
 
 /**
- * task-agents-model.ts -- what a task's coding agents say on its sidebar row: its one mark.
+ * task-agents-model.ts -- how a task's coding agents stand, in the one status its row wears.
  *
- * A row wears at most one mark, as a devtool's sidebar does: a spinner
- * while any agent works on the task, else the pull request that matters
- * most, an open or draft one first and else a merged one, and else none.
- * A closed pull request marks nothing, since nothing is left to do with it.
+ * A row wears at most one status, as a devtool's sidebar does: the one
+ * thing that matters most about its agents. A question waiting on the
+ * reader comes first, since only they can move it; then an agent that
+ * failed; then one at work; then the pull request that matters most, an
+ * open or draft one before a merged one, and a merged one before a closed
+ * one. A task whose agents finished with nothing published wears none.
  */
 
-/** The one mark a task's row wears at its end. */
-export const TASK_ROW_MARK = {
+/** Where a task's agents stand, most pressing first. */
+export const TASK_AGENTS_STATUS = {
+  WAITING_ON_YOU: "waiting-on-you",
+  FAILED: "failed",
   WORKING: "working",
   PULL_REQUEST: "pull-request",
   NONE: "none",
 } as const;
 
-export type TaskRowMark =
-  | { readonly kind: typeof TASK_ROW_MARK.WORKING }
-  | { readonly kind: typeof TASK_ROW_MARK.PULL_REQUEST; readonly pullRequest: TaskPullRequestLine }
-  | { readonly kind: typeof TASK_ROW_MARK.NONE };
+export type TaskAgentsStatus =
+  | { readonly kind: typeof TASK_AGENTS_STATUS.WAITING_ON_YOU }
+  | { readonly kind: typeof TASK_AGENTS_STATUS.FAILED }
+  | { readonly kind: typeof TASK_AGENTS_STATUS.WORKING }
+  | {
+      readonly kind: typeof TASK_AGENTS_STATUS.PULL_REQUEST;
+      readonly pullRequest: TaskPullRequestLine;
+    }
+  | { readonly kind: typeof TASK_AGENTS_STATUS.NONE };
 
-const NO_MARK: TaskRowMark = { kind: TASK_ROW_MARK.NONE };
+const NO_STATUS: TaskAgentsStatus = { kind: TASK_AGENTS_STATUS.NONE };
 
-/** The pull request states a row is marked for while one is still to be acted on. */
-const STANDING_STATES: ReadonlySet<TaskPullRequestLine["state"]> = new Set([
-  PULL_REQUEST_STATE.OPEN,
-  PULL_REQUEST_STATE.DRAFT,
-]);
+/** The pull request states in the order a task's status picks among them: still to be acted on, then merged, then closed. */
+const PULL_REQUEST_ORDER = [
+  new Set<TaskPullRequestLine["state"]>([PULL_REQUEST_STATE.OPEN, PULL_REQUEST_STATE.DRAFT]),
+  new Set<TaskPullRequestLine["state"]>([PULL_REQUEST_STATE.MERGED]),
+  new Set<TaskPullRequestLine["state"]>([PULL_REQUEST_STATE.CLOSED]),
+] as const;
 
-/** The mark a task's row wears for what its agents are doing and what they published. */
-export function taskRowMark(agents: TaskAgentsSummary | undefined): TaskRowMark {
-  if (agents === undefined) return NO_MARK;
-  if (agents.working > 0) return { kind: TASK_ROW_MARK.WORKING };
-  const pullRequest =
-    agents.pullRequests.find((each) => STANDING_STATES.has(each.state)) ??
-    agents.pullRequests.find((each) => each.state === PULL_REQUEST_STATE.MERGED);
-  return pullRequest === undefined ? NO_MARK : { kind: TASK_ROW_MARK.PULL_REQUEST, pullRequest };
+/** The pull request a task's status names: the first of the earliest state in `PULL_REQUEST_ORDER`. */
+function markedPullRequest(
+  pullRequests: readonly TaskPullRequestLine[],
+): TaskPullRequestLine | undefined {
+  for (const states of PULL_REQUEST_ORDER) {
+    const found = pullRequests.find((each) => states.has(each.state));
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+/** The one status a task's row wears for what its agents are doing, what they ask, and what they published. */
+export function taskAgentsStatus(agents: TaskAgentsSummary | undefined): TaskAgentsStatus {
+  if (agents === undefined) return NO_STATUS;
+  if ((agents.waitingOnYou ?? 0) > 0) return { kind: TASK_AGENTS_STATUS.WAITING_ON_YOU };
+  if ((agents.failed ?? 0) > 0) return { kind: TASK_AGENTS_STATUS.FAILED };
+  if (agents.working > 0) return { kind: TASK_AGENTS_STATUS.WORKING };
+  const pullRequest = markedPullRequest(agents.pullRequests);
+  return pullRequest === undefined
+    ? NO_STATUS
+    : { kind: TASK_AGENTS_STATUS.PULL_REQUEST, pullRequest };
 }

@@ -20,6 +20,7 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
+  AttentionMark,
   Badge,
   cn,
   HOVER_CARD_ROW_LOOK,
@@ -48,7 +49,6 @@ import {
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
-import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
 import { useInboxItemDraft, useInboxItemDrafted } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";

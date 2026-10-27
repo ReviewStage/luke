@@ -2,6 +2,7 @@ import type { InboxPerson } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { readFailedWords, TERM } from "@luke/features/words";
 import {
+  AttentionMark,
   BUTTON_SIZE,
   CHIP_LOOK,
   Chip,
@@ -99,7 +100,6 @@ import {
   useState,
 } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
-import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useInboxItemDraft } from "../composer-drafts.js";

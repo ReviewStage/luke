@@ -1304,11 +1304,11 @@ test("a task's row ends as its sidebar row does, who is on it then an agent at w
     }),
   );
   chooseFilter("Tasks");
-  /** Each row's end, its marks in order: the face's kind, then the working mark. */
+  /** Each row's end, its marks in order: the face's kind, then how its agents stand. */
   const ends = () =>
     [...document.querySelectorAll('[role="option"] .luke-combobox-option-hint')].map((hint) =>
-      [...hint.querySelectorAll(".actor-mark, .state-glyph")].map(
-        (mark) => mark.getAttribute("data-kind") ?? mark.getAttribute("data-state"),
+      [...hint.querySelectorAll(".actor-mark, .task-agents-mark")].map(
+        (mark) => mark.getAttribute("data-kind") ?? mark.getAttribute("data-task-agents"),
       ),
     );
 

@@ -15,7 +15,7 @@ import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { useTaskMenuItems } from "./task-actions.js";
-import { TaskRowMark, taskCardOf } from "./task-card.js";
+import { TaskRowStatus, taskCardOf } from "./task-card.js";
 
 /**
  * recent-row.tsx -- a plan as a person's page lists it: its glyph, the name, and at its end the repository, who is on it, and its mark and time, hanging its card and offering the sidebar's menu.
@@ -98,7 +98,7 @@ export function RecentRow({
                   {task.repository ?? "No repository"}
                 </OneLine>
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
-                <TaskRowMark task={task} stranded={strandedHome(tasks, task)} />
+                <TaskRowStatus task={task} stranded={strandedHome(tasks, task)} />
                 <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
               </span>
             )
