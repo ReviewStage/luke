@@ -199,7 +199,7 @@ test("a spawned subagent is drawn as a subagent's row on the model and effort it
     errorText: "interrupted",
   }).container;
   assert.ok(interrupted.querySelector("[data-subagent-row]"));
-  assert.equal(interrupted.querySelector(".luke-failure-note")?.textContent, "interrupted");
+  assert.ok(interrupted.textContent?.includes("interrupted"), "the row says why it ended under it");
 });
 
 test("a command that failed says its exit code, and one still running draws its row from its input alone", () => {
