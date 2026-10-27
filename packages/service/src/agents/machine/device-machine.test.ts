@@ -22,8 +22,13 @@ import { device } from "@luke/database/schemas/device";
 import { deviceAgentLine } from "@luke/database/schemas/device-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
+import { BRAIN_REQUEST_FAILURE } from "@luke/features/brain";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
-import { DEVICE_AGENT_REQUEST_KIND, DEVICE_KIND } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_AGENT_REQUEST_KIND,
+  DEVICE_KIND,
+  DEVICE_LAUNCH_REFUSAL,
+} from "@luke/features/device-agent-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Fiber, Layer, Option, Redacted } from "effect";
@@ -235,6 +240,37 @@ it.layer(Layer.merge(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT))
             "a launch a newer one replaced settles nothing",
           );
           assert.equal(yield* statusNow, TURN_STATUS.FAILED);
+        }),
+    );
+
+    it.effect(
+      "a launch its Mac settled unstarted because the agent ran directly on it settles the turn as a session that ended",
+      () =>
+        Effect.gen(function* () {
+          const opened = yield* openLocalAgent;
+          const { userId, deviceId, agent } = opened;
+          const launch = yield* launched(opened);
+          yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
+          const writer = yield* storeWriter({ tools: {} });
+          const turnId = randomUUID();
+          yield* writer.enqueueTurn(
+            { userId, conversationId: agent.conversationId },
+            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+          );
+
+          yield* settledDeviceAgentLine(
+            userId,
+            deviceId,
+            launch.handle.command,
+            1,
+            DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY,
+          );
+          const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
+            agent.conversationId,
+          );
+
+          assert.equal(turn?.status, TURN_STATUS.FAILED);
+          assert.equal(turn?.failure, BRAIN_REQUEST_FAILURE.SESSION_ENDED);
         }),
     );
   },

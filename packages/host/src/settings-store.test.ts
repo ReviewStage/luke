@@ -229,7 +229,6 @@ const SAMPLE_VALUE = {
   // Ask is the default, so Never is the choice that has to survive a reopen.
   macCommands: MAC_COMMAND_MODE.NEVER,
   localAgents: true,
-  localAgentsSandbox: true,
   // Atlas is the default, so another is the choice that has to survive a reopen.
   videoAvatar: VIDEO_AVATAR.CELIA,
   // Each diff setting away from its default, the look a review tool's reader picked.

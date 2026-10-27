@@ -389,10 +389,25 @@ export const deviceAgentClaimRequestSchema = EffectSchema.Struct({
 });
 
 /** A line settled: its id, and for a launch line whose runner exited, its exit code. */
+/**
+ * Why a device settled a launch without starting its runner, where it is
+ * one the service words for the agent's reader: the agent ran directly on
+ * the device before, which now runs every agent in a VM, so its session
+ * cannot be reached again there.
+ */
+export const DEVICE_LAUNCH_REFUSAL = {
+  RAN_DIRECTLY: "ran-directly",
+} as const;
+
+export type DeviceLaunchRefusal =
+  (typeof DEVICE_LAUNCH_REFUSAL)[keyof typeof DEVICE_LAUNCH_REFUSAL];
+
 export const deviceAgentSettleRequestSchema = EffectSchema.Struct({
   ...deviceField,
   id: wireUuidSchema,
   exitCode: EffectSchema.optionalKey(EffectSchema.Int),
+  /** Why a launch was settled unstarted, where the device names why; a device from before it names none. */
+  refusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_LAUNCH_REFUSAL))),
 });
 
 /** A request answered: its id, and the answer of its kind, a read's bytes in base64. */

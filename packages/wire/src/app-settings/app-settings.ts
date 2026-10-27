@@ -20,6 +20,7 @@ export const APP_SETTING_ID = {
   AGENT_NOTIFICATIONS: "agent_notifications",
   MAC_COMMANDS: "mac_commands",
   LOCAL_AGENTS: "local_agents",
+  /** Offered by no build: This Mac's sandbox switch, which never drew a row and runs every agent sandboxed now. */
   LOCAL_AGENTS_SANDBOX: "local_agents_sandbox",
   DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
   WORKSPACE_AGENT_MODEL: "workspace_agent_model",

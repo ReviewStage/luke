@@ -44,8 +44,8 @@ import { nativeHelperPath } from "../native/native-helper";
  * Electron's own Node, and the CLI the runner's Agent SDK installed for
  * this Mac, pinned to the cloud's, where it installed one.
  *
- * Beside it stands the platform the Mac runs its agents on while its
- * sandbox setting is on (`sandboxed`): each in a smolvm VM of its own
+ * Beside it stands the platform the Mac runs every agent on (`sandboxed`),
+ * which the follower always takes: each in a smolvm VM of its own
  * (`@luke/host/node`'s `smolvmSandbox`), the pinned smolvm fetched and
  * checked under the app's state, started through the same launcher, with
  * the agent's folder and the runner's bundle mounted at their paths, no
