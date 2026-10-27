@@ -31,6 +31,7 @@ import {
   type RunnerEvent,
   type RunnerEventBatch,
   type RunnerMessage,
+  redactSecrets,
 } from "./protocol.js";
 
 /** The most events one post carries. */
@@ -82,25 +83,17 @@ export interface EventSink {
   readonly withhold: (secret: Redacted.Redacted) => Effect.Effect<void>;
 }
 
-/** What a secret is replaced with wherever an event carried it. */
-const REDACTED = "[redacted]";
-
 /** A value as it crosses to Luke: JSON's own shapes. */
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json };
 
-/** A text with every secret taken out. */
-function redactedText(text: string, secrets: readonly string[]): string {
-  return secrets.reduce((scrubbing, secret) => scrubbing.replaceAll(secret, REDACTED), text);
-}
-
 /** A value with every secret taken out of each string in it, keys included. */
 function redacted(value: Json, secrets: readonly string[]): Json {
-  if (Predicate.isString(value)) return redactedText(value, secrets);
+  if (Predicate.isString(value)) return redactSecrets(value, secrets);
   if (Array.isArray(value)) return value.map((each) => redacted(each, secrets));
   if (!Predicate.isObject(value)) return value;
   return Object.fromEntries(
     Object.entries(value).map(([key, each]) => [
-      redactedText(key, secrets),
+      redactSecrets(key, secrets),
       redacted(each, secrets),
     ]),
   );
@@ -115,7 +108,7 @@ function redacted(value: Json, secrets: readonly string[]): Json {
  * JSON, so no escape can hide a secret or be cut in half by its removal.
  */
 function batchText(batch: RunnerEventBatch, secrets: readonly Redacted.Redacted[]): string {
-  const values = secrets.map(Redacted.value).filter((value) => value !== "");
+  const values = secrets.map(Redacted.value);
   // Note that the batch is JSON already, as the SDK parsed it from the CLI's stdout.
   const json: Json = JSON.parse(JSON.stringify(batch));
   return JSON.stringify(redacted(json, values));

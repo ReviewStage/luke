@@ -71,6 +71,21 @@ export const WorkspaceEnvironmentSchema = Schema.Struct({
 
 export type WorkspaceEnvironment = typeof WorkspaceEnvironmentSchema.Type;
 
+/** What a secret is replaced with wherever Luke shows text that held it. */
+export const REDACTED = "[redacted]";
+
+/**
+ * The text with every secret's value replaced by `REDACTED`. Note that the
+ * longest are replaced first, because a secret that begins another would
+ * otherwise leave the rest of the longer one showing.
+ */
+export function redactSecrets(text: string, secrets: readonly string[]): string {
+  return secrets
+    .filter((secret) => secret !== "")
+    .toSorted((one, other) => other.length - one.length)
+    .reduce((scrubbing, secret) => scrubbing.replaceAll(secret, REDACTED), text);
+}
+
 /** The places a runner's starter names in `RUNNER_ENV.PLACE`. */
 export const RUNNER_PLACE = {
   /**

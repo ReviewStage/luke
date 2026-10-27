@@ -222,7 +222,6 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
             name,
             WORKSPACE_ENVIRONMENT_KIND.SECRET,
             sealed,
-            "",
             owner,
             new Date(0),
           );

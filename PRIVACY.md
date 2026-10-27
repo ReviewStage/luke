@@ -480,9 +480,8 @@ is sent once, over HTTPS, to our service, and stored under the workspace
 encrypted the way your own API keys are, so a copy of our database alone
 cannot read it; our operators who hold the server-only secret too could. Beside
 it we keep its name, whether it is a variable or a secret, who saved it last,
-and when, and for a secret of twelve characters or more a hint of its last
-four. Every member of the workspace is shown a variable's value; a secret is
-shown only by its hint. Our service reads the values afresh as an agent
+and when. Every member of the workspace is shown a variable's value; a secret
+is shown only by its name, and no part of its value is ever shown again. Our service reads the values afresh as an agent
 starts work. An agent that runs on Luke's own agent is handed them with each
 shell command, which sets them ahead of what it runs. One that runs on Claude
 Code or Codex is handed them in the sealed environment its runner starts
@@ -491,7 +490,7 @@ the agent runs. Neither writes them to the machine's disk. Secrets reach only ag
 cloud sandboxes: an agent running on a member's own Mac or Linux host is
 handed the workspace's variables, sealed in its launch until that machine
 takes it, and never its secrets. A secret's value is replaced with
-`[REDACTED]` wherever it appears in what a command answers and in everything
+`[redacted]` wherever it appears in what a command answers and in everything
 an agent's runner reports back, but a command can still print it changed, so
 a secret can reach the agent's model, its transcript, and the traces of its run,
 which include the agent traces sent to Sentry described under "Error,

@@ -55,6 +55,7 @@ import type { TurnHanded } from "@luke/service/agents/coder-host/turn-context";
 import {
   NO_SHELL_ENVIRONMENT,
   type ShellEnvironment,
+  workspaceShellEnvironment,
 } from "@luke/service/agents/coder-host/workspace-environment";
 import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
@@ -116,7 +117,12 @@ export function shellEnvironmentFor(admit: CoderHost["admit"]) {
       Effect.gen(function* () {
         const admitted = yield* admit(ctx.session.auth, ctx.session.id);
         if (Result.isFailure(admitted)) return NO_SHELL_ENVIRONMENT;
-        return yield* host.shellEnvironment(admitted.success);
+        const agent = yield* host.agent(admitted.success);
+        if (Result.isFailure(agent)) return NO_SHELL_ENVIRONMENT;
+        return yield* workspaceShellEnvironment(
+          agent.success.organizationId,
+          agent.success.machine,
+        );
       }).pipe(
         Effect.catch((failure) =>
           Effect.as(

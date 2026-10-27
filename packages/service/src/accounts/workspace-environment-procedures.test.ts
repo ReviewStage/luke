@@ -28,7 +28,7 @@ import { workspaceEnvironmentProcedures } from "./workspace-environment-procedur
  * A workspace's environment, answered by its procedures the way the hosted
  * function answers them, over a real dialect: any member reads the list, an owner or
  * admin alone saves or removes, a variable is answered with its value and
- * a secret by its hint alone, every value is kept sealed, a value the ring
+ * a secret by its name alone, every value is kept sealed, a value the ring
  * can no longer open is answered unreadable, and a workspace the account is
  * not in is not found.
  *
@@ -165,7 +165,7 @@ const statusOf = (answered: Answer) => ({ status: answered.status, body: answere
 
 it.layer(getTestDB())("the workspace environment route", (it) => {
   it.effect(
-    "answers a variable with its value and a secret by its hint alone, to every member",
+    "answers a variable with its value and a secret by its name alone, to every member",
     () =>
       Effect.gen(function* () {
         const { workspace, owner, plain, ask } = yield* openWorkspace({ ring: KEK.ONE });
@@ -190,7 +190,6 @@ it.layer(getTestDB())("the workspace environment route", (it) => {
             {
               name: "STRIPE_KEY",
               kind: WORKSPACE_ENVIRONMENT_KIND.SECRET,
-              hint: "…wxyz",
               readable: true,
               updatedAt: savedAt,
             },
@@ -214,21 +213,6 @@ it.layer(getTestDB())("the workspace environment route", (it) => {
 
       assert.ok(!stored.includes("plainly-visible"));
       assert.ok(!stored.includes(SECRET));
-    }),
-  );
-
-  it.effect("shows no hint of a secret too short for its last characters to hide it", () =>
-    Effect.gen(function* () {
-      const { workspace, owner, ask } = yield* openWorkspace({ ring: KEK.ONE });
-
-      const saved = yield* ask(
-        save(owner, workspace, "PIN", WORKSPACE_ENVIRONMENT_KIND.SECRET, "1234"),
-      );
-
-      assert.deepEqual(
-        entriesOf(saved).entries.map((entry) => entry.hint),
-        [""],
-      );
     }),
   );
 

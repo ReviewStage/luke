@@ -6,12 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream } from "node:stream/web";
-import { Redacted } from "effect";
+import { REDACTED } from "@luke/agent-runner/protocol";
 import type { SandboxSpawnOptions } from "eve/sandbox";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { test } from "vitest";
 import { bashStartingIn, SHELL_NETWORK, type ShellNetwork } from "./shell.js";
-import { MASKED_SECRET, type ShellEnvironment } from "./workspace-environment.js";
+import type { ShellEnvironment } from "./workspace-environment.js";
 
 /**
  * The coding agent's shell: every command starts in the checkout, in a
@@ -280,8 +280,8 @@ test("a failure Vercel's API did not lose a command to fails as eve failed it", 
 
 /** A workspace's environment as the host reads it: a variable, and a secret to be masked. */
 const WORKSPACE: ShellEnvironment = {
-  variables: [["APP_MODE", Redacted.make(`it's a "dev" $HOME run`)]],
-  secrets: [["STRIPE_KEY", Redacted.make("sk_test_secret_value")]],
+  variables: { APP_MODE: `it's a "dev" $HOME run` },
+  secrets: { STRIPE_KEY: "sk_test_secret_value" },
 };
 
 test("a workspace's variables stand in the command's environment exactly as they were saved", async () => {
@@ -309,7 +309,7 @@ test("a secret reaches the command, but its value is masked out of everything th
   );
   assert.deepEqual(
     [answer.exitCode, answer.stdout, answer.stderr],
-    [0, `key=${MASKED_SECRET}`, `also ${MASKED_SECRET}`],
+    [0, `key=${REDACTED}`, `also ${REDACTED}`],
   );
 });
 

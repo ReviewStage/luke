@@ -5,7 +5,7 @@
  * the workspace in its body (`workspace-environment-wire.ts`):
  *
  * - `POST /api/workspaces/environment` takes any member, and answers the
- *   list: a variable with its value, a secret by its hint alone.
+ *   list: a variable with its value, a secret by its name alone.
  * - `POST /api/workspaces/environment/save` takes an owner or admin, seals
  *   the value under the deployment's ring whatever its kind, and keeps it
  *   under the name, replacing what the name held.
@@ -51,9 +51,6 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted, keyRingMiddleware } from "../orpc/base.js";
 
-/** How many of a secret's last characters its hint shows, and the shortest secret that shows any. */
-const SECRET_HINT = { SHOWN_CHARS: 4, MIN_CHARS: 12 } as const;
-
 export interface WorkspaceEnvironmentProcedureSeams {
   resolveUserId: UserIdResolver;
 }
@@ -72,13 +69,7 @@ const workspaceFor = Effect.fn("web/workspaceEnvironmentWorkspace")(function* (
   return workspace.value;
 });
 
-/** A secret's hint: its last characters, where it is long enough that they give nothing away. */
-function secretHint(value: string): string {
-  if (value.length < SECRET_HINT.MIN_CHARS) return "";
-  return `…${value.slice(-SECRET_HINT.SHOWN_CHARS)}`;
-}
-
-/** One row as a member is shown it: a variable's value opened, a secret's hint alone. */
+/** One row as a member is shown it: a variable's value opened, never a secret's. */
 function entryOf(
   ring: KeyRing,
   organizationId: string,
@@ -91,8 +82,8 @@ function entryOf(
     readable: Result.isSuccess(opened),
     updatedAt: row.updatedAt.getTime(),
   };
-  if (row.kind === WORKSPACE_ENVIRONMENT_KIND.SECRET) return { ...entry, hint: row.hint };
-  return Result.isSuccess(opened) ? { ...entry, value: Redacted.value(opened.success) } : entry;
+  if (row.kind === WORKSPACE_ENVIRONMENT_KIND.SECRET || Result.isFailure(opened)) return entry;
+  return { ...entry, value: Redacted.value(opened.success) };
 }
 
 /** The workspace's list as it stands, with why a save kept nothing where it did. */
@@ -134,19 +125,9 @@ export function workspaceEnvironmentProcedures(seams: WorkspaceEnvironmentProced
         { organizationId: workspace.id, name: input.name },
         value,
       );
-      const hint =
-        input.kind === WORKSPACE_ENVIRONMENT_KIND.SECRET ? secretHint(input.secretValue) : "";
       const now = yield* DateTime.nowAsDate;
       yield* hostedStoreOrUnavailable(
-        saveWorkspaceEnvironmentValue(
-          workspace.id,
-          input.name,
-          input.kind,
-          sealed,
-          hint,
-          userId,
-          now,
-        ),
+        saveWorkspaceEnvironmentValue(workspace.id, input.name, input.kind, sealed, userId, now),
       );
       return yield* listOf(ring, workspace.id);
     }),

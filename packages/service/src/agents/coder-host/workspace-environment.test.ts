@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { REDACTED } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
 import { parseKeyRing, sealEnvironmentValue } from "@luke/database/models/provider-key-seal";
 import { saveWorkspaceEnvironmentValue } from "@luke/database/models/workspace-environment-store";
@@ -14,7 +15,6 @@ import {
 import { Effect, Layer, Redacted, Result } from "effect";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import {
-  MASKED_SECRET,
   maskSecrets,
   type ShellEnvironment,
   workspaceShellEnvironment,
@@ -72,38 +72,24 @@ const openWorkspace = (
         { organizationId, name },
         Redacted.make(value),
       );
-      yield* saveWorkspaceEnvironmentValue(
-        organizationId,
-        name,
-        kind,
-        sealed,
-        "",
-        owner,
-        new Date(0),
-      );
+      yield* saveWorkspaceEnvironmentValue(organizationId, name, kind, sealed, owner, new Date(0));
     }
     return organizationId;
   });
 
-/** The workspace's environment read under the ring given for an agent on the machine given, as plain values. */
+/** The workspace's environment read under the ring given for an agent on the machine given. */
 const readUnder = (
   organizationId: string,
   ring: string | undefined,
   machine: CodingAgentMachine = CODING_AGENT_MACHINE.VERCEL,
 ) =>
-  Effect.map(
-    workspaceShellEnvironment(organizationId, machine).pipe(
-      Effect.provide(
-        Layer.succeed(HostedEnvironment, {
-          ...NO_ENVIRONMENT,
-          providerKeyEncryptionKeys: ring === undefined ? undefined : Redacted.make(ring),
-        }),
-      ),
+  workspaceShellEnvironment(organizationId, machine).pipe(
+    Effect.provide(
+      Layer.succeed(HostedEnvironment, {
+        ...NO_ENVIRONMENT,
+        providerKeyEncryptionKeys: ring === undefined ? undefined : Redacted.make(ring),
+      }),
     ),
-    (environment) => ({
-      variables: environment.variables.map(([name, value]) => [name, Redacted.value(value)]),
-      secrets: environment.secrets.map(([name, value]) => [name, Redacted.value(value)]),
-    }),
   );
 
 it.layer(getTestDB())("a workspace's shell environment", (it) => {
@@ -119,11 +105,8 @@ it.layer(getTestDB())("a workspace's shell environment", (it) => {
       const read = yield* readUnder(workspace, KEK.ONE);
 
       assert.deepEqual(read, {
-        variables: [["APP_MODE", "development"]],
-        secrets: [
-          ["LONG_TOKEN", "abcd1234-and-more"],
-          ["SHORT_TOKEN", "abcd1234"],
-        ],
+        variables: { APP_MODE: "development" },
+        secrets: { LONG_TOKEN: "abcd1234-and-more", SHORT_TOKEN: "abcd1234" },
       });
     }),
   );
@@ -136,8 +119,8 @@ it.layer(getTestDB())("a workspace's shell environment", (it) => {
       ]);
 
       assert.deepEqual(yield* readUnder(workspace, KEK.ONE, CODING_AGENT_MACHINE.DEVICE), {
-        variables: [["APP_MODE", "development"]],
-        secrets: [],
+        variables: { APP_MODE: "development" },
+        secrets: {},
       });
     }),
   );
@@ -148,18 +131,15 @@ it.layer(getTestDB())("a workspace's shell environment", (it) => {
         ["APP_MODE", WORKSPACE_ENVIRONMENT_KIND.VARIABLE, "development", KEK.ONE],
       ]);
 
-      assert.deepEqual(yield* readUnder(workspace, undefined), { variables: [], secrets: [] });
+      assert.deepEqual(yield* readUnder(workspace, undefined), { variables: {}, secrets: {} });
     }),
   );
 });
 
 it("masks every secret out of each text of a running command's answer, the longer first, and moves nothing else", () => {
   const environment: ShellEnvironment = {
-    variables: [],
-    secrets: [
-      ["SHORT_TOKEN", Redacted.make("abcd1234")],
-      ["LONG_TOKEN", Redacted.make("abcd1234-and-more")],
-    ],
+    variables: {},
+    secrets: { SHORT_TOKEN: "abcd1234", LONG_TOKEN: "abcd1234-and-more" },
   };
   const answer = {
     status: "running",
@@ -174,7 +154,7 @@ it("masks every secret out of each text of a running command's answer, the longe
   assert.deepEqual(maskSecrets(answer, environment), {
     ...answer,
     outputDirectory: "/tmp/.eve/jobs/abcd1234",
-    message: `still running with ${MASKED_SECRET}`,
-    stdout: `long ${MASKED_SECRET}, short ${MASKED_SECRET}`,
+    message: `still running with ${REDACTED}`,
+    stdout: `long ${REDACTED}, short ${REDACTED}`,
   });
 });

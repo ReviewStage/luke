@@ -25,9 +25,8 @@ import {
 
 /**
  * A workspace's environment over a real dialect: values kept sealed and
- * opened again for the workspace and name they were saved under alone, a
- * name saved again replaced whole, of whichever kind, removed, kept to the
- * workspace that saved it, and gone with its workspace; and a rotation's
+ * opened again for the workspace and name they were saved under alone, kept
+ * to the workspace that saved it, and gone with its workspace; and a rotation's
  * rewrap moves only the row it read.
  *
  * Synthetic accounts, workspaces, and keys throughout.
@@ -80,7 +79,7 @@ const save = (
   Effect.gen(function* () {
     const sealed = sealEnvironmentValue(ring, { organizationId, name }, Redacted.make(value));
     const now = yield* DateTime.nowAsDate;
-    yield* saveWorkspaceEnvironmentValue(organizationId, name, kind, sealed, "…hint", userId, now);
+    yield* saveWorkspaceEnvironmentValue(organizationId, name, kind, sealed, userId, now);
   });
 
 /** What a workspace's rows open to, by name, under the ring given. */
@@ -149,30 +148,6 @@ it.layer(getTestDB())("the workspace environment store", (it) => {
 
       assert.ok(Result.isFailure(elsewhere));
       assert.ok(Result.isFailure(renamed));
-    }),
-  );
-
-  it.effect("replaces a name saved again whole, its kind with it, and removes it", () =>
-    Effect.gen(function* () {
-      const owner = yield* openAccount;
-      const workspace = yield* openWorkspace(owner);
-
-      yield* save(OLD_RING, workspace, owner, "API_URL", WORKSPACE_ENVIRONMENT_KIND.SECRET, "one");
-      yield* save(
-        OLD_RING,
-        workspace,
-        owner,
-        "API_URL",
-        WORKSPACE_ENVIRONMENT_KIND.VARIABLE,
-        "two",
-      );
-      const replaced = yield* opened(OLD_RING, workspace);
-      yield* removeWorkspaceEnvironmentValue(workspace, "API_URL");
-
-      assert.deepEqual(replaced, [
-        ["API_URL", WORKSPACE_ENVIRONMENT_KIND.VARIABLE, Result.succeed("two")],
-      ]);
-      assert.deepEqual(yield* listWorkspaceEnvironmentRows(workspace), []);
     }),
   );
 

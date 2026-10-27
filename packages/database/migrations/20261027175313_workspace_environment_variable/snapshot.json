@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "ed87b198-8a8c-4647-aef1-14d3edfef593",
+  "id": "80ea5f31-5be4-4bc8-851b-1990710b7f5f",
   "prevIds": ["3d1b4556-f3be-419d-9b9f-0cd0fe2aeef4"],
   "ddl": [
     {
@@ -11038,19 +11038,6 @@
       "generated": null,
       "identity": null,
       "name": "sealed_value",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_environment_variable"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "hint",
       "entityType": "columns",
       "schema": "public",
       "table": "workspace_environment_variable"

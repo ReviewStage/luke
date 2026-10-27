@@ -1,4 +1,4 @@
-import { RUNNER_ENV, type WorkspaceEnvironment } from "@luke/agent-runner/protocol";
+import { RUNNER_ENV, redactSecrets, type WorkspaceEnvironment } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { openEnvironmentValue, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
@@ -6,10 +6,7 @@ import {
   sealedOf,
 } from "@luke/database/models/workspace-environment-store";
 import { CODING_AGENT_MACHINE, type CodingAgentMachine } from "@luke/features/coding-agent-wire";
-import {
-  WORKSPACE_ENVIRONMENT_BOUNDS,
-  WORKSPACE_ENVIRONMENT_KIND,
-} from "@luke/features/workspace-environment-wire";
+import { WORKSPACE_ENVIRONMENT_KIND } from "@luke/features/workspace-environment-wire";
 import { Effect, Redacted, Result } from "effect";
 import type { BashToolOutput } from "eve/tools/bash";
 import { HostedEnvironment } from "../../environment.js";
@@ -42,21 +39,10 @@ import { HostedEnvironment } from "../../environment.js";
  * them rather than failing.
  */
 
-/** What a secret's value is replaced with in a command's answer. */
-export const MASKED_SECRET = "[REDACTED]";
+/** What one command or launch runs with: each variable and each secret, by name. */
+export type ShellEnvironment = WorkspaceEnvironment;
 
-/** The shortest secret masked, which is the shortest the service keeps. */
-const MIN_MASKED_CHARS = WORKSPACE_ENVIRONMENT_BOUNDS.MIN_SECRET_CHARS;
-
-type Named = readonly [name: string, value: Redacted.Redacted<string>];
-
-/** What one command runs with: each variable and each secret, by name, in name order. */
-export interface ShellEnvironment {
-  readonly variables: readonly Named[];
-  readonly secrets: readonly Named[];
-}
-
-export const NO_SHELL_ENVIRONMENT: ShellEnvironment = { variables: [], secrets: [] };
+export const NO_SHELL_ENVIRONMENT: ShellEnvironment = { variables: {}, secrets: {} };
 
 /** Whether a workspace's secrets reach an agent on the machine given: Luke's cloud sandbox alone, and no machine of a member's own. */
 function secretsReach(machine: CodingAgentMachine | undefined): boolean {
@@ -79,8 +65,8 @@ export function workspaceShellEnvironment(
     if (ring === undefined || Result.isFailure(ring)) return NO_SHELL_ENVIRONMENT;
     const rows = yield* listWorkspaceEnvironmentRows(organizationId);
     const withSecrets = secretsReach(machine);
-    const variables: Named[] = [];
-    const secrets: Named[] = [];
+    const variables: Record<string, string> = {};
+    const secrets: Record<string, string> = {};
     for (const row of rows) {
       const secret = row.kind === WORKSPACE_ENVIRONMENT_KIND.SECRET;
       if (secret && !withSecrets) continue;
@@ -91,7 +77,7 @@ export function workspaceShellEnvironment(
       );
       // Note that an unreadable value is left out rather than failing the command, since its settings row says so.
       if (Result.isFailure(opened)) continue;
-      (secret ? secrets : variables).push([row.name, opened.success]);
+      (secret ? secrets : variables)[row.name] = Redacted.value(opened.success);
     }
     return { variables, secrets };
   }).pipe(
@@ -108,8 +94,8 @@ export function workspaceShellEnvironment(
 
 /** The lines that export every value, for the head of a command; nothing where there is none. */
 export function exportLines(environment: ShellEnvironment): string {
-  return [...environment.variables, ...environment.secrets]
-    .map(([name, value]) => `export ${name}=${quoted(Redacted.value(value))}\n`)
+  return Object.entries({ ...environment.variables, ...environment.secrets })
+    .map(([name, value]) => `export ${name}=${quoted(value)}\n`)
     .join("");
 }
 
@@ -117,33 +103,22 @@ export function exportLines(environment: ShellEnvironment): string {
 export function runnerWorkspaceEnvironment(
   environment: ShellEnvironment,
 ): Readonly<Record<string, string>> {
-  if (environment.variables.length === 0 && environment.secrets.length === 0) return {};
-  const byName = (named: readonly Named[]) =>
-    Object.fromEntries(named.map(([name, value]) => [name, Redacted.value(value)]));
-  const workspace: WorkspaceEnvironment = {
-    variables: byName(environment.variables),
-    secrets: byName(environment.secrets),
-  };
-  return { [RUNNER_ENV.WORKSPACE]: JSON.stringify(workspace) };
+  const empty =
+    Object.keys(environment.variables).length === 0 &&
+    Object.keys(environment.secrets).length === 0;
+  return empty ? {} : { [RUNNER_ENV.WORKSPACE]: JSON.stringify(environment) };
 }
 
-function maskText(text: string, secrets: readonly string[]): string {
-  return secrets.reduce((masked, value) => masked.replaceAll(value, MASKED_SECRET), text);
-}
-
-/** eve's answer to a command with every secret's value masked out of each of its texts, the longest first. */
+/** eve's answer to a command with every secret's value redacted out of each of its texts. */
 export function maskSecrets(answer: BashToolOutput, environment: ShellEnvironment): BashToolOutput {
-  const secrets = environment.secrets
-    .map(([, value]) => Redacted.value(value))
-    .filter((value) => value.length >= MIN_MASKED_CHARS)
-    .sort((one, other) => other.length - one.length);
+  const secrets = Object.values(environment.secrets);
   if (secrets.length === 0) return answer;
-  const stdout = maskText(answer.stdout, secrets);
-  const stderr = maskText(answer.stderr, secrets);
+  const stdout = redactSecrets(answer.stdout, secrets);
+  const stderr = redactSecrets(answer.stderr, secrets);
   switch (answer.status) {
     case "completed":
       return { ...answer, stdout, stderr };
     case "running":
-      return { ...answer, stdout, stderr, message: maskText(answer.message, secrets) };
+      return { ...answer, stdout, stderr, message: redactSecrets(answer.message, secrets) };
   }
 }

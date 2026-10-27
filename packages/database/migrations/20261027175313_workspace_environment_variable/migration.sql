@@ -5,7 +5,6 @@ CREATE TABLE "workspace_environment_variable" (
 	"key_version" integer NOT NULL,
 	"sealed_data_key" text NOT NULL,
 	"sealed_value" text NOT NULL,
-	"hint" text NOT NULL,
 	"updated_by_user_id" text,
 	"updated_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "workspace_environment_variable_pkey" PRIMARY KEY("organization_id","name")

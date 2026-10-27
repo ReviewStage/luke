@@ -8,7 +8,7 @@ import { workspaceIdSchema } from "./task-wire.js";
  * Every coding agent of a workspace runs its shell commands with the
  * workspace's variables and secrets in its environment, as Copilot, Cursor,
  * Devin, and Jules do. A variable is shown to every member with its value; a
- * secret is shown by a hint of its last characters alone once saved, and its
+ * secret is shown by its name alone once saved, as GitHub's are, and its
  * value is masked in what the agent's commands answer. A member of the
  * workspace reads the list; an owner or admin saves one, replacing the value
  * a name held, or removes one. A value travels once, in the body of the save,
@@ -23,7 +23,7 @@ import { workspaceIdSchema } from "./task-wire.js";
 export const WORKSPACE_ENVIRONMENT_KIND = {
   /** Shown to every member, and to the agent, with its value. */
   VARIABLE: "variable",
-  /** Shown by a hint alone once saved, and masked in what the agent's commands answer. */
+  /** Shown by its name alone once saved, and masked in what the agent's commands answer. */
   SECRET: "secret",
 } as const;
 
@@ -44,37 +44,30 @@ export const WORKSPACE_ENVIRONMENT_BOUNDS = {
 } as const;
 
 /**
- * Names the sandbox's shell or the agent's own commands depend on, and those
- * that would steer the process a native agent's harness runs in, which holds
- * the member's own credential (its loader, its runtime's options, its
- * proxy, the certificates it trusts), which no workspace may set.
+ * Names that would steer where the agent's commands, or the process a native
+ * agent's harness runs in, find their programs, home, and temporary files, or
+ * that would steer the harness itself, which holds the member's own
+ * credential (its loader, its runtime's options, its proxy, the certificates
+ * it trusts), which no workspace may set. Note that a name only a shell's
+ * looks or habits read (`TERM`, `PAGER`, `LANG`) is left to the workspace, as
+ * GitHub leaves every name but its own prefix.
  */
 const RESERVED_ENVIRONMENT_NAMES: ReadonlySet<string> = new Set([
   "ALL_PROXY",
   "BASH_ENV",
   "ENV",
   "HOME",
-  "HOSTNAME",
   "HTTP_PROXY",
   "HTTPS_PROXY",
-  "LANG",
-  "LOGNAME",
-  "NO_COLOR",
   "NO_PROXY",
   "NODE_EXTRA_CA_CERTS",
   "NODE_OPTIONS",
   "NODE_PATH",
-  "OLDPWD",
-  "PAGER",
   "PATH",
-  "PWD",
   "SHELL",
-  "SHLVL",
   "SSL_CERT_DIR",
   "SSL_CERT_FILE",
-  "TERM",
   "TMPDIR",
-  "USER",
 ]);
 
 /**
@@ -117,8 +110,6 @@ const workspaceEnvironmentEntrySchema = EffectSchema.Struct({
   kind: kindSchema,
   /** A variable's value; absent for a secret, and for a value the service can no longer read. */
   value: EffectSchema.optionalKey(EffectSchema.String),
-  /** A secret's last characters, as `…abcd`; absent for a variable. */
-  hint: EffectSchema.optionalKey(EffectSchema.String),
   /** False where the service can no longer decrypt the value, which then reaches no sandbox until it is saved again. */
   readable: EffectSchema.Boolean,
   /** When it was last saved, in epoch milliseconds. */

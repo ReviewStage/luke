@@ -28,11 +28,10 @@ const SealedRowSchema = Schema.Struct({
   keyVersion: Schema.Int,
   sealedDataKey: Schema.String,
   sealedValue: Schema.String,
-  hint: Schema.String,
   updatedAt: InstantColumnSchema,
 });
 
-/** One stored variable or secret as its row holds it: sealed, beside what a member is shown of it. */
+/** One stored variable or secret as its row holds it: sealed. */
 export type WorkspaceEnvironmentRow = typeof SealedRowSchema.Type;
 
 const OwnedRowSchema = Schema.Struct({ organizationId: Schema.String, ...SealedRowSchema.fields });
@@ -48,7 +47,6 @@ const ROW_COLUMNS = {
   keyVersion: workspaceEnvironmentVariable.keyVersion,
   sealedDataKey: workspaceEnvironmentVariable.sealedDataKey,
   sealedValue: workspaceEnvironmentVariable.sealedValue,
-  hint: workspaceEnvironmentVariable.hint,
   updatedAt: workspaceEnvironmentVariable.updatedAt,
 } as const;
 
@@ -87,7 +85,6 @@ const upsertRow = SqlSchema.void({
     keyVersion: Schema.Int,
     sealedDataKey: Schema.String,
     sealedValue: Schema.String,
-    hint: Schema.String,
     userId: Schema.String,
     now: Schema.Date,
   }),
@@ -97,7 +94,6 @@ const upsertRow = SqlSchema.void({
       keyVersion: write.keyVersion,
       sealedDataKey: write.sealedDataKey,
       sealedValue: write.sealedValue,
-      hint: write.hint,
       updatedByUserId: write.userId,
       updatedAt: write.now,
     };
@@ -168,7 +164,6 @@ export function saveWorkspaceEnvironmentValue(
   name: string,
   kind: WorkspaceEnvironmentKind,
   sealed: SealedProviderKey,
-  hint: string,
   userId: string,
   now: Date,
 ): TaskStoreEffect<void> {
@@ -179,7 +174,6 @@ export function saveWorkspaceEnvironmentValue(
     keyVersion: sealed.keyVersion,
     sealedDataKey: sealed.sealedDataKey,
     sealedValue: sealed.sealedKey,
-    hint,
     userId,
     now,
   });
