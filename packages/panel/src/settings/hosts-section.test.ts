@@ -93,8 +93,10 @@ test("Add hosts shows the token in its command and sends the service only the to
   assert.deepEqual(sent, [{ tokenHash: createHash("sha256").update(token).digest("hex") }]);
   assert.ok(!JSON.stringify(sent).includes(token), "nothing sent carries the token");
 
-  const copy = document.querySelector<HTMLButtonElement>('button[aria-label="Copy setup prompt"]');
-  assert.ok(copy !== null, "the dialog offers the setup prompt");
+  const copy = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) => each.textContent === "Copy agent prompt",
+  );
+  assert.ok(copy !== undefined, "the dialog offers the agent prompt");
   await act(async () => copy.click());
   assert.equal(copied.length, 1);
   assert.ok(copied[0]?.includes(`--token ${token}`), "the prompt carries the install command");
