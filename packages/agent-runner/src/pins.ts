@@ -236,3 +236,29 @@ export const CODEX_LINUX_PINS: LinuxToolPins = {
     BINARY: "bin/codex",
   },
 };
+
+/**
+ * smolvm on a host (`apps/host`), which runs every agent in a VM of its own: the
+ * release the install script fetches and checks, by the SHA-256 of each
+ * architecture's tarball as smolvm's own release lists them
+ * (`checksums.sha256`), and the version the daemon requires the box's
+ * `smolvm` to answer `--version` with. `apps/web/install/install.sh` carries
+ * the same version, addresses, and digests as literals, which a test holds
+ * to these. A bump moves them together.
+ */
+export const SMOLVM_LINUX_PIN = {
+  VERSION: "1.32.3",
+  ARCHIVE: {
+    x64: "https://github.com/smol-machines/smolvm/releases/download/v1.32.3/smolvm-1.32.3-linux-x86_64.tar.gz",
+    arm64:
+      "https://github.com/smol-machines/smolvm/releases/download/v1.32.3/smolvm-1.32.3-linux-arm64.tar.gz",
+  },
+  SHA256: {
+    x64: "82b50f55b35828efbf02ec84c22274780be109c7f424a24646390abc44506afe",
+    arm64: "baea200aea86c405e31afd3a6f278b3bcf6370ea252d35e66b90ba3e849b9721",
+  },
+} as const;
+
+/** Luke's sandbox image, as CI publishes it from the cloud's own setup script, pinned by digest: what every host agent's VM boots, and what the install script fetches ahead of the first. */
+export const SANDBOX_IMAGE =
+  "ghcr.io/reviewstage/luke-sandbox:35c90fc1c0bee4e5@sha256:168aedd03509fa3bccb00b84059baea6d19ae7032a7f0ad0c46f43b6a8bf21e0";

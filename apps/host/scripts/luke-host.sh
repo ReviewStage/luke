@@ -1,5 +1,5 @@
 #!/bin/sh
-# luke-host -- the host's one command: `uninstall` removes Luke's host from the box, as root; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
+# luke-host -- the host's one command: `uninstall` removes Luke's host from the box, as root, with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
 #
 # Shipped as bin/luke-host in the release (scripts/package.ts) and linked
 # from /usr/local/bin by the install script.
@@ -8,6 +8,7 @@ set -eu
 root="$(dirname "$(dirname "$(readlink -f "$0")")")"
 HOST_USER="luke-host"
 UNIT="luke-host.service"
+SMOLVM_DIR="/opt/luke-smolvm"
 
 uninstall() {
   if [ "$(id -u)" -ne 0 ]; then
@@ -45,6 +46,8 @@ uninstall() {
   if [ "$root" = "/opt/luke-host" ]; then
     rm -rf "$root"
   fi
+  # Note that smolvm is the install script's own, beside the release rather than in it; its state and any machines left behind are under the luke-host user's home and processes, which went with the user above.
+  rm -rf "$SMOLVM_DIR"
   printf 'Luke host is removed from this box. Remove it in Settings › Agents › Hosts too, if it is still listed.\n'
 }
 

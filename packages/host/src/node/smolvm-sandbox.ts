@@ -1,4 +1,4 @@
-import { CLAUDE_CODE_PIN, CODEX_PIN } from "@luke/agent-runner/pins";
+import { CLAUDE_CODE_PIN, CODEX_PIN, SANDBOX_IMAGE } from "@luke/agent-runner/pins";
 import { Duration, Effect, Option, Schema, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { ChildProcess } from "effect/process";
@@ -57,10 +57,6 @@ import {
  * start a machine, which names no secret: a credential is only ever a
  * reference to its file there.
  */
-
-/** Luke's sandbox image, as CI publishes it from the cloud's own setup script, pinned by digest. */
-const SANDBOX_IMAGE =
-  "ghcr.io/reviewstage/luke-sandbox:35c90fc1c0bee4e5@sha256:168aedd03509fa3bccb00b84059baea6d19ae7032a7f0ad0c46f43b6a8bf21e0";
 
 /** The machine's workload: one that never exits, so `machine exec` always has a running container to run in. */
 const WORKLOAD = ["sh", "-c", "while true; do sleep 3600; done"] as const;
