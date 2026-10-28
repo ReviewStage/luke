@@ -60,8 +60,9 @@ export function automationTrail(
   agent: Pick<CodingAgentSummary, "automationId" | "automationName">,
   tasks: Pick<TasksControl, "automationsView">,
 ): readonly ToolbarPlace[] | undefined {
-  const run = automationRun(agent);
-  if (run === undefined) return undefined;
+  // Note that a run from before its origin was kept has no name to lead with, so it draws none.
+  const name = automationRun(agent)?.name;
+  if (name === undefined) return undefined;
   const { automationId } = agent;
   const { onOpen } = tasks.automationsView;
   const automations: ToolbarPlace = {
@@ -74,7 +75,7 @@ export function automationTrail(
   return [
     automations,
     {
-      label: run.name,
+      label: name,
       onPress: () => onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     },
   ];

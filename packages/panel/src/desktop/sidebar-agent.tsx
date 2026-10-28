@@ -76,9 +76,8 @@ function starterOf(
   face: boolean,
   reader: ReturnType<typeof useMemberDirectory>,
 ): Actor | undefined {
-  const run = automationRun(agent);
-  if (run !== undefined)
-    return { kind: ACTOR_KIND.AUTOMATION, name: run.name, state: ACTOR_STATE.REST };
+  const name = automationRun(agent)?.name;
+  if (name !== undefined) return { kind: ACTOR_KIND.AUTOMATION, name, state: ACTOR_STATE.REST };
   if (!face) return undefined;
   return teammateCreator({ createdBy: agent.startedBy, ownerId: agent.startedBy?.userId }, reader);
 }

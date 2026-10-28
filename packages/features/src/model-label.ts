@@ -111,22 +111,29 @@ export function agentName(agent: NamedAgent, models?: readonly CatalogModel[]): 
   );
 }
 
+/** What says an automation's run started an agent: the run's origin, by its name, and the automation's id. */
+interface AutomationStarted extends Pick<NamedAgent, "automationName" | "automationOrigin"> {
+  /** The automation whose run started the agent; none for one started by hand or once that automation is deleted. */
+  readonly automationId?: string | null | undefined;
+}
+
 /** The run of an automation that started an agent, by the name its automation had then. */
 export interface AutomationRun {
-  readonly name: string;
+  /** None for an agent from before the run's origin was kept, which only its automation's id names. */
+  readonly name?: string;
 }
 
 /**
  * The automation's run that started the agent, or none for one started by
  * hand: the one answer to whether an automation started it, the window's
  * and the service's alike, as a query reads it through
- * `agentAutomationRunSql`. Note that it reads the run's origin, never the
- * automation's id, because the id goes null once the automation is deleted
- * while its run's origin stays; the id answers only which automation to open.
+ * `agentAutomationRunSql`. Note that it reads the run's origin first,
+ * because the automation's id goes null once the automation is deleted
+ * while its run's origin stays; the id answers which automation to open.
  */
-export function automationRun(
-  agent: Pick<NamedAgent, "automationName" | "automationOrigin">,
-): AutomationRun | undefined {
+export function automationRun(agent: AutomationStarted): AutomationRun | undefined {
   const name = agent.automationName ?? agent.automationOrigin?.name;
-  return name === undefined ? undefined : { name };
+  if (name !== undefined) return { name };
+  // The id covers agents from before the origin column, which name no run.
+  return (agent.automationId ?? null) === null ? undefined : {};
 }
