@@ -235,16 +235,11 @@ test("who reaches the runtime session and the conversation reads from the rows",
 
 const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 /** Every kind of turn admitted, opening and following up, so the door's own rules are what a request meets. */
-const EVERY_TURN = {
-  [EVE_HOST_TURN.TYPED]: true,
-  [EVE_HOST_TURN.SPOKEN]: true,
-  [EVE_HOST_TURN.UNHEARD]: true,
-} as const;
+const EVERY_TURN = { [EVE_HOST_TURN.TYPED]: true } as const;
 const DEPLOYMENT = {
   secret: Redacted.make(DEPLOYMENT_SECRET),
   admits: { [DEPLOYMENT_ACT.OPEN]: EVERY_TURN, [DEPLOYMENT_ACT.FOLLOW_UP]: EVERY_TURN },
   presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
-  streams: true,
 };
 
 /** A request under the deployment's secret naming the account, on the message route, for the kind of turn given. */
@@ -298,7 +293,7 @@ test("the account a principal acts for is its own for a person and the named one
   assert.equal(actedForAccount(laidOver), "user-a");
 });
 
-test("at the door the deployment is admitted for the named account's own conversation and session, and refused for another account's; its spoken ask, its Stop, and its stream read present the deployment itself", async () => {
+test("at the door the deployment is admitted for the named account's own conversation and session, and refused for another account's; its Stop presents the deployment itself", async () => {
   const auth = ownedAuth(
     [deploymentActor(DEPLOYMENT), bearerOf("user-a")],
     ownershipOf({ [SESSION_A]: "user-a" }, { [CONVERSATION_ID]: "user-a" }),
@@ -313,16 +308,8 @@ test("at the door the deployment is admitted for the named account's own convers
     admitted?.principalType,
     admitted?.principalId,
   ];
-  const opened = await auth(scheduled("user-a", EVE_HOST_TURN.SPOKEN));
-  assert.deepEqual(presented(opened), deploymentItself);
-  assert.equal(actedForAccount(opened ?? null), "user-a");
-  const followed = await auth(
-    scheduled("user-a", EVE_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}`),
-  );
-  assert.deepEqual(presented(followed), deploymentItself);
-  assert.equal(actedForAccount(followed ?? null), "user-a");
   assert.equal(
-    await refusal(() => auth(scheduled("user-b", EVE_HOST_TURN.SPOKEN))),
+    await refusal(() => auth(scheduled("user-b", EVE_HOST_TURN.TYPED))),
     EVE_HOST_REFUSAL.NOT_OWNER,
   );
   // The authenticator's own refusal reaches the caller through the door with its reason, not as nobody signed in.
@@ -332,7 +319,7 @@ test("at the door the deployment is admitted for the named account's own convers
   );
   assert.equal(
     await refusal(() =>
-      auth(scheduled("user-b", EVE_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}`)),
+      auth(scheduled("user-b", EVE_HOST_TURN.TYPED, `/eve/v1/session/${SESSION_A}`)),
     ),
     EVE_HOST_REFUSAL.NOT_OWNER,
   );
@@ -361,31 +348,6 @@ test("at the door the deployment is admitted for the named account's own convers
       auth(scheduled("user-a", undefined, `/eve/v1/session/${SESSION_NEW}/cancel`)),
     ),
     EVE_HOST_REFUSAL.NOT_OWNER,
-  );
-  // The voice hearing a spoken ask's turn: a read of the account's own recorded session's stream
-  // is admitted, another account's and one no record attributes are refused, and only a read.
-  const streamed = await auth(
-    scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/stream`, "GET"),
-  );
-  assert.deepEqual(presented(streamed), deploymentItself);
-  assert.equal(actedForAccount(streamed ?? null), "user-a");
-  assert.equal(
-    await refusal(() =>
-      auth(scheduled("user-b", undefined, `/eve/v1/session/${SESSION_A}/stream`, "GET")),
-    ),
-    EVE_HOST_REFUSAL.NOT_OWNER,
-  );
-  assert.equal(
-    await refusal(() =>
-      auth(scheduled("user-a", undefined, `/eve/v1/session/${SESSION_NEW}/stream`, "GET")),
-    ),
-    EVE_HOST_REFUSAL.NOT_OWNER,
-  );
-  assert.equal(
-    await refusal(() =>
-      auth(scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/stream`, "POST")),
-    ),
-    EVE_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
   );
 });
 

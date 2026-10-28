@@ -65,8 +65,6 @@
     "./models/conversation-rewind": "./src/models/conversation-rewind.js",
     "./models/session-sandbox-cleanup": "./src/models/session-sandbox-cleanup.js",
     "./models/soft-delete": "./src/models/soft-delete.js",
-    "./models/voice-session-record": "./src/models/voice-session-record.js",
-    "./models/voice-writer": "./src/models/voice-writer.js",
     "./models/workspace-seams": "./src/models/workspace-seams.js",
     "./models/workspace-store": "./src/models/workspace-store.js",
     "./models/workspace-token-repository-store": "./src/models/workspace-token-repository-store.js",
@@ -108,7 +106,6 @@
     "./schemas/session-sandbox": "./src/schemas/session-sandbox.js",
     "./schemas/storage": "./src/schemas/storage.js",
     "./schemas/usage": "./src/schemas/usage.js",
-    "./schemas/voice": "./src/schemas/voice.js",
     "./pull-request-chapters-vocabulary": "./src/pull-request-chapters-vocabulary.js",
     "./storage-vocabulary": "./src/storage-vocabulary.js",
     "./sync/listener": "./src/sync/listener.js",
@@ -117,8 +114,7 @@
     "./sync/sync-table": "./src/sync/sync-table.js",
     "./sync/tables": "./src/sync/tables.js",
     "./testing": "./src/testing/index.js",
-    "./testing/no-database": "./src/testing/no-database.js",
-    "./voice-vocabulary": "./src/voice-vocabulary.js"
+    "./testing/no-database": "./src/testing/no-database.js"
   },
   "types": "./src/schemas/index.ts",
   "scripts": {
@@ -132,7 +128,6 @@
   "dependencies": {
     "@effect/sql-pg": "catalog:",
     "@luke/features": "workspace:*",
-    "@luke/live": "workspace:*",
     "@luke/runtime": "workspace:*",
     "@luke/settings": "workspace:*",
     "@luke/wire": "workspace:*",

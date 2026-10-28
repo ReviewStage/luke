@@ -425,9 +425,6 @@ importers:
       '@luke/host':
         specifier: workspace:*
         version: link:../../packages/host
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../../packages/live
       '@luke/panel':
         specifier: workspace:*
         version: link:../../packages/panel
@@ -626,9 +623,6 @@ importers:
       '@luke/features':
         specifier: workspace:*
         version: link:../features
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../live
       '@luke/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -681,9 +675,6 @@ importers:
 
   packages/features:
     dependencies:
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../live
       '@luke/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -822,25 +813,6 @@ importers:
       '@types/ws':
         specifier: 8.18.1
         version: 8.18.1
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@vitest/browser-playwright@5.0.0)(@vitest/ui@5.0.0)(jsdom@30.0.1)(vite@7.3.1)
-
-  packages/live:
-    dependencies:
-      '@luke/wire':
-        specifier: workspace:*
-        version: link:../wire
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -1059,9 +1031,6 @@ importers:
       '@luke/features':
         specifier: workspace:*
         version: link:../features
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../live
       '@luke/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -1382,31 +1351,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@vitest/browser-playwright@5.0.0)(@vitest/ui@5.0.0)(jsdom@30.0.1)(vite@7.3.1)
-
-  tools/trace-export:
-    dependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(redis@6.2.1)
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../../packages/live
-      '@luke/wire':
-        specifier: workspace:*
-        version: link:../../packages/wire
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.12
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
 
 packages:
 

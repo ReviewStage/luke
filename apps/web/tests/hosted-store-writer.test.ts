@@ -50,7 +50,7 @@ import {
 import { readStoredUIMessages, TOOL_PART_STATE } from "@luke/wire/ui-messages";
 import { type ToolSet, tool, type UIMessage } from "ai";
 import { eq } from "drizzle-orm";
-import { Option, Result, Schema } from "effect";
+import { Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 
@@ -426,112 +426,4 @@ test("a cleared conversation is written by nothing, like one that never was", as
   assert.deepEqual(started, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION }));
   const queued = await database.run(writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED }));
   assert.deepEqual(queued, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION }));
-});
-
-test("a spoken reply is a finished assistant row under no turn, once per client id; the latest spoken line is found by its span and names the delegation that owns it", async () => {
-  const target = await conversation();
-  const spokenLine = (clientId: string, fromMs: number, toMs: number, delegationId?: string) =>
-    database.run(
-      writer.upsertSpokenRow(target, {
-        role: MESSAGE_ROLE.USER,
-        clientId,
-        text: `line ${fromMs}`,
-        metadata: {
-          author: MESSAGE_AUTHOR.DEVELOPER,
-          channel: MESSAGE_CHANNEL.VOICE,
-          voice_session_id: "vs_fixture_1",
-          ...(delegationId === undefined ? undefined : { delegation_id: delegationId }),
-          from_ms: fromMs,
-          to_ms: toMs,
-        },
-      }),
-    );
-  assert.ok(Result.isSuccess(await spokenLine("line-1", 1000, 2000)));
-  assert.ok(Result.isSuccess(await spokenLine("dl_1", 3000, 4000, "dl_1")));
-
-  const reply = await database.run(
-    writer.upsertSpokenRow(target, {
-      role: MESSAGE_ROLE.ASSISTANT,
-      clientId: "reply-1",
-      text: "Answered aloud.",
-      metadata: { author: MESSAGE_AUTHOR.VOICE_MODEL },
-    }),
-  );
-  assert.ok(Result.isSuccess(reply));
-  if (!Result.isSuccess(reply)) return;
-  assert.equal(reply.success.effect, STORE_WRITE_EFFECT.WRITTEN);
-  const again = await database.run(
-    writer.upsertSpokenRow(target, {
-      role: MESSAGE_ROLE.ASSISTANT,
-      clientId: "reply-1",
-      text: "Answered aloud.",
-      metadata: { author: MESSAGE_AUTHOR.VOICE_MODEL },
-    }),
-  );
-  // Told again under the same id, the row is grown in place rather than doubled.
-  assert.ok(Result.isSuccess(again));
-  if (!Result.isSuccess(again)) return;
-  assert.deepEqual(
-    [again.success.id, again.success.effect],
-    [reply.success.id, STORE_WRITE_EFFECT.WRITTEN],
-  );
-  const rows = await storedMessages(target);
-  assert.deepEqual(
-    rows.map((row) => [row.clientId, row.role, row.turnId, row.finishedAt !== null]),
-    [
-      ["line-1", MESSAGE_ROLE.USER, null, true],
-      ["dl_1", MESSAGE_ROLE.USER, null, true],
-      ["reply-1", MESSAGE_ROLE.ASSISTANT, null, true],
-    ],
-  );
-
-  const ownLine = await database.run(
-    writer.latestSpokenLine(target, {
-      voiceSessionId: "vs_fixture_1",
-      startingAtOrBeforeMs: 2500,
-    }),
-  );
-  assert.ok(Result.isSuccess(ownLine));
-  if (!Result.isSuccess(ownLine)) return;
-  assert.deepEqual(
-    [
-      Option.getOrUndefined(ownLine.success)?.clientId,
-      Option.getOrUndefined(ownLine.success)?.delegationId,
-    ],
-    ["line-1", undefined],
-  );
-  // Found by where it starts: a delegation's offset may fall inside the line it is about.
-  const delegatedLine = await database.run(
-    writer.latestSpokenLine(target, {
-      voiceSessionId: "vs_fixture_1",
-      startingAtOrBeforeMs: 3500,
-    }),
-  );
-  assert.ok(Result.isSuccess(delegatedLine));
-  if (!Result.isSuccess(delegatedLine)) return;
-  assert.deepEqual(
-    [
-      Option.getOrUndefined(delegatedLine.success)?.clientId,
-      Option.getOrUndefined(delegatedLine.success)?.delegationId,
-    ],
-    ["dl_1", "dl_1"],
-  );
-  const none = await database.run(
-    writer.latestSpokenLine(target, {
-      voiceSessionId: "vs_fixture_1",
-      startingAtOrBeforeMs: 500,
-    }),
-  );
-  assert.ok(Result.isSuccess(none));
-  if (!Result.isSuccess(none)) return;
-  assert.ok(Option.isNone(none.success));
-  const otherSession = await database.run(
-    writer.latestSpokenLine(target, {
-      voiceSessionId: "vs_fixture_2",
-      startingAtOrBeforeMs: 9000,
-    }),
-  );
-  assert.ok(Result.isSuccess(otherSession));
-  if (!Result.isSuccess(otherSession)) return;
-  assert.ok(Option.isNone(otherSession.success));
 });

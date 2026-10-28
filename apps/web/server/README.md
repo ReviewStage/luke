@@ -519,7 +519,7 @@ meter every hosted operation spends — so the group yields the seam on the
 request's own fiber and the edge that serves the request is the one place the
 client behind it is provided. What still holds a runner is everything a route
 composes apart from the store and that still hands a promise up — the
-writers, the ask record, and the eve host's two seams
+writers and the eve host's two seams
 the eve project reaches through a promise of its own — each handed its
 edge's own, `runWeb` in a
 function and the store tests'

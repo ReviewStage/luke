@@ -94,8 +94,7 @@ const UPLOAD_POLICY = {
  * tuple, authenticator, type, and id, and the record says the deployment
  * carried it in the `luke:carrier` attribute rather than in the principal;
  * the opening is minted the same way, so the agent's session runs as the
- * developer whether the developer or Luke started it. A spoken turn is
- * admitted on neither, since Luke takes no calls. A caller of another role
+ * developer whether the developer or Luke started it. A caller of another role
  * adds its row here and nowhere else.
  * Note that the table holds no row for a cancel or a reset, and needs none:
  * neither opens a turn, so the deployment's authenticator admits both on
@@ -109,16 +108,8 @@ const UPLOAD_POLICY = {
  * (`agents/retire-sessions.ts`).
  */
 export const CODER_DEPLOYMENT_TURNS = {
-  [DEPLOYMENT_ACT.OPEN]: {
-    [EVE_HOST_TURN.TYPED]: true,
-    [EVE_HOST_TURN.SPOKEN]: false,
-    [EVE_HOST_TURN.UNHEARD]: false,
-  },
-  [DEPLOYMENT_ACT.FOLLOW_UP]: {
-    [EVE_HOST_TURN.TYPED]: true,
-    [EVE_HOST_TURN.SPOKEN]: false,
-    [EVE_HOST_TURN.UNHEARD]: false,
-  },
+  [DEPLOYMENT_ACT.OPEN]: { [EVE_HOST_TURN.TYPED]: true },
+  [DEPLOYMENT_ACT.FOLLOW_UP]: { [EVE_HOST_TURN.TYPED]: true },
 } as const satisfies DeploymentTurnTable;
 
 /**
@@ -131,9 +122,6 @@ export const CODER_DEPLOYMENT_TURNS = {
  * as the account's too, which eve's cancel and reset routes read nothing of.
  */
 export const CODER_DEPLOYMENT_PRESENCE = DEPLOYMENT_PRESENCE.ACCOUNT;
-
-/** The deployment reads no session's stream here: only the voice function did, following a spoken ask's turn. */
-export const CODER_DEPLOYMENT_STREAMS = false;
 
 export function coderChannelInput(
   resolveUserId: BearerAccount,

@@ -62,8 +62,8 @@ export interface AccountPreferencesRow {
  * menu's choice each write their own part without reading the other first.
  * The experiments part is the one patch: its keys are merged over what
  * stood, so a Mac that knows fewer experiments never erases another's.
- * `preferences` is the shared part, whose `voice` it replaces; the link
- * choice is a part of its own, which a build that predates it never sends.
+ * `preferences` is the shared part; the link choice is a part of its own,
+ * which a build that predates it never sends.
  */
 export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;

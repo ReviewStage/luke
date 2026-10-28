@@ -12,7 +12,6 @@ import { getTestDB, planOf, plansOf } from "../../testing/index.js";
 import {
   CLEARED_CONVERSATION_RETENTION_MS,
   purgeClearedConversations,
-  purgeDeletedTaskCalls,
   stampConversationsDeleted,
 } from "../soft-delete.js";
 
@@ -105,14 +104,6 @@ it.layer(getTestDB())("the soft delete's reads and the purge's cascade", (it) =>
 
         assert.match(children?.plan ?? "", /conversations_parent/);
       }),
-  );
-
-  it.effect("the sweep finds a deleted task's calls through their task's index", () =>
-    Effect.gen(function* () {
-      const [purge] = yield* plansOf(purgeDeletedTaskCalls(new Date("2026-10-20T12:00:00Z")));
-
-      assert.match(purge?.plan ?? "", /voice_sessions_task/);
-    }),
   );
 
   // Note that these are the statements Postgres's own foreign key triggers run for each row a

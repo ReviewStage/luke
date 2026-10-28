@@ -394,7 +394,7 @@ door holds the deployment to what its actor admits
 opening and line, which are an agent's Start, a message, an inbox answer, a
 manual automation run, a comment's hand-over to an agent it mentions
 (`src/tasks/comment-ask.ts`), an agent's own `start_agent`, and
-another agent's `message_agent` (`src/agents/coder-host/agent-message.ts`); a spoken ask, which a call hands the agent it speaks into;
+another agent's `message_agent` (`src/agents/coder-host/agent-message.ts`);
 a cancel, which is an agent's Stop, its Archive, and a task's archive; and a
 reset, which is how the two deletes, a task's and the account's, retire the
 eve sessions of what they delete (`src/agents/retire-sessions.ts`); each only
@@ -765,7 +765,7 @@ are handed every integration the developer has not switched off for that
 agent, the switches naming connections. The
 definition's auth is eve's plain `getToken` form, credentialed as the app,
 and the account is the admitted conversation's owner, never the session's
-principal. That matters because a spoken turn runs as the
+principal. That matters because a turn the service hands in runs as the
 deployment acting for the account, and eve's user-scoped auth (`connect()`
 from `@vercel/connect/eve`) would refuse it before reading any token. That
 form has no interactive half either, so eve never pauses a run for a
@@ -1308,8 +1308,8 @@ not watched. A token lasts an hour, so the store hook renews it at the
 firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
 
 The store hook (`apps/dev/hooks/store.ts`) relays every event into the store
-through the shared relay (`src/agents/eve-host/relay.ts`), composed
-with no ask record, so an agent's turns land as `turns` rows naming its
+through the shared relay (`src/agents/eve-host/relay.ts`), so an
+agent's turns land as `turns` rows naming its
 model and effort and its `messages` rows as `UIMessage`s; it also stops the
 sandbox the moment a turn ends, completed, failed, or cancelled, where a
 sandbox tool ran in the session. The instructions (`src/agents/coder-host/instructions.ts`)
@@ -1360,18 +1360,18 @@ of a model offering two was chosen (absent is the model's whole window).
 Settings › Agents and the Start menu's chevron both write it, as one
 value rather than two that could disagree. A PUT carries either part or both;
 a part left out stands as it was, so the desktop's settings sync never
-resets the chosen model and the Start menu never touches the voice. A
+resets the chosen model and the Start menu never touches the settings. A
 `codingAgent` write is accepted only as the instance's model catalog accepts
 it (below): a model it does not offer or an effort that model does not list
 is `invalid-request`, and a catalog the instance cannot read is `unavailable`.
-The store keeps the columns beside `voice` on `account_preference`, and
+The store keeps the columns on `account_preference`, and
 reads a half-written pair as the default; `coding_agent_context_window` is
 null for the model's whole window (migration 0077). `updated_at` is the preferences
 part's own instant, nullable since migration 0062 and left null by a write
 that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
 as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
-over the voice it holds.
+over the settings it holds.
 
 `experiments` is the third part: each experiment the account turned on or
 back off in Settings › Experimental, keyed by `@luke/settings`'s
@@ -2033,7 +2033,7 @@ erases them with the account.
 `packages/database/src/models/` is the store the coder host composes against; every
 module there is an `Effect<A, SqlError | Schema.SchemaError, SqlClient>`
 whose rows a `Schema` decodes and whose path rule is that schema too, which
-`HostedStore`, the store writer, the voice writer, and the ask record all
+`HostedStore`, the store writer, and the ask record all
 answer as it came, and which a route handler composes into the one effect
 `runWeb` answers for the request.
 
@@ -2116,47 +2116,11 @@ sequence comes from the row's counter, each allocation landing on the first
 position no row holds, so the unique `(conversation_id, seq)` constraint is
 the backstop for a writer outside the lock and nothing the writer retries.
 
-Voice was stored beside them the way a call platform stores a call, in
-`voice_sessions` and `voice_transcript_segments`. Luke takes no calls now, so
-nothing writes these tables; what follows is how the records earlier calls
-left were written, which a transcript still reads.
-A session row is one live session — the Live API's own session id, unique so
-a re-attach on a fresh function instance finds the row it had rather than
-forking it, and indexed with the user so an ownership check is one lookup —
-with its delegation mode, when it started and
-closed, the API's own close reason, and a `usage` payload of billed seconds
-with a flag saying whether the API confirmed them or a lost connection left
-them estimated. A segment is one span of what was actually said, by whom, in
-milliseconds on the session's clock. What is spoken becomes a message as each
-utterance settles: the developer's line and every utterance of Luke's are each
-cut from these segments into a finished row of the conversation, so the
-record keeps the words the developer actually heard. A delegated
-exchange's reply is also the assistant message the agent wrote, and Luke's
-reading of it stands beside that message as its own row, whose metadata names
-the voice session and span it was cut from, the delegation it followed, and,
-where the store could tell, `read_from`: the message the words were read
-aloud from — the delegation's turn's journal where that turn had settled
-within two minutes of the write, in which case the row joins the turn. No
-audio is ever stored.
-
-Two writers shared those tables and never a column. The voice service's
-`packages/database/src/models/voice-session-record.ts` owned the session row's whole life: it is
-inserted when the session is created, found again by `(user_id,
-live_session_id)` when a fresh function instance re-attaches to the same
-live session, overwritten with each unconfirmed usage snapshot while open,
-and closed once with the confirmed seconds, the instant, and the reason. The
-voice writer in `packages/database/src/models/voice-writer.ts` only reads that row
-for its id and hangs everything else off it: a segment per transcript delta
-at the next position of the session's own sequence, and the developer's spoken ask as a
-user message on the voice channel, cut from the stored user segments between
-the previous ask's end and the delegation's offset or the end of the
-utterance the service's ledger grouped the ask as, whichever is later, and
-named with the session, the delegation, and the span. A row whose `closed_at` is still
-null may keep gaining segments, because an instance that dies at its
-duration bound never sends `session.closed`, its relay detaches rather than
-closing, and the re-attach lands on the same row; the writer reads nothing from the row's state but its id
-and reads everything else back from the record, so a
-fresh instance continues a session where the last one stopped.
+Calls an earlier version took left their spoken lines as rows of the
+conversation on the voice channel, which a transcript still reads as ordinary
+lines. The call records beside them, `voice_sessions` and
+`voice_transcript_segments`, are no longer declared, and nothing reads or
+writes them until a migration drops them.
 
 The store tests run the generated migrations on PGlite in process, so
 `check.sh` and CI's test jobs need no service. The `postgres` CI job
