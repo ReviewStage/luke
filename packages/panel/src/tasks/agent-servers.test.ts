@@ -555,6 +555,18 @@ test("a server's own error is no part of its row's sentence, and stands quoted a
     hint?.textContent,
     "Linear could not be reached. Linear said: “workspace is suspended”",
   );
+
+  restOn(serverPress(container, "Linear") ?? assert.fail("no Linear row"));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
+  assert.ok(
+    [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].some(
+      (note) => note.textContent === "Linear said: “workspace is suspended”",
+    ),
+    "the server's card says the server's own words too",
+  );
 });
 
 test("a server's row hangs the server's card beside it, and a tool a search found hangs the card of its tool", async () => {

@@ -277,13 +277,13 @@ test("in an agent's tab with Linear off, a line that opened a turn hands it that
     on: "Off",
     note: SERVER_MENTION_NOTE.OFF_OPENS,
     tools: [
-      ["create_comment", undefined],
-      ["get_issue", undefined],
-      ["get_user", undefined],
-      ["list_issues", "Read-only"],
-      ["list_teams", undefined],
-      ["search_documentation", undefined],
-      ["update_issue", undefined],
+      ["create_comment, Comment on an issue.", undefined],
+      ["get_issue, Read one issue.", undefined],
+      ["get_user, Read one member.", undefined],
+      ["list_issues, List the team's issues.", "Read-only"],
+      ["list_teams, List the teams.", undefined],
+      ["search_documentation, Search Linear's documentation.", undefined],
+      ["update_issue, Change an issue.", undefined],
     ],
     presses: 0,
   });
@@ -292,7 +292,7 @@ test("in an agent's tab with Linear off, a line that opened a turn hands it that
     count: "7 tools",
     on: "Off",
     note: SERVER_MENTION_NOTE.OFF_STEERS,
-    tools: [["list_issues", "Read-only"]],
+    tools: [["list_issues, List the team's issues.", "Read-only"]],
     presses: 0,
   });
   const reply = await cardOf(chipIn(container, "first"));
@@ -381,7 +381,7 @@ test("off an agent, as in a plan's or Luke's words, the server's row has no swit
   assert.equal(serverCard.note, undefined);
   assert.equal(serverCard.count, "7 tools");
   assert.equal(serverCard.tools.length, 7, "the card lists every tool, scrolling past a few");
-  assert.deepEqual(toolCard.tools, [["list_issues", "Read-only"]]);
+  assert.deepEqual(toolCard.tools, [["list_issues, List the team's issues.", "Read-only"]]);
 
   restOn(tool ?? assert.fail("the tool's chip stands"));
   await settle();

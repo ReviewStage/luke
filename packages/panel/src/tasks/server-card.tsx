@@ -10,6 +10,7 @@ import {
   HoverCardRule,
   ProviderMark,
   Tooltip,
+  VisuallyHidden,
 } from "@luke/ui";
 import {
   SERVER_HANDED,
@@ -27,7 +28,8 @@ import { useServerRows } from "./agent-servers.js";
  *
  * The card's head is the server as the popover's row reads it
  * (`agent-servers.tsx`): its mark, its name, and under it how many tools it
- * offers and where its sign-in or its server stands; where the words are an
+ * offers and where its sign-in or its server stands, the server's own
+ * words behind a problem in a note of their own; where the words are an
  * agent's, its corner says whether that agent has it on or off, a word
  * rather than the popover's switch, which only the popover presses. A note under it says what
  * the mention does (`serverMentionNote`): an agent with the server on is
@@ -141,23 +143,36 @@ function serverSub(row: ServerRow): React.JSX.Element | undefined {
 }
 
 /**
- * One tool's row: its title, and its badge's words at its end. Where its
- * server said what it does, the row hangs a card of its own saying so, the
- * first sentence as the popover's list says it, so the card's one-line row
- * loses none of what the list says.
+ * One tool's row: its title, and its badge's words at its end. Where the
+ * popover's list says more of it, its name in the code face beside a title
+ * that differs or the first sentence of what it does, the row hangs a card
+ * of its own saying so, and says it to a screen reader beside the title,
+ * so the card's one-line row loses none of what the list says.
  */
 function ToolLine({ tool }: { tool: IntegrationTool }): React.JSX.Element {
   const title = toolTitle(tool);
+  const name = title === tool.name ? undefined : tool.name;
+  const summary = tool.description === "" ? undefined : toolSummary(tool.description);
+  const more = [name, summary].filter((part) => part !== undefined).join(". ");
   const row = (
     <li>
-      <HoverCardRow glyph={null} label={title} end={toolBadge(tool.annotations)} />
+      <HoverCardRow
+        glyph={null}
+        label={
+          <>
+            {title}
+            {more === "" ? null : <VisuallyHidden>{`, ${more}`}</VisuallyHidden>}
+          </>
+        }
+        end={toolBadge(tool.annotations)}
+      />
     </li>
   );
-  if (tool.description === "") return row;
+  if (more === "") return row;
   const card = (
     <HoverCard data-tool-card="">
-      <HoverCardHead name={title} sub={title === tool.name ? undefined : tool.name} />
-      <HoverCardNote>{toolSummary(tool.description)}</HoverCardNote>
+      <HoverCardHead name={title} sub={name} />
+      {summary === undefined ? null : <HoverCardNote>{summary}</HoverCardNote>}
     </HoverCard>
   );
   return (
@@ -201,6 +216,7 @@ export function ServerCard({
         }
       />
       {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
+      {row.said === undefined ? null : <HoverCardNote>{row.said}</HoverCardNote>}
       {tools.length === 0 ? null : (
         <>
           <HoverCardRule />
