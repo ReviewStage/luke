@@ -57,6 +57,7 @@ import {
   LOCAL_AGENT_REFUSAL,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubAccess } from "@luke/features/github-repositories-wire";
+import { automationRun } from "@luke/features/model-label";
 import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Task } from "@luke/features/task-wire";
@@ -1217,7 +1218,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
         : continued
           ? SERVER_AGENT_START_KIND.CONTINUE
           : SERVER_AGENT_START_KIND.FORK,
-    is_from_automation: ask.automationId !== undefined && ask.automationId !== null,
+    is_from_automation: automationRun(ask) !== undefined,
     has_task: ask.taskId !== null,
   });
   return committed === undefined ? { agent, created } : { agent, created, txid: committed };

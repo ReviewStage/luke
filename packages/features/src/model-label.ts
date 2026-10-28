@@ -2,7 +2,7 @@ import { CODING_AGENT_KIND, type CodingAgentKind } from "./coding-agent-wire.js"
 import { type CatalogModel, MODEL_PROVIDER } from "./models-wire.js";
 
 /**
- * model-label.ts -- a model as a tab, a menu, or a notification names it: the catalog's own name, or the id's own name spelled out; and an agent by its title, its automation, or its model.
+ * model-label.ts -- a model as a tab, a menu, or a notification names it: the catalog's own name, or the id's own name spelled out; an agent by its title, its automation, or its model; and whether an automation's run started it.
  *
  * Shared by the panel, which draws the tabs and the Start menu, the main
  * process, which posts the notification an agent's end is announced in, and
@@ -109,4 +109,24 @@ export function agentName(agent: NamedAgent, models?: readonly CatalogModel[]): 
     agent.automationOrigin?.name ??
     modelLabel(agent.model, models)
   );
+}
+
+/** The run of an automation that started an agent, by the name its automation had then. */
+export interface AutomationRun {
+  readonly name: string;
+}
+
+/**
+ * The automation's run that started the agent, or none for one started by
+ * hand: the one answer to whether an automation started it, the window's
+ * and the service's alike, as a query reads it through
+ * `agentAutomationRunSql`. Note that it reads the run's origin, never the
+ * automation's id, because the id goes null once the automation is deleted
+ * while its run's origin stays; the id answers only which automation to open.
+ */
+export function automationRun(
+  agent: Pick<NamedAgent, "automationName" | "automationOrigin">,
+): AutomationRun | undefined {
+  const name = agent.automationName ?? agent.automationOrigin?.name;
+  return name === undefined ? undefined : { name };
 }
