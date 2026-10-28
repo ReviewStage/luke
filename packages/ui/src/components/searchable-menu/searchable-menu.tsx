@@ -372,9 +372,9 @@ function rowHint(row: MenuRow): React.ReactNode {
 }
 
 /**
- * The matching rows as the list's options, a run under each heading. A
- * menu with a row chosen keeps every row's check room, so their hints end
- * in one line; one with none chosen keeps none.
+ * The matching rows as the list's options, a run under each heading, the
+ * one chosen checked; the rest keep no check room, so their hints end at the
+ * row's edge.
  */
 function optionGroups(
   rows: readonly MenuRow[],
