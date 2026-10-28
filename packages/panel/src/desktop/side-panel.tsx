@@ -168,7 +168,7 @@ import {
   type SidePanelTab,
 } from "../tasks/use-side-panel.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
-import type { MenuAction } from "./action-menu.js";
+import type { MenuEntry } from "./action-menu.js";
 import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
@@ -206,7 +206,7 @@ import { TabStrip } from "./tab-strip.js";
 export interface ShownTab {
   readonly label: string;
   /** Its actions as the ⋯ at `opener` drops them, an item opening a menu of the tab's own under it. */
-  readonly groups: (opener: HTMLElement) => MenuAction[][];
+  readonly groups: (opener: HTMLElement) => MenuEntry[][];
 }
 
 /** A phone's Activity, as the panel's strip is handed it: where it lists the tabs, how a row's press leaves the list, and where the tab shown is handed on. */
@@ -2737,7 +2737,9 @@ function PanelPhoneHead({
                 : shown
                     .groups(opener)
                     .map((group) =>
-                      group.map((item) => ({ ...item, detail: item.detail ?? shown.label })),
+                      group.map((item) =>
+                        "items" in item ? item : { ...item, detail: item.detail ?? shown.label },
+                      ),
                     );
             return [
               [{ label: TABS, icon: <ListIcon />, checked: listing, onSelect: onList }],

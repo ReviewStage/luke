@@ -440,9 +440,12 @@ function Toolbar({ actions }: { actions: TabActionGroups | undefined }) {
         {
           key: action.label,
           type: "button",
-          disabled: action.disabled,
-          onClick: (event: React.MouseEvent<HTMLElement>) =>
-            "onAsk" in action ? action.onAsk(event.currentTarget) : action.onSelect(),
+          disabled: "disabled" in action ? action.disabled : undefined,
+          onClick: (event: React.MouseEvent<HTMLElement>) => {
+            if ("items" in action) return;
+            if ("onAsk" in action) action.onAsk(event.currentTarget);
+            else action.onSelect();
+          },
         },
         action.label,
       ),

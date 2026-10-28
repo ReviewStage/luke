@@ -88,7 +88,7 @@ import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js"
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCallingAgent } from "../use-voice-view.js";
-import type { MenuAction } from "./action-menu.js";
+import type { MenuEntry } from "./action-menu.js";
 import { useAgentCallDoors, useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 import { useTaskInboxShow } from "./folded-groups.js";
@@ -588,11 +588,15 @@ function TaskInboxTab({
  * says under it what it acts on, the tab, so the tab's Copy link is told
  * from the task's beneath it.
  */
-function shownTabGroups(shown: ShownTab | undefined, opener: HTMLElement): MenuAction[][] {
+function shownTabGroups(shown: ShownTab | undefined, opener: HTMLElement): MenuEntry[][] {
   if (shown === undefined) return [];
   return shown
     .groups(opener)
-    .map((group) => group.map((item) => ({ ...item, detail: item.detail ?? shown.label })));
+    .map((group) =>
+      group.map((item) =>
+        "items" in item ? item : { ...item, detail: item.detail ?? shown.label },
+      ),
+    );
 }
 
 /**
@@ -618,6 +622,8 @@ function PlanDocument({
   const { region } = tasks;
   // The tab a phone's panel shows past the plan, which its header is named by (`side-panel.tsx`'s `ShownTab`).
   const [shownTab, setShownTab] = useState<ShownTab | undefined>(undefined);
+  // The toolbar's slot the chosen agent's ⋯ stands in, as the side panel's bar keeps one for its chosen tab's; a phone's header offers the tab's actions instead.
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   // A phone's Activity lists the panel's tabs until one is chosen, from it or by anything else, such as
   // an arrival the panel shows, on the task it was asked on alone (`task-pane-switcher.tsx`).
   // Asked over a shut panel, it holds whatever tab the panel opens on, which a shut panel with every tab closed chooses as it opens.
@@ -1274,6 +1280,7 @@ function PlanDocument({
                               shown={tasks.shown}
                               onOpenTerminal={terminalDoors.onOpenTerminal}
                               calling={calling}
+                              slot={switched ? null : actionsSlot}
                             />
                           }
                           actions={
@@ -1309,9 +1316,14 @@ function PlanDocument({
                                   onChoose={chooseRepository}
                                   openRequest={menuRequest}
                                 />
-                                {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. A phone's is its header's. */}
+                                {/* The task's ⋯, until it moves to the Plan tab; a phone's is its header's. */}
                                 {switched ? null : taskMenu}
                               </Fragment>
+                              {/* The chosen agent's ⋯, portalled in from its tab (`strip-tabs.tsx`'s `DoorsTab`), so it acts on what is under the bar. */}
+                              <span
+                                ref={setActionsSlot}
+                                className="toolbar-tab-actions flex min-w-control flex-none items-center"
+                              />
                               <SummaryButton layout={summaryLayout} cardId={summaryCard} />
                             </>
                           }
