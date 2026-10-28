@@ -181,6 +181,8 @@ export interface CodingAgent {
   readonly automationOrigin: StoredAutomationOrigin | null;
   /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
   readonly startedFrom: StoredStartedFrom | null;
+  /** The account's coding agent whose `start_agent` started this one; null for any other starter, and once that agent's row is gone. */
+  readonly startedByAgentId: string | null;
   readonly conversationId: string;
   readonly model: string;
   readonly effort: string;
@@ -310,6 +312,8 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
   /** The agent of the same plan this one is started from, with its replay's counts; none for one started afresh. */
   readonly startedFrom?: StoredStartedFrom | undefined;
+  /** The coding agent whose `start_agent` starts this one; none for a Start by a member, Luke, or an automation. */
+  readonly startedByAgentId?: string | undefined;
   /** The agent's title from the start, a run's fixed name; none where it is named later. */
   readonly title?: string | undefined;
   readonly idempotencyKey: string;
@@ -361,6 +365,7 @@ const CODING_AGENT_COLUMNS = {
   automationId: codingAgent.automationId,
   automationOrigin: codingAgent.automationOrigin,
   startedFrom: codingAgent.startedFrom,
+  startedByAgentId: codingAgent.startedByAgentId,
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
   effort: codingAgent.effort,
@@ -398,6 +403,7 @@ const CODING_AGENT_LINE_COLUMNS = {
   automationId: codingAgent.automationId,
   automationName: agentAutomationNameSql(codingAgent),
   startedFrom: codingAgent.startedFrom,
+  startedByAgentId: codingAgent.startedByAgentId,
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
   effort: codingAgent.effort,
@@ -507,6 +513,7 @@ const CodingAgentRowSchema = Schema.Struct({
   automationId: Schema.NullOr(Schema.String),
   automationOrigin: AutomationOriginColumnSchema,
   startedFrom: StartedFromColumnSchema,
+  startedByAgentId: Schema.NullOr(Schema.String),
   conversationId: Schema.String,
   model: Schema.String,
   effort: Schema.String,
@@ -609,6 +616,30 @@ const findAgentByKey = SqlSchema.findOneOption({
         .where(and(eq(codingAgent.userId, userId), eq(codingAgent.idempotencyKey, idempotencyKey)))
         .limit(1),
     ),
+});
+
+const findOwnAgentId = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+    ),
+});
+
+/**
+ * The starter a Start records: the account's own agent under the id it
+ * names, and none for no id or another account's agent. Note that only the
+ * account's own agent is recorded, because the starter is told how this
+ * agent's run ends, and no account's agent is told of another's.
+ */
+const ownStarterOf = Effect.fnUntraced(function* (userId: string, agentId: string | undefined) {
+  if (agentId === undefined) return null;
+  const own = yield* findOwnAgentId({ userId, agentId });
+  return Option.isSome(own) ? own.value.id : null;
 });
 
 /** A runtime as a conversation's row holds it. */
@@ -731,6 +762,7 @@ const insertAgent = SqlSchema.findOneOption({
     automationId: Schema.NullOr(Schema.String),
     automationOrigin: AutomationOriginColumnSchema,
     startedFrom: StartedFromColumnSchema,
+    startedByAgentId: Schema.NullOr(Schema.String),
     title: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
     model: Schema.String,
@@ -761,6 +793,7 @@ const insertAgent = SqlSchema.findOneOption({
           automationId: write.automationId,
           automationOrigin: write.automationOrigin,
           startedFrom: write.startedFrom,
+          startedByAgentId: write.startedByAgentId,
           title: write.title,
           conversationId: write.conversationId,
           model: write.model,
@@ -1963,8 +1996,9 @@ const deleteConversationRow = SqlSchema.void({
  * Starts an agent on a task of the account's workspace, or in a workspace
  * of the account's with no task: a `coding_agent` conversation of the
  * account's and the row that binds it to the task or the workspace, with
- * the plan text or the prompt, the repository, and the automation whose run
- * started it with that run, as handed. A Start whose key the account has already used answers the agent
+ * the plan text or the prompt, the repository, the automation whose run
+ * started it with that run, and the account's own agent whose `start_agent`
+ * started it, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
  * A Start of the member's operator answers the one standing in the
  * workspace where there is one, whatever its key, and writes nothing; one
@@ -2013,6 +2047,7 @@ export function createCodingAgent(
           automationId: started.automationId ?? null,
           automationOrigin: started.automationOrigin ?? null,
           startedFrom: started.startedFrom ?? null,
+          startedByAgentId: yield* ownStarterOf(userId, started.startedByAgentId),
           title: started.title ?? null,
           idempotencyKey: started.idempotencyKey,
           model: started.model,

@@ -1,15 +1,11 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
 import { Database } from "@luke/database/core/query";
 import { user } from "@luke/database/schemas/auth";
-import {
-  openInboxItem,
-  openTaskAgent,
-  openWorkspace,
-  unmigratedPgliteSqlClient,
-} from "@luke/database/testing";
+import { openInboxItem, openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readStoredUIMessages } from "@luke/wire/ui-messages";
 import { Effect, Layer } from "effect";
@@ -56,6 +52,23 @@ function foldersUpTo(last: string) {
     return folder;
   });
 }
+
+/**
+ * An agent of dean's on no task, with its own conversation, as an earlier
+ * build wrote it; its id. Note that the rows are written in SQL naming only
+ * the columns they need, because the schema modules declare today's columns,
+ * which a database migrated only up to the vocabulary does not hold.
+ */
+const openEarlierAgent = (workspaceId: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const id = randomUUID();
+    const conversationId = randomUUID();
+    yield* sql`insert into conversations (id, user_id, kind) values (${conversationId}, 'dean', 'coding_agent')`;
+    yield* sql`insert into coding_agent (id, organization_id, user_id, conversation_id, model, effort, idempotency_key)
+      values (${id}, ${workspaceId}, 'dean', ${conversationId}, 'anthropic/claude-opus-5.5', 'high', ${randomUUID()})`;
+    return id;
+  });
 
 /** Each row as an earlier build wrote it, in order, with its words and sender where it kept them; `KEY` stands for the agent's thread's key. */
 const BEFORE = [
@@ -138,7 +151,7 @@ it.effect(
           db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
         );
         const workspaceId = yield* openWorkspace("dean");
-        const agentId = yield* openTaskAgent("dean", workspaceId, null);
+        const agentId = yield* openEarlierAgent(workspaceId);
         const itemId = yield* openInboxItem("dean", workspaceId, null, agentId, true);
         const [thread] = yield* sql<{
           readonly key: string;
@@ -263,7 +276,7 @@ it.effect(
           db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
         );
         const workspaceId = yield* openWorkspace("dean");
-        const agentId = yield* openTaskAgent("dean", workspaceId, null);
+        const agentId = yield* openEarlierAgent(workspaceId);
         const [agent] = yield* sql<{
           readonly conversationId: string;
         }>`select conversation_id as "conversationId" from coding_agent where id = ${agentId}`;
