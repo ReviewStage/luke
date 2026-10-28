@@ -1129,11 +1129,9 @@ export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | nul
  * here as the writer holds it when it takes such a line, since a task
  * conversation's turnless user rows are its spoken asks and wait for no
  * turn of eve's. A line a turn already received under another row
- * (`noReceiptOfLine`) is not counted, and neither is a line said or typed
- * on a call into the agent: the voice answers many spoken ones itself, and
- * one it hands on, as every typed one is, opens its spoken turn through the
- * asks (`asks.ts`), whose turn row is what reads the agent as running, so no
- * line of a call waits on a turn here. Nor is a line its hand-over withdrew,
+ * (`noReceiptOfLine`) is not counted, and neither is a line a past call
+ * left (`lineOfTheAgents`), whose turn the call opened through an ask of its
+ * own rather than through the line. Nor is a line its hand-over withdrew,
  * which the session did not take.
  */
 const newestAwaitingLines = SqlSchema.findAll({

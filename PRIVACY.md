@@ -195,9 +195,7 @@ lost him, is already marked deleted, whether or not the task is, and is
 removed seven days after it was marked. Before it deletes anything, it
 stops every agent of the task still at work, as Stop does; if one
 cannot be stopped just then, or is still starting, the task is not deleted
-and you can try again in a moment. A deleted task's or agent's past call
-records are kept, unread, until the voice tables are dropped (see "Your
-account"). Deleting your account removes every task. Pinning or archiving a task
+and you can try again in a moment. Deleting your account removes every task. Pinning or archiving a task
 stores only when you did it and deletes nothing.
 
 **A plan's pictures.** When you paste, drop, or choose a picture into a
@@ -824,18 +822,12 @@ when it was queued, started, and ended, and how (rows from earlier versions
 may also hold the ids of OpenAI's responses, and the turns a task's own Luke
 ran before tasks lost him). A transcript from an earlier version, which took
 voice calls, may also hold the lines said on a call into the agent, yours and
-the voice's, each kept as it was written; and each such call keeps a record
-of its own: its task and its agent, OpenAI's id for the session, when it
-started and ended and why, its voice model, its billed seconds (or our own
-count where OpenAI gave none), and each line said on it, by whom and when. A
-call made before calls were made into an agent, when a task had its own Luke,
-keeps its record without the lines said on it, which are deleted. These rows are not sealed: they are stored
+the voice's, each kept as it was written. These rows are not sealed: they are stored
 as written, and our own operators can read them. They stand until you delete
 your account, which removes them at once. A deleted task's agents'
 transcripts are marked deleted and removed seven days later, as is every
 conversation a task held with its own Luke before tasks lost him (see
-"Tasks"). A deleted task's or agent's past call records are kept, unread,
-until the voice tables are dropped.
+"Tasks").
 
 **Linear, if you connect it.** Connecting Linear in Settings › Integrations
 signs you in to Linear in your browser through Vercel Connect, which stores
