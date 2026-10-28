@@ -16,6 +16,8 @@ import { rovingItem } from "../roving-keys/roving-keys.js";
 import { holdRun, ListSelectionContext, selectableRow } from "../selection/list-selection.js";
 import { SelectBox, type SelectBoxPlace } from "../selection/select-box.js";
 
+export { SELECT_BOX_PLACE, type SelectBoxPlace } from "../selection/select-box.js";
+
 /**
  * card-press.tsx -- the one press a whole card is: a real button that reaches every edge of the card it stands in.
  *

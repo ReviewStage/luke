@@ -22,7 +22,8 @@ import { ListSelectionContext } from "./list-selection.js";
  * box rather than in its flow, so it moves nothing as it comes and goes: in
  * the gutter a list row keeps at its start (`--spacing-select-gutter`), or at
  * the start of a card's first line, where the card hides what it draws there
- * while the box shows.
+ * while the box shows. It is `CardPress`'s alone, which an app asks for by
+ * place (`selectBox`), so the barrel offers the places and not the box.
  */
 
 /** Where a row's box stands. */
@@ -53,9 +54,6 @@ const PLACED: Record<SelectBoxPlace, string> = {
   [SELECT_BOX_PLACE.CARD_HEAD]:
     "top-[calc(var(--spacing-row-inset)+(var(--spacing-luke-20)-var(--spacing-select-box))/2)] left-list-inset",
 };
-
-/** What finds a row's box, as a card hiding what stands under it does. */
-export const SELECT_BOX_SELECTOR = ".luke-select-box";
 
 /** The box of the row keyed `selectKey`, in the selection it stands in; nothing outside one. */
 export function SelectBox({
