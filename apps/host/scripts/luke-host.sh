@@ -1,8 +1,8 @@
 #!/bin/sh
-# luke-host -- the host's one command: `uninstall` removes Luke's host from the box, as root, with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
+# luke-host -- the host's one command: `uninstall` removes Luke's host from a Linux box, as root, with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
 #
-# Shipped as bin/luke-host in the release (scripts/package.ts) and linked
-# from /usr/local/bin by the install script.
+# Shipped as bin/luke-host in every release tarball, a Mac's among them
+# (scripts/package.ts), and linked from /usr/local/bin by the install script.
 set -eu
 
 root="$(dirname "$(dirname "$(readlink -f "$0")")")"
@@ -11,6 +11,11 @@ UNIT="luke-host.service"
 SMOLVM_DIR="/opt/luke-smolvm"
 
 uninstall() {
+  # Note that the removal below is systemd's and a Linux user's, so a Mac refuses it rather than run half of it.
+  if [ "$(uname -s)" != "Linux" ]; then
+    printf 'luke-host uninstall removes Luke host from a Linux box only.\n' >&2
+    exit 1
+  fi
   if [ "$(id -u)" -ne 0 ]; then
     printf 'Run it as root: sudo luke-host uninstall\n' >&2
     exit 1
@@ -55,4 +60,7 @@ if [ "${1:-}" = "uninstall" ]; then
   uninstall
   exit 0
 fi
+# Note that the runner is named as the release's own, since a Mac daemon's default is the desktop app's copy beside its release, which a tarball has no sibling for.
+LUKE_HOST_RUNNER_FOLDER="${LUKE_HOST_RUNNER_FOLDER:-$root/lib}"
+export LUKE_HOST_RUNNER_FOLDER
 exec "$root/node/bin/node" "$root/lib/luke-host.mjs" "$@"
