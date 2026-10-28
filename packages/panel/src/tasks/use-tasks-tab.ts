@@ -17,6 +17,7 @@ import { planMarkdown } from "@luke/features/plan-markdown";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
+  type RepositoryPin,
   type Task,
   type TaskRunsOnRequest,
   type TaskStanding,
@@ -53,11 +54,7 @@ import {
   type StripTab,
   sameTab,
 } from "@luke/ui/tab-strip-model";
-import {
-  applySectionWrite,
-  NO_TASK_SECTIONS,
-  SECTION_WRITE_FAILED_NOTE,
-} from "@luke/ui/task-sections-model";
+import { NO_TASK_SECTIONS, SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import {
   AGENT_PIN_FAILED_NOTES,
   agentsPinned,
@@ -72,12 +69,9 @@ import {
   type PendingMarks,
   type PendingPinPositions,
   type PendingRenames,
-  type PendingRepositoryPin,
-  type PendingRepositoryPins,
   type PendingStandings,
   PIN_MOVE_FAILED_NOTE,
   type PinMove,
-  pinnedRepositories,
   positionedView,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
@@ -108,7 +102,6 @@ import {
   undoStillDue,
   unsettledAgentPins,
   unsettledPinPositions,
-  unsettledRepositoryPins,
   withStanding,
   workspaceReaches,
 } from "@luke/ui/tasks-model";
@@ -199,12 +192,6 @@ import {
   useSidePanel,
 } from "./use-side-panel.js";
 import { sayRestored } from "./version-view.js";
-
-/** A change to the sections drawn before the service answered it, and when it was asked. */
-interface PendingSectionWrite {
-  readonly write: TaskSectionWrite;
-  readonly at: number;
-}
 
 /**
  * use-tasks-tab.ts -- the panel's Tasks tab as one control: which page shows, the presses each page makes, and the host's read of the tasks as the tab shows.
@@ -831,14 +818,14 @@ export interface TasksControl {
   onMovePins: (moves: readonly PinMove[], putBack?: () => void) => void;
   /**
    * The sections the account made in its sidebars and the tasks it keeps
-   * in them, every workspace's, as the service last answered them with the
-   * writes still out drawn over them.
+   * in them, every workspace's, as main draws them, the writes still out
+   * among them.
    */
   taskSections: TaskSections;
   /**
-   * Writes changes to the sections, in order, on the account: drawn at
-   * once, sent one after another, and let go as each is answered, so a
-   * refused one goes back with a toast.
+   * Writes a drag's or a menu's changes to the sections, in order, on the
+   * account: drawn by main at once, and put back with a toast if the
+   * service refuses one.
    */
   onWriteSections: (writes: readonly TaskSectionWrite[]) => void;
   /** Deletes a task, which ends its call and returns to the home page if it is the open one; answers whether it was deleted. */
@@ -971,8 +958,8 @@ const NO_PENDING_RENAMES: PendingRenames = new Map();
 /** No task pin given here and still waiting on main's view. */
 const NO_PENDING_MARKS: PendingMarks = new Map();
 
-/** No repository pin given here and still waiting on main's view. */
-const NO_PENDING_PINS: PendingRepositoryPins = new Map();
+/** No repository pinned, as before main's view carries the sidebar. */
+const NO_REPOSITORY_PINS: readonly RepositoryPin[] = [];
 
 /** No agent pin given here and still waiting on main's view. */
 const NO_PENDING_AGENT_PINS: PendingAgentPins = new Map();
@@ -1220,18 +1207,6 @@ export function useTasksTab(input: {
       return next;
     });
   }, []);
-  // A repository's pin given here stands until main's view carries it, as a
-  // task's does. Note that a sign-out lets every one go, because a pin names
-  // a repository rather than a row of this account's own, so one left
-  // standing would be drawn on the next account to sign in.
-  const [repositoryPins, setRepositoryPins] = useState<PendingRepositoryPins>(new Map());
-  useEffect(
-    () =>
-      setRepositoryPins((held) =>
-        accountSignedIn ? unsettledRepositoryPins(held, viewed.repositoryPins) : NO_PENDING_PINS,
-      ),
-    [viewed, accountSignedIn],
-  );
   // An agent's pin given here stands until main's view carries it, as a plan's does.
   const [agentPins, setAgentPins] = useState<PendingAgentPins>(NO_PENDING_AGENT_PINS);
   useEffect(
@@ -1252,25 +1227,11 @@ export function useTasksTab(input: {
       ),
     [viewed, accountSignedIn],
   );
-  // A change to the sections stands drawn until its act settles, by which
-  // time main's view carries the service's answer to it. Note that a
-  // sign-out lets every one go, as it does a repository's pin.
-  const [sectionWrites, setSectionWrites] = useState<readonly PendingSectionWrite[]>([]);
-  useEffect(() => {
-    if (!accountSignedIn) setSectionWrites([]);
-  }, [accountSignedIn]);
   // Note that every list step below is memoized on what it reads, because
   // this runs on every render of the window and each step walks every task
-  // of every workspace.
-  const viewedSections = viewed.taskSections ?? NO_TASK_SECTIONS;
-  const taskSections = useMemo(
-    () =>
-      sectionWrites.reduce(
-        (held, pending) => applySectionWrite(held, pending.write, pending.at),
-        viewedSections,
-      ),
-    [sectionWrites, viewedSections],
-  );
+  // of every workspace. A repository's pin and a change to the sections are
+  // drawn by main the moment they are asked, so the view already carries them.
+  const taskSections = viewed.taskSections ?? NO_TASK_SECTIONS;
   // A tab closed names a task of the account it was closed under, so a sign-out lets them go.
   useEffect(() => {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
@@ -1860,22 +1821,16 @@ export function useTasksTab(input: {
       });
   };
   // A fixture's repositories are pinned nowhere, as its tasks are marked
-  // nowhere. A pin says nothing once it lands, since the group it moves is
-  // in sight; a refusal puts the group back only while no later press
-  // replaced it, and says so in a toast, since the menu that asked has closed.
+  // nowhere. Main draws a pin at once and puts the group back where the
+  // service refused it (`@luke/host`'s `sidebar-collections.ts`); a pin says
+  // nothing once it lands, since the group it moves is in sight, and a
+  // refusal says so in a toast, since the menu that asked has closed.
   const pinRepository = (repository: string, pinned: boolean) => {
     if (fixture !== undefined) return;
-    const next: PendingRepositoryPin = { pinned, at: Date.now() };
-    setRepositoryPins((held) => new Map(held).set(repository, next));
     act(ACT_KIND.TASKS_PIN_REPOSITORY, { repository, pinned })
       .catch(() => false)
       .then((changed) => {
         if (changed) return;
-        setRepositoryPins((held) =>
-          held.get(repository) === next
-            ? new Map([...held].filter(([pending]) => pending !== repository))
-            : held,
-        );
         toast({
           words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
           tone: STATUS_TONE.DANGER,
@@ -1985,35 +1940,24 @@ export function useTasksTab(input: {
     });
   };
 
-  // Each change to the sections waits on the one before it, so the service
-  // takes them in the order they were drawn. A fixture run draws them and
-  // sends none, so its sections stand as dragged until it ends.
-  const sectionFlight = useRef<Promise<unknown>>(Promise.resolve());
+  // A drag's or a menu's changes to the sections go to main as one ask,
+  // which draws them at once and writes them in order after every ask
+  // before them, putting them back where the service refused one
+  // (`@luke/host`'s `sidebar-collections.ts`). A fixture's sections are
+  // changed nowhere, as its repositories are pinned nowhere.
   const writeSections = (writes: readonly TaskSectionWrite[]) => {
-    const now = Date.now();
-    const pending = writes.map((write): PendingSectionWrite => ({ write, at: now }));
-    if (pending.length === 0) return;
-    setSectionWrites((held) => [...held, ...pending]);
-    if (fixture !== undefined) return;
-    const pressedBy = input.account;
-    for (const each of pending) {
-      const flight = sectionFlight.current.then(() =>
-        accountNow.current === pressedBy
-          ? act(ACT_KIND.TASKS_WRITE_SECTION, each.write).catch(() => false)
-          : undefined,
-      );
-      sectionFlight.current = flight;
-      flight.then((changed) => {
-        setSectionWrites((held) => held.filter((one) => one !== each));
-        if (changed === false) {
-          toast({
-            words: SECTION_WRITE_FAILED_NOTE,
-            tone: STATUS_TONE.DANGER,
-            hold: TOAST_HOLD.FAILED,
-          });
-        }
+    const [first, ...rest] = writes;
+    if (first === undefined || fixture !== undefined) return;
+    act(ACT_KIND.TASKS_WRITE_SECTION, { writes: [first, ...rest] })
+      .catch(() => false)
+      .then((changed) => {
+        if (changed) return;
+        toast({
+          words: SECTION_WRITE_FAILED_NOTE,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+        });
       });
-    }
   };
 
   // Each task's status choices made here so far, counted as each is sent,
@@ -3357,7 +3301,7 @@ export function useTasksTab(input: {
     onDraftName: draftName,
     onMarkTask: (taskId, mark) => markTask(taskId, mark),
     onSettleTasks: settleTasks,
-    pinnedRepositories: pinnedRepositories(viewed.repositoryPins, repositoryPins),
+    pinnedRepositories: (viewed.repositoryPins ?? NO_REPOSITORY_PINS).map((pin) => pin.repository),
     onPinRepository: pinRepository,
     taskSections,
     onWriteSections: writeSections,

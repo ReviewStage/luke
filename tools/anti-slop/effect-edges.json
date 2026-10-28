@@ -36,6 +36,7 @@
   "runOnHandedRuntime": [
     "packages/features/src/hosted-link.ts",
     "packages/host/src/client/app-state-store.ts",
+    "packages/host/src/live-collection.ts",
     "packages/host/src/update-service.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
   ],

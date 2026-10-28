@@ -5,6 +5,7 @@ import {
   pinPositionsForMove,
 } from "@luke/features/pin-order";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
+import { isAgentEntry } from "@luke/features/task-section-writes";
 import {
   TASK_BOUNDS,
   TASK_PRIORITY_ORDER,
@@ -79,7 +80,6 @@ import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { FolderXIcon, GLYPH, ICON_SIZE, ListTodoIcon, PinIcon, UserXIcon } from "@luke/ui/icons";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
-  isAgentEntry,
   placeWrites,
   restoreWrites,
   sectionEntries,

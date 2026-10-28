@@ -95,6 +95,7 @@
     "./plan-markdown": "./src/plan-markdown.js",
     "./plan-template": "./src/plan-template.js",
     "./task-section-wire": "./src/task-section-wire.js",
+    "./task-section-writes": "./src/task-section-writes.js",
     "./task-wire": "./src/task-wire.js",
     "./tasks-view": "./src/tasks-view.js",
     "./pull-request-write-wire": "./src/pull-request-write-wire.js",

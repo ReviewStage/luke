@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { inPinOrder } from "@luke/features/pin-order";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
+import { applySectionWrite } from "@luke/features/task-section-writes";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
@@ -15,7 +16,7 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { applySectionWrite, NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
+import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
