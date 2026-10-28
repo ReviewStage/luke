@@ -6,11 +6,9 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 /**
  * places-waiting.ts -- how many wait on the developer in the Inbox, the one
  * reading the places that count them draw from: the sidebar's rows
- * (`desktop-sidebar.tsx`), a phone's places bar (`mobile-bar.tsx`), each
- * task's badge on the Tasks page's List and Board, and the waiting-on-you
- * icon every task row wears (`TaskAgentsMark`) in the sidebar, Recent, ⌘K,
- * and on the Tasks page, so the drawer, the bar, the page, and the rows never
- * disagree. Each channel's row counts the same questions the Inbox's does,
+ * (`desktop-sidebar.tsx`), a phone's places bar (`mobile-bar.tsx`), and
+ * each task's badge on the Tasks page's List and Board, so the drawer, the
+ * bar, and the page never disagree. Each channel's row counts the same questions the Inbox's does,
  * by the channel each lives in (`useChannelWaiting`), so the channels' add
  * up to the Inbox's, bar those in an archived channel, which has no row.
  */

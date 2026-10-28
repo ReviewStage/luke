@@ -19,7 +19,7 @@ import { CatalogSection } from "../section";
 /**
  * task-marks.tsx -- a task's status as its mark, each of the five, its
  * priority as its mark, each of the five, and the one icon of how its agents
- * stand, each of the seven it can wear, every one beside the word it stands for.
+ * stand, each of the six it can wear, every one beside the word it stands for.
  */
 
 /** A task's agents at rest, with `counts` and a pull request standing in `state` where one is given. */
@@ -50,24 +50,23 @@ function agents(
   };
 }
 
-/** One task's agents, and the questions waiting on the reader, in each status its icon wears, most pressing first, each beside its word. */
+/** One task's agents in each status its icon wears, most pressing first, each beside its word. */
 const AGENTS_STATUSES = [
-  ["waiting on you", agents({}), 1],
-  ["failed", agents({ failed: 1 }), 0],
-  ["working", agents({ working: 1 }), 0],
-  ["open", agents({}, PULL_REQUEST_STATE.OPEN), 0],
-  ["draft", agents({}, PULL_REQUEST_STATE.DRAFT), 0],
-  ["merged", agents({}, PULL_REQUEST_STATE.MERGED), 0],
-  ["closed", agents({}, PULL_REQUEST_STATE.CLOSED), 0],
+  ["failed", agents({ failed: 1 })],
+  ["working", agents({ working: 1 })],
+  ["open", agents({}, PULL_REQUEST_STATE.OPEN)],
+  ["draft", agents({}, PULL_REQUEST_STATE.DRAFT)],
+  ["merged", agents({}, PULL_REQUEST_STATE.MERGED)],
+  ["closed", agents({}, PULL_REQUEST_STATE.CLOSED)],
 ] as const;
 
 /** Every status a task's agents icon wears, at `size`, each beside its word. */
 function TaskAgentsMarks({ size }: { size: TaskAgentsMarkSize }): React.JSX.Element {
   return (
     <Inline gap={GAP.SECTION}>
-      {AGENTS_STATUSES.map(([words, summary, waiting]) => (
+      {AGENTS_STATUSES.map(([words, summary]) => (
         <Inline key={words} gap={GAP.CONTROL}>
-          <TaskAgentsMark agents={summary} waiting={waiting} size={size} />
+          <TaskAgentsMark agents={summary} size={size} />
           <Text variant={TEXT_VARIANT.CAPTION}>{words}</Text>
         </Inline>
       ))}

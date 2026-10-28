@@ -178,7 +178,6 @@ function sidebarTask(
       task,
       current,
       unread: false,
-      waiting: 0,
       now: task.updatedAt,
       onOpen: () => asked.opened.push(task.id),
     }),
