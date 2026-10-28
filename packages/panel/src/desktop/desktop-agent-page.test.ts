@@ -656,7 +656,7 @@ function PhonePanelPage(): React.JSX.Element {
   );
 }
 
-test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers none of a task's Board, Code, or Call", async () => {
+test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers none of a task's Comments, Code, or Call", async () => {
   localStorage.clear();
   installScrollIntoView();
   transcript = {
@@ -703,7 +703,7 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
     `the worker's tab stands in the panel: ${opened.join(", ")}`,
   );
   assert.deepEqual(
-    offered.filter((label) => /^(Board|Code|Call)$/u.test(label ?? "")),
+    offered.filter((label) => /^(Comments|Code|Call)$/u.test(label ?? "")),
     [],
     "no task's kind is offered",
   );
