@@ -65,7 +65,14 @@ import { GLYPH } from "@luke/ui/icons";
 import { isWireString } from "@luke/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ActorLine, ActorRef, AutomationCard, commentAuthor } from "../actor-ref.js";
+import {
+  ACTOR_SIZE,
+  ActorLine,
+  ActorMark,
+  ActorRef,
+  AutomationCard,
+  commentAuthor,
+} from "../actor-ref.js";
 import {
   Conversation,
   ConversationContent,
@@ -1090,18 +1097,18 @@ export interface InboxNewThread {
 }
 
 /**
- * The box's new thread for one item: the item's agent's chip, as the
- * crumbs name the agent, and its channel's chip, each hanging its card and
- * opening nothing, since a press on the checkbox's words ticks it.
+ * The box's new thread for one item: the item's agent's chip, wearing its
+ * tile as a mention of the agent does, and its channel's chip, each hanging
+ * its card and opening nothing, since a press on the checkbox's words ticks it.
  */
 function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent): AnswerNewThread {
-  const { name, agent } = by.subject;
+  const { name, tile } = by.subject;
   const channel = offer.channelOf(item);
   return {
     agent: (
       <InlineRef
         look={INLINE_REF_LOOK.PILL}
-        glyph={tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon}
+        glyph={<ActorMark actor={tile} size={ACTOR_SIZE.INLINE} />}
         label={name}
         card={<AgentCard subject={by.subject} models={by.models} />}
       />
