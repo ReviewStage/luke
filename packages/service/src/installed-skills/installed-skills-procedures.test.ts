@@ -33,10 +33,12 @@ import type { WebServices } from "../runtime.js";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
+  GITHUB_APP_WITH_TOKENS,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   type InstallationFixture,
   openGithubUser,
+  openTokenMember,
   type SentToGitHub,
 } from "../testing/github-app-fake.js";
 import { installedSkillsProcedures } from "./installed-skills-procedures.js";
@@ -137,6 +139,7 @@ function repositoryScript(repository: FakeRepository) {
         owner: { login: repository.owner },
         default_branch: "main",
         private: repository.private,
+        updated_at: null,
       });
     }
     const commit = /^\/commits\/(.+)$/u.exec(rest);
@@ -272,6 +275,17 @@ function withAudit(
   };
 }
 
+/** GitHub past its anonymous rate limit, as it answers a request carrying no token; any other goes on to the repository. */
+function anonymousLimited(repository: (sent: SentToGitHub) => Response | undefined) {
+  return (sent: SentToGitHub): Response | undefined =>
+    sent.headers.get("authorization") === null
+      ? Response.json(
+          { message: "API rate limit exceeded" },
+          { status: 403, headers: { "x-ratelimit-remaining": "0" } },
+        )
+      : repository(sent);
+}
+
 /** The one skill a list answered, by id. */
 function installedId(answer: Answer): string {
   const [skill] = readAnswer(installedSkillListAnswerSchema, HOSTED_HTTP_STATUS.OK, answer).skills;
@@ -387,6 +401,38 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
         assert.deepEqual(
           listed.skills.map(({ name, manageable, enabled }) => ({ name, manageable, enabled })),
           [{ name: "review", manageable: true, enabled: true }],
+        );
+      }),
+  );
+
+  it.effect.each([
+    { reader: "the member's own token", tokenMember: true },
+    { reader: "the workspace's installation on another owner", tokenMember: false },
+  ] as const)(
+    "a public source no one may push to previews on $reader while GitHub refuses anonymous reads",
+    ({ tokenMember }) =>
+      Effect.gen(function* () {
+        const kit = fakeRepository("acme", "kit");
+        commitTo(kit, "main", { "skills/review/SKILL.md": skillFile("review", "Review it.") });
+        const elsewhere = installationFor(fakeRepository("stage", "app"));
+        const owner = tokenMember ? yield* openTokenMember() : yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        if (!tokenMember) yield* connectWorkspaceGitHub(workspace, elsewhere);
+        const ask = yield* routes(
+          githubReaching(
+            tokenMember ? [] : [elsewhere],
+            tokenMember ? GITHUB_APP_WITH_TOKENS : undefined,
+            {},
+            anonymousLimited(repositoryScript(kit)),
+          ),
+        );
+
+        const previewed = sourcePreview(
+          yield* ask(`${SKILLS}/preview`, owner, preview(workspace, "npx skills add acme/kit")),
+        );
+        assert.deepEqual(
+          previewed.skills.map((skill) => skill.name),
+          ["review"],
         );
       }),
   );
