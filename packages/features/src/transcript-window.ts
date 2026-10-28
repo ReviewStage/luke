@@ -12,7 +12,10 @@
  * their own (`windowParts`), keyed by the message's id and the part's index,
  * the heavy ones cut as a page asked cut cuts them, so a journal that grows
  * in place moves only the parts it added. A reader draws the messages from
- * both with `windowMessagesOf`, with nothing read again.
+ * both with `windowMessagesOf`, with nothing read again. A reader that
+ * follows the window by cursor is answered only the messages written or
+ * amended past it, which it joins onto the rows it holds
+ * (`joinedWindowRows`).
  */
 
 import { isRecord, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@luke/wire";
@@ -242,4 +245,34 @@ export function windowMessagesOf(
       const parts = partsOf.get(row.id) ?? [];
       return parts.length === row.partCount ? [windowMessageOf(row, parts)] : [];
     });
+}
+
+/** The rows a window is drawn from, beside whatever else the read that carries them answers. */
+interface WindowRows {
+  readonly window: readonly TranscriptWindowRow[];
+  readonly windowParts: readonly TranscriptWindowPartRow[];
+}
+
+/**
+ * The rows held, with an answer's newest messages past the reader's cursor
+ * joined on by message id: each message it answers in place of the one held,
+ * the parts it answers of a message in place of the parts held of it, and
+ * everything else as it answers it, the newest `TRANSCRIPT_WINDOW` messages
+ * kept. Note that a message the answer moved to a later sequence stays one
+ * row, since it keeps its id, and that a message whose row and parts the
+ * answer read apart is left out of the drawing until both agree
+ * (`windowMessagesOf`), as it would be in a whole answer.
+ */
+export function joinedWindowRows<Rows extends WindowRows>(held: Rows, past: Rows): Rows {
+  const rowsAnswered = new Set(past.window.map((row) => row.id));
+  const partsAnswered = new Set([...rowsAnswered, ...past.windowParts.map((row) => row.messageId)]);
+  const window = [...held.window.filter((row) => !rowsAnswered.has(row.id)), ...past.window]
+    .toSorted((a, b) => b.seq - a.seq)
+    .slice(0, TRANSCRIPT_WINDOW);
+  const kept = new Set(window.map((row) => row.id));
+  const windowParts = [
+    ...held.windowParts.filter((row) => !partsAnswered.has(row.messageId)),
+    ...past.windowParts,
+  ].filter((row) => kept.has(row.messageId));
+  return { ...past, window, windowParts };
 }
