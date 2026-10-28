@@ -79,10 +79,6 @@ import {
   type IntegrationsProcedureSeams,
   integrationsProcedures,
 } from "../integrations/integrations-procedures.js";
-import {
-  type WorkspaceLinearProcedureSeams,
-  workspaceLinearProcedures,
-} from "../integrations/workspace-linear-procedures.js";
 import { type LiveProcedureSeams, liveProcedures } from "../live/live-procedures.js";
 import {
   type PlanCommentsProcedureSeams,
@@ -133,7 +129,6 @@ export type HostedRouterSeams = AccountProcedureSeams &
   TasksProcedureSeams &
   WorkspaceGithubProcedureSeams &
   WorkspaceInvitationsProcedureSeams &
-  WorkspaceLinearProcedureSeams &
   SentryInstallProcedureSeams &
   WorkspacesProcedureSeams;
 
@@ -171,7 +166,6 @@ export function hostedRouter(seams: HostedRouterSeams) {
     taskSections: taskSectionsProcedures(seams),
     workspaceGithub: workspaceGithubProcedures(seams),
     workspaceInvitations: workspaceInvitationsProcedures(seams),
-    workspaceLinear: workspaceLinearProcedures(seams),
     workspaceSentry: sentryInstallProcedures(seams),
     workspaces: workspacesProcedures(seams),
   });

@@ -15,10 +15,7 @@ import { auth } from "@luke/service/auth/auth";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { resolveBrowserSessionUserId } from "@luke/service/auth/browser-session";
 import { githubUnlink } from "@luke/service/github/github-unlink";
-import {
-  integrationsAppSeams,
-  workspaceLinearProcedureSeams,
-} from "@luke/service/integrations/integration-seams";
+import { integrationsAppSeams } from "@luke/service/integrations/integration-seams";
 import { type HostedFetch, hostedFetch } from "@luke/service/orpc/handler";
 import { type HostedRouterSeams, hostedRouter } from "@luke/service/orpc/router";
 import type { Route } from "@luke/service/route";
@@ -65,7 +62,6 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   ...accountProcedureSeams(),
   ...hostedAdminSeams(auth.api),
   ...integrationsAppSeams(),
-  ...workspaceLinearProcedureSeams(),
   resolveUserId: resolveHostedUserId,
   resolveSessionUserId: resolveBrowserSessionUserId,
   unlinkGitHub: githubUnlink(auth.api),

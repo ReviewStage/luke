@@ -28,7 +28,6 @@ import type { SessionAuth, SessionContext } from "eve/context";
 import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import {
   ModelCatalog,
   type OfferedModel,
@@ -439,12 +438,7 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<
     WireRecord,
     never,
-    | DatabaseServices
-    | HttpClient.HttpClient
-    | GitHubApp
-    | ModelCatalog
-    | WorkspaceLinearConnect
-    | SentryApp
+    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | SentryApp
   >;
   /** Folds an event the store need hear nothing of into the session's relay state and answers whether it did, so the caller admits the session and relays only the rest: the relay's own quiet events (`foldedQuietly`), bar a compaction's end, which the agent's row records. */
   relaysQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean;

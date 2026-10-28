@@ -9,11 +9,7 @@ import type {
 import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
-import {
-  ALREADY_INVITED_REFUSAL,
-  LINEAR_UNAVAILABLE_REFUSAL,
-  WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "../acts.js";
+import { ALREADY_INVITED_REFUSAL, WORKSPACE_NOT_PERMITTED_REFUSAL } from "../acts.js";
 import {
   ACT_ERROR,
   type ActPortClient,
@@ -35,8 +31,8 @@ import {
  * a frame this build does not trust, are refused in each kind's own words
  * before the host is asked; a panel's ask reaches the host with its payload
  * as the kind's schema read it, and answers what the host answered; a write
- * the account's role does not allow, an address already invited, and a
- * Linear that could not be read are refused in words that say so; and an
+ * the account's role does not allow and an address already invited are
+ * refused in words that say so; and an
  * address the service named opens only where it is the one kind its
  * connection may open.
  */
@@ -72,15 +68,8 @@ const GRACE = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 const ALAN = { userId: "user-alan", name: "Alan Turing" };
-const LINEAR_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
 const SENTRY_INSTALL_URL = "https://sentry.io/sentry-apps/luke/external-install/?state=fixture";
 const SENTRY_INSTALLATION = { installationId: "installation-1", account: "acme" };
-const LINEAR_ISSUE = {
-  id: "issue-1",
-  identifier: "ENG-1",
-  title: "Start a plan from Linear",
-  url: "https://linear.app/acme/issue/ENG-1",
-};
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
@@ -94,12 +83,6 @@ const REFUSAL = {
     "Could not connect GitHub to that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT]:
     "Could not disconnect GitHub from that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT]:
-    "Could not connect Linear to that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]:
-    "Could not disconnect Linear from that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES]:
-    "Could not read that workspace's Linear issues on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]:
     "Could not read that workspace's Sentry on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL]:
@@ -142,9 +125,6 @@ const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
   },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, payload: WORKSPACE },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT, payload: WORKSPACE },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, payload: WORKSPACE },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, payload: WORKSPACE },
   {
@@ -169,8 +149,6 @@ interface Script {
   alreadyInvited: boolean;
   /** The address a GitHub connection answers to open. */
   connectUrl: string;
-  /** The address a Linear connection answers to open. */
-  linearConnectUrl: string;
   /** The address a Sentry install answers to open. */
   sentryInstallUrl: string;
   /** What a people unfollow waits on once the host has heard it, so a test can open a stream while it is on its way. */
@@ -198,7 +176,6 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     notPermitted: false,
     alreadyInvited: false,
     connectUrl: INSTALL_URL,
-    linearConnectUrl: LINEAR_SIGN_IN_URL,
     sentryInstallUrl: SENTRY_INSTALL_URL,
     peopleUnfollowed: Promise.resolve(),
   };
@@ -242,22 +219,6 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     workspaceGitHubDisconnect: (params) =>
       ask(`disconnect:${params.workspaceId}`, () =>
         script.notPermitted ? refusal() : { workspace: ACME },
-      ),
-    workspaceLinearConnect: (params) =>
-      ask(
-        `linear-connect:${params.workspaceId}`,
-        (): TasksWorkspaceGitHubConnectAnswer =>
-          script.notPermitted ? refusal() : { url: script.linearConnectUrl },
-      ),
-    workspaceLinearDisconnect: (params) =>
-      ask(`linear-disconnect:${params.workspaceId}`, () =>
-        script.notPermitted ? refusal() : { workspace: ACME },
-      ),
-    workspaceLinearIssues: (params) =>
-      ask(`linear-issues:${params.workspaceId}`, () =>
-        params.workspaceId === ACME.id
-          ? { issues: [LINEAR_ISSUE] }
-          : ({ failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const),
       ),
     workspaceSentry: (params) =>
       ask(`sentry:${params.workspaceId}`, () =>
@@ -527,24 +488,6 @@ it("a connection's install address opens only where it is GitHub's", async () =>
     refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT],
   });
   assert.deepEqual(browsed, []);
-});
-
-it("a workspace's Linear sign-in opens only an https address, and its issues are answered or refused in words that say how to mend it", async () => {
-  const { client, browsed, script } = windowPort(PANEL);
-
-  const connected = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT, WORKSPACE);
-  script.linearConnectUrl = "http://vercel.test/connect";
-  const plain = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT, WORKSPACE);
-  const issues = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES, WORKSPACE);
-  const none = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES, {
-    workspaceId: "workspace-other",
-  });
-
-  assert.deepEqual(connected, { answer: undefined });
-  assert.deepEqual(plain, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT] });
-  assert.deepEqual(browsed, [LINEAR_SIGN_IN_URL]);
-  assert.deepEqual(issues, { answer: [LINEAR_ISSUE] });
-  assert.deepEqual(none, { refused: LINEAR_UNAVAILABLE_REFUSAL });
 });
 
 it("a workspace's Sentry install opens only Sentry's own address, its installations are read, and a disconnect answers what remains or is refused in words that say why", async () => {
