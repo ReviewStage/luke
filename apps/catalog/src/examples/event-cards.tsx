@@ -33,11 +33,8 @@ function EventCards(): React.JSX.Element {
       <CatalogSection id="event-card-review" title="A review with inline comments">
         <div className="catalog-column">
           <EventCard
-            head={
-              <>
-                @octocat requested changes on <Link>#42</Link>
-              </>
-            }
+            lead="@octocat requested changes on"
+            subject={<Link>#42</Link>}
             notes={COMMENTS.map(([path, line, body]) => ({
               key: `${path}:${line}`,
               where: <Link>{`${path}:${line}`}</Link>,
@@ -51,11 +48,12 @@ function EventCards(): React.JSX.Element {
       <CatalogSection id="event-card-check" title="A failed check, its head alone">
         <div className="catalog-column">
           <EventCard
-            head={
+            lead={
               <>
-                A check failed on <code>3f2a9c1</code> · <Link>Checks</Link>
+                A check failed on <code>3f2a9c1</code> ·
               </>
             }
+            subject={<Link>Checks</Link>}
           />
         </div>
       </CatalogSection>

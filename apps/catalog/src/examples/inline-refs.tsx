@@ -6,6 +6,7 @@ import {
   INLINE_REF_LOOK,
   INLINE_REF_NAME,
   InlineRef,
+  SubjectLine,
   Text,
   UserIcon,
 } from "@luke/ui";
@@ -16,8 +17,9 @@ import { CatalogSection } from "../section";
  * inline-refs.tsx -- things named in a line of words: a link's words, a
  * byline's wash, and a mention's pill, each pressable and not; a pill
  * saying where its subject stands, one that leaves the app as a link, one
- * whose subject is gone, a path cut at its start, and long names in a
- * narrow column. A screen reader hears each pill's kind before its name. Each hangs its card, or
+ * whose subject is gone, a path cut at its start, long names in a narrow
+ * column, and a pill as the subject of a line, as wide as its name until
+ * the line runs out. A screen reader hears each pill's kind before its name. Each hangs its card, or
  * its name in a pill, in the window's tooltip, once the pointer rests on
  * it or the keyboard reaches it.
  */
@@ -130,6 +132,26 @@ function InlineRefs(): React.JSX.Element {
               onPress={press}
             />
           </Text>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="inline-ref-subject" title="The subject of a line">
+        <div className="catalog-column">
+          <SubjectLine lead="Thread answer">
+            <InlineRef
+              look={INLINE_REF_LOOK.PILL}
+              glyph={<DocumentIcon />}
+              label="Expire an invitation after a week?"
+              onPress={press}
+            />
+          </SubjectLine>
+          <SubjectLine lead="Thread message">
+            <InlineRef
+              look={INLINE_REF_LOOK.PILL}
+              glyph={<DocumentIcon />}
+              label="Move every scheduled automation onto the workspace's own timezone"
+              onPress={press}
+            />
+          </SubjectLine>
         </div>
       </CatalogSection>
     </>
