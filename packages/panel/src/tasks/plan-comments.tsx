@@ -192,7 +192,9 @@ import {
  * (`APP_COMMAND.COMMENT_ON_SELECTION`). In the open editor the format
  * toolbar over the words selected takes the bubble's place, its Comment
  * starting the thread (`useEditorComment`), so two surfaces never stand over
- * one selection. Its words are
+ * one selection; and in a plan the reader may edit, words a press selects in
+ * the read view open the editor on them (`clickPlacement`), so the bubble
+ * stands there only until the press ends. Its words are
  * measured in the plan's Markdown by laying the words drawn over the
  * section's source (`@luke/features/plan-comment-anchor`), so emphasis, a
  * link, or a chip inside them puts nothing off. Posting a comment asks no
