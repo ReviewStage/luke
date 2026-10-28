@@ -1377,6 +1377,13 @@ export function composeLocalAgents(
       Effect.gen(function* () {
         const lost = yield* leased;
         if (Option.isNone(lost)) return yield* Effect.sleep(IDLE);
+        // Note that a lease lost to another follower ends the turn wherever it stands, its setup's retries and the kept launches' recovery among it, so nothing of this follower's registers or stops a VM once another holds the machine, and the follow ends with every runner it started.
+        yield* Effect.race(underLease(userId, folder), lost.value);
+      });
+
+    /** What an open gate's turn does once it holds the machine's lease: the device readied and registered, the launches it kept settled, and its agents followed. */
+    const underLease = (userId: string, folder: string) =>
+      Effect.gen(function* () {
         const deviceId = yield* deviceOf(userId);
         const { tools } = platform.sandbox;
         const registered = (setup: DeviceSetupRegister) =>
@@ -1407,11 +1414,7 @@ export function composeLocalAgents(
           }
           if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
         }
-        // Note that a lease lost to another follower ends the follow, every runner it started with it.
-        yield* Effect.race(
-          Effect.scoped(follow(userId, deviceId, folder, shellVariables)),
-          lost.value,
-        );
+        yield* Effect.scoped(follow(userId, deviceId, folder, shellVariables));
       });
 
     const lifetime = Effect.gen(function* () {

@@ -456,8 +456,8 @@ it.effect(
         );
         yield* TestClock.adjust(Duration.seconds(20));
         yield* until(() => tries === 2);
-        // Note that the second wait is doubled, so forty seconds more have not ended it either.
-        yield* TestClock.adjust(Duration.seconds(40));
+        // Note that the second try came by thirty-six seconds in and its wait is doubled, sixty seconds give or take a fifth, so the third comes between seventy-two and a hundred and eight.
+        yield* TestClock.adjust(Duration.seconds(30));
         assert.equal(tries, 2);
         yield* TestClock.adjust(Duration.seconds(40));
         yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
@@ -475,6 +475,41 @@ it.effect(
           "the local agents' smolvm or sandbox image could not be had",
         ]);
         yield* TestClock.adjust(Duration.seconds(1));
+      }),
+    ),
+);
+
+it.effect(
+  "a device whose setup failed tries nothing again, and registers nothing, once another follower has taken the machine's lease",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        let tries = 0;
+        const files = new Map<string, string>();
+        const { registered, reported } = yield* followingDevice(
+          () =>
+            Effect.suspend(() => {
+              tries += 1;
+              return Effect.fail(
+                new LocalAgentSandboxUnavailable({ detail: "smolvm couldn't be downloaded" }),
+              );
+            }),
+          { files },
+        );
+        yield* until(() => tries === 1 && registered.length === 1);
+        // Note that another follower's lease, renewed far ahead, stands for the whole test.
+        const now = yield* Clock.currentTimeMillis;
+        files.set(
+          `${STATE_ROOT}/local-agents.lock`,
+          JSON.stringify({ holder: "another-follower", renewedAt: now + 3_600_000 }),
+        );
+        yield* TestClock.adjust(Duration.seconds(10));
+        yield* until(() =>
+          reported.includes("this follower lost the machine's lease, so it stops"),
+        );
+        yield* TestClock.adjust(Duration.minutes(2));
+
+        assert.deepEqual([tries, registered.length], [1, 1]);
       }),
     ),
 );
