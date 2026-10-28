@@ -1366,12 +1366,18 @@ function holdJournal(context: WriterContext, turnId: string, row: MessageRow, di
   context.journals.set(turnId, { row, dirty });
 }
 
+/** The conversations whose journal is a transcript a coding agent's tab shows: its own and its workers'. */
+const TRANSCRIPT_KINDS: ReadonlySet<string> = new Set([
+  CONVERSATION_KIND.CODING_AGENT,
+  CONVERSATION_KIND.CHILD,
+]);
+
 /**
- * What a coding agent's journal growth costs to write: each amendment that
+ * What a transcript's journal growth costs to write: each amendment that
  * lands rewrites the turn's whole journal row, so its bytes climb with the
- * turn's length.
- * Sentry's metrics layer sends it as the histogram's `.sum`, `.count`,
- * `.min`, and `.max`. It carries a size and never a row, an id, or a txid.
+ * turn's length. Sentry's metrics layer sends it as the histogram's `.sum`,
+ * `.count`, `.min`, and `.max`. It carries a size and never a row, an id, or
+ * a txid.
  */
 const JOURNAL_METRIC = {
   REWRITE_BYTES: Metric.histogram("luke.transcript.journal_rewrite_bytes", {
@@ -1398,8 +1404,8 @@ function landJournals(context: WriterContext): Write<void> {
               parts: held.row.parts,
             }),
             Effect.andThen(
-              // Note that only a coding agent's journal is counted, since its transcript is what the measure is for.
-              context.kind === CONVERSATION_KIND.CODING_AGENT
+              // Note that only a coding agent's journal, or its worker's, is counted, since its transcript is what the measure is for; a child conversation is only ever opened for a worker (`openChildConversation`).
+              TRANSCRIPT_KINDS.has(context.kind)
                 ? Metric.update(
                     JOURNAL_METRIC.REWRITE_BYTES,
                     Buffer.byteLength(JSON.stringify(held.row.parts)),
