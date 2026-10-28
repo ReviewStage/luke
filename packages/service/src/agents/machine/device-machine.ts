@@ -243,6 +243,8 @@ function deviceMachineOver(
         writableRoots: [folders.folder],
         signedIn: device.value.signedIn,
         isolation: device.value.isolation,
+        // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
+        linesRead: false,
       };
       return layout;
     });
