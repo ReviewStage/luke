@@ -319,7 +319,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The Hosts page's one group, drawn once an account is signed in, which Add hosts heads: the machines themselves are read from the service and listed under it.
+    // The Hosts page's Add hosts button, drawn once an account is signed in, under the machines the service lists.
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.ADD_HOSTS,
