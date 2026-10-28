@@ -1,50 +1,28 @@
 import type { Experiment } from "@luke/settings";
-import { FoldingButton, Tooltip } from "@luke/ui";
+import { CornerBadge, FoldingButton } from "@luke/ui";
 import { FlaskConicalIcon, MessageSquareIcon } from "lucide-react";
 import type { MenuAction } from "./desktop/action-menu.js";
 import { useOpenFeedback } from "./open-feedback.js";
 
 /**
- * experiment-marks.tsx -- what an experiment's page wears in its toolbar: the Experimental tag after its title, and Send feedback among its actions.
+ * experiment-marks.tsx -- what says a surface is still an experiment: the flask badge on its control, and Send feedback among a page's actions.
  *
- * Automations and an automation's page each say they are an
- * experiment the same way, so the two are drawn here once. The tag reads as
- * a devtool's Beta label rather than a badge that asks for a look: small,
- * neutral, hairlined, and sitting on the title's baseline (`.experiment-tag`
- * in desktop.css); a phone draws its glyph alone. Send feedback is the window's labelled toolbar button,
- * the same box, weight, and glyph as every other act in a page's toolbar,
- * its words folding away where a narrow toolbar folds its acts', and opens
- * the feedback dialog about the page's own experiment.
+ * A control that is still an experiment, New task's Runs on chip, wears the
+ * flask Settings › Experimental is listed by as a small badge on its corner,
+ * as an app's icon wears a beta badge, rather than a glyph beside it that
+ * reads as a press of its own; the control's hint says Experimental. Send
+ * feedback is the window's labelled toolbar button, the same box, weight,
+ * and glyph as every other act in a page's toolbar, its words folding away
+ * where a narrow toolbar folds its acts', and opens the feedback dialog
+ * about the page's own experiment.
  */
 
-/** What the tag says, and what its glyph is called where it is drawn alone. */
-const EXPERIMENTAL = "Experimental";
+/** What the badge stands for, said in the hint of the control that wears it. */
+export const EXPERIMENTAL = "Experimental";
 
-/**
- * The quiet tag after an experiment's title; in a narrow room, a phone's,
- * whose header leaves the title little room, the experiment's glyph alone,
- * the flask Settings › Experimental is listed by, still called Experimental
- * and saying so in its hint.
- */
-export function ExperimentTag({ narrow = false }: { narrow?: boolean }): React.JSX.Element {
-  if (!narrow)
-    return (
-      <span className="experiment-tag flex-none rounded-luke-full border border-border-strong px-item-gap text-caption font-luke-medium tracking-experiment-tag text-muted-foreground">
-        {EXPERIMENTAL}
-      </span>
-    );
-  return (
-    <Tooltip label={EXPERIMENTAL}>
-      <span
-        className="experiment-tag inline-flex flex-none self-center text-muted-foreground [&>svg]:size-control-icon"
-        data-glyph=""
-        role="img"
-        aria-label={EXPERIMENTAL}
-      >
-        <FlaskConicalIcon aria-hidden="true" />
-      </span>
-    </Tooltip>
-  );
+/** `children`, a control still behind Settings › Experimental, wearing the flask at its corner. */
+export function ExperimentBadge({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <CornerBadge mark={<FlaskConicalIcon />}>{children}</CornerBadge>;
 }
 
 /** What Send feedback is called, on the toolbar's button and a menu's item alike. */
