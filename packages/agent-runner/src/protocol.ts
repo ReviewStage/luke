@@ -351,15 +351,31 @@ const UuidSchema = Schema.String.check(
 );
 
 /**
+ * When a message sent while a turn runs reaches the agent: at the turn's
+ * next step, steering it, or once the turn is over, opening the next one.
+ * A message sent while no turn runs opens one either way.
+ */
+export const MESSAGE_DELIVERY = {
+  STEER: "steer",
+  QUEUE: "queue",
+} as const;
+export type MessageDelivery = (typeof MESSAGE_DELIVERY)[keyof typeof MESSAGE_DELIVERY];
+export const MessageDeliverySchema = Schema.Literals(Object.values(MESSAGE_DELIVERY));
+
+/**
  * A message for the session, in the Messages API's own block shapes. `uuid`
  * is Luke's id for the message, handed to the SDK as the prompt's own, so
  * the ACCEPTED event and the `result` that answers it name it; the runner
- * mints one where a line names none.
+ * mints one where a line names none. `delivery` is how a message sent while
+ * a turn runs reaches it, a steer where none is named: a queued one the
+ * runner holds itself, unaccepted, until the turn is over, and only then
+ * hands on and says it took.
  */
 const MessageLineSchema = Schema.Struct({
   type: Schema.Literal(INPUT_LINE.MESSAGE),
   uuid: Schema.optionalKey(UuidSchema),
   content: Schema.Array(ContentBlockSchema),
+  delivery: Schema.optionalKey(MessageDeliverySchema),
 });
 /**
  * Stop the running turn. `launch` names the launch the stop is for by its

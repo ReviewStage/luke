@@ -64,6 +64,8 @@ export {
   GITHUB_LINE_EVENT,
   type GitHubLineMetadata,
   isDeveloperLine,
+  LINE_DELIVERY,
+  type LineDelivery,
   type LukeLineMetadata,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,

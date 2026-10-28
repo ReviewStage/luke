@@ -161,7 +161,7 @@ import {
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { LINE_DELIVERY, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { sentLineId } from "@luke/wire/host-ids";
 import { temporaryDirectory } from "@luke/wire/testing";
@@ -5136,6 +5136,41 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             [MESSAGE_ROLE.ASSISTANT, undefined],
           ],
         );
+      }),
+  );
+
+  it.effect(
+    "a message queued behind the running turn is handed on queued and reads as queued until a turn takes it",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agent, ask, owner, target, writer, turnId } = yield* startedAgent(eve, {
+          running: true,
+        });
+        const text = "Then open a pull request.";
+        const answered = yield* ask(
+          messageAs(owner, agent.id, {
+            text,
+            clientKey: randomUUID(),
+            delivery: LINE_DELIVERY.QUEUE,
+          }),
+        );
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(answered.body));
+        assert.equal(eve.sent.at(-1)?.message.delivery, LINE_DELIVERY.QUEUE);
+        /** The developer's newest line as the page reads it. */
+        const newestLine = Effect.map(
+          ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+          (read) =>
+            readAnswer(
+              codingAgentMessagesAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              read,
+            ).messages.findLast((each) => each.role === MESSAGE_ROLE.USER),
+        );
+
+        assert.equal((yield* newestLine)?.queued, true);
+        yield* writer.takeAwaitingLine(target, { text, turnId });
+        assert.equal((yield* newestLine)?.queued, undefined);
       }),
   );
 

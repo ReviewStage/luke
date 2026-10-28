@@ -63,6 +63,20 @@ export const MESSAGE_CHANNEL = {
   AUTOMATION: "automation",
 } as const;
 
+/**
+ * When a line typed while a coding agent's turn runs reaches the agent: at
+ * the turn's next step, steering it, or once the turn is over, opening the
+ * next one. A line typed while no turn runs opens one either way. The
+ * runner's own line spells the same values (`@luke/agent-runner/protocol`'s
+ * `MESSAGE_DELIVERY`), which the service hands it.
+ */
+export const LINE_DELIVERY = {
+  STEER: "steer",
+  QUEUE: "queue",
+} as const;
+
+export type LineDelivery = (typeof LINE_DELIVERY)[keyof typeof LINE_DELIVERY];
+
 /** What a member did on a thread that a line steered into its agent carries. */
 export const THREAD_LINE_EVENT = {
   MESSAGE: "message",
@@ -168,6 +182,8 @@ const TYPED_ASK_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.TYPED),
   voice_session_id: EffectSchema.optional(identifier),
   from_ms: EffectSchema.optional(spanInstant),
+  /** Where the line was queued behind the turn under way rather than steering it; a steer names nothing. */
+  delivery: EffectSchema.optional(EffectSchema.Literal(LINE_DELIVERY.QUEUE)),
 });
 
 export type TypedAskMetadata = EffectSchema.Schema.Type<typeof TYPED_ASK_METADATA>;

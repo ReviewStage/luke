@@ -5,6 +5,7 @@ import {
   type ClaudeCodeConfig,
   INPUT_LINE,
   type InputLine,
+  MESSAGE_DELIVERY,
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_HARNESS,
@@ -52,7 +53,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
-import { MESSAGE_ROLE } from "@luke/wire";
+import { LINE_DELIVERY, MESSAGE_ROLE } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
 import {
@@ -1054,48 +1055,53 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
-  it.effect("send writes a message line to the running runner, and cancel writes stop", () =>
-    Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-      const api = runnerSandboxApi();
-      const { userId, agent } = yield* openAgent;
-      const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
-      const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-      const lineId = randomUUID();
-      yield* updateCodingAgentChoice(userId, agent.id, {
-        model: "anthropic/claude-sonnet-5.5",
-        effort: "low",
-      });
+  it.effect(
+    "send writes a message line to the running runner, queued as sent, and cancel writes stop",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const lineId = randomUUID();
+        yield* updateCodingAgentChoice(userId, agent.id, {
+          model: "anthropic/claude-sonnet-5.5",
+          effort: "low",
+        });
 
-      const sent = yield* sessions.send(
-        opened.sessionId,
-        message(agent, "Also the emails.", lineId),
-      );
-      const turnId = yield* turnUnderWay(userId, agent);
-      const cancelled = yield* sessions.cancel(opened.sessionId, turnId);
+        const sent = yield* sessions.send(opened.sessionId, {
+          ...message(agent, "Also the emails.", lineId),
+          delivery: LINE_DELIVERY.QUEUE,
+        });
+        const turnId = yield* turnUnderWay(userId, agent);
+        const cancelled = yield* sessions.cancel(opened.sessionId, turnId);
 
-      assert.deepEqual(sent, {
-        outcome: EVE_SEND_OUTCOME.ACCEPTED,
-        sessionId: opened.sessionId,
-        deliveryId: lineId,
-      });
-      assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
-      assert.equal(api.commands.length, 1);
-      const [model, line, stop] = ((yield* launchLines(api.commands[0])) as InputLine[]).slice(2);
-      // The agent's model and effort as they stand, ahead of the message, so a change since the launch holds.
-      assert.deepEqual(model, {
-        type: INPUT_LINE.MODEL,
-        model: "claude-sonnet-5-5",
-        fast: false,
-        effort: "low",
-      });
-      assert.ok(line?.type === INPUT_LINE.MESSAGE);
-      assert.equal(line.uuid, lineId);
-      assert.deepEqual(developerContent(line), [{ type: "text", text: "Also the emails." }]);
-      // The stop names the launch running the turn, by its first event number.
-      assert.deepEqual(stop, { type: INPUT_LINE.STOP, launch: 0 });
-    }),
+        assert.deepEqual(sent, {
+          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          sessionId: opened.sessionId,
+          deliveryId: lineId,
+        });
+        assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
+        assert.equal(api.commands.length, 1);
+        const [model, line, stop] = ((yield* launchLines(api.commands[0])) as InputLine[]).slice(2);
+        // The agent's model and effort as they stand, ahead of the message, so a change since the launch holds.
+        assert.deepEqual(model, {
+          type: INPUT_LINE.MODEL,
+          model: "claude-sonnet-5-5",
+          fast: false,
+          effort: "low",
+        });
+        assert.ok(line?.type === INPUT_LINE.MESSAGE);
+        assert.equal(line.uuid, lineId);
+        assert.equal(line.delivery, MESSAGE_DELIVERY.QUEUE);
+        assert.deepEqual(developerContent(line), [{ type: "text", text: "Also the emails." }]);
+        // The stop names the launch running the turn, by its first event number.
+        assert.deepEqual(stop, { type: INPUT_LINE.STOP, launch: 0 });
+      }),
   );
 
   it.effect(

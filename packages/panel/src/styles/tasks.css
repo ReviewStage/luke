@@ -1743,6 +1743,13 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   opacity: 0.6;
 }
 
+/* A line queued behind the agent's turn (`queued-mark.tsx`): its bubble and
+   files faded, as words still waiting to go, beside the mark that says so,
+   until a turn takes it. */
+.is-user[data-queued] > :not(.luke-badge, .luke-message-line) {
+  opacity: 0.6;
+}
+
 /* A finished turn's line (`working-time.tsx`) breaks between how long it
    worked and when it ended, never inside either. */
 [data-worked] > :is([data-worked-length], time) {

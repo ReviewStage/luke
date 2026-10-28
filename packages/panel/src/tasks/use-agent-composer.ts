@@ -9,6 +9,7 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
+import { LINE_DELIVERY, type LineDelivery } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { useEffect, useRef, useState } from "react";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
@@ -77,12 +78,13 @@ import {
  * rewind to (`going`), because the service may still withdraw its row.
  */
 
-/** How one message is sent: the agent, the words, the key this send is known by, which Retry carries again, and the files attached, answered as the view hears it. */
+/** How one message is sent: the agent, the words, the key this send is known by, which Retry carries again, the files attached, and whether it is queued behind the turn under way, answered as the view hears it. */
 export type MessageSender = (
   agentId: string,
   text: string,
   clientKey: string,
   attachments: readonly CodingAgentAttachment[],
+  delivery?: LineDelivery,
 ) => Promise<CodingAgentAgentAnswer>;
 
 /** How the agent is taken back to just before one of the developer's lines, by its message id, answered as the view hears it. */
@@ -108,8 +110,8 @@ export interface AgentComposerControl {
   note: Failure | undefined;
   /** Why the agent takes no message any more, in the host's words; nothing while it does. */
   closed: string | undefined;
-  /** Sends the words in the box, trimmed, and its files under a fresh key; nothing on an empty box or a closed agent. */
-  send: () => void;
+  /** Sends the words in the box, trimmed, and its files under a fresh key, steering a turn under way unless `delivery` queues them behind it; nothing on an empty box or a closed agent. */
+  send: (delivery?: LineDelivery) => void;
   /** Sends the message that did not go again under its key, so a send whose answer was lost reaches the agent once. */
   retry: () => void;
   /** The lines sent that the transcript has not read back yet, in order. */
@@ -123,6 +125,8 @@ interface Failed {
   readonly clientKey: string;
   /** Whether its words came back into the box, which Retry sends; else the line keeps them, marked as not sent. */
   readonly inBox: boolean;
+  /** Whether it was queued behind a turn, which Retry from the box queues again. */
+  readonly delivery?: LineDelivery | undefined;
   readonly note: Failure;
 }
 
@@ -319,7 +323,7 @@ export function useAgentComposer(input: {
         rewound !== undefined && "failure" in rewound
           ? rewound
           : await latest.current
-              .send(agentId, line.text, line.clientKey, line.attachments)
+              .send(agentId, line.text, line.clientKey, line.attachments, line.delivery)
               .catch((): CodingAgentAgentAnswer => UNANSWERED);
       // An answer to another agent's tab, or to a tab since remounted, is nobody's.
       if (latest.current.agentId !== agentId) return;
@@ -378,7 +382,13 @@ export function useAgentComposer(input: {
       const rewoundNow = rewound !== undefined && !("failure" in rewound);
       ours((was) => ({
         ...was,
-        failed: { lineId: line.id, clientKey: line.clientKey, inBox, note },
+        failed: {
+          lineId: line.id,
+          clientKey: line.clientKey,
+          inBox,
+          delivery: line.delivery,
+          note,
+        },
         sent: inBox
           ? was.sent.filter((each) => each.id !== line.id)
           : marked(
@@ -391,17 +401,21 @@ export function useAgentComposer(input: {
     queues.current.set(agentId, going);
   };
 
-  const sendDraft = (clientKey: string = crypto.randomUUID()) => {
+  const sendDraft = (clientKey: string = crypto.randomUUID(), delivery?: LineDelivery) => {
     const text = kept.draft.text.trim();
     const { attachments } = kept.draft;
     if (!hasWordsOrFiles(text, attachments) || held.closed !== undefined) return;
+    // Note that only a turn under way can be queued behind; with none, the line opens one either way.
+    const running = input.running === true;
+    const queued = running && delivery === LINE_DELIVERY.QUEUE;
     const line: SentLine = {
       id: sentLineId(clientKey),
       clientKey,
       text,
       attachments,
-      steers: input.running === true,
+      steers: running && !queued,
       state: SENT_LINE_STATE.PENDING,
+      ...(queued ? { delivery: LINE_DELIVERY.QUEUE } : undefined),
     };
     update(() => EMPTY_DRAFT);
     setHeld((was) => ({ ...was, failed: undefined, sent: [...was.sent, line] }));
@@ -504,12 +518,12 @@ export function useAgentComposer(input: {
     sending: false,
     note: held.closed === undefined ? (held.failed?.note ?? held.revertFailed?.note) : undefined,
     closed: held.closed,
-    send: () => sendDraft(),
+    send: (delivery) => sendDraft(undefined, delivery),
     retry: () => {
       const { failed, revertFailed } = held;
       if (revertFailed !== undefined) return revert(revertFailed.messageId);
       if (failed === undefined) return;
-      if (failed.inBox) sendDraft(failed.clientKey);
+      if (failed.inBox) sendDraft(failed.clientKey, failed.delivery);
       else resend(failed.lineId);
     },
     retryLine: resend,

@@ -1,4 +1,10 @@
-import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
+import {
+  keepIdentity,
+  LINE_DELIVERY,
+  MESSAGE_ROLE,
+  TURN_ORIGIN,
+  WireValueSchema,
+} from "@luke/wire";
 import { describeWire, readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
@@ -641,14 +647,17 @@ export const codingAgentStartRequestOnWire = (request: CodingAgentStartRequest) 
  * so the service answers what the first send did rather than sending the
  * words a second time. The message steers the turn under way, so the model
  * sees it at its next step and a call still generating is cut short and
- * run again with it, or opens a turn where none runs. The answer is the
- * agent's summary with its status read after the message was taken, which
- * is running.
+ * run again with it, or, where its `delivery` queues it, waits for that turn
+ * to end and opens the next; either opens a turn where none runs. A steer
+ * names no delivery, so a service older than queueing still takes it. The
+ * answer is the agent's summary with its status read after the message was
+ * taken, which is running.
  */
 export const codingAgentMessageRequestSchema = EffectSchema.Struct({
   text: messageWordsSchema,
   clientKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
+  delivery: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(LINE_DELIVERY))),
 }).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
 
 export type CodingAgentMessageRequest = typeof codingAgentMessageRequestSchema.Type;
@@ -2148,6 +2157,13 @@ const codingAgentMessageSchema = EffectSchema.Struct({
   arrivedIn: EffectSchema.optionalKey(
     EffectSchema.Struct({ journalId: EffectSchema.String, afterStep: countedNumber }),
   ),
+  /**
+   * Whether one of the developer's lines was queued behind the turn under way
+   * and no turn has taken it yet, so the tab draws it waiting at the
+   * transcript's foot; absent once a turn took it, on a line that steered or
+   * opened its turn, on every other row, and from a service older than it.
+   */
+  queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
   /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
   startedAt: EffectSchema.optionalKey(countedNumber),
   /** Epoch milliseconds the turn answered or ended; absent while it is still written, on the developer's rows, and from a service older than it. */

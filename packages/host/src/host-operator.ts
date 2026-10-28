@@ -1772,6 +1772,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           text: params.text,
           clientKey: params.clientKey,
           ...("attachments" in params ? { attachments: params.attachments } : undefined),
+          ...("delivery" in params ? { delivery: params.delivery } : undefined),
         }),
         answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),

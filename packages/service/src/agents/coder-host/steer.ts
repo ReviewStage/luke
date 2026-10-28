@@ -29,6 +29,7 @@ import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/
 import { MENTION_KIND, withoutMemberLinks } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
 import { causeKind } from "@luke/runtime/effect";
+import { LINE_DELIVERY, type LineDelivery } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -138,6 +139,8 @@ export interface SteerLine {
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
   readonly sender: LineSender;
   readonly metadata?: AwaitingLineMetadata | undefined;
+  /** Whether a line sent while a turn runs steers it or is queued for the next; a steer where none is named. */
+  readonly delivery?: LineDelivery | undefined;
   /** The words the servers handed to the next turn are read from where they are not all of `text`: an automation's own prompt, never a webhook body or a GitHub event's words beside it; `text` otherwise. */
   readonly serverWords?: string | undefined;
 }
@@ -441,13 +444,20 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   // and so is whether the session the record named had ended, whose running turn nothing else ends.
   let refused: HostedRefusal | undefined;
   let ended = false;
+  const queued = line.delivery === LINE_DELIVERY.QUEUE;
   const message = {
     conversationId: agent.conversationId,
     turn: EVE_HOST_TURN.TYPED,
     message: eveContent(line.text, attachments, mentioned, label),
     // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
     lineId: sentLineId(line.clientKey),
+    ...(queued ? { delivery: LINE_DELIVERY.QUEUE } : undefined),
   };
+  // A queued line's row says so, so the transcript draws it waiting until a turn takes it.
+  const metadata: AwaitingLineMetadata | undefined =
+    queued && line.metadata === undefined
+      ? { channel: MESSAGE_CHANNEL.TYPED, delivery: LINE_DELIVERY.QUEUE }
+      : line.metadata;
   // Note that a session eve no longer runs, or none at all, is no refusal: the words open a fresh
   // session over the same conversation, which claims its record forward from the one that ended and
   // is seeded with what was said in it (`host.ts`'s `seed`), so no developer has to press Continue.
@@ -513,7 +523,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   );
   const written = yield* hostedStoreOrUnavailable(
     Effect.flatMap(writer, (write) =>
-      write.writeAwaitingLine(target, { ...line, attachments, mentioned }, dispatch),
+      write.writeAwaitingLine(target, { ...line, attachments, mentioned, metadata }, dispatch),
     ),
   );
   if (Result.isFailure(written))

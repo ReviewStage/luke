@@ -75,6 +75,7 @@ import {
   INPUT_LINE,
   type InputLine,
   type IntegrationServer,
+  MESSAGE_DELIVERY,
   RUNNER_END,
   RUNNER_ENV,
   type RunnerConfig,
@@ -745,8 +746,15 @@ export const runnerSessions = <
         uuid,
         layout.attachments,
       );
+      // A queued message is held by the runner for the next turn; a steer names no delivery, as a runner older than queueing reads it.
+      const queued = message.delivery === MESSAGE_DELIVERY.QUEUE;
       return {
-        line: { type: INPUT_LINE.MESSAGE, uuid, content },
+        line: {
+          type: INPUT_LINE.MESSAGE,
+          uuid,
+          content,
+          ...(queued ? { delivery: MESSAGE_DELIVERY.QUEUE } : undefined),
+        },
         files,
         turn: message.turn,
         timeZone: message.timeZone,

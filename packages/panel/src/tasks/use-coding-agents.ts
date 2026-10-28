@@ -1469,7 +1469,7 @@ export function useCodingAgents(input: {
   );
 
   const onMessage = useCallback<MessageSender>(
-    async (agentId, text, clientKey, attachments) => {
+    async (agentId, text, clientKey, attachments, delivery) => {
       // Note that a message that opens the agent's sandbox anew while its image is prepared is
       // taken at once, its relaunch waiting on the image in the service, so it is asked once.
       const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_MESSAGE, {
@@ -1477,6 +1477,7 @@ export function useCodingAgents(input: {
         text,
         clientKey,
         ...(attachments.length === 0 ? undefined : { attachments }),
+        ...(delivery === undefined ? undefined : { delivery }),
       }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
       if (!("failure" in answer)) {
         setList((was) =>

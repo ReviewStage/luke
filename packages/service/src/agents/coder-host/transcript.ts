@@ -52,6 +52,7 @@ import {
   type TurnRecord,
 } from "@luke/features/coding-agent-wire";
 import { turnRecordOf } from "@luke/features/turn-record";
+import { LINE_DELIVERY } from "@luke/wire";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, type Schema } from "effect";
 import {
@@ -150,6 +151,7 @@ type TranscriptMessage = StoredUIMessage &
     readonly sentBy?: CodingAgentSender;
     readonly sentAt?: number;
     readonly arrivedIn?: LinePlace;
+    readonly queued?: true;
   };
 
 /** A page of the transcript as the route answers it: each row's message, the agent's status as it stood, and why where its newest turn failed. */
@@ -338,6 +340,14 @@ function spokenOnCall(message: StoredUIMessage): boolean {
   return "channel" in metadata && metadata.channel === MESSAGE_CHANNEL.VOICE;
 }
 
+/** Whether one of the developer's lines was queued behind a turn and no turn has taken it yet. */
+function queuedLine(record: StoredMessageRecord): boolean {
+  if (record.turnId !== undefined || record.message.role !== MESSAGE_ROLE.USER) return false;
+  const { metadata } = record.message;
+  if (!("channel" in metadata)) return false;
+  return metadata.channel === MESSAGE_CHANNEL.TYPED && metadata.delivery === LINE_DELIVERY.QUEUE;
+}
+
 /**
  * A row as the page carries it: its message, for a developer's line when
  * and what sent it and where in a turn under way it arrived, for a line
@@ -360,6 +370,7 @@ function transcriptMessageOf(
       ...(sent === undefined ? undefined : { sentBy: senderOf(sent) }),
       sentAt: record.placedAt.getTime(),
       ...(place === undefined ? undefined : { arrivedIn: place }),
+      ...(queuedLine(record) ? { queued: true } : undefined),
     };
   }
   if (spokenOnCall(record.message)) {
