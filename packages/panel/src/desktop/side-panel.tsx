@@ -1,5 +1,6 @@
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import {
+  CODING_AGENT_MACHINE,
   CODING_AGENT_STATUS,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
@@ -12,7 +13,7 @@ import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
@@ -167,7 +168,7 @@ import {
   type SidePanelControl,
   type SidePanelTab,
 } from "../tasks/use-side-panel.js";
-import { useCapability, useExperiment } from "../use-app-state.js";
+import { useCapability } from "../use-app-state.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
@@ -661,9 +662,9 @@ export function panelEntries(input: {
     readonly onNew: (agentId: string) => void;
   };
   /**
-   * Where a new Browser tab may open, while the Browser tab experiment is
-   * on: each of the task's coding agents' cloud browsers, the one viewed
-   * first, drafted through `onAgent`; none where the caller offers none.
+   * Where a new Browser tab may open: each of the task's coding agents'
+   * cloud browsers, the one viewed first, drafted through `onAgent`; none
+   * where the caller offers none.
    */
   browsers?: {
     readonly agents: readonly CloudBrowserOffer[];
@@ -775,8 +776,6 @@ export function panelOffers(input: {
   pages: readonly PageLine[];
   /** Adds a shell to an agent's sandbox; none where the platform runs no terminals. */
   onNewTerminal: ((agentId: string) => void) | undefined;
-  /** Whether the Browser tab experiment is on. */
-  browsers: boolean;
   /** The agent whose browser a new tab is offered in first: the one the panel or the column shows. */
   viewedAgent: string | undefined;
   plan: PlanStanding | undefined;
@@ -790,10 +789,12 @@ export function panelOffers(input: {
     const subject = agentSubject(agents, agentId, cards.held, false);
     return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };
   };
+  // Note that an agent on a Mac is offered none, because only a cloud sandbox runs a browser.
   const cloudOffers: readonly CloudBrowserOffer[] =
-    !input.browsers || holder !== SIDE_PANEL_HOLDER.TASK
+    holder !== SIDE_PANEL_HOLDER.TASK
       ? []
-      : [...(agents.agents ?? [])]
+      : (agents.agents ?? [])
+          .filter((agent) => agent.machine !== CODING_AGENT_MACHINE.DEVICE)
           .sort((a, b) => Number(b.id === input.viewedAgent) - Number(a.id === input.viewedAgent))
           .map((agent) => ({ agentId: agent.id, agent, owner: ownerOf(agent.id) }));
   return panelEntries({
@@ -2442,12 +2443,11 @@ export function SidePanel({
   const terminals = !terminalsHere
     ? NO_TERMINALS
     : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
-  const browserOn = useExperiment(EXPERIMENT.BROWSER);
-  // The task's agents' cloud Browser tabs stand while the experiment is on,
-  // on every platform, since the page draws them from the service and needs
-  // nothing of main's; on a task's own panel alone, never an agent's page's or
-  // the Inbox's, which borrows its task's panel.
-  const cloudListing = browserOn && holder === SIDE_PANEL_HOLDER.TASK;
+  // The task's agents' cloud Browser tabs stand on every platform, since the
+  // page draws them from the service and needs nothing of main's; on a task's
+  // own panel alone, never an agent's page's or the Inbox's, which borrows its
+  // task's panel.
+  const cloudListing = holder === SIDE_PANEL_HOLDER.TASK;
   const cloudListed = useCloudBrowserTabs(taskId, cloudListing);
   // A draft of a tab in an agent's browser stands after the tabs the service lists, until it opens one.
   const cloudDraftsHeld = useCloudBrowserDrafts(taskId, cloudListing);
@@ -2526,7 +2526,6 @@ export function SidePanel({
     onNewTerminal: terminalsHere
       ? (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW)
       : undefined,
-    browsers: browserOn,
     viewedAgent,
     plan: task,
     cards: {

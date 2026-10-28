@@ -93,7 +93,7 @@ test("a delivery that moves only the settings leaves every other slice the objec
   const { drawn, deliver } = await window(first);
   const held = drawn.at(-1);
 
-  const moved = stateWith(experimentsOn(EXPERIMENT.BROWSER), { version: 2 });
+  const moved = stateWith(experimentsOn(EXPERIMENT.MEMORY), { version: 2 });
   await deliver(moved);
   const now = drawn.at(-1);
 

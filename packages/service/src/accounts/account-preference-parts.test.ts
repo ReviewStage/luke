@@ -142,15 +142,13 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
       const { owner, ask } = yield* openAccounts;
       assert.deepEqual(partOf(yield* ask(request(owner)), "experiments"), {});
 
-      const turnedOn = yield* ask(request(owner, { experiments: { [EXPERIMENT.BROWSER]: true } }));
-      assert.deepEqual(partOf(turnedOn, "experiments"), { [EXPERIMENT.BROWSER]: true });
+      const turnedOn = yield* ask(request(owner, { experiments: { [EXPERIMENT.MEMORY]: true } }));
+      assert.deepEqual(partOf(turnedOn, "experiments"), { [EXPERIMENT.MEMORY]: true });
 
       // The voice's own write leaves the experiments standing, and the experiments' leaves the voice.
       yield* ask(request(owner, { preferences: { voice: "cedar" } }));
-      const turnedOff = yield* ask(
-        request(owner, { experiments: { [EXPERIMENT.BROWSER]: false } }),
-      );
-      assert.deepEqual(partOf(turnedOff, "experiments"), { [EXPERIMENT.BROWSER]: false });
+      const turnedOff = yield* ask(request(owner, { experiments: { [EXPERIMENT.MEMORY]: false } }));
+      assert.deepEqual(partOf(turnedOff, "experiments"), { [EXPERIMENT.MEMORY]: false });
       assert.deepEqual(partOf(turnedOff, "preferences"), { voice: "cedar" });
     }),
   );
@@ -159,17 +157,17 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts;
       const newer = yield* ask(
-        request(owner, { experiments: { [EXPERIMENT.BROWSER]: true, newer: true } }),
+        request(owner, { experiments: { [EXPERIMENT.MEMORY]: true, newer: true } }),
       );
-      assert.deepEqual(partOf(newer, "experiments"), { [EXPERIMENT.BROWSER]: true });
+      assert.deepEqual(partOf(newer, "experiments"), { [EXPERIMENT.MEMORY]: true });
 
-      const refused = yield* ask(request(owner, { experiments: [EXPERIMENT.BROWSER] }));
+      const refused = yield* ask(request(owner, { experiments: [EXPERIMENT.MEMORY] }));
       assert.deepEqual(refused, {
         status: HOSTED_HTTP_STATUS.BAD_REQUEST,
         body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
       });
       assert.deepEqual(partOf(yield* ask(request(owner)), "experiments"), {
-        [EXPERIMENT.BROWSER]: true,
+        [EXPERIMENT.MEMORY]: true,
       });
     }),
   );
@@ -177,7 +175,7 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
   it.effect("answers the bearer's own account's choices and no other's", () =>
     Effect.gen(function* () {
       const { owner, other, ask } = yield* openAccounts;
-      yield* ask(request(owner, { experiments: { [EXPERIMENT.BROWSER]: true } }));
+      yield* ask(request(owner, { experiments: { [EXPERIMENT.MEMORY]: true } }));
       assert.deepEqual(partOf(yield* ask(request(other)), "experiments"), {});
     }),
   );

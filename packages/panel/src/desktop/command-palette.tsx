@@ -195,7 +195,7 @@ import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "../tasks/use-workspace-members.js";
-import { useCapability, useExperiment, useExperimentChoices } from "../use-app-state.js";
+import { useCapability, useExperimentChoices } from "../use-app-state.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
@@ -904,10 +904,9 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
   show();
 }
 
-/** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals, and whether the Browser tab experiment is on. */
+/** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals. */
 interface PanelOfferDoors {
   readonly onNewTerminal: ((agentId: string) => void) | undefined;
-  readonly browsers: boolean;
 }
 
 /**
@@ -966,7 +965,6 @@ function agentRows(
         agents: tasks.agents,
         pages,
         onNewTerminal: doors.onNewTerminal,
-        browsers: doors.browsers,
         viewedAgent: undefined,
         plan: openPlanStanding(tasks),
         cards: {
@@ -2083,7 +2081,6 @@ export function CommandPalette({
     onNewTerminal: useCapability(HOST_CAPABILITY.TERMINALS)
       ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
       : undefined,
-    browsers: useExperiment(EXPERIMENT.BROWSER),
   };
   const taskId = tasks.activeTaskId;
   const repository = tasks.tasks.find((task) => task.id === taskId)?.repository ?? null;

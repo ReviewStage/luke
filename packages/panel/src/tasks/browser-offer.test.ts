@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_MACHINE,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { BROWSER_TAB_OPEN_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -24,12 +26,11 @@ import { NO_LOOKS } from "./use-task-looks.js";
 
 /**
  * Where a Browser tab is offered: the side panel's "+" lists New browser tab
- * under Browser while the account has the Browser tab experiment on and the
- * task has a coding agent, always in an agent's cloud browser: one agent's
+ * under Browser while the task has a coding agent, always in an agent's cloud browser: one agent's
  * at once, and with several, a submenu of whose, the one viewed first. A
  * pick lands on a draft, which opens nothing until its bar's Enter
- * (`cloud-browser-tab.test.ts`). With no agent, or the experiment off, the
- * "+" offers none. A synthetic plan and agents throughout.
+ * (`cloud-browser-tab.test.ts`). With no agent, or only one on a Mac, which
+ * runs no browser, the "+" offers none. A synthetic plan and agents throughout.
  */
 
 const TASK: Task = {
@@ -75,6 +76,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   fakeAppBridge({ onMenuCommand: () => () => undefined });
+  handState({});
 });
 
 afterEach(() => {
@@ -147,14 +149,12 @@ async function browserRows(): Promise<HTMLElement[]> {
   ].filter((row) => row.closest('[role="group"]')?.textContent?.startsWith("Browser") === true);
 }
 
-test("on a task with no coding agent, the panel's + offers no Browser tab, and none with the experiment off", async () => {
-  handState(experimentsOn(EXPERIMENT.BROWSER));
+test("on a task with no coding agent, or only one on a Mac, the panel's + offers no Browser tab", async () => {
   await mount();
   assert.deepEqual(await browserRows(), []);
 
   for (const root of roots.splice(0)) act(() => root.unmount());
-  handState({});
-  await mount([AGENT]);
+  await mount([{ ...AGENT, machine: CODING_AGENT_MACHINE.DEVICE }]);
   assert.deepEqual(await browserRows(), []);
 });
 
@@ -171,7 +171,6 @@ function landedOnDraft(chosen: readonly SidePanelTab[]): boolean {
 }
 
 test("on a task with one coding agent, the panel's + New browser tab drafts a tab in its browser at once, with no submenu, and opens nothing", async () => {
-  handState(experimentsOn(EXPERIMENT.BROWSER));
   const asked: unknown[] = [];
   fakeActPort({
     [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: (payload) => {
@@ -199,7 +198,6 @@ function submenuChoices(): HTMLElement[] {
 }
 
 test("on a task with several coding agents, the panel's + New browser tab opens a submenu of the agents alone, the one viewed first, and an agent drafts a tab in its browser and opens nothing", async () => {
-  handState(experimentsOn(EXPERIMENT.BROWSER));
   const asked: unknown[] = [];
   fakeActPort({
     [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: (payload) => {
@@ -227,7 +225,6 @@ test("on a task with several coding agents, the panel's + New browser tab opens 
 });
 
 test("a cloud Browser tab wears its agent's glyph in the strip and hangs a card naming the agent's browser and the page's address", async () => {
-  handState(experimentsOn(EXPERIMENT.BROWSER));
   const tab = {
     id: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
     agentId: OTHER_AGENT.id,
