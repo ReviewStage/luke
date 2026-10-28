@@ -1150,27 +1150,36 @@ export const THREAD_LINE_LEAD = {
   [THREAD_LINE_EVENT.CLOSE]: INBOX_CLOSE_LEAD,
 } as const;
 
-/** Where the item's key opens on a thread line's first line, past its quoted title. */
+/** Where the item's key opens on an answer's first line, past its quoted title. */
 const KEY_OPENS = '" (key ';
 
 /** Where the item's key closes, which no key spells. */
 const KEY_CLOSES = "):";
+
+/** How a line's paragraphs are set apart. */
+const PARAGRAPH = "\n\n";
 
 /**
  * A member's thread line as a person reads it under its head: what they
  * wrote, without the first line that names the item to the agent by its
  * title and key (`inboxThreadMessage`, `inboxAnswerMessage`), but for what
  * an answer's first line says they did after the key ("Declined."); nothing
- * of a close, which says only that it closed. Note that the line is read
- * by its metadata's word that it is a thread's, so its first line is always
- * that header, and the key is found past the title's closing quote, since
- * a key spells no parenthesis.
+ * of a close, which says only that it closed. Note that the line is read by
+ * its metadata's word that it is a thread's, so its first line is always
+ * that header: a message's is the header alone, dropped whole, and an
+ * answer's key is found by its last opening on that line, since a title is
+ * free text that may spell one and the words after the key never do.
  */
 export function threadLineWords(text: string, event: ThreadLineMetadata["event"]): string {
   if (event === THREAD_LINE_EVENT.CLOSE) return "";
-  const head = text.indexOf(KEY_OPENS);
-  const close = head === -1 ? -1 : text.indexOf(KEY_CLOSES, head + KEY_OPENS.length);
-  return close === -1 ? text : text.slice(close + KEY_CLOSES.length).trim();
+  const cut = text.indexOf(PARAGRAPH);
+  const head = cut === -1 ? text : text.slice(0, cut);
+  const rest = cut === -1 ? "" : text.slice(cut + PARAGRAPH.length);
+  if (event === THREAD_LINE_EVENT.MESSAGE) return rest.trim();
+  const key = head.lastIndexOf(KEY_OPENS);
+  const close = key === -1 ? -1 : head.indexOf(KEY_CLOSES, key + KEY_OPENS.length);
+  const did = close === -1 ? head : head.slice(close + KEY_CLOSES.length).trim();
+  return [did, rest.trim()].filter((part) => part !== "").join(PARAGRAPH);
 }
 
 /** A field's value as words: a number as it prints, yes or no for a boolean. */

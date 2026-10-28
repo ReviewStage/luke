@@ -10,8 +10,9 @@ import {
   Text,
   TextLink,
 } from "@luke/ui";
-import { GITHUB_LINE_EVENT, type GitHubLineMetadata, type ThreadLineMetadata } from "@luke/wire";
+import type { GitHubLineMetadata, ThreadLineMetadata } from "@luke/wire";
 import type { ReactNode } from "react";
+import { githubLineHead } from "./coding-agent-model.js";
 import { linkChip, type MentionDoors } from "./mention-chip.js";
 import { NO_TASK, useMentionDoors } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -30,21 +31,6 @@ import { useOpenLink } from "./use-open-link.js";
  * inline comment by the line it is on, with the instructions and the fence
  * left to the agent.
  */
-
-/** How many characters of a commit a head names it by, as GitHub's own short form. */
-const SHORT_SHA_CHARS = 7;
-
-/** What a review's verdict reads as before its pull request, by GitHub's own state; any other reads as reviewed. */
-const VERDICT_WORDS: ReadonlyMap<string, string> = new Map([
-  ["approved", "approved"],
-  ["changes_requested", "requested changes on"],
-]);
-
-/** What a review that is neither an approval nor a change request reads as. */
-const REVIEWED = "reviewed";
-
-/** What a comment reads as before its pull request. */
-const COMMENTED = "commented on";
 
 /** A link in a card's words, opened as the window opens links: the chip of what it names where the transcript draws one (`linkChip`) and `doors` are given, else the link. */
 function CardLink({
@@ -101,29 +87,6 @@ export function ThreadLineHead({ line }: { line: ThreadLineMetadata }): React.JS
   );
 }
 
-/** What a GitHub line's head says GitHub did, before the thing it did it to. */
-function eventWords(line: GitHubLineMetadata): string {
-  switch (line.event) {
-    case GITHUB_LINE_EVENT.REVIEW:
-      return `@${line.by} ${VERDICT_WORDS.get(line.verdict ?? "") ?? REVIEWED}`;
-    case GITHUB_LINE_EVENT.COMMENT:
-      return `@${line.by} ${COMMENTED}`;
-    case GITHUB_LINE_EVENT.CHECK_FAILED:
-      return "A check failed on";
-    case GITHUB_LINE_EVENT.CHECKS_COMPLETED:
-      return "Every check finished on";
-  }
-}
-
-/** What a GitHub line's head names: a check's commit by its short form where the line says it, else the pull request by its number, each linking the line's page; else that page as its checks. */
-function eventTarget(line: GitHubLineMetadata): string {
-  const checks =
-    line.event === GITHUB_LINE_EVENT.CHECK_FAILED ||
-    line.event === GITHUB_LINE_EVENT.CHECKS_COMPLETED;
-  if (checks && line.sha !== undefined) return line.sha.slice(0, SHORT_SHA_CHARS);
-  return line.number === undefined ? "its checks" : `#${line.number}`;
-}
-
 /** One inline comment as the card's note: its place, linking its page, over its words. */
 function commentNote(
   comment: NonNullable<GitHubLineMetadata["comments"]>[number],
@@ -141,12 +104,13 @@ function commentNote(
 export function GitHubLineCard({ line }: { line: GitHubLineMetadata }): React.JSX.Element {
   const doors = useMentionDoors();
   const words = line.words ?? "";
+  const head = githubLineHead(line);
   return (
     <EventCard
       data-github-line={line.event}
       head={
         <>
-          {eventWords(line)} <CardLink href={line.url} label={eventTarget(line)} doors={doors} />
+          {head.event} <CardLink href={line.url} label={head.target} doors={doors} />
         </>
       }
       notes={(line.comments ?? []).map(commentNote)}

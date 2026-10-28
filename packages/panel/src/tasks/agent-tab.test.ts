@@ -1089,7 +1089,7 @@ const TASK_PAGE: TaskMentionsValue = {
   },
 };
 
-test("a member's message on a thread is headed by what they did and the thread's chip, its words without the header that names the item to the agent", () => {
+test("a member's message on a thread is headed by what they did and the thread's chip, its words without the header that names the item to the agent, whatever its title spells", () => {
   fakeAppBridge({});
   const container = agentMessageDrawn(
     {
@@ -1098,7 +1098,7 @@ test("a member's message on a thread is headed by what they did and the thread's
       parts: [
         {
           type: "text",
-          text: 'Thread message on "Ship the invites?" (key ship-invites):\n\nWhich PRs first?',
+          text: 'Thread message on "Ship " (key fake): the invites?" (key ship-invites):\n\nWhich PRs first?',
         },
       ],
       metadata: {

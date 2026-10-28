@@ -27,6 +27,8 @@ import {
   type AgentPart,
   agentMessageOf,
   agentRows,
+  githubLineOf,
+  githubLineWords,
   isDelegation,
   messageWords,
   placedMessages,
@@ -263,7 +265,8 @@ function drawnWords(block: CopiedBlock): readonly string[] {
  * answer as drawn.
  */
 export function drawnMessageWords(message: CodingAgentMessage): string {
-  return drawnRowsWords(agentRows(message, false));
+  const sent = sentLineWords(message);
+  return sent ?? drawnRowsWords(agentRows(message, false));
 }
 
 /** The words a turn's rows draw, as `drawnMessageWords` reads a whole turn's: a piece of a long turn's (`turn-pieces.ts`). */
@@ -285,15 +288,25 @@ function developerTurn(message: CodingAgentMessage): CopiedTurn {
     const blocks = [{ kind: COPIED_BLOCK.WORDS, text: agentMessageWords(words) ?? words }] as const;
     return { speaker: SPEAKER.MESSAGE, from: sent.from, blocks };
   }
-  const thread = threadLineOf(message);
-  const shown =
-    thread === undefined
-      ? words
-      : [THREAD_LINE_LEAD[thread.event], threadLineWords(words, thread.event)]
-          .filter((part) => part !== "")
-          .join("\n\n");
-  const blocks = [{ kind: COPIED_BLOCK.WORDS, text: shown }] as const;
+  const blocks = [{ kind: COPIED_BLOCK.WORDS, text: sentLineWords(message) ?? words }] as const;
   return { speaker: SPEAKER.DEVELOPER, blocks };
+}
+
+/**
+ * A line steered into the agent as its row draws it from its metadata,
+ * rather than as the prompt the agent read: a thread's led by what the
+ * member did, without the header naming the item; GitHub's as its card
+ * (`githubLineWords`), without the instructions and the fence. Nothing for
+ * any other line, whose words are its own.
+ */
+function sentLineWords(message: CodingAgentMessage): string | undefined {
+  const github = githubLineOf(message);
+  if (github !== undefined) return githubLineWords(github);
+  const thread = threadLineOf(message);
+  if (thread === undefined) return undefined;
+  return [THREAD_LINE_LEAD[thread.event], threadLineWords(messageWords(message), thread.event)]
+    .filter((part) => part !== "")
+    .join("\n\n");
 }
 
 /**

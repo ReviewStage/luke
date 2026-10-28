@@ -93,6 +93,7 @@ import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
   type AgentMessageMetadata,
+  GITHUB_LINE_EVENT,
   type GitHubLineMetadata,
   isRecord,
   isWireString,
@@ -1660,6 +1661,68 @@ export function threadLineOf(message: CodingAgentMessage): ThreadLineMetadata | 
 export function githubLineOf(message: CodingAgentMessage): GitHubLineMetadata | undefined {
   const read = userMetadataOf(message);
   return read?.channel === MESSAGE_CHANNEL.GITHUB ? read : undefined;
+}
+
+/** How many characters of a commit a GitHub line's head names it by, as GitHub's own short form. */
+const SHORT_SHA_CHARS = 7;
+
+/** What a review's verdict reads as before its pull request, by GitHub's own state; any other reads as reviewed. */
+const VERDICT_WORDS: ReadonlyMap<string, string> = new Map([
+  ["approved", "approved"],
+  ["changes_requested", "requested changes on"],
+]);
+
+/** What a review that is neither an approval nor a change request reads as. */
+const REVIEWED = "reviewed";
+
+/** A GitHub line's head: what GitHub did, then what it did it to, which links the line's page. */
+export interface GitHubLineHead {
+  readonly event: string;
+  readonly target: string;
+}
+
+/**
+ * A GitHub line's head, as its card draws it and a copy or a find reads
+ * it: who reviewed or commented, or that a check failed or every check
+ * finished; then a check's commit by its short form where the line says
+ * it, else the pull request by its number, else its checks.
+ */
+export function githubLineHead(line: GitHubLineMetadata): GitHubLineHead {
+  switch (line.event) {
+    case GITHUB_LINE_EVENT.REVIEW:
+      return {
+        event: `@${line.by} ${VERDICT_WORDS.get(line.verdict ?? "") ?? REVIEWED}`,
+        target: pullRequestTarget(line),
+      };
+    case GITHUB_LINE_EVENT.COMMENT:
+      return { event: `@${line.by} commented on`, target: pullRequestTarget(line) };
+    case GITHUB_LINE_EVENT.CHECK_FAILED:
+      return { event: "A check failed on", target: commitTarget(line) };
+    case GITHUB_LINE_EVENT.CHECKS_COMPLETED:
+      return { event: "Every check finished on", target: commitTarget(line) };
+  }
+}
+
+/** The pull request a GitHub line names, by its number; its checks where GitHub named none. */
+function pullRequestTarget(line: GitHubLineMetadata): string {
+  return line.number === undefined ? "its checks" : `#${line.number}`;
+}
+
+/** A check's commit by its short form, else the pull request it ran on. */
+function commitTarget(line: GitHubLineMetadata): string {
+  return line.sha === undefined ? pullRequestTarget(line) : line.sha.slice(0, SHORT_SHA_CHARS);
+}
+
+/** A GitHub line as words, as its card draws them: its head, the words, then each inline comment by its line over what it says. */
+export function githubLineWords(line: GitHubLineMetadata): string {
+  const head = githubLineHead(line);
+  const comments = (line.comments ?? []).map((comment) => {
+    const where = comment.line === undefined ? comment.path : `${comment.path}:${comment.line}`;
+    return comment.body === "" ? where : `${where}\n\n${comment.body}`;
+  });
+  return [`${head.event} ${head.target}`, line.words ?? "", ...comments]
+    .filter((part) => part !== "")
+    .join("\n\n");
 }
 
 /** A user row's metadata where it names the channel that carried it; nothing for an assistant's row, an observation, or a row this build cannot read. */

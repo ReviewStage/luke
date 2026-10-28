@@ -191,6 +191,53 @@ test("a thread's answer is copied led by what the member did, without the header
   );
 });
 
+test("GitHub's review is copied as its card reads, from its metadata, without the instructions and the fence the agent read", () => {
+  const review: CodingAgentMessage = {
+    ...said(
+      "review",
+      MESSAGE_ROLE.USER,
+      "@octocat approved your pull request #42.\n\n<github-review>\nShip it.\n</github-review>\n\nAct on it as you judge best.",
+    ),
+    metadata: {
+      author: "developer",
+      channel: "github",
+      event: "review",
+      repository: "acme/relay",
+      number: 42,
+      url: "https://github.com/acme/relay/pull/42#pullrequestreview-1",
+      by: "octocat",
+      verdict: "approved",
+      words: "Ship it.",
+      comments: [
+        {
+          path: "src/a.ts",
+          line: 3,
+          url: "https://github.com/acme/relay/pull/42#r1",
+          body: "Nice.",
+        },
+      ],
+    },
+  };
+  const transcript = agentTranscript({
+    title: "Add teammate invitations",
+    brief: undefined,
+    messages: [said("plan", MESSAGE_ROLE.USER, "Build invitations."), review],
+  });
+  assert.equal(
+    transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
+    [
+      "# Add teammate invitations",
+      "## Plan",
+      "Build invitations.",
+      "## Developer",
+      "@octocat approved #42",
+      "Ship it.",
+      "src/a.ts:3",
+      "Nice.",
+    ].join("\n\n") + "\n",
+  );
+});
+
 /** The first message of an agent forked from another: the brief, two of the source's three steps, and the developer's note. */
 const FORKED_FIRST = firstMessageText(
   "Fix the tile.",
