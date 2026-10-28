@@ -53,7 +53,7 @@ uninstall() {
   fi
   # Note that smolvm is the install script's own, beside the release rather than in it; its state and any machines left behind are under the luke-host user's home and processes, which went with the user above.
   rm -rf "$SMOLVM_DIR"
-  printf 'Luke host is removed from this box. Remove it in Settings › Agents › Machines too, if it is still listed.\n'
+  printf 'Luke host is removed from this box. Remove it in Settings › Hosts too, if it is still listed.\n'
 }
 
 if [ "${1:-}" = "uninstall" ]; then
