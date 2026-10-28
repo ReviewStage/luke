@@ -12,9 +12,14 @@ import { macCommandsLiveStatement } from "@luke/database/models/mac-command-stor
 import { messageStandingNow } from "@luke/database/models/message-reads";
 import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
 import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
+import {
+  memberWorkspaceIds,
+  workspacesLiveStatements,
+} from "@luke/database/models/workspace-store";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   agentBrowserTabSync,
+  agentPinSync,
   agentSectionEntrySync,
   attachmentSync,
   automationRunSync,
@@ -23,6 +28,7 @@ import {
   codingAgentDelegationSync,
   codingAgentSync,
   conversationsSync,
+  githubInstallationSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,
   inboxItemReadSync,
@@ -32,9 +38,12 @@ import {
   macCommandSync,
   memberSync,
   messagesSync,
+  organizationSync,
+  personalWorkspaceSync,
   planPageVersionSync,
   planRevisionSync,
   repositoryPinSync,
+  taskPinSync,
   taskSectionEntrySync,
   taskSectionSync,
   taskSync,
@@ -55,9 +64,31 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
+import { taskListLiveStatements } from "../tasks/task-list-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { defineLiveQuery, LIVE_MODE, liveQueryRegistry } from "./live-query.js";
+
+/**
+ * The reader's topic for each workspace it is a member of, looked up as a
+ * read is asked for. Note that a membership made or ended moves the rows of
+ * a read that takes these and notifies the reader's own topic, which such a
+ * read takes too, so the read it wakes answers, and the next request looks
+ * the memberships up again.
+ */
+function readerWorkspaceTopics(userId: string) {
+  return Effect.map(memberWorkspaceIds(userId), (workspaceIds) =>
+    workspaceIds.map((workspaceId): SyncTopic => [TOPIC.WORKSPACE, workspaceId]),
+  );
+}
+
+/** The reader's own topic and its workspaces', which a read of what the account reaches across its workspaces is woken on. */
+function readerAndWorkspaceTopics(userId: string) {
+  return Effect.map(readerWorkspaceTopics(userId), (workspaces): readonly SyncTopic[] => [
+    [TOPIC.ACCOUNT, userId],
+    ...workspaces,
+  ]);
+}
 
 /**
  * The account's sidebar: its sections, the tasks and agents it keeps in
@@ -90,6 +121,55 @@ export const sidebarLive = defineLiveQuery({
       repositoryPinsLiveStatement(userId),
       (sections, pins) => ({ ...sections, pins }),
     ),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * The account's task list: the tasks it reaches and every agent of them and
+ * with no task, each with the account's pin, the names it shows, and what
+ * its status is read from, woken on the account's topic and on each of its
+ * workspaces'. A task, an agent, a member's name, or a turn starting or
+ * settling names the workspace; the account's pins, its memberships, and
+ * what admits it to a repository name the account. Note that a message
+ * wakes no task list, because a streamed step rewrites one every moment and
+ * names only its conversation: an awaiting line or an operator's quiet reply
+ * that moves with no turn starting or settling shows at the hold's end, as
+ * does the rename of someone the list names who has left every workspace.
+ */
+export const tasksLive = defineLiveQuery({
+  name: "tasks",
+  params: ["userId"],
+  reads: [
+    taskSync,
+    taskPinSync,
+    codingAgentSync,
+    agentPinSync,
+    userSync,
+    turnsSync,
+    messagesSync,
+    conversationsSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId }) => readerAndWorkspaceTopics(userId),
+  statements: ({ userId }) => taskListLiveStatements(userId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * The account's workspaces and the GitHub installations connected to them,
+ * woken on the account's topic and on each of its workspaces'. A
+ * workspace's name and photo, its members, its installations, and the name
+ * of the account it was made for name the workspace; the account's
+ * memberships, its first workspace, and its own picture name the account.
+ */
+export const workspacesLive = defineLiveQuery({
+  name: "workspaces",
+  params: ["userId"],
+  reads: [memberSync, organizationSync, personalWorkspaceSync, userSync, githubInstallationSync],
+  topics: ({ userId }) => readerAndWorkspaceTopics(userId),
+  statements: ({ userId }) => workspacesLiveStatements(userId),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -433,6 +513,8 @@ export const agentTranscriptLive = defineLiveQuery({
 
 export const LIVE_QUERIES = liveQueryRegistry([
   sidebarLive,
+  tasksLive,
+  workspacesLive,
   macCommandsLive,
   inboxLive,
   taskInboxLive,
