@@ -450,7 +450,8 @@ export function AgentPullRequestChipCard({
   fallback,
 }: {
   agentId: string;
-  taskId: string;
+  /** The task a link to the agent's Changes named it under, where it did; the agent alone is read otherwise. */
+  taskId: string | undefined;
   reading: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
