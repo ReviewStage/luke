@@ -444,8 +444,8 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   return (
     <>
       {loaded && ordered.length === 0 && !thisMacAlone ? null : (
-        // Note that the section holds the search anchor until Add hosts is drawn, so a result lands while the list is read or failed.
-        <SettingsSection anchor={loaded ? undefined : SETTINGS_SEARCH_ROW.ADD_HOSTS}>
+        // Note that signed out the section holds the search anchor, since Add hosts is drawn only for a signed-in member.
+        <SettingsSection anchor={signedIn ? undefined : SETTINGS_SEARCH_ROW.ADD_HOSTS}>
           {!signedIn ? (
             <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
           ) : loaded ? (
@@ -476,7 +476,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           )}
         </SettingsSection>
       )}
-      {loaded ? (
+      {signedIn ? (
         <div className={ADD_LINE} {...searchAnchorProps(SETTINGS_SEARCH_ROW.ADD_HOSTS)}>
           <Button
             variant={BUTTON_VARIANT.OUTLINE}
