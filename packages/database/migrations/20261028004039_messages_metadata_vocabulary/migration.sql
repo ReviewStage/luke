@@ -1,0 +1,13 @@
+-- An agent message kept its sender's name in its metadata; the row's sender columns keep it now, so a row whose columns name none takes it from there first.
+UPDATE "messages" SET "sender" = coalesce("sender", 'agent'), "sender_name" = "metadata"->>'from' WHERE "role" = 'user' AND "metadata"->>'channel' = 'agent_message' AND "sender_name" IS NULL AND "metadata"->>'from' IS NOT NULL;--> statement-breakpoint
+-- A line another agent sent before its metadata said so was written as a typed ask under the agent's sender; it reads as the agent message it is.
+UPDATE "messages" SET "metadata" = jsonb_build_object('channel', 'agent_message') WHERE "role" = 'user' AND "metadata"->>'channel' = 'typed' AND "sender" = 'agent';--> statement-breakpoint
+-- A member's reply, answer, or close on a thread was written as a typed ask before its metadata said so; one whose head names a thread of the agent's own, by its key, reads as the thread line it is, and any other stays as it stands.
+WITH "line" AS (SELECT "messages"."id", "coding_agent"."id" AS "agent_id", "head"[1] AS "lead", "head"[2] AS "key" FROM "messages" JOIN "coding_agent" ON "coding_agent"."conversation_id" = "messages"."conversation_id" CROSS JOIN LATERAL regexp_match("messages"."parts"->0->>'text', '^(Thread answer|Thread closed|Thread message|Inbox answer|Inbox closed|Inbox message) on ".*" \(key ([a-z0-9][a-z0-9._-]*)\):', 'p') AS "head" WHERE "messages"."role" = 'user' AND "messages"."metadata"->>'channel' = 'typed' AND "head" IS NOT NULL)
+UPDATE "messages" SET "metadata" = jsonb_build_object('channel', 'thread', 'event', CASE WHEN "line"."lead" LIKE '% answer' THEN 'answer' WHEN "line"."lead" LIKE '% closed' THEN 'close' ELSE 'message' END, 'item_id', "inbox_item"."id"::text) FROM "line" JOIN "inbox_item" ON "inbox_item"."agent_id" = "line"."agent_id" AND "inbox_item"."key" = "line"."key" WHERE "messages"."id" = "line"."id";--> statement-breakpoint
+-- Who sent an agent message is the row's sender columns, never its metadata.
+UPDATE "messages" SET "metadata" = "metadata" - 'from' WHERE "role" = 'user' AND "metadata" ? 'from';--> statement-breakpoint
+-- A user row's channel or source says what it is; only a spoken ask keeps who wrote it, the developer or the voice model.
+UPDATE "messages" SET "metadata" = "metadata" - 'author' WHERE "role" = 'user' AND "metadata" ? 'author' AND "metadata"->>'channel' IS DISTINCT FROM 'voice';--> statement-breakpoint
+-- An assistant row is the model's that answered the turn, whatever harness ran it, or the voice model's.
+UPDATE "messages" SET "metadata" = jsonb_set("metadata", '{author}', '"model"') WHERE "role" = 'assistant' AND "metadata"->>'author' IN ('brain', 'child');

@@ -581,11 +581,7 @@ const MESSAGE_SENDING_AGENT = {
 } as const;
 
 /** What the row of `AGENT_MESSAGE` says wrote it. */
-const AGENT_MESSAGE_METADATA = {
-  author: MESSAGE_AUTHOR.AGENT,
-  channel: MESSAGE_CHANNEL.AGENT_MESSAGE,
-  from: "Invite emails",
-} as const;
+const AGENT_MESSAGE_METADATA = { channel: MESSAGE_CHANNEL.AGENT_MESSAGE } as const;
 
 /** A second turn as eve emits it for a line it received while the agent was idle: the line, then a word of answer. */
 function answeredTurn(turnId: string, received: string): MessageStreamEvent[] {
@@ -805,7 +801,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
               },
               { type: "reasoning", text: "Weigh the build again. ".repeat(500), state: "done" },
             ] as never,
-            metadata: { author: MESSAGE_AUTHOR.BRAIN },
+            metadata: { author: MESSAGE_AUTHOR.MODEL },
             placedAt: new Date(),
           });
           const page = yield* transcriptNow(
@@ -1391,7 +1387,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           assert.equal(words.role, MESSAGE_ROLE.USER);
           if (words.role !== MESSAGE_ROLE.USER) return;
           assert.deepEqual(words.metadata, {
-            author: MESSAGE_AUTHOR.DEVELOPER,
             channel: MESSAGE_CHANNEL.TYPED,
           });
           assert.ok(words.parts.some((part) => isTextUIPart(part) && part.text === PLAN_TEXT));
@@ -1866,10 +1861,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const said = page.messages.flatMap((message) =>
             message.role === MESSAGE_ROLE.USER ? [message.metadata] : [],
           );
-          assert.deepEqual(said, [
-            { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
-            AGENT_MESSAGE_METADATA,
-          ]);
+          assert.deepEqual(said, [{ channel: MESSAGE_CHANNEL.TYPED }, AGENT_MESSAGE_METADATA]);
 
           const model = titleModelAnswering("Teammate invitations by email");
           yield* titleCodingAgent(model, target, agent);

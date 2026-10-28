@@ -39,12 +39,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import { failureKind } from "@luke/runtime/effect";
-import {
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  THREAD_LINE_EVENT,
-  type ThreadLineMetadata,
-} from "@luke/wire";
+import { MESSAGE_CHANNEL, THREAD_LINE_EVENT, type ThreadLineMetadata } from "@luke/wire";
 import type { LanguageModel } from "ai";
 import { Effect, Option } from "effect";
 import { type AccountResolving, controlsAgent } from "../agents/agent-reach.js";
@@ -183,7 +178,6 @@ const takenNod = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** What the line a member's reply, answer, or close steers into the item's agent says carried it. */
 function threadLine(event: ThreadLineMetadata["event"], itemId: string): ThreadLineMetadata {
   return {
-    author: MESSAGE_AUTHOR.DEVELOPER,
     channel: MESSAGE_CHANNEL.THREAD,
     event,
     item_id: itemId,

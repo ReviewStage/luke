@@ -437,7 +437,6 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
     ].join("\n\n"),
     steered: {
       metadata: {
-        author: "developer",
         channel: "github",
         event: "review",
         repository: REPOSITORY,
@@ -479,7 +478,6 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
     ask: 'Thread message on "Invite links" (key invite-links):\n\nWhat happens if two people open the same link at once?',
     steered: {
       metadata: {
-        author: "developer",
         channel: "thread",
         event: "message",
         item_id: THREAD_ITEM_ID,
@@ -520,7 +518,6 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
     ask: `A check failed on your branch \`${PULL_REQUEST.head}\`: ${FAILED_CHECKS_URL}\n\nRead why, fix the cause, and push.`,
     steered: {
       metadata: {
-        author: "developer",
         channel: "github",
         event: "check_failed",
         repository: REPOSITORY,

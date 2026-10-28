@@ -161,7 +161,7 @@ type CopiedCall = Extract<CopiedBlock, { kind: typeof COPIED_BLOCK.CALL }>;
 interface CopiedTurn {
   readonly speaker: Speaker;
   /** The name of the agent another agent's message is from, which its heading names; none on any other turn. */
-  readonly from?: string;
+  readonly from?: string | undefined;
   readonly blocks: readonly CopiedBlock[];
 }
 
@@ -283,15 +283,9 @@ export function drawnRowsWords(rows: readonly TurnRow<AgentPart>[]): string {
  */
 function developerTurn(message: CodingAgentMessage): CopiedTurn {
   const words = messageWords(message);
-  const sent = agentMessageOf(message);
-  if (sent !== undefined) {
+  if (agentMessageOf(message) !== undefined) {
     const blocks = [{ kind: COPIED_BLOCK.WORDS, text: agentMessageWords(words) ?? words }] as const;
-    // Note that a reworked row names no sender of its own, so the copy goes unattributed rather than naming the wrong one.
-    return {
-      speaker: SPEAKER.MESSAGE,
-      ...(sent.from === undefined ? {} : { from: sent.from }),
-      blocks,
-    };
+    return { speaker: SPEAKER.MESSAGE, from: message.sentBy?.name, blocks };
   }
   const blocks = [{ kind: COPIED_BLOCK.WORDS, text: sentLineWords(message) ?? words }] as const;
   return { speaker: SPEAKER.DEVELOPER, blocks };

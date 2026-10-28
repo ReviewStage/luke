@@ -456,7 +456,7 @@ function useLiveDoors(
  * Another coding agent's message, sent with `message_agent`, as its
  * sender's bubble at the column's left: its words as a person reads them,
  * without the lines that are the agent's alone (`agentMessageWords`), then
- * the sender by its own chip, which opens it, or by the name the line keeps
+ * the sender by its own chip, which opens it, or by the name its row kept
  * where the sender is gone, when it arrived, and Copy and Copy link.
  */
 function AgentMessageRow({ message }: { message: CodingAgentMessage }): ReactNode {
@@ -484,7 +484,7 @@ function AgentMessageRow({ message }: { message: CodingAgentMessage }): ReactNod
             <SendingAgent actor={sender} agentId={sender.agentId} />
           ) : (
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} truncate>
-              {sent.from}
+              {message.sentBy?.name}
             </Text>
           )
         }

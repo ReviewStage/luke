@@ -123,7 +123,7 @@ function turn(id: string, answer: string, startedAt: number): CodingAgentMessage
       STEP,
       { type: "text", text: answer },
     ],
-    metadata: { author: "brain" },
+    metadata: { author: "model" },
     startedAt,
     finishedAt: startedAt + 11_000,
   };
@@ -142,7 +142,7 @@ const TYPED: CodingAgentMessage = {
   id: "typed",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: "And for a resent invite?" }],
-  metadata: { author: "developer", channel: "typed", voice_session_id: CALL, from_ms: 20_000 },
+  metadata: { channel: "typed", voice_session_id: CALL, from_ms: 20_000 },
   sentAt: CALL_START + 20_000,
 };
 const TYPED_TURN = turn(
@@ -189,7 +189,7 @@ const BUSY_TURN: CodingAgentMessage = {
     },
     { type: "text", text: "Invites now last fourteen days, and the tests pass." },
   ],
-  metadata: { author: "brain" },
+  metadata: { author: "model" },
   startedAt: CALL_START - 30_000,
   finishedAt: CALL_START + 40_000,
 };

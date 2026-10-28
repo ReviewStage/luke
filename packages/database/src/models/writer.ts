@@ -415,19 +415,14 @@ export type AwaitingLineMetadata =
 
 /** An awaiting line naming no channel is the developer's typed ask. */
 const TYPED_LINE_METADATA: TypedAskMetadata = {
-  author: MESSAGE_AUTHOR.DEVELOPER,
   channel: MESSAGE_CHANNEL.TYPED,
 };
 
 /** A line Luke sent the agent on its own. */
-export const LUKE_LINE_METADATA: LukeLineMetadata = {
-  author: MESSAGE_AUTHOR.DEVELOPER,
-  channel: MESSAGE_CHANNEL.LUKE,
-};
+export const LUKE_LINE_METADATA: LukeLineMetadata = { channel: MESSAGE_CHANNEL.LUKE };
 
 /** An automation's run's prompt. */
 export const AUTOMATION_LINE_METADATA: AutomationLineMetadata = {
-  author: MESSAGE_AUTHOR.DEVELOPER,
   channel: MESSAGE_CHANNEL.AUTOMATION,
 };
 
@@ -623,7 +618,7 @@ type ToolPart = ToolUIPart<UITools>;
 
 type Parts = StoredUIMessage["parts"];
 
-const BRAIN_AUTHORED = { author: MESSAGE_AUTHOR.BRAIN } as const;
+const MODEL_AUTHORED = { author: MESSAGE_AUTHOR.MODEL } as const;
 
 /**
  * A row a statement had to answer. Its absence is this writer's own
@@ -1481,10 +1476,10 @@ const journal = /* @__PURE__ */ Effect.fnUntraced(function* (
   const { id } = yield* insertMessage(context, {
     clientId: turnId,
     turnId,
-    message: { id: turnId, role: MESSAGE_ROLE.ASSISTANT, metadata: BRAIN_AUTHORED, parts: [] },
+    message: { id: turnId, role: MESSAGE_ROLE.ASSISTANT, metadata: MODEL_AUTHORED, parts: [] },
     finishedAt: undefined,
   });
-  const opened: MessageRow = { id, parts: [], metadata: BRAIN_AUTHORED, finishedAt: null };
+  const opened: MessageRow = { id, parts: [], metadata: MODEL_AUTHORED, finishedAt: null };
   holdJournal(context, turnId, opened, false);
   return Result.succeed(opened);
 });
@@ -1504,7 +1499,7 @@ const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = yield* admitted(context, {
     id: row.id,
     role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_AUTHORED,
+    metadata: MODEL_AUTHORED,
     parts,
   });
   if (Result.isFailure(read)) return Result.fail(read.failure);

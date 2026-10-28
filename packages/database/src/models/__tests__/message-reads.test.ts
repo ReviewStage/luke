@@ -81,7 +81,7 @@ const writeLine = (userId: string, conversationId: string, seq: number, at = new
       clientId: randomUUID(),
       role: MESSAGE_ROLE.USER,
       parts: [{ type: "text", text: `Line ${seq}` }],
-      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+      metadata: { channel: MESSAGE_CHANNEL.TYPED },
       createdAt: at,
       placedAt: at,
     }),
@@ -106,8 +106,8 @@ const writeTurnRow = (
       parts: [{ type: "text", text: `Line ${seq}` }],
       metadata:
         role === MESSAGE_ROLE.USER
-          ? { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED }
-          : { author: MESSAGE_AUTHOR.BRAIN },
+          ? { channel: MESSAGE_CHANNEL.TYPED }
+          : { author: MESSAGE_AUTHOR.MODEL },
       createdAt: new Date(),
       placedAt: new Date(),
       finishedAt: new Date(),
@@ -142,7 +142,7 @@ const writeReceipt = (
       clientId: randomUUID(),
       role: MESSAGE_ROLE.USER,
       parts: [{ type: "text", text }],
-      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+      metadata: { channel: MESSAGE_CHANNEL.TYPED },
       createdAt: new Date(),
       placedAt: new Date(),
       finishedAt: new Date(),

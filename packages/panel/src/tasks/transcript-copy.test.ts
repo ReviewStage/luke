@@ -97,7 +97,8 @@ function said(id: string, role: CodingAgentMessage["role"], text: string): Codin
 test("another agent's message is copied under the agent that sent it, never as the developer's words nor as the plan, and is no step of the agent's own", () => {
   const notice: CodingAgentMessage = {
     ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
-    metadata: { author: "agent", channel: "agent_message", from: "Invite emails" },
+    metadata: { channel: "agent_message" },
+    sentBy: { name: "Invite emails", agent: true },
   };
   const transcript = agentTranscript({
     title: "Add teammate invitations",
@@ -140,7 +141,8 @@ test("another agent's message in its whole shape is copied as its words alone, w
         agentMessageReplyLine("5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f"),
       ].join("\n\n"),
     ),
-    metadata: { author: "agent", channel: "agent_message", from: "Invite emails" },
+    metadata: { channel: "agent_message" },
+    sentBy: { name: "Invite emails", agent: true },
   };
   const transcript = agentTranscript({
     title: "Add teammate invitations",
@@ -167,7 +169,6 @@ test("a thread's answer is copied led by what the member did, without the header
       inboxAnswerMessage({ key: "ship-it", title: "Ship it?" }, { reply: INBOX_REPLY.APPROVED }),
     ),
     metadata: {
-      author: "developer",
       channel: "thread",
       event: "answer",
       item_id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
@@ -199,7 +200,6 @@ test("GitHub's review is copied as its card reads, from its metadata, without th
       "@octocat approved your pull request #42.\n\n<github-review>\nShip it.\n</github-review>\n\nAct on it as you judge best.",
     ),
     metadata: {
-      author: "developer",
       channel: "github",
       event: "review",
       repository: "acme/relay",

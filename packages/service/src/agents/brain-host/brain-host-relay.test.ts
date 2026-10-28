@@ -255,7 +255,6 @@ it.effect(
       const [words, answer] = messageRows;
       assert.ok(words && answer);
       assert.deepEqual(words.metadata, {
-        author: MESSAGE_AUTHOR.DEVELOPER,
         channel: MESSAGE_CHANNEL.TYPED,
       });
       // Each step behind its boundary, ordered as the model produced it —

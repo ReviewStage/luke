@@ -90,7 +90,7 @@ const CUT_TURN: CodingAgentMessage = {
       tail: "compiled the last file",
     },
   ],
-  metadata: { author: "brain" },
+  metadata: { author: "model" },
   startedAt: 2_000,
   finishedAt: 9_000,
 };

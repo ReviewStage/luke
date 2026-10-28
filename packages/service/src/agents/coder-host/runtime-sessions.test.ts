@@ -1771,7 +1771,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(said, {
             sender: MESSAGE_SENDER.AUTOMATION,
             senderName: "Nightly checks",
-            metadata: { author: "developer", channel: "automation" },
+            metadata: { channel: "automation" },
           });
           assert.ok(run.agent.conversationId !== "");
 
@@ -1803,7 +1803,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               .where(eq(messages.clientId, handed.lineId ?? ""));
             opened.push(row);
           }
-          const prompt = { author: "developer", channel: "start", brief: "prompt" };
+          const prompt = { channel: "start", brief: "prompt" };
           assert.deepEqual(opened, [
             { sender: MESSAGE_SENDER.MEMBER, senderAgentId: null, metadata: prompt },
             { sender: MESSAGE_SENDER.AGENT, senderAgentId: starting.agent.id, metadata: prompt },

@@ -9,13 +9,12 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
-import { AGENT_MESSAGE_FROM_CHARS, type WireRecord } from "@luke/wire";
+import type { WireRecord } from "@luke/wire";
 import { describeWire } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
-  MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   type UnparsedWireValue,
   wireUuidSchema,
@@ -151,19 +150,6 @@ function messageLine(sender: CodingAgent, senderMention: string, text: string): 
   return [head, text, agentMessageReplyLine(sender.id)].join("\n\n");
 }
 
-/**
- * What the line's row names its sender by: the agent's name within the
- * metadata's bound, cut between two characters so no emoji is split.
- */
-function senderName(sender: CodingAgent): string {
-  let kept = "";
-  for (const character of agentName(sender).trim()) {
-    if (kept.length + character.length > AGENT_MESSAGE_FROM_CHARS) break;
-    kept += character;
-  }
-  return kept.trim();
-}
-
 /** One call of `message_agent`: the words handed to another agent of the caller's workspace, or why nothing was sent. */
 export function runMessageAgent(
   call: CodingAgentCall,
@@ -207,11 +193,7 @@ export function runMessageAgent(
         text: messageLine(sender, mention, text),
         clientKey: call.clientKey,
         sender: agentLineSender(sender),
-        metadata: {
-          author: MESSAGE_AUTHOR.AGENT,
-          channel: MESSAGE_CHANNEL.AGENT_MESSAGE,
-          from: senderName(sender),
-        },
+        metadata: { channel: MESSAGE_CHANNEL.AGENT_MESSAGE },
       }).pipe(Effect.result);
       if (Result.isFailure(sent)) return agentToolRejected(refusalWords(sent.failure));
       return {

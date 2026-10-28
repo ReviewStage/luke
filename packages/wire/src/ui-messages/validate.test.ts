@@ -125,45 +125,33 @@ test("a stored-row read holds a row to the structure and the registry's names, n
   );
 });
 
-test("a stored-row read fills in the author a reworked row drops and reads author model as brain, which the write door refuses", async () => {
-  const row = (role: "user" | "assistant", id: string, metadata: WireRecord) => ({
+test("a stored-row read takes a row a draining release wrote in the old metadata spelling as the row it is, and the write door refuses it", async () => {
+  const words = [{ type: "text", text: "Rebase before you push." }];
+  const row = (id: string, role: string, metadata: WireRecord) => ({
     id,
     role,
-    parts: [{ type: "text", text: id }],
     metadata,
+    parts: words,
   });
-  const thread = { channel: "thread", event: "message", item_id: "item-1" };
-  const github = { channel: "github", event: "comment", repository: "a/b", url: "u", by: "x" };
-  const reworked = [
-    row("user", "typed", { channel: "typed" }),
-    row("user", "agent", { channel: "agent_message" }),
-    row("user", "thread", thread),
-    row("user", "github", github),
-    row("user", "luke", { channel: "luke" }),
-    row("user", "automation", { channel: "automation" }),
-    row("user", "note", { source: "recalled_notes" }),
-    row("user", "voice", { author: "voice_model", channel: "voice" }),
-    row("assistant", "reply", { author: "model" }),
+  const legacy = [
+    row("typed", "user", { author: "developer", channel: "typed" }),
+    row("message", "user", { author: "agent", channel: "agent_message", from: "Invite emails" }),
+    row("note", "user", { author: "brain", source: "hook" }),
+    row("spoken", "user", { author: "voice_model", channel: "voice" }),
+    row("reply", "assistant", { author: "brain" }),
   ];
-  const read = await runTest(readStoredUIMessages(reworked, {}, UNREGISTERED_TOOL_PART.DROP));
-  assert.ok(read.ok);
   assert.deepEqual(
-    read.value.map((message) =>
-      message.role !== "system" && "author" in message.metadata
-        ? message.metadata.author
-        : undefined,
-    ),
-    [
-      "developer",
-      "agent",
-      "developer",
-      "developer",
-      "developer",
-      "developer",
-      "brain",
-      "voice_model",
-      "brain",
-    ],
+    await runTest(readStoredUIMessages(legacy, TOOLS, UNREGISTERED_TOOL_PART.DROP)),
+    {
+      ok: true,
+      value: [
+        row("typed", "user", { channel: "typed" }),
+        row("message", "user", { channel: "agent_message" }),
+        row("note", "user", { source: "hook" }),
+        row("spoken", "user", { author: "voice_model", channel: "voice" }),
+        row("reply", "assistant", { author: "model" }),
+      ],
+    },
   );
-  assert.equal((await runTest(readStoredUIMessages(reworked, {}))).ok, false);
+  assert.equal((await runTest(readStoredUIMessages(legacy, TOOLS))).ok, false);
 });

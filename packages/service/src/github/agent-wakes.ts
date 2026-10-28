@@ -20,7 +20,6 @@ import {
   GITHUB_LINE_BOUNDS,
   GITHUB_LINE_EVENT,
   type GitHubLineMetadata,
-  MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   type UnparsedWireValue,
 } from "@luke/wire";
@@ -618,7 +617,6 @@ function githubLine(
       body: boundWords(comment.body),
     }));
   return {
-    author: MESSAGE_AUTHOR.DEVELOPER,
     channel: MESSAGE_CHANNEL.GITHUB,
     event: LINE_EVENT_OF_WAKE[wake.kind],
     repository: wake.repository,

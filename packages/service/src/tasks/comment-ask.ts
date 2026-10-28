@@ -8,7 +8,7 @@ import {
   type PlanCommentAsked,
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
-import { MESSAGE_AUTHOR, MESSAGE_CHANNEL } from "@luke/wire";
+import { MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Option } from "effect";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
@@ -130,7 +130,6 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     clientKey,
     sender: { kind: MESSAGE_SENDER.MEMBER, userId },
     metadata: {
-      author: MESSAGE_AUTHOR.DEVELOPER,
       channel: MESSAGE_CHANNEL.COMMENT,
       thread_id: threadId,
     },

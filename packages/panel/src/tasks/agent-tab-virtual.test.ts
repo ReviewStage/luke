@@ -605,7 +605,7 @@ test("the log first draws once the calls its lines were said on are read, so no 
     id: "m-said",
     role: MESSAGE_ROLE.USER,
     parts: [{ type: "text", text: "Ship it." }],
-    metadata: { author: "developer", channel: "typed", voice_session_id: CALL, from_ms: 20_000 },
+    metadata: { channel: "typed", voice_session_id: CALL, from_ms: 20_000 },
   };
   const { follower } = following(page([message(0), message(1), said, message(3)]));
   const calls = handed<Awaited<ReturnType<CodingAgentsControl["readCalls"]>>>();

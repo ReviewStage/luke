@@ -69,14 +69,15 @@ export function toolPartType(name: string): ToolPart["type"] {
  * What a user row of a turn's own words says about itself: a developer's ask
  * by the channel it arrived on, and a child's delegated task by its source.
  * The notes the host hands a turn beside its words name their own sources,
- * below. Every ask this host writes is typed.
+ * below. Every ask this host writes is typed, and a typed row carries no
+ * author: its channel says what carried it.
  */
 export function userMetadataOf(trigger: BrainTurnTrigger): UserMessageMetadata {
   switch (trigger) {
     case BRAIN_TURN_TRIGGER.ASK:
-      return { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED };
+      return { channel: MESSAGE_CHANNEL.TYPED };
     case BRAIN_TURN_TRIGGER.CHILD_TASK:
-      return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.CHILD };
+      return { source: OBSERVATION_SOURCE.CHILD };
   }
 }
 
@@ -90,7 +91,7 @@ export function userMessage(id: string, text: string, metadata: UserMessageMetad
   };
 }
 
-const ASSISTANT_METADATA: AssistantMessageMetadata = { author: MESSAGE_AUTHOR.BRAIN };
+const ASSISTANT_METADATA: AssistantMessageMetadata = { author: MESSAGE_AUTHOR.MODEL };
 
 function reasoningPart(reasoning: ReasoningSummary): ReasoningUIPart {
   return {

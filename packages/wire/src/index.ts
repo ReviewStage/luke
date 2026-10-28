@@ -53,7 +53,6 @@ export {
   type TurnStatus,
 } from "./turn.js";
 export {
-  AGENT_MESSAGE_FROM_CHARS,
   type AgentMessageMetadata,
   ASSISTANT_MESSAGE_METADATA,
   type AssistantMessageMetadata,
@@ -64,6 +63,7 @@ export {
   GITHUB_LINE_BOUNDS,
   GITHUB_LINE_EVENT,
   type GitHubLineMetadata,
+  isDeveloperLine,
   type LukeLineMetadata,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,

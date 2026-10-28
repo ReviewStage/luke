@@ -165,51 +165,46 @@ function refusedPart(
 }
 
 /**
- * The one key an earlier build wrote on a developer's line to a coding
- * agent while it awaited its turn, naming how it was to be delivered. No
- * row carries it any more and the vocabulary no longer admits it, but a
- * row written before that build retired still may, so a stored-row read
- * drops it and the row reads as the ordinary line it is, rather than
- * refusing the page it stands on. The write door drops nothing: a message
- * written today naming the key is outside the vocabulary and is refused.
+ * The keys an earlier build wrote on a user row that this vocabulary no
+ * longer admits: `delivery`, which named how a developer's line to a coding
+ * agent was to be delivered while it awaited its turn; `author`, on every
+ * line but a spoken ask's, which its channel or source already says; and
+ * `from`, an agent message's sender, which the row's sender columns hold.
+ * The migration that rewrote the stored rows leaves none of them behind, but
+ * a release still serving beside this one may write one while it drains, so
+ * a stored-row read drops them and the row reads as the line it is, rather
+ * than refusing the page it stands on. The write door drops nothing: a
+ * message written today naming one is outside the vocabulary and is refused.
  */
-const LEGACY_USER_METADATA_KEY = "delivery";
+const LEGACY_USER_METADATA_KEY = {
+  DELIVERY: "delivery",
+  AUTHOR: "author",
+  FROM: "from",
+} as const;
 
-/** The user metadata with the legacy key gone; anything else exactly as it came, for the schema to judge. */
-function withoutLegacyUserKey(metadata: UnparsedWireValue): UnparsedWireValue {
-  if (!isRecord(metadata) || !(LEGACY_USER_METADATA_KEY in metadata)) return metadata;
-  const { [LEGACY_USER_METADATA_KEY]: _legacy, ...rest } = metadata;
-  return rest;
+/** What an earlier build wrote as an assistant row's author for the model that answered the turn. */
+const LEGACY_MODEL_AUTHOR = "brain";
+
+/** The user metadata with the legacy keys gone; anything else exactly as it came, for the schema to judge. */
+function withoutLegacyUserKeys(metadata: UnparsedWireValue): UnparsedWireValue {
+  if (!isRecord(metadata)) return metadata;
+  const spoken = metadata.channel === MESSAGE_CHANNEL.VOICE;
+  const legacy = new Set<string>(
+    Object.values(LEGACY_USER_METADATA_KEY).filter(
+      (key) => key in metadata && !(spoken && key === LEGACY_USER_METADATA_KEY.AUTHOR),
+    ),
+  );
+  if (legacy.size === 0) return metadata;
+  return Object.fromEntries(Object.entries(metadata).filter(([key]) => !legacy.has(key)));
 }
 
-/**
- * Once a row names its kind rather than an author, a user row carries no
- * `author` and an assistant row of the brain's says `model`. A stored-row read
- * fills in what this build's types expect, so a row of either shape reads the
- * same and the release serving while the rewrite runs can still read the
- * page; the write door fills in nothing. A voice row keeps its author, and
- * anything that is not a record is left for the schema to judge.
- */
-function withUserAuthor(metadata: UnparsedWireValue): UnparsedWireValue {
-  if (!isRecord(metadata) || "author" in metadata) return metadata;
-  // A note says what opened the turn and an agent message who sent it; every other line was the developer's by the old vocabulary.
-  if ("source" in metadata) return { ...metadata, author: MESSAGE_AUTHOR.BRAIN };
-  const author =
-    metadata.channel === MESSAGE_CHANNEL.AGENT_MESSAGE
-      ? MESSAGE_AUTHOR.AGENT
-      : MESSAGE_AUTHOR.DEVELOPER;
-  return { ...metadata, author };
+/** The assistant metadata with the legacy author read as the model; anything else exactly as it came. */
+function withLegacyAssistantAuthor(metadata: UnparsedWireValue): UnparsedWireValue {
+  if (!isRecord(metadata) || metadata.author !== LEGACY_MODEL_AUTHOR) return metadata;
+  return { ...metadata, author: MESSAGE_AUTHOR.MODEL };
 }
 
-/** The brain's assistant row, which a reworked row spells `model` and this build `brain`. */
-const REWORKED_BRAIN_AUTHOR = "model";
-
-function withBrainAuthor(metadata: UnparsedWireValue): UnparsedWireValue {
-  if (!isRecord(metadata) || metadata.author !== REWORKED_BRAIN_AUTHOR) return metadata;
-  return { ...metadata, author: MESSAGE_AUTHOR.BRAIN };
-}
-
-/** A validated row typed by its role, its metadata read under that role's schema; a stored-row read forgives the legacy key and fills in the author a reworked row drops, the write door does neither. */
+/** A validated row typed by its role, its metadata read under that role's schema; a stored-row read forgives the legacy keys, the write door does not. */
 function readStoredMessage(
   message: ValidatedMessage,
   storedRow: boolean,
@@ -222,23 +217,16 @@ function readStoredMessage(
     case MESSAGE_ROLE.USER: {
       const role = message.role;
       return Result.map(
-        underMetadata(
-          readUserMetadata(storedRow ? withUserAuthor(withoutLegacyUserKey(metadata)) : metadata),
-        ),
+        underMetadata(readUserMetadata(storedRow ? withoutLegacyUserKeys(metadata) : metadata)),
         (value) => ({ id, role, parts, metadata: value }),
       );
     }
     case MESSAGE_ROLE.ASSISTANT: {
       const role = message.role;
-      return Result.map(
-        underMetadata(readAssistantMetadata(storedRow ? withBrainAuthor(metadata) : metadata)),
-        (value) => ({
-          id,
-          role,
-          parts,
-          metadata: value,
-        }),
+      const read = readAssistantMetadata(
+        storedRow ? withLegacyAssistantAuthor(metadata) : metadata,
       );
+      return Result.map(underMetadata(read), (value) => ({ id, role, parts, metadata: value }));
     }
     case MESSAGE_ROLE.SYSTEM:
       if (metadata !== undefined) return refuse(SCHEMA_REFUSAL.MALFORMED, ["metadata"]);
@@ -276,7 +264,7 @@ function readStoredMessages(
  * declarations keyed by the name a part spells. A tool part naming a tool the
  * registry does not hold is refused or dropped as `unregistered` says, the
  * write door refusing and a stored-row read dropping, and a stored-row read
- * forgives the legacy metadata key named above on the same terms, since
+ * forgives the legacy metadata named above on the same terms, since
  * `unregistered` is where the two doors tell themselves apart; a refusal is the same
  * word and path a wire schema answers with, so a store can tell a malformed
  * row from one naming a tool this build does not register. A conversation

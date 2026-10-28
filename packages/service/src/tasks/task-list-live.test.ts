@@ -646,7 +646,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           role: MESSAGE_ROLE.USER,
           parts: [{ type: "text", text: "One more thing." }],
           metadata: {
-            author: MESSAGE_AUTHOR.DEVELOPER,
             channel: MESSAGE_CHANNEL.TYPED,
             voice_session_id: "voice-session-1",
           },

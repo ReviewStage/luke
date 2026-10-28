@@ -990,7 +990,8 @@ const AGENT_MESSAGE: CodingAgentMessage = {
       ].join("\n\n"),
     },
   ],
-  metadata: { author: "agent", channel: "agent_message", from: "Invite emails" },
+  metadata: { channel: "agent_message" },
+  sentBy: { name: "Invite emails", agent: true },
 };
 
 /** The message drawn in an agent's transcript, on the task's page where one is given. */
@@ -1077,7 +1078,6 @@ test("a member's message on a thread is headed by what they did and the thread's
         },
       ],
       metadata: {
-        author: "developer",
         channel: "thread",
         event: "message",
         item_id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
@@ -1105,7 +1105,6 @@ test("a review from GitHub draws as a card of who said what on the pull request,
       },
     ],
     metadata: {
-      author: "developer",
       channel: "github",
       event: "review",
       repository: "acme/relay",
