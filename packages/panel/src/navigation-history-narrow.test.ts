@@ -76,7 +76,6 @@ interface Standing {
   readonly inbox: {
     readonly open: boolean;
     readonly chosen: InboxChoice | undefined;
-    readonly listed: boolean;
     /** Whether the Inbox shows one column by its own width, as one narrower than its split does in a room still wide. */
     readonly single?: boolean;
   };
@@ -107,7 +106,7 @@ const ON_TASK: Standing = {
   tab: PANEL_TAB.TASKS,
   settings: { view: SETTINGS_VIEW.ACCOUNT, listed: true },
   panel: { open: false, tab: undefined },
-  inbox: { open: false, chosen: undefined, listed: false },
+  inbox: { open: false, chosen: undefined },
   versions: { open: false, revision: undefined, listed: true },
   agent: undefined,
 };
@@ -211,12 +210,11 @@ function tasksTab(
       ...base.inboxView,
       open: at.inbox.open,
       chosen: at.inbox.chosen,
-      listed: at.inbox.listed,
       single: at.inbox.single ?? false,
-      onOpen: () => inbox({ open: true }),
+      onOpen: () => inbox({ open: true, chosen: undefined }),
       onClose: () => inbox({ open: false }),
       onChoose: (chosen) => inbox({ chosen }),
-      onListed: (listed) => inbox({ listed }),
+      onClear: () => inbox({ chosen: undefined }),
     },
     adminView: {
       ...base.adminView,
@@ -442,7 +440,7 @@ test("on a narrow stage a side panel the window opened with, as a link loaded on
 test("on a narrow stage a task opened from a list on its plan is one step, whose Close shows the task's column in that step, so Back returns to the list at once", () => {
   const window = mount(SHELL_ROOM.NARROW, {
     ...ON_TASK,
-    inbox: { open: true, chosen: undefined, listed: true },
+    inbox: { open: true, chosen: undefined },
   });
   // A task opened from a list lands on its plan, the side panel over it, in one move (`use-tasks-tab.ts`'s `onSelect`).
   window.move((held) => ({
@@ -487,20 +485,19 @@ test("on a narrow stage a side panel shut over a page other than its plan's is n
 test("on a narrow stage an Inbox item opened from its list is a step, and the Inbox's way back steps back to the list", () => {
   const window = mount(SHELL_ROOM.NARROW, {
     ...ON_TASK,
-    inbox: { open: true, chosen: undefined, listed: true },
+    inbox: { open: true, chosen: undefined },
   });
   // A row pressed chooses its item and stands it alone, as the Inbox's columns do.
   window.press(() => {
     window.shown().inboxView.onChoose(ITEM);
-    window.shown().inboxView.onListed(false);
   });
 
   assert.deepEqual(window.addresses(), ["/acme/inbox", `${TASK_PATH}/inbox/item-1`]);
   assert.equal(window.standingAddress(), copiedHere());
-  const shownItem = (at: Standing) => (at.inbox.listed ? undefined : at.inbox.chosen);
+  const shownItem = (at: Standing) => at.inbox.chosen;
   backAndForth(window, shownItem, undefined, ITEM);
 
-  window.press(() => window.shown().inboxView.onListed(true));
+  window.press(() => window.shown().inboxView.onClear());
   assert.equal(shownItem(window.at()), undefined, "the way back stands the list");
   assert.equal(window.history().canGoForward, true, "as a step back, the item ahead");
   assert.equal(window.standingAddress(), "/acme/inbox");
@@ -509,18 +506,17 @@ test("on a narrow stage an Inbox item opened from its list is a step, and the In
 test("in a room still wide, as a 700px stage is, an Inbox showing one column by its own width holds its item as a step after its list, and its way back steps back to the list", () => {
   const window = mount(SHELL_ROOM.WIDE, {
     ...ON_TASK,
-    inbox: { open: true, chosen: undefined, listed: true, single: true },
+    inbox: { open: true, chosen: undefined, single: true },
   });
   window.press(() => {
     window.shown().inboxView.onChoose(ITEM);
-    window.shown().inboxView.onListed(false);
   });
 
   assert.deepEqual(window.addresses(), ["/acme/inbox", `${TASK_PATH}/inbox/item-1`]);
-  const shownItem = (at: Standing) => (at.inbox.listed ? undefined : at.inbox.chosen);
+  const shownItem = (at: Standing) => at.inbox.chosen;
   backAndForth(window, shownItem, undefined, ITEM);
 
-  window.press(() => window.shown().inboxView.onListed(true));
+  window.press(() => window.shown().inboxView.onClear());
   assert.equal(shownItem(window.at()), undefined, "the way back stands the list");
   assert.equal(window.history().canGoForward, true, "as a step back, the item ahead");
   assert.equal(window.standingAddress(), "/acme/inbox");
@@ -530,12 +526,9 @@ test("on the desktop's width the step's link names the Inbox's item standing alo
   for (const single of [true, false]) {
     const window = mount(SHELL_ROOM.WIDE, {
       ...ON_TASK,
-      inbox: { open: true, chosen: undefined, listed: true, single },
+      inbox: { open: true, chosen: undefined, single },
     });
-    window.press(() => {
-      window.shown().inboxView.onChoose(ITEM);
-      window.shown().inboxView.onListed(false);
-    });
+    window.press(() => window.shown().inboxView.onChoose(ITEM));
     assert.equal(window.standingAddress(), single ? `${TASK_PATH}/inbox/item-1` : "/acme/inbox");
     assert.equal(copiedHere(), `${TASK_PATH}/inbox/item-1`, "Copy link names the item at hand");
     unmountAll();
@@ -607,12 +600,8 @@ test("on the desktop's width none of a narrow room's panes is a step: the side p
       (window) => window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB)),
     ],
     [
-      { ...ON_TASK, inbox: { open: true, chosen: undefined, listed: true } },
-      (window) =>
-        window.press(() => {
-          window.shown().inboxView.onChoose(ITEM);
-          window.shown().inboxView.onListed(false);
-        }),
+      { ...ON_TASK, inbox: { open: true, chosen: undefined } },
+      (window) => window.press(() => window.shown().inboxView.onChoose(ITEM)),
     ],
     [
       { ...ON_TASK, tab: PANEL_TAB.SETTINGS },
@@ -633,7 +622,7 @@ test("on the desktop's width none of a narrow room's panes is a step: the side p
     // Each screen's way back to its list, which a wide room draws no button for, stands nothing new either.
     window.press(() => {
       window.history().lists.settings();
-      window.shown().inboxView.onListed(true);
+      window.shown().inboxView.onClear();
       window.shown().history.onList();
     });
     assert.equal(window.addresses().length, 1, "one step, however the panes turn");
@@ -827,7 +816,7 @@ test("on a narrow stage another tab chosen in the side panel standing over the p
 test("on a narrow stage a task's way out steps back past its own panes to the page it was opened from, pushing nothing, and Forward opens the task again", () => {
   const window = mount(SHELL_ROOM.NARROW, {
     ...ON_TASK,
-    inbox: { open: true, chosen: undefined, listed: true },
+    inbox: { open: true, chosen: undefined },
   });
   assert.equal(window.history().away, undefined, "the Inbox's list has nothing behind it");
   window.move((held) => ({

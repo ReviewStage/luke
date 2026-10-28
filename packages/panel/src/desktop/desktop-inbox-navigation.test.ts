@@ -66,6 +66,7 @@ import {
   menuItem,
   mount,
   noticeOf,
+  ON_THRESHOLD,
   openings,
   pagerOf,
   pressKey,
@@ -121,7 +122,7 @@ test("an item a link names before the account's task list is read says no Not fo
 });
 
 test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape does not leave the Inbox", async () => {
-  const { page, asked } = mount();
+  const { page, asked } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["item"]);
@@ -156,8 +157,8 @@ test("an Inbox too narrow for the list and the item side by side shows the chose
   assert.deepEqual([columnsShown(page), asked.closed], [["list"], 0], "the Inbox stands");
 });
 
-test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again, it keeps the list asked for, so narrowed it lands on its list", async () => {
-  const { page } = mount();
+test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again with nothing chosen, narrowed it lands on its list", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   layOut(page, 900);
   assert.deepEqual(columnsShown(page), ["list", "item"]);
@@ -183,7 +184,7 @@ test("the Inbox joins only once narrowed past the band, keeping the item it show
 });
 
 test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const keys = standKeymap();
   layOut(page, 800);
@@ -205,8 +206,8 @@ test("one column wide, the item's bar says where it stands in the list, and its 
   act(() => keys.unmount());
 });
 
-test("a chosen item whose plan leaves the account's list, deleted on another Mac, gives way to the first item still waiting", async () => {
-  const { page } = mount();
+test("a chosen item whose plan leaves the account's list, deleted on another Mac, leaves the pane beside the list empty rather than choosing another", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   assert.deepEqual(
     listed(page).filter((row) => row.startsWith("▸")),
@@ -217,11 +218,9 @@ test("a chosen item whose plan leaves the account's list, deleted on another Mac
     world.setHolding([{ taskId: INVITES.id, items: 1, updatedAt: 4_000 }]);
   });
   await settle();
-  assert.deepEqual(listed(page), ["# Invites", "▸ *Expire after 7 days?"]);
-  assert.equal(
-    page.querySelector(".inbox-view-items [data-inbox-title]")?.textContent,
-    "Expire after 7 days?",
-  );
+  assert.deepEqual(listed(page), ["# Invites", "*Expire after 7 days?"]);
+  assert.equal(page.querySelector(".inbox-view-items [data-inbox-title]"), null);
+  assert.equal(page.querySelector(".inbox-view-items")?.textContent, "1 thread");
 });
 
 test("an item of an agent with no plan stands under the automation that started it, and opens on its agent's own read under the automation's crumb", async () => {
@@ -246,7 +245,7 @@ test("an item of an agent with no plan stands under the automation that started 
   );
   const rows = listed(page);
   assert.ok(rows.includes("# Nightly flake sweep"), rows.join(" | "));
-  assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "▸ *Quarantine the flaky test?");
+  assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "*Quarantine the flaky test?");
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
   await settle();
@@ -585,7 +584,9 @@ test("a read of an agent with no plan that fails is said with Retry, which reads
 
 test("an item chosen by a notification's click, in an Inbox showing its list alone, is shown itself, and Back stands on the list again, the notification's ask taken once", async () => {
   world.agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
-  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless), {
+    chosen: ON_THRESHOLD,
+  });
   await settle();
   layOut(page, 700);
   await settle();
@@ -1328,7 +1329,7 @@ test("ticking the box's checkbox sends its words as a new thread to the item's a
   // Note that the item asks nothing, since a question's controls standing in the box leave no checkbox under it.
   world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: APP_CHANNEL.id }]]]);
   const starts = heldStarts();
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
 
   const box = () =>
@@ -1372,7 +1373,7 @@ test("words written in the box while its new thread starts stay in it once the t
     act: (request: AnyAct): Promise<FakeActAnswer> =>
       request.kind === ACT_KIND.CODING_AGENTS_INBOX_START ? answer.promise : previous(request),
   });
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
 
   const pane = itemPane(page);
@@ -1414,7 +1415,7 @@ test("a thread started from an item of an archived channel lands in #general, an
   answerChannels({ archived: () => [old] });
   world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: old.id }]]]);
   heldStarts();
-  const { page } = mount([], { channels: true });
+  const { page } = mount([], { channels: true, chosen: ON_THRESHOLD });
   await settle();
   act(() => chooseChannel(old.id));
   await settle();

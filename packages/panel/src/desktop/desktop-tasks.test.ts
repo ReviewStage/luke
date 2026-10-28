@@ -650,11 +650,12 @@ test("while a task's Inbox is first read, its list stands placeholder rows under
   inbox.unmount();
 });
 
-test("on To do, the item a task's Inbox chose for itself stays shown once it is answered, and its row stays where it stood, gray, so the list says nothing of there being nothing to do while it is chosen", async () => {
+test("on To do, the item opened in a task's Inbox stays shown once it is answered, and its row stays where it stood, gray, so the list says nothing of there being nothing to do while it is chosen", async () => {
   window.localStorage.clear();
   const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
   const read = heldAnswer();
   const inbox = await narrowTaskInbox([asked], 1_200, read.promise);
+  await act(async () => inbox.row("Expire after 7 days?")?.click());
   await inbox.pressScope("For you");
   assert.equal(inbox.title(), "Expire after 7 days?");
   await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
@@ -674,6 +675,7 @@ test("a task's Inbox holding only settled items, read, on To do lists no row and
   ];
   const wide = await narrowTaskInbox(items, 1_200);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+  await act(async () => wide.row("Resend on bounce?")?.click());
   await wide.pressScope("For you");
   assert.deepEqual(await wide.head(), ["Inbox", "[For you]", "All"]);
   assert.deepEqual(wide.rows(), [], "the item read is not listed under a filter leaving it out");
@@ -952,6 +954,8 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  assert.deepEqual(marked, [], "nothing is read before it is opened");
+  await act(async () => inbox.row("Ship it?")?.click());
   assert.equal(inbox.title(), "Ship it?");
   assert.deepEqual(marked, [`read:${SHIP.id}`]);
   const dot = (title: string) =>
@@ -999,6 +1003,8 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  assert.equal(answered.length, 0, "nothing is acknowledged before it is opened");
+  await act(async () => inbox.row("The preview is up")?.click());
   assert.equal(inbox.title(), "The preview is up");
   // Note that a nod carries its item, the revision shown, and the nod alone, under a key of the window's own.
   const sent = () => answered.map(({ clientKey: _key, ...nod }) => nod);

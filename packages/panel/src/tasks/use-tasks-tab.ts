@@ -230,7 +230,7 @@ export type InboxChoice = (
   | { readonly taskId: string; readonly itemId: string }
   | { readonly agentId: string; readonly itemId: string }
 ) & {
-  /** Whether the item itself is shown where the Inbox shows one column: a notification's ask, rather than a row's choice the list stays standing for. */
+  /** Whether a link, a notification, or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
   readonly opened?: true;
 };
 
@@ -239,18 +239,17 @@ export type InboxChoice = (
  * items of every task holding one in a column of their own, and the chosen
  * item beside them. It is the window's alone, as a version history is, so
  * it leaves the task the host has open, and the call bound to it, as they
- * stand; opening any task, or a new one, leaves it. The item chosen is kept
- * while it stands, so the item answered stays in sight, and after it is
- * left, so opening it again in the same workspace stands on the item last read
- * beside the list. A narrow room, a phone's, keeps the choice too but opens
- * on the list, since there the list is the place: an item stands alone only
- * once a row is pressed or a link asks for it (`onOpenItem`).
+ * stand; opening any task, or a new one, leaves it. Nothing is chosen in it
+ * until a row is pressed or a link asks for an item (`onOpenItem`), and the
+ * item chosen is kept while it stands, so the item answered stays in sight;
+ * it opens again on nothing chosen, its list beside an empty pane, or alone
+ * where the Inbox shows one column (`inbox-columns.ts`).
  */
 interface InboxViewControl {
   readonly open: boolean;
-  /** The item chosen in it, none until one is, where the list's first stands in. */
+  /** The item chosen in it, none until one is. */
   readonly chosen: InboxChoice | undefined;
-  /** Opens the Inbox, as the places bar, the sidebar, and its chord do: on its list in a narrow room, whatever stood there, and as it was left in a wide one; asked first where leaving would lose unsaved work. */
+  /** Opens the Inbox, as the places bar, the sidebar, and its chord do, on nothing chosen; asked first where leaving would lose unsaved work. */
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
@@ -266,19 +265,11 @@ interface InboxViewControl {
   /**
    * Opens the Inbox narrowed to a channel with Channels on, from wherever
    * the window stands: the sidebar's row, the command palette. It chooses
-   * no item, so the channel's first stands chosen, and one column opens on
-   * its list, as the Inbox's own row opens it.
+   * no item, as the Inbox's own row opens it.
    */
   readonly onOpenChannel: (channelId: string) => void;
-  /**
-   * Whether the list stands alone rather than the item chosen, where the
-   * Inbox shows one column (`inbox-columns.ts`): asked for by its way back or
-   * Show all, and given up by a row pressed. It is held here rather than in
-   * the Inbox, so the window's history can record it and go back to it.
-   */
-  readonly listed: boolean;
-  /** Stands the list alone, or the item chosen. */
-  readonly onListed: (listed: boolean) => void;
+  /** Chooses no item, which stands the list alone where the Inbox shows one column. */
+  readonly onClear: () => void;
   /** Whether the open Inbox shows one column by its own width (`inbox-columns.ts`), which the window's history steps between its list and its item by. */
   readonly single?: boolean;
   /** Says whether the Inbox shows one column. */
@@ -344,8 +335,6 @@ type StandIn =
   | {
       readonly kind: typeof STAND_IN.INBOX;
       readonly chosen: InboxChoice | undefined;
-      /** Whether the list stands alone rather than the item chosen, where the Inbox shows one column. */
-      readonly listed: boolean;
     }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
   | {
@@ -1035,38 +1024,6 @@ function inWorkspace<Entry extends { readonly taskId: string }>(
 }
 
 /**
- * The Inbox's last choice, by the account signed in and the workspace listed
- * as it was made, so another account on this Mac, or another workspace,
- * never opens on it.
- */
-interface RememberedInboxChoice {
-  readonly account: string | undefined;
-  readonly workspaceId: string | undefined;
-  readonly chosen: InboxChoice;
-}
-
-/**
- * The Inbox's choice to stand on as it opens again: the one last made, where
- * it was made by the account signed in now in the workspace listed, else none,
- * where the list's first stands in. Note that it comes back as a row's choice
- * rather than an ask, so an item gone since gives way to the first rather than
- * saying it is missing.
- */
-function rememberedChoice(
-  remembered: RememberedInboxChoice | undefined,
-  now: { readonly account: string | undefined; readonly workspaceId: string | undefined },
-): InboxChoice | undefined {
-  if (remembered === undefined) return undefined;
-  if (remembered.account !== now.account || remembered.workspaceId !== now.workspaceId) {
-    return undefined;
-  }
-  const { chosen } = remembered;
-  return "taskId" in chosen
-    ? { taskId: chosen.taskId, itemId: chosen.itemId }
-    : { agentId: chosen.agentId, itemId: chosen.itemId };
-}
-
-/**
  * What the open task holds of each fixed tab's kind: its plan always, and of
  * its Inbox whether it may draw one, an agent held, an archived one among
  * them, or an item waiting (`inbox`).
@@ -1142,8 +1099,6 @@ export function useTasksTab(input: {
   // Whether the window's Inbox shows one column, as it measures itself.
   const [inboxSingle, setInboxSingle] = useState(false);
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
-  /** The item last chosen in the Inbox, by whom and where, which opening the Inbox again stands on. */
-  const lastInboxChoice = useRef<RememberedInboxChoice | undefined>(undefined);
   // The synthetic tasks, which only a fixture run draws: the window is drawn once they have landed (`App`).
   const tasksFixture = loadedTasksFixture();
   /** A file an inbox item opens on a task not yet open, opened once the host has it open. */
@@ -1579,16 +1534,6 @@ export function useTasksTab(input: {
     reportedAgent.current = shownAgent;
     tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent });
   }, [shownAgent, tell]);
-  // Note that the Inbox's choice is remembered as it is made, so leaving the Inbox and coming back stands on it.
-  useEffect(() => {
-    if (inboxChosen !== undefined) {
-      lastInboxChoice.current = {
-        account: input.account,
-        workspaceId: listedWorkspaceId,
-        chosen: inboxChosen,
-      };
-    }
-  }, [inboxChosen, input.account, listedWorkspaceId]);
 
   // The tab showing is what asks the host to read the tasks again; the open
   // task and its call stand through it going away, and a call's drafts reach
@@ -2107,17 +2052,9 @@ export function useTasksTab(input: {
     !restoring &&
     listSettled
   ) {
-    const rest = restingPage({
-      fresh: fresh && tasks.listStatus === TASKS_READ.READY,
-      remembered: rememberedChoice(lastInboxChoice.current, {
-        account: input.account,
-        workspaceId: listedWorkspaceId,
-      }),
-    });
+    const rest = restingPage(fresh && tasks.listStatus === TASKS_READ.READY);
     const on: StandIn | undefined =
-      rest.kind === RESTING_PAGE.INBOX
-        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: true }
-        : undefined;
+      rest === RESTING_PAGE.INBOX ? { kind: STAND_IN.INBOX, chosen: undefined } : undefined;
     if (on !== undefined) {
       setRested({
         kind: on.kind,
@@ -2657,16 +2594,9 @@ export function useTasksTab(input: {
         return;
       }
       case LINK_PLACE.INBOX: {
-        // Note that a link to the Inbox opens it as its sidebar row does, on the item last chosen in the workspace it lists, and in a narrow room on its list.
-        const workspaceId = listLinked(workspace);
-        standInFor({
-          kind: STAND_IN.INBOX,
-          chosen: rememberedChoice(lastInboxChoice.current, {
-            account: input.account,
-            workspaceId,
-          }),
-          listed: input.room === SHELL_ROOM.NARROW,
-        });
+        // Note that a link to the Inbox opens it as its sidebar row does, on nothing chosen.
+        listLinked(workspace);
+        standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
         return;
       }
       case LINK_PLACE.INBOX_ITEM: {
@@ -2692,7 +2622,6 @@ export function useTasksTab(input: {
             "planId" in place
               ? { taskId: place.planId, itemId: place.itemId, opened: true }
               : { agentId: place.agentId, itemId: place.itemId, opened: true },
-          listed: false,
         });
         return;
       }
@@ -2701,12 +2630,8 @@ export function useTasksTab(input: {
         listLinked(workspace);
         if (!channelsOn) return;
         standChannelPlace(place.channelId);
-        // Note that a channel's link opens it as its row does: on no item, and on its list in a narrow room.
-        standInFor({
-          kind: STAND_IN.INBOX,
-          chosen: undefined,
-          listed: input.room === SHELL_ROOM.NARROW,
-        });
+        // Note that a channel's link opens it as its row does: on no item.
+        standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
         return;
       }
       case LINK_PLACE.AUTOMATIONS:
@@ -3090,24 +3015,12 @@ export function useTasksTab(input: {
     inboxView: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
-      // Note that it opens on the list though it keeps the item last chosen, so one column shows the list and two stand that item beside it (`inbox-columns.ts`).
+      // Note that it opens on nothing chosen, so one column shows the list and two an empty pane beside it (`inbox-columns.ts`).
       // With Channels on, it leaves any channel shown, so the Inbox lists every channel's items.
       onOpen: guard(() => {
         setHistoryFor(undefined);
         if (channelsOn) leaveChannel();
-        const remembered = lastInboxChoice.current;
-        setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX
-            ? { ...held, listed: true }
-            : {
-                kind: STAND_IN.INBOX,
-                chosen: rememberedChoice(remembered, {
-                  account: input.account,
-                  workspaceId: listedWorkspaceId,
-                }),
-                listed: true,
-              },
-        );
+        setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
       }),
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (chosen) =>
@@ -3118,19 +3031,18 @@ export function useTasksTab(input: {
         // An item opened by a press is a place of its own, as a link's is, not the Inbox rested on.
         setRested(undefined);
         setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX
-            ? { ...held, chosen, listed: false }
-            : { kind: STAND_IN.INBOX, chosen, listed: false },
+          held?.kind === STAND_IN.INBOX ? { ...held, chosen } : { kind: STAND_IN.INBOX, chosen },
         );
       }),
       onOpenChannel: guard((channelId: string) => {
         setHistoryFor(undefined);
         chooseChannel(channelId);
-        setStandIn({ kind: STAND_IN.INBOX, chosen: undefined, listed: true });
+        setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
       }),
-      listed: inboxView?.listed ?? false,
-      onListed: (listed) =>
-        setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, listed } : held)),
+      onClear: () =>
+        setStandIn((held) =>
+          held?.kind === STAND_IN.INBOX ? { ...held, chosen: undefined } : held,
+        ),
       single: inboxView !== undefined && inboxSingle,
       onSingle: setInboxSingle,
       pages: inboxPages.pages,

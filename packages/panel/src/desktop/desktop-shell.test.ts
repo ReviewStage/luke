@@ -185,8 +185,7 @@ function mount(
         onChoose: ignore,
         onOpenItem: () => undefined,
         onOpenChannel: () => undefined,
-        listed: false,
-        onListed: ignore,
+        onClear: ignore,
         pages: undefined,
         onTaskAgents: () => undefined,
       },
@@ -878,7 +877,6 @@ test("the places bar stands only on a phone's lists: an open task, an Inbox item
     inboxView: {
       ...tasksControl().inboxView,
       open: true,
-      listed: false,
       chosen: { taskId: "task-1", itemId: "item-1" },
     },
   });
@@ -887,7 +885,7 @@ test("the places bar stands only on a phone's lists: an open task, an Inbox item
   document.body.innerHTML = "";
 
   const onList = await mountNarrow({
-    inboxView: { ...tasksControl().inboxView, open: true, listed: true },
+    inboxView: { ...tasksControl().inboxView, open: true },
   });
   assert.equal(barItem(onList, "Inbox").getAttribute("aria-current"), "page");
   act(() => root?.unmount());
