@@ -34,9 +34,10 @@ import { keptKey, useKept } from "../use-kept.js";
  * whose items it lists, a teammate by their account's id, and whether its
  * rows show their media, and its list's width; a task's own Inbox keeps a
  * scope of its own, one for every task, apart from the window's, and shows
- * no media; and each channel keeps its own scope and whose items it lists,
- * by the channel's id, All of everyone's until first turned. A choice kept before its scope was is read as the scope that
- * now lists what it listed: a tab kept before the scopes, Needs you or
+ * no media; and the channels keep one scope and one choice of whose items
+ * they list, shared by every channel, apart from the window's, All of
+ * everyone's until first turned. A choice kept before its scope was is read
+ * as the scope that now lists what it listed: a tab kept before the scopes, Needs you or
  * Unread, as To do, and All open or Everything as All; the Needs you
  * button's press, kept before the tabs, as To do where it was pressed and
  * All where it was not; and the sort Waiting longest as Oldest first. A
@@ -64,7 +65,7 @@ const STORAGE_KEY = {
   INBOX_GROUPING: "luke.inboxGrouping",
   INBOX_SORT: "luke.inboxSort",
   INBOX_WHOSE: "luke.inboxWhose",
-  CHANNEL_SCOPES: "luke.channelScopes",
+  CHANNEL_SCOPE: "luke.channelScope",
   INBOX_MEDIA_PREVIEWS: "luke.inboxMediaPreviews",
   INBOX_SECOND_LINE: "luke.inboxSecondLine",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
@@ -153,12 +154,9 @@ const whoseSchema = Schema.Union([
 /** Whose items the Inbox lists. */
 const storedWhose = Schema.fromJsonString(whoseSchema);
 
-/** Each channel's own scope and whose items it lists, by the channel's id. */
-const storedChannelScopes = Schema.fromJsonString(
-  Schema.Record(
-    Schema.String,
-    Schema.Struct({ show: Schema.Literals(Object.values(INBOX_SHOW)), whose: whoseSchema }),
-  ),
+/** The channels' scope and whose items they list, one for every channel. */
+const storedChannelScope = Schema.fromJsonString(
+  Schema.Struct({ show: Schema.Literals(Object.values(INBOX_SHOW)), whose: whoseSchema }),
 );
 
 /** The tabs an earlier version kept, before the scopes: Needs you, Unread, and All open; Everything was kept as All is. */
@@ -202,14 +200,11 @@ const storedShow = Schema.fromJsonString(
   ),
 );
 
-/** A channel's own scope: which items it shows, and whose. */
-export interface ChannelScope {
+/** The channels' scope: which items they show, and whose. */
+interface ChannelScope {
   readonly show: InboxShow;
   readonly whose: InboxWhose;
 }
-
-/** Each channel's scope as the reader last turned it, by the channel's id. */
-type ChannelScopes = Readonly<Record<string, ChannelScope>>;
 
 /** The Inbox's view choices, each kept on this Mac under its own key. */
 const KEPT = {
@@ -226,7 +221,7 @@ const KEPT = {
   GROUPING: keptKey<InboxGrouping>(STORAGE_KEY.INBOX_GROUPING, storedGrouping),
   SORT: keptKey<InboxSort>(STORAGE_KEY.INBOX_SORT, storedSort),
   WHOSE: keptKey<InboxWhose>(STORAGE_KEY.INBOX_WHOSE, storedWhose),
-  CHANNEL_SCOPES: keptKey<ChannelScopes>(STORAGE_KEY.CHANNEL_SCOPES, storedChannelScopes),
+  CHANNEL_SCOPE: keptKey<ChannelScope>(STORAGE_KEY.CHANNEL_SCOPE, storedChannelScope),
   MEDIA_PREVIEWS: keptKey(STORAGE_KEY.INBOX_MEDIA_PREVIEWS, storedFlag),
   SECOND_LINE: keptKey(STORAGE_KEY.INBOX_SECOND_LINE, storedFlag),
   FOLDED_GROUPS: keptKey(STORAGE_KEY.GROUPS, storedFolds),
@@ -402,30 +397,19 @@ export function useInboxViewChoices(): InboxViewChoices {
   };
 }
 
-/** A channel's scope as it opens until the reader turns it: All of everyone's, since a channel is everyone's threads on one topic. */
+/** The channels' scope until the reader turns it: All of everyone's, since a channel is everyone's threads on one topic. */
 const CHANNEL_SCOPE_OPENING: ChannelScope = { show: INBOX_SHOW.ALL, whose: EVERYONES };
 
-/** No channel's scope turned yet. */
-const NO_CHANNEL_SCOPES: ChannelScopes = {};
-
-/** Each channel's own scope, and the press that turns one. */
-export interface ChannelScopeChoices {
-  scopeOf: (channelId: string) => ChannelScope;
-  /** Turns one or both of a channel's choices, leaving the other as it is kept now. */
-  onScope: (channelId: string, turned: Partial<ChannelScope>) => void;
-}
-
-/** Each channel's scope, All of everyone's until first turned, and kept for that channel as it is turned. */
-export function useChannelScopes(): ChannelScopeChoices {
-  const [scopes, , change] = useKept(KEPT.CHANNEL_SCOPES, NO_CHANNEL_SCOPES);
+/** The channels' scope, one for every channel, All of everyone's until first turned, and kept as it is turned; the Inbox's other choices stand beside it. */
+export function useChannelScope(): InboxShowChoice & InboxWhoseChoice {
+  const [scope, , change] = useKept(KEPT.CHANNEL_SCOPE, CHANNEL_SCOPE_OPENING);
+  // Note that each turn is merged over what storage holds now, so another window's turn of the other choice is kept beside it.
+  const turn = (turned: Partial<ChannelScope>) => change((kept) => ({ ...kept, ...turned }));
   return {
-    scopeOf: (channelId) => scopes[channelId] ?? CHANNEL_SCOPE_OPENING,
-    // Note that the turn is merged over what storage holds now, so another window's turn of another channel, or of this channel's other choice, is kept beside it.
-    onScope: (channelId, turned) =>
-      change((kept) => ({
-        ...kept,
-        [channelId]: { ...(kept[channelId] ?? CHANNEL_SCOPE_OPENING), ...turned },
-      })),
+    show: scope.show,
+    onShow: (show) => turn({ show }),
+    whose: scope.whose,
+    onWhose: (whose) => turn({ whose }),
   };
 }
 

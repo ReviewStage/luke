@@ -1960,7 +1960,7 @@ test("a channel narrows the Inbox to its own threads, everyone's, under its name
   );
 });
 
-test("a channel keeps the scope it was turned to when the reader leaves and comes back", async () => {
+test("a scope turned in one channel stands in every channel, and when the reader comes back", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
@@ -1981,7 +1981,8 @@ test("a channel keeps the scope it was turned to when the reader leaves and come
 
   act(() => chooseChannel(APP_CHANNEL.id));
   await settle();
-  assert.deepEqual(rowTitles(page), [RETRY.title], "another channel opens on its own scope, All");
+  assert.equal(headTitle(page), `#${APP_CHANNEL.name} · For you`);
+  assert.deepEqual(rowTitles(page), [], "another channel opens on For you too");
 
   act(() => leaveChannel());
   await settle();

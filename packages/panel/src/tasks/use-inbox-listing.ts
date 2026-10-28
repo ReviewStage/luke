@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import {
   type InboxViewChoices,
-  useChannelScopes,
+  useChannelScope,
   useInboxTaskFolds,
   useInboxViewChoices,
 } from "../desktop/folded-groups.js";
@@ -48,11 +48,12 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * scope (`inboxList`); and whether a New thread stands in the pane.
  *
  * Narrowed to a channel, it lists and counts that channel's items alone
- * (`channelGroups`), under a scope of the channel's own: All of everyone's
- * until the reader turns it, since a channel is everyone's threads on one
- * topic, and then whatever they turned it to, kept for that channel across
- * a switch away and a launch (`useChannelScopes`). Its grouping, its order,
- * and the rest of its view are the Inbox's own.
+ * (`channelGroups`), under the channels' scope, one for every channel and
+ * apart from the Inbox's: All of everyone's until the reader turns it,
+ * since a channel is everyone's threads on one topic, and then whatever
+ * they turned it to, in every channel and across a launch
+ * (`useChannelScope`). Its grouping, its order, and the rest of its view
+ * are the Inbox's own.
  */
 
 /** A New thread just opened, before the Inbox it opened on has named the item it stands over. */
@@ -87,23 +88,11 @@ function holdingGroups(
   });
 }
 
-/**
- * The Inbox's view choices, narrowed to a channel where one is given: its
- * scope the channel's own, kept for it as the reader turns it; the Inbox's
- * kept choices where none is.
- */
+/** The Inbox's view choices, under the channels' scope where a channel is given; the Inbox's kept choices where none is. */
 function useScopedChoices(channelId: string | undefined): InboxViewChoices {
   const kept = useInboxViewChoices();
-  const scopes = useChannelScopes();
-  if (channelId === undefined) return kept;
-  const standing = scopes.scopeOf(channelId);
-  return {
-    ...kept,
-    show: standing.show,
-    onShow: (show) => scopes.onScope(channelId, { show }),
-    whose: standing.whose,
-    onWhose: (whose) => scopes.onScope(channelId, { whose }),
-  };
+  const channels = useChannelScope();
+  return channelId === undefined ? kept : { ...kept, ...channels };
 }
 
 /** The choice that opens a listed item: by its task, or by its agent where it has none. */
