@@ -487,7 +487,7 @@ test("the bar's Permanently delete asks first, naming how many, and deletes only
   assert.equal(page.querySelector('[role="toolbar"]'), null, "the selection is let go");
 });
 
-test("a delete the service refuses for some tasks keeps those asked of and chosen, and Retry sends none already deleted", async () => {
+test("a delete the service refuses for some tasks keeps only those asked of and chosen, and Retry sends none already deleted", async () => {
   const { page } = await mountPage();
   commandClick(page, "ACME-39");
   commandClick(page, "ACME-42");
@@ -504,7 +504,11 @@ test("a delete the service refuses for some tasks keeps those asked of and chose
   press();
   await settle();
   assert.match(question()?.textContent ?? "", /Permanently delete 1 task\?/u);
-  assert.ok(page.querySelector('[role="toolbar"]'), "the selection stands while a task remains");
+  assert.match(
+    page.querySelector('[role="toolbar"]')?.textContent ?? "",
+    /1 selected/u,
+    "the task deleted leaves the selection, the one refused stays",
+  );
 
   refusing.clear();
   press();
