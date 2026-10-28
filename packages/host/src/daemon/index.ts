@@ -5,6 +5,13 @@
 export { readHostDevice } from "../host-device-record.js";
 export { hostDaemon } from "./host-daemon.js";
 export { enrollHostDevice } from "./host-device.js";
-export { DARWIN_HOST, type HostRuntime, hostArch, hostRuntime, LINUX_HOST } from "./host-os.js";
+export {
+  DARWIN_HOST,
+  darwinStandaloneLaunchAgentFile,
+  type HostRuntime,
+  hostArch,
+  hostRuntime,
+  LINUX_HOST,
+} from "./host-os.js";
 export { type HostPlatformOptions, hostPlatform } from "./host-platform.js";
 export { hostSmolvm } from "./host-smolvm.js";
