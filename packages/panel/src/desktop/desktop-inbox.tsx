@@ -241,6 +241,7 @@ export function DesktopInbox({
     counts,
     list,
     steps,
+    onPointing,
     chosen,
     filteredOut,
     search,
@@ -615,6 +616,7 @@ export function DesktopInbox({
                     onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
                     onClose={closeItem}
                     onAskMove={askMove}
+                    onPointing={onPointing}
                   />
                 )}
                 {chosen === undefined ? (
