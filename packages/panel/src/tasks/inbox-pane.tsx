@@ -1122,34 +1122,11 @@ function Crumbs({
   /** Whether the heading has scrolled away, so the path names the item. */
   titleShown: boolean;
 }): React.JSX.Element {
-  const { name, agent } = by.subject;
   const automation = useAutomationCrumb(holder, doors.onOpenHolder);
-  const onOpenHolder = doors.onOpenHolder;
-  const task: Crumb | undefined =
-    holder.kind === INBOX_HOLDER.TASK
-      ? {
-          label: holder.task.name,
-          glyph: tabLook({
-            kind: TAB_KIND.PLAN,
-            name: holder.task.name,
-            status: holder.task.status,
-          }).icon,
-          hint: holder.task.name,
-          card: doors.taskCard,
-          onPress: () => onOpenHolder?.(),
-        }
-      : undefined;
   const crumbs: Crumb[] = [
-    task ?? automation,
-    {
-      label: name,
-      glyph: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
-      hint: name,
-      card: <AgentCard subject={by.subject} models={by.models} />,
-      onPress: () => by.onOpen(),
-      // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
-      fixed: titleShown,
-    },
+    taskCrumb(holder, doors) ?? automation,
+    // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
+    agentCrumb(by, titleShown),
     { label: title, current: true, shown: titleShown },
   ].filter((crumb) => crumb !== undefined);
   return (
@@ -1157,6 +1134,51 @@ function Crumbs({
       <Breadcrumbs label="Path" crumbs={crumbs} />
     </div>
   );
+}
+
+/** The path's task crumb, wearing its plan's glyph and hanging its card, which opens the task; none for an item no task holds. */
+function taskCrumb(holder: InboxHolder, doors: InboxPaneDoors): Crumb | undefined {
+  if (holder.kind !== INBOX_HOLDER.TASK) return undefined;
+  const { onOpenHolder } = doors;
+  return {
+    label: holder.task.name,
+    glyph: tabLook({ kind: TAB_KIND.PLAN, name: holder.task.name, status: holder.task.status })
+      .icon,
+    hint: holder.task.name,
+    card: doors.taskCard,
+    onPress: () => onOpenHolder?.(),
+  };
+}
+
+/** The path's agent crumb, wearing its mark and hanging its card, which opens its tab; `fixed` keeps its size where the crumbs after it give way first. */
+function agentCrumb(by: ItemAgent, fixed = false): Crumb {
+  const { name, agent } = by.subject;
+  return {
+    label: name,
+    glyph: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
+    hint: name,
+    card: <AgentCard subject={by.subject} models={by.models} />,
+    onPress: () => by.onOpen(),
+    fixed,
+  };
+}
+
+/**
+ * A phone's bar's name for the item: what holds it, its task as the wide
+ * path leads with it, or its agent where no task holds it, each crumb
+ * pressing where the wide path's does. Note that the bar never names the
+ * item's title, because the thread's heading right under it already does.
+ */
+function PhoneHolder({
+  holder,
+  by,
+  doors,
+}: {
+  holder: InboxHolder;
+  by: ItemAgent;
+  doors: InboxPaneDoors;
+}): React.JSX.Element {
+  return <Breadcrumbs label="Path" crumbs={[taskCrumb(holder, doors) ?? agentCrumb(by)]} />;
 }
 
 /**
@@ -1205,7 +1227,7 @@ export function InboxPane({
   mentions?: TaskMentionsValue | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the item stands alone on a
-   * phone: the way back's glyph, the item's title centred, and one ⋯
+   * phone: the way back's glyph, what holds the item centred (`PhoneHolder`), and one ⋯
    * holding the pager, what the crumbs open, the panel, and the item's own
    * actions; none elsewhere, where the bar draws its crumbs and buttons.
    */
@@ -1297,7 +1319,7 @@ export function InboxPane({
               <BackButton label={`#${channelName}`} place={`#${channelName}`} onBack={onBack} />
             )
           }
-          title={cardTitle(item.title)}
+          title={<PhoneHolder holder={holder} by={by} doors={doors} />}
           end={
             <InboxItemMenu
               key={item.id}
